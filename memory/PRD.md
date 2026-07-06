@@ -6387,3 +6387,21 @@ dry_run_mode=False (tenant main, preview DB).
 1. User deploys → runs plan on production → approves → execute → verify.
 2. AFTER verify all_pass: Live Canary for ONE Tabby order — implement
    `max_orders=1` canary limit (approved as next task, NOT now).
+
+### Rev34.1 addendum — safety_check gate (user directive, same day)
+- `build_safety_check()` in dry_purge.py scans every to-be-deleted row
+  for REAL قيود ids in ANY identifier field. Four counters:
+  dry_invoice_rows_with_real_invoice_id / _real_payment_id /
+  dry_customer_rows_with_real_customer_id /
+  dry_product_rows_with_real_product_id.
+- Exposed inside `GET /admin/dry-purge/plan` as `safety_check` +
+  top-level `execute_allowed`.
+- HARD-ENFORCED inside `execute_dry_purge` BEFORE any write: any
+  counter > 0 → DryPurgeRefused("safety_check_failed") with the full
+  safety payload in the 409 body. blocked_reason explains why.
+- Tests: 9/9 pass (3 new: clean-seed all-zero, mixed payment row
+  [real payment id 161 + DRY invoice id] blocks execute & mutates
+  nothing, DRY invoice row with real receipt id blocks). Canary
+  suite still green.
+- STATUS: production purge still NOT executed — awaiting user's plan
+  output from https://mezansalla.com and explicit approval.

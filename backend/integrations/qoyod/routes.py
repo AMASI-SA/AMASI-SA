@@ -1291,7 +1291,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         except DryPurgeRefused as exc:
             raise HTTPException(
                 status_code=409,
-                detail={"code": exc.code, "detail": str(exc)})
+                detail={"code": exc.code, "detail": str(exc),
+                        **exc.extra})
 
     @router.get("/admin/dry-purge/verify")
     async def admin_dry_purge_verify(user=Depends(current_user)):

@@ -122,9 +122,100 @@ def _sample(doc: dict) -> dict:
 
 
 class DryPurgeRefused(Exception):
-    def __init__(self, code: str, human: str):
+    def __init__(self, code: str, human: str, **extra):
         super().__init__(human)
-        self.code = code
+        self.code  = code
+        self.extra = extra
+
+
+def _is_real_id(v: Any) -> bool:
+    """Non-empty and NOT a DRY:/PREVIEW: sentinel → real قيود id."""
+    if v in (None, ""):
+        return False
+    return not str(v).upper().startswith(("DRY:", "PREVIEW:"))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SAFETY CHECK — no to-be-deleted row may carry ANY real قيود id
+# ─────────────────────────────────────────────────────────────────────
+async def build_safety_check(db, *, user_id: str) -> dict:
+    """Iter-2026-02.rev34.1 (user directive) — scan every row the
+    delete queries would remove and count rows carrying a REAL قيود
+    id in ANY identifier field. All four counters MUST be 0 before
+    execute is allowed; execute_dry_purge enforces this itself.
+
+      • dry_product_rows_with_real_product_id
+      • dry_customer_rows_with_real_customer_id
+      • dry_invoice_rows_with_real_invoice_id
+        (also counts payment rows whose qoyod_invoice_id is real)
+      • dry_invoice_rows_with_real_payment_id
+        (real qoyod_invoice_payment_id / qoyod_receipt_id on any
+        to-be-deleted row)
+    """
+    counters: dict[str, dict] = {k: {"count": 0, "samples": []} for k in (
+        "dry_invoice_rows_with_real_invoice_id",
+        "dry_invoice_rows_with_real_payment_id",
+        "dry_customer_rows_with_real_customer_id",
+        "dry_product_rows_with_real_product_id",
+    )}
+
+    def _hit(counter: str, coll: str, doc: dict, field: str):
+        c = counters[counter]
+        c["count"] += 1
+        if len(c["samples"]) < 10:
+            c["samples"].append({
+                "collection":         coll,
+                "offending_field":    field,
+                "offending_value":    doc.get(field),
+                "salla_order_number": doc.get("salla_order_number"),
+                "salla_order_id":     doc.get("salla_order_id"),
+                "sku":                doc.get("sku"),
+                "lookup_key":         doc.get("lookup_key"),
+            })
+
+    coll = "qoyod_products_mapping"
+    async for d in db[coll].find(_delete_query(coll, user_id)):
+        if _is_real_id(d.get("qoyod_product_id")):
+            _hit("dry_product_rows_with_real_product_id",
+                 coll, d, "qoyod_product_id")
+
+    coll = "qoyod_customers_mapping"
+    async for d in db[coll].find(_delete_query(coll, user_id)):
+        if _is_real_id(d.get("qoyod_customer_id")):
+            _hit("dry_customer_rows_with_real_customer_id",
+                 coll, d, "qoyod_customer_id")
+
+    coll = "qoyod_invoices"
+    async for d in db[coll].find(_delete_query(coll, user_id)):
+        if _is_real_id(d.get("qoyod_invoice_id")):
+            _hit("dry_invoice_rows_with_real_invoice_id",
+                 coll, d, "qoyod_invoice_id")
+        for f in ("qoyod_invoice_payment_id", "qoyod_receipt_id"):
+            if _is_real_id(d.get(f)):
+                _hit("dry_invoice_rows_with_real_payment_id", coll, d, f)
+
+    coll = "qoyod_invoice_payments"
+    async for d in db[coll].find(_delete_query(coll, user_id)):
+        if _is_real_id(d.get("qoyod_invoice_payment_id")):
+            _hit("dry_invoice_rows_with_real_payment_id",
+                 coll, d, "qoyod_invoice_payment_id")
+        if _is_real_id(d.get("qoyod_invoice_id")):
+            _hit("dry_invoice_rows_with_real_invoice_id",
+                 coll, d, "qoyod_invoice_id")
+
+    all_zero = all(c["count"] == 0 for c in counters.values())
+    return {
+        **counters,
+        "all_zero":        all_zero,
+        "execute_allowed": all_zero,
+        "blocked_reason": None if all_zero else (
+            "صف واحد أو أكثر من المرشّحين للحذف يحمل معرّف قيود حقيقي "
+            "في أحد الحقول — الحذف ممنوع حتى تُراجع هذه الصفوف يدوياً "
+            "(راجع samples في كل عدّاد أعلاه). execute سيرفض بنيوياً."),
+        "note": (
+            "يجب أن تكون العدّادات الأربعة = 0 قبل execute. البوابة "
+            "مفروضة داخل execute نفسه وليست عرضاً فقط."),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -153,6 +244,8 @@ async def build_dry_purge_plan(db, *, user_id: str) -> dict:
         repair_buckets[coll] = {"count": count, "samples": samples}
         total_repair += count
 
+    safety = await build_safety_check(db, user_id=user_id)
+
     return {
         "ok":                     True,
         "generated_at":           _now().isoformat(),
@@ -160,6 +253,8 @@ async def build_dry_purge_plan(db, *, user_id: str) -> dict:
         "total_repair":           total_repair,
         "delete":                 delete_buckets,
         "repair":                 repair_buckets,
+        "safety_check":           safety,
+        "execute_allowed":        safety["execute_allowed"],
         "expected_confirm_token": CONFIRM_TOKEN,
         "never_touched": [
             "integration_inbox (الطلبات + raw payload)",
@@ -183,6 +278,19 @@ async def execute_dry_purge(
         raise DryPurgeRefused(
             "confirm_token_mismatch",
             f"Pass confirm_token='{CONFIRM_TOKEN}' to authorise the purge.")
+
+    # Iter-2026-02.rev34.1 — HARD safety gate. If any to-be-deleted
+    # row carries a real قيود id anywhere, the whole run is refused
+    # BEFORE any archive/delete/repair write happens.
+    safety = await build_safety_check(db, user_id=user_id)
+    if not safety["all_zero"]:
+        non_zero = {k: v["count"] for k, v in safety.items()
+                    if isinstance(v, dict) and v.get("count", 0) > 0}
+        raise DryPurgeRefused(
+            "safety_check_failed",
+            ("مرفوض — safety_check غير صفري: "
+             f"{non_zero}. لا حذف قبل مراجعة هذه الصفوف يدوياً."),
+            safety_check=safety)
 
     run_id = uuid4().hex
     now = _now()
@@ -240,6 +348,7 @@ async def execute_dry_purge(
         "repaired":       repaired,
         "total_deleted":  sum(deleted.values()),
         "total_repaired": sum(repaired.values()),
+        "safety_check_passed": True,
         "archive_collection": ARCHIVE_COLLECTION,
         "note": (
             "كل صف محذوف مؤرشف في qoyod_dry_purge_archive تحت run_id "

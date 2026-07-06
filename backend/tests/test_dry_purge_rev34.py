@@ -29,6 +29,7 @@ from integrations.qoyod.dry_purge import (
     RUNS_COLLECTION,
     DryPurgeRefused,
     build_dry_purge_plan,
+    build_safety_check,
     execute_dry_purge,
     verify_dry_state,
 )
@@ -253,3 +254,79 @@ async def test_pending_orders_ledger_filter_excludes_dry(db):
     matches = [r async for r in db.qoyod_invoices.find(ledger_filter)]
     assert len(matches) == 1
     assert matches[0]["qoyod_invoice_id"] == "188"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iter-2026-02.rev34.1 — safety_check gate (user directive)
+# ─────────────────────────────────────────────────────────────────────
+_SAFETY_KEYS = (
+    "dry_invoice_rows_with_real_invoice_id",
+    "dry_invoice_rows_with_real_payment_id",
+    "dry_customer_rows_with_real_customer_id",
+    "dry_product_rows_with_real_product_id",
+)
+
+
+@pytest.mark.asyncio
+async def test_plan_safety_check_all_zero_on_clean_seed(db):
+    plan = await build_dry_purge_plan(db, user_id=TENANT)
+    sc = plan["safety_check"]
+    for k in _SAFETY_KEYS:
+        assert sc[k]["count"] == 0, (k, sc[k])
+    assert sc["all_zero"] is True
+    assert sc["execute_allowed"] is True
+    assert sc["blocked_reason"] is None
+    assert plan["execute_allowed"] is True
+
+
+@pytest.mark.asyncio
+async def test_mixed_payment_row_blocks_execute_and_mutates_nothing(db):
+    """A payments row matched via DRY qoyod_invoice_id but carrying a
+    REAL qoyod_invoice_payment_id (the frozen-forensics shape, e.g.
+    payment 161) MUST flip the safety gate and refuse the whole run
+    before ANY write."""
+    await db.qoyod_invoice_payments.insert_one({
+        "user_id": TENANT, "salla_order_number": "ORD-MIXED",
+        "qoyod_invoice_payment_id": "161",           # REAL
+        "qoyod_invoice_id": "DRY:invoice:mixed001",  # DRY → in delete set
+    })
+    plan = await build_dry_purge_plan(db, user_id=TENANT)
+    sc = plan["safety_check"]
+    assert sc["dry_invoice_rows_with_real_payment_id"]["count"] == 1
+    assert sc["execute_allowed"] is False
+    assert plan["execute_allowed"] is False
+    assert sc["blocked_reason"]
+    s = sc["dry_invoice_rows_with_real_payment_id"]["samples"][0]
+    assert s["offending_field"] == "qoyod_invoice_payment_id"
+    assert s["offending_value"] == "161"
+
+    with pytest.raises(DryPurgeRefused) as exc:
+        await execute_dry_purge(
+            db, user_id=TENANT, confirm_token=CONFIRM_TOKEN, actor="t")
+    assert exc.value.code == "safety_check_failed"
+    assert exc.value.extra["safety_check"]["all_zero"] is False
+    # NOTHING was archived, deleted, or repaired.
+    assert await db[ARCHIVE_COLLECTION].count_documents(
+        {"user_id": TENANT}) == 0
+    assert await db.qoyod_products_mapping.count_documents(
+        {"user_id": TENANT}) == 4
+    flagged = await db.qoyod_products_mapping.find_one(
+        {"user_id": TENANT, "sku": "SKU-REAL-FLAG"})
+    assert flagged["dry_run_only"] is True   # repair did NOT run
+
+
+@pytest.mark.asyncio
+async def test_mixed_invoice_row_with_real_receipt_blocks(db):
+    """A DRY invoice ledger row carrying a REAL qoyod_receipt_id is a
+    mixed row → counted under dry_invoice_rows_with_real_payment_id."""
+    await db.qoyod_invoices.insert_one({
+        "user_id": TENANT, "salla_order_id": "ORD-MIXED2",
+        "qoyod_invoice_id": "DRY:invoice:mixed002",
+        "qoyod_receipt_id": "42",                    # REAL
+    })
+    sc = await build_safety_check(db, user_id=TENANT)
+    assert sc["dry_invoice_rows_with_real_payment_id"]["count"] == 1
+    assert sc["execute_allowed"] is False
+    with pytest.raises(DryPurgeRefused):
+        await execute_dry_purge(
+            db, user_id=TENANT, confirm_token=CONFIRM_TOKEN, actor="t")
