@@ -6341,3 +6341,49 @@ Regression: all 66 rev29/29b/29c/29d/30/31 tests still green
   566 paths, enable-tabby / disable-tabby / dismiss / probe all present.
 - Note: `_RetryPaymentBody` (nested, UNUSED — endpoint uses module-level
   `RetryPaymentOnlyBody`) left as-is per "surgical only" mandate.
+
+---
+## 2026-02 — Rev34: DRY-Purge Tool (P0) — CODE READY, NOT EXECUTED
+User directive: clean DRY:/PREVIEW: sentinels (46 product mappings in
+prod, DRY invoices/payments in ledger) WITHOUT touching orders/raw
+payloads, then isolate DRY rows in the invoices UI. NO canary enable,
+NO deploy, NO real purge execution yet (needs plan → user approval).
+
+### Shipped
+- NEW `backend/integrations/qoyod/dry_purge.py`:
+  - `GET  /api/integrations/qoyod/admin/dry-purge/plan` (read-only)
+  - `POST /api/integrations/qoyod/admin/dry-purge/execute`
+    (confirm_token="PURGE-DRY-MAPPINGS"; archives every deleted doc
+    into `qoyod_dry_purge_archive`, run summary in
+    `qoyod_dry_purge_runs`; deletes DRY:/PREVIEW: rows from
+    products/customers mappings + qoyod_invoices/qoyod_invoice_payments;
+    REPAIRS (flag-clear only) real-id mappings with dry_run_only=True)
+  - `GET  /api/integrations/qoyod/admin/dry-purge/verify`
+    (acceptance: dry-mappings=0, ledger clean, no sendable row with
+    DRY request_body)
+  - NEVER touches integration_inbox / raw payloads / real Qoyod ids
+    (frozen invoices 188-194 & payments 160-165 out of scope).
+- FIX pending-orders (routes.py ledger_cursor): qoyod_invoices lookup
+  now excludes ^(DRY:|PREVIEW:) → DRY invoices no longer masquerade
+  as existing_invoice.
+- `GET /invoices` now returns `is_dry_test` per row; QoyodInvoices.jsx
+  isolates dry rows in amber card "سجلات اختبار — غير مُرسلة" with
+  pill "اختبار / غير مُرسلة" (testid: qoyod-invoices-dry-table).
+- Tests: backend/tests/test_dry_purge_rev34.py — 6 tests vs REAL Mongo
+  on isolated tenant (plan counts, token refusal, delete/archive/
+  repair, inbox untouched byte-identical, verify before/after,
+  ledger filter semantics). All pass. Canary suite 127 pass.
+
+### Verified locks unchanged
+production_writes_locked=True, selective_live_send_enabled=False,
+dry_run_mode=False (tenant main, preview DB).
+
+### Pre-existing test failures (NOT from rev34 — untouched modules)
+- test_rev30_payment_continuation.py::test_8_upstream_invariants_intact
+- test_eligible_orders_readonly.py::TestPureUnits::test_totals_fail
+- test_bnpl_iter146_billing_eligible.py (collection ImportError)
+
+### Next (user-gated)
+1. User deploys → runs plan on production → approves → execute → verify.
+2. AFTER verify all_pass: Live Canary for ONE Tabby order — implement
+   `max_orders=1` canary limit (approved as next task, NOT now).

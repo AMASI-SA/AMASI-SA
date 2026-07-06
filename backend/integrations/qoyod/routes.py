@@ -435,6 +435,13 @@ class DisableTabbyLiveCanaryBody(BaseModel):
     reason:        Optional[str] = Field(None, max_length=256)
 
 
+class DryPurgeExecuteBody(BaseModel):
+    """Iter-2026-02.rev34 — gated DRY-purge execution. Refused unless
+    confirm_token == dry_purge.CONFIRM_TOKEN."""
+    model_config = ConfigDict(extra="forbid")
+    confirm_token: str = Field(..., min_length=1, max_length=128)
+
+
 class DismissPatchBody(BaseModel):
     """Iter-290h — Optional note attached when an operator dismisses an
     unallocated Qoyod receipt. Moved to module scope (was nested inside
@@ -797,6 +804,13 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             q, {"_id": 0}).sort("updated_at", -1).limit(max(1, min(limit, 500)))
         rows = []
         async for r in cursor:
+            # Iter-2026-02.rev34 — flag Dry-Run test records so the UI
+            # isolates them as "اختبار / غير مُرسلة" instead of showing
+            # them among real invoices as "بانتظار المعالجة".
+            qid = str(r.get("qoyod_invoice_id") or "")
+            r["is_dry_test"] = bool(
+                r.get("dry_run") is True
+                or qid.startswith(("DRY:", "PREVIEW:")))
             rows.append(r)
         return {"ok": True, "count": len(rows), "items": rows}
 
@@ -1243,6 +1257,49 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "حقيقي. استخدم `POST /products/adopt` لكل SKU. هذا يُحدِّث "
                 "الـ mapping ويُفعِّل dependency_status.sendable في الـ preview."),
         }
+
+    # ── Iter-2026-02.rev34 — DRY-purge tool (plan → execute → verify) ─
+    # Cleans DRY:/PREVIEW: sentinels out of the mapping + ledger
+    # collections. NEVER touches integration_inbox (orders), raw
+    # payloads, or any REAL قيود id. Execute is confirm_token-gated
+    # and archives every deleted doc into qoyod_dry_purge_archive.
+    @router.get("/admin/dry-purge/plan")
+    async def admin_dry_purge_plan(user=Depends(current_user)):
+        """READ-ONLY preview: exactly what execute would delete
+        (archived first) and repair (dry_run_only flag clear on
+        real-id mappings). Nothing is mutated here."""
+        from integrations.qoyod.dry_purge import build_dry_purge_plan
+        tenant = _tenant_id(user)
+        return await build_dry_purge_plan(db, user_id=tenant)
+
+    @router.post("/admin/dry-purge/execute")
+    async def admin_dry_purge_execute(
+        body: DryPurgeExecuteBody, user=Depends(current_user),
+    ):
+        """Gated purge: archive → delete DRY:/PREVIEW: mappings +
+        ledger rows, repair real-id mappings carrying a legacy
+        dry_run_only flag. Refuses on confirm_token mismatch."""
+        from integrations.qoyod.dry_purge import (
+            DryPurgeRefused, execute_dry_purge,
+        )
+        tenant = _tenant_id(user)
+        actor = f"operator:{getattr(user, 'email', tenant)}"
+        try:
+            return await execute_dry_purge(
+                db, user_id=tenant,
+                confirm_token=body.confirm_token, actor=actor)
+        except DryPurgeRefused as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": exc.code, "detail": str(exc)})
+
+    @router.get("/admin/dry-purge/verify")
+    async def admin_dry_purge_verify(user=Depends(current_user)):
+        """READ-ONLY acceptance checks: dry-mappings=0, ledger clean,
+        no sendable row holds a DRY request_body."""
+        from integrations.qoyod.dry_purge import verify_dry_state
+        tenant = _tenant_id(user)
+        return await verify_dry_state(db, user_id=tenant)
 
     # ── Existing-Data Migration (read-only pre-flight) ──────────────
     attach_migration_routes(router, db, current_user, _tenant_id)
@@ -2083,7 +2140,15 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     {"salla_order_id":     {"$in": list(order_keys)}},
                     {"salla_order_number": {"$in": list(order_keys)}},
                 ],
-                "qoyod_invoice_id": {"$exists": True, "$nin": [None, ""]},
+                # Iter-2026-02.rev34 — a DRY:/PREVIEW: ledger row is a
+                # test artefact, NOT a real قيود invoice. Without this
+                # exclusion, DRY invoices masked orders as
+                # "existing_invoice" and hid them from ready_to_send.
+                "qoyod_invoice_id": {
+                    "$exists": True,
+                    "$nin":    [None, ""],
+                    "$not":    {"$regex": "^(DRY:|PREVIEW:)"},
+                },
             }, {"salla_order_id": 1, "salla_order_number": 1,
                 "qoyod_invoice_id": 1, "qoyod_invoice_number": 1,
                 "status": 1, "_id": 0})

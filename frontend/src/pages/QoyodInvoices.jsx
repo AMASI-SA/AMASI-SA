@@ -391,7 +391,11 @@ function OrphanOrdersSection({ orphans, loading, onOpen }) {
 }
 
 // ─── Invoices Data Grid ──────────────────────────────────────────────
-function InvoicesTable({ invoices, loading, onOpen }) {
+// Iter-2026-02.rev34 — `dryMode` renders the SAME grid for Dry-Run
+// test records only, isolated in its own amber card. Dry rows never
+// show "بانتظار المعالجة" — they show "اختبار / غير مُرسلة".
+function InvoicesTable({ invoices, loading, onOpen, dryMode = false }) {
+  if (dryMode && (!invoices || invoices.length === 0)) return null;
   if (loading) {
     return <Card title="سجل الفواتير في قيود"><span className="text-sm text-slate-500">جاري التحميل…</span></Card>;
   }
@@ -406,9 +410,15 @@ function InvoicesTable({ invoices, loading, onOpen }) {
     );
   }
   return (
-    <Card title={`سجل الفواتير في قيود (${invoices.length})`}
-          subtitle="الفواتير التي اجتازت أو فشلت في خط أنابيب الإرسال."
-          testid="qoyod-invoices-table">
+    <Card
+      title={dryMode
+        ? `سجلات اختبار — غير مُرسلة (${invoices.length})`
+        : `سجل الفواتير في قيود (${invoices.length})`}
+      subtitle={dryMode
+        ? "سجلات Dry-Run تجريبية لم تُرسل إلى قيود إطلاقاً. معزولة عن السجل الحقيقي ولا تعني فواتير بانتظار المعالجة."
+        : "الفواتير التي اجتازت أو فشلت في خط أنابيب الإرسال."}
+      tone={dryMode ? "alert" : "default"}
+      testid={dryMode ? "qoyod-invoices-dry-table" : "qoyod-invoices-table"}>
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-full text-xs">
           <thead className="bg-slate-50 text-slate-700">
@@ -429,9 +439,16 @@ function InvoicesTable({ invoices, loading, onOpen }) {
               <tr key={row.salla_order_id || i} className="border-t border-slate-100">
                 <td className="px-3 py-2 font-mono text-slate-700">{row.salla_order_id}</td>
                 <td className="px-3 py-2">
-                  <Pill tone={STATUS_COLOR[row.status] || "slate"}>
-                    {STATUS_AR[row.status] || row.status}
-                  </Pill>
+                  {dryMode ? (
+                    <Pill tone="bg-amber-100 text-amber-800 border-amber-300"
+                          testid={`dry-test-pill-${row.salla_order_id}`}>
+                      اختبار / غير مُرسلة
+                    </Pill>
+                  ) : (
+                    <Pill tone={STATUS_COLOR[row.status] || "slate"}>
+                      {STATUS_AR[row.status] || row.status}
+                    </Pill>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-slate-700 text-[11px]">
                   {STAGE_AR[row.pipeline_stage] || row.pipeline_stage || "—"}
@@ -920,7 +937,19 @@ export default function QoyodInvoices() {
       />
       <ComplianceAlertCard summary={summary} loading={loadingSummary} />
       <OrphanOrdersSection orphans={orphans} loading={loadingOrphans} onOpen={openInvoice} />
-      <InvoicesTable invoices={invoices} loading={loadingInvoices} onOpen={openInvoice} />
+      {/* Iter-2026-02.rev34 — Dry-Run test records isolated from the
+          real ledger. Backend marks them via `is_dry_test`. */}
+      <InvoicesTable
+        invoices={invoices.filter((r) => !r.is_dry_test)}
+        loading={loadingInvoices}
+        onOpen={openInvoice}
+      />
+      <InvoicesTable
+        invoices={invoices.filter((r) => r.is_dry_test)}
+        loading={false}
+        onOpen={openInvoice}
+        dryMode
+      />
 
       <TimelineDrawer
         open={!!selected}
