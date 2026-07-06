@@ -3154,6 +3154,22 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             })
         return {"ok": True, "budget": budget, "orders": orders}
 
+    # ── Iter-2026-02.rev36 — "طلبات لم تُرسل إلى قيود" ───────────────
+    # Daily-ops source of truth: every recent order mapped to FOUR
+    # human statuses only (أُرسل / لم يُرسل / فشل / مكرر) with an
+    # Arabic reason. READ-ONLY.
+    @router.get("/unsent-orders")
+    async def list_unsent_orders_endpoint(
+        days: int = Query(30, ge=1, le=365),
+        limit: int = Query(500, ge=1, le=2000),
+        status: Optional[str] = Query(None),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.unsent_orders import list_unsent_orders
+        tenant = _tenant_id(user)
+        return await list_unsent_orders(
+            db, user_id=tenant, days=days, limit=limit, status=status)
+
     # ── Iter-2026-02.rev36 — Stale-Worker (Zombie) Detector ─────────
     # READ-ONLY. Incident 2026-07-06: invoice 195/payment 166 written
     # by a process running pre-rev24 code during the open canary

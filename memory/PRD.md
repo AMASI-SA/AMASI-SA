@@ -6477,3 +6477,50 @@ NOT order 270818906 before first-canary review.
 (test_qoyod_global_write_lock_iter293_4 rev32.1-era contract,
 test_preparation_iteration34, settlements/wallet/etc ~248 across
 full 3.4k suite — historical, unrelated modules).
+
+---
+## 2026-02 — Rev36: Simplification (user decree) — CODE READY
+User pivot: simplicity. 4 human statuses only, no new complexity.
+Containment approved & shipped first, Key Fence DEFERRED (user does
+Qoyod key rotation + Emergent support kills stale containers).
+
+### Incident closure (order 270954898)
+Real invoice 195/payment 166 written during open canary window
+(22:58→23:18 UTC) by a ZOMBIE process running pre-rev24 code (proof:
+no persisted SAS gate, no worker sha, no budget reservation, no
+live_send_audit — all four are unconditional in current build).
+Invoice 195/payment 166 KEPT (amounts match, legitimate). Sequence
+continues frozen leak 188-194/160-165 → same zombie as original leak.
+
+### Shipped (rev36)
+- Containment (read-only, dev-internal):
+  GET /admin/stale-worker-detector (zombie signatures on recent rows)
+  GET /admin/live-send-audit (rev35 audit viewer)
+  NEW module stale_worker_detector.py.
+- pipeline.py pre-send checks (live sends only, before create_invoice):
+  1) DUPLICATE hard-stop: real ledger invoice exists for order →
+     SKIPPED + duplicate_of_invoice flag, outcome DUPLICATE_BLOCKED.
+     (DB already has unique index qoyod_invoices_order_unique on
+     user_id+salla_order_id → no fifth layer added per user criterion.)
+  2) TOTALS pre-check: |mezan_expected_total - salla_total| > 0.01 →
+     no POST, totals_precheck_block + DEAD_LETTER(FAILED_INVOICE,
+     code=totals_precheck_mismatch). Complements post-create tri-state.
+- NEW unsent_orders.py: simplify_row() → 4 statuses (أُرسل/لم يُرسل/
+  فشل/مكرر) + Arabic reasons; GET /unsent-orders (days/limit/status).
+- NEW page /integrations/qoyod/unsent-orders (QoyodUnsentOrders.jsx):
+  daily-ops source of truth — 4 count cards, tabs, reasons table.
+  Sidebar link "📮 طلبات لم تُرسل إلى قيود". Route in App.js.
+- Tests: test_unsent_orders_rev36.py 17 tests (mapping matrix, list
+  counts+filter, duplicate query semantics, 0.01 threshold). All
+  rev-suites: 269 passed. Screenshot verified page.
+
+### Pre-existing failures (NOT rev36 — confirmed in pre-edit full log)
+- test_qoyod_rounding_warning_iter293_4_rev8.py (5) + ~248 legacy
+  failures across full historical suite (stale contracts).
+
+### Deferred / backlog
+- Key Fence (design only, deferred by user).
+- OpenAI Chat integration question still unanswered.
+- Order 270818906 rescue; 270954898 needs nothing (invoice 195 kept).
+- No new features until the three simplification goals verified by
+  user on production.

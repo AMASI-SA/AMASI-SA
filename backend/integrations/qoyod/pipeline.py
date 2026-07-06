@@ -2151,6 +2151,103 @@ async def process_customer_resolved_row(
             }
 
         try:
+            # ── rev36 — Simple-guarantees pre-send checks ────────────
+            # User directive: (1) NO second real invoice for the same
+            # order EVER; (2) expected-vs-Salla total must agree within
+            # 0.01 SAR BEFORE the POST (complements the post-create
+            # verification of Iter-293.4). Live sends only — dry runs
+            # never reach قيود.
+            if not is_dry and not _pipeline_is_dry_mode:
+                _order_keys = [k for k in (
+                    row.get("salla_order_number"),
+                    row.get("salla_order_id")) if k]
+                _dup = None
+                if _order_keys:
+                    _dup = await db.qoyod_invoices.find_one({
+                        "user_id": user_id,
+                        "$or": [
+                            {"salla_order_number": {"$in": _order_keys}},
+                            {"salla_order_id":     {"$in": _order_keys}},
+                        ],
+                        "qoyod_invoice_id": {
+                            "$exists": True, "$nin": [None, ""],
+                            "$not": {"$regex": "^(DRY:|PREVIEW:)"},
+                        },
+                    }, {"_id": 0, "qoyod_invoice_id": 1,
+                        "qoyod_invoice_number": 1})
+                if _dup is not None:
+                    _dup_patch = transition(
+                        from_stage="PRODUCT_RESOLVED", to_stage="SKIPPED",
+                        actor="worker",
+                        note=("duplicate blocked: real invoice "
+                              f"{_dup.get('qoyod_invoice_id')} already "
+                              "exists for this order"),
+                        existing_started_at=started_at)
+                    _dup_patch.setdefault("$set", {})[
+                        "duplicate_of_invoice"] = {
+                        "qoyod_invoice_id":
+                            _dup.get("qoyod_invoice_id"),
+                        "qoyod_invoice_number":
+                            _dup.get("qoyod_invoice_number"),
+                        "detected_at": datetime.now(timezone.utc),
+                    }
+                    await _apply(db, row["id"], _dup_patch)
+                    logger.warning(
+                        "rev36 duplicate_invoice_blocked row_id=%s "
+                        "order=%s existing_invoice=%s",
+                        row.get("id"), _order_keys,
+                        _dup.get("qoyod_invoice_id"))
+                    return {
+                        "row_id":   row["id"],
+                        "outcome":  "DUPLICATE_BLOCKED",
+                        "reason":   "real_invoice_already_exists",
+                        "existing_invoice_id":
+                            _dup.get("qoyod_invoice_id"),
+                        "trace_id": trace_id,
+                    }
+
+                _expected = (invoice_diagnostics or {}).get(
+                    "mezan_expected_total")
+                _salla_total = canonical.get("total_amount")
+                try:
+                    _pre_diff = (
+                        None if (_expected is None
+                                 or _salla_total is None)
+                        else round(float(_expected)
+                                   - float(_salla_total), 4))
+                except (TypeError, ValueError):
+                    _pre_diff = None
+                if _pre_diff is not None and abs(_pre_diff) > 0.01:
+                    _tp_err = {
+                        "code":    "totals_precheck_mismatch",
+                        "message": ("expected invoice total differs "
+                                    "from Salla total by more than "
+                                    "0.01 SAR — send blocked BEFORE "
+                                    "the POST"),
+                        "mezan_expected_total": _expected,
+                        "salla_total":          _salla_total,
+                        "difference":           _pre_diff,
+                    }
+                    await db.integration_inbox.update_one(
+                        {"id": row["id"]},
+                        {"$set": {"totals_precheck_block": {
+                            **_tp_err,
+                            "at": datetime.now(timezone.utc),
+                        }}})
+                    await _dead_letter(
+                        db, row_id=row["id"],
+                        from_stage="PRODUCT_RESOLVED",
+                        fail_stage="FAILED_INVOICE",
+                        error=_tp_err,
+                        started_at=started_at)
+                    return {
+                        "row_id":     row["id"],
+                        "outcome":    "TOTALS_PRECHECK_BLOCKED",
+                        "reason":     "totals_precheck_mismatch",
+                        "difference": _pre_diff,
+                        "trace_id":   trace_id,
+                    }
+
             # rev32 — Final pre-POST guard #3: before create_invoice.
             # Reads FRESH settings + row from DB and enforces all 8
             # conditions from Issue #5 §4. On violation, triggers auto
