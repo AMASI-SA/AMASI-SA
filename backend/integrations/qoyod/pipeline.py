@@ -792,19 +792,29 @@ async def process_normalized_row(
                       (totals.details or {}).get("mezan_vat_diagnostics")}},
     )
 
-    # ── rev33.2 — Canary-scope BUSINESS-decision skip (early) ──────
-    # RCA of order 269997994 (payment_method=mada, trace
-    # cf802d6f…): a non-allowlisted payment method during an active
-    # Live Canary is a BUSINESS decision (out of canary scope), NOT
-    # a technical failure. Route to SKIPPED BEFORE any API client
-    # is built or Qoyod call is attempted, and BEFORE the row is
-    # even marked RULES_APPLIED.
+    # ── Iter-2026-07.rev33.2 — Canary Scope Business-Decision Skip ─
+    # RCA of order 269997994 (payment_method=mada, trace_id
+    # cf802d6f28444fea942e815bb590bf8c): under a Tabby-only Live
+    # Canary (allowlist=["tabby_installment"], selective_live_send_
+    # enabled=true), a non-allowlisted payment method was routed
+    # through the Rev32 create_customer guard and ended up at
+    # FAILED_CUSTOMER → DEAD_LETTER with a misleading
+    # `qoyod_write_locked` error on create_contact.
     #
-    # This check fires ONLY when Live Canary is active
-    # (`selective_live_send_enabled=true`). When canary is OFF,
-    # the pre-existing SAS-gate branch above is the sole allowlist
-    # enforcer — this check is a strict subset of that path,
-    # scoped to the canary window.
+    # A non-allowlisted payment method during an active canary is
+    # NOT a technical failure — it is a BUSINESS decision (out of
+    # scope for THIS canary window). Route to SKIPPED via CAS
+    # BEFORE `_get_api_client` is called and BEFORE any Qoyod HTTP
+    # write is attempted. Payload and audit evidence are preserved
+    # on the row via a `canary_scope_skip` sub-document for post-
+    # incident RCA.
+    #
+    # Guard scope: fires ONLY when Live Canary is active
+    # (`selective_live_send_enabled=true`). When canary is OFF, the
+    # pre-existing SAS-gate branch at NORMALIZED is the sole
+    # allowlist enforcer, and this check is a strict subset of that
+    # path — never fires. Positive control: tabby_installment rows
+    # remain unaffected (payment_method IS in allowlist).
     if bool(settings.get("selective_live_send_enabled", False)):
         pm_for_canary_check = (canonical.get("payment_method")
                                 or canonical.get("payment_method_native"))
@@ -813,8 +823,8 @@ async def process_normalized_row(
         if (not _canary_permit
                 and "not_in_allowlist" in _canary_reason):
             logger.info(
-                "rev33.2 canary_scope_skip (pre-client) row_id=%s "
-                "trace_id=%s payment_method=%r allowlist=%r",
+                "rev33.2 canary_scope_skip row_id=%s trace_id=%s "
+                "payment_method=%r allowlist=%r",
                 row.get("id"), trace_id, pm_for_canary_check,
                 list(settings.get(
                     "selective_auto_send_allowed_payment_methods")
@@ -1037,11 +1047,6 @@ async def process_normalized_row(
     # write actions (create_customer, create_product, create_invoice,
     # create_invoice_payment). Skipped when `_pipeline_is_dry_mode` is
     # True — same rationale as invoice/payment guards downstream.
-    #
-    # NOTE: rev33.2 canary-scope BUSINESS skip already fired earlier
-    # (before _get_api_client) — this Rev32 guard remains as
-    # defense-in-depth for any non-canary write attempt that
-    # slipped past the earlier check.
     if not _pipeline_is_dry_mode:
         pm_for_guard = (canonical.get("payment_method")
                         or canonical.get("payment_method_native"))
@@ -1172,400 +1177,6 @@ async def process_normalized_row(
         "reason":   None,
         "trace_id": trace_id,
         "decision": decision.to_log_dict(),
-        "customer": res.to_log_dict(),
-    }
-
-
-async def process_rules_applied_row(
-    db, row: dict, *, api_client=None,
-) -> dict:
-    """rev33.1 — Orphan-row recovery for `RULES_APPLIED`.
-
-    Background
-    ──────────
-    `process_normalized_row` is monolithic: on a single call it moves
-    a row `NORMALIZED → RULES_APPLIED → CUSTOMER_RESOLVED`. Both
-    transitions are CAS-atomic writes, but the interval between them
-    is not: `resolve_customer` (network POST or DryRun) sits between
-    the two writes. If the pod is killed / restarted / times-out
-    inside that interval (e.g. mid-K8s-rollout), the first CAS
-    completed and the second did NOT — the row is now **orphaned at
-    RULES_APPLIED**.
-
-    The scheduled worker (`worker._one_round`) polls only
-    `pipeline_stage ∈ {NORMALIZED, CUSTOMER_RESOLVED}` — so an orphan
-    at `RULES_APPLIED` is invisible to it and sits forever. Prod
-    2026-07-05 exhibited exactly this after the three K8s readiness
-    timeouts: order 270818906 / trace 5ad73216… stuck at
-    RULES_APPLIED with `sas_gate.eligible=true` +
-    `business_rules.eligible=true`.
-
-    Design constraints (user-directive, do NOT relax)
-    ─────────────────────────────────────────────────
-    1) DO NOT re-run the SAS gate. The persisted
-       `selective_auto_send_gate` MUST be the source of truth —
-       overwriting it would erase forensic evidence.
-    2) DO NOT re-run `evaluate_rules` / `totals_guard`. The
-       persisted `business_rules_decision` and `totals_guard` are
-       already on the row.
-    3) Only complete the **second half** of the parent function:
-       preflight guards → Rev32 create_customer → `resolve_customer`
-       → CAS `RULES_APPLIED → CUSTOMER_RESOLVED`.
-    4) All rev32 / rev32.1 / rev33 write guards MUST run unchanged.
-       SKIPPED / DEAD_LETTER routing must match the parent's rules.
-
-    Idempotency
-    ───────────
-    Entry guard at the top refuses any row not at `RULES_APPLIED`,
-    so calling this twice on the same row is a no-op after the CAS
-    fires.
-    """
-    if row.get("pipeline_stage") != "RULES_APPLIED":
-        return {
-            "row_id": row.get("id"),
-            "skipped": True,
-            "reason": "not_in_rules_applied_stage",
-            "pipeline_stage": row.get("pipeline_stage"),
-        }
-
-    canonical = row.get("canonical_payload")
-    if not canonical:
-        await _dead_letter(
-            db, row_id=row["id"], from_stage="RULES_APPLIED",
-            fail_stage="FAILED_CUSTOMER",
-            error={"code": "canonical_payload_missing",
-                   "message":
-                       "RULES_APPLIED row has no canonical_payload"},
-            started_at=row.get("pipeline_started_at"),
-        )
-        return {"row_id": row["id"], "outcome": "DEAD_LETTER",
-                "reason": "canonical_payload_missing"}
-
-    user_id  = row.get("user_id", "main")
-    trace_id = row.get("trace_id")
-
-    try:
-        dto = SalesOrderDTO(**canonical)
-    except Exception as exc:
-        await _dead_letter(
-            db, row_id=row["id"], from_stage="RULES_APPLIED",
-            fail_stage="FAILED_CUSTOMER",
-            error={"code": "canonical_payload_invalid",
-                   "message": f"{exc.__class__.__name__}: {exc}"},
-            started_at=row.get("pipeline_started_at"),
-        )
-        return {"row_id": row["id"], "outcome": "DEAD_LETTER",
-                "reason": "canonical_payload_invalid"}
-
-    settings = await _load_settings(db, user_id)
-
-    # ── rev33.2 — Canary-scope BUSINESS-decision skip (early) ──────
-    # Mirrors the pre-client check in `process_normalized_row`.
-    # Runs BEFORE persisted-evidence defensive checks and BEFORE
-    # `_get_api_client` so an orphan whose payment_method fell
-    # outside the current canary allowlist is skipped cleanly with
-    # no client build and no Qoyod call.
-    if bool(settings.get("selective_live_send_enabled", False)):
-        pm_for_canary_check = (
-            (row.get("canonical_payload") or {}).get("payment_method")
-            or (row.get("canonical_payload") or {}).get(
-                "payment_method_native"))
-        _canary_permit, _canary_reason = _live_write_permitted(
-            settings, payment_method=pm_for_canary_check)
-        if (not _canary_permit
-                and "not_in_allowlist" in _canary_reason):
-            logger.info(
-                "rev33.2 canary_scope_skip (orphan-recovery, "
-                "pre-client) row_id=%s trace_id=%s "
-                "payment_method=%r allowlist=%r",
-                row.get("id"), trace_id, pm_for_canary_check,
-                list(settings.get(
-                    "selective_auto_send_allowed_payment_methods")
-                    or []))
-            patch = transition(
-                from_stage="RULES_APPLIED", to_stage="SKIPPED",
-                actor="worker",
-                note=(f"rev33.2 canary_scope_skip (orphan): pm="
-                      f"{pm_for_canary_check!r} outside allowlist "
-                      "during Live Canary — no write attempted"),
-                existing_started_at=row.get("pipeline_started_at"),
-            )
-            patch.setdefault("$set", {})["canary_scope_skip"] = {
-                "reason":             _canary_reason,
-                "at":                 _now(),
-                "payment_method":     pm_for_canary_check,
-                "allowlist":          list(settings.get(
-                    "selective_auto_send_allowed_payment_methods")
-                    or []),
-                "stage_when_skipped": "RULES_APPLIED",
-                "detected_by":        "process_rules_applied_row",
-            }
-            try:
-                await _apply_atomic(
-                    db, row["id"], patch,
-                    expected_from_stage="RULES_APPLIED")
-            except _StaleStageError:
-                pass
-            return {
-                "row_id":         row["id"],
-                "outcome":        "SKIPPED",
-                "reason":         "canary_scope_skip_pm_not_in_allowlist",
-                "trace_id":       trace_id,
-                "payment_method": pm_for_canary_check,
-            }
-
-    # ── Read persisted evidence — DO NOT re-evaluate ────────────────
-    sas_gate         = row.get("selective_auto_send_gate") or {}
-    business_rules_d = row.get("business_rules_decision") or {}
-
-    # Defensive: if persisted evidence says the row is ineligible,
-    # transition to SKIPPED via CAS. This should never fire in a
-    # healthy pipeline (rev33 SKIPPED-terminality + rev29c gate-
-    # persist ensure a rejected row can never reach RULES_APPLIED),
-    # but keep the guard for belt-and-suspenders forensic safety.
-    if sas_gate and (sas_gate.get("eligible") is False):
-        patch = transition(
-            from_stage="RULES_APPLIED", to_stage="SKIPPED",
-            actor="worker",
-            note=(
-                "rev33.1 orphan-recovery: persisted sas_gate."
-                "eligible=false at RULES_APPLIED — routing to "
-                "SKIPPED without side-effects"),
-            existing_started_at=row.get("pipeline_started_at"),
-        )
-        try:
-            await _apply_atomic(
-                db, row["id"], patch,
-                expected_from_stage="RULES_APPLIED")
-        except _StaleStageError:
-            pass
-        return {
-            "row_id":   row["id"],
-            "outcome":  "SKIPPED",
-            "reason":   "sas_gate_eligible_false_on_persisted_evidence",
-            "trace_id": trace_id,
-        }
-    if (business_rules_d
-            and business_rules_d.get("eligible") is False):
-        patch = transition(
-            from_stage="RULES_APPLIED", to_stage="SKIPPED",
-            actor="worker",
-            note=(
-                "rev33.1 orphan-recovery: persisted business_rules_"
-                "decision.eligible=false at RULES_APPLIED — routing "
-                "to SKIPPED without side-effects"),
-            existing_started_at=row.get("pipeline_started_at"),
-        )
-        try:
-            await _apply_atomic(
-                db, row["id"], patch,
-                expected_from_stage="RULES_APPLIED")
-        except _StaleStageError:
-            pass
-        return {
-            "row_id":   row["id"],
-            "outcome":  "SKIPPED",
-            "reason":   "business_rules_eligible_false_on_persisted",
-            "trace_id": trace_id,
-        }
-
-    # `_sas_gate_passed` mirrors the parent function's local flag,
-    # derived from persisted evidence (NOT a re-eval). This drives
-    # `_get_api_client(scoped_write_allowance=…)` so a live client
-    # is only ever handed back when the persisted gate said so.
-    _sas_gate_passed = bool(sas_gate.get("eligible"))
-
-    # ── Client resolution (mirrors parent lines 798-812) ────────────
-    if api_client is None:
-        api_client, _is_dry = await _get_api_client(
-            db, user_id, settings,
-            scoped_write_allowance=_sas_gate_passed,
-            row_id=row.get("id"))
-        if api_client is None:
-            await _dead_letter(
-                db, row_id=row["id"], from_stage="RULES_APPLIED",
-                fail_stage="FAILED_CUSTOMER",
-                error={"code": "no_credentials",
-                       "message":
-                           "Qoyod API key not configured"},
-                started_at=row.get("pipeline_started_at"),
-            )
-            return {"row_id": row["id"], "outcome": "DEAD_LETTER",
-                    "reason": "no_credentials"}
-
-    # ── Dry-mode signal (parent lines 826-828) ──────────────────────
-    from integrations.qoyod.invoice_builder import (
-        DryRunQoyodClient as _DryRunQoyodClient_check,
-    )
-    _pipeline_is_dry_mode = bool(
-        isinstance(api_client, _DryRunQoyodClient_check)
-        or settings.get("dry_run_mode", False))
-
-    # ── Preflight guards (parent lines 937-975) ─────────────────────
-    try:
-        await _require_sas_gate_persisted(
-            db, row["id"], stage="CUSTOMER_RESOLVED")
-    except _SasGateMissingError as e:
-        logger.error(
-            "rev33.1 gate_missing_before_customer_resolved row_id=%s "
-            "trace_id=%s row_worker_sha=%s",
-            row.get("id"), trace_id, e.worker_sha)
-        await _dead_letter(
-            db, row_id=row["id"], from_stage="RULES_APPLIED",
-            fail_stage="FAILED_CUSTOMER",
-            error={
-                "code":    "sas_gate_missing_before_downstream",
-                "message": str(e),
-                "stage":   "CUSTOMER_RESOLVED",
-                "row_worker_sha": e.worker_sha,
-            },
-            started_at=row.get("pipeline_started_at"),
-        )
-        return {
-            "row_id":   row["id"],
-            "outcome":  "DEAD_LETTER",
-            "reason":   "sas_gate_missing_before_downstream",
-            "stage":    "CUSTOMER_RESOLVED",
-            "trace_id": trace_id,
-        }
-
-    try:
-        await _assert_sas_not_rejected(db, row["id"])
-    except _StaleStageError as e:
-        logger.warning(
-            "rev33.1 sas_reject_guard_at_customer_resolver "
-            "row_id=%s trace_id=%s %s",
-            row.get("id"), trace_id, e)
-        return {
-            "row_id":   row["id"],
-            "outcome":  "STALE_STAGE_ABORT",
-            "reason":   "sas_gate_rejected_row_before_customer_resolver",
-            "detail":   str(e),
-            "trace_id": trace_id,
-        }
-
-    # ── Rev32 guard #1 — create_customer (parent lines 981-1014) ────
-    # NOTE: rev33.2 canary-scope BUSINESS skip already fired before
-    # `_get_api_client` above — this Rev32 guard remains as
-    # defense-in-depth.
-    if not _pipeline_is_dry_mode:
-        pm_for_guard = (canonical.get("payment_method")
-                        or canonical.get("payment_method_native"))
-        try:
-            await _rev32_assert_final_write_permitted(
-                db, row["id"],
-                action="create_customer",
-                payment_method=pm_for_guard,
-                user_id=user_id,
-            )
-        except Rev32Violation as _v:
-            logger.error(
-                "rev33.1 rev32 create_customer_blocked row_id=%s "
-                "trace_id=%s violation_type=%s reason=%s",
-                row.get("id"), trace_id,
-                _v.violation_type, _v.reason)
-            await _dead_letter(
-                db, row_id=row["id"],
-                from_stage="RULES_APPLIED",
-                fail_stage="FAILED_CUSTOMER",
-                error={
-                    "code":           "rev32_guard_blocked",
-                    "violation_type": _v.violation_type,
-                    "message":        _v.reason,
-                    "evidence":       _v.evidence,
-                },
-                started_at=row.get("pipeline_started_at"))
-            return {
-                "row_id":         row["id"],
-                "outcome":        "REV32_BLOCKED",
-                "reason":         _v.violation_type,
-                "violation_type": _v.violation_type,
-                "step":           "create_customer",
-                "trace_id":       trace_id,
-            }
-
-    # ── Resolve customer (parent lines 1015-1053) ───────────────────
-    res: ResolutionResult = await resolve_customer(
-        db, user_id, dto.customer,
-        trace_id=trace_id,
-        default_customer_id=settings.get("default_customer_id"),
-        api_client=api_client,
-    )
-
-    if not res.success:
-        await _dead_letter(
-            db, row_id=row["id"],
-            from_stage="RULES_APPLIED",
-            fail_stage="FAILED_CUSTOMER",
-            error=res.error,
-            started_at=row.get("pipeline_started_at"),
-        )
-        if res.qoyod_request_payload is not None:
-            await db.integration_inbox.update_one(
-                {"id": row["id"]},
-                {"$set": {
-                    "qoyod_payloads.customer_request":
-                        res.qoyod_request_payload,
-                    "qoyod_payloads.customer_request_at": _now(),
-                    "customer_resolution": res.to_log_dict(),
-                }},
-            )
-        return {
-            "row_id":   row["id"],
-            "outcome":  "DEAD_LETTER",
-            "reason":   "FAILED_CUSTOMER",
-            "trace_id": trace_id,
-            "customer": res.to_log_dict(),
-        }
-
-    # ── CAS RULES_APPLIED → CUSTOMER_RESOLVED (parent 1055-1112) ────
-    _is_dry_customer = (
-        _pipeline_is_dry_mode
-        or (isinstance(res.qoyod_customer_id, str)
-            and res.qoyod_customer_id.startswith(("DRY:", "PREVIEW:"))))
-    if _is_dry_customer:
-        _customer_note = (
-            "rev33.1 orphan-recovery · DRY-RUN: customer payload "
-            "built, no POST" if res.created_new else
-            "rev33.1 orphan-recovery · DRY-RUN: customer mapped "
-            "from local store, no POST")
-    else:
-        _customer_note = (
-            "rev33.1 orphan-recovery · customer mapped from local "
-            "store" if not res.created_new else
-            "rev33.1 orphan-recovery · customer created in Qoyod")
-
-    patch = transition(
-        from_stage="RULES_APPLIED", to_stage="CUSTOMER_RESOLVED",
-        actor="worker",
-        note=_customer_note,
-    )
-    patch.setdefault("$set", {}).update({
-        "customer_resolution": res.to_log_dict(),
-        "qoyod_customer_id":   res.qoyod_customer_id,
-    })
-    try:
-        await _apply_atomic(
-            db, row["id"], patch,
-            expected_from_stage="RULES_APPLIED")
-    except _StaleStageError as e:
-        logger.warning(
-            "rev33.1 customer_resolved_stale row_id=%s trace_id=%s %s",
-            row.get("id"), trace_id, e)
-        return {
-            "row_id":   row["id"],
-            "outcome":  "STALE_STAGE_ABORT",
-            "reason":   "row_stage_changed_before_customer_resolved_write",
-            "expected": "RULES_APPLIED",
-            "actual":   e.actual,
-            "trace_id": trace_id,
-        }
-
-    return {
-        "row_id":   row["id"],
-        "outcome":  "CUSTOMER_RESOLVED",
-        "reason":   None,
-        "trace_id": trace_id,
         "customer": res.to_log_dict(),
     }
 
@@ -3525,58 +3136,6 @@ async def day4_report(db, user_id: str) -> dict:
             "partial_failure":     by_stage.get("PARTIAL_FAILURE", 0),
             "completed":           by_stage.get("COMPLETED", 0),
         },
-    }
-
-
-async def process_pending_rules_applied(
-    db, user_id: str = "main", *,
-    limit: int = 25,
-    api_client=None,
-) -> dict:
-    """rev33.1 — Drain up to `limit` orphan-`RULES_APPLIED` rows.
-
-    Symmetrical to `process_pending_normalized` — reads only rows at
-    `pipeline_stage="RULES_APPLIED"` and drives them forward via
-    `process_rules_applied_row` (which does NOT re-run the SAS gate
-    or business rules; it consumes the persisted evidence).
-
-    Wired into `worker._one_round` so the periodic tick self-heals
-    any rows orphaned by a pod restart between the two CAS writes
-    of `process_normalized_row`.
-    """
-    cursor = db.integration_inbox.find(
-        {"user_id": user_id, "pipeline_stage": "RULES_APPLIED"},
-        sort=[("received_at", 1)],
-        limit=max(1, min(limit, 100)),
-    )
-    rows = []
-    async for r in cursor:
-        rows.append(r)
-
-    results: list[dict] = []
-    counters = {"customer_resolved": 0, "skipped": 0,
-                "dead_letter":       0, "stale_stage_abort": 0,
-                "rev32_blocked":     0}
-    for row in rows:
-        out = await process_rules_applied_row(
-            db, row, api_client=api_client)
-        results.append(out)
-        oc = out.get("outcome")
-        if oc == "CUSTOMER_RESOLVED":
-            counters["customer_resolved"] += 1
-        elif oc == "SKIPPED":
-            counters["skipped"] += 1
-        elif oc == "DEAD_LETTER":
-            counters["dead_letter"] += 1
-        elif oc == "STALE_STAGE_ABORT":
-            counters["stale_stage_abort"] += 1
-        elif oc == "REV32_BLOCKED":
-            counters["rev32_blocked"] += 1
-    return {
-        "ok": True,
-        "processed": len(results),
-        "counts": counters,
-        "items": results,
     }
 
 
