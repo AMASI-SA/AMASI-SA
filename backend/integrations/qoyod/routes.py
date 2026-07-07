@@ -2030,6 +2030,21 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             confirm_token=str(body.get("confirm_token") or ""),
             actor=f"operator:{getattr(user, 'email', tenant)}")
 
+    # ── rev41 — Unified Send Diagnosis (READ-ONLY, any method) ───────
+    # ONE rule for all payment methods: READY_TO_SEND_ONCE or REFUSED
+    # with the REAL blocker (runs the actual policy engine).
+    @router.get("/admin/send-diagnosis/{order_number}")
+    async def admin_send_diagnosis(
+        order_number: str,
+        expected_payment_method: Optional[str] = Query(None),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.send_diagnosis import build_send_diagnosis
+        return await build_send_diagnosis(
+            db, user_id=_tenant_id(user),
+            order_number=str(order_number),
+            expected_payment_method=expected_payment_method)
+
     # ── rev39.1 — MADA candidate finder (READ-ONLY) ──────────────────
     @router.get("/admin/mada-candidates")
     async def admin_mada_candidates(
