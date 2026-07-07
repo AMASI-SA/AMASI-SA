@@ -1,6 +1,30 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.1 — MADA Candidate Finder (READ-ONLY)
+# ══════════════════════════════════════════════════════════════════
+Production preflight showed order 270513107 is VETOED: its row is
+SKIPPED (rev33 veto) + AMS11981 unmapped. User decreed: no bypass,
+no arm, no send. Chose option (b): read-only finder.
+- NEW `mada_candidates.py` + `GET /admin/mada-candidates?limit=5`:
+  scans recent mada orders (aggregate by order), runs the SAME
+  build_send_preflight per order, classifies:
+  • ready_now (all mapped, diff<=0.01, no SKIPPED, no dup, status
+    completed) — ranked first
+  • ready_with_product_create (only-missing SKUs listed)
+  • rejected_summary with Arabic reasons (SKIPPED veto / dup / scope
+    / status / amount).
+  ZERO writes (pinned by test), zero Qoyod calls.
+- Tests: test_mada_candidates_rev39_1.py = 2 passed (6-order matrix).
+- NOTE: mada_canary_send is still HARD-PINNED to 270513107. Once the
+  user picks a new candidate order, re-pin the constants
+  (MADA_CANARY_ORDER_NUMBER + phrase) to it — ONE-LINE change +
+  redeploy, per user's max-safety style.
+- NEEDS DEPLOY. User flow: GET admin/mada-candidates → pick
+  ready_now candidate → individual send-preflight → user approval →
+  re-pin send tool → arm pinned budget → send.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39 — MADA Canary Send machinery (BUILT, NOT EXECUTED)
 # ══════════════════════════════════════════════════════════════════
 User decree: send ONE mada order 270513107 (198.72, trace fbf9b483…),

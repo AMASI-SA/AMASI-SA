@@ -2030,6 +2030,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             confirm_token=str(body.get("confirm_token") or ""),
             actor=f"operator:{getattr(user, 'email', tenant)}")
 
+    # ── rev39.1 — MADA candidate finder (READ-ONLY) ──────────────────
+    @router.get("/admin/mada-candidates")
+    async def admin_mada_candidates(
+        limit: int = Query(5, ge=1, le=20),
+        scan_limit: int = Query(200, ge=10, le=1000),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.mada_candidates import find_mada_candidates
+        return await find_mada_candidates(
+            db, user_id=_tenant_id(user), limit=limit,
+            scan_limit=scan_limit)
+
     # ── rev39 — MADA Canary Send (order 270513107 ONLY) ──────────────
     # Guarded one-shot: exact approval phrase + 10 guards + pinned
     # budget. NEVER auto-runs; the operator fires it explicitly.
