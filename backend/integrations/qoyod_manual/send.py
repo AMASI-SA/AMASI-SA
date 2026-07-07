@@ -31,11 +31,13 @@ from typing import Any, Optional
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod.payment_methods import resolve_payment_account
-from integrations.qoyod.unsent_orders import _order_created_date, _is_real
+from integrations.qoyod.unsent_orders import _is_real
 from integrations.qoyod_manual.client import (
     ManualQoyodClient, ManualQoyodError,
 )
-from integrations.qoyod_manual.pending import _is_completed
+from integrations.qoyod_manual.pending import (
+    _is_completed, _salla_order_created_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -466,13 +468,20 @@ async def manual_send_one(
             "order_not_found",
             f"لم يتم العثور على طلب برقم {order_number} في الاستلام")
 
-    # ── Floor date + status filters (mirror the pending listing) ────
-    odate = _order_created_date(row)
-    if odate is None or odate < _FLOOR_DATE:
+    # ── Floor date (Salla-source-only) + status filters ────────────
+    # No fallback to received_at/updated_at/webhook time — if Salla
+    # doesn't tell us the creation date, we REFUSE to send.
+    odate = _salla_order_created_date(row)
+    if odate is None:
+        raise ManualSendRefused(
+            "no_salla_order_date",
+            "لا يوجد تاريخ إنشاء للطلب في بيانات سلة — يتعذّر التحقق من "
+            "تاريخ التكامل")
+    if odate < _FLOOR_DATE:
         raise ManualSendRefused(
             "before_floor_date",
-            f"تاريخ الطلب أقدم من {_FLOOR_DATE.isoformat()} — "
-            "خارج نطاق التكامل")
+            f"تاريخ إنشاء الطلب ({odate.isoformat()}) أقدم من "
+            f"{_FLOOR_DATE.isoformat()} — خارج نطاق التكامل")
     if not _is_completed(row):
         raise ManualSendRefused(
             "not_completed",

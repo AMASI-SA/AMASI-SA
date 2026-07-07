@@ -455,3 +455,124 @@ def test_q2_quantises_half_up():
     assert _q2("2.345") == 2.35
     # Long-tail float that _q2 must strip cleanly.
     assert _q2(0.1 + 0.2) == 0.30
+
+
+# ────────────────────────────────────────────────────────────────────
+# T12 — Floor-date boundary (bug: order 268552119 leaked with pre-floor
+#       Salla date because the old helper fell back to received_at).
+#
+#   • 2026-06-30 → EXCLUDED
+#   • 2026-07-01 → INCLUDED
+#   • 2026-07-05 → INCLUDED
+#   • no Salla date at all → EXCLUDED (never promoted via received_at)
+# ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_floor_date_boundary_strict(db):
+    # Order that MUST be excluded (2026-06-30) — reproduces the bug
+    # reported for order 268552119.
+    row_before = _inbox_row(order_number="268552119",
+                             order_date="2026-06-30")
+    await db.integration_inbox.insert_one(row_before)
+
+    # Exactly ON the floor — MUST be included.
+    row_boundary = _inbox_row(order_number="ORDER-JUL1",
+                               order_date="2026-07-01")
+    await db.integration_inbox.insert_one(row_boundary)
+
+    # After floor — MUST be included.
+    row_after = _inbox_row(order_number="ORDER-JUL5",
+                            order_date="2026-07-05")
+    await db.integration_inbox.insert_one(row_after)
+
+    # No Salla date at all — MUST be excluded even if received_at is
+    # today (post-floor). Simulates a webhook that arrived after
+    # 2026-07-01 for an order that was actually created much earlier
+    # but whose Salla date fields are missing / malformed.
+    row_no_date = {
+        "id":                 "no-date-1",
+        "user_id":            TENANT,
+        "trace_id":           "tr-nd",
+        "salla_order_number": "ORDER-NO-DATE",
+        "received_at":        datetime.now(timezone.utc),
+        "pipeline_stage":     "NORMALIZED",
+        "canonical_payload": {
+            "order_number":  "ORDER-NO-DATE",
+            "order_id":      "ORDER-NO-DATE",
+            # NO order_date / created_at at all.
+            "order_status":  "completed",
+            "order_status_native": "تم التنفيذ",
+            "total_amount":  10.0,
+            "currency":      "SAR",
+            "payment_method": "credit_card",
+            "customer": {"name": "بدون تاريخ"},
+            "items": [{"sku": "SKU-ND", "name": "بند بدون تاريخ",
+                        "quantity": 1, "unit_price": 10.0,
+                        "tax_amount": 0.0, "discount_amount": 0.0,
+                        "total": 10.0}],
+        },
+        "raw_payload": {},
+    }
+    await db.integration_inbox.insert_one(row_no_date)
+
+    result = await list_pending_orders(
+        db, user_id=TENANT, days=365, limit=100)
+    order_numbers = {o["order_number"] for o in result["orders"]}
+
+    # Pre-floor order must NOT appear.
+    assert "268552119" not in order_numbers, (
+        f"268552119 leaked into pending list: {order_numbers}")
+    # No-Salla-date row must NOT appear.
+    assert "ORDER-NO-DATE" not in order_numbers, order_numbers
+    # Boundary + post-floor rows must appear.
+    assert "ORDER-JUL1" in order_numbers, order_numbers
+    assert "ORDER-JUL5" in order_numbers, order_numbers
+
+    # Counters expose the distinct exclusion reasons.
+    assert result["counts"]["excluded_pre_floor"] >= 1
+    assert result["counts"]["excluded_no_salla_date"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_send_refuses_pre_floor_order(db):
+    """Direct POST /send/{order_number} for a pre-floor row must be
+    refused with `before_floor_date` — belt-and-braces so the guard
+    fires even if a caller bypasses the pending listing."""
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    row = _inbox_row(order_number="268552119",
+                     order_date="2026-06-30")
+    await db.integration_inbox.insert_one(row)
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db, user_id=TENANT, order_number="268552119")
+    assert exc.value.code == "before_floor_date"
+
+
+@pytest.mark.asyncio
+async def test_send_refuses_when_no_salla_date(db):
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    row = {
+        "id":                 "no-date-2",
+        "user_id":            TENANT,
+        "trace_id":           "tr-nd-2",
+        "salla_order_number": "ORDER-NO-DATE-2",
+        "received_at":        datetime.now(timezone.utc),
+        "pipeline_stage":     "NORMALIZED",
+        "canonical_payload": {
+            "order_number":  "ORDER-NO-DATE-2",
+            "order_status":  "completed",
+            "total_amount":  10.0,
+            "currency":      "SAR",
+            "payment_method": "credit_card",
+            "customer": {"name": "ت"},
+            "items": [{"sku": "S", "name": "s", "quantity": 1,
+                        "unit_price": 10.0, "total": 10.0}],
+        },
+        "raw_payload": {},
+    }
+    await db.integration_inbox.insert_one(row)
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db, user_id=TENANT, order_number="ORDER-NO-DATE-2")
+    assert exc.value.code == "no_salla_order_date"

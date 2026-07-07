@@ -306,11 +306,12 @@ export default function QoyodManualSend() {
       )}
 
       {counts && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
             ["ظاهرة الآن", counts.returned],
             ["فُحص من الاستلام", counts.scanned_inbox_rows],
             ["مستبعد قبل تاريخ التكامل", counts.excluded_pre_floor],
+            ["مستبعد (بدون تاريخ سلة)", counts.excluded_no_salla_date],
             ["مستبعد (مرسل مسبقاً)", counts.excluded_already_sent],
           ].map(([label, value]) => (
             <div

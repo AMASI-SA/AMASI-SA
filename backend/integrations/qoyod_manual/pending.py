@@ -13,19 +13,63 @@ Rules (immutable, per user directive 2026-02):
 from __future__ import annotations
 
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional
+from typing import Optional, Any
 
-# Reuse the SAME floor-date + date-extraction helpers so Plan B and
-# the frozen pipeline see the same universe of dates.
+# Reuse the SAME floor-date + is_real helpers so Plan B and
+# the frozen pipeline see the same universe.
 from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE,
+    _parse_iso_date,
 )
-from integrations.qoyod.unsent_orders import (
-    _order_created_date,
-    _is_real,
-)
+from integrations.qoyod.unsent_orders import _is_real
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
+
+
+def _salla_order_created_date(row: dict) -> Optional[date]:
+    """Salla-source-only creation date.
+
+    User directive (2026-07-08): the floor-date filter MUST use the
+    REAL Salla creation date. NEVER fall back to `received_at`,
+    `updated_at`, or any webhook-timing field — those can be much
+    newer than the actual order and would let pre-floor orders slip
+    through Plan B (bug: order 268552119 leaked in).
+
+    Priority (all from the Salla payload only):
+        1. canonical_payload.order_date       (normalizer output)
+        2. canonical_payload.created_at
+        3. raw_payload.data.date.date         (Salla envelope)
+        4. raw_payload.data.date              (Salla flat string)
+        5. raw_payload.data.created_at
+
+    Returns `None` when no Salla-source date is present — the caller
+    MUST then exclude the row (never assume it belongs post-floor).
+    """
+    canon = row.get("canonical_payload") or {}
+    d = _parse_iso_date(canon.get("order_date"))
+    if d is not None:
+        return d
+    d = _parse_iso_date(canon.get("created_at"))
+    if d is not None:
+        return d
+    raw = row.get("raw_payload") or {}
+    data = raw.get("data") or {}
+    if isinstance(data, dict):
+        date_field = data.get("date")
+        if isinstance(date_field, dict):
+            d = _parse_iso_date(date_field.get("date"))
+            if d is not None:
+                return d
+        elif date_field is not None:
+            d = _parse_iso_date(date_field)
+            if d is not None:
+                return d
+        d = _parse_iso_date(data.get("created_at"))
+        if d is not None:
+            return d
+    # No Salla-source date → row is EXCLUDED from Plan B (never
+    # promoted via received_at).
+    return None
 
 
 def _is_completed(row: dict) -> bool:
@@ -98,6 +142,7 @@ async def list_pending_orders(
     pending: list[dict] = []
     scanned = 0
     excluded_pre_floor = 0
+    excluded_no_salla_date = 0
     excluded_not_completed = 0
     excluded_already_sent = 0
 
@@ -111,9 +156,13 @@ async def list_pending_orders(
             continue
         seen_orders.add(order_number)
 
-        # Floor date
-        odate = _order_created_date(row)
-        if odate is None or odate < _FLOOR_DATE:
+        # Floor date — Salla-source-only. Rows without a Salla date
+        # are EXCLUDED (never promoted via received_at).
+        odate = _salla_order_created_date(row)
+        if odate is None:
+            excluded_no_salla_date += 1
+            continue
+        if odate < _FLOOR_DATE:
             excluded_pre_floor += 1
             continue
 
@@ -157,6 +206,7 @@ async def list_pending_orders(
             "returned":              len(pending),
             "scanned_inbox_rows":    scanned,
             "excluded_pre_floor":    excluded_pre_floor,
+            "excluded_no_salla_date": excluded_no_salla_date,
             "excluded_not_completed": excluded_not_completed,
             "excluded_already_sent": excluded_already_sent,
         },
