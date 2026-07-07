@@ -79,12 +79,20 @@ async def _cleanup(db, tenant):
 # ─────────────────────────────────────────────────────────────────────
 # Pattern matcher tests
 # ─────────────────────────────────────────────────────────────────────
-def test_known_fixed_patterns_registry_has_contact_name_only():
-    """User directive: only ONE pattern today — contact_name_blank."""
-    assert len(KNOWN_FIXED_PATTERNS) == 1
-    p = KNOWN_FIXED_PATTERNS[0]
-    assert p["id"] == "contact_name_blank_2026_02_26"
+def test_known_fixed_patterns_registry_has_reviewed_patterns_only():
+    """Registry pin: exactly the reviewed patterns, nothing more.
+    rev47 (user approval 2026-07) added the MANUAL-ONLY
+    false_skip_history_veto pattern alongside contact_name_blank."""
+    assert len(KNOWN_FIXED_PATTERNS) == 2
+    by_id = {p["id"]: p for p in KNOWN_FIXED_PATTERNS}
+    assert set(by_id) == {"contact_name_blank_2026_02_26",
+                          "false_skip_history_veto_2026_07_07"}
+    p = by_id["contact_name_blank_2026_02_26"]
     assert "FAILED_CUSTOMER" in p["applies_to_failed_stages"]
+    assert not p.get("manual_only")
+    r47 = by_id["false_skip_history_veto_2026_07_07"]
+    assert r47["manual_only"] is True
+    assert "FAILED_CUSTOMER" in r47["applies_to_failed_stages"]
 
 
 def test_matcher_accepts_classic_qoyod_validation_shape():

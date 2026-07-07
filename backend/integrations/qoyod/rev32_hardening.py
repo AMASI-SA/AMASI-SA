@@ -311,6 +311,68 @@ async def assert_not_at_terminal_stage(
 
 
 # ─────────────────────────────────────────────────────────────────
+# rev47 — SKIPPED-history veto exemption (user approval 2026-07)
+# ─────────────────────────────────────────────────────────────────
+# RCA of prod order 270939808 (credit_card canary, trace
+# ad0c8807452b4fe5b4a1c764738e9c6d): the row was TRANSIENTLY skipped
+# (payment_method_not_in_allow_list, before credit_card was enabled),
+# legitimately resumed via the audited one-shot (rev44), yet the
+# rev33(X) blanket veto still killed the write at create_customer and
+# tripped the kill switch. rev47 teaches the veto the rev44 rule:
+# a historical SKIPPED entry is exempt ONLY when BOTH hold:
+#   (a) its note maps to a rev44 TRANSIENT reason AND the order is
+#       not cancelled/refunded (classify_skip — the ONE rule);
+#   (b) the very next stage_history entry is the audited resume
+#       SKIPPED → RETRYING (the one-shot path, which itself refuses
+#       non-transient rows).
+# EVERYTHING ELSE stays an absolute veto (fail-closed): fatal skips,
+# duplicate blocks, unknown/legacy notes, unresumed skips.
+_SKIP_NOTE_PREFIXES: tuple = (
+    "selective_auto_send_gate re-eval failed: ",
+    "selective_auto_send_gate: ",
+    "business_rule: ",
+    "manual_recovery_hold: ",
+)
+
+
+def skip_reason_from_history_note(note) -> Optional[str]:
+    """Map a SKIPPED stage_history note back to its skip reason.
+    Unknown/legacy formats return None → the veto stays (fail-closed)."""
+    n = str(note or "")
+    for prefix in _SKIP_NOTE_PREFIXES:
+        if n.startswith(prefix):
+            return n[len(prefix):].strip() or None
+    if n.startswith("rev33.2 canary_scope_skip:"):
+        return "canary_scope_skip_pm_not_in_allowlist"
+    return None
+
+
+def skipped_history_entry_exempt(entry, next_entry, row: dict) -> bool:
+    """rev47 — True ONLY for a transient-classified SKIPPED entry that
+    was immediately resumed via the audited SKIPPED → RETRYING hop."""
+    from integrations.qoyod.skip_classification import (
+        TRANSIENT, classify_skip,
+    )
+    if not isinstance(entry, dict):
+        return False
+    reason = skip_reason_from_history_note(entry.get("note"))
+    if not reason:
+        return False
+    canonical = row.get("canonical_payload") or {}
+    cls = classify_skip(
+        reason,
+        status_native=canonical.get("order_status_native"),
+        status_canon=canonical.get("order_status"))
+    if cls != TRANSIENT:
+        return False
+    if not isinstance(next_entry, dict):
+        return False
+    nxt_from = next_entry.get("from_stage") or next_entry.get("from")
+    nxt_to = next_entry.get("to_stage") or next_entry.get("to")
+    return nxt_from == "SKIPPED" and nxt_to == "RETRYING"
+
+
+# ─────────────────────────────────────────────────────────────────
 # (1) Stale-worker POST block  +  (3) Final pre-POST guard
 # ─────────────────────────────────────────────────────────────────
 async def assert_final_write_permitted(
@@ -369,6 +431,10 @@ async def assert_final_write_permitted(
          "dead_lettered_at":          1,
          "canonical_payload.payment_method":        1,
          "canonical_payload.payment_method_native": 1,
+         # rev47 — statuses feed classify_skip for the history-veto
+         # exemption (cancelled/refunded stays an absolute veto).
+         "canonical_payload.order_status":          1,
+         "canonical_payload.order_status_native":   1,
          "_id":                       0},
     ) or {}
 
@@ -428,11 +494,18 @@ async def assert_final_write_permitted(
     # only looks at the CURRENT stage).
     stage_history = row.get("stage_history") or []
     if isinstance(stage_history, list):
-        for _entry in stage_history:
+        for _idx, _entry in enumerate(stage_history):
             _to = None
             if isinstance(_entry, dict):
                 _to = _entry.get("to_stage") or _entry.get("to")
             if _to == "SKIPPED":
+                # rev47 — transient + audited-resume entries are exempt
+                # (see skipped_history_entry_exempt above). Any other
+                # SKIPPED entry keeps the absolute rev33 veto.
+                _next = (stage_history[_idx + 1]
+                         if _idx + 1 < len(stage_history) else None)
+                if skipped_history_entry_exempt(_entry, _next, row):
+                    continue
                 await _persist_violation_flag(
                     db, row_id,
                     flag_key="post_skipped_history_write_violation",

@@ -71,6 +71,7 @@ from integrations.qoyod.first_sync_monitor import (
 from integrations.qoyod.dead_letter_requeue import (
     find_requeue_candidates, auto_requeue_known_fixed, requeue_one,
     MAX_REQUEUE_ATTEMPTS, KNOWN_FIXED_PATTERNS,
+    pattern_check as dead_letter_pattern_check_fn,
 )
 from integrations.qoyod.one_shot_reprocess import (
     reprocess_one_order, OneShotRefused, CONFIRM_TOKEN_TEMPLATE,
@@ -1099,6 +1100,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             actor=f"operator:{getattr(user, 'email', tenant)}",
         )
         return {"ok": True, "result": result}
+
+    @router.get("/dead-letter/pattern-check")
+    async def dead_letter_pattern_check(
+        order_number: str = Query(..., min_length=1, max_length=32),
+        user=Depends(current_user),
+    ):
+        """rev47 — READ-ONLY: does this order's row match a known-fix
+        pattern EXCLUSIVELY (no other DEAD_LETTER matches), and are
+        all its historical skips transient + resumed? Zero writes."""
+        tenant = _tenant_id(user)
+        return await dead_letter_pattern_check_fn(
+            db, user_id=tenant, order_number=order_number)
 
     @router.post("/dead-letter/requeue-one")
     async def dead_letter_requeue_one(

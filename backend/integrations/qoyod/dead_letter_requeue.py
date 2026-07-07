@@ -90,6 +90,19 @@ def _contact_name_blank_matcher(err: dict | None) -> bool:
     return "contact_name" in blob and "blank" in blob
 
 
+def _false_skip_history_veto_matcher(err: dict | None) -> bool:
+    """rev47 — Match EXACTLY the false rev33 SKIPPED-history veto that
+    dead-lettered order 270939808 (2026-07-07): the guard blocked the
+    write because a TRANSIENT skip (rev44) appeared in stage_history.
+    Fixed by rev47 (skipped_history_entry_exempt in rev32_hardening).
+    Matches nothing else — no substring heuristics."""
+    if not isinstance(err, dict):
+        return False
+    return (err.get("code") == "rev32_guard_blocked"
+            and err.get("violation_type")
+            == "post_skipped_history_write_violation")
+
+
 KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
     {
         "id":            "contact_name_blank_2026_02_26",
@@ -100,6 +113,25 @@ KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
         "applies_to_failed_stages": frozenset({"FAILED_CUSTOMER"}),
         "matcher":       _contact_name_blank_matcher,
         "fixed_at":      "2026-02-26",
+    },
+    {
+        "id":            "false_skip_history_veto_2026_07_07",
+        "description":   ("rev33 blanket SKIPPED-history veto killed a "
+                          "row whose skips were TRANSIENT (rev44) and "
+                          "legitimately resumed via the audited one-shot"
+                          " (prod order 270939808). Fixed by rev47: the "
+                          "veto now exempts transient+resumed entries."),
+        "applies_to_failed_stages": frozenset({"FAILED_CUSTOMER"}),
+        "matcher":       _false_skip_history_veto_matcher,
+        "fixed_at":      "2026-07-07",
+        # rev47 user conditions: NO auto-requeue (operator-only),
+        # clear the rev32.1 dead-letter stamp (with audit trail), and
+        # park the row at SKIPPED(transient) so the background worker
+        # can never auto-send it — only the explicit canary one-shot.
+        "manual_only":              True,
+        "clear_dead_letter_evidence": True,
+        "hold_in_skipped":          True,
+        "hold_skip_reason":  "dead_letter_false_veto_recovery_hold",
     },
 ]
 
@@ -119,10 +151,13 @@ KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
 #      block is the policy anchor — do not relax it lightly).
 #
 # The invariant below is asserted at import time AND re-asserted by
-# `test_known_fixed_patterns_registry_has_contact_name_only` so any
+# `test_known_fixed_patterns_registry_has_reviewed_patterns_only` so any
 # accidental expansion breaks CI immediately.
 _REVIEWED_PATTERN_IDS: frozenset[str] = frozenset({
     "contact_name_blank_2026_02_26",
+    # rev47 — reviewed + user-approved 2026-07: manual-only recovery
+    # for the false rev33 SKIPPED-history veto (order 270939808).
+    "false_skip_history_veto_2026_07_07",
 })
 _unreviewed = {p["id"] for p in KNOWN_FIXED_PATTERNS} - _REVIEWED_PATTERN_IDS
 assert not _unreviewed, (
@@ -172,14 +207,20 @@ def _resume_target_for(last_failed_stage: str | None) -> str:
     return "NORMALIZED"
 
 
-def match_pattern(row: dict) -> dict | None:
+def match_pattern(row: dict, *, include_manual_only: bool = False) -> dict | None:
     """Return the first KNOWN_FIXED_PATTERNS entry that matches the
     row, or None. A match requires BOTH the failed-stage AND the
     error matcher to accept the row.
+
+    rev47 — patterns flagged `manual_only=True` are NEVER matched for
+    the auto-requeue path (worker tick / bulk button); only the
+    explicit operator `requeue_one` passes include_manual_only=True.
     """
     last_failed = row.get("last_failed_stage")
     err = row.get("pipeline_error") or {}
     for pat in KNOWN_FIXED_PATTERNS:
+        if pat.get("manual_only") and not include_manual_only:
+            continue
         if last_failed not in pat["applies_to_failed_stages"]:
             continue
         try:
@@ -233,6 +274,28 @@ async def requeue_row(
     resume_stage = _resume_target_for(last_failed)
     pattern_id = pattern.get("id")
 
+    # rev47 — fail-closed pre-check for hold-in-skipped patterns:
+    # refuse unless EVERY historical SKIPPED entry is transient AND
+    # was resumed via the audited SKIPPED → RETRYING hop (the exact
+    # exemption the fixed rev33 veto applies at write time).
+    if pattern.get("hold_in_skipped"):
+        from integrations.qoyod.rev32_hardening import (
+            skipped_history_entry_exempt,
+        )
+        history = row.get("stage_history") or []
+        for _idx, _e in enumerate(history):
+            _to = _e.get("to_stage") if isinstance(_e, dict) else None
+            if _to != "SKIPPED":
+                continue
+            _next = history[_idx + 1] if _idx + 1 < len(history) else None
+            if not skipped_history_entry_exempt(_e, _next, row):
+                return {
+                    "ok": False,
+                    "reason": "historical_skip_not_transient_or_not_resumed",
+                    "row_id": row_id,
+                    "offending_note": (_e or {}).get("note"),
+                }
+
     # Hop 1: <terminal> → RETRYING
     forced_tag = " [FORCED]" if force else ""
     note1 = (f"auto-requeue{forced_tag}: pattern={pattern_id} "
@@ -246,6 +309,16 @@ async def requeue_row(
         "last_requeue_at":  _now(),
         "last_requeue_pattern": pattern_id,
     })
+    # rev47 — clear the rev32.1 dead-letter stamp ONLY for reviewed
+    # patterns that explicitly request it, with a full audit trail.
+    # Without this the rev32.1 (A) veto would forever block the retry.
+    if pattern.get("clear_dead_letter_evidence"):
+        p1["$set"].update({
+            "dead_lettered_at":            None,
+            "dead_letter_cleared_at":      _now(),
+            "dead_letter_cleared_by":      actor,
+            "dead_letter_cleared_pattern": pattern_id,
+        })
     if force:
         p1["$set"].update({
             "forced_requeue_at": _now(),
@@ -267,12 +340,34 @@ async def requeue_row(
     # because (RETRYING → HAPPY_PATH) is exactly the retry edge.
     await db.integration_inbox.update_one({"id": row_id}, p2)
 
+    # rev47 — Hop 3 (hold-in-skipped patterns ONLY): park the row at
+    # SKIPPED with skip_class=transient so the background worker can
+    # NEVER auto-send it. The ONLY resume path is the explicit audited
+    # operator one-shot (canary send), exactly per user condition #2.
+    final_stage = resume_stage
+    if pattern.get("hold_in_skipped"):
+        from integrations.qoyod.skip_classification import (
+            stamp_skip_class,
+        )
+        hold_reason = (pattern.get("hold_skip_reason")
+                       or "dead_letter_false_veto_recovery_hold")
+        p3 = transition(
+            from_stage=resume_stage, to_stage="SKIPPED",
+            actor=actor,
+            note=f"manual_recovery_hold: {hold_reason}",
+        )
+        stamp_skip_class(p3, reason=hold_reason, row=row)
+        await db.integration_inbox.update_one({"id": row_id}, p3)
+        final_stage = "SKIPPED"
+
     return {
         "ok":               True,
         "row_id":           row_id,
         "trace_id":         row.get("trace_id"),
         "previous_stage":   current_stage,
         "resume_stage":     resume_stage,
+        "final_stage":      final_stage,
+        "held_in_skipped":  final_stage == "SKIPPED",
         "requeue_attempts": prev_attempts + 1,
         "pattern_id":       pattern_id,
     }
@@ -416,10 +511,109 @@ async def requeue_one(
     row = await db.integration_inbox.find_one(q)
     if not row:
         return {"ok": False, "reason": "row_not_found"}
-    pat = match_pattern(row)
+    # rev47 — the explicit operator path may match manual-only patterns.
+    pat = match_pattern(row, include_manual_only=True)
     if not pat:
         return {"ok": False, "reason": "no_known_fix_pattern_matches",
                 "last_failed_stage": row.get("last_failed_stage"),
                 "pipeline_error":    row.get("pipeline_error")}
     res = await requeue_row(db, row, pattern=pat, actor=actor, force=force)
     return {"ok": bool(res.get("ok")), "result": res}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# rev47 — READ-ONLY pattern check (user condition #1, 2026-07)
+# ─────────────────────────────────────────────────────────────────────
+async def pattern_check(db, *, user_id: str, order_number: str) -> dict:
+    """READ-ONLY diagnosis: does THIS order's DEAD_LETTER row match a
+    known-fix pattern, are ALL its historical skips transient+resumed
+    (rev47 exemption), and does the pattern match any OTHER
+    DEAD_LETTER row (exclusivity scan)? Zero writes, zero Qoyod calls.
+    """
+    from integrations.qoyod.rev32_hardening import (
+        skipped_history_entry_exempt,
+    )
+    on = str(order_number or "").strip()
+    if not on:
+        return {"ok": False, "reason": "order_number_required",
+                "read_only": True}
+    cands: list = [on]
+    try:
+        cands.append(int(on))
+    except (TypeError, ValueError):
+        pass
+    row = await db.integration_inbox.find_one({
+        "user_id": user_id,
+        "$or": [{"salla_order_number": {"$in": cands}},
+                {"salla_order_id": {"$in": cands}}],
+    })
+    if not row:
+        return {"ok": False, "found": False, "order_number": on,
+                "read_only": True}
+
+    pat = match_pattern(row, include_manual_only=True)
+    history = row.get("stage_history") or []
+    skipped_entries: list[dict] = []
+    all_exempt = True
+    for idx, e in enumerate(history):
+        to = e.get("to_stage") if isinstance(e, dict) else None
+        if to != "SKIPPED":
+            continue
+        nxt = history[idx + 1] if idx + 1 < len(history) else None
+        exempt = skipped_history_entry_exempt(e, nxt, row)
+        all_exempt = all_exempt and exempt
+        skipped_entries.append({
+            "note":         e.get("note"),
+            "at":           str(e.get("at")),
+            "rev47_exempt": exempt,
+        })
+
+    # Exclusivity scan — ANY other terminal-failure row matching the
+    # same pattern must be surfaced (user demands this order is the
+    # ONLY match before any requeue).
+    other_matches: list[dict] = []
+    cursor = db.integration_inbox.find(
+        {"user_id": user_id,
+         "pipeline_stage": {"$in": ["DEAD_LETTER", "PARTIAL_FAILURE"]}},
+        limit=500)
+    async for r in cursor:
+        r_pat = match_pattern(r, include_manual_only=True)
+        if r_pat is None or (pat and r_pat.get("id") != pat.get("id")):
+            continue
+        r_on = str(r.get("salla_order_number") or "")
+        if r_on != on:
+            other_matches.append({"order_number": r_on,
+                                  "trace_id": r.get("trace_id"),
+                                  "pattern_id": r_pat.get("id")})
+
+    err = row.get("pipeline_error") or {}
+    dead_at = row.get("dead_lettered_at")
+    return {
+        "ok": True, "found": True,
+        "read_only": True, "no_db_writes": True,
+        "no_qoyod_api_calls": True,
+        "order_number":       on,
+        "trace_id":           row.get("trace_id"),
+        "pipeline_stage":     row.get("pipeline_stage"),
+        "last_failed_stage":  row.get("last_failed_stage"),
+        "dead_lettered_at":   str(dead_at) if dead_at else None,
+        "pipeline_error_code": err.get("code"),
+        "pipeline_error_violation_type": err.get("violation_type"),
+        "pattern_matches":    bool(pat),
+        "matched_pattern_id": (pat or {}).get("id"),
+        "pattern_is_manual_only": bool((pat or {}).get("manual_only")),
+        "skipped_history_entries": skipped_entries,
+        "all_historical_skips_transient_and_resumed": all_exempt,
+        "other_dead_letter_rows_matching_pattern": other_matches,
+        "other_matches_count": len(other_matches),
+        "safe_to_requeue": bool(
+            pat
+            and pat.get("id") == "false_skip_history_veto_2026_07_07"
+            and all_exempt
+            and not other_matches),
+        "note": ("قراءة فقط — لا كتابة ولا استدعاء لقيود. "
+                 "safe_to_requeue=true يعني: الصف يطابق حصريًا نمط "
+                 "false_skip_history_veto_2026_07_07، وكل تخطياته "
+                 "التاريخية مؤقتة ومستأنفة عبر المسار المدقق، ولا يوجد "
+                 "أي DEAD_LETTER آخر يطابق النمط."),
+    }

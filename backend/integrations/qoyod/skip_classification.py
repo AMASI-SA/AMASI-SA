@@ -33,6 +33,11 @@ TRANSIENT_SKIP_REASONS = frozenset({
     "payment_method_hard_blocked",
     "payment_method_mapping_missing",
     "canary_scope_skip_pm_not_in_allowlist",
+    # rev47 — audited manual recovery hold: a DEAD_LETTER row that was
+    # falsely vetoed (rev33 SKIPPED-history veto on a transient skip)
+    # is parked back at SKIPPED so the worker never auto-sends it; the
+    # ONLY resume path is the explicit operator canary one-shot.
+    "dead_letter_false_veto_recovery_hold",
 })
 
 

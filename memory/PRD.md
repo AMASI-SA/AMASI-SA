@@ -7104,3 +7104,69 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   send-diagnosis/270939808 (expect payment_account_mapping_check
   passed + ready_to_send true), then re-run the SAME send command
   (budget still armed & pinned, phrase unchanged).
+
+### Rev47 — False SKIPPED-history veto: root cause + recovery (2026-07, user-approved)
+- PROD RCA (order 270939808, trace ad0c8807…): send failed at
+  FAILED_CUSTOMER → DEAD_LETTER with pipeline_error
+  code=rev32_guard_blocked, violation_type=
+  post_skipped_history_write_violation. Qoyod NEVER rejected the
+  customer — rev33(X) blanket veto killed the write because the row
+  had historical SKIPPED entries, even though those skips were
+  TRANSIENT (rev44: payment_method_not_in_allow_list before
+  credit_card was enabled) and resumed via the audited one-shot.
+  Side effect: kill switch tripped stored settings (writes_locked=
+  True, live_send=False) + dead_lettered_at stamped on the row.
+- FIX (surgical, fail-closed preserved):
+  1. rev32_hardening.py — rev33(X) veto now EXEMPTS a SKIPPED history
+     entry ONLY when (a) its note parses to a rev44 TRANSIENT reason
+     (skip_reason_from_history_note; unknown/legacy → veto) AND order
+     not cancelled-like (classify_skip), AND (b) the NEXT history
+     entry is the audited SKIPPED→RETRYING resume
+     (skipped_history_entry_exempt). Projection now includes
+     canonical_payload.order_status(+native).
+  2. dead_letter_requeue.py — new REVIEWED pattern
+     false_skip_history_veto_2026_07_07 (matches EXACTLY
+     rev32_guard_blocked + post_skipped_history_write_violation at
+     FAILED_CUSTOMER). manual_only=True (auto-requeue NEVER touches
+     it — user condition), clear_dead_letter_evidence=True (clears
+     dead_lettered_at with audit stamps dead_letter_cleared_at/by/
+     pattern), hold_in_skipped=True (3-hop DEAD_LETTER→RETRYING→
+     NORMALIZED→SKIPPED with skip_class=transient reason
+     dead_letter_false_veto_recovery_hold — worker never drains
+     SKIPPED so NO auto-send; only explicit canary one-shot resumes).
+     Fail-closed pre-check: requeue refused if ANY historical SKIPPED
+     is not transient+resumed.
+  3. skip_classification.py — dead_letter_false_veto_recovery_hold
+     added to TRANSIENT_SKIP_REASONS.
+  4. NEW read-only endpoint GET /api/integrations/qoyod/
+     dead-letter/pattern-check?order_number=… (user condition #1):
+     shows matched pattern, per-SKIPPED-entry rev47_exempt flags,
+     exclusivity scan over ALL DEAD_LETTER rows, safe_to_requeue.
+- KEY INSIGHT: mada_canary_send uses a scoped _OVERLAY (never written
+  to qoyod_settings) → the kill-switch's stored flips do NOT block
+  the canary send. NO kill-switch reset needed. Budget: slot already
+  held by 270939808 (used=[order] passes guard 10 + rev35
+  is_order_reserved) — re-arm force_reset only if user wants
+  remaining=1 literally.
+- TESTS: test_rev47_false_skip_veto_recovery.py 18/18 (parser,
+  exemption matrix, full-guard pass with live env, vetoes for
+  unresumed/fatal/unknown/cancelled, matcher exactness, auto-requeue
+  ignores manual_only, recovery to SKIPPED-hold, SSOT green after
+  recovery, guard pass after audited resume, pattern_check
+  exclusivity). Registry-pin tests updated (2 reviewed patterns).
+  Full qoyod regression: NO new failures vs baseline; 64 PRE-EXISTING
+  failures remain from Rev46 (tests pinned to tabby scope) — backlog.
+- USER NEXT (on prod, IN ORDER, each step reviewed before the next):
+  (1) READ: GET /api/integrations/qoyod/dead-letter/pattern-check
+      ?order_number=270939808 → expect safe_to_requeue=true,
+      other_matches_count=0.
+  (2) RECOVER: POST /api/integrations/qoyod/dead-letter/requeue-one
+      {"trace_id":"ad0c8807452b4fe5b4a1c764738e9c6d"} → expect
+      final_stage=SKIPPED, held_in_skipped=true.
+  (3) (optional, for remaining=1) POST /admin/live-canary/budget/arm
+      {confirm_token:"ARM-CANARY-BUDGET", max_orders:1,
+       force_reset:true, pinned_order_number:"270939808"}.
+  (4) DIAGNOSE: GET /admin/send-diagnosis/270939808 → expect
+      READY_TO_SEND_ONCE, all_blockers=[], budget pinned.
+  (5) ONLY after explicit user permission: POST /admin/mada-canary/
+      send (same phrase as Rev46). AGENT MUST NOT SEND.
