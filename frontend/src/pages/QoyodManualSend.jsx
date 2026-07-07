@@ -52,9 +52,18 @@ function ResultBanner({ result, onDismiss }) {
               </div>
               <div className="mt-1 text-xs opacity-75">
                 إجمالي سلة: {formatMoney(result.salla_total)} — إجمالي قيود
-                المتوقع: {formatMoney(result.expected_total)} — الفرق:{" "}
-                {result.difference}
+                المتوقع: {formatMoney(result.expected_total)} — قيمة السداد:{" "}
+                {formatMoney(result.payment_amount ?? result.expected_total)} —
+                الفرق: {result.difference}
               </div>
+              {result.send_date && (
+                <div className="mt-1 text-xs opacity-75">
+                  تاريخ إنشاء الفاتورة والسداد في قيود (توقيت السعودية):{" "}
+                  <span dir="ltr" className="font-mono">
+                    {result.send_date}
+                  </span>
+                </div>
+              )}
             </>
           ) : (
             <>

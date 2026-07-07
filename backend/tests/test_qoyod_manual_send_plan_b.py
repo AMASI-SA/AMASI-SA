@@ -329,3 +329,129 @@ async def test_worker_runs_when_not_frozen(db):
     result = await _one_round(db, user_id=TENANT, batch_limit=10)
     assert "frozen" not in result
     assert result["normalized"]["processed"] == 0
+
+
+# ────────────────────────────────────────────────────────────────────
+# T8 — Quantisation: all money fields sent to Qoyod are 2-decimals
+# T9 — send_date is Riyadh-today (NOT Salla order_created_at)
+# T10 — payment amount == expected_total (invoice will close to zero)
+# ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_send_quantises_and_uses_riyadh_send_date(db):
+    """Order with a fractional-total that would produce >2dp values
+    if we didn't quantise. We assert:
+        * unit_price / discount / tax_percent / expected_total are all
+          exactly 2-decimal.
+        * invoice.issue_date == today in Asia/Riyadh (NOT Salla date).
+        * payment.amount == expected_total AND payment.date == send_date.
+    """
+    from datetime import timedelta as _td
+    RIYADH = timezone(_td(hours=3))
+    riyadh_today = datetime.now(RIYADH).date().isoformat()
+
+    await _seed_settings(db)
+    await _seed_credentials(db)
+
+    # Salla row with weird total that produces non-2dp intermediates
+    # (e.g. 143.75 with tax 15% → net 125 exactly; but pick an amount
+    # that would drift without quantise: 137.63).
+    row = _inbox_row(order_number="Q900", total=137.63, sku="SKU-Q")
+    # Deliberately give the item a mismatched unit_price+total combo
+    # so the builder must compute a discount.
+    row["canonical_payload"]["items"][0]["unit_price"] = 137.63
+    row["canonical_payload"]["items"][0]["total"] = 137.63
+    # Salla order_date is 2026-07-05 — well BEFORE any realistic send.
+    row["canonical_payload"]["order_date"] = "2026-07-05"
+    row["canonical_payload"]["created_at"] = "2026-07-05"
+    row["raw_payload"] = {"data": {"created_at": "2026-07-05"}}
+    await db.integration_inbox.insert_one(row)
+
+    captured: dict = {}
+
+    async def _find_inv(*_a, **_k):
+        return None
+
+    async def _find_cust_phone(*_a, **_k):
+        return [{"id": 44}]
+
+    async def _find_prod(*_a, **_k):
+        return {"id": 88, "sku": "SKU-Q"}
+
+    async def _create_invoice(payload, *, idem):
+        captured["invoice_payload"] = payload
+        return {"invoice": {"id": 601, "number": "INV-601",
+                             "reference": payload["invoice"]["reference"]}}
+
+    async def _create_payment(payload, *, idem):
+        captured["payment_payload"] = payload
+        return {"invoice_payment": {"id": 9001}}
+
+    with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "find_invoice_by_reference",
+               new=AsyncMock(side_effect=_find_inv)), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "find_customers_by_phone",
+               new=AsyncMock(side_effect=_find_cust_phone)), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "find_product_by_sku",
+               new=AsyncMock(side_effect=_find_prod)), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "create_invoice",
+               new=AsyncMock(side_effect=_create_invoice)), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "create_invoice_payment",
+               new=AsyncMock(side_effect=_create_payment)):
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="Q900")
+
+    assert result["ok"] is True
+    assert result["send_date"] == riyadh_today, \
+        f"send_date must be Riyadh today, got {result['send_date']}"
+    assert result["send_date"] != "2026-07-05", \
+        "send_date must NOT be the Salla order_created_at"
+
+    inv = captured["invoice_payload"]["invoice"]
+    # Invoice-level dates use send_date, not Salla date.
+    assert inv["issue_date"] == riyadh_today
+    assert inv["due_date"] == riyadh_today
+    # Every monetary field in EVERY line is exactly 2dp.
+    for line in inv["line_items"]:
+        for k in ("unit_price", "discount", "tax_percent"):
+            v = line[k]
+            # Convert to Decimal to inspect the exponent.
+            from decimal import Decimal as _D
+            d = _D(str(v))
+            # exp is -2 (=2 decimals) or larger (0.1 -> -1 also OK if
+            # value is a whole 10th, but our _q2 always emits xx.xx).
+            assert -d.as_tuple().exponent <= 2, \
+                f"{k}={v} has >2 decimals"
+
+    # Payment amount == expected_total AND is 2dp.
+    pay = captured["payment_payload"]["invoice_payment"]
+    assert pay["amount"] == result["expected_total"], \
+        (f"payment.amount={pay['amount']} must equal "
+         f"expected_total={result['expected_total']}")
+    assert pay["date"] == riyadh_today
+    from decimal import Decimal as _D
+    assert -_D(str(pay["amount"])).as_tuple().exponent <= 2
+
+    # Invoice will close to zero → status Paid, remaining 0.00.
+    remaining = round(result["expected_total"] - pay["amount"], 2)
+    assert remaining == 0.0, \
+        f"invoice must close to zero; remaining={remaining}"
+
+
+# ────────────────────────────────────────────────────────────────────
+# T11 — _q2 helper (unit)
+# ────────────────────────────────────────────────────────────────────
+def test_q2_quantises_half_up():
+    from integrations.qoyod_manual.send import _q2
+    assert _q2(0) == 0.0
+    assert _q2(None) == 0.0
+    assert _q2(1) == 1.0
+    # ROUND_HALF_UP: 1.005 → 1.01 (Python's default banker rounding
+    # would give 1.00 with round(); we assert we DON'T do that).
+    assert _q2(1.005) == 1.01
+    assert _q2("2.345") == 2.35
+    # Long-tail float that _q2 must strip cleanly.
+    assert _q2(0.1 + 0.2) == 0.30
