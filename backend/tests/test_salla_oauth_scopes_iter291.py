@@ -106,8 +106,12 @@ class TestScopeHygiene:
         # Webhooks (register + manage subscription on the merchant's store).
         # Official format: webhooks.read_write.
         assert "webhooks.read_write" in scopes or "webhooks.read" in scopes
-        # Store settings (currency, tax, store name) — read-only.
-        assert "settings.read" in scopes
+        # rev42 (user directive): the Salla Partners panel permissions
+        # are LOCKED to exactly 5 scopes — settings.read is NOT
+        # available; store info is covered by stores.read.
+        assert "stores.read" in scopes
+        assert "categories.read" in scopes
+        assert "settings.read" not in scopes
 
     def test_scopes_are_space_separated_single_line(self):
         """Salla expects a single, space-separated string — no commas,

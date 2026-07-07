@@ -6934,3 +6934,21 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - NEXT: user runs GET /api/integrations/qoyod/admin/mada-candidates
   on production, picks the candidate with ready_excluding_budget=true,
   then we re-pin budget + canary constants to it (with permission).
+
+### Rev42 — Salla scopes locked to panel's 5 permissions (user directive)
+- Salla Partners panel permissions are LOCKED platform-side; code now
+  requests EXACTLY: offline_access, orders.read_write,
+  webhooks.read_write, stores.read, categories.read
+  (settings.read removed — /store/info covered by stores.read).
+  SALLA_OAUTH_SCOPES env override still available (currently unset).
+- Products sync DISABLED (scope unavailable → GET /products would 403):
+  POST /api/salla/sync/products now returns 409
+  disabled_reason=salla_products_scope_unavailable, never calls Salla.
+  run_products_sync kept in sync.py for future re-enable.
+- Frontend: sync-products button replaced with disabled chip
+  (data-testid=salla-sync-products-disabled) — product data is read
+  from the order payload (orders_db auto-seeds items already).
+- Tests updated: test_salla_phase2_iter73_review (409 contract),
+  test_salla_oauth_scopes_iter291 (new 5 scopes), stale phase1
+  message assertion fixed. Salla suites 45 passed / 7 skipped.
+- User must REDEPLOY then retry the OAuth connect on production.

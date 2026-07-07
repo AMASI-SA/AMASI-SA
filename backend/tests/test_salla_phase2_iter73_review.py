@@ -189,11 +189,15 @@ def test_sync_orders_error_shape_when_not_connected(auth_session):
     _assert_needs_reauth_shape(r)
 
 
-def test_sync_products_error_shape_when_not_connected(auth_session):
-    auth_session.post(f"{BASE_URL}/api/salla/disconnect", timeout=10)
+def test_sync_products_disabled_rev42(auth_session):
+    """rev42 (user directive): products scope is locked OFF in the
+    Salla Partners panel — the endpoint must refuse with 409 and
+    NEVER call Salla (no needs_reauth path)."""
     r = auth_session.post(f"{BASE_URL}/api/salla/sync/products", timeout=15)
-    _assert_needs_reauth_shape(r)
-    assert r.json()["detail"]["needs_reauth"] is True
+    assert r.status_code == 409, f"unexpected {r.status_code}: {r.text}"
+    detail = r.json()["detail"]
+    assert detail["disabled_reason"] == "salla_products_scope_unavailable"
+    assert detail["needs_reauth"] is False
 
 
 # ── 8. /sources-comparison shape + filters ───────────────────────────

@@ -56,11 +56,16 @@ EXPIRY_SAFETY_MARGIN_SEC = 120
 # Operators can override the list via the SALLA_OAUTH_SCOPES env var
 # (space-separated) without a code change — useful when Salla rolls out
 # new scope names or when the App's enabled permissions change.
+# rev42 (user directive 2026-06): the Salla Partners panel permissions
+# are LOCKED to exactly these 5 — requesting anything else returns
+# invalid_scope / "لا يوجد تصريح لربط التطبيق". Product data is read
+# from the order payload (no /products scope).
 _DEFAULT_SCOPES_FALLBACK = (
     "offline_access "
-    "settings.read "
     "orders.read_write "
-    "webhooks.read_write"
+    "webhooks.read_write "
+    "stores.read "
+    "categories.read"
 )
 DEFAULT_SCOPES = (os.environ.get("SALLA_OAUTH_SCOPES") or _DEFAULT_SCOPES_FALLBACK).strip()
 

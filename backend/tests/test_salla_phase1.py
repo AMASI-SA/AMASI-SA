@@ -142,7 +142,7 @@ def test_oauth_login_unconfigured_returns_503(monkeypatch):
     try:
         r = requests.get(f"{API}/salla/oauth/login", headers=_hdr(token), timeout=10)
         if r.status_code == 503:
-            assert "SALLA_CLIENT_ID" in r.text or "غير مُعدّاً" in r.text
+            assert "SALLA_CLIENT_ID" in r.text or "ليس مُعدّاً" in r.text
         else:
             # Backend HAS creds → must return a proper authorize URL.
             assert r.status_code == 200, r.text

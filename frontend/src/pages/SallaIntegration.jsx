@@ -100,7 +100,7 @@ export default function SallaIntegration() {
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [config, setConfig] = useState(null);
-    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false, reset: false });
+    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, reset: false });
     const [showDisconnect, setShowDisconnect] = useState(false);
     const [showReset, setShowReset] = useState(false);
     const [liveStoreInfo, setLiveStoreInfo] = useState(null);
@@ -268,22 +268,6 @@ export default function SallaIntegration() {
             await load();
         } finally {
             setBusy(b => ({ ...b, syncOrders: false }));
-        }
-    };
-
-    const handleSyncProducts = async () => {
-        setBusy(b => ({ ...b, syncProducts: true }));
-        try {
-            const { data } = await api.post("/salla/sync/products");
-            toast.success(`مزامنة المنتجات: ${data.created} جديد · ${data.updated} محدّث`);
-            await load();
-        } catch (e) {
-            const det = e?.response?.data?.detail;
-            const msg = typeof det === "string" ? det : (det?.message || "فشل مزامنة المنتجات");
-            toast.error(msg);
-            await load();
-        } finally {
-            setBusy(b => ({ ...b, syncProducts: false }));
         }
     };
 
@@ -589,16 +573,14 @@ export default function SallaIntegration() {
                             <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders ? "animate-spin" : ""} />
                             {busy.syncOrders ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleSyncProducts}
-                            disabled={busy.syncProducts}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-bold text-sm"
-                            data-testid="salla-sync-products-btn"
+                        <span
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-100 text-slate-500 font-bold text-sm border border-slate-200 cursor-not-allowed"
+                            title="صلاحية المنتجات غير متاحة في لوحة سلة — بيانات المنتجات تُقرأ من كائن الطلب مباشرة"
+                            data-testid="salla-sync-products-disabled"
                         >
-                            <Package size={14} weight="bold" className={busy.syncProducts ? "animate-spin" : ""} />
-                            {busy.syncProducts ? "جاري المزامنة…" : "مزامنة المنتجات"}
-                        </button>
+                            <Package size={14} weight="bold" />
+                            مزامنة المنتجات معطّلة (تُقرأ من الطلب)
+                        </span>
                         <button
                             type="button"
                             onClick={() => navigate("/salla-sources")}

@@ -57,7 +57,6 @@ from .sync import (
     compute_sources_comparison,
     ensure_sync_indexes,
     run_orders_sync,
-    run_products_sync,
 )
 
 
@@ -556,15 +555,23 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         return {"ok": True, **result}
 
     @router.post("/sync/products")
-    async def sync_products(user: dict = Depends(current_user)):
-        try:
-            result = await run_products_sync(db, user["id"])
-        except SallaError as e:
-            raise HTTPException(
-                status_code=e.status_code if e.status_code != 200 else 400,
-                detail={"message": str(e), "needs_reauth": e.needs_reauth},
-            )
-        return {"ok": True, **result}
+    async def sync_products(user: dict = Depends(current_user)):  # noqa: ARG001
+        # rev42 (user directive): products scope is DISABLED in the
+        # Salla Partners panel — calling GET /products returns 403.
+        # Product data is taken from the order payload instead.
+        # Original call kept for when the scope is re-enabled:
+        #     result = await run_products_sync(db, user["id"])
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    "مزامنة المنتجات معطّلة — صلاحية المنتجات غير "
+                    "متاحة في لوحة سلة الحالية. بيانات المنتجات تُقرأ "
+                    "مباشرة من كائن الطلب (Order Payload)."),
+                "needs_reauth": False,
+                "disabled_reason": "salla_products_scope_unavailable",
+            },
+        )
 
     # ── 9. Sync logs ──────────────────────────────────────────────────
     @router.get("/sync/logs")
