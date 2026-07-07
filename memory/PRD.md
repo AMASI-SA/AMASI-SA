@@ -1,6 +1,26 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV37.1 COMPLETE — Unsent page counts ORDERS, not inbox rows
+# ══════════════════════════════════════════════════════════════════
+**User report**: Salla has 315 orders since 2026-07-01 but the Unsent
+page showed 658. ROOT CAUSE: `integration_inbox` intentionally stores
+a row PER STATUS TRANSITION (idempotency key includes status_slug),
+so one Salla order = 2+ rows; the page counted rows.
+**Fix (surgical)**:
+- `unsent_orders.list_unsent_orders`: group rows by
+  `salla_order_number` → ONE entry per ORDER. Representative status
+  priority: أُرسل > مكرر > فشل > لم يُرسل (SENT wins even if a newer
+  row failed — the invoice exists in قيود). Adds `events_count`.
+  Rows with no order number stay separate. Field gaps (totals/
+  payment) backfilled from older rows.
+- `reconciliation_report._mezan_sent_orders`: dedup by
+  (order_number, qoyod_invoice_id) — prevents false "في ميزان فقط".
+- Tests: 35 passed (unsent rev36 =21 incl. 2 new dedup tests,
+  reconciliation rev37 =7, per_order_unlock =7).
+- NEEDS DEPLOY to reach production numbers.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV37 COMPLETE — Reconciliation Report ميزان ↔ قيود (READ-ONLY)
 # ══════════════════════════════════════════════════════════════════
 **Status**: VERIFIED (6/6 pytest + endpoint smoke). User request:

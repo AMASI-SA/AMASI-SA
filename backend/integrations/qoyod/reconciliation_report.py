@@ -48,6 +48,8 @@ async def _mezan_sent_orders(db, user_id: str, sync_start) -> list[dict]:
     """MEZAN rows that claim a REAL قيود invoice, scoped by Salla
     order CREATION date >= 2026-07-01."""
     out: list[dict] = []
+    seen: set[tuple] = set()  # rev37.1 — inbox has a row per status
+    # transition; the same order+invoice must be counted ONCE.
     cursor = db.integration_inbox.find(
         {"user_id": user_id,
          "qoyod_invoice_id": {"$exists": True, "$nin": [None, ""]}},
@@ -65,6 +67,11 @@ async def _mezan_sent_orders(db, user_id: str, sync_start) -> list[dict]:
         if order_date is not None and order_date < sync_start:
             continue
         canon = row.get("canonical_payload") or {}
+        key = (str(row.get("salla_order_number") or ""),
+               str(row.get("qoyod_invoice_id")))
+        if key in seen:
+            continue
+        seen.add(key)
         out.append({
             "order_number":     str(row.get("salla_order_number") or ""),
             "order_date":       (order_date.isoformat()

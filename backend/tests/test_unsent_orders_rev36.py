@@ -180,3 +180,59 @@ async def test_sync_start_is_fixed_constant_settings_ignored(db):
         assert out["total"] == 0
     finally:
         await db.qoyod_settings.delete_many({"user_id": TENANT})
+
+
+# ── 6. rev37.1 — ONE entry per SALLA ORDER (dedup rows) ─────────────
+# The inbox stores a row PER STATUS TRANSITION (idempotency key
+# includes status_slug), so one Salla order = 2+ rows. The page must
+# count ORDERS: user saw 658 rows for 315 Salla orders.
+@pytest.mark.asyncio
+async def test_one_entry_per_order_not_per_inbox_row(db):
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    r1 = _inbox("d1", "3001", "SKIPPED")           # order.created event
+    r1["received_at"] = now - timedelta(hours=2)
+    r2 = _inbox("d2", "3001", "COMPLETED",          # status → completed
+                qoyod_invoice_id="500")
+    r2["received_at"] = now - timedelta(hours=1)
+    r3 = _inbox("d3", "3002", "NORMALIZED")         # created
+    r3["received_at"] = now - timedelta(hours=2)
+    r4 = _inbox("d4", "3002", "NORMALIZED")         # status update
+    r4["received_at"] = now - timedelta(hours=1)
+    await db.integration_inbox.insert_many([r1, r2, r3, r4])
+
+    out = await list_unsent_orders(db, user_id=TENANT, days=7)
+    # 4 rows but only 2 ORDERS.
+    assert out["total"] == 2
+    assert out["counts"] == {SENT: 1, UNSENT: 1, FAILED: 0, DUPLICATE: 0}
+    by_order = {o["order_number"]: o for o in out["orders"]}
+    # 3001: SENT wins over the older SKIPPED row.
+    assert by_order["3001"]["status"] == SENT
+    assert by_order["3001"]["qoyod_invoice_id"] == "500"
+    assert by_order["3001"]["events_count"] == 2
+    assert by_order["3002"]["status"] == UNSENT
+
+
+@pytest.mark.asyncio
+async def test_dedup_priority_sent_beats_failed_and_failed_beats_unsent(db):
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    # Order 4001: FAILED row is MORE RECENT than the SENT row —
+    # SENT still wins (the invoice exists in قيود).
+    a1 = _inbox("p1", "4001", "COMPLETED", qoyod_invoice_id="600")
+    a1["received_at"] = now - timedelta(hours=3)
+    a2 = _inbox("p2", "4001", "FAILED_PRODUCT")
+    a2["received_at"] = now - timedelta(hours=1)
+    # Order 4002: UNSENT then FAILED → FAILED wins.
+    b1 = _inbox("p3", "4002", "NORMALIZED")
+    b1["received_at"] = now - timedelta(hours=3)
+    b2 = _inbox("p4", "4002", "DEAD_LETTER",
+                dead_letter_evidence={"fail_stage": "FAILED_INVOICE"})
+    b2["received_at"] = now - timedelta(hours=1)
+    await db.integration_inbox.insert_many([a1, a2, b1, b2])
+
+    out = await list_unsent_orders(db, user_id=TENANT, days=7)
+    by_order = {o["order_number"]: o for o in out["orders"]}
+    assert by_order["4001"]["status"] == SENT
+    assert by_order["4002"]["status"] == FAILED
+    assert out["counts"] == {SENT: 1, UNSENT: 0, FAILED: 1, DUPLICATE: 0}

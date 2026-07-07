@@ -168,3 +168,18 @@ async def test_fallback_match_by_reference_when_id_differs():
     r = await run_reconciliation_report(db, user_id="main", api_client=client)
     assert r["counts"][MATCHED] == 1
     assert r["counts"][QOYOD_ONLY] == 0
+
+
+@pytest.mark.asyncio
+async def test_multiple_inbox_rows_same_order_counted_once():
+    """rev37.1 — inbox stores a row per status transition. Two rows
+    for the same order+invoice must yield ONE reconciliation entry."""
+    db = _DB()
+    db.integration_inbox.rows.append(_mezan_row("100", "501", 213.78))
+    db.integration_inbox.rows.append(_mezan_row("100", "501", 213.78))
+    client = _ReadOnlyClient([_qoyod_inv("501", "100", 213.78)])
+    r = await run_reconciliation_report(db, user_id="main", api_client=client)
+    assert r["mezan_sent_total"] == 1
+    assert r["counts"][MATCHED] == 1
+    assert r["counts"][MEZAN_ONLY] == 0
+    assert r["all_matched"] is True

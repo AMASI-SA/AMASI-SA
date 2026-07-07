@@ -166,9 +166,16 @@ async def list_unsent_orders(
 
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))
-    counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     excluded_pre_sync = 0
-    orders: list[dict] = []
+    # rev37.1 — ONE entry per SALLA ORDER, not per inbox row. The
+    # inbox intentionally stores a row per status transition
+    # (idempotency key includes status_slug), so a single order can
+    # have 2+ rows. Group by salla_order_number; representative
+    # status priority: أُرسل > مكرر > فشل > لم يُرسل. Ties keep the
+    # most recent row (cursor is sorted received_at desc).
+    _PRIORITY = {SENT: 3, DUPLICATE: 2, FAILED: 1, UNSENT: 0}
+    grouped: dict[str, dict] = {}
+    order_keys: list[str] = []
 
     cursor = db.integration_inbox.find(
         {"user_id": user_id, "received_at": {"$gte": cutoff}},
@@ -195,12 +202,9 @@ async def list_unsent_orders(
             excluded_pre_sync += 1
             continue
         s = simplify_row(row)
-        counts[s["status"]] += 1
-        if status and s["status"] != status:
-            continue
         canon = row.get("canonical_payload") or {}
         received = row.get("received_at")
-        orders.append({
+        entry = {
             "order_number":   row.get("salla_order_number"),
             "received_at":    (received.isoformat()
                                if hasattr(received, "isoformat")
@@ -215,7 +219,35 @@ async def list_unsent_orders(
                                  if _is_real(row.get("qoyod_invoice_id"))
                                  else None),
             "trace_id":       row.get("trace_id"),
-        })
+            "events_count":   1,
+        }
+        key = str(row.get("salla_order_number") or "") \
+            or f"__row__{row.get('id')}"
+        prev = grouped.get(key)
+        if prev is None:
+            grouped[key] = entry
+            order_keys.append(key)
+            continue
+        prev["events_count"] += 1
+        if _PRIORITY[entry["status"]] > _PRIORITY[prev["status"]]:
+            entry["events_count"] = prev["events_count"]
+            grouped[key] = entry
+        else:
+            # Keep prev (more recent or higher priority) — but fill
+            # gaps from older rows (e.g. status-update row has no
+            # canonical totals yet the created row does).
+            for f in ("total_amount", "payment_method", "salla_status"):
+                if prev.get(f) in (None, "") and entry.get(f) not in (None, ""):
+                    prev[f] = entry[f]
+
+    counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
+    orders: list[dict] = []
+    for key in order_keys:
+        e = grouped[key]
+        counts[e["status"]] += 1
+        if status and e["status"] != status:
+            continue
+        orders.append(e)
 
     return {"ok": True, "days": days, "counts": counts,
             "total": sum(counts.values()),
