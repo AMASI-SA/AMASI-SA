@@ -244,10 +244,43 @@ async def execute_mada_canary_send(
                 _stage == "INVOICE_CREATED"),
             actor=f"mada_canary:{actor}")
     except Exception as exc:
+        # rev39.6 — surface one_shot's STRUCTURED refusal fields
+        # (selective_send_blocker_code etc.) instead of swallowing
+        # them, plus the full pre-dispatch guard snapshot. Display
+        # only — no bypass.
+        extra = {}
+        to_dict = getattr(exc, "to_dict", None)
+        if callable(to_dict):
+            try:
+                extra = dict(to_dict())
+            except Exception:
+                extra = {}
+        budget_snap = await get_canary_budget(db, user_id=user_id)
         await _audit(db, attempt_id, "dispatch", "error",
-                     error=f"{type(exc).__name__}: {exc}"[:500])
+                     error=f"{type(exc).__name__}: {exc}"[:500],
+                     **{k: v for k, v in extra.items()
+                        if isinstance(v, (str, int, float, bool))
+                        or v is None})
         return {"attempt_id": attempt_id, "outcome": "ERROR",
                 "code": type(exc).__name__, "detail": str(exc)[:500],
+                "one_shot_refusal": extra or None,
+                "guards_snapshot": {
+                    "order_number": MADA_CANARY_ORDER_NUMBER,
+                    "trace_id": pf.get("trace_id"),
+                    "pipeline_stage": pf.get("pipeline_stage"),
+                    "total_amount": pf.get("total_amount"),
+                    "ready_to_send": pf.get("ready_to_send"),
+                    "checks": pf.get("checks"),
+                    "allow_reset_from_partial_invoice_created":
+                        pf.get("pipeline_stage") == "INVOICE_CREATED",
+                    "budget": {
+                        "pinned_order_number":
+                            budget_snap.get("pinned_order_number"),
+                        "used": budget_snap.get("used"),
+                        "remaining": budget_snap.get("remaining"),
+                        "armed": budget_snap.get("armed"),
+                    },
+                },
                 "settings_untouched": True}
 
     await _audit(db, attempt_id, "dispatch", "returned",

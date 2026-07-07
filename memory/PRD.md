@@ -1,6 +1,33 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.6 — Blocker code surfaced (2nd send attempt analysis)
+# ══════════════════════════════════════════════════════════════════
+2nd production attempt 0268d9b1-… refused: OneShotRefused
+"selective_send_policy_blocked" — one_shot RAISED the structured
+blocker (selective_send_blocker_code) but our tool's generic except
+swallowed the extras. Facts:
+- The ACTUAL blocker code is ALREADY PERSISTED in production:
+  `qoyod_per_order_approvals` doc for order 269875747 (fields
+  selective_send_blocker_code / _reason). Readable NOW via existing
+  `GET /admin/per-order-approvals` — no redeploy needed.
+- Likely candidates (policy checks order): DRY_INVOICE_ID_DETECTED
+  (row has DRY: invoice id at INVOICE_CREATED — policy check 3 reads
+  existing_qoyod_invoice_id BEFORE/独立 of reset) or trigger-status
+  (our _OVERLAY does NOT overlay enabled_trigger_statuses — the old
+  tabby canary proxy did). Confirm via the persisted code first —
+  user decree: no policy change before knowing blocker_code.
+- rev39.6 (display only, NO bypass): mada_canary_send ERROR response
+  now includes `one_shot_refusal` (full to_dict incl. blocker code)
+  + `guards_snapshot` (checks, stage, ready, partial-IC flag, budget
+  pinned/used/remaining). Audit rows carry blocker fields too.
+- Tests: 11/11. Budget still used=0 (refusal pre-client-mint).
+- NEXT: user reads blocker code from /admin/per-order-approvals →
+  then we decide the precise, surgical fix (e.g., overlay trigger
+  statuses or unset DRY id via the audited reset) — ONLY after code
+  is known and user approves.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.5 — INVOICE_CREATED support in mada canary (ONE argument)
 # ══════════════════════════════════════════════════════════════════
 Production send attempt dcd83dc0-… was refused: OneShotRefused —

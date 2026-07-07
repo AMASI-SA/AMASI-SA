@@ -247,3 +247,33 @@ async def test_partial_ic_flag_passed_only_for_invoice_created(
         approval_phrase=MADA_CANARY_APPROVAL_PHRASE, actor="test")
     assert out2["outcome"] == "COMPLETED"
     assert calls[0]["allow_reset_from_partial_invoice_created"] is False
+
+
+@pytest.mark.asyncio
+async def test_error_surfaces_blocker_code_and_guard_snapshot(
+        db, monkeypatch):
+    """rev39.6 — OneShotRefused structured fields (incl.
+    selective_send_blocker_code) must reach the operator response."""
+    from integrations.qoyod.one_shot_reprocess import OneShotRefused
+    await db.integration_inbox.insert_one(_row(stage="INVOICE_CREATED"))
+    await _arm_pinned(db)
+
+    async def _fake(dbx, **kw):
+        raise OneShotRefused(
+            "selective_send_policy_blocked", "policy said no",
+            selective_send_blocker_code="TRIGGER_STATUS_NOT_ENABLED",
+            selective_send_blocker_reason="status not in triggers")
+
+    monkeypatch.setattr(osr, "reprocess_one_order", _fake)
+    out = await execute_mada_canary_send(
+        db, user_id=TENANT, order_number=MADA_CANARY_ORDER_NUMBER,
+        approval_phrase=MADA_CANARY_APPROVAL_PHRASE, actor="test")
+    assert out["outcome"] == "ERROR"
+    assert out["one_shot_refusal"]["selective_send_blocker_code"] \
+        == "TRIGGER_STATUS_NOT_ENABLED"
+    snap = out["guards_snapshot"]
+    assert snap["budget"]["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
+    assert snap["budget"]["used"] == 0 and snap["budget"]["remaining"] == 1
+    assert snap["pipeline_stage"] == "INVOICE_CREATED"
+    assert snap["allow_reset_from_partial_invoice_created"] is True
+    assert snap["checks"]["duplicate_check"]["passed"] is True
