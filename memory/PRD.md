@@ -7309,3 +7309,23 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   single send. All internal guard layers now peeled (rev33 history ✓,
   rev35 budget ✓, rev32.1 row-context ✓): any next failure will be a
   GENUINE Qoyod API response surfaced in fresh_attempt fields.
+
+### Rev48.2 — Pre-send verification trio (user conditions) (2026-07)
+- USER STOP: demanded before final send: (1) QOYOD_API_KEY env, (2)
+  rev48.1 in markers, (3) budget reset (used=1/remaining=0).
+- FACTS ESTABLISHED: env QOYOD_API_KEY is NEVER read by the send path
+  (grep-proven); real key = qoyod_credentials.api_key_enc via
+  get_api_key; its presence on prod is proven (client was minted in
+  attempt d1636e4c, refusal would be no_api_key). QOYOD_API_BASE IS
+  required and proven set (client constructor succeeded).
+- IMPLEMENTED: build diagnostics now reports
+  qoyod_credentials_db_present (real check, tenant-scoped, boolean),
+  QOYOD_API_KEY_env_is_legacy_unused=true, QOYOD_API_BASE_present;
+  MODULE_MARKERS += rev48_budget_reserve_before_dispatch,
+  rev48_1_client_row_context, rev48_1_rules_applied_resumable.
+  Tests 34/34. E2E verified on preview.
+- Budget reset: NO code — existing arm endpoint with force_reset:true
+  pinned to 270939808.
+- USER NEXT: redeploy → build check (all markers true +
+  qoyod_credentials_db_present=true) → budget re-arm (remaining=1) →
+  send-diagnosis READY → single send.

@@ -476,7 +476,10 @@ def test_build_diagnostics_module_markers_present():
                 "rev46_credit_card_canary_scope",
                 "rev46_1_payment_account_mapping_check",
                 "rev47_skip_history_exemption",
-                "rev47_manual_only_recovery_pattern"}
+                "rev47_manual_only_recovery_pattern",
+                "rev48_budget_reserve_before_dispatch",
+                "rev48_1_client_row_context",
+                "rev48_1_rules_applied_resumable"}
     assert set(mm["markers"]) == expected
     for v in mm["markers"].values():
         assert v["present"] and v["sha256_first16"]

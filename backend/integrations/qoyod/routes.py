@@ -911,7 +911,20 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         from integrations.qoyod.sas_build_diagnostics import (
             build_diagnostics_report,
         )
-        return build_diagnostics_report()
+        report = build_diagnostics_report()
+        # rev48.2 — the REAL Qoyod key check: the send path reads the
+        # encrypted key from qoyod_credentials (get_api_key), never
+        # from env. Boolean only — never leaks the value.
+        tenant = _tenant_id(user)
+        _cred = await db.qoyod_credentials.find_one(
+            {"user_id": tenant,
+             "api_key_enc": {"$exists": True, "$ne": None}},
+            {"_id": 1})
+        report["qoyod_credentials_db_present"] = bool(_cred)
+        report["qoyod_key_source"] = (
+            "qoyod_credentials collection (encrypted) — env "
+            "QOYOD_API_KEY is legacy and unused by the send path")
+        return report
 
     @router.get("/admin/diagnostics/row")
     async def admin_diagnostics_row(

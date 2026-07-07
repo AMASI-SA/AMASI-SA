@@ -257,6 +257,15 @@ MODULE_MARKERS: dict[str, tuple[str, str]] = {
     "rev47_manual_only_recovery_pattern": (
         "dead_letter_requeue.py",
         "false_skip_history_veto_2026_07_07"),
+    "rev48_budget_reserve_before_dispatch": (
+        "mada_canary_send.py",
+        "rev48 — reserve the rev35 budget slot BEFORE dispatch"),
+    "rev48_1_client_row_context": (
+        "one_shot_reprocess.py",
+        "rev48.1 — row context is MANDATORY"),
+    "rev48_1_rules_applied_resumable": (
+        "state_machine.py",
+        "rev48.1 — RULES_APPLIED → RETRYING"),
 }
 
 
@@ -339,8 +348,16 @@ def build_diagnostics_report() -> dict:
                 bool((os.environ.get("SALLA_WEBHOOK_SECRET") or "").strip()),
             "SALLA_APP_ID_present":
                 bool((os.environ.get("SALLA_APP_ID") or "").strip()),
+            # rev48.2 — LEGACY/INFORMATIONAL ONLY: the send path NEVER
+            # reads this env var. The real key lives ENCRYPTED in the
+            # qoyod_credentials collection (see
+            # qoyod_credentials_db_present added by the route).
             "QOYOD_API_KEY_present":
                 bool((os.environ.get("QOYOD_API_KEY") or "").strip()),
+            "QOYOD_API_KEY_env_is_legacy_unused": True,
+            # QOYOD_API_BASE IS required (client constructor).
+            "QOYOD_API_BASE_present":
+                bool((os.environ.get("QOYOD_API_BASE") or "").strip()),
         },
         "acceptance": {
             # For the UI/operator to read at a glance.
