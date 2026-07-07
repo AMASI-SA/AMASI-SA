@@ -1,61 +1,52 @@
-"""rev41 — Unified Send Diagnosis (READ-ONLY, all payment methods).
+"""rev41→rev43 — Unified Send Diagnosis (READ-ONLY, all methods).
 
-User decree: ONE rule for every payment method — either
-"READY_TO_SEND_ONCE" or "REFUSED" with the REAL blocker, no hidden
-differences between mada/tabby/others and no guessing.
+Now a THIN WRAPPER around the single source of truth
+`evaluate_order_for_qoyod_send` (send_eligibility_ssot.py) plus the
+canary-budget layer (budget is an OPERATOR constraint, not an
+order-eligibility fact, so it lives here — not in the SSOT).
 
-This runs the SAME engines the send path runs, read-only:
-  • build_send_preflight        (scope/payment/dup/skipped/dead/amount)
-  • get_canary_budget           (pinned/used/remaining)
-  • should_allow_selective_live_send — the ACTUAL policy engine, fed
-    the EXACT policy_order shape one_shot builds (lines ~852) and the
-    EXACT settings overlay the canary send uses.
-  • one_shot stage-support matrix (incl. the partial-IC hatch rule).
-
-ZERO writes. ZERO Qoyod API calls. `qoyod_write_reached` is always
-false here by construction.
+ZERO writes. ZERO Qoyod API calls. `qoyod_write_reached` always false.
 """
 from __future__ import annotations
 
 from integrations.qoyod.canary_budget import (
     CANARY_SCOPE_ALLOWLIST, get_canary_budget,
 )
-from integrations.qoyod.dry_rca_report import _fetch_inbox_row
+from integrations.qoyod.eligible_orders import QOYOD_TAX_PERIOD
 from integrations.qoyod.mada_canary_send import _OVERLAY
 from integrations.qoyod.selective_send_policy import (
-    should_allow_selective_live_send,
+    QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT,
+    QOYOD_INVOICE_DATE_SOURCE_DEFAULT,
+    _floored_sync_start,
 )
-from integrations.qoyod.send_preflight import build_send_preflight
-from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.send_eligibility_ssot import (
+    POLICY_EVAL_OVERLAY, evaluate_order_for_qoyod_send,
+)
 
-# Mirrors one_shot_reprocess._reset_row_to_stage support rules.
-_ONE_SHOT_DIRECT_STAGES = {
-    "DEAD_LETTER", "PARTIAL_FAILURE", "LOCKED_AWAITING_APPROVAL",
-    "NORMALIZED", "NEW", "RECEIVED", "VALIDATED", "ELIGIBLE",
-}
+_BUDGET_BLOCKER_CODES = ("budget_not_armed",
+                         "budget_pinned_to_other_order",
+                         "budget_exhausted")
 
 
-def _one_shot_stage_support(row: dict) -> dict:
-    stage = row.get("pipeline_stage")
-    if stage == "SKIPPED":
-        return {"supported": False,
-                "reason": "SKIPPED نهائية مطلقة (rev33) — لا reprocess"}
-    if stage == "INVOICE_CREATED":
-        if _is_real(row.get("qoyod_invoice_id")):
-            return {"supported": False,
-                    "reason": ("INVOICE_CREATED مع فاتورة حقيقية — "
-                               "بوابة partial-IC معطلة (منع الازدواج)")}
-        return {"supported": True,
-                "reason": ("INVOICE_CREATED بدون فاتورة حقيقية — "
-                           "مدعومة عبر بوابة partial-IC المدقّقة"),
-                "requires_partial_ic_flag": True}
-    if (stage in _ONE_SHOT_DIRECT_STAGES
-            or str(stage or "").startswith("FAILED")):
-        return {"supported": True,
-                "reason": f"المرحلة {stage} مدعومة في one-shot"}
-    return {"supported": False,
-            "reason": (f"المرحلة {stage} غير مدعومة — one-shot يدعم "
-                       "terminal/failed/pre-customer فقط")}
+def _gates_of(settings: dict) -> dict:
+    return {
+        "selective_live_send_enabled": bool(
+            settings.get("selective_live_send_enabled", False)),
+        "production_writes_locked": bool(
+            settings.get("production_writes_locked", True)),
+        "qoyod_sync_start_date": _floored_sync_start(
+            settings.get("qoyod_sync_start_date")).isoformat(),
+        "qoyod_tax_period": settings.get(
+            "qoyod_tax_period", QOYOD_TAX_PERIOD),
+        "bank_transfer_routing_enabled": bool(
+            settings.get("bank_transfer_routing_enabled", False)),
+        "qoyod_invoice_date_source": settings.get(
+            "qoyod_invoice_date_source",
+            QOYOD_INVOICE_DATE_SOURCE_DEFAULT),
+        "qoyod_enabled_invoice_trigger_statuses": list(
+            settings.get("qoyod_enabled_invoice_trigger_statuses")
+            or QOYOD_ENABLED_TRIGGER_STATUSES_DEFAULT),
+    }
 
 
 async def build_send_diagnosis(
@@ -64,10 +55,13 @@ async def build_send_diagnosis(
 ) -> dict:
     base = {"order_number": str(order_number),
             "read_only": True, "qoyod_write_reached": False,
-            "no_qoyod_api_calls": True}
-    pf = await build_send_preflight(
+            "no_qoyod_api_calls": True,
+            "source": "evaluate_order_for_qoyod_send"}
+
+    ssot = await evaluate_order_for_qoyod_send(
         db, user_id=user_id, order_number=str(order_number),
         expected_payment_method=expected_payment_method)
+
     budget = await get_canary_budget(db, user_id=user_id)
     budget_block = {
         "armed": budget.get("armed", False),
@@ -76,93 +70,51 @@ async def build_send_diagnosis(
         "remaining": budget.get("remaining", 0),
         "canary_payment_method": CANARY_SCOPE_ALLOWLIST[0],
     }
-    if not pf.get("found"):
+
+    if not ssot.get("found"):
         return {**base, "verdict": "REFUSED",
-                "blocker_code": "order_not_found",
-                "blocker_reason": "لا يوجد سجل لهذا الطلب في ميزان",
-                "budget": budget_block}
+                "blocker_code": ssot["primary_blocker_code"],
+                "blocker_reason": ssot["primary_blocker_reason"],
+                "all_blockers": ssot["blockers"],
+                "ssot": ssot, "budget": budget_block}
 
-    row = await _fetch_inbox_row(db, user_id, str(order_number))
-    canonical = row.get("canonical_payload") or {}
+    # ── Budget layer (operator constraint, on top of the SSOT) ──────
+    budget_blockers: list[dict] = []
+    if not budget_block["armed"]:
+        budget_blockers.append({"code": "budget_not_armed",
+                                "reason": "الميزانية غير مسلّحة"})
+    elif budget_block["pinned_order_number"] not in (
+            None, str(order_number)):
+        budget_blockers.append({
+            "code": "budget_pinned_to_other_order",
+            "reason": (f"الميزانية مثبّتة على "
+                       f"{budget_block['pinned_order_number']}")})
+    elif budget_block["remaining"] < 1 and str(order_number) not in (
+            budget.get("order_numbers") or []):
+        budget_blockers.append({"code": "budget_exhausted",
+                                "reason": "الميزانية مستهلكة"})
 
-    # ── REAL policy engine, EXACT one_shot inputs ────────────────────
+    all_blockers = list(ssot["blockers"]) + budget_blockers
+    verdict = "READY_TO_SEND_ONCE" if not all_blockers else "REFUSED"
+    first = all_blockers[0] if all_blockers else None
+
+    # ── Guards snapshot (stored vs overlays) ─────────────────────────
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
     eff = dict(settings)
-    eff.update(_OVERLAY)                       # same canary overlay
-    eff["production_writes_locked"] = False    # one_shot per-order unlock
-    policy_order = {
-        "order_number": (row.get("salla_order_number")
-                         or canonical.get("order_number")
-                         or order_number),
-        "salla_order_id": (row.get("salla_order_id")
-                           or canonical.get("order_id")),
-        "salla_order_created_at": canonical.get("order_date"),
-        "status": canonical.get("order_status"),
-        "payment_method": canonical.get("payment_method"),
-        "existing_qoyod_invoice_id": row.get("qoyod_invoice_id"),
-        "customer_status": {
-            "resolved": row.get("qoyod_customer_id") is not None,
-            "qoyod_id": row.get("qoyod_customer_id"),
-            "reason": None},
-        "products_status": {"resolved": True, "resolved_count": 1,
-                            "dry_run_only": 0, "missing": []},
-        "totals_status": {"valid": True, "total": 0.0,
-                          "expected": 0.0, "diff": 0.0},
-    }
-    decision = should_allow_selective_live_send(
-        order=policy_order, settings=eff)
-    # rev41.1 — guards snapshot (READ-ONLY): raw stored gates vs the
-    # scoped overlay the canary send applies at call-time.
-    raw_decision = should_allow_selective_live_send(
-        order=policy_order, settings=settings)
+    eff.update(_OVERLAY)
     guards_snapshot = {
-        "stored_settings_gates": raw_decision.gates_snapshot,
-        "effective_during_canary_send": decision.gates_snapshot,
+        "stored_settings_gates": _gates_of(settings),
+        "effective_during_canary_send": _gates_of(eff),
         "canary_overlay_applied": dict(_OVERLAY),
-        "note": ("stored = ما هو محفوظ فعلياً في qoyod_settings "
+        "ssot_policy_overlay": dict(POLICY_EVAL_OVERLAY),
+        "note": ("stored = المحفوظ فعلياً في qoyod_settings "
                  "(fail-closed). effective = ما يراه محرك السياسة "
-                 "أثناء إرسال الكناري بعد الطبقة المؤقتة — "
-                 "الطبقة لا تُكتب في قاعدة البيانات أبداً."),
-    }
-    policy_block = {
-        "decision": decision.decision,
-        "blocker_code": decision.blocker_code,
-        "blocker_reason": decision.blocker_reason,
-        "enabled_trigger_statuses": decision.enabled_trigger_statuses,
-        "normalized_status": decision.normalized_status,
+                 "أثناء إرسال الكناري — الطبقة لا تُكتب في قاعدة "
+                 "البيانات أبداً."),
     }
 
-    stage_support = _one_shot_stage_support(row)
-    checks = pf["checks"]
-
-    # ── ONE verdict rule for ALL payment methods ─────────────────────
-    blockers: list[tuple[str, str]] = []
-    for name in ("scope_check", "payment_check", "duplicate_check",
-                 "skipped_history_check", "dead_letter_check",
-                 "amount_check"):
-        if not checks[name]["passed"]:
-            blockers.append((name, checks[name]["detail"]))
-    if not stage_support["supported"]:
-        blockers.append(("one_shot_stage", stage_support["reason"]))
-    if decision.decision != "allow":
-        blockers.append((decision.blocker_code or "policy_blocked",
-                         decision.blocker_reason or "policy refused"))
-    if not budget_block["armed"]:
-        blockers.append(("budget_not_armed", "الميزانية غير مسلّحة"))
-    elif budget_block["pinned_order_number"] not in (
-            None, str(order_number)):
-        blockers.append(("budget_pinned_to_other_order",
-                         f"الميزانية مثبّتة على "
-                         f"{budget_block['pinned_order_number']}"))
-    elif budget_block["remaining"] < 1 and str(order_number) not in (
-            budget.get("order_numbers") or []):
-        blockers.append(("budget_exhausted", "الميزانية مستهلكة"))
-
-    verdict = "READY_TO_SEND_ONCE" if not blockers else "REFUSED"
-    first = blockers[0] if blockers else (None, None)
-
-    # Attempt history for THIS order (mada canary audit).
+    # Attempt history for THIS order (canary audit, read-only).
     attempts = []
     cur = db.mada_canary_audit_log.find(
         {"order_number": str(order_number)},
@@ -171,24 +123,45 @@ async def build_send_diagnosis(
         a["at"] = str(a.get("at"))
         attempts.append(a)
 
+    pol = ssot["policy_check"]
     return {
         **base,
         "verdict": verdict,
-        "blocker_code": first[0],
-        "blocker_reason": first[1],
-        "all_blockers": [{"code": c, "reason": r} for c, r in blockers],
-        "payment_method": pf["checks"]["payment_check"]["payment_method"],
-        "pipeline_stage": pf.get("pipeline_stage"),
-        "trace_id": pf.get("trace_id"),
-        "total_amount": pf.get("total_amount"),
-        "ready_to_send": pf.get("ready_to_send"),
-        "duplicate_check": checks["duplicate_check"],
-        "amount_check": checks["amount_check"],
+        "blocker_code": first["code"] if first else None,
+        "blocker_reason": first["reason"] if first else None,
+        "all_blockers": all_blockers,
+        "eligible": ssot["eligible"],
+        "ready_to_send": ssot["ready_to_send"],
+        "payment_method": ssot.get("payment_method"),
+        "pipeline_stage": ssot.get("pipeline_stage"),
+        "trace_id": ssot.get("trace_id"),
+        "total_amount": ssot.get("total_amount"),
+        "duplicate_check": ssot["duplicate_check"],
+        "amount_check": ssot["amount_check"],
+        "product_mapping_check": ssot["product_mapping_check"],
+        "stage_check": ssot["stage_check"],
+        "dry_check": ssot["dry_check"],
+        "skipped_dead_letter_check": ssot["skipped_dead_letter_check"],
+        "sync_start_date_check": ssot["sync_start_date_check"],
+        "selective_send_policy": {
+            "decision": "allow" if pol["passed"] else "block",
+            "blocker_code": pol["blocker_code"],
+            "blocker_reason": pol["blocker_reason"],
+            "enabled_trigger_statuses": pol["enabled_trigger_statuses"],
+            "normalized_status": pol["normalized_status"],
+        },
+        "one_shot_stage_support": {
+            "supported": ssot["stage_check"]["passed"],
+            "reason": ssot["stage_check"]["detail"],
+            **({"requires_partial_ic_flag": True}
+               if ssot["stage_check"].get("requires_partial_ic_flag")
+               else {}),
+        },
         "budget": budget_block,
         "budget_used": budget_block["used"],
         "budget_remaining": budget_block["remaining"],
+        "budget_blockers": budget_blockers,
         "guards_snapshot": guards_snapshot,
-        "selective_send_policy": policy_block,
-        "one_shot_stage_support": stage_support,
+        "ssot": ssot,
         "recent_send_attempts": attempts,
     }

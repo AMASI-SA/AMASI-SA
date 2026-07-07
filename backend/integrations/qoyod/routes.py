@@ -3260,13 +3260,51 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         status: Optional[str] = Query(None),
         salla_status: Optional[str] = Query(None),
         search: Optional[str] = Query(None, max_length=40),
+        with_eligibility: bool = Query(False),
         user=Depends(current_user),
     ):
         from integrations.qoyod.unsent_orders import list_unsent_orders
         tenant = _tenant_id(user)
-        return await list_unsent_orders(
+        result = await list_unsent_orders(
             db, user_id=tenant, days=days, limit=limit, status=status,
             salla_status=salla_status, search=search)
+        # rev43 — same SINGLE source of truth as candidates/diagnosis.
+        if with_eligibility:
+            from integrations.qoyod.send_eligibility_ssot import (
+                evaluate_order_for_qoyod_send,
+            )
+            _CAP = 50
+            for o in result.get("orders", [])[:_CAP]:
+                ev = await evaluate_order_for_qoyod_send(
+                    db, user_id=tenant,
+                    order_number=str(o.get("order_number")))
+                o["send_eligibility"] = {
+                    "eligible": ev.get("eligible"),
+                    "ready_to_send": ev.get("ready_to_send"),
+                    "blocker_codes": [b["code"] for b in
+                                      ev.get("blockers") or []],
+                    "primary_blocker_code":
+                        ev.get("primary_blocker_code"),
+                }
+            result["eligibility_source"] = "evaluate_order_for_qoyod_send"
+            result["eligibility_enriched_cap"] = _CAP
+        return result
+
+    # ── rev43 — SSOT Send-Eligibility Preview (READ-ONLY) ────────────
+    # ONE source of truth for every consumer. First N orders (any
+    # payment method) evaluated by evaluate_order_for_qoyod_send.
+    @router.get("/admin/send-eligibility-preview")
+    async def send_eligibility_preview_endpoint(
+        limit: int = Query(20, ge=1, le=50),
+        scan_limit: int = Query(200, ge=10, le=1000),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.send_eligibility_ssot import (
+            build_send_eligibility_preview,
+        )
+        return await build_send_eligibility_preview(
+            db, user_id=_tenant_id(user), limit=limit,
+            scan_limit=scan_limit)
 
     # ── rev37 — تقرير المطابقة ميزان ↔ قيود. READ-ONLY ───────────────
     # Proves MEZAN's successful orders == قيود invoices (id + total),

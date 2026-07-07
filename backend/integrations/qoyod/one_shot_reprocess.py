@@ -919,6 +919,35 @@ async def reprocess_one_order(
             selective_send_blocker_reason=_blocked.blocker_reason,
         )
 
+    # ── 7a-bis. rev43 — SSOT fail-closed gate (user decree) ──────────
+    # ONE source of truth for "is this order sendable?". Runs for
+    # EVERY one_shot invocation (canary, manual, batch) BEFORE any
+    # api_client construction / Qoyod write. A fully GREEN diagnosis
+    # is REQUIRED: unmapped product / DRY id / SKIPPED / DEAD_LETTER /
+    # duplicate / amount mismatch ⇒ refuse. NO product creation inside
+    # the send — Adopt first, re-diagnose, then ONE send.
+    from integrations.qoyod.send_eligibility_ssot import (
+        evaluate_order_for_qoyod_send as _ssot_evaluate,
+    )
+    _ssot = await _ssot_evaluate(
+        db, user_id=user_id, order_number=str(order_number))
+    if not _ssot.get("ready_to_send"):
+        logger.warning(
+            "rev43 SSOT_GATE_REFUSED order=%s primary=%s blockers=%s",
+            order_number, _ssot.get("primary_blocker_code"),
+            [b["code"] for b in _ssot.get("blockers") or []])
+        raise OneShotRefused(
+            "ssot_not_ready_to_send",
+            ("مصدر الحقيقة الواحد رفض الإرسال — التشخيص ليس أخضر "
+             "بالكامل. الحاجز الأساسي: "
+             f"{_ssot.get('primary_blocker_code')}. "
+             "أصلح الحواجز ثم أعد التشخيص قبل أي محاولة إرسال."),
+            order_number=order_number,
+            primary_blocker_code=_ssot.get("primary_blocker_code"),
+            primary_blocker_reason=_ssot.get("primary_blocker_reason"),
+            blockers=_ssot.get("blockers"),
+        )
+
     # ── 7b. Iter-293.4-rev3 — Pre-send sendability check ─────────────
     # Re-run the preview-reprocess to make sure the latest state of
     # mappings + canonical produces a sendable payload. This catches:

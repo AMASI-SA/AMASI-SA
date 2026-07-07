@@ -138,7 +138,7 @@ async def test_duplicate_real_invoice_blocks(db):
     assert out["verdict"] == "REFUSED"
     codes = [b["code"] for b in out["all_blockers"]]
     assert "duplicate_check" in codes
-    assert "one_shot_stage" in codes  # real invoice → hatch closed
+    assert "stage_check" in codes  # real invoice → hatch closed
     assert out["duplicate_check"]["existing_qoyod_invoice_id"] == "888"
 
 
@@ -188,5 +188,5 @@ async def test_skipped_stage_blocks(db):
                                      order_number=ORDER)
     assert out["verdict"] == "REFUSED"
     codes = [b["code"] for b in out["all_blockers"]]
-    assert "skipped_history_check" in codes
-    assert "one_shot_stage" in codes
+    assert "skipped_dead_letter_check" in codes
+    assert "stage_check" in codes

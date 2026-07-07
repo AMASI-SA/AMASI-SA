@@ -6952,3 +6952,33 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   test_salla_oauth_scopes_iter291 (new 5 scopes), stale phase1
   message assertion fixed. Salla suites 45 passed / 7 skipped.
 - User must REDEPLOY then retry the OAuth connect on production.
+
+### Rev43 — SSOT: ONE send decision for everything (user decree)
+- CONTEXT: user froze all new Revs + live sends after finding
+  mada-candidates showed 269773218/269871682/269669891 as ready_now
+  while send-diagnosis refused them (dry_invoice_id_detected).
+- NEW: send_eligibility_ssot.py → evaluate_order_for_qoyod_send()
+  contract: eligible, ready_to_send, blockers[], primary_blocker_code/
+  reason, duplicate_check, amount_check, product_mapping_check,
+  stage_check, dry_check, skipped_dead_letter_check,
+  sync_start_date_check, payment_check, policy_check. READ-ONLY.
+- CONSUMERS UNIFIED: mada_candidates (verdict from SSOT only;
+  ready_now impossible with blockers; new verdict needs_product_adopt),
+  send_diagnosis (thin wrapper: SSOT + budget layer + guards snapshot),
+  one_shot reprocess_one_order (rev43 fail-closed gate 7a-bis:
+  OneShotRefused ssot_not_ready_to_send BEFORE any api_client — all
+  live sends funnel here), unsent-orders (?with_eligibility=true,
+  cap 50), NEW GET /admin/send-eligibility-preview?limit=20.
+- USER RULE (approved option a): full GREEN diagnosis before ANY
+  Qoyod write. Unmapped product ⇒ product_mapping_check blocker; NO
+  product creation inside send; Adopt → re-diagnose → ONE send.
+- 269875747 PERMANENTLY excluded (SKIPPED+DL+DRY). No bypass ever.
+- Tests: test_send_eligibility_ssot_rev43.py 6/6 (incl. one_shot gate
+  + read-only proof + contradiction invariant), updated candidates/
+  diagnosis suites, fixed stale rev33 scope tests (tabby→mada).
+  41/41 targeted + broad regression: remaining 15 failures verified
+  PRE-EXISTING via git stash (day4/day5/write_lock legacy suites).
+- NEXT (after user redeploys + verifies preview on prod): pick ONE
+  clean order (any stable payment method) → green diagnosis → one
+  send → one invoice → one payment → reconciliation match. No old
+  orders, no second payment method until this closes.
