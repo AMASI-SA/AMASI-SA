@@ -284,8 +284,25 @@ def _line_gross(*, unit_price: float, quantity: float,
 def _build_invoice_payload(*, canon: dict, contact_id: int,
                            line_resolutions: dict,
                            settings: dict,
-                           send_date_iso: str) -> tuple[dict, float]:
-    """Return (payload, expected_total).
+                           send_date_iso: str) -> tuple[dict, float, dict]:
+    """Return (payload, expected_total, breakdown).
+
+    `breakdown` is a JSON-safe RCA object showing HOW the expected
+    total was assembled, sufficient to diagnose any totals_mismatch
+    without re-running the pipeline:
+        {
+          "tax_percent":       15.0,
+          "tax_factor":        1.15,
+          "salla_declared_total": 219.91,
+          "items": [ {sku, description, quantity, unit_price,
+                       discount, line_net, line_gross, salla_total} ],
+          "shipping":     {included, unit, discount, gross,
+                            salla_declared, target_gross} | null,
+          "cod_fee":      {gross} | null,
+          "expected_qoyod_total":       219.93,
+          "difference":                 0.02,
+          "difference_source_hint":     "…",
+        }
 
     Post-2026-07-08 changes (user directive):
         • ALL money fields quantised to 2 decimals (ROUND_HALF_UP)
@@ -303,6 +320,7 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     tax_factor = 1.0 + tax_percent / 100.0
 
     lines: list[dict] = []
+    breakdown_items: list[dict] = []
     expected_total_dec = Decimal("0")
 
     for it in canon.get("items") or []:
@@ -340,41 +358,84 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
             "tax_percent":   tax_percent,
         })
         expected_total_dec += Decimal(str(line_gross))
+        # RCA row.
+        line_net_after_disc = _q2(unit_price * qty - discount)
+        line_tax = _q2(line_gross - line_net_after_disc)
+        breakdown_items.append({
+            "sku":                       sku,
+            "product_id":                pid,
+            "description":               it.get("name") or sku,
+            "quantity":                  qty,
+            "salla_unit_price":          _q2(unit_price_raw),
+            "qoyod_unit_price":          unit_price,
+            "salla_line_total":          _q2(target_gross),
+            "computed_discount":         discount,
+            "line_net_after_discount":   line_net_after_disc,
+            "line_tax_15pct":            line_tax,
+            "line_gross_after_tax":      line_gross,
+            "delta_vs_salla_line":       _q2(line_gross - target_gross),
+        })
 
     # Shipping line (optional — only if configured AND non-zero).
     shipping_amount = _q2(canon.get("shipping_amount"))
+    shipping_breakdown: Optional[dict] = None
     if shipping_amount > 0:
         ship_pid = _to_int(settings.get("default_shipping_product_id"))
-        if ship_pid is not None:
-            items_gross_sum = sum(_f(it.get("total"))
-                                   for it in canon.get("items") or [])
-            ship_target_gross = _f(canon.get("total_amount")) - items_gross_sum
-            if ship_target_gross > 0:
-                ship_target_net = ship_target_gross / tax_factor
-                ship_unit_raw = shipping_amount
-                ship_discount_raw = ship_unit_raw - ship_target_net
-                if ship_discount_raw < 0:
-                    ship_unit = _q2(ship_target_net)
-                    ship_discount = 0.0
-                else:
-                    ship_unit = _q2(ship_unit_raw)
-                    ship_discount = _q2(ship_discount_raw)
-                ship_gross = _line_gross(
-                    unit_price=ship_unit, quantity=1,
-                    discount=ship_discount, tax_percent=tax_percent)
-                lines.append({
-                    "product_id":    ship_pid,
-                    "description":   "شحن (Shipping)",
-                    "quantity":      1,
-                    "unit_price":    ship_unit,
-                    "discount":      ship_discount,
-                    "discount_type": "amount",
-                    "tax_percent":   tax_percent,
-                })
-                expected_total_dec += Decimal(str(ship_gross))
+        items_gross_sum = sum(_f(it.get("total"))
+                               for it in canon.get("items") or [])
+        ship_target_gross = _f(canon.get("total_amount")) - items_gross_sum
+        if ship_pid is not None and ship_target_gross > 0:
+            ship_target_net = ship_target_gross / tax_factor
+            ship_unit_raw = shipping_amount
+            ship_discount_raw = ship_unit_raw - ship_target_net
+            if ship_discount_raw < 0:
+                ship_unit = _q2(ship_target_net)
+                ship_discount = 0.0
+            else:
+                ship_unit = _q2(ship_unit_raw)
+                ship_discount = _q2(ship_discount_raw)
+            ship_gross = _line_gross(
+                unit_price=ship_unit, quantity=1,
+                discount=ship_discount, tax_percent=tax_percent)
+            lines.append({
+                "product_id":    ship_pid,
+                "description":   "شحن (Shipping)",
+                "quantity":      1,
+                "unit_price":    ship_unit,
+                "discount":      ship_discount,
+                "discount_type": "amount",
+                "tax_percent":   tax_percent,
+            })
+            expected_total_dec += Decimal(str(ship_gross))
+            shipping_breakdown = {
+                "included":              True,
+                "salla_declared_amount": _q2(shipping_amount),
+                "salla_declared_gross":  _q2(ship_target_gross),
+                "qoyod_unit_price":      ship_unit,
+                "qoyod_discount":        ship_discount,
+                "qoyod_gross_after_tax": ship_gross,
+                "delta_vs_salla":        _q2(ship_gross - ship_target_gross),
+            }
+        else:
+            # Shipping present in Salla but NOT wired to a product in
+            # settings — surface this because it's a common source
+            # of totals_mismatch.
+            shipping_breakdown = {
+                "included":              False,
+                "salla_declared_amount": _q2(shipping_amount),
+                "salla_declared_gross":  _q2(ship_target_gross),
+                "reason":               ("لا يوجد default_shipping_product_id "
+                                          "في إعدادات قيود — سطر الشحن "
+                                          "مُهمَل في الحسبة"
+                                          if ship_pid is None else
+                                          "حصة الشحن الصافية من إجمالي "
+                                          "سلة سالبة أو صفر — سطر الشحن "
+                                          "مُهمَل"),
+            }
 
     # COD fee line (optional).
     cod_fee = _q2(canon.get("cod_fee_amount"))
+    cod_breakdown: Optional[dict] = None
     if cod_fee > 0:
         cod_pid = _to_int(settings.get("default_cod_fee_product_id"))
         if cod_pid is not None:
@@ -394,9 +455,70 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
                 "tax_percent":   tax_percent,
             })
             expected_total_dec += Decimal(str(cod_gross))
+            cod_breakdown = {
+                "included":              True,
+                "salla_declared_amount": _q2(cod_fee),
+                "qoyod_gross_after_tax": cod_gross,
+                "delta_vs_salla":        _q2(cod_gross - cod_fee),
+            }
+        else:
+            cod_breakdown = {
+                "included":              False,
+                "salla_declared_amount": _q2(cod_fee),
+                "reason":                ("لا يوجد default_cod_fee_product_id "
+                                           "في إعدادات قيود — سطر رسوم COD "
+                                           "مُهمَل في الحسبة"),
+            }
 
     expected_total = float(
         expected_total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+    salla_total = _q2(canon.get("total_amount"))
+    diff = _q2(expected_total - salla_total)
+
+    # Human-readable RCA hint. Sums the per-line deltas + shipping +
+    # cod delta to point at the exact source of the residual diff.
+    items_delta_sum = _q2(sum(bi["delta_vs_salla_line"]
+                               for bi in breakdown_items))
+    ship_delta = (shipping_breakdown.get("delta_vs_salla")
+                  if isinstance(shipping_breakdown, dict)
+                  and shipping_breakdown.get("included") else 0.0)
+    cod_delta = (cod_breakdown.get("delta_vs_salla")
+                 if isinstance(cod_breakdown, dict)
+                 and cod_breakdown.get("included") else 0.0)
+    hint_parts: list[str] = []
+    if abs(items_delta_sum) >= 0.01:
+        hint_parts.append(
+            f"مجموع فروق أسطر المنتجات = {items_delta_sum:+.2f}")
+    if abs(ship_delta or 0) >= 0.01:
+        hint_parts.append(f"فرق سطر الشحن = {ship_delta:+.2f}")
+    if abs(cod_delta or 0) >= 0.01:
+        hint_parts.append(f"فرق سطر رسوم COD = {cod_delta:+.2f}")
+    if isinstance(shipping_breakdown, dict) \
+       and not shipping_breakdown.get("included") \
+       and _f(shipping_breakdown.get("salla_declared_amount")) > 0:
+        hint_parts.append(
+            f"شحن سلة {shipping_breakdown['salla_declared_amount']} ريال "
+            "مُهمَل (لا default_shipping_product_id)")
+    if isinstance(cod_breakdown, dict) \
+       and not cod_breakdown.get("included") \
+       and _f(cod_breakdown.get("salla_declared_amount")) > 0:
+        hint_parts.append(
+            f"COD سلة {cod_breakdown['salla_declared_amount']} ريال "
+            "مُهمَل (لا default_cod_fee_product_id)")
+    hint = " · ".join(hint_parts) if hint_parts else (
+        "الفرق ناتج عن تقريب سنتات على مستوى الأسطر")
+
+    breakdown = {
+        "tax_percent":            tax_percent,
+        "tax_factor":             tax_factor,
+        "salla_declared_total":   salla_total,
+        "items":                  breakdown_items,
+        "shipping":               shipping_breakdown,
+        "cod_fee":                cod_breakdown,
+        "expected_qoyod_total":   expected_total,
+        "difference":             diff,
+        "difference_source_hint": hint,
+    }
 
     invoice: dict = {
         "invoice": {
@@ -421,7 +543,7 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     br_id = _to_int(settings.get("default_branch_id"))
     if br_id is not None:
         invoice["invoice"]["branch_id"] = br_id
-    return invoice, expected_total
+    return invoice, expected_total, breakdown
 
 
 def _build_payment_payload(*, invoice_id: int, amount: float,
@@ -668,7 +790,7 @@ async def _run_all_steps(
     # Recorded ONCE here and reused for both the invoice `issue_date`
     # and the payment `date`.
     send_date_iso = _riyadh_today_iso()
-    invoice_payload, expected_total = _build_invoice_payload(
+    invoice_payload, expected_total, breakdown = _build_invoice_payload(
         canon=canon, contact_id=contact_id,
         line_resolutions=line_resolutions, settings=settings,
         send_date_iso=send_date_iso)
@@ -677,9 +799,11 @@ async def _run_all_steps(
         raise ManualSendRefused(
             "totals_mismatch",
             f"فرق المبلغ {abs(diff)} ريال أكبر من 0.01 — أُوقف الإرسال",
-            {"salla_total": salla_total,
-             "expected_qoyod_total": expected_total,
-             "difference": diff})
+            {"salla_total":            salla_total,
+             "expected_qoyod_total":   expected_total,
+             "difference":             diff,
+             "difference_source_hint": breakdown["difference_source_hint"],
+             "breakdown":              breakdown})
 
     # ── 4) POST invoice ────────────────────────────────────────────
     idem_inv = f"inv-{order_number}"

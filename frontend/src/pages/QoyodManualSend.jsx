@@ -22,6 +22,197 @@ function extractDetail(err) {
   return d.message || d.code || JSON.stringify(d);
 }
 
+function fmt(v, digits = 2) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  return n.toFixed(digits);
+}
+
+function TotalsBreakdown({ detail }) {
+  const b = detail?.breakdown || {};
+  const items = b.items || [];
+  const ship = b.shipping;
+  const cod = b.cod_fee;
+  return (
+    <div
+      dir="rtl"
+      data-testid="totals-mismatch-breakdown"
+      className="mt-3 rounded-lg border border-red-200 bg-white p-3 text-xs text-slate-700"
+    >
+      <div className="mb-2 font-semibold text-slate-900">
+        تفاصيل حساب الإجمالي (RCA)
+      </div>
+      <div className="mb-2 text-slate-600">
+        نسبة الضريبة:{" "}
+        <span dir="ltr" className="font-mono">
+          {fmt(b.tax_percent, 2)}%
+        </span>{" "}
+        · إجمالي سلة:{" "}
+        <span dir="ltr" className="font-mono">
+          {fmt(detail.salla_total, 2)}
+        </span>{" "}
+        · إجمالي قيود المتوقع:{" "}
+        <span dir="ltr" className="font-mono">
+          {fmt(detail.expected_qoyod_total, 2)}
+        </span>{" "}
+        · الفرق:{" "}
+        <span
+          dir="ltr"
+          className={`font-mono font-bold ${
+            Math.abs(Number(detail.difference)) > 0.01
+              ? "text-red-700"
+              : "text-emerald-700"
+          }`}
+        >
+          {fmt(detail.difference, 2)}
+        </span>
+      </div>
+      {b.difference_source_hint && (
+        <div className="mb-2 rounded bg-amber-50 p-2 text-amber-900">
+          💡 مصدر الفرق: {b.difference_source_hint}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[11px]">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="border p-1 text-right">SKU</th>
+              <th className="border p-1 text-right">الوصف</th>
+              <th className="border p-1 text-right">الكمية</th>
+              <th className="border p-1 text-right">سعر الوحدة سلة</th>
+              <th className="border p-1 text-right">سعر الوحدة قيود</th>
+              <th className="border p-1 text-right">الخصم</th>
+              <th className="border p-1 text-right">صافي بعد الخصم</th>
+              <th className="border p-1 text-right">ضريبة 15%</th>
+              <th className="border p-1 text-right">إجمالي قيود</th>
+              <th className="border p-1 text-right">إجمالي سلة</th>
+              <th className="border p-1 text-right">الفرق</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i}>
+                <td dir="ltr" className="border p-1 font-mono">
+                  {it.sku}
+                </td>
+                <td className="border p-1">{it.description}</td>
+                <td dir="ltr" className="border p-1 text-center">
+                  {it.quantity}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.salla_unit_price)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.qoyod_unit_price)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.computed_discount)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.line_net_after_discount)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.line_tax_15pct)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left font-semibold">
+                  {fmt(it.line_gross_after_tax)}
+                </td>
+                <td dir="ltr" className="border p-1 text-left">
+                  {fmt(it.salla_line_total)}
+                </td>
+                <td
+                  dir="ltr"
+                  className={`border p-1 text-left font-mono ${
+                    Math.abs(Number(it.delta_vs_salla_line)) > 0.01
+                      ? "bg-red-50 text-red-800"
+                      : ""
+                  }`}
+                >
+                  {fmt(it.delta_vs_salla_line)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {ship && (
+        <div
+          className={`mt-2 rounded border p-2 ${
+            ship.included
+              ? "border-slate-200 bg-slate-50"
+              : "border-red-300 bg-red-50 text-red-900"
+          }`}
+          data-testid="breakdown-shipping"
+        >
+          <div className="font-semibold">
+            الشحن:{" "}
+            {ship.included
+              ? "مُدرج في الحساب"
+              : "❗ مُهمَل — سبب رئيسي للفرق"}
+          </div>
+          {ship.included ? (
+            <div>
+              مبلغ سلة:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(ship.salla_declared_amount)}
+              </span>{" "}
+              · إجمالي قيود:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(ship.qoyod_gross_after_tax)}
+              </span>{" "}
+              · الفرق:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(ship.delta_vs_salla)}
+              </span>
+            </div>
+          ) : (
+            <div>
+              مبلغ سلة:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(ship.salla_declared_amount)}
+              </span>{" "}
+              — {ship.reason}
+            </div>
+          )}
+        </div>
+      )}
+      {cod && (
+        <div
+          className={`mt-2 rounded border p-2 ${
+            cod.included
+              ? "border-slate-200 bg-slate-50"
+              : "border-red-300 bg-red-50 text-red-900"
+          }`}
+          data-testid="breakdown-cod"
+        >
+          <div className="font-semibold">
+            رسوم COD:{" "}
+            {cod.included
+              ? "مُدرج في الحساب"
+              : "❗ مُهمَل — سبب رئيسي للفرق"}
+          </div>
+          <div>
+            مبلغ سلة:{" "}
+            <span dir="ltr" className="font-mono">
+              {fmt(cod.salla_declared_amount)}
+            </span>
+            {cod.included && (
+              <>
+                {" "}· الفرق:{" "}
+                <span dir="ltr" className="font-mono">
+                  {fmt(cod.delta_vs_salla)}
+                </span>
+              </>
+            )}
+            {!cod.included && <> — {cod.reason}</>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultBanner({ result, onDismiss }) {
   if (!result) return null;
   const ok = result.ok;
@@ -75,14 +266,19 @@ function ResultBanner({ result, onDismiss }) {
                 <span className="font-mono">{result.code}</span> —{" "}
                 {result.message}
               </div>
-              {result.detail && (
-                <pre
-                  dir="ltr"
-                  className="mt-2 max-h-48 overflow-auto rounded bg-white p-2 text-xs text-slate-700 border border-red-100"
-                >
-                  {JSON.stringify(result.detail, null, 2)}
-                </pre>
-              )}
+              {result.code === "totals_mismatch" &&
+                result.detail?.breakdown && (
+                  <TotalsBreakdown detail={result.detail} />
+                )}
+              {result.detail &&
+                result.code !== "totals_mismatch" && (
+                  <pre
+                    dir="ltr"
+                    className="mt-2 max-h-48 overflow-auto rounded bg-white p-2 text-xs text-slate-700 border border-red-100"
+                  >
+                    {JSON.stringify(result.detail, null, 2)}
+                  </pre>
+                )}
             </>
           )}
         </div>
@@ -112,6 +308,9 @@ export default function QoyodManualSend() {
   const [result, setResult] = useState(null);
   const [floorDate, setFloorDate] = useState(null);
   const [page, setPage] = useState(1);
+  const [diagnoseFor, setDiagnoseFor] = useState(null);
+  const [diagnoseResult, setDiagnoseResult] = useState(null);
+  const [diagnoseLoading, setDiagnoseLoading] = useState(false);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -194,6 +393,22 @@ export default function QoyodManualSend() {
       }
     } finally {
       setSendingFor(null);
+    }
+  };
+
+  const handleDiagnose = async (orderNumber) => {
+    setDiagnoseFor(orderNumber);
+    setDiagnoseResult(null);
+    try {
+      const res = await api.get(`${BASE}/diagnose/${orderNumber}`);
+      setDiagnoseResult({ orderNumber, data: res.data });
+    } catch (e) {
+      setDiagnoseResult({
+        orderNumber,
+        data: { ok: false, code: "http_error", message: extractDetail(e) },
+      });
+    } finally {
+      setDiagnoseFor(null);
     }
   };
 
@@ -355,6 +570,73 @@ export default function QoyodManualSend() {
 
       <ResultBanner result={result} onDismiss={() => setResult(null)} />
 
+      {diagnoseResult && (
+        <div
+          dir="rtl"
+          data-testid="diagnose-panel"
+          className="rounded-xl border border-slate-300 bg-white p-4"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="font-semibold text-slate-900">
+              🔍 تشخيص حساب الطلب #{diagnoseResult.orderNumber}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDiagnoseResult(null)}
+              data-testid="diagnose-close"
+              className="text-slate-500 hover:text-slate-800"
+            >
+              ✕
+            </button>
+          </div>
+          {diagnoseResult.data?.ok ? (
+            <>
+              <div className="mb-2 text-sm">
+                {diagnoseResult.data.within_tolerance ? (
+                  <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">
+                    ✅ ضمن حد التسامح (0.01 ريال) — الإرسال سيمر
+                  </span>
+                ) : (
+                  <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">
+                    ❌ خارج حد التسامح — الإرسال سيتوقف
+                  </span>
+                )}
+                <span className="mx-3 text-xs text-slate-500">
+                  إجمالي سلة:{" "}
+                  <span dir="ltr" className="font-mono">
+                    {fmt(diagnoseResult.data.salla_total)}
+                  </span>{" "}
+                  · إجمالي قيود المتوقع:{" "}
+                  <span dir="ltr" className="font-mono">
+                    {fmt(diagnoseResult.data.expected_qoyod_total)}
+                  </span>{" "}
+                  · الفرق:{" "}
+                  <span dir="ltr" className="font-mono font-bold">
+                    {fmt(diagnoseResult.data.difference)}
+                  </span>
+                </span>
+              </div>
+              <TotalsBreakdown
+                detail={{
+                  salla_total: diagnoseResult.data.salla_total,
+                  expected_qoyod_total:
+                    diagnoseResult.data.expected_qoyod_total,
+                  difference: diagnoseResult.data.difference,
+                  breakdown: diagnoseResult.data.breakdown,
+                }}
+              />
+            </>
+          ) : (
+            <div className="rounded bg-red-50 p-3 text-sm text-red-700">
+              <span className="font-mono">
+                {diagnoseResult.data?.code || "error"}
+              </span>{" "}
+              — {diagnoseResult.data?.message || "خطأ غير معروف"}
+            </div>
+          )}
+        </div>
+      )}
+
       {error && (
         <div
           className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
@@ -460,21 +742,37 @@ export default function QoyodManualSend() {
                           </span>
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleSend(o.order_number)}
-                            disabled={sendingFor === o.order_number}
-                            data-testid={`manual-send-btn-${o.order_number}`}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                              sendingFor === o.order_number
-                                ? "bg-slate-300 text-slate-600"
-                                : "bg-emerald-600 text-white hover:bg-emerald-700"
-                            }`}
-                          >
-                            {sendingFor === o.order_number
-                              ? "جارٍ الإرسال…"
-                              : "إرسال إلى قيود"}
-                          </button>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSend(o.order_number)}
+                              disabled={sendingFor === o.order_number}
+                              data-testid={`manual-send-btn-${o.order_number}`}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                                sendingFor === o.order_number
+                                  ? "bg-slate-300 text-slate-600"
+                                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+                              }`}
+                            >
+                              {sendingFor === o.order_number
+                                ? "جارٍ الإرسال…"
+                                : "إرسال إلى قيود"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDiagnose(o.order_number)}
+                              disabled={diagnoseFor === o.order_number}
+                              data-testid={`manual-send-diagnose-btn-${o.order_number}`}
+                              title="عرض تفصيل حساب الإجمالي (بدون إرسال)"
+                              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                                diagnoseFor === o.order_number
+                                  ? "border-slate-300 bg-slate-100 text-slate-500"
+                                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                              }`}
+                            >
+                              🔍 تشخيص
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
