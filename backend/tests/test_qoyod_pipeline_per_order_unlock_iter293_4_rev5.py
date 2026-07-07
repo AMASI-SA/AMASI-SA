@@ -14,28 +14,28 @@ sending the invoice. Result the operator saw:
     qoyod_invoice_id=undefined, per_order_approval=undefined,
     invoice request body=undefined.
 
-The Contract Pinned Here
+The Contract Pinned Here (SUPERSEDED by rev33 — see below)
 ────────────────────────
-When the pipeline receives a supplied `api_client` whose
-`write_lock_enabled` attribute is `False`, the per-flight
-`LOCKED_AWAITING_APPROVAL` short-circuit MUST NOT trigger — even if
-`settings.production_writes_locked` is True in the database.
+`_writes_blocked` (pure helper) still honours the supplied client as
+the source of truth — those unit tests are unchanged.
 
-The api_client itself remains the SOLE source of truth on whether a
-given call has been granted a bypass. The pipeline only adds a clean
-short-circuit so the row ends in a structured state rather than a
-raw QoyodWriteLockedError exception.
+rev33 UPDATE (after invoice-188 leak, user decree):
+A caller-supplied LIVE api_client can NO LONGER bypass the settings
+gates. `process_customer_resolved_row` re-checks
+`_live_write_permitted(settings)` + the SAS gate, and when either
+denies, the supplied client is FORCIBLY replaced with
+`DryRunQoyodClient`. Fail-closed: no real POST ever happens while
+`production_writes_locked=True`, regardless of what client the
+caller constructed.
 
 What's covered
 ──────────────
-1. Unlocked api_client + locked settings → pipeline calls
-   create_invoice (no short-circuit).
-2. Locked api_client + locked settings → pipeline parks the row
-   at LOCKED_AWAITING_APPROVAL (legacy behaviour intact).
-3. No api_client supplied → pipeline falls back to `is_locked(settings)`
-   (defensive — preserves existing webhook path).
-4. DryRunQoyodClient → no short-circuit regardless of settings
-   (write_lock_enabled missing → getattr default False).
+1. `_writes_blocked` pure-helper contract (unchanged).
+2. Unlocked api_client + locked settings → rev33 forces DryRun:
+   the real client's create_invoice is NEVER called; row completes
+   with a DRY: invoice id only.
+3. Locked api_client + locked settings → same fail-closed forcing:
+   no real POST attempted.
 """
 from __future__ import annotations
 
@@ -219,13 +219,14 @@ def _customer_resolved_row():
 @pytest.mark.asyncio
 class TestPipelineHonoursPerOrderUnlock:
 
-    async def test_unlocked_client_reaches_create_invoice(self):
-        """The smoking gun. With settings.production_writes_locked=True
-        AND a supplied UNLOCKED api_client, the pipeline must call
-        api_client.create_invoice — NOT park at LOCKED_AWAITING_APPROVAL.
-
-        Before Iter-293.4-rev5 this test FAILED — the row landed in
-        LOCKED_AWAITING_APPROVAL with no create_invoice call.
+    async def test_unlocked_client_forced_dry_when_settings_locked(self):
+        """rev33 fail-closed contract. With
+        settings.production_writes_locked=True, a supplied UNLOCKED
+        api_client MUST be replaced with DryRunQoyodClient — the real
+        client's create_invoice is NEVER called and the row completes
+        with a DRY: invoice id only. (Pre-rev33 this test asserted the
+        opposite: the per-order bypass. That contract was revoked by
+        user decree after the invoice-188 leak.)
         """
         db = _DB()
         row = _customer_resolved_row()
@@ -277,31 +278,27 @@ class TestPipelineHonoursPerOrderUnlock:
             result = await process_customer_resolved_row(
                 db, row, api_client=unlocked_client)
 
-        # The actual proof: create_invoice WAS called.
-        assert unlocked_client.create_invoice.called, (
-            "Pipeline short-circuited to LOCKED_AWAITING_APPROVAL "
-            "despite the supplied UNLOCKED api_client. The per-order "
-            "approval bypass is broken. "
+        # rev33 fail-closed proof: the REAL client was never invoked.
+        assert not unlocked_client.create_invoice.called, (
+            "rev33 violated: settings.production_writes_locked=True "
+            "but the caller-supplied live client reached "
+            "create_invoice. "
             f"actual result={result!r}")
-        # And the row is COMPLETED (COD → credit_invoice_only branch
-        # so no invoice_payment is built, but invoice was sent).
+        assert not unlocked_client.create_invoice_payment.called
+        # The row completed in forced dry-run mode.
         assert result.get("outcome") == "COMPLETED"
-        assert result.get("qoyod_invoice_id") == "QID-1"
-        # COD path must NOT call invoice_payment.
-        assert not unlocked_client.create_invoice_payment.called, (
-            "COD posting_mode=credit_invoice_only MUST NOT call "
-            "create_invoice_payment.")
-        # Row state reflects the success.
+        assert result.get("dry_run") is True
+        assert str(result.get("qoyod_invoice_id", "")).startswith("DRY:")
+        # Row state reflects the dry completion.
         final = await db.integration_inbox.find_one({"id": row["id"]})
         assert final["pipeline_stage"] == "COMPLETED"
-        assert final.get("qoyod_invoice_id") == "QID-1"
-        # No row was parked in the audit log as a blocked attempt.
-        assert len(db.qoyod_write_lock_attempts.rows) == 0, (
-            "Unlocked client must not record a blocked-write audit row.")
+        assert str(final.get("qoyod_invoice_id", "")).startswith("DRY:")
 
-    async def test_locked_client_still_parks_at_locked_awaiting_approval(self):
-        """Legacy behaviour intact — when no per-order approval was
-        granted, the pipeline still parks the row cleanly."""
+    async def test_locked_client_forced_dry_no_real_write(self):
+        """rev33 — a locked client + locked settings likewise gets
+        replaced with DryRunQoyodClient. No real POST is ever
+        attempted; the row completes dry instead of raising
+        QoyodWriteLockedError."""
         db = _DB()
         row = _customer_resolved_row()
         db.integration_inbox.rows.append(row)
@@ -343,13 +340,10 @@ class TestPipelineHonoursPerOrderUnlock:
             result = await process_customer_resolved_row(
                 db, row, api_client=locked_client)
 
-        # No POST was attempted.
+        # No real POST was attempted (rev33 forced DryRun).
         assert not locked_client.create_invoice.called
-        # The row landed cleanly at LOCKED_AWAITING_APPROVAL.
-        assert result.get("outcome") == "LOCKED_AWAITING_APPROVAL"
-        assert result.get("step") == "invoice"
-        # Audit trail was written.
-        assert len(db.qoyod_write_lock_attempts.rows) == 1
-        attempt = db.qoyod_write_lock_attempts.rows[0]
-        assert attempt["action"] == "create_invoice"
-        assert attempt["path"] == "/invoices"
+        assert result.get("outcome") == "COMPLETED"
+        assert result.get("dry_run") is True
+        assert str(result.get("qoyod_invoice_id", "")).startswith("DRY:")
+        # No blocked-write audit row — the locked client was never used.
+        assert len(db.qoyod_write_lock_attempts.rows) == 0

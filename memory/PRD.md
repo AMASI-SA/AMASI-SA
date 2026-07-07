@@ -1,6 +1,49 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV36.2 COMPLETE — Absolute Integration Floor Date 2026-07-01
+#    (2026-06, this session)
+# ══════════════════════════════════════════════════════════════════
+
+**Status**: VERIFIED. `2026-07-01` is now enforced as the SINGLE
+source of truth everywhere. Any older stored `qoyod_sync_start_date`
+(e.g. 2020-01-01 in prod DB) is safely overridden in code — a stored
+value can only move the boundary LATER, never earlier.
+
+## What changed (surgical)
+- `selective_send_policy.py`: `_floored_sync_start()` — floor applied
+  in `should_allow_selective_live_send`, `_compute_readiness_blockers`
+  and `build_selective_send_policy_report`. Never returns None;
+  garbage/old stored values → `2026-07-01`.
+- `eligible_orders.py`: hardcoded `QOYOD_SYNC_START_DATE="2026-07-01"`.
+- `unsent_orders.py` (rev36.1): uses the same constant.
+- Fixed `test_qoyod_pipeline_per_order_unlock_iter293_4_rev5.py`:
+  the 2 failing tests pinned a PRE-rev33 contract (per-order unlocked
+  api_client bypasses locked settings). rev33 revoked that after the
+  invoice-188 leak — a supplied live client is forcibly replaced with
+  DryRunQoyodClient when gates deny. Tests updated to pin the new
+  fail-closed contract. 7/7 pass now.
+
+## Test results (2026-06)
+- Session-critical suites: 209 passed, 0 failed
+  (per_order_unlock_rev5=7, unsent_rev36, canary_rev35, dry_purge_rev34,
+   sas_gate, selective_send_policy/guard/readiness=130).
+- Full backend suite: 221 failures are ALL pre-existing/inherited
+  (verified identical count via git-stash baseline). 25 of them are
+  old qoyod tests pinning contracts revoked by rev32/rev33 hardening
+  (write-lock refuse paths, REV32_MISSING_ROW_CONTEXT). The rest are
+  unrelated modules (tiktok/snapchat/accounting/unified orders).
+  NOT touched — surgical mandate.
+
+## Next (needs explicit user permission)
+- Deploy Rev36.2.
+- P1: canary-test remaining payment methods (mada, tamara) ONE order
+  at a time — only after Rev36.2 live + user go-ahead.
+- P2 (postponed by user): Key Fence.
+- FROZEN forensic evidence: invoices #188-194/payments #160-165 and
+  invoice #195/payment #166 — DO NOT TOUCH.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ ITER-001K COMPLETE — Pipeline Instrumentation (P0, 2026-02-XX)
 # ══════════════════════════════════════════════════════════════════
 
@@ -6537,3 +6580,18 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   the scope note. Tests 19/19 (2 new: exclusion + settings override).
 - ⚠️ Preview settings carry dummy qoyod_sync_start_date="2020-01-01".
   User must ensure production settings value is 2026-07-01 or unset.
+
+### Rev36.2 — Sync start date PINNED as foundational constant
+- User decree: 2026-07-01 is a FOUNDATIONAL project constant, NOT a
+  setting. list_unsent_orders now IGNORES settings.qoyod_sync_start_date
+  entirely; boundary = QOYOD_SYNC_START_DATE constant (eligible_orders).
+- Verified on preview: dummy setting "2020-01-01" ignored, boundary
+  2026-07-01 enforced (134 old rows excluded). Tests 19/19 (override-
+  ignored test replaces the old override test).
+- Excluded-count NOT shown in UI (user: internal info). Small static
+  scope note kept. NOTE: selective_send_policy still reads the
+  settings override (pinning there would break many test suites +
+  send semantics — left as-is per no-new-complexity decree; production
+  settings should not carry a conflicting value).
+- NEXT (user): after deploy + verification → test remaining payment
+  methods. Page = daily-ops source of truth.

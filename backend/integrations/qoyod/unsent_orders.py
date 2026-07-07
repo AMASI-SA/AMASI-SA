@@ -155,18 +155,14 @@ async def list_unsent_orders(
 ) -> dict:
     """All recent orders mapped to the 4-status contract + counts.
 
-    INTEGRATION START DATE RULE (user decree): orders created BEFORE
-    `qoyod_sync_start_date` (settings override, default 2026-07-01)
-    are OUT OF SCOPE for the قيود integration entirely — they are
-    ignored at the data source: no counts, no listing, no failed, no
-    pending."""
-    from integrations.qoyod.eligible_orders import (
-        QOYOD_SYNC_START_DATE, _parse_iso_date,
-    )
-    settings = await db.qoyod_settings.find_one(
-        {"user_id": user_id}, {"qoyod_sync_start_date": 1}) or {}
-    sync_start = (_parse_iso_date(settings.get("qoyod_sync_start_date"))
-                  or date.fromisoformat(QOYOD_SYNC_START_DATE))
+    INTEGRATION START DATE — FOUNDATIONAL PROJECT CONSTANT (user
+    decree 2026-02): orders created BEFORE 2026-07-01 are OUT OF
+    SCOPE for the قيود integration entirely — ignored at the data
+    source: no counts, no listing, no failed, no pending. This is
+    NOT a setting: it is fixed in code and NO settings value can
+    change it."""
+    from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
+    sync_start = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))

@@ -51,6 +51,19 @@ from integrations.qoyod.eligible_orders import (
 logger = logging.getLogger("selective_send_policy")
 
 
+def _floored_sync_start(stored=None):
+    """rev36.2 (user decree) — 2026-07-01 is a FOUNDATIONAL project
+    constant and the SINGLE source of truth for the integration
+    start. A stored/passed value may only move the boundary LATER,
+    never earlier. Returns a `date`."""
+    floor = _parse_iso_date(QOYOD_SYNC_START_DATE)
+    if stored is not None and not hasattr(stored, "year"):
+        stored = _parse_iso_date(str(stored))
+    if stored is not None and stored > floor:
+        return stored
+    return floor
+
+
 # ── Iter-001g/h — Invoice date policy ───────────────────────────────
 # Per user directive (2026-07-01): invoice_date / issue_date in the
 # Qoyod payload MUST be the SEND date in Asia/Riyadh — NOT
@@ -280,8 +293,9 @@ def should_allow_selective_live_send(
                                         True))
     cutoff_str      = settings.get("qoyod_sync_start_date",
                                    QOYOD_SYNC_START_DATE)
-    cutoff = sync_start_date or _parse_iso_date(cutoff_str) or \
-        _parse_iso_date(QOYOD_SYNC_START_DATE)
+    # rev36.2 — foundational floor (see _floored_sync_start).
+    cutoff = _floored_sync_start(
+        sync_start_date or _parse_iso_date(cutoff_str))
 
     posting_mode = _posting_mode_for(payment_method)
 
@@ -594,8 +608,9 @@ def _compute_readiness_blockers(
 
     cutoff_str = settings.get("qoyod_sync_start_date",
                               QOYOD_SYNC_START_DATE)
-    cutoff = sync_start_date or _parse_iso_date(cutoff_str) or \
-        _parse_iso_date(QOYOD_SYNC_START_DATE)
+    # rev36.2 — foundational floor (see _floored_sync_start).
+    cutoff = _floored_sync_start(
+        sync_start_date or _parse_iso_date(cutoff_str))
 
     enabled_trigger_statuses_raw = settings.get(
         "qoyod_enabled_invoice_trigger_statuses")
@@ -717,8 +732,8 @@ async def build_selective_send_policy_report(
             raw_settings.get("selective_live_send_enabled", False)),
         "production_writes_locked":    bool(
             raw_settings.get("production_writes_locked", True)),
-        "qoyod_sync_start_date":       raw_settings.get(
-            "qoyod_sync_start_date", QOYOD_SYNC_START_DATE),
+        "qoyod_sync_start_date":       _floored_sync_start(
+            raw_settings.get("qoyod_sync_start_date")).isoformat(),
         "qoyod_tax_period":            raw_settings.get(
             "qoyod_tax_period", QOYOD_TAX_PERIOD),
         "bank_transfer_routing_enabled": bool(

@@ -163,17 +163,19 @@ async def test_pre_sync_start_orders_fully_ignored(db):
 
 
 @pytest.mark.asyncio
-async def test_sync_start_settings_override(db):
-    """settings.qoyod_sync_start_date overrides the default."""
+async def test_sync_start_is_fixed_constant_settings_ignored(db):
+    """User decree: 2026-07-01 is a FOUNDATIONAL constant — a stored
+    settings value must NOT change the page's scope boundary."""
     await db.qoyod_settings.update_one(
         {"user_id": TENANT},
-        {"$set": {"qoyod_sync_start_date": "2026-08-01"}}, upsert=True)
+        {"$set": {"qoyod_sync_start_date": "2020-01-01"}}, upsert=True)
     try:
         r = _inbox("o4", "903", "NORMALIZED")
-        r["canonical_payload"]["order_date"] = "2026-07-15"
+        r["canonical_payload"]["order_date"] = "2026-06-15"  # pre-start
         await db.integration_inbox.insert_one(r)
         out = await list_unsent_orders(db, user_id=TENANT, days=7)
-        assert out["sync_start_date"] == "2026-08-01"
+        # Setting IGNORED — boundary stays 2026-07-01, old order out.
+        assert out["sync_start_date"] == "2026-07-01"
         assert out["excluded_pre_sync_start"] == 1
         assert out["total"] == 0
     finally:
