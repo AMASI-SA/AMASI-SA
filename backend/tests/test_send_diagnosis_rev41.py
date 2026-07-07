@@ -72,6 +72,12 @@ async def _seed_mapping(db):
     await db.qoyod_products_mapping.insert_one(
         {"user_id": TENANT, "sku": "AMS11981",
          "qoyod_product_id": "777", "dry_run_only": False})
+    # rev46.1 — SSOT now mirrors SAS gate check 8 (payment account).
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"payment_method_mapping": [
+            {"salla_method": "mada", "qoyod_account_id": "77"}]}},
+        upsert=True)
 
 
 async def _snapshot_counts(db):

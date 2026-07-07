@@ -7083,3 +7083,24 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   (3) verify: send-diagnosis/270939808 + reconciliation-report.
 - Expected flow inside send: SKIPPED(transient)→RETRYING→NORMALIZED →
   customer created/matched (rev45, fail-closed) → invoice → payment.
+
+### Rev46.1 — SSOT gap closed: payment_account_mapping_check
+- PROD INCIDENT: first credit_card canary send for 270939808
+  refused fail-closed (outcome SKIPPED, settings_untouched, no
+  invoice) — SAS gate payment_method_mapping_missing: no Qoyod
+  account mapped for credit_card in settings.payment_method_mapping
+  (only mada/tabby-era rows). Reproduced locally 1:1. Budget NOT
+  consumed (reservation happens at write time; skip occurred at
+  gate). Diagnosis had shown green → SSOT gap.
+- FIX: SSOT now runs the gate's own _resolve_payment_mapping (zero
+  drift) → new contract field payment_account_mapping_check +
+  blocker of same code. Tests: test_rev46_1 2/2 (incident repro +
+  green) + fixtures updated across rev41/43/44/45/candidates/
+  approval suites. 207/207 pass.
+- USER NEXT (on prod): add credit_card row to payment_method_mapping
+  (Qoyod settings page "ربط طرق الدفع" in UI, or PUT /settings with
+  FULL merged list — PUT replaces the list; COD rows auto-coerced),
+  REDEPLOY (for rev46.1 diagnosis visibility), re-run
+  send-diagnosis/270939808 (expect payment_account_mapping_check
+  passed + ready_to_send true), then re-run the SAME send command
+  (budget still armed & pinned, phrase unchanged).

@@ -121,6 +121,11 @@ class _DB:
             "production_writes_locked": locked,
             "dry_run_mode": False,
             "invoice_trigger_statuses": ["completed"],
+            # rev46.1 — SSOT payment account check needs a mapping.
+            "payment_method_mapping": [
+                {"salla_method": "credit_card",
+                 "qoyod_account_id": "77"},
+                {"salla_method": "mada", "qoyod_account_id": "77"}],
             # Iter-001k — open Selective Send gate for legacy tests.
             "selective_live_send_enabled": True,
             "qoyod_enabled_invoice_trigger_statuses":

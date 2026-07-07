@@ -137,6 +137,11 @@ async def test_ssot_270939808_class_order_fully_green(db):
     await db.integration_inbox.insert_one(_row("270939808"))
     await db.qoyod_products_mapping.insert_one(
         {"user_id": TENANT, "sku": "SKU-45", "qoyod_product_id": "9"})
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"payment_method_mapping": [
+            {"salla_method": "credit_card",
+             "qoyod_account_id": "77"}]}}, upsert=True)
     ev = await evaluate_order_for_qoyod_send(
         db, user_id=TENANT, order_number="270939808")
     assert ev["ready_to_send"] is True
@@ -165,7 +170,10 @@ async def test_one_shot_passes_customer_gate_reaches_ssot(db):
     # refused by the SSOT gate for the REAL blocker (product).
     await db.qoyod_settings.insert_one(
         {"user_id": TENANT, "production_writes_locked": False,
-         "selective_live_send_enabled": True, "dry_run_mode": False})
+         "selective_live_send_enabled": True, "dry_run_mode": False,
+         "payment_method_mapping": [
+             {"salla_method": "credit_card",
+              "qoyod_account_id": "77"}]})
     await db.integration_inbox.insert_one(
         _row("903", sku="SKU-NOMAP", stage="NORMALIZED",
              skip_class=None))

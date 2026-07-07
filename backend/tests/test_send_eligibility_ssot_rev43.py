@@ -92,6 +92,12 @@ async def _map_sku(db, sku="SKU-S"):
     await db.qoyod_products_mapping.insert_one(
         {"user_id": TENANT, "sku": sku, "qoyod_product_id": "9",
          "dry_run_only": False})
+    # rev46.1 — SSOT now mirrors SAS gate check 8 (payment account).
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"payment_method_mapping": [
+            {"salla_method": "mada", "qoyod_account_id": "77"}]}},
+        upsert=True)
 
 
 # ── 1. Contract + green path ─────────────────────────────────────────
@@ -201,7 +207,9 @@ async def test_one_shot_refuses_non_green_order(db):
     # the rev43 SSOT gate stands — it must refuse BEFORE any client.
     await db.qoyod_settings.insert_one(
         {"user_id": TENANT, "production_writes_locked": False,
-         "selective_live_send_enabled": True, "dry_run_mode": False})
+         "selective_live_send_enabled": True, "dry_run_mode": False,
+         "payment_method_mapping": [
+             {"salla_method": "mada", "qoyod_account_id": "77"}]})
     await db.integration_inbox.insert_one(
         _row("401", sku="SKU-NOMAP"))
     with patch(

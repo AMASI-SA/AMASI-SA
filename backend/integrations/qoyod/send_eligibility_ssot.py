@@ -16,6 +16,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from integrations.qoyod.dry_rca_report import _fetch_inbox_row
+from integrations.qoyod.selective_auto_send_gate import (
+    _resolve_payment_mapping,
+)
 from integrations.qoyod.selective_send_policy import (
     should_allow_selective_live_send,
 )
@@ -146,6 +149,29 @@ async def evaluate_order_for_qoyod_send(
     stage_check = _stage_check(row)
     dry_check = _dry_check(row)
 
+    settings = await db.qoyod_settings.find_one(
+        {"user_id": user_id}, {"_id": 0}) or {}
+
+    # rev46.1 — the SAS gate (check 8 on the REAL send path) refuses
+    # any payment method without a mapped Qoyod account
+    # (payment_method_mapping_missing). Discovered when the first
+    # credit_card canary send SKIPPED despite a green diagnosis.
+    # Uses the gate's own resolver — zero drift.
+    _pm_raw = str(canonical.get("payment_method") or "")
+    _resolved_key, _account_id = _resolve_payment_mapping(
+        _pm_raw, settings)
+    payment_account_mapping_check = {
+        "passed": bool(_resolved_key and _account_id),
+        "payment_method": _pm_raw,
+        "qoyod_account_id": _account_id,
+        "detail": ((f"طريقة الدفع '{_pm_raw}' مربوطة بحساب قيود "
+                    f"{_account_id}") if _account_id else
+                   (f"لا يوجد حساب قيود مربوط لطريقة الدفع "
+                    f"'{_pm_raw}' في payment_method_mapping — "
+                    "بوابة الإرسال سترفض (payment_method_mapping_"
+                    "missing). أضف الربط من إعدادات طرق الدفع أولاً")),
+    }
+
     unmapped = list(c["amount_check"].get("unmapped_skus") or [])
     product_mapping_check = {
         "passed": not unmapped,
@@ -160,8 +186,6 @@ async def evaluate_order_for_qoyod_send(
     amount_check = c["amount_check"]
 
     # ── Selective Send policy — order-intrinsic (gates overlaid) ────
-    settings = await db.qoyod_settings.find_one(
-        {"user_id": user_id}, {"_id": 0}) or {}
     eff = dict(settings)
     eff.update(POLICY_EVAL_OVERLAY)
     policy_order = {
@@ -213,6 +237,7 @@ async def evaluate_order_for_qoyod_send(
     _add("dry_check", dry_check)
     _add("skipped_dead_letter_check", skipped_dead_letter_check)
     _add("stage_check", stage_check)
+    _add("payment_account_mapping_check", payment_account_mapping_check)
     _add("product_mapping_check", product_mapping_check)
     if not unmapped:                    # computable only when mapped
         _add("amount_check", amount_check)
@@ -246,6 +271,7 @@ async def evaluate_order_for_qoyod_send(
         "duplicate_check": duplicate_check,
         "amount_check": amount_check,
         "product_mapping_check": product_mapping_check,
+        "payment_account_mapping_check": payment_account_mapping_check,
         "stage_check": stage_check,
         "dry_check": dry_check,
         "skipped_dead_letter_check": skipped_dead_letter_check,

@@ -28,6 +28,12 @@ async def db():
     database = client[os.environ["DB_NAME"]]
     for c in COLLS:
         await database[c].delete_many({"user_id": TENANT})
+    # rev46.1 — SSOT mirrors SAS gate check 8 (payment account).
+    await database.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"payment_method_mapping": [
+            {"salla_method": "mada", "qoyod_account_id": "77"}]}},
+        upsert=True)
     yield database
     for c in COLLS:
         await database[c].delete_many({"user_id": TENANT})

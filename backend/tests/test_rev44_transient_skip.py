@@ -175,6 +175,11 @@ async def test_ssot_transient_skip_not_blocking(db):
         _row("300", stage="SKIPPED", skip_class="transient"))
     await db.qoyod_products_mapping.insert_one(
         {"user_id": TENANT, "sku": "SKU-R", "qoyod_product_id": "9"})
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"payment_method_mapping": [
+            {"salla_method": "mada", "qoyod_account_id": "77"}]}},
+        upsert=True)
     ev = await evaluate_order_for_qoyod_send(
         db, user_id=TENANT, order_number="300")
     assert ev["skipped_dead_letter_check"]["passed"] is True
