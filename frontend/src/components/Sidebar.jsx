@@ -164,6 +164,7 @@ const SECTIONS = [
                     { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
                     { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
                     { to: "/integrations/qoyod/unsent-orders", label: "📮 طلبات لم تُرسل إلى قيود", icon: Queue, testid: "nav-qoyod-unsent-orders" },
+                    { to: "/admin/qoyod-manual-send", label: "🚚 إرسال يدوي إلى قيود (خطة B)", icon: Queue, testid: "nav-qoyod-manual-send" },
                     { to: "/integrations/qoyod/reconciliation", label: "⚖️ تقرير المطابقة ميزان ↔ قيود", icon: Queue, testid: "nav-qoyod-reconciliation" },
                     { to: "/integrations/qoyod/pending-orders", label: "🗂️ الطلبات المعلقة", icon: Queue, testid: "nav-qoyod-pending-orders" },
                     { to: "/integrations/qoyod/eligible-orders", label: "📋 الطلبات المؤهلة (Audit)", icon: Queue, testid: "nav-qoyod-eligible-orders" },

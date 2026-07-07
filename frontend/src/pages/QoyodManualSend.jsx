@@ -100,6 +100,7 @@ function ResultBanner({ result, onDismiss }) {
 }
 
 export default function QoyodManualSend() {
+  const PAGE_SIZE = 15;
   const [health, setHealth] = useState(null);
   const [rows, setRows] = useState([]);
   const [counts, setCounts] = useState(null);
@@ -110,6 +111,7 @@ export default function QoyodManualSend() {
   const [sendingFor, setSendingFor] = useState(null);
   const [result, setResult] = useState(null);
   const [floorDate, setFloorDate] = useState(null);
+  const [page, setPage] = useState(1);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -131,6 +133,7 @@ export default function QoyodManualSend() {
         setRows(res.data?.orders || []);
         setCounts(res.data?.counts || null);
         setFloorDate(res.data?.floor_date || null);
+        setPage(1);
       } catch (e) {
         setError(extractDetail(e));
         setRows([]);
@@ -208,6 +211,11 @@ export default function QoyodManualSend() {
           <p className="mt-1 text-sm text-slate-500 max-w-2xl">
             طلبات مكتملة (تم التنفيذ) بتاريخ ≥ {floorDate || "2026-07-01"} ولم
             تُرسل إلى قيود بعد. الإرسال يدوي طلب بطلب — لا إرسال تلقائي.
+          </p>
+          <p className="mt-1 text-xs text-slate-400 max-w-2xl">
+            ملاحظة: عمود &quot;تاريخ الطلب في سلة&quot; أدناه للعرض فقط. تاريخ
+            فاتورة قيود وتاريخ السداد سيكونان يوم الضغط على &quot;إرسال إلى
+            قيود&quot; بتوقيت السعودية.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -333,62 +341,140 @@ export default function QoyodManualSend() {
             ✅ لا توجد طلبات مؤهلة للإرسال اليدوي في هذه الفترة.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-right">رقم الطلب</th>
-                <th className="px-3 py-2 text-right">تاريخ الإنشاء</th>
-                <th className="px-3 py-2 text-right">العميل</th>
-                <th className="px-3 py-2 text-right">المبلغ</th>
-                <th className="px-3 py-2 text-right">طريقة الدفع</th>
-                <th className="px-3 py-2 text-right">حالة سلة</th>
-                <th className="px-3 py-2 text-right">إجراء</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => (
-                <tr
-                  key={o.order_number}
-                  className="border-t border-slate-100 hover:bg-slate-50"
-                  data-testid={`manual-send-row-${o.order_number}`}
+          (() => {
+            const totalPages = Math.max(
+              1,
+              Math.ceil(rows.length / PAGE_SIZE)
+            );
+            const currentPage = Math.min(page, totalPages);
+            const start = (currentPage - 1) * PAGE_SIZE;
+            const pageRows = rows.slice(start, start + PAGE_SIZE);
+            return (
+              <>
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-right">رقم الطلب</th>
+                      <th className="px-3 py-2 text-right">
+                        تاريخ الطلب في سلة
+                      </th>
+                      <th className="px-3 py-2 text-right">العميل</th>
+                      <th className="px-3 py-2 text-right">المبلغ</th>
+                      <th className="px-3 py-2 text-right">طريقة الدفع</th>
+                      <th className="px-3 py-2 text-right">حالة سلة</th>
+                      <th className="px-3 py-2 text-right">إجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((o) => (
+                      <tr
+                        key={o.order_number}
+                        className="border-t border-slate-100 hover:bg-slate-50"
+                        data-testid={`manual-send-row-${o.order_number}`}
+                      >
+                        <td className="px-3 py-2 font-medium">
+                          {o.order_number}
+                        </td>
+                        <td
+                          className="px-3 py-2 text-slate-500"
+                          dir="ltr"
+                          data-testid={`manual-send-salla-date-${o.order_number}`}
+                          title="تاريخ إنشاء الطلب في سلة — للعرض فقط"
+                        >
+                          {o.order_date || formatDate(o.received_at)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {o.customer_name || "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {formatMoney(o.total_amount, o.currency)}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {o.payment_method_native ||
+                            o.payment_method ||
+                            "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs text-sky-800">
+                            {o.salla_status || "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSend(o.order_number)}
+                            disabled={sendingFor === o.order_number}
+                            data-testid={`manual-send-btn-${o.order_number}`}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                              sendingFor === o.order_number
+                                ? "bg-slate-300 text-slate-600"
+                                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                            }`}
+                          >
+                            {sendingFor === o.order_number
+                              ? "جارٍ الإرسال…"
+                              : "إرسال إلى قيود"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div
+                  className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+                  data-testid="manual-send-pagination"
                 >
-                  <td className="px-3 py-2 font-medium">{o.order_number}</td>
-                  <td className="px-3 py-2 text-slate-500" dir="ltr">
-                    {o.order_date || formatDate(o.received_at)}
-                  </td>
-                  <td className="px-3 py-2">{o.customer_name || "—"}</td>
-                  <td className="px-3 py-2">
-                    {formatMoney(o.total_amount, o.currency)}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {o.payment_method_native || o.payment_method || "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs text-sky-800">
-                      {o.salla_status || "—"}
+                  <div className="text-slate-500">
+                    عرض{" "}
+                    <span dir="ltr" className="font-mono">
+                      {start + 1}–{Math.min(start + PAGE_SIZE, rows.length)}
+                    </span>{" "}
+                    من{" "}
+                    <span dir="ltr" className="font-mono">
+                      {rows.length}
                     </span>
-                  </td>
-                  <td className="px-3 py-2">
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleSend(o.order_number)}
-                      disabled={sendingFor === o.order_number}
-                      data-testid={`manual-send-btn-${o.order_number}`}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                        sendingFor === o.order_number
-                          ? "bg-slate-300 text-slate-600"
-                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      data-testid="manual-send-prev-page"
+                      className={`rounded-lg border px-3 py-1.5 text-xs ${
+                        currentPage <= 1
+                          ? "border-slate-200 bg-slate-100 text-slate-400"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
                       }`}
                     >
-                      {sendingFor === o.order_number
-                        ? "جارٍ الإرسال…"
-                        : "إرسال إلى قيود"}
+                      → السابق
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span
+                      dir="ltr"
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono"
+                      data-testid="manual-send-page-indicator"
+                    >
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={currentPage >= totalPages}
+                      data-testid="manual-send-next-page"
+                      className={`rounded-lg border px-3 py-1.5 text-xs ${
+                        currentPage >= totalPages
+                          ? "border-slate-200 bg-slate-100 text-slate-400"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      التالي ←
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()
         )}
       </div>
     </div>
