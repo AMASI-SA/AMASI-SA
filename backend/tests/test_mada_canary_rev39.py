@@ -192,3 +192,24 @@ async def test_scoped_db_overlay_never_mutates_settings(db):
     assert raw["dry_run_mode"] is True
     assert raw["production_writes_locked"] is True
     assert "selective_auto_send_allowed_payment_methods" not in raw
+
+
+@pytest.mark.asyncio
+async def test_arm_response_shows_pin_and_mada_no_tabby(db):
+    """rev39.4 — user requirement: the arm response must state the
+    pin, payment scope, and counters explicitly; no Tabby wording."""
+    out = await _arm_pinned(db)
+    assert out["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
+    assert out["canary_payment_method"] == "mada"
+    assert out["allowed_payment_methods"] == ["mada"]
+    assert out["max_orders"] == 1
+    assert out["used"] == 0 and out["remaining"] == 1
+    assert "Tabby" not in out["human_message"]
+    assert "tabby" not in out["human_message"].lower()
+    assert MADA_CANARY_ORDER_NUMBER in out["human_message"]
+    # Status endpoint mirrors the same facts.
+    from integrations.qoyod.canary_budget import get_canary_budget
+    st = await get_canary_budget(db, user_id=TENANT)
+    assert st["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
+    assert st["canary_payment_method"] == "mada"
+    assert st["used"] == 0 and st["remaining"] == 1

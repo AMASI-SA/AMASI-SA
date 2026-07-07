@@ -44,9 +44,9 @@ ARM_CONFIRM_TOKEN  = "ARM-CANARY-BUDGET"
 # explicit user decision.
 HARD_MAX_ORDERS    = 1
 
-# rev39 — CURRENT canary phase scope (user decree 2026-07):
-# mada, ONE order (270513107). The tabby phase is CLOSED. This single
-# constant is the ONLY place the phase's payment method is defined;
+# rev39 — CURRENT canary phase scope (user decree 2026-07): mada,
+# ONE pinned order. The tabby phase is CLOSED. This single constant
+# is the ONLY place the phase's payment method is defined;
 # pipeline._live_write_permitted and rev32 assert_final_write_permitted
 # both compare against it, exactly as they pinned tabby before.
 CANARY_SCOPE_ALLOWLIST: list = ["mada"]
@@ -125,14 +125,24 @@ async def arm_canary_budget(
         "ok":            True,
         "outcome":       "ARMED",
         "max_orders":    int(max_orders),
+        "used":          0,
+        "remaining":     int(max_orders),
         "order_numbers": [],
+        "pinned_order_number": doc["pinned_order_number"],
+        "canary_payment_method": CANARY_SCOPE_ALLOWLIST[0],
+        "allowed_payment_methods": list(CANARY_SCOPE_ALLOWLIST),
         "armed_at":      now.isoformat(),
         "armed_by":      actor,
         "human_message": (
             f"ميزانية الـ Canary مُسلَّحة: طلب واحد فقط "
-            f"(max_orders={max_orders}). أول طلب Tabby يمر عبر "
-            "البوابات سيحجز الميزانية؛ أي طلب بعده يتوقف "
-            "(hold) دون أي كتابة."),
+            f"(max_orders={max_orders}, used=0, remaining="
+            f"{max_orders})، نطاق الدفع الحالي: "
+            f"{CANARY_SCOPE_ALLOWLIST[0]}"
+            + (f"، ومثبّتة حصرياً على الطلب "
+               f"{doc['pinned_order_number']} — أي طلب آخر يُرفض "
+               "(order_not_pinned)."
+               if doc["pinned_order_number"] else
+               "؛ أول طلب يمر عبر البوابات يحجز الميزانية.")),
     }
 
 
@@ -153,6 +163,8 @@ async def get_canary_budget(db, *, user_id: str) -> dict:
         "remaining":     max(0, max_orders - len(used)),
         "order_numbers": used,
         "pinned_order_number": doc.get("pinned_order_number"),
+        "canary_payment_method": CANARY_SCOPE_ALLOWLIST[0],
+        "allowed_payment_methods": list(CANARY_SCOPE_ALLOWLIST),
     }
     for k in ("armed_at", "last_reserved_at"):
         v = doc.get(k)

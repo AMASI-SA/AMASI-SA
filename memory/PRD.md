@@ -1,6 +1,24 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.4 — Budget arm response fixed (pin + mada scope explicit)
+# ══════════════════════════════════════════════════════════════════
+User armed the pinned budget in production; response still showed the
+stale rev35 "أول طلب Tabby" message with no pin echo. FACT: the pin
+WAS saved (deployed body model has the field — extra=forbid would
+have 422'd otherwise; doc dict stores it). Only the response text was
+stale (the rev39 human_message edit hadn't survived).
+- `arm_canary_budget` return now includes: pinned_order_number,
+  canary_payment_method="mada", allowed_payment_methods, max_orders,
+  used=0, remaining, and Arabic message naming the pinned order. No
+  Tabby wording (test-pinned).
+- `get_canary_budget` also returns canary_payment_method/allowlist.
+- Verify-now (production, no redeploy needed): GET
+  /admin/live-canary/budget → returns pinned_order_number.
+- Tests: 16 passed. NEEDS DEPLOY for the new arm response.
+- User rule: NO send until the response clearly shows pin=269875747.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.3 — Gift-task REVERTED + send tool re-pinned to 269875747
 # ══════════════════════════════════════════════════════════════════
 - User ordered full revert of the gift-orders task (rev40 WIP):
