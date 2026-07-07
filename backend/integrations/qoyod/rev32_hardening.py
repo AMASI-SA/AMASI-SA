@@ -463,7 +463,8 @@ async def assert_final_write_permitted(
     # POST /admin/expand-selective-auto-send or direct MongoDB
     # update) and slip a non-Tabby write through.
     if bool(settings.get("selective_live_send_enabled", False)):
-        if list(allow_list) != ["tabby_installment"]:
+        from integrations.qoyod.canary_budget import CANARY_SCOPE_ALLOWLIST
+        if list(allow_list) != list(CANARY_SCOPE_ALLOWLIST):
             await _persist_violation_flag(
                 db, row_id,
                 flag_key="canary_scope_drift_violation",
@@ -472,9 +473,9 @@ async def assert_final_write_permitted(
             await trigger_kill_switch(
                 db, user_id=user_id,
                 reason=(f"Live Canary is ACTIVE but allowlist="
-                        f"{list(allow_list)!r} != ['tabby_installment']; "
+                        f"{list(allow_list)!r} != {CANARY_SCOPE_ALLOWLIST!r}; "
                         f"attempted {action!r} — canary_scope_drift_violation "
-                        "(rev33)"),
+                        "(rev33/rev39)"),
                 violation_type="canary_scope_drift_violation",
                 evidence=evidence_common,
             )
@@ -482,9 +483,9 @@ async def assert_final_write_permitted(
                 row_id=row_id, action=action,
                 violation_type="canary_scope_drift_violation",
                 reason=(f"Live Canary requires allowlist "
-                        f"== ['tabby_installment'] at write time; "
+                        f"== {CANARY_SCOPE_ALLOWLIST!r} at write time; "
                         f"found {list(allow_list)!r} — write forbidden "
-                        "(rev33)"),
+                        "(rev33/rev39)"),
                 evidence=evidence_common)
 
     # ── rev35 (Z): Canary order budget (max_orders=1) ────────────

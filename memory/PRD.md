@@ -1,6 +1,48 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39 — MADA Canary Send machinery (BUILT, NOT EXECUTED)
+# ══════════════════════════════════════════════════════════════════
+User decree: send ONE mada order 270513107 (198.72, trace fbf9b483…),
+SKU AMS11981 created ONCE inside the approved send, max_orders=1,
+no dup, diff<=0.01. NOTHING executed — awaiting explicit approval.
+Changes:
+- `canary_budget.py`: `CANARY_SCOPE_ALLOWLIST=["mada"]` (single
+  source of the phase scope — tabby phase CLOSED) + budget
+  `pinned_order_number` (arm accepts it; reserve refuses any other
+  order → "order_not_pinned").
+- `pipeline._live_write_permitted` + `rev32 assert_final_write_
+  permitted` rev33(Y): compare vs CANARY_SCOPE_ALLOWLIST (was
+  hardcoded tabby).
+- NEW `mada_canary_send.py` + `POST /admin/mada-canary/send`
+  {order_number, approval_phrase}: phrase MUST be exactly
+  "Approved live Qoyod mada canary send for order 270513107 only".
+  10 guards (phrase/scope/preflight checks/status/dup/SKIPPED-veto/
+  pinned budget; unmapped AMS11981 tolerated — created in-send;
+  pipeline totals guard still blocks >0.01). Dispatch →
+  reprocess_one_order via scoped `_ScopedDB` settings overlay
+  (dry_run F, locked F, live T, SAS T, allowlist ["mada"], cutover
+  default 2026-07-01) — DB settings NEVER mutated. Audit:
+  `mada_canary_audit_log`.
+- `send_preflight`: added `skipped_history_check` to checks
+  (affects ready_to_send).
+- Tests: rev39=9, all related suites 272+109 passed. Updated
+  tabby-pinned seeds (canary_budget_rev35, live_write_gate,
+  selective_auto_send_gate) to mada. Inherited failure (pre-rev39):
+  test_live_write_gate::test_2e (pins pre-rev35 no-budget live mint).
+- PRODUCTION RUNBOOK (after deploy, in order):
+  1. GET admin/send-preflight/270513107?expected_payment_method=mada
+     (expect: all green except amount_check unmapped AMS11981 +
+     skipped_history_check MUST pass)
+  2. POST admin/live-canary/budget/arm
+     {"confirm_token":"ARM-CANARY-BUDGET","max_orders":1,
+      "pinned_order_number":"270513107"}
+  3. USER APPROVAL → POST admin/mada-canary/send
+     {"order_number":"270513107","approval_phrase":
+      "Approved live Qoyod mada canary send for order 270513107 only"}
+  4. Verify: reconciliation-report + live-canary/first-run-report.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV38.1 — Single-SKU Product Fix (AMS11981 / mada canary prep)
 # ══════════════════════════════════════════════════════════════════
 User's production preflight for mada order 270513107 (total 198.72,

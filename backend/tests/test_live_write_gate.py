@@ -34,7 +34,7 @@ def _base_live_settings() -> dict:
         "selective_live_send_enabled":   True,
         "production_writes_locked":      False,
         "dry_run_mode":                  False,
-        "selective_auto_send_allowed_payment_methods": ["tabby_installment"],
+        "selective_auto_send_allowed_payment_methods": ["mada"],
     }
 
 
@@ -156,8 +156,8 @@ def _tabby_canonical():
         "order_status":          "completed",
         "order_status_native":   "completed",
         "order_date":            AFTER_CUTOVER,
-        "payment_method":        "tabby_installment",
-        "payment_method_native": "tabby_installment",
+        "payment_method":        "mada",
+        "payment_method_native": "mada",
         "currency":              "SAR",
         "subtotal":              226.94,
         "tax_amount":            34.04,
@@ -212,12 +212,12 @@ def _dry_settings_full() -> dict:
         "selective_auto_send_enabled":          True,
         "selective_auto_send_cutover_at":       CUTOVER_ISO,
         "selective_auto_send_allowed_payment_methods":
-            ["tabby_installment"],
+            ["mada"],
         "selective_live_send_enabled":          False,  # ← Phase 2 style
         "production_writes_locked":             False,
         "dry_run_mode":                         True,   # ← operator kept dry
         "payment_method_mapping": [
-            {"salla_method":            "tabby_installment",
+            {"salla_method":            "mada",
              "qoyod_account_id":        "92",
              "qoyod_payment_method_id": "92"},
         ],
@@ -291,7 +291,7 @@ async def test_6_diagnostics_reports_live_write_gate_violation():
         "pipeline_stage":  "INVOICE_CREATED",
         "qoyod_customer_id":  "233",
         "qoyod_invoice_id":   "188",     # ← REAL id
-        "canonical_payload":  {"payment_method": "tabby_installment"},
+        "canonical_payload":  {"payment_method": "mada"},
         "selective_auto_send_gate": {"eligible": True, "reason": "eligible"},
     }
     fake_settings = {
@@ -325,7 +325,7 @@ async def test_7_diagnostics_no_violation_when_ids_dry_and_flags_dry():
         "pipeline_stage":  "INVOICE_CREATED",
         "qoyod_customer_id":  "DRY:contact:abc",
         "qoyod_invoice_id":   "DRY:invoice:def",
-        "canonical_payload":  {"payment_method": "tabby_installment"},
+        "canonical_payload":  {"payment_method": "mada"},
         "selective_auto_send_gate": {"eligible": True, "reason": "eligible"},
     }
     db = MagicMock()
@@ -347,7 +347,7 @@ async def test_8_diagnostics_no_violation_when_all_gates_open_for_real_id():
         "qoyod_customer_id":       "233",
         "qoyod_invoice_id":        "188",
         "qoyod_invoice_payment_id": "159",
-        "canonical_payload":       {"payment_method": "tabby_installment"},
+        "canonical_payload":       {"payment_method": "mada"},
         "selective_auto_send_gate": {"eligible": True, "reason": "eligible"},
     }
     fake_settings = {

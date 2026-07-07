@@ -1247,10 +1247,12 @@ def _live_write_permitted(
     # rev33 — payment_method allowlist check (when caller supplies pm).
     allow_list = list(
         settings.get("selective_auto_send_allowed_payment_methods") or [])
-    # rev33 — Canary scope invariant: allowlist must be exactly Tabby.
-    if list(allow_list) != ["tabby_installment"]:
+    # rev33/rev39 — Canary scope invariant: allowlist must be exactly
+    # the CURRENT phase scope (single source: canary_budget module).
+    from integrations.qoyod.canary_budget import CANARY_SCOPE_ALLOWLIST
+    if list(allow_list) != list(CANARY_SCOPE_ALLOWLIST):
         return False, ("canary_scope_drift_allowlist_not_exactly_"
-                       f"tabby (got {allow_list!r})")
+                       f"{CANARY_SCOPE_ALLOWLIST!r} (got {allow_list!r})")
     if payment_method is not None:
         if not payment_method:
             return False, "payment_method_unresolvable"

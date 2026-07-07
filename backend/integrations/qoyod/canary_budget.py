@@ -44,6 +44,13 @@ ARM_CONFIRM_TOKEN  = "ARM-CANARY-BUDGET"
 # explicit user decision.
 HARD_MAX_ORDERS    = 1
 
+# rev39 — CURRENT canary phase scope (user decree 2026-07):
+# mada, ONE order (270513107). The tabby phase is CLOSED. This single
+# constant is the ONLY place the phase's payment method is defined;
+# pipeline._live_write_permitted and rev32 assert_final_write_permitted
+# both compare against it, exactly as they pinned tabby before.
+CANARY_SCOPE_ALLOWLIST: list = ["mada"]
+
 
 class CanaryBudgetRefused(Exception):
     def __init__(self, code: str, human: str):
@@ -70,6 +77,7 @@ async def arm_canary_budget(
     db, *, user_id: str, confirm_token: str,
     max_orders: int = 1, force_reset: bool = False,
     actor: str = "operator",
+    pinned_order_number: str | None = None,
 ) -> dict:
     """Create/reset the tenant's canary budget. Refuses when:
       • confirm_token mismatch
@@ -102,6 +110,9 @@ async def arm_canary_budget(
         "order_numbers": [],
         "armed_at":      now,
         "armed_by":      actor,
+        # rev39 — when set, ONLY this order may reserve the slot.
+        "pinned_order_number": (str(pinned_order_number).strip()
+                                if pinned_order_number else None),
         "previous_run_order_numbers": used if force_reset else [],
     }
     await db[BUDGET_COLLECTION].replace_one(
@@ -141,6 +152,7 @@ async def get_canary_budget(db, *, user_id: str) -> dict:
         "used":          len(used),
         "remaining":     max(0, max_orders - len(used)),
         "order_numbers": used,
+        "pinned_order_number": doc.get("pinned_order_number"),
     }
     for k in ("armed_at", "last_reserved_at"):
         v = doc.get(k)
@@ -169,6 +181,10 @@ async def reserve_canary_budget(
     doc = await db[BUDGET_COLLECTION].find_one({"user_id": user_id})
     if not doc:
         return False, "canary_budget_not_armed"
+    # rev39 — pinned budget: ONLY the pinned order may reserve.
+    pinned = doc.get("pinned_order_number")
+    if pinned and order != str(pinned):
+        return False, "order_not_pinned"
     if order in list(doc.get("order_numbers") or []):
         return True, "already_reserved"
 

@@ -437,11 +437,14 @@ class DisableTabbyLiveCanaryBody(BaseModel):
 
 class CanaryBudgetArmBody(BaseModel):
     """Iter-2026-02.rev35 — arm the single-order canary budget.
-    max_orders is HARD-CAPPED at 1 inside canary_budget.py."""
+    max_orders is HARD-CAPPED at 1 inside canary_budget.py.
+    rev39: pinned_order_number restricts the slot to ONE order."""
     model_config = ConfigDict(extra="forbid")
     confirm_token: str  = Field(..., min_length=1, max_length=128)
     max_orders:    int  = Field(default=1, ge=1, le=1)
     force_reset:   bool = Field(default=False)
+    pinned_order_number: Optional[str] = Field(
+        default=None, max_length=40)
 
 
 class DryPurgeExecuteBody(BaseModel):
@@ -2027,6 +2030,24 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             confirm_token=str(body.get("confirm_token") or ""),
             actor=f"operator:{getattr(user, 'email', tenant)}")
 
+    # ── rev39 — MADA Canary Send (order 270513107 ONLY) ──────────────
+    # Guarded one-shot: exact approval phrase + 10 guards + pinned
+    # budget. NEVER auto-runs; the operator fires it explicitly.
+    @router.post("/admin/mada-canary/send")
+    async def admin_mada_canary_send(
+        body: dict = Body(...),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.mada_canary_send import (
+            execute_mada_canary_send,
+        )
+        tenant = _tenant_id(user)
+        return await execute_mada_canary_send(
+            db, user_id=tenant,
+            order_number=str(body.get("order_number") or ""),
+            approval_phrase=str(body.get("approval_phrase") or ""),
+            actor=str(getattr(user, "email", None) or "operator"))
+
     # ── rev38 — Send Preflight (READ-ONLY, per-order) ────────────────
     # فحص ما قبل الإرسال: نطاق التاريخ + طريقة الدفع + فاتورة مكررة +
     # فرق المبلغ + معاينة الـ payload. صفر كتابة، صفر نداء لقيود.
@@ -3133,6 +3154,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 confirm_token=body.confirm_token,
                 max_orders=body.max_orders,
                 force_reset=body.force_reset,
+                pinned_order_number=body.pinned_order_number,
                 actor=str(actor))
         except CanaryBudgetRefused as exc:
             return {"ok": False, "outcome": "REFUSED",

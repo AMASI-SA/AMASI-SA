@@ -110,6 +110,19 @@ async def build_send_preflight(
         db, user_id, row.get("salla_order_number"),
         canonical.get("order_id") or row.get("salla_order_id"))
 
+    # 3.5 ── rev39 — SKIPPED history (rev33 veto intel, READ-ONLY) ───
+    history = [str(h.get("stage") or h) for h in
+               row.get("stage_history") or []]
+    has_skipped = ("SKIPPED" in history
+                   or row.get("pipeline_stage") == "SKIPPED")
+    skipped_history_check = {
+        "passed": not has_skipped,
+        "pipeline_stage": row.get("pipeline_stage"),
+        "detail": ("الصف سبق تخطيه (SKIPPED) — فيتو rev33 سيمنع أي "
+                   "إرسال لهذا الصف" if has_skipped
+                   else "لا يوجد SKIPPED في تاريخ الصف"),
+    }
+
     # 4 ── amount + payload preview (pure build, READ-ONLY lookups) ──
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
@@ -170,6 +183,7 @@ async def build_send_preflight(
     checks = {"scope_check": scope_check,
               "payment_check": payment_check,
               "duplicate_check": duplicate_check,
+              "skipped_history_check": skipped_history_check,
               "amount_check": amount_check}
     return {
         "ok": True,

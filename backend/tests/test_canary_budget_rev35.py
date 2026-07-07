@@ -143,7 +143,7 @@ _LIVE_SETTINGS = {
     "selective_live_send_enabled": True,
     "production_writes_locked":    False,
     "selective_auto_send_enabled": True,
-    "selective_auto_send_allowed_payment_methods": ["tabby_installment"],
+    "selective_auto_send_allowed_payment_methods": ["mada"],
 }
 
 
@@ -159,7 +159,7 @@ async def _seed_live_row(db, row_id: str, order_no: str):
         "pipeline_stage": "CUSTOMER_RESOLVED",
         "sas_worker_trace": {"worker_pipeline_sha": _compute_pipeline_sha()},
         "selective_auto_send_gate": {"eligible": True, "reason": "test"},
-        "canonical_payload": {"payment_method": "tabby_installment"},
+        "canonical_payload": {"payment_method": "mada"},
     })
 
 
@@ -236,7 +236,7 @@ async def test_write_time_budget_violation_for_unreserved_order(db):
     with pytest.raises(Rev32Violation) as exc:
         await assert_final_write_permitted(
             db, "row-w-1", action="create_invoice",
-            payment_method="tabby_installment", user_id=TENANT)
+            payment_method="mada", user_id=TENANT)
     assert exc.value.violation_type == "canary_budget_violation"
     row = await db.integration_inbox.find_one(
         {"user_id": TENANT, "id": "row-w-1"})
@@ -260,4 +260,4 @@ async def test_write_time_budget_passes_for_reserved_order(db):
     # completes without raising for this well-formed row.
     await assert_final_write_permitted(
         db, "row-w-2", action="create_invoice",
-        payment_method="tabby_installment", user_id=TENANT)
+        payment_method="mada", user_id=TENANT)
