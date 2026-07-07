@@ -1,6 +1,21 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.5 — INVOICE_CREATED support in mada canary (ONE argument)
+# ══════════════════════════════════════════════════════════════════
+Production send attempt dcd83dc0-… was refused: OneShotRefused —
+row at INVOICE_CREATED unsupported. FIX (no expansion): one_shot
+already has an audited escape hatch
+`allow_reset_from_partial_invoice_created` (built for the tabby
+canary; self-verifies NO real invoice on the row + quarantines DRY
+mappings + two-hop via RETRYING). mada_canary_send now passes it
+=True ONLY when the row is actually at INVOICE_CREATED. All 10
+guards (dup/amount/pinned budget/single order) still run first.
+- Tests: 10/10 (new test pins flag True for IC, False otherwise).
+- NEEDS DEPLOY, then user may retry the same send call — ONLY with
+  explicit user go-ahead (user forbade auto-retry).
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.4 — Budget arm response fixed (pin + mada scope explicit)
 # ══════════════════════════════════════════════════════════════════
 User armed the pinned budget in production; response still showed the

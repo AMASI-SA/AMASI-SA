@@ -213,3 +213,37 @@ async def test_arm_response_shows_pin_and_mada_no_tabby(db):
     assert st["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
     assert st["canary_payment_method"] == "mada"
     assert st["used"] == 0 and st["remaining"] == 1
+
+
+@pytest.mark.asyncio
+async def test_partial_ic_flag_passed_only_for_invoice_created(
+        db, monkeypatch):
+    """rev39.5 — INVOICE_CREATED rows opt in to one_shot's audited
+    partial-IC escape hatch; other stages do NOT."""
+    row = _row(stage="INVOICE_CREATED")
+    row["qoyod_invoice_id"] = "DRY:invoice:old"  # dry-era leftover
+    await db.integration_inbox.insert_one(row)
+    await _arm_pinned(db)
+    calls = []
+
+    async def _fake(dbx, **kw):
+        calls.append(kw)
+        return {"outcome": "COMPLETED", "qoyod_invoice_id": "950",
+                "qoyod_invoice_payment_id": "601"}
+
+    monkeypatch.setattr(osr, "reprocess_one_order", _fake)
+    out = await execute_mada_canary_send(
+        db, user_id=TENANT, order_number=MADA_CANARY_ORDER_NUMBER,
+        approval_phrase=MADA_CANARY_APPROVAL_PHRASE, actor="test")
+    assert out["outcome"] == "COMPLETED", out
+    assert calls[0]["allow_reset_from_partial_invoice_created"] is True
+
+    # Non-IC stage → flag False.
+    await db.integration_inbox.delete_many({"user_id": TENANT})
+    await db.integration_inbox.insert_one(_row(stage="CUSTOMER_RESOLVED"))
+    calls.clear()
+    out2 = await execute_mada_canary_send(
+        db, user_id=TENANT, order_number=MADA_CANARY_ORDER_NUMBER,
+        approval_phrase=MADA_CANARY_APPROVAL_PHRASE, actor="test")
+    assert out2["outcome"] == "COMPLETED"
+    assert calls[0]["allow_reset_from_partial_invoice_created"] is False

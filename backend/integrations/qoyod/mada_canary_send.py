@@ -223,6 +223,14 @@ async def execute_mada_canary_send(
         reprocess_one_order,
     )
     scoped_db = _ScopedDB(db)
+    # rev39.5 — the pinned order's row sits at INVOICE_CREATED (a DRY
+    # era leftover). one_shot has a purpose-built, audited escape
+    # hatch for exactly this: it self-verifies NO real invoice exists
+    # on the row and quarantines DRY mappings before the two-hop
+    # reset. We opt in ONLY when the row is actually at
+    # INVOICE_CREATED — all our guards (dup / amount / pinned budget /
+    # single order) already passed above.
+    _stage = pf.get("pipeline_stage")
     try:
         result = await reprocess_one_order(
             scoped_db, user_id=user_id,
@@ -232,6 +240,8 @@ async def execute_mada_canary_send(
                 order_number=MADA_CANARY_ORDER_NUMBER),
             approval_phrase=APPROVAL_PHRASE_TEMPLATE.format(
                 order_number=MADA_CANARY_ORDER_NUMBER),
+            allow_reset_from_partial_invoice_created=(
+                _stage == "INVOICE_CREATED"),
             actor=f"mada_canary:{actor}")
     except Exception as exc:
         await _audit(db, attempt_id, "dispatch", "error",
