@@ -235,36 +235,121 @@ def _build_customer_payload(canon: dict) -> dict:
     return payload
 
 
+def _unwrap_id(v: Any) -> Any:
+    """Coerce a Qoyod id setting to a scalar payload value.
+
+    Plan-B local copy of the legacy `_unwrap_id_for_payload` — Qoyod
+    accepts a scalar (int when parseable, otherwise string). Arrays
+    are collapsed to their first non-empty element. Returns `None`
+    when nothing usable is present (caller then drops the key)."""
+    if isinstance(v, (list, tuple)):
+        for el in v:
+            r = _unwrap_id(el)
+            if r not in (None, ""):
+                return r
+        return None
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return s
+
+
 def _build_product_payload(item: dict, settings: dict) -> dict:
+    """Build a product-creation payload that Qoyod actually accepts.
+
+    Iter-286/287 findings (proven against production):
+        • The `sale_item: 1` integer flag MUST be present — without
+          it, Qoyod's validator refuses even a valid `selling_price`
+          with `enter at least a purchase price or a sales price`.
+        • The four required ids (`category_id`, `tax_id`,
+          `product_unit_type_id`, `sales_account_id`) must be
+          SCALAR (int when possible) — not arrays.
+        • Field name is `type` (not `product_type`); the flat
+          `name`/`sku` shape works — no `name_ar`/`name_en` needed.
+        • `buying_price` / `selling_price` alone (without
+          `sale_item: 1`) is the exact combination Qoyod REJECTS —
+          which is what earlier Plan-B versions did.
+
+    Iter-290g fallback: if `unit_price=0` (free item), bump the
+    catalog `selling_price` to `1.0` — the invoice line still
+    carries the true (possibly zero) price, this only affects the
+    product-catalog row.
+    """
     sku = str(item.get("sku") or "").strip()
     name = str(item.get("name") or sku or "منتج").strip()
-    price = _q2(item.get("unit_price"))
-    body: dict = {
-        "product": {
-            "name_ar":  name,
-            "name_en":  name,
-            "sku":      sku or None,
-            "quantity": 0,
-            "buying_price":  price,
-            "selling_price": price,
-            "product_type":  (settings.get("default_product_type")
-                              or "Product"),
-            "unit_type":     "unit",
-        }
+    raw_price = item.get("unit_price")
+    try:
+        selling_price = float(raw_price) if raw_price is not None else 0.0
+    except (TypeError, ValueError):
+        selling_price = 0.0
+    # Bump zero-price products for catalog creation only (Iter-290g).
+    catalog_price = selling_price if selling_price > 0 else 1.0
+    catalog_price = _q2(catalog_price)
+
+    ptype = (settings.get("default_product_type") or "service")
+    product: dict = {
+        "name":          name,
+        "sku":           sku or None,
+        "type":          ptype,
+        "is_non_stock":  ptype == "service",
+        # Iter-286 — Qoyod's live validator requires these integer
+        # flags. Without `sale_item: 1` the payload is rejected
+        # regardless of the prices supplied.
+        "sale_item":     1,
+        "purchase_item": 0,
+        "selling_price": catalog_price,
     }
-    cat = settings.get("default_product_category_id")
-    if cat:
-        body["product"]["category_id"] = _to_int(cat)
-    tax = settings.get("default_product_tax_id")
-    if tax:
-        body["product"]["tax_id"] = _to_int(tax)
-    sales = settings.get("default_sales_account_id")
-    if sales:
-        body["product"]["sales_account_id"] = _to_int(sales)
-    unit_type = settings.get("default_product_unit_type_id")
-    if unit_type:
-        body["product"]["unit_type_id"] = _to_int(unit_type)
-    return body
+    # Stamp the four required tenant ids as scalars (drop empty).
+    for setting_key, product_key in (
+        ("default_product_category_id",  "category_id"),
+        ("default_product_tax_id",       "tax_id"),
+        ("default_product_unit_type_id", "product_unit_type_id"),
+        ("default_sales_account_id",     "sales_account_id"),
+    ):
+        v = _unwrap_id(settings.get(setting_key))
+        if v is not None:
+            product[product_key] = v
+    return {"product": product}
+
+
+def _build_product_payload_fallback(item: dict, settings: dict) -> dict:
+    """Minimal-fields self-heal payload (Iter-286 legacy pattern).
+
+    Strips `type`/`is_non_stock`/`purchase_item` and lets Qoyod pick
+    defaults. Used exactly ONCE when the first POST /products still
+    gets a 422 about prices — helps tenants whose Qoyod flavour
+    dislikes any of the extra flags.
+    """
+    sku = str(item.get("sku") or "").strip()
+    name = str(item.get("name") or sku or "منتج").strip()
+    raw_price = item.get("unit_price")
+    try:
+        selling_price = float(raw_price) if raw_price is not None else 0.0
+    except (TypeError, ValueError):
+        selling_price = 0.0
+    if selling_price <= 0:
+        selling_price = 1.0
+    product: dict = {
+        "name":          name,
+        "sku":           sku or None,
+        "sale_item":     1,
+        "selling_price": _q2(selling_price),
+    }
+    for setting_key, product_key in (
+        ("default_product_category_id",  "category_id"),
+        ("default_product_tax_id",       "tax_id"),
+        ("default_product_unit_type_id", "product_unit_type_id"),
+        ("default_sales_account_id",     "sales_account_id"),
+    ):
+        v = _unwrap_id(settings.get(setting_key))
+        if v is not None:
+            product[product_key] = v
+    return {"product": product}
 
 
 def _line_gross(*, unit_price: float, quantity: float,
@@ -770,7 +855,42 @@ async def _run_all_steps(
         # Create.
         payload = _build_product_payload(it, settings)
         idem = f"prod-{order_number}-{sku}"
-        created = await client.create_product(payload, idem=idem)
+        create_attempts = [{"stage": "primary", "payload": payload}]
+        try:
+            created = await client.create_product(payload, idem=idem)
+        except ManualQoyodError as exc:
+            # 422 self-heal: try the minimal fallback payload ONCE.
+            # Any other status is re-raised with the primary payload
+            # exposed for RCA.
+            if exc.status_code == 422:
+                fb_payload = _build_product_payload_fallback(it, settings)
+                create_attempts.append(
+                    {"stage": "fallback", "payload": fb_payload})
+                try:
+                    created = await client.create_product(
+                        fb_payload, idem=f"{idem}-fb")
+                except ManualQoyodError as exc2:
+                    # Both attempts failed — expose both payloads +
+                    # both قيود responses so the operator can inspect.
+                    raise ManualSendRefused(
+                        "product_create_failed",
+                        f"قيود رفض إنشاء منتج بـ SKU {sku} في محاولتين "
+                        f"({exc.status_code} ثم {exc2.status_code})",
+                        {"sku":              sku,
+                         "primary_attempt":  {
+                             "payload":  payload,
+                             "response": exc.to_dict()},
+                         "fallback_attempt": {
+                             "payload":  fb_payload,
+                             "response": exc2.to_dict()}})
+            else:
+                raise ManualSendRefused(
+                    "product_create_failed",
+                    f"قيود رفض إنشاء منتج بـ SKU {sku} "
+                    f"({exc.status_code})",
+                    {"sku":     sku,
+                     "payload": payload,
+                     "response": exc.to_dict()})
         node = created.get("product") if isinstance(created, dict) else None
         if not isinstance(node, dict):
             node = created if isinstance(created, dict) else {}
@@ -779,10 +899,17 @@ async def _run_all_steps(
             raise ManualSendRefused(
                 "product_create_failed",
                 f"قيود لم يُعِد رقم منتج صالحاً للـ SKU {sku}",
-                {"response": created})
+                {"sku": sku, "attempts": create_attempts,
+                 "response": created})
         line_resolutions[sku] = pid
-        product_trace.append({"sku": sku, "product_id": pid,
-                              "resolution": "created"})
+        product_trace.append({
+            "sku":         sku,
+            "product_id":  pid,
+            "resolution":  "created",
+            "attempts":    len(create_attempts),
+            "used_stage":  create_attempts[-1]["stage"],
+            "request_body": create_attempts[-1]["payload"],
+        })
     steps_trace.append({"step": "products", "resolutions": product_trace})
 
     # ── 3) Build invoice payload + Guard G2 (totals) ───────────────
