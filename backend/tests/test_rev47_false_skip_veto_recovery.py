@@ -483,3 +483,116 @@ def test_build_diagnostics_module_markers_present():
     assert acc["module_markers_ok"] is True
     assert acc["code_matches_expected"] == (
         acc["pipeline_markers_ok"] and acc["module_markers_ok"])
+
+
+# ── 11. rev47.2 — worker must not steal a one-shot-claimed row ───────
+# USER SPEC (2026-07): stored allowed_payment_methods=["mada"], canary
+# overlay=["credit_card"]; send-diagnosis must be READY_TO_SEND_ONCE
+# and the one-shot send must NOT become SKIPPED via
+# payment_method_not_in_allow_list (prod RCA 19:30:12 UTC — the 5s
+# background worker drained the row with STORED settings mid-send).
+@pytest.mark.asyncio
+async def test_worker_cannot_steal_claimed_row_stored_mada(db):
+    from integrations.qoyod.invoice_builder import DryRunQoyodClient
+    from integrations.qoyod.mada_canary_send import _ScopedDB
+    from integrations.qoyod.one_shot_reprocess import _reset_row_to_stage
+    from integrations.qoyod.pipeline import (
+        process_normalized_row, process_pending_customer_resolved,
+        process_pending_normalized,
+    )
+    from integrations.qoyod.send_diagnosis import build_send_diagnosis
+
+    order = "270939808"
+    await db.integration_inbox.insert_one(_prod_replica_row(order))
+    stored = dict(_LIVE_SETTINGS)
+    stored.update({
+        # prod-like stored posture: kill switch fired, canary scope
+        # NOT in the stored allow-list (worker sees mada only).
+        "selective_auto_send_allowed_payment_methods": ["mada"],
+        "production_writes_locked": True,
+        "selective_live_send_enabled": False,
+        "kill_switch_triggered": True,
+    })
+    await db.qoyod_settings.insert_one(stored)
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": "SKU-R47", "qoyod_product_id": "9"})
+    await db.qoyod_canary_budget.insert_one({
+        "user_id": TENANT, "max_orders": 1, "order_numbers": [],
+        "pinned_order_number": order,
+        "armed_at": datetime.now(timezone.utc), "armed_by": "test"})
+
+    # Recovery (requeue-one) → SKIPPED hold.
+    out = await requeue_one(db, user_id=TENANT,
+                            row_id=f"{TENANT}-row-{order}")
+    assert out["ok"] is True
+
+    # (a) USER SPEC: diagnosis is READY even though stored=["mada"].
+    diag = await build_send_diagnosis(db, user_id=TENANT,
+                                      order_number=order)
+    assert diag["verdict"] == "READY_TO_SEND_ONCE"
+    assert diag["all_blockers"] == []
+
+    # (b) One-shot reset (exactly what the canary send does) → the
+    # row lands at NORMALIZED carrying the rev47.2 claim.
+    scoped = _ScopedDB(db)
+    row = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    await _reset_row_to_stage(scoped, row, resume_stage="NORMALIZED",
+                              actor="mada_canary:operator")
+    row = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert row["pipeline_stage"] == "NORMALIZED"
+    assert row["one_shot_claim_until"] is not None
+    assert row["one_shot_claim_actor"] == "mada_canary:operator"
+
+    # (c) Background worker drain (STORED settings, mada-only) must
+    # NOT see the claimed row — no steal, no false skip.
+    drained = await process_pending_normalized(db, TENANT)
+    assert drained.get("processed", 0) == 0
+    row = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert row["pipeline_stage"] == "NORMALIZED"  # untouched
+
+    # (d) The in-request scoped processing (canary overlay,
+    # credit_card allowed) proceeds — NOT skipped.
+    res = await process_normalized_row(scoped, row,
+                                       api_client=DryRunQoyodClient())
+    assert res.get("outcome") != "SKIPPED"
+    row = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert row["pipeline_stage"] == "CUSTOMER_RESOLVED"
+
+    # (e) The claim also shields the CUSTOMER_RESOLVED drain window.
+    drained2 = await process_pending_customer_resolved(db, TENANT)
+    assert drained2.get("processed", 0) == 0
+    row = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert row["pipeline_stage"] == "CUSTOMER_RESOLVED"
+
+
+@pytest.mark.asyncio
+async def test_expired_claim_is_visible_to_worker_again(db):
+    from datetime import timedelta
+    from integrations.qoyod.pipeline import process_pending_normalized
+
+    order = "6001"
+    row = _prod_replica_row(order, stage="NORMALIZED",
+                            dead_lettered=False)
+    row["stage_history"] = row["stage_history"][:4]
+    row["pipeline_error"] = None
+    row["last_failed_stage"] = None
+    row["one_shot_claim_until"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=5))
+    await db.integration_inbox.insert_one(row)
+    stored = dict(_LIVE_SETTINGS)
+    stored["selective_auto_send_allowed_payment_methods"] = ["mada"]
+    await db.qoyod_settings.insert_one(stored)
+
+    drained = await process_pending_normalized(db, TENANT)
+    assert drained.get("processed") == 1  # expired claim → drained
+    fresh = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    # stored allow-list is mada-only → credit_card row transiently
+    # skipped by the WORKER (fail-closed behaviour preserved).
+    assert fresh["pipeline_stage"] == "SKIPPED"
+    assert fresh["skip_class"] == "transient"

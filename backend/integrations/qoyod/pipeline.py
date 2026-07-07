@@ -3250,7 +3250,14 @@ async def process_pending_customer_resolved(
     db, user_id: str = "main", *, limit: int = 25, api_client=None,
 ) -> dict:
     cursor = db.integration_inbox.find(
-        {"user_id": user_id, "pipeline_stage": "CUSTOMER_RESOLVED"},
+        {"user_id": user_id, "pipeline_stage": "CUSTOMER_RESOLVED",
+         # rev47.2 — see process_pending_normalized: claimed rows are
+         # owned by the in-flight one-shot until the lease expires.
+         "$or": [
+             {"one_shot_claim_until": {"$exists": False}},
+             {"one_shot_claim_until": None},
+             {"one_shot_claim_until": {"$lte": _now()}},
+         ]},
         sort=[("received_at", 1)], limit=max(1, min(limit, 100)),
     )
     rows = []
@@ -3332,7 +3339,16 @@ async def process_pending_normalized(
     Day 5 introduces a proper background worker with concurrency.
     """
     cursor = db.integration_inbox.find(
-        {"user_id": user_id, "pipeline_stage": "NORMALIZED"},
+        {"user_id": user_id, "pipeline_stage": "NORMALIZED",
+         # rev47.2 — rows claimed by an in-flight audited one-shot
+         # (canary send) are invisible to the background drain until
+         # the claim expires; the worker evaluates with STORED
+         # settings and must not steal a row mid-send.
+         "$or": [
+             {"one_shot_claim_until": {"$exists": False}},
+             {"one_shot_claim_until": None},
+             {"one_shot_claim_until": {"$lte": _now()}},
+         ]},
         sort=[("received_at", 1)],
         limit=max(1, min(limit, 100)),
     )

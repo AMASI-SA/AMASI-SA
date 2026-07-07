@@ -30,7 +30,7 @@ Strict invariants (user directive 2026-02-27)
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIClient
@@ -49,6 +49,25 @@ logger = logging.getLogger(__name__)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# rev47.2 — One-shot claim lease (prod RCA 2026-07-07 19:30 UTC):
+# after the one-shot reset parked order 270939808 at NORMALIZED, the
+# 5-second background worker drained it FIRST using STORED settings
+# (allow-list without credit_card) and skipped it with
+# payment_method_not_in_allow_list — stealing the row from the scoped
+# canary overlay mid-send. The claim makes the row INVISIBLE to the
+# worker drain for a bounded window; it expires automatically
+# (fail-closed — no permanent lock, no settings change).
+ONE_SHOT_CLAIM_SECONDS = 120
+
+
+def _one_shot_claim_fields(actor: str) -> dict:
+    return {
+        "one_shot_claim_until": _now() + timedelta(
+            seconds=ONE_SHOT_CLAIM_SECONDS),
+        "one_shot_claim_actor": actor,
+    }
 
 
 CONFIRM_TOKEN_TEMPLATE = "REPROCESS-{order_number}"
@@ -345,8 +364,12 @@ async def _reset_row_to_stage(
     current = row.get("pipeline_stage")
 
     if current == resume_stage:
-        # Already where we want it — no-op (e.g. row was already
-        # NORMALIZED but the worker hasn't picked it up yet).
+        # Already where we want it — no state hop, but STILL claim the
+        # row (rev47.2) so the background worker cannot steal it
+        # mid-send (see claim note below).
+        await db.integration_inbox.update_one(
+            {"id": row["id"]},
+            {"$set": _one_shot_claim_fields(actor)})
         return
 
     # rev33 — SKIPPED is ABSOLUTELY TERMINAL … except rev44 transient.
@@ -459,6 +482,7 @@ async def _reset_row_to_stage(
             needs_retry_hop=needs_retry_hop,
             state_machine_allowed_edges_for_current_stage=(
                 allowed_from_current))
+    p2.setdefault("$set", {}).update(_one_shot_claim_fields(actor))
     await db.integration_inbox.update_one({"id": row["id"]}, p2)
 
 

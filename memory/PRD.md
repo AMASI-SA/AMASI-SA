@@ -7205,3 +7205,36 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - NEXT: user runs (read-only, prod): order-recovery-diagnostics for the
   fresh note NOW; redeploy; verify diagnostics/build module markers all
   true; then analyze skip reason and decide next fix (likely SSOT gap).
+
+### Rev47.2 — Worker steal race fix (one-shot claim lease) (2026-07)
+- CONFIRMED RCA of the 19:30:12 UTC skip: fresh stage_history note =
+  "selective_auto_send_gate: payment_method_not_in_allow_list". The
+  scoped canary overlay path itself is fine (worked at 18:37) — the
+  5-second BACKGROUND WORKER drained the row while it sat at
+  NORMALIZED mid-send and evaluated it with STORED settings
+  (allow-list without credit_card), stealing it from the one-shot.
+- FIX (user-approved constraints: no stored-settings change, no
+  global credit_card enable, no requeue/arm/send by agent):
+  1. one_shot_reprocess._reset_row_to_stage stamps
+     one_shot_claim_until (now+120s, ONE_SHOT_CLAIM_SECONDS) +
+     one_shot_claim_actor on the resumed row (also in the
+     already-at-resume-stage no-op branch).
+  2. pipeline.process_pending_normalized +
+     process_pending_customer_resolved drain queries exclude rows
+     with an ACTIVE claim ($exists false / None / <= now pass).
+     Claim expires automatically — fail-closed, no permanent lock.
+- TESTS (user-specified scenario): stored allowlist=["mada"] +
+  overlay=["credit_card"] → diagnosis READY_TO_SEND_ONCE; claimed row
+  invisible to both worker drains; scoped processing proceeds to
+  CUSTOMER_RESOLVED (not SKIPPED); expired claim visible again and
+  worker fail-closed skip still works. 21/21 rev47 suite; full qoyod
+  regression 0 new failures vs baseline (64 pre-existing Rev46).
+- PROD STATE NOW: row 270939808 at SKIPPED (transient,
+  payment_method_not_in_allow_list from the steal) — still resumable
+  by the canary send directly, NO requeue needed. Budget armed
+  pinned (used=0 after 19:26 re-arm)… may have been consumed by the
+  19:30 attempt reservation — diagnosis will show.
+- USER NEXT (per user's own instruction #7): redeploy → GET
+  /admin/diagnostics/build (module markers all true) → GET
+  /admin/send-diagnosis/270939808 → review → explicit permission →
+  single canary send.
