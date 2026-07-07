@@ -6918,3 +6918,19 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - PURPOSE: diagnose why prod order 269875747 was refused by the
   Selective Send policy WITHOUT attempting a send. User runs the GET
   on production (mezansalla.com) and reads blocker_code.
+
+### Rev41.2 — Candidate finder × Unified Diagnosis (READ-ONLY)
+- USER DECREE: order 269875747 is PERMANENTLY excluded from the
+  canary (SKIPPED + dead_letter + dry_invoice_id). No bypass, no
+  reprocess, no reset — ever.
+- mada-candidates now embeds a full rev41 send_diagnosis per
+  candidate: verdict, blocker_code/reason, non_budget_blockers vs
+  budget_blockers (budget_not_armed / budget_pinned_to_other_order /
+  budget_exhausted separated), ready_excluding_budget flag.
+- Ranking: ready_excluding_budget=true first, then ready_now.
+- Budget/settings intentionally UNTOUCHED until user approves the
+  replacement order. Tests 10/10 (new rev41.2 test incl. DRY id
+  flagging). E2E verified on preview.
+- NEXT: user runs GET /api/integrations/qoyod/admin/mada-candidates
+  on production, picks the candidate with ready_excluding_budget=true,
+  then we re-pin budget + canary constants to it (with permission).

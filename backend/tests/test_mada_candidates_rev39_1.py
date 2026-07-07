@@ -132,3 +132,39 @@ async def test_dead_letter_rows_rejected_rev39_2(db):
     assert out["candidates"] == []
     assert out["rejected_summary"].get(
         "فيتو DEAD_LETTER/حالة محظورة (rev32.1)") == 2
+
+
+@pytest.mark.asyncio
+async def test_rev41_2_candidates_carry_send_diagnosis(db):
+    """rev41.2 — each candidate embeds the unified send diagnosis;
+    budget blockers are separated so a pinned/unarmed budget never
+    hides real blockers. Clean candidate ranks first."""
+    # Clean: one-shot-supported stage + resolved customer + mapped.
+    clean = _row("911", sku="SKU-A", stage="NORMALIZED")
+    clean["qoyod_customer_id"] = "55"
+    await db.integration_inbox.insert_one(clean)
+    # Dirty: DRY invoice id sentinel (policy must flag it).
+    dirty = _row("912", sku="SKU-A", stage="NORMALIZED", hours_ago=0)
+    dirty["qoyod_customer_id"] = "55"
+    dirty["qoyod_invoice_id"] = "DRY:123"
+    await db.integration_inbox.insert_one(dirty)
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": "SKU-A", "qoyod_product_id": "9"})
+
+    out = await find_mada_candidates(db, user_id=TENANT, limit=5)
+    by_num = {c["order_number"]: c for c in out["candidates"]}
+    assert {"911", "912"} <= set(by_num)
+
+    d911 = by_num["911"]["send_diagnosis"]
+    assert d911["ready_excluding_budget"] is True
+    assert d911["non_budget_blockers"] == []
+    assert [b["code"] for b in d911["budget_blockers"]] == [
+        "budget_not_armed"]
+
+    d912 = by_num["912"]["send_diagnosis"]
+    assert d912["ready_excluding_budget"] is False
+    codes = [b["code"] for b in d912["non_budget_blockers"]]
+    assert "dry_invoice_id_detected" in codes
+
+    # Clean candidate ranked first.
+    assert out["candidates"][0]["order_number"] == "911"
