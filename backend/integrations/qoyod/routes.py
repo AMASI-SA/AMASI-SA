@@ -1996,6 +1996,21 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             user_id=_tenant_id(user),
         )
 
+    # ── rev38 — Send Preflight (READ-ONLY, per-order) ────────────────
+    # فحص ما قبل الإرسال: نطاق التاريخ + طريقة الدفع + فاتورة مكررة +
+    # فرق المبلغ + معاينة الـ payload. صفر كتابة، صفر نداء لقيود.
+    @router.get("/admin/send-preflight/{order_number}")
+    async def admin_send_preflight(
+        order_number: str,
+        expected_payment_method: Optional[str] = Query(None),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.send_preflight import build_send_preflight
+        return await build_send_preflight(
+            db, user_id=_tenant_id(user),
+            order_number=str(order_number),
+            expected_payment_method=expected_payment_method)
+
     @router.get("/admin/canary-readiness-preview/{order_number}")
     async def admin_canary_readiness_preview(
         order_number: str,

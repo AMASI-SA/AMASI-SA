@@ -1,6 +1,27 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV38 — Send Preflight (READ-ONLY, per order) for mada canary
+# ══════════════════════════════════════════════════════════════════
+User is preparing the FIRST mada canary order 270513107 (تم التنفيذ).
+Explicit ban: NO send before user approval, no reprocess/run-now.
+- New `send_preflight.py` + `GET /api/integrations/qoyod/admin/
+  send-preflight/{order_number}?expected_payment_method=mada`.
+  ZERO writes / ZERO Qoyod API calls. Returns: trace_id,
+  total_amount, salla_status, 4 checks (scope>=2026-07-01 with actual
+  date / payment method vs expected / duplicate REAL invoice via
+  ledger+inbox same filter as pipeline rev36 / amount diff <= 0.01
+  via the SAME pure build_invoice_payload) + invoice payload PREVIEW
+  + ready_to_send boolean.
+- Tests: test_send_preflight_rev38.py = 7 passed (incl. a
+  writes-nothing invariant test). Order data lives in PRODUCTION →
+  user must DEPLOY then call the endpoint there; preview returns
+  found=false (verified via curl).
+- NEXT: user runs preflight on production → reviews the 5 outputs →
+  gives explicit send approval → only then arm canary budget for ONE
+  mada order.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV37.3 — Unsent page ops enhancements (display/search only)
 # ══════════════════════════════════════════════════════════════════
 - Per-row Salla status: Arabic native (`order_status_native`) + slug
