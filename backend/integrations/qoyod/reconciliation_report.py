@@ -99,6 +99,45 @@ async def _qoyod_invoices_in_scope(api_client, sync_start) -> list[dict]:
     return out
 
 
+# rev37.2 — user-frozen forensic evidence (leak RCA). NEVER touch.
+_FROZEN_EVIDENCE_INVOICE_IDS = {
+    "188", "189", "190", "191", "192", "193", "194", "195"}
+
+
+async def _diagnose_qoyod_only(db, user_id: str, reference: str,
+                               sync_start) -> str:
+    """READ-ONLY RCA for a قيود invoice with no MEZAN match — looks
+    the order up in integration_inbox WITHOUT the date scope."""
+    if not reference:
+        return ("فاتورة بدون مرجع طلب سلة — الأرجح فاتورة يدوية "
+                "أُنشئت مباشرة في قيود")
+    row = await db.integration_inbox.find_one(
+        {"user_id": user_id,
+         "$or": [{"salla_order_number": reference},
+                 {"salla_order_id": reference}]},
+        {"_id": 0, "qoyod_invoice_id": 1, "pipeline_stage": 1,
+         "received_at": 1,
+         "raw_payload.data.date": 1, "raw_payload.data.created_at": 1,
+         "canonical_payload.order_date": 1,
+         "canonical_payload.created_at": 1},
+        sort=[("received_at", -1)])
+    if row is None:
+        return ("لا يوجد أي سجل لهذا الطلب في ميزان — الأرجح فاتورة "
+                "يدوية أو أُنشئت قبل تفعيل الويبهوك")
+    order_date = _order_created_date(row)
+    if order_date is not None and order_date < sync_start:
+        return (f"الطلب موجود في ميزان لكن تاريخ إنشائه في سلة "
+                f"{order_date.isoformat()} قبل بداية التكامل "
+                f"{sync_start.isoformat()} — فاتورة تاريخية/تسريب سابق "
+                "خارج نطاق التكامل")
+    if _is_real(row.get("qoyod_invoice_id")):
+        return ("الطلب موجود في ميزان بفاتورة مختلفة "
+                f"(#{row.get('qoyod_invoice_id')}) — يحتاج مراجعة يدوية")
+    return ("الطلب موجود في ميزان ضمن النطاق لكن دون رقم فاتورة "
+            f"مسجّل (حالة: {row.get('pipeline_stage')}) — تسريب محتمل: "
+            "فاتورة كُتبت في قيود دون تحديث سجل ميزان")
+
+
 async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:
     """Compare + persist. READ-ONLY towards قيود."""
     from integrations.qoyod.api_client import QoyodAPIError
@@ -155,6 +194,11 @@ async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:
         if v["qoyod_invoice_id"] in claimed_ids:
             continue
         counts[QOYOD_ONLY] += 1
+        note = await _diagnose_qoyod_only(
+            db, user_id, v["reference"], sync_start)
+        if v["qoyod_invoice_id"] in _FROZEN_EVIDENCE_INVOICE_IDS:
+            note = ("🧊 ضمن الأدلة المجمّدة بقرارك (188-195) — "
+                    "لا تُمس. " + note)
         rows.append({
             "order_number":     v["reference"] or None,
             "order_date":       None,
@@ -166,8 +210,7 @@ async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:
             "issue_date":       v["issue_date"],
             "pipeline_stage":   None,
             "status":           QOYOD_ONLY,
-            "note": ("فاتورة في قيود بدون سجل في ميزان — "
-                     "تحتاج مراجعة (قد تكون تسريباً أو فاتورة يدوية)"),
+            "note":             note,
         })
 
     report = {

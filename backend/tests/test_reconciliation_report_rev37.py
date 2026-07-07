@@ -56,6 +56,16 @@ class _Coll:
                 continue
             out.append(dict(r))
         return _Cursor(out)
+    async def find_one(self, q, projection=None, sort=None):
+        refs = [c.get("salla_order_number") or c.get("salla_order_id")
+                for c in q.get("$or", [])]
+        for r in self.rows:
+            if r.get("user_id") != q.get("user_id"):
+                continue
+            if refs and (r.get("salla_order_number") in refs
+                         or r.get("salla_order_id") in refs):
+                return dict(r)
+        return None
     async def insert_one(self, doc):
         self.inserted.append(doc)
 
@@ -183,3 +193,51 @@ async def test_multiple_inbox_rows_same_order_counted_once():
     assert r["counts"][MATCHED] == 1
     assert r["counts"][MEZAN_ONLY] == 0
     assert r["all_matched"] is True
+
+
+# ── rev37.2 — قيود-only auto-RCA (user case: invoice 191 / 268552119) ─
+def _qoyod_only_row(r):
+    return next(x for x in r["rows"] if x["status"] == QOYOD_ONLY)
+
+
+@pytest.mark.asyncio
+async def test_qoyod_only_diagnosis_pre_floor_order_and_frozen_191():
+    """Invoice 191 (frozen evidence) references order 268552119 whose
+    Salla creation date is BEFORE 2026-07-01 → out of MEZAN scope,
+    note must say so + carry the frozen-evidence prefix."""
+    db = _DB()
+    db.integration_inbox.rows.append({
+        "user_id": "main", "salla_order_number": "268552119",
+        "qoyod_invoice_id": None, "pipeline_stage": "SKIPPED",
+        "canonical_payload": {"order_date": "2026-06-20"},
+    })
+    client = _ReadOnlyClient([_qoyod_inv("191", "268552119", 220.58)])
+    r = await run_reconciliation_report(db, user_id="main", api_client=client)
+    assert r["counts"][QOYOD_ONLY] == 1
+    note = _qoyod_only_row(r)["note"]
+    assert "🧊" in note and "188-195" in note
+    assert "2026-06-20" in note and "قبل بداية التكامل" in note
+
+
+@pytest.mark.asyncio
+async def test_qoyod_only_diagnosis_order_completely_absent():
+    db = _DB()
+    client = _ReadOnlyClient([_qoyod_inv("900", "111222333", 50.0)])
+    r = await run_reconciliation_report(db, user_id="main", api_client=client)
+    assert "لا يوجد أي سجل" in _qoyod_only_row(r)["note"]
+
+
+@pytest.mark.asyncio
+async def test_qoyod_only_diagnosis_in_scope_missing_invoice_id():
+    """Order exists in scope but MEZAN never recorded the invoice id
+    → possible leak wording."""
+    db = _DB()
+    db.integration_inbox.rows.append({
+        "user_id": "main", "salla_order_number": "555",
+        "qoyod_invoice_id": None, "pipeline_stage": "CUSTOMER_RESOLVED",
+        "canonical_payload": {"order_date": "2026-07-10"},
+    })
+    client = _ReadOnlyClient([_qoyod_inv("901", "555", 75.0)])
+    r = await run_reconciliation_report(db, user_id="main", api_client=client)
+    note = _qoyod_only_row(r)["note"]
+    assert "تسريب محتمل" in note and "CUSTOMER_RESOLVED" in note

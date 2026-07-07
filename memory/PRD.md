@@ -1,6 +1,24 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV37.2 — قيود-only auto-RCA in reconciliation report
+# ══════════════════════════════════════════════════════════════════
+**User RCA request**: invoice 191 / order 268552119 / 220.58 shown
+as "في قيود فقط" in the PRODUCTION reconciliation run (9 مطابق, 0
+فرق, 0 ميزان-فقط, 1 قيود-فقط).
+**Finding**: invoice 191 belongs to the user-FROZEN leak batch
+(#188-194 / payments #160-165 — RCA forensic evidence, never touch).
+Order number 268552119 predates the leaked orders 269922590/270091836
+→ almost certainly created before 2026-07-01 → correctly OUT of MEZAN
+scope → "في قيود فقط" is the CORRECT classification.
+**Enhancement (read-only)**: `_diagnose_qoyod_only()` now looks each
+قيود-only reference up in integration_inbox WITHOUT the date scope
+and explains: pre-floor order / order absent entirely / in-scope but
+no invoice id recorded (possible leak) / different invoice. Frozen
+ids 188-195 get a 🧊 prefix. 10/10 tests pass. NEEDS DEPLOY for the
+production report to show the exact reason.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV37.1 COMPLETE — Unsent page counts ORDERS, not inbox rows
 # ══════════════════════════════════════════════════════════════════
 **User report**: Salla has 315 orders since 2026-07-01 but the Unsent
