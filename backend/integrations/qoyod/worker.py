@@ -59,6 +59,33 @@ def _now() -> datetime:
 
 async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
     """Process one batch from each pending bucket. Returns counts."""
+    # ── Plan-B Freeze (user directive 2026-02) ──────────────────────
+    # When `qoyod_settings.legacy_pipeline_frozen=True`, the automatic
+    # Rev32→Rev48 pipeline is HALTED — no canary, no one-shot, no auto
+    # progression. Rows stay untouched at whatever stage they reached.
+    # Only the isolated Manual Send path (`/api/integrations/qoyod/manual/*`)
+    # can push orders to Qoyod. The old code stays as reference; this
+    # flag just short-circuits the worker tick.
+    try:
+        _frozen_doc = await db.qoyod_settings.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "legacy_pipeline_frozen": 1},
+        )
+    except Exception:
+        _frozen_doc = None
+    if _frozen_doc and _frozen_doc.get("legacy_pipeline_frozen"):
+        return {
+            "frozen":       True,
+            "reason":       "legacy_pipeline_frozen=true (Plan B — manual send only)",
+            "backfill_gate":     {"scanned": 0, "skipped": 0, "mode": "frozen"},
+            "auto_requeue":      {"scanned": 0, "requeued": 0,
+                                   "skipped_no_pattern": 0,
+                                   "skipped_max_attempts": 0,
+                                   "failures": 0},
+            "normalized":        {"processed": 0, "outcomes": {}},
+            "customer_resolved": {"processed": 0, "outcomes": {}},
+            "at":                _now().isoformat(),
+        }
     # ── Step 0a: Backfill Gate (user directive 2026-02-27) ──────────
     # Default `backfill_mode="now_forward_only"`: pre-activation rows
     # in NORMALIZED / CUSTOMER_RESOLVED / PRODUCT_RESOLVED are SKIPPED

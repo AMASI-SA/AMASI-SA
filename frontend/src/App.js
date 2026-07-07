@@ -46,6 +46,7 @@ import QoyodCodReceiptsReport from "./pages/QoyodCodReceiptsReport";
 import QoyodPendingOrders from "./pages/QoyodPendingOrders";
 import QoyodProducts from "./pages/QoyodProducts";
 import QoyodCustomers from "./pages/QoyodCustomers";
+import QoyodManualSend from "./pages/QoyodManualSend";
 import EligibleOrders from "./pages/EligibleOrders";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
@@ -187,6 +188,7 @@ function AppRoutes() {
             <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/cod-receipts-report" element={<ProtectedRoute><Layout><QoyodCodReceiptsReport /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/pending-orders" element={<ProtectedRoute><Layout><QoyodPendingOrders /></Layout></ProtectedRoute>} />
+            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Layout><QoyodManualSend /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/eligible-orders" element={<ProtectedRoute><Layout><EligibleOrders /></Layout></ProtectedRoute>} />
           <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><QoyodProducts /></Layout></ProtectedRoute>} />
 <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><QoyodCustomers /></Layout></ProtectedRoute>} />            <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><QoyodWebhookMonitor /></Layout></ProtectedRoute>} />

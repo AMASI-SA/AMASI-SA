@@ -1,6 +1,71 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ PLAN B — Manual Send (2026-02, this session)
+# ══════════════════════════════════════════════════════════════════
+User directive: STOP Rev32→Rev48 layered guards (kept as reference,
+NOT deleted). Introduce a new isolated, manual, one-order-at-a-time
+push path for orders with status=completed created on/after 2026-07-01.
+
+Backend (NEW module: /app/backend/integrations/qoyod_manual/):
+- __init__.py       — module docs
+- client.py         — ManualQoyodClient (thin httpx wrapper, ZERO
+                      rev32/write-lock hooks — Plan B is completely
+                      isolated from the frozen pipeline).
+- pending.py        — list_pending_orders: filters completed +
+                      >=2026-07-01 + no real Qoyod invoice.
+- send.py           — manual_send_one: 4 sequential steps
+                      (customer → products → invoice → payment),
+                      guarded by exactly 4 rules:
+                      G1  atomic idempotency lock on
+                          qoyod_manual_send_locks (unique index on
+                          order_number) + DB/Qoyod dedup checks.
+                      G2  |Salla total − Qoyod expected| ≤ 0.01 SAR.
+                      G3  No DRY/PREVIEW ids accepted or returned.
+                      G4  payment method must resolve to a
+                          Qoyod account via existing
+                          qoyod_settings.payment_method_mapping
+                          (no new mapping table created).
+- routes.py         — router mounted at
+                      /api/integrations/qoyod/manual
+                      Endpoints:
+                        GET  /health
+                        GET  /pending-orders
+                        POST /send/{order_number}
+                        GET  /status/{order_number}
+
+Backend (surgical edit): worker._one_round short-circuits when
+qoyod_settings.legacy_pipeline_frozen=True — the legacy pipeline is
+FROZEN, not deleted. All Rev32-Rev48 code files stay as reference.
+
+Frontend (NEW page):
+- /admin/qoyod-manual-send  — QoyodManualSend.jsx
+    * Table of pending orders with an "إرسال إلى قيود" button per row
+    * Freeze status banner (reads /health)
+    * Confirmation dialog + result banner with detailed error payload
+    * Full data-testid coverage for testing agent
+
+Tests: /app/backend/tests/test_qoyod_manual_send_plan_b.py
+    T1 pending-orders filters (7 rows, all 3 excludes hit) — PASS
+    T2 already-sent short-circuit                            — PASS
+    T3 payment-method-unmapped guard                         — PASS
+    T4 totals-mismatch guard                                 — PASS
+    T5 happy path (invoice + payment + lock + markers)       — PASS
+    T6 worker respects legacy_pipeline_frozen=True           — PASS
+    T7 worker runs normally when flag absent/false           — PASS
+    (7/7 passing, 0.21s)
+
+Operator-facing next steps:
+    1. On PRODUCTION, PUT qoyod_settings.legacy_pipeline_frozen=true
+       via the existing settings endpoint (or a one-shot mongo update).
+    2. Ensure qoyod_settings.payment_method_mapping has an entry for
+       every used salla_method with a valid qoyod_account_id.
+    3. Open /admin/qoyod-manual-send, verify order 270939808 appears,
+       click "إرسال إلى قيود", inspect the response banner.
+
+# ══════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.6 — Blocker code surfaced (2nd send attempt analysis)
 # ══════════════════════════════════════════════════════════════════
 2nd production attempt 0268d9b1-… refused: OneShotRefused
