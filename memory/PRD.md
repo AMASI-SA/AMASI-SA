@@ -1,6 +1,21 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV37.3 — Unsent page ops enhancements (display/search only)
+# ══════════════════════════════════════════════════════════════════
+- Per-row Salla status: Arabic native (`order_status_native`) + slug
+  (`order_status`) as a sky pill in new "حالة سلة" column.
+- Backend Salla-status filter (`salla_status` param, matches native
+  OR slug) + `salla_status_counts` facet (from ACTUAL data, computed
+  before filter so the dropdown is always complete).
+- Backend search by order number (`search` param → Mongo regex on
+  salla_order_number, escaped) — NOT frontend-only filtering.
+- Reason column unchanged (already Arabic) and now sits beside the
+  Salla status. NO send / reprocess / billing-logic changes.
+- Tests: test_unsent_orders_rev36.py = 23 passed (2 new). UI smoke
+  screenshot OK. NEEDS DEPLOY.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV37.2 — قيود-only auto-RCA in reconciliation report
 # (UPDATED per user decree: FACTS ONLY — no "الأرجح/غالباً/يبدو".
 #  Notes now: pre-floor with ACTUAL date / manual invoice (no order

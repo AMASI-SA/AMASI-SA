@@ -3163,12 +3163,15 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         days: int = Query(30, ge=1, le=365),
         limit: int = Query(500, ge=1, le=2000),
         status: Optional[str] = Query(None),
+        salla_status: Optional[str] = Query(None),
+        search: Optional[str] = Query(None, max_length=40),
         user=Depends(current_user),
     ):
         from integrations.qoyod.unsent_orders import list_unsent_orders
         tenant = _tenant_id(user)
         return await list_unsent_orders(
-            db, user_id=tenant, days=days, limit=limit, status=status)
+            db, user_id=tenant, days=days, limit=limit, status=status,
+            salla_status=salla_status, search=search)
 
     # ── rev37 — تقرير المطابقة ميزان ↔ قيود. READ-ONLY ───────────────
     # Proves MEZAN's successful orders == قيود invoices (id + total),

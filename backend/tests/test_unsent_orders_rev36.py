@@ -236,3 +236,57 @@ async def test_dedup_priority_sent_beats_failed_and_failed_beats_unsent(db):
     assert by_order["4001"]["status"] == SENT
     assert by_order["4002"]["status"] == FAILED
     assert out["counts"] == {SENT: 1, UNSENT: 0, FAILED: 1, DUPLICATE: 0}
+
+
+# ── 7. rev37.3 — Salla-status facet + backend order-number search ───
+@pytest.mark.asyncio
+async def test_salla_status_filter_and_counts(db):
+    r1 = _inbox("s1", "5001", "NORMALIZED")
+    r1["canonical_payload"].update(
+        {"order_status": "completed", "order_status_native": "تم التنفيذ"})
+    r2 = _inbox("s2", "5002", "NORMALIZED")
+    r2["canonical_payload"].update(
+        {"order_status": "under_review",
+         "order_status_native": "بانتظار المراجعة"})
+    r3 = _inbox("s3", "5003", "FAILED_PRODUCT")
+    r3["canonical_payload"].update(
+        {"order_status": "completed", "order_status_native": "تم التنفيذ"})
+    await db.integration_inbox.insert_many([r1, r2, r3])
+
+    out = await list_unsent_orders(db, user_id=TENANT, days=7)
+    assert out["salla_status_counts"] == {"تم التنفيذ": 2,
+                                          "بانتظار المراجعة": 1}
+    assert out["orders"][0].get("salla_status_slug") in (
+        "completed", "under_review")
+
+    # Filter by Arabic native label.
+    f1 = await list_unsent_orders(
+        db, user_id=TENANT, days=7, salla_status="تم التنفيذ")
+    assert f1["total"] == 2
+    assert {o["order_number"] for o in f1["orders"]} == {"5001", "5003"}
+    # Filter by slug also works.
+    f2 = await list_unsent_orders(
+        db, user_id=TENANT, days=7, salla_status="under_review")
+    assert f2["total"] == 1
+    assert f2["orders"][0]["order_number"] == "5002"
+    # Facet list stays complete even when filtered.
+    assert set(f2["salla_status_counts"]) == {"تم التنفيذ",
+                                              "بانتظار المراجعة"}
+
+
+@pytest.mark.asyncio
+async def test_search_by_order_number_is_backend_side(db):
+    await db.integration_inbox.insert_many([
+        _inbox("q1", "6001234", "NORMALIZED"),
+        _inbox("q2", "6005678", "NORMALIZED"),
+        _inbox("q3", "7009999", "NORMALIZED"),
+    ])
+    out = await list_unsent_orders(db, user_id=TENANT, days=7,
+                                   search="600")
+    assert out["total"] == 2
+    assert {o["order_number"] for o in out["orders"]} == \
+        {"6001234", "6005678"}
+    exact = await list_unsent_orders(db, user_id=TENANT, days=7,
+                                     search="7009999")
+    assert exact["total"] == 1
+    assert exact["orders"][0]["order_number"] == "7009999"

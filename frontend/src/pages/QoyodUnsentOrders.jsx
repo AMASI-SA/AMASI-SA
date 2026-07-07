@@ -29,12 +29,16 @@ export default function QoyodUnsentOrders() {
   const [tab, setTab] = useState("لم يُرسل");
   const [days, setDays] = useState(30);
   const [error, setError] = useState(null);
+  const [sallaStatus, setSallaStatus] = useState("");
+  const [search, setSearch] = useState("");
 
-  const fetchAll = async (d = days) => {
+  const fetchAll = async (d = days, ss = sallaStatus, q = search) => {
     setLoading(true);
     try {
-      const res = await api.get(`${QOYOD_BASE}/unsent-orders`,
-        { params: { days: d, limit: 1000 } });
+      const params = { days: d, limit: 1000 };
+      if (ss) params.salla_status = ss;
+      if (q && q.trim()) params.search = q.trim();
+      const res = await api.get(`${QOYOD_BASE}/unsent-orders`, { params });
       setData(res.data);
       setError(null);
     } catch (e) {
@@ -43,7 +47,7 @@ export default function QoyodUnsentOrders() {
       setLoading(false);
     }
   };
-  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [days]);
+  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [days, sallaStatus]);
 
   const orders = (data?.orders || []).filter(
     (o) => tab === "الكل" || o.status === tab);
@@ -65,7 +69,27 @@ export default function QoyodUnsentOrders() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <input value={search} dir="ltr"
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") fetchAll(days, sallaStatus, search); }}
+            placeholder="بحث برقم الطلب…"
+            data-testid="unsent-search-input"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm w-40" />
+          <button onClick={() => fetchAll(days, sallaStatus, search)}
+            data-testid="unsent-search-btn"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+            بحث
+          </button>
+          <select value={sallaStatus}
+            onChange={(e) => setSallaStatus(e.target.value)}
+            data-testid="unsent-salla-status-select"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="">حالة سلة: الكل</option>
+            {Object.entries(data?.salla_status_counts || {}).map(([s, n]) => (
+              <option key={s} value={s}>{s} ({n})</option>
+            ))}
+          </select>
           <select value={days} onChange={(e) => setDays(Number(e.target.value))}
             data-testid="unsent-days-select"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">

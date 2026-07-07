@@ -152,6 +152,8 @@ def simplify_row(row: dict) -> dict:
 async def list_unsent_orders(
     db, *, user_id: str, days: int = 30, limit: int = 500,
     status: str | None = None,
+    salla_status: str | None = None,
+    search: str | None = None,
 ) -> dict:
     """All recent orders mapped to the 4-status contract + counts.
 
@@ -177,8 +179,14 @@ async def list_unsent_orders(
     grouped: dict[str, dict] = {}
     order_keys: list[str] = []
 
+    query: dict = {"user_id": user_id, "received_at": {"$gte": cutoff}}
+    if search and str(search).strip():
+        import re as _re
+        query["salla_order_number"] = {
+            "$regex": _re.escape(str(search).strip())}
+
     cursor = db.integration_inbox.find(
-        {"user_id": user_id, "received_at": {"$gte": cutoff}},
+        query,
         {"_id": 0, "id": 1, "trace_id": 1, "salla_order_number": 1,
          "received_at": 1, "pipeline_stage": 1, "pipeline_error": 1,
          "qoyod_invoice_id": 1, "duplicate_of_invoice": 1,
@@ -192,6 +200,7 @@ async def list_unsent_orders(
          "canonical_payload.total_amount": 1,
          "canonical_payload.payment_method_native": 1,
          "canonical_payload.payment_method": 1,
+         "canonical_payload.order_status": 1,
          "canonical_payload.order_status_native": 1},
     ).sort("received_at", -1).limit(max(1, min(limit, 2000)))
 
@@ -213,6 +222,7 @@ async def list_unsent_orders(
             "payment_method": (canon.get("payment_method_native")
                                or canon.get("payment_method")),
             "salla_status":   canon.get("order_status_native"),
+            "salla_status_slug": canon.get("order_status"),
             "status":         s["status"],
             "reason":         s["reason"],
             "qoyod_invoice_id": (row.get("qoyod_invoice_id")
@@ -236,14 +246,33 @@ async def list_unsent_orders(
             # Keep prev (more recent or higher priority) — but fill
             # gaps from older rows (e.g. status-update row has no
             # canonical totals yet the created row does).
-            for f in ("total_amount", "payment_method", "salla_status"):
+            for f in ("total_amount", "payment_method", "salla_status",
+                      "salla_status_slug"):
                 if prev.get(f) in (None, "") and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
+
+    # rev37.3 — Salla-status facet: distinct statuses ACTUALLY present
+    # (computed BEFORE the salla_status filter so the dropdown always
+    # shows every available option) + optional backend-side filter.
+    salla_status_counts: dict[str, int] = {}
+    for key in order_keys:
+        e = grouped[key]
+        label = e.get("salla_status") or e.get("salla_status_slug")
+        if label:
+            salla_status_counts[label] = salla_status_counts.get(label, 0) + 1
+
+    def _salla_match(e: dict) -> bool:
+        if not salla_status:
+            return True
+        return salla_status in (e.get("salla_status"),
+                                e.get("salla_status_slug"))
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     orders: list[dict] = []
     for key in order_keys:
         e = grouped[key]
+        if not _salla_match(e):
+            continue
         counts[e["status"]] += 1
         if status and e["status"] != status:
             continue
@@ -253,4 +282,5 @@ async def list_unsent_orders(
             "total": sum(counts.values()),
             "sync_start_date": sync_start.isoformat(),
             "excluded_pre_sync_start": excluded_pre_sync,
+            "salla_status_counts": salla_status_counts,
             "orders": orders}
