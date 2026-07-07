@@ -170,4 +170,87 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                                         else _upd),
         }
 
+    @router.post("/repair-recon-markers")
+    async def repair_recon_markers(user=Depends(current_user)):
+        """Retroactive migration for the reconciliation page.
+
+        For every inbox row whose `manual_qoyod_invoice_id` is a real
+        (non-DRY) numeric id but the unified `qoyod_invoice_id` field
+        is missing/empty, copy the value across. This heals Plan-B
+        sends made BEFORE we started writing the unified marker, so
+        the "مقارنة ميزان ↔ قيود" page shows them as MATCHED.
+
+        Also copies the invoice number when present. Idempotent —
+        subsequent calls are no-ops.
+
+        Returns a summary: how many rows were scanned/updated and the
+        list of affected order numbers (up to 200 for UI display).
+        """
+        actor = "unknown"
+        try:
+            actor = ((user or {}).get("email")
+                     or (user or {}).get("id") or "unknown")
+        except Exception:
+            pass
+
+        scanned = 0
+        updated = 0
+        skipped_no_manual = 0
+        skipped_already_unified = 0
+        affected: list[str] = []
+
+        cursor = db.integration_inbox.find(
+            {"user_id": _TENANT,
+             "manual_qoyod_invoice_id":
+                {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1, "salla_order_number": 1,
+             "manual_qoyod_invoice_id": 1,
+             "manual_qoyod_invoice_number": 1,
+             "qoyod_invoice_id": 1},
+        )
+        async for row in cursor:
+            scanned += 1
+            mid = row.get("manual_qoyod_invoice_id")
+            if not (mid and str(mid).strip()
+                    and not str(mid).upper().startswith(
+                        ("DRY:", "PREVIEW:"))):
+                skipped_no_manual += 1
+                continue
+            existing = row.get("qoyod_invoice_id")
+            if existing and str(existing).strip() and \
+               not str(existing).upper().startswith(("DRY:", "PREVIEW:")):
+                skipped_already_unified += 1
+                continue
+            patch: dict = {
+                "qoyod_invoice_id":     str(mid),
+                "qoyod_invoice_source": "manual_plan_b_repair",
+                "qoyod_marker_repaired_at": _now(),
+                "qoyod_marker_repaired_by": actor,
+            }
+            num = row.get("manual_qoyod_invoice_number")
+            if num:
+                patch["qoyod_invoice_number"] = str(num)
+            await db.integration_inbox.update_one(
+                {"id": row.get("id")}, {"$set": patch})
+            updated += 1
+            on = str(row.get("salla_order_number") or "")
+            if on and len(affected) < 200:
+                affected.append(on)
+
+        logger.warning(
+            "plan-b repair-recon-markers scanned=%s updated=%s actor=%s",
+            scanned, updated, actor)
+        return {
+            "ok":      True,
+            "actor":   actor,
+            "counts": {
+                "scanned_manual_rows":      scanned,
+                "updated":                  updated,
+                "skipped_no_manual_id":     skipped_no_manual,
+                "skipped_already_unified":  skipped_already_unified,
+            },
+            "affected_orders_sample": affected,
+            "at":     _now().isoformat(),
+        }
+
     return router

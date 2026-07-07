@@ -46,29 +46,50 @@ def _qoyod_invoice_view(it: dict) -> dict:
 
 async def _mezan_sent_orders(db, user_id: str, sync_start) -> list[dict]:
     """MEZAN rows that claim a REAL قيود invoice, scoped by Salla
-    order CREATION date >= 2026-07-01."""
+    order CREATION date >= 2026-07-01.
+
+    Post Plan-B (2026-07-08): a row counts as "sent from ميزان" if
+    EITHER of these fields carries a real (non-DRY/PREVIEW) numeric
+    id — the legacy pipeline wrote `qoyod_invoice_id`; Plan-B writes
+    both `qoyod_invoice_id` AND `manual_qoyod_invoice_id`. Belt-and-
+    braces so older Plan-B rows written before the unified marker
+    landing (or rows written by any future manual variant) still
+    match.
+    """
     out: list[dict] = []
     seen: set[tuple] = set()  # rev37.1 — inbox has a row per status
     # transition; the same order+invoice must be counted ONCE.
     cursor = db.integration_inbox.find(
         {"user_id": user_id,
-         "qoyod_invoice_id": {"$exists": True, "$nin": [None, ""]}},
+         "$or": [
+             {"qoyod_invoice_id":
+                 {"$exists": True, "$nin": [None, ""]}},
+             {"manual_qoyod_invoice_id":
+                 {"$exists": True, "$nin": [None, ""]}},
+         ]},
         {"_id": 0, "id": 1, "salla_order_number": 1, "received_at": 1,
-         "pipeline_stage": 1, "qoyod_invoice_id": 1,
+         "pipeline_stage": 1,
+         "qoyod_invoice_id": 1,
+         "manual_qoyod_invoice_id": 1,
+         "qoyod_invoice_source": 1,
          "raw_payload.data.date": 1, "raw_payload.data.created_at": 1,
          "canonical_payload.order_date": 1,
          "canonical_payload.created_at": 1,
          "canonical_payload.total_amount": 1},
     ).sort("received_at", -1).limit(5000)
     async for row in cursor:
-        if not _is_real(row.get("qoyod_invoice_id")):
+        # Resolve the unified invoice id: prefer the legacy field
+        # (matches historical rows exactly), fall back to Plan-B's.
+        inv_id = row.get("qoyod_invoice_id") \
+            or row.get("manual_qoyod_invoice_id")
+        if not _is_real(inv_id):
             continue
         order_date = _order_created_date(row)
         if order_date is not None and order_date < sync_start:
             continue
         canon = row.get("canonical_payload") or {}
         key = (str(row.get("salla_order_number") or ""),
-               str(row.get("qoyod_invoice_id")))
+               str(inv_id))
         if key in seen:
             continue
         seen.add(key)
@@ -76,9 +97,14 @@ async def _mezan_sent_orders(db, user_id: str, sync_start) -> list[dict]:
             "order_number":     str(row.get("salla_order_number") or ""),
             "order_date":       (order_date.isoformat()
                                  if order_date else None),
-            "qoyod_invoice_id": str(row.get("qoyod_invoice_id")),
+            "qoyod_invoice_id": str(inv_id),
             "mezan_total":      _coerce_float(canon.get("total_amount")),
             "pipeline_stage":   row.get("pipeline_stage"),
+            "send_source":      (row.get("qoyod_invoice_source")
+                                 or ("manual_plan_b"
+                                     if row.get("manual_qoyod_invoice_id")
+                                     and not row.get("qoyod_invoice_id")
+                                     else "legacy")),
         })
     return out
 
@@ -105,9 +131,15 @@ _FROZEN_EVIDENCE_INVOICE_IDS = {
 
 
 async def _diagnose_qoyod_only(db, user_id: str, reference: str,
-                               sync_start) -> str:
+                               sync_start,
+                               qoyod_invoice_id: str = "") -> str:
     """READ-ONLY RCA for a قيود invoice with no MEZAN match — looks
-    the order up in integration_inbox WITHOUT the date scope."""
+    the order up in integration_inbox WITHOUT the date scope.
+
+    Post Plan-B: also checks `manual_qoyod_invoice_id` and, when the
+    قيود invoice id matches Plan-B's marker, self-heals the row by
+    populating the unified `qoyod_invoice_id` field (idempotent).
+    """
     if not reference:
         return ("فاتورة بدون مرجع طلب سلة في قيود — لا يمكن ربطها "
                 "بأي طلب في ميزان (فاتورة يدوية)")
@@ -115,8 +147,14 @@ async def _diagnose_qoyod_only(db, user_id: str, reference: str,
         {"user_id": user_id,
          "$or": [{"salla_order_number": reference},
                  {"salla_order_id": reference}]},
-        {"_id": 0, "qoyod_invoice_id": 1, "pipeline_stage": 1,
+        {"_id": 0, "id": 1, "qoyod_invoice_id": 1,
+         "manual_qoyod_invoice_id": 1,
+         "manual_qoyod_invoice_number": 1,
+         "manual_send_last_status": 1,
+         "qoyod_invoice_source": 1,
+         "pipeline_stage": 1,
          "received_at": 1,
+         "salla_order_number": 1,
          "raw_payload.data.date": 1, "raw_payload.data.created_at": 1,
          "canonical_payload.order_date": 1,
          "canonical_payload.created_at": 1},
@@ -132,9 +170,33 @@ async def _diagnose_qoyod_only(db, user_id: str, reference: str,
     if _is_real(row.get("qoyod_invoice_id")):
         return ("يوجد طلب في ميزان مرتبط بفاتورة مختلفة "
                 f"(#{row.get('qoyod_invoice_id')}) — يحتاج مراجعة يدوية")
-    return ("يوجد طلب في ميزان داخل النطاق "
-            f"(حالة: {row.get('pipeline_stage')}) لكن لا توجد فاتورة "
-            "مرتبطة به في سجل ميزان — مشكلة حقيقية تحتاج مراجعة")
+    # Plan-B branch — the row was sent manually but the unified marker
+    # was NOT written (older Plan-B success that predates the marker,
+    # or a race). If the ids match, self-heal so next reconciliation
+    # pairs them as MATCHED.
+    manual_id = row.get("manual_qoyod_invoice_id")
+    if _is_real(manual_id):
+        if qoyod_invoice_id and str(manual_id) == str(qoyod_invoice_id):
+            try:
+                await db.integration_inbox.update_one(
+                    {"id": row.get("id"),
+                     "$or": [{"qoyod_invoice_id":
+                              {"$exists": False}},
+                             {"qoyod_invoice_id": None},
+                             {"qoyod_invoice_id": ""}]},
+                    {"$set": {"qoyod_invoice_id": str(manual_id),
+                               "qoyod_invoice_source": "manual_plan_b_repair"}})
+            except Exception:  # pragma: no cover — read-only fallback
+                pass
+            return ("أُرسل عبر Plan B اليدوي وسُجّل في ميزان — تم "
+                    f"توحيد المرجع الآن (#{manual_id})")
+        return ("أُرسل عبر Plan B اليدوي لكن رقم الفاتورة في ميزان "
+                f"(#{manual_id}) لا يطابق فاتورة قيود — يحتاج مراجعة")
+    # No invoice on the ميزان side at all — belongs to "بانتظار الإرسال
+    # اليدوي في Plan B" bucket for post-floor orders.
+    return ("بانتظار الإرسال اليدوي في Plan B — يوجد طلب في ميزان "
+            "داخل النطاق لكن لم يُرسل بعد إلى قيود من واجهة الإرسال "
+            "اليدوي")
 
 
 async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:
@@ -194,7 +256,8 @@ async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:
             continue
         counts[QOYOD_ONLY] += 1
         note = await _diagnose_qoyod_only(
-            db, user_id, v["reference"], sync_start)
+            db, user_id, v["reference"], sync_start,
+            qoyod_invoice_id=v["qoyod_invoice_id"])
         if v["qoyod_invoice_id"] in _FROZEN_EVIDENCE_INVOICE_IDS:
             note = ("🧊 ضمن الأدلة المجمّدة بقرارك (188-195) — "
                     "لا تُمس. " + note)

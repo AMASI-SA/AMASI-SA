@@ -704,13 +704,24 @@ async def _run_all_steps(
                         "difference": diff})
 
     # Persist marker immediately so a retry can't double-post.
+    # We write BOTH markers atomically:
+    #   • `manual_qoyod_invoice_id`  — Plan-B source-of-truth field.
+    #   • `qoyod_invoice_id`         — unified marker read by the
+    #     reconciliation report and any legacy tool. Writing it here
+    #     is the "repair/migration" step the user requested so the
+    #     comparison page sees Plan-B invoices as first-class.
+    # `send_source="manual_plan_b"` disambiguates the origin.
     await db.integration_inbox.update_one(
         {"id": row.get("id")},
-        {"$set": {"manual_qoyod_invoice_id": str(invoice_id),
-                   "manual_qoyod_invoice_number": (str(invoice_number)
-                                                    if invoice_number else None),
-                   "manual_send_last_status": "invoice_created",
-                   "manual_send_at": datetime.now(timezone.utc)}})
+        {"$set": {"manual_qoyod_invoice_id":         str(invoice_id),
+                   "manual_qoyod_invoice_number":    (str(invoice_number)
+                                                       if invoice_number else None),
+                   "qoyod_invoice_id":               str(invoice_id),
+                   "qoyod_invoice_number":           (str(invoice_number)
+                                                       if invoice_number else None),
+                   "qoyod_invoice_source":           "manual_plan_b",
+                   "manual_send_last_status":        "invoice_created",
+                   "manual_send_at":                 datetime.now(timezone.utc)}})
 
     # ── 5) POST invoice payment ────────────────────────────────────
     # amount = expected_total (post-quantisation قيود total) so قيود
