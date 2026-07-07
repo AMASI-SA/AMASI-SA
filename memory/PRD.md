@@ -7002,3 +7002,37 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   non-terminal (pending_until_eligible/ignored_event) while keeping
   fatal: pre-floor date, real invoice, DRY, DEAD_LETTER. NOT
   IMPLEMENTED YET — user decree: analysis first.
+
+### Rev44 — Transient vs Fatal SKIPPED (user decree after prod proof)
+- PROD FORENSICS PROVED: 9/13 status-skipped orders had completed
+  webhooks that were ALSO skipped (payment_method_not_in_allow_list,
+  stale tabby allowlist) = permanently locked. Plus stale SAS cutover
+  (later than 2026-07-01) killed in-scope 07-01/07-02 orders.
+- USER DECISIONS: (1) payment_method_scope = transient (NO allowlist
+  expansion now); (2) cutover clamped to 2026-07-01 floor; (3) new
+  flow only, no old-row touch, no reset/reprocess/live-send/recovery
+  without separate preview + explicit approval.
+- IMPLEMENTED: skip_classification.py (classify_skip/stamp_skip_class;
+  transient = transitional status + payment scope; fatal = cancelled/
+  refunded, pre-cutover/floor, duplicate real invoice,
+  pre_activation, unknown → fail-closed). Pipeline stamps skip_class
+  at ALL 5 SKIPPED write sites + backfill_gate (fatal). SAS gate
+  clamps cutover DOWN to 2026-07-01 (stored value untouched).
+  send_preflight: skipped/dead checks pass for skip_class=transient
+  ONLY. SSOT stage_check: SKIPPED+transient = supported. one_shot
+  _reset_row_to_stage: transient SKIPPED resumes via SKIPPED→
+  RETRYING→NORMALIZED (audited); fatal/unclassified refused
+  (skipped_is_terminal_rev33). skipped-forensics now shows
+  skip_class per row.
+- DESIGN NOTE: transient rows still PARK at stage SKIPPED (state
+  machine untouched) but are non-blocking + resumable =
+  pending_until_eligible semantics. Legacy rows (no skip_class)
+  remain fatal — untouched by decree.
+- Tests: test_rev44_transient_skip.py 7/7 (classification matrix,
+  cutover clamp, pipeline stamping transient/fatal, SSOT both ways,
+  one_shot resume/refuse). Broad regression: 28 remaining failures
+  verified PRE-EXISTING via git stash (legacy rev32/rev33.2 mock
+  suites + day4/day5). e2e OK.
+- PROOF FOR USER (after redeploy, read-only):
+  skipped-forensics (skip_class visible) + send-eligibility-preview
+  (transient orders no longer carry skipped_dead_letter_check).

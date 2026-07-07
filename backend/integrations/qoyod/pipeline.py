@@ -88,6 +88,10 @@ from integrations.qoyod.rev32_hardening import (
     BLOCKED_FOR_WRITE_STAGES as _REV32_1_BLOCKED_FOR_WRITE_STAGES,  # noqa: F401
     stamp_dead_letter_evidence as _stamp_dead_letter_evidence,
 )
+# rev44 — transient vs fatal SKIPPED classification (user decree).
+from integrations.qoyod.skip_classification import (
+    stamp_skip_class as _stamp_skip_class,
+)
 # ── Iter-2026-07.rev33 — Canary Scope Lock + SKIPPED Terminality ─
 # P0 hotfix for the 2026-07-05 Tabby-only canary scope leak (orders
 # 269747616 → invoice #193 credit_card, 270054904 → invoice #194
@@ -621,6 +625,7 @@ async def process_normalized_row(
             )
             patch.setdefault("$set", {})["selective_auto_send_gate"] = \
                 _sas.to_log_dict()
+            _stamp_skip_class(patch, reason=_sas.reason, row=row)
             # rev26 — atomic CAS: only writes SKIPPED if row is still
             # at NORMALIZED. If another handler already moved it,
             # the pipeline aborts loudly (no further side-effect).
@@ -732,6 +737,7 @@ async def process_normalized_row(
         )
         patch.setdefault("$set", {})["business_rules_decision"] = \
             decision.to_log_dict()
+        _stamp_skip_class(patch, reason=decision.reason, row=row)
         await _apply(db, row["id"], patch)
         return {
             "row_id":   row["id"],
@@ -847,6 +853,9 @@ async def process_normalized_row(
                 "stage_when_skipped": "NORMALIZED",
                 "detected_by":        "process_normalized_row",
             }
+            _stamp_skip_class(
+                patch, reason="canary_scope_skip_pm_not_in_allowlist",
+                row=row)
             try:
                 await _apply_atomic(
                     db, row["id"], patch,
@@ -1521,6 +1530,7 @@ async def process_customer_resolved_row(
             )
             patch.setdefault("$set", {})[
                 "selective_auto_send_gate"] = _sas.to_log_dict()
+            _stamp_skip_class(patch, reason=_sas.reason, row=row)
             # ChatGPT review blocker (Rev32 v2): CUSTOMER_RESOLVED →
             # SKIPPED MUST be CAS. Previously used non-atomic `_apply`
             # which could stomp on a concurrent worker that already
@@ -2193,6 +2203,9 @@ async def process_customer_resolved_row(
                             _dup.get("qoyod_invoice_number"),
                         "detected_at": datetime.now(timezone.utc),
                     }
+                    _stamp_skip_class(
+                        _dup_patch, reason="duplicate_real_invoice",
+                        row=row)
                     await _apply(db, row["id"], _dup_patch)
                     logger.warning(
                         "rev36 duplicate_invoice_blocked row_id=%s "

@@ -117,6 +117,9 @@ async def skip_pre_activation_rows(
             "skipped_reason":       "pre_activation_skipped",
             "skipped_at":           _now(),
             "skipped_by":           "backfill_gate",
+            # rev44 — pre-activation is a FATAL skip by decree.
+            "skip_class":           "fatal",
+            "skip_class_reason":    "pre_activation_skipped",
         })
         await db.integration_inbox.update_one({"id": row_id}, patch)
         items.append({

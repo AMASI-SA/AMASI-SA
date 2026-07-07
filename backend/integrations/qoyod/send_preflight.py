@@ -115,12 +115,21 @@ async def build_send_preflight(
                row.get("stage_history") or []]
     has_skipped = ("SKIPPED" in history
                    or row.get("pipeline_stage") == "SKIPPED")
+    # rev44 — transient skips (status/payment scope) do NOT block;
+    # unclassified/legacy SKIPPED stays fatal (fail-closed).
+    is_transient_skip = (has_skipped
+                         and row.get("skip_class") == "transient")
+    skipped_blocked = has_skipped and not is_transient_skip
     skipped_history_check = {
-        "passed": not has_skipped,
+        "passed": not skipped_blocked,
         "pipeline_stage": row.get("pipeline_stage"),
+        "skip_class": row.get("skip_class"),
         "detail": ("الصف سبق تخطيه (SKIPPED) — فيتو rev33 سيمنع أي "
-                   "إرسال لهذا الصف" if has_skipped
-                   else "لا يوجد SKIPPED في تاريخ الصف"),
+                   "إرسال لهذا الصف" if skipped_blocked
+                   else ("تخطٍ مؤقت (transient rev44) — لا يمنع "
+                         "الإرسال؛ الاستئناف عبر one-shot مدقق فقط"
+                         if is_transient_skip
+                         else "لا يوجد SKIPPED في تاريخ الصف")),
     }
 
     # 3.6 ── rev39.2 — DEAD_LETTER / blocked-stage veto (rev32.1) ────
@@ -132,7 +141,11 @@ async def build_send_preflight(
     )
     stage_now = row.get("pipeline_stage")
     dead_at = row.get("dead_lettered_at")
-    blocked = bool(dead_at) or stage_now in BLOCKED_FOR_WRITE_STAGES
+    blocked = bool(dead_at) or (
+        stage_now in BLOCKED_FOR_WRITE_STAGES
+        # rev44 — transient SKIPPED is resumable: one-shot resets the
+        # stage BEFORE any write, so the rev32.1 veto never fires.
+        and not (stage_now == "SKIPPED" and is_transient_skip))
     dead_letter_check = {
         "passed": not blocked,
         "pipeline_stage": stage_now,

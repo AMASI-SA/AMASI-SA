@@ -233,6 +233,13 @@ def evaluate_selective_auto_send_gate(
             eligible=False, reason=ReasonCode.NO_CUTOVER,
             detail="`selective_auto_send_cutover_at` not set.",
             cutover_at=str(cutover_raw) if cutover_raw else None)
+    # rev44 (user decree) — the cutover may NEVER be LATER than the
+    # foundational integration start 2026-07-01. Prod forensics
+    # showed in-scope orders (07-01/07-02) killed by a stale later
+    # cutover. Clamp DOWN; stored value untouched.
+    _floor = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    if cutover_dt > _floor:
+        cutover_dt = _floor
 
     # 3. Salla creation strictly AFTER cutover.
     salla_dt = _extract_salla_created(canonical, row)

@@ -349,7 +349,7 @@ async def _reset_row_to_stage(
         # NORMALIZED but the worker hasn't picked it up yet).
         return
 
-    # rev33 — SKIPPED is ABSOLUTELY TERMINAL.
+    # rev33 — SKIPPED is ABSOLUTELY TERMINAL … except rev44 transient.
     #
     # RCA of leaks 269747616 (credit_card → invoice #193) and
     # 270054904 (tamara_installment → invoice #194): SKIPPED rows
@@ -357,16 +357,24 @@ async def _reset_row_to_stage(
     # and driven through PRODUCT_RESOLVED → INVOICE_CREATED live
     # during the 2026-07-05 Tabby-only canary window. The
     # partial-IC escape hatch is now scoped to INVOICE_CREATED
-    # ONLY. A row that a worker (or the SAS gate) marked SKIPPED
-    # CANNOT be reset back to any earlier stage — full stop.
+    # ONLY.
+    #
+    # rev44 (user decree, prod forensics 2026-07-07): a SKIPPED row
+    # stamped `skip_class=transient` (temporary status/payment scope)
+    # is resumable via the RETRYING hop. Unclassified/legacy/fatal
+    # SKIPPED remains absolutely terminal — fail-closed.
     if current == "SKIPPED":
-        raise OneShotRefused(
-            "skipped_is_terminal_rev33",
-            "row is in stage 'SKIPPED'; rev33 makes SKIPPED "
-            "absolutely terminal — no reprocess/reset permitted. "
-            "If a SKIPPED row legitimately needs to be re-sent, "
-            "create a new inbox row from the source webhook payload.",
-            current_stage=current)
+        if row.get("skip_class") != "transient":
+            raise OneShotRefused(
+                "skipped_is_terminal_rev33",
+                "row is in stage 'SKIPPED'; rev33 makes SKIPPED "
+                "absolutely terminal — no reprocess/reset permitted. "
+                "(rev44: only skip_class='transient' rows are "
+                "resumable; this row is fatal/unclassified.) "
+                "If a SKIPPED row legitimately needs to be re-sent, "
+                "create a new inbox row from the source webhook payload.",
+                current_stage=current,
+                skip_class=row.get("skip_class"))
     if current not in _REPROCESSABLE_STAGES:
         # Canary partial-invoice-created escape hatch: allow reset
         # from INVOICE_CREATED IFF the row has no real Qoyod
@@ -397,6 +405,10 @@ async def _reset_row_to_stage(
         (current in FAILURE_TO_RESUME)
         or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
                         "LOCKED_AWAITING_APPROVAL"))
+        # rev44 — transient SKIPPED resumes via the SKIPPED →
+        # RETRYING edge (registered in state_machine line ~303).
+        or (current == "SKIPPED"
+            and row.get("skip_class") == "transient")
         or (permit_partial_invoice_created
             and current == "INVOICE_CREATED"))
     if needs_retry_hop:

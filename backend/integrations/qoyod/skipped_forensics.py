@@ -74,6 +74,8 @@ def _row_summary(row: dict) -> dict:
     return {
         "order_number": row.get("salla_order_number"),
         "trace_id": row.get("trace_id"),
+        "skip_class": row.get("skip_class"),
+        "skip_class_reason": row.get("skip_class_reason"),
         "old_stage": (entry or {}).get("from_stage"),
         "new_stage": "SKIPPED",
         "skipped_at": _iso((entry or {}).get("at")
@@ -100,6 +102,7 @@ async def build_skipped_forensics(
     # ── 1. Last N transitions INTO SKIPPED (by finish time) ─────────
     proj = {"_id": 0, "salla_order_number": 1, "trace_id": 1,
             "stage_history": 1, "pipeline_stage": 1,
+            "skip_class": 1, "skip_class_reason": 1,
             "pipeline_finished_at": 1, "received_at": 1,
             "selective_auto_send_gate": 1, "business_rules_decision": 1,
             "skipped_reason": 1, "canary_scope_skip": 1,

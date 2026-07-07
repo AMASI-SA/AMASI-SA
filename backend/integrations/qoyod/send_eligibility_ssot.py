@@ -52,7 +52,17 @@ _POLICY_CODES_COVERED = {
 def _stage_check(row: dict) -> dict:
     stage = row.get("pipeline_stage")
     if stage == "SKIPPED":
+        # rev44 — transient skips (status/payment scope) are
+        # resumable via the audited one-shot; unclassified/legacy
+        # SKIPPED stays absolutely terminal (fail-closed).
+        if row.get("skip_class") == "transient":
+            return {"passed": True, "pipeline_stage": stage,
+                    "skip_class": "transient",
+                    "detail": ("SKIPPED مؤقت (rev44 "
+                               "pending_until_eligible) — قابل "
+                               "للاستئناف عبر one-shot مدقق")}
         return {"passed": False, "pipeline_stage": stage,
+                "skip_class": row.get("skip_class"),
                 "detail": "SKIPPED نهائية مطلقة (rev33) — لا reprocess"}
     if stage == "INVOICE_CREATED":
         if _is_real(row.get("qoyod_invoice_id")):
