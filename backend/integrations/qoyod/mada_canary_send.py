@@ -29,13 +29,15 @@ from integrations.qoyod.send_preflight import build_send_preflight
 from integrations.qoyod.unsent_orders import _is_real, _order_created_date
 
 # ── Immutable contract constants (user decree) ──────────────────────
-# rev39.3 — re-pinned per user pick (269875747, ready_now,
-# INVOICE_CREATED stage, diff 0.0). Previous picks 270513107
-# (SKIPPED veto) and 269997994 (DEAD_LETTER veto) remain untouched.
-MADA_CANARY_ORDER_NUMBER: str = "269875747"
+# rev46 — re-pinned to 270939808 (credit_card, first order to pass
+# the FULL SSOT green diagnosis under rev43/44/45). Previous picks
+# 269875747 (SKIPPED+DL+DRY — permanently excluded), 270513107 and
+# 269997994 remain untouched.
+MADA_CANARY_ORDER_NUMBER: str = "270939808"
 MADA_CANARY_APPROVAL_PHRASE: str = (
-    "Approved live Qoyod mada canary send for order 269875747 only")
-REQUIRED_PAYMENT_METHOD: str = "mada"
+    "Approved live Qoyod credit_card canary send for order "
+    "270939808 only")
+REQUIRED_PAYMENT_METHOD: str = "credit_card"
 REQUIRED_SKU: str = "AMS11981"
 _ACCEPTED_STATUSES = frozenset({"completed", "تم التنفيذ"})
 AUDIT_COLLECTION = "mada_canary_audit_log"
@@ -129,7 +131,7 @@ async def _run_guards(db, *, user_id: str, order_number: str,
             4, "scope_check_failed", checks["scope_check"]["detail"])
     if not checks["payment_check"]["passed"]:
         raise MadaCanaryGuardFailed(
-            5, "payment_method_not_mada",
+            5, "payment_method_mismatch",
             checks["payment_check"]["detail"])
     if not checks["duplicate_check"]["passed"]:
         raise MadaCanaryGuardFailed(
@@ -153,19 +155,25 @@ async def _run_guards(db, *, user_id: str, order_number: str,
                 8, "amount_check_failed",
                 amount.get("detail") or "فشل فحص المبلغ")
     # 9 — SKIPPED history veto (rev33 X) — refuse cleanly here instead
-    # of tripping the kill switch mid-send.
+    # of tripping the kill switch mid-send. rev44: a SKIPPED stamped
+    # skip_class='transient' is resumable via the audited one-shot;
+    # fatal/unclassified SKIPPED stays refused (fail-closed).
     row = await db.integration_inbox.find_one(
         {"user_id": user_id,
          "salla_order_number": MADA_CANARY_ORDER_NUMBER,
          "trace_id": pf.get("trace_id")},
-        {"_id": 0, "stage_history": 1, "pipeline_stage": 1})
+        {"_id": 0, "stage_history": 1, "pipeline_stage": 1,
+         "skip_class": 1})
     history = [str(h.get("stage") or h) for h in
                (row or {}).get("stage_history") or []]
-    if "SKIPPED" in history or (row or {}).get("pipeline_stage") == "SKIPPED":
+    _has_skipped = ("SKIPPED" in history
+                    or (row or {}).get("pipeline_stage") == "SKIPPED")
+    if _has_skipped and (row or {}).get("skip_class") != "transient":
         raise MadaCanaryGuardFailed(
             9, "skipped_history_veto",
-            "الصف المختار سبق تخطيه (SKIPPED) — فيتو rev33 يمنع "
-            "إرساله. نحتاج قراراً منفصلاً/صفاً جديداً من الويبهوك.")
+            "الصف المختار سبق تخطيه (SKIPPED) بتصنيف قاتل/غير مصنّف — "
+            "فيتو rev33 يمنع إرساله. نحتاج قراراً منفصلاً/صفاً جديداً "
+            "من الويبهوك.")
     # 9.5 — DEAD_LETTER / blocked-stage veto (rev32.1) — attempting a
     # write would trip the kill switch; refuse cleanly here.
     if not pf["checks"].get("dead_letter_check", {}).get("passed", False):

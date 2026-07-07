@@ -49,7 +49,9 @@ HARD_MAX_ORDERS    = 1
 # is the ONLY place the phase's payment method is defined;
 # pipeline._live_write_permitted and rev32 assert_final_write_permitted
 # both compare against it, exactly as they pinned tabby before.
-CANARY_SCOPE_ALLOWLIST: list = ["mada"]
+# rev46 — canary scope moved mada → credit_card for the single
+# approved send of order 270939808 (user decree 2026-07-07).
+CANARY_SCOPE_ALLOWLIST: list = ["credit_card"]
 
 
 class CanaryBudgetRefused(Exception):

@@ -10,7 +10,7 @@ RCA fixtures:
 
 Both orders live-wrote to قيود during the 2026-07-05 Tabby-only
 canary window (enabled at 19:36:41 UTC) although
-`selective_auto_send_allowed_payment_methods=["mada"]`.
+`selective_auto_send_allowed_payment_methods=["credit_card"]`.
 
 Root causes (verbatim from RCA v2):
   Gap 1: `one_shot_reprocess._reset_row_to_stage(
@@ -25,7 +25,7 @@ Root causes (verbatim from RCA v2):
   Gap 4: `pipeline._live_write_permitted()` did NOT check
          payment_method allowlist.
   Gap 5: No runtime invariant enforcing
-         `allowlist == ["mada"]` while the canary
+         `allowlist == ["credit_card"]` while the canary
          window was active.
 
 rev33 fixes (each independently verified by the tests below):
@@ -39,7 +39,7 @@ rev33 fixes (each independently verified by the tests below):
          a subsequent stage reset.
   Fix C: `assert_final_write_permitted` vetoes any live write
          when `selective_live_send_enabled=True` AND
-         `allow_list != ["mada"]`
+         `allow_list != ["credit_card"]`
          (`canary_scope_drift_violation`).
   Fix D: `pipeline._live_write_permitted(settings,
          payment_method=…)` refuses when payment_method is
@@ -131,7 +131,7 @@ def _canary_settings(*, allow=None, live=True):
         "selective_live_send_enabled":                 live,
         "selective_auto_send_enabled":                 True,
         "selective_auto_send_allowed_payment_methods":
-            list(allow) if allow is not None else ["mada"],
+            list(allow) if allow is not None else ["credit_card"],
     }
 
 
@@ -244,7 +244,7 @@ async def test_2_stage_history_skipped_blocks_create_invoice():
 @pytest.mark.asyncio
 async def test_3_tamara_installment_blocked_by_allowlist_during_canary():
     """Fix C + rev32.1 (5): non-tabby payment_method with
-    allowlist=['mada'] is blocked by
+    allowlist=['credit_card'] is blocked by
     `live_non_allowlisted_payment_method_violation`."""
     from integrations.qoyod.rev32_hardening import (
         Rev32Violation, assert_final_write_permitted,
@@ -279,7 +279,7 @@ async def test_4_mada_permitted_during_canary():
     )
     row = _row_at_stage(
         stage="PRODUCT_RESOLVED",
-        payment_method="mada",
+        payment_method="credit_card",
         eligible=True,
         row_id="row-tabby")
     db = _mk_db(settings=_canary_settings(), row=row)
@@ -288,7 +288,7 @@ async def test_4_mada_permitted_during_canary():
     await assert_final_write_permitted(
         db, row["id"],
         action="create_invoice",
-        payment_method="mada",
+        payment_method="credit_card",
         user_id="main")
 
 
@@ -389,7 +389,7 @@ async def test_7_stage_history_no_transitions_after_skipped():
     for stage in downstream_stages:
         row = _row_at_stage(
             stage=stage,
-            payment_method="mada",   # even Tabby is refused
+            payment_method="credit_card",   # even Tabby is refused
             eligible=True,
             stage_history=[
                 {"from_stage": "CUSTOMER_RESOLVED", "to_stage": "SKIPPED"},
@@ -403,7 +403,7 @@ async def test_7_stage_history_no_transitions_after_skipped():
             await assert_final_write_permitted(
                 db, row["id"],
                 action="create_invoice",
-                payment_method="mada",
+                payment_method="credit_card",
                 user_id="main")
         assert exc.value.violation_type == (
             "post_skipped_history_write_violation"), (
@@ -422,7 +422,7 @@ def test_8_production_writes_locked_false_alone_insufficient():
     Exercises three subcases:
       (a) selective_live_send_enabled=False -> refused
       (b) selective_auto_send_enabled=False -> refused
-      (c) allowlist widened beyond ['mada'] -> refused
+      (c) allowlist widened beyond ['credit_card'] -> refused
     Also exercises the payment_method allowlist check under a
     permitting-but-non-tabby configuration."""
     from integrations.qoyod.pipeline import _live_write_permitted
@@ -433,8 +433,8 @@ def test_8_production_writes_locked_false_alone_insufficient():
         "production_writes_locked":      False,
         "selective_live_send_enabled":   False,   # <— the ONLY off-flag
         "selective_auto_send_enabled":   True,
-        "selective_auto_send_allowed_payment_methods": ["mada"],
-    }, payment_method="mada")
+        "selective_auto_send_allowed_payment_methods": ["credit_card"],
+    }, payment_method="credit_card")
     assert permitted is False
     assert "selective_live_send_enabled_is_false" in reason
 
@@ -444,8 +444,8 @@ def test_8_production_writes_locked_false_alone_insufficient():
         "production_writes_locked":      False,
         "selective_live_send_enabled":   True,
         "selective_auto_send_enabled":   False,   # <— off
-        "selective_auto_send_allowed_payment_methods": ["mada"],
-    }, payment_method="mada")
+        "selective_auto_send_allowed_payment_methods": ["credit_card"],
+    }, payment_method="credit_card")
     assert permitted is False
 
     # (c) allowlist drift -> refused by canary scope invariant
@@ -456,8 +456,8 @@ def test_8_production_writes_locked_false_alone_insufficient():
         "selective_auto_send_enabled":   True,
         # DRIFT: allowlist includes credit_card + mada
         "selective_auto_send_allowed_payment_methods":
-            ["mada", "credit_card"],
-    }, payment_method="mada")
+            ["credit_card", "apple_pay"],
+    }, payment_method="credit_card")
     assert permitted is False
     assert "canary_scope_drift" in reason
 
@@ -467,19 +467,19 @@ def test_8_production_writes_locked_false_alone_insufficient():
         "production_writes_locked":      False,
         "selective_live_send_enabled":   True,
         "selective_auto_send_enabled":   True,
-        "selective_auto_send_allowed_payment_methods": ["mada"],
-    }, payment_method="mada")
+        "selective_auto_send_allowed_payment_methods": ["credit_card"],
+    }, payment_method="credit_card")
     assert permitted is True
 
     # (e) rev33 payment_method allowlist mirror -
-    # credit_card outside allowlist -> refused (even under happy gate
+    # mada outside allowlist -> refused (even under happy gate
     # config the moment payment_method is off-list).
     permitted, reason = _live_write_permitted({
         "dry_run_mode":                  False,
         "production_writes_locked":      False,
         "selective_live_send_enabled":   True,
         "selective_auto_send_enabled":   True,
-        "selective_auto_send_allowed_payment_methods": ["mada"],
-    }, payment_method="credit_card")
+        "selective_auto_send_allowed_payment_methods": ["credit_card"],
+    }, payment_method="mada")
     assert permitted is False
-    assert "credit_card" in reason and "allowlist" in reason
+    assert "mada" in reason and "allowlist" in reason

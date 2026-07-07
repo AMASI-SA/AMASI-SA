@@ -57,7 +57,7 @@ def _row(stage="CUSTOMER_RESOLVED", history=None):
             "order_number": MADA_CANARY_ORDER_NUMBER,
             "order_date": "2026-07-04", "order_status": "completed",
             "order_status_native": "تم التنفيذ",
-            "payment_method": "mada",
+            "payment_method": "credit_card",
             "customer": {"name": "عميلة", "phone": "0500000009"},
             "items": [{"sku": "AMS11981",
                        "name": "عباية ستيتش بناتي",
@@ -80,7 +80,7 @@ async def _arm_pinned(db):
 
 @pytest.mark.asyncio
 async def test_scope_constant_is_mada_phase():
-    assert CANARY_SCOPE_ALLOWLIST == ["mada"]
+    assert CANARY_SCOPE_ALLOWLIST == ["credit_card"]
 
 
 @pytest.mark.asyncio
@@ -187,7 +187,7 @@ async def test_scoped_db_overlay_never_mutates_settings(db):
     seen = await scoped.qoyod_settings.find_one({"user_id": TENANT})
     assert seen["dry_run_mode"] is False
     assert seen["production_writes_locked"] is False
-    assert seen["selective_auto_send_allowed_payment_methods"] == ["mada"]
+    assert seen["selective_auto_send_allowed_payment_methods"] == ["credit_card"]
     raw = await db.qoyod_settings.find_one({"user_id": TENANT})
     assert raw["dry_run_mode"] is True
     assert raw["production_writes_locked"] is True
@@ -200,8 +200,8 @@ async def test_arm_response_shows_pin_and_mada_no_tabby(db):
     pin, payment scope, and counters explicitly; no Tabby wording."""
     out = await _arm_pinned(db)
     assert out["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
-    assert out["canary_payment_method"] == "mada"
-    assert out["allowed_payment_methods"] == ["mada"]
+    assert out["canary_payment_method"] == "credit_card"
+    assert out["allowed_payment_methods"] == ["credit_card"]
     assert out["max_orders"] == 1
     assert out["used"] == 0 and out["remaining"] == 1
     assert "Tabby" not in out["human_message"]
@@ -211,7 +211,7 @@ async def test_arm_response_shows_pin_and_mada_no_tabby(db):
     from integrations.qoyod.canary_budget import get_canary_budget
     st = await get_canary_budget(db, user_id=TENANT)
     assert st["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
-    assert st["canary_payment_method"] == "mada"
+    assert st["canary_payment_method"] == "credit_card"
     assert st["used"] == 0 and st["remaining"] == 1
 
 

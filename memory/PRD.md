@@ -7062,3 +7062,24 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   REQUIRED_PAYMENT_METHOD=mada — sending credit_card 270939808 will
   need scope decision (either via generic one-shot endpoint with
   approval phrase, or updating canary scope const with permission).
+
+### Rev46 — Canary scope mada → credit_card for ONE send (270939808)
+- Prod diagnosis: 270939808 = FIRST fully-green SSOT order
+  (ssot.ready_to_send=true, blockers=[]; only budget pin remained).
+- CHANGES (user approved): CANARY_SCOPE_ALLOWLIST=["credit_card"];
+  MADA_CANARY_ORDER_NUMBER="270939808"; approval phrase = "Approved
+  live Qoyod credit_card canary send for order 270939808 only";
+  REQUIRED_PAYMENT_METHOD="credit_card"; guard#5 code renamed
+  payment_method_mismatch; guard#9 aligned with rev44 (transient
+  SKIPPED resumable, fatal/unclassified still refused). NO safety
+  gate touched. Tests updated (scope-lock suite migrated to
+  credit_card; canary rev39 suite re-pinned). 199/199 targeted pass.
+- AGENT DID NOT SEND / ARM — user executes on prod after redeploy:
+  (1) POST /admin/live-canary/budget/arm {confirm_token:
+      ARM-CANARY-BUDGET, max_orders:1, pinned_order_number:
+      "270939808"} (used=0 so no force_reset needed)
+  (2) POST /admin/mada-canary/send {order_number:"270939808",
+      approval_phrase: exact phrase above}
+  (3) verify: send-diagnosis/270939808 + reconciliation-report.
+- Expected flow inside send: SKIPPED(transient)→RETRYING→NORMALIZED →
+  customer created/matched (rev45, fail-closed) → invoice → payment.
