@@ -58,6 +58,11 @@ export default function QoyodUnsentOrders() {
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             شاشة التشغيل اليومية — كل طلب بحالة واحدة واضحة وسببها.
+            {data?.sync_start_date && (
+              <span className="mr-2 text-xs text-slate-400" data-testid="unsent-sync-start-note">
+                (نطاق التكامل يبدأ من {data.sync_start_date} — الطلبات الأقدم مستبعدة)
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">

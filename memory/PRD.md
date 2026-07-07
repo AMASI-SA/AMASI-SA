@@ -6524,3 +6524,16 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - Order 270818906 rescue; 270954898 needs nothing (invoice 195 kept).
 - No new features until the three simplification goals verified by
   user on production.
+
+### Rev36.1 — Integration Start Date rule on unsent-orders (user note)
+- list_unsent_orders now excludes ANY order created before
+  `qoyod_sync_start_date` (settings override → default
+  QOYOD_SYNC_START_DATE="2026-07-01" from eligible_orders.py) at the
+  BACKEND: no counts, no listing, not failed, not pending.
+- Order date priority mirrors eligible_orders: canonical order_date/
+  created_at → raw_payload data.date.date → data.created_at →
+  received_at fallback.
+- Response adds sync_start_date + excluded_pre_sync_start; UI shows
+  the scope note. Tests 19/19 (2 new: exclusion + settings override).
+- ⚠️ Preview settings carry dummy qoyod_sync_start_date="2020-01-01".
+  User must ensure production settings value is 2026-07-01 or unset.

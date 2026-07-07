@@ -62,10 +62,10 @@ def test_simplify_row_mapping(row, expected_status, reason_part):
 async def db():
     client = AsyncIOMotorClient(os.environ["MONGO_URL"])
     database = client[os.environ["DB_NAME"]]
-    for coll in ("integration_inbox", "qoyod_invoices"):
+    for coll in ("integration_inbox", "qoyod_invoices", "qoyod_settings"):
         await database[coll].delete_many({"user_id": TENANT})
     yield database
-    for coll in ("integration_inbox", "qoyod_invoices"):
+    for coll in ("integration_inbox", "qoyod_invoices", "qoyod_settings"):
         await database[coll].delete_many({"user_id": TENANT})
     client.close()
 
@@ -139,3 +139,42 @@ def test_totals_precheck_threshold():
     assert abs(diff(100.02, 100.00)) > 0.01           # BLOCK
     assert abs(diff(99.98, 100.00)) > 0.01            # BLOCK (negative)
     assert diff(None, 100.0) is None                   # unknown → no block
+
+
+# ── 5. Integration start date rule (user decree 2026-02) ─────────────
+@pytest.mark.asyncio
+async def test_pre_sync_start_orders_fully_ignored(db):
+    """Orders created BEFORE qoyod_sync_start_date (default
+    2026-07-01) never enter the page: no counts, no listing, not
+    failed, not pending — regardless of their pipeline state."""
+    old = _inbox("o1", "900", "FAILED_PRODUCT")
+    old["canonical_payload"]["order_date"] = "2026-06-15"
+    old2 = _inbox("o2", "901", "NORMALIZED")
+    old2["raw_payload"] = {"data": {"date": {"date": "2026-05-01 10:00:00"}}}
+    new = _inbox("o3", "902", "NORMALIZED")
+    new["canonical_payload"]["order_date"] = "2026-07-02"
+    await db.integration_inbox.insert_many([old, old2, new])
+
+    out = await list_unsent_orders(db, user_id=TENANT, days=7)
+    assert out["sync_start_date"] == "2026-07-01"
+    assert out["excluded_pre_sync_start"] == 2
+    assert out["counts"] == {SENT: 0, UNSENT: 1, FAILED: 0, DUPLICATE: 0}
+    assert {o["order_number"] for o in out["orders"]} == {"902"}
+
+
+@pytest.mark.asyncio
+async def test_sync_start_settings_override(db):
+    """settings.qoyod_sync_start_date overrides the default."""
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"qoyod_sync_start_date": "2026-08-01"}}, upsert=True)
+    try:
+        r = _inbox("o4", "903", "NORMALIZED")
+        r["canonical_payload"]["order_date"] = "2026-07-15"
+        await db.integration_inbox.insert_one(r)
+        out = await list_unsent_orders(db, user_id=TENANT, days=7)
+        assert out["sync_start_date"] == "2026-08-01"
+        assert out["excluded_pre_sync_start"] == 1
+        assert out["total"] == 0
+    finally:
+        await db.qoyod_settings.delete_many({"user_id": TENANT})

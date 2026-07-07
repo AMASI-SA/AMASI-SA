@@ -12,12 +12,44 @@ Internal pipeline stages stay developer-only. READ-ONLY module.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 SENT      = "أُرسل"
 UNSENT    = "لم يُرسل"
 FAILED    = "فشل"
 DUPLICATE = "مكرر"
+
+
+def _order_created_date(row: dict) -> date | None:
+    """Salla order CREATION date for an inbox row — same priority as
+    eligible_orders._extract_order_created_at (canonical order_date →
+    raw_payload data.date.date → data.created_at)."""
+    from integrations.qoyod.eligible_orders import _parse_iso_date
+    canon = row.get("canonical_payload") or {}
+    d = _parse_iso_date(canon.get("order_date")) \
+        or _parse_iso_date(canon.get("created_at"))
+    if d is not None:
+        return d
+    raw = row.get("raw_payload") or {}
+    data = raw.get("data") or {}
+    if isinstance(data, dict):
+        date_field = data.get("date")
+        if isinstance(date_field, dict):
+            d = _parse_iso_date(date_field.get("date"))
+            if d is not None:
+                return d
+        elif date_field is not None:
+            d = _parse_iso_date(date_field)
+            if d is not None:
+                return d
+        d = _parse_iso_date(data.get("created_at"))
+        if d is not None:
+            return d
+    received = row.get("received_at")
+    if hasattr(received, "date"):
+        return received.date()
+    return None
+
 
 _FAIL_REASONS_AR = {
     "FAILED_VALIDATION":    "فشل التحقق من بيانات الطلب",
@@ -121,10 +153,25 @@ async def list_unsent_orders(
     db, *, user_id: str, days: int = 30, limit: int = 500,
     status: str | None = None,
 ) -> dict:
-    """All recent orders mapped to the 4-status contract + counts."""
+    """All recent orders mapped to the 4-status contract + counts.
+
+    INTEGRATION START DATE RULE (user decree): orders created BEFORE
+    `qoyod_sync_start_date` (settings override, default 2026-07-01)
+    are OUT OF SCOPE for the قيود integration entirely — they are
+    ignored at the data source: no counts, no listing, no failed, no
+    pending."""
+    from integrations.qoyod.eligible_orders import (
+        QOYOD_SYNC_START_DATE, _parse_iso_date,
+    )
+    settings = await db.qoyod_settings.find_one(
+        {"user_id": user_id}, {"qoyod_sync_start_date": 1}) or {}
+    sync_start = (_parse_iso_date(settings.get("qoyod_sync_start_date"))
+                  or date.fromisoformat(QOYOD_SYNC_START_DATE))
+
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
+    excluded_pre_sync = 0
     orders: list[dict] = []
 
     cursor = db.integration_inbox.find(
@@ -135,6 +182,10 @@ async def list_unsent_orders(
          "canary_budget_hold": 1, "dead_letter_evidence": 1,
          "selective_auto_send_gate": 1,
          "stage_history": {"$slice": -6},
+         "raw_payload.data.date": 1,
+         "raw_payload.data.created_at": 1,
+         "canonical_payload.order_date": 1,
+         "canonical_payload.created_at": 1,
          "canonical_payload.total_amount": 1,
          "canonical_payload.payment_method_native": 1,
          "canonical_payload.payment_method": 1,
@@ -142,6 +193,11 @@ async def list_unsent_orders(
     ).sort("received_at", -1).limit(max(1, min(limit, 2000)))
 
     async for row in cursor:
+        # ── Integration start date — hard scope boundary ─────────────
+        order_date = _order_created_date(row)
+        if order_date is not None and order_date < sync_start:
+            excluded_pre_sync += 1
+            continue
         s = simplify_row(row)
         counts[s["status"]] += 1
         if status and s["status"] != status:
@@ -166,4 +222,7 @@ async def list_unsent_orders(
         })
 
     return {"ok": True, "days": days, "counts": counts,
-            "total": sum(counts.values()), "orders": orders}
+            "total": sum(counts.values()),
+            "sync_start_date": sync_start.isoformat(),
+            "excluded_pre_sync_start": excluded_pre_sync,
+            "orders": orders}
