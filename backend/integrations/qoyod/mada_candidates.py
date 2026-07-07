@@ -50,6 +50,8 @@ def _classify(pf: dict) -> tuple[str, str]:
         return "rejected", "توجد فاتورة قيود حقيقية"
     if not c["skipped_history_check"]["passed"]:
         return "rejected", "فيتو SKIPPED (rev33)"
+    if not c["dead_letter_check"]["passed"]:
+        return "rejected", "فيتو DEAD_LETTER/حالة محظورة (rev32.1)"
     status = str(pf.get("salla_status") or "").strip()
     if status not in _ACCEPTED_STATUSES:
         return "rejected", f"حالة سلة غير مؤهلة ({status})"

@@ -157,3 +157,17 @@ async def test_preflight_order_not_found(db):
     out = await build_send_preflight(
         db, user_id=TENANT, order_number="000000")
     assert out["ok"] is False and out["found"] is False
+
+
+@pytest.mark.asyncio
+async def test_preflight_dead_letter_check_rev39_2(db):
+    row = _mada_row(order="270777777")
+    row["pipeline_stage"] = "DEAD_LETTER"
+    await db.integration_inbox.insert_one(row)
+    await _seed_mapping(db)
+    out = await build_send_preflight(
+        db, user_id=TENANT, order_number="270777777")
+    dl = out["checks"]["dead_letter_check"]
+    assert dl["passed"] is False
+    assert "rev32.1" in dl["detail"]
+    assert out["ready_to_send"] is False

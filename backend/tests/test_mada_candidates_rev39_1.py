@@ -113,3 +113,22 @@ async def test_finder_classifies_and_ranks(db):
 async def test_finder_empty_when_no_mada(db):
     out = await find_mada_candidates(db, user_id=TENANT)
     assert out["candidates"] == [] and out["scanned_orders"] == 0
+
+
+@pytest.mark.asyncio
+async def test_dead_letter_rows_rejected_rev39_2(db):
+    """rev39.2 — user picked 269997994 (DEAD_LETTER) which rev32.1
+    absolutely vetoes at write time (kill switch). The finder must
+    reject it upfront."""
+    r = _row("901", sku="SKU-A", stage="DEAD_LETTER")
+    await db.integration_inbox.insert_one(r)
+    r2 = _row("902", sku="SKU-A", stage="CUSTOMER_RESOLVED",
+              hours_ago=2)
+    r2["dead_lettered_at"] = datetime.now(timezone.utc)  # rolled back
+    await db.integration_inbox.insert_one(r2)
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": "SKU-A", "qoyod_product_id": "9"})
+    out = await find_mada_candidates(db, user_id=TENANT, limit=5)
+    assert out["candidates"] == []
+    assert out["rejected_summary"].get(
+        "فيتو DEAD_LETTER/حالة محظورة (rev32.1)") == 2

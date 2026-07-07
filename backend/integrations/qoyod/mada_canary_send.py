@@ -163,6 +163,13 @@ async def _run_guards(db, *, user_id: str, order_number: str,
             9, "skipped_history_veto",
             "الصف المختار سبق تخطيه (SKIPPED) — فيتو rev33 يمنع "
             "إرساله. نحتاج قراراً منفصلاً/صفاً جديداً من الويبهوك.")
+    # 9.5 — DEAD_LETTER / blocked-stage veto (rev32.1) — attempting a
+    # write would trip the kill switch; refuse cleanly here.
+    if not pf["checks"].get("dead_letter_check", {}).get("passed", False):
+        raise MadaCanaryGuardFailed(
+            9, "dead_letter_veto",
+            pf["checks"].get("dead_letter_check", {}).get("detail")
+            or "الصف بحالة محظورة للكتابة (rev32.1)")
     # 10 — canary budget: armed + pinned to THIS order + slot free.
     budget = await get_canary_budget(db, user_id=user_id)
     if not budget.get("armed"):

@@ -123,6 +123,28 @@ async def build_send_preflight(
                    else "لا يوجد SKIPPED في تاريخ الصف"),
     }
 
+    # 3.6 ── rev39.2 — DEAD_LETTER / blocked-stage veto (rev32.1) ────
+    # RCA of invoice #192: a DEAD_LETTER row was resurrected by a
+    # side path. rev32.1 makes it an ABSOLUTE write veto — attempting
+    # a send would trip the kill switch. Surface it here instead.
+    from integrations.qoyod.rev32_hardening import (
+        BLOCKED_FOR_WRITE_STAGES,
+    )
+    stage_now = row.get("pipeline_stage")
+    dead_at = row.get("dead_lettered_at")
+    blocked = bool(dead_at) or stage_now in BLOCKED_FOR_WRITE_STAGES
+    dead_letter_check = {
+        "passed": not blocked,
+        "pipeline_stage": stage_now,
+        "dead_lettered_at": (str(dead_at) if dead_at else None),
+        "detail": ((f"الصف بحالة {stage_now} "
+                    + (f"(dead_lettered_at={dead_at}) " if dead_at else "")
+                    + "— فيتو rev32.1 يمنع أي كتابة لهذا الصف "
+                    "(محاولة الإرسال ستفعّل مفتاح الإيقاف)")
+                   if blocked else
+                   "الصف في حالة قابلة للكتابة — لا فيتو rev32.1"),
+    }
+
     # 4 ── amount + payload preview (pure build, READ-ONLY lookups) ──
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
@@ -184,6 +206,7 @@ async def build_send_preflight(
               "payment_check": payment_check,
               "duplicate_check": duplicate_check,
               "skipped_history_check": skipped_history_check,
+              "dead_letter_check": dead_letter_check,
               "amount_check": amount_check}
     return {
         "ok": True,

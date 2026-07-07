@@ -1,6 +1,30 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.2 — DEAD_LETTER veto surfaced (finder gap fixed)
+# ══════════════════════════════════════════════════════════════════
+User picked candidate 269997994 (trace cf802d6f…) — but its row is
+DEAD_LETTER. rev32.1 (born from invoice #192 leak) makes
+dead_lettered_at / BLOCKED_FOR_WRITE_STAGES an ABSOLUTE write veto —
+attempting a send would TRIP THE KILL SWITCH. The rev39.1 finder had
+a gap (only checked SKIPPED). Send tool was NOT pinned to 269997994.
+Fixes:
+- `send_preflight`: new `dead_letter_check` (dead_lettered_at OR
+  stage ∈ BLOCKED_FOR_WRITE_STAGES → fail, affects ready_to_send).
+- `mada_candidates`: rejects with "فيتو DEAD_LETTER/حالة محظورة
+  (rev32.1)" (checks BOTH stage and the sticky dead_lettered_at).
+- `mada_canary_send`: guard 9.5 refuses cleanly instead of tripping
+  the kill switch.
+- Tests: +2 (finder dead-letter matrix incl. rolled-back row with
+  sticky timestamp; preflight check). 25 related passed.
+- NEEDS DEPLOY. User next: re-run GET admin/mada-candidates (fixed) →
+  pick a candidate with clean stage (NORMALIZED/CUSTOMER_RESOLVED…)
+  → then re-pin send tool. Safest alternative: wait for a FRESH mada
+  order arriving via webhook post-deploy (clean row by construction).
+- mada_canary_send remains pinned to 270513107 (stale — re-pin upon
+  user's next valid pick).
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.1 — MADA Candidate Finder (READ-ONLY)
 # ══════════════════════════════════════════════════════════════════
 Production preflight showed order 270513107 is VETOED: its row is
