@@ -109,8 +109,8 @@ async def _diagnose_qoyod_only(db, user_id: str, reference: str,
     """READ-ONLY RCA for a قيود invoice with no MEZAN match — looks
     the order up in integration_inbox WITHOUT the date scope."""
     if not reference:
-        return ("فاتورة بدون مرجع طلب سلة — الأرجح فاتورة يدوية "
-                "أُنشئت مباشرة في قيود")
+        return ("فاتورة بدون مرجع طلب سلة في قيود — لا يمكن ربطها "
+                "بأي طلب في ميزان (فاتورة يدوية)")
     row = await db.integration_inbox.find_one(
         {"user_id": user_id,
          "$or": [{"salla_order_number": reference},
@@ -122,20 +122,19 @@ async def _diagnose_qoyod_only(db, user_id: str, reference: str,
          "canonical_payload.created_at": 1},
         sort=[("received_at", -1)])
     if row is None:
-        return ("لا يوجد أي سجل لهذا الطلب في ميزان — الأرجح فاتورة "
-                "يدوية أو أُنشئت قبل تفعيل الويبهوك")
+        return ("فاتورة يدوية في قيود — لا يوجد أي طلب مقابل لهذا "
+                "المرجع في ميزان (فُحص integration_inbox بدون قيد تاريخ)")
     order_date = _order_created_date(row)
     if order_date is not None and order_date < sync_start:
-        return (f"الطلب موجود في ميزان لكن تاريخ إنشائه في سلة "
+        return (f"يوجد طلب في ميزان وتاريخ إنشائه في سلة "
                 f"{order_date.isoformat()} قبل بداية التكامل "
-                f"{sync_start.isoformat()} — فاتورة تاريخية/تسريب سابق "
-                "خارج نطاق التكامل")
+                f"{sync_start.isoformat()} — خارج نطاق التكامل")
     if _is_real(row.get("qoyod_invoice_id")):
-        return ("الطلب موجود في ميزان بفاتورة مختلفة "
+        return ("يوجد طلب في ميزان مرتبط بفاتورة مختلفة "
                 f"(#{row.get('qoyod_invoice_id')}) — يحتاج مراجعة يدوية")
-    return ("الطلب موجود في ميزان ضمن النطاق لكن دون رقم فاتورة "
-            f"مسجّل (حالة: {row.get('pipeline_stage')}) — تسريب محتمل: "
-            "فاتورة كُتبت في قيود دون تحديث سجل ميزان")
+    return ("يوجد طلب في ميزان داخل النطاق "
+            f"(حالة: {row.get('pipeline_stage')}) لكن لا توجد فاتورة "
+            "مرتبطة به في سجل ميزان — مشكلة حقيقية تحتاج مراجعة")
 
 
 async def run_reconciliation_report(db, *, user_id: str, api_client) -> dict:

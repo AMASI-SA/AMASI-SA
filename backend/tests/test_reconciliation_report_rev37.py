@@ -224,7 +224,11 @@ async def test_qoyod_only_diagnosis_order_completely_absent():
     db = _DB()
     client = _ReadOnlyClient([_qoyod_inv("900", "111222333", 50.0)])
     r = await run_reconciliation_report(db, user_id="main", api_client=client)
-    assert "لا يوجد أي سجل" in _qoyod_only_row(r)["note"]
+    note = _qoyod_only_row(r)["note"]
+    assert "فاتورة يدوية" in note and "لا يوجد أي طلب مقابل" in note
+    # No speculative wording — facts only (user decree rev37.2).
+    for banned in ("الأرجح", "غالباً", "يبدو"):
+        assert banned not in note
 
 
 @pytest.mark.asyncio
@@ -240,4 +244,5 @@ async def test_qoyod_only_diagnosis_in_scope_missing_invoice_id():
     client = _ReadOnlyClient([_qoyod_inv("901", "555", 75.0)])
     r = await run_reconciliation_report(db, user_id="main", api_client=client)
     note = _qoyod_only_row(r)["note"]
-    assert "تسريب محتمل" in note and "CUSTOMER_RESOLVED" in note
+    assert "مشكلة حقيقية" in note and "CUSTOMER_RESOLVED" in note
+    assert "لا توجد فاتورة مرتبطة" in note

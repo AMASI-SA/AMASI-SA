@@ -2,6 +2,10 @@
 
 # ══════════════════════════════════════════════════════════════════
 # ✅ REV37.2 — قيود-only auto-RCA in reconciliation report
+# (UPDATED per user decree: FACTS ONLY — no "الأرجح/غالباً/يبدو".
+#  Notes now: pre-floor with ACTUAL date / manual invoice (no order
+#  in MEZAN at all) / different invoice / in-scope without linked
+#  invoice = "مشكلة حقيقية". Test pins banned speculative words.)
 # ══════════════════════════════════════════════════════════════════
 **User RCA request**: invoice 191 / order 268552119 / 220.58 shown
 as "في قيود فقط" in the PRODUCTION reconciliation run (9 مطابق, 0
