@@ -267,24 +267,65 @@ export default function QoyodManualSend() {
 
       {/* Freeze / mapping banner */}
       <div
-        className={`rounded-xl border p-3 text-sm ${
+        className={`rounded-xl border p-4 text-sm ${
           health?.legacy_pipeline_frozen
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-amber-200 bg-amber-50 text-amber-900"
+            ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+            : "border-amber-300 bg-amber-50 text-amber-900"
         }`}
         data-testid="manual-send-freeze-banner"
       >
         <div className="flex flex-wrap items-center gap-4">
-          <span className="font-medium">
-            حالة تجميد المسار القديم:{" "}
-            <span dir="ltr" className="font-mono">
+          <span className="font-semibold text-base">
+            {health?.legacy_pipeline_frozen ? "🛑" : "⚠️"} حالة تجميد
+            المسار القديم:{" "}
+            <span
+              dir="ltr"
+              className="font-mono text-lg"
+              data-testid="manual-send-freeze-value"
+            >
               {health?.legacy_pipeline_frozen ? "true" : "false"}
             </span>
           </span>
-          <span className="text-xs opacity-75">
-            (تفعّل من إعدادات قيود ← `legacy_pipeline_frozen=true` لإيقاف
-            المسار القديم بدون حذفه)
-          </span>
+          {!health?.legacy_pipeline_frozen && (
+            <span className="text-xs opacity-75">
+              يجب تفعيل التجميد قبل إرسال أي طلب من Plan B.
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              const target = !health?.legacy_pipeline_frozen;
+              const confirmText = target
+                ? "هل تريد تفعيل تجميد المسار القديم (Rev32→Rev48)؟\n\n" +
+                  "بعد التفعيل: الـ worker يتوقف عن تحريك أي صف في " +
+                  "integration_inbox. الملفات القديمة تبقى كما هي (لا " +
+                  "حذف). Plan B يبقى مسار الإرسال الوحيد."
+                : "هل تريد إلغاء تجميد المسار القديم؟\n\n" +
+                  "بعد الإلغاء: الـ worker سيعود لتحريك الصفوف تلقائياً " +
+                  "وقد يرسل طلبات إلى قيود بدون تدخّل يدوي.";
+              if (!window.confirm(confirmText)) return;
+              try {
+                await api.post(`${BASE}/freeze-legacy-pipeline`, {
+                  enabled: target,
+                });
+                await loadHealth();
+              } catch (e) {
+                window.alert(
+                  "تعذّر تحديث حالة التجميد: " + extractDetail(e)
+                );
+              }
+            }}
+            data-testid="manual-send-freeze-toggle"
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+              health?.legacy_pipeline_frozen
+                ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                : "bg-emerald-600 text-white hover:bg-emerald-700"
+            }`}
+          >
+            {health?.legacy_pipeline_frozen
+              ? "إلغاء التجميد"
+              : "تفعيل التجميد الآن"}
+          </button>
           <span className="ml-auto text-xs opacity-75">
             روابط الدفع المُعرّفة:{" "}
             <span dir="ltr" className="font-mono">
@@ -292,6 +333,24 @@ export default function QoyodManualSend() {
             </span>
           </span>
         </div>
+        {health?.legacy_pipeline_frozen_updated_at && (
+          <div
+            className="mt-2 text-xs opacity-75"
+            data-testid="manual-send-freeze-audit"
+          >
+            آخر تعديل:{" "}
+            <span dir="ltr" className="font-mono">
+              {String(health.legacy_pipeline_frozen_updated_at).slice(
+                0,
+                19
+              )}
+            </span>{" "}
+            — بواسطة:{" "}
+            <span dir="ltr" className="font-mono">
+              {health.legacy_pipeline_frozen_actor || "—"}
+            </span>
+          </div>
+        )}
       </div>
 
       <ResultBanner result={result} onDismiss={() => setResult(null)} />

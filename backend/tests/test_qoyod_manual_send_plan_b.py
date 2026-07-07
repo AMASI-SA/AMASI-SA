@@ -576,3 +576,37 @@ async def test_send_refuses_when_no_salla_date(db):
         await manual_send_one(
             db, user_id=TENANT, order_number="ORDER-NO-DATE-2")
     assert exc.value.code == "no_salla_order_date"
+
+
+# ────────────────────────────────────────────────────────────────────
+# T15 — Freeze toggle round-trip: worker respects the flag AFTER
+#       flip, and the flag also short-circuits _one_round.
+# ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_freeze_toggle_stops_worker(db):
+    # Start empty. Confirm worker runs normally.
+    result = await _one_round(db, user_id=TENANT, batch_limit=5)
+    assert "frozen" not in result
+
+    # Flip the flag via direct update (equivalent to what the endpoint
+    # does).
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"legacy_pipeline_frozen": True,
+                   "legacy_pipeline_frozen_actor": "test@x",
+                   "legacy_pipeline_frozen_updated_at":
+                       datetime.now(timezone.utc)},
+         "$setOnInsert": {"user_id": TENANT}},
+        upsert=True,
+    )
+    result = await _one_round(db, user_id=TENANT, batch_limit=5)
+    assert result["frozen"] is True
+    assert "legacy_pipeline_frozen=true" in result["reason"]
+
+    # Flip it back off.
+    await db.qoyod_settings.update_one(
+        {"user_id": TENANT},
+        {"$set": {"legacy_pipeline_frozen": False}},
+    )
+    result = await _one_round(db, user_id=TENANT, batch_limit=5)
+    assert "frozen" not in result

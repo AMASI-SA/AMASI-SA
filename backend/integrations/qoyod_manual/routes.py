@@ -5,6 +5,7 @@ Endpoints (all mounted under /api/integrations/qoyod/manual):
     POST /send/{order_number}       Push ONE order end-to-end.
     GET  /status/{order_number}     Latest manual-send lock row.
     GET  /health                    Frozen-flag + module presence probe.
+    POST /freeze-legacy-pipeline    Toggle legacy_pipeline_frozen on/off.
 
 Auth: the caller must be authenticated (uses the same `current_user`
 dependency as the rest of the qoyod router).
@@ -15,7 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict
 
 from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.send import (
@@ -25,6 +27,16 @@ from integrations.qoyod_manual.send import (
 logger = logging.getLogger(__name__)
 
 _TENANT = "main"  # matches the rest of the qoyod router's convention
+
+
+class FreezeLegacyPipelinePayload(BaseModel):
+    """Body for POST /freeze-legacy-pipeline.
+
+    `enabled=True`  → sets legacy_pipeline_frozen=True (freezes worker).
+    `enabled=False` → sets it False (worker resumes normal ticks).
+    """
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 def _now() -> datetime:
@@ -42,11 +54,18 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         settings = await db.qoyod_settings.find_one(
             {"user_id": _TENANT},
             {"_id": 0, "legacy_pipeline_frozen": 1,
+             "legacy_pipeline_frozen_updated_at": 1,
+             "legacy_pipeline_frozen_actor": 1,
              "payment_method_mapping": 1}) or {}
+        _upd = settings.get("legacy_pipeline_frozen_updated_at")
         return {
             "ok":                        True,
             "legacy_pipeline_frozen":    bool(settings.get(
                                               "legacy_pipeline_frozen")),
+            "legacy_pipeline_frozen_updated_at": (
+                _upd.isoformat() if isinstance(_upd, datetime) else _upd),
+            "legacy_pipeline_frozen_actor": settings.get(
+                "legacy_pipeline_frozen_actor"),
             "payment_method_mapping_count": len(
                 settings.get("payment_method_mapping") or []),
             "at":                        _now().isoformat(),
@@ -98,5 +117,57 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             if isinstance(v, datetime):
                 doc[k] = v.isoformat()
         return {"ok": True, "order_number": order_number, "lock": doc}
+
+    @router.post("/freeze-legacy-pipeline")
+    async def freeze_legacy_pipeline(
+        payload: FreezeLegacyPipelinePayload = Body(...),
+        user=Depends(current_user),
+    ):
+        """Set `qoyod_settings.legacy_pipeline_frozen` to True/False.
+
+        This is the ONE knob that stops the Rev32→Rev48 worker from
+        touching integration_inbox rows. It is NOT a delete — the
+        legacy code files remain in place as reference. Only the
+        worker tick short-circuits.
+
+        Emits an audit line so operators can review who flipped it.
+        """
+        actor = "unknown"
+        try:
+            actor = ((user or {}).get("email")
+                     or (user or {}).get("id") or "unknown")
+        except Exception:
+            pass
+        now = _now()
+        await db.qoyod_settings.update_one(
+            {"user_id": _TENANT},
+            {"$set": {
+                "legacy_pipeline_frozen":            bool(payload.enabled),
+                "legacy_pipeline_frozen_updated_at": now,
+                "legacy_pipeline_frozen_actor":      actor,
+            },
+             "$setOnInsert": {"user_id": _TENANT}},
+            upsert=True,
+        )
+        logger.warning(
+            "plan-b freeze_legacy_pipeline enabled=%s actor=%s",
+            payload.enabled, actor)
+        # Return the post-write snapshot so the caller can verify.
+        after = await db.qoyod_settings.find_one(
+            {"user_id": _TENANT},
+            {"_id": 0, "legacy_pipeline_frozen": 1,
+             "legacy_pipeline_frozen_updated_at": 1,
+             "legacy_pipeline_frozen_actor": 1}) or {}
+        _upd = after.get("legacy_pipeline_frozen_updated_at")
+        return {
+            "ok":                     True,
+            "legacy_pipeline_frozen": bool(
+                after.get("legacy_pipeline_frozen")),
+            "actor":                  after.get(
+                "legacy_pipeline_frozen_actor"),
+            "updated_at":             (_upd.isoformat()
+                                        if isinstance(_upd, datetime)
+                                        else _upd),
+        }
 
     return router
