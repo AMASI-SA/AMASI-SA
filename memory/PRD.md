@@ -6897,3 +6897,24 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   settings should not carry a conflicting value).
 - NEXT (user): after deploy + verification → test remaining payment
   methods. Page = daily-ops source of truth.
+
+### Rev41 — Unified Send Diagnosis (READ-ONLY, all payment methods)
+- New endpoint: GET /api/integrations/qoyod/admin/send-diagnosis/{order_number}
+  (optional ?expected_payment_method=mada). Zero writes, zero Qoyod
+  API calls; qoyod_write_reached=false by construction.
+- ONE verdict rule for every payment method: READY_TO_SEND_ONCE or
+  REFUSED with the REAL blocker (runs the actual policy engine
+  should_allow_selective_live_send with the EXACT one_shot policy_order
+  shape + the exact mada canary settings overlay).
+- Response exposes: blocker_code, blocker_reason, all_blockers[],
+  guards_snapshot (stored_settings_gates vs effective_during_canary_send
+  vs canary_overlay_applied), budget snapshot (armed/pinned/used/
+  remaining), duplicate_check, amount_check, one_shot_stage_support,
+  recent_send_attempts (mada_canary_audit_log, read-only).
+- Rev41.1: guards_snapshot added per user requirement.
+- Tests: tests/test_send_diagnosis_rev41.py (6/6) + regression
+  rev38/39/39.1 suites (22/22). E2E verified on preview (auth +
+  order_not_found path).
+- PURPOSE: diagnose why prod order 269875747 was refused by the
+  Selective Send policy WITHOUT attempting a send. User runs the GET
+  on production (mezansalla.com) and reads blocker_code.

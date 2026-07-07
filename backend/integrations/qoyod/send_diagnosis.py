@@ -112,6 +112,19 @@ async def build_send_diagnosis(
     }
     decision = should_allow_selective_live_send(
         order=policy_order, settings=eff)
+    # rev41.1 — guards snapshot (READ-ONLY): raw stored gates vs the
+    # scoped overlay the canary send applies at call-time.
+    raw_decision = should_allow_selective_live_send(
+        order=policy_order, settings=settings)
+    guards_snapshot = {
+        "stored_settings_gates": raw_decision.gates_snapshot,
+        "effective_during_canary_send": decision.gates_snapshot,
+        "canary_overlay_applied": dict(_OVERLAY),
+        "note": ("stored = ما هو محفوظ فعلياً في qoyod_settings "
+                 "(fail-closed). effective = ما يراه محرك السياسة "
+                 "أثناء إرسال الكناري بعد الطبقة المؤقتة — "
+                 "الطبقة لا تُكتب في قاعدة البيانات أبداً."),
+    }
     policy_block = {
         "decision": decision.decision,
         "blocker_code": decision.blocker_code,
@@ -174,6 +187,7 @@ async def build_send_diagnosis(
         "budget": budget_block,
         "budget_used": budget_block["used"],
         "budget_remaining": budget_block["remaining"],
+        "guards_snapshot": guards_snapshot,
         "selective_send_policy": policy_block,
         "one_shot_stage_support": stage_support,
         "recent_send_attempts": attempts,
