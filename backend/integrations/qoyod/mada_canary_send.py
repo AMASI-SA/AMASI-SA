@@ -29,9 +29,12 @@ from integrations.qoyod.send_preflight import build_send_preflight
 from integrations.qoyod.unsent_orders import _is_real, _order_created_date
 
 # ── Immutable contract constants (user decree) ──────────────────────
-MADA_CANARY_ORDER_NUMBER: str = "270513107"
+# rev39.3 — re-pinned per user pick (269875747, ready_now,
+# INVOICE_CREATED stage, diff 0.0). Previous picks 270513107
+# (SKIPPED veto) and 269997994 (DEAD_LETTER veto) remain untouched.
+MADA_CANARY_ORDER_NUMBER: str = "269875747"
 MADA_CANARY_APPROVAL_PHRASE: str = (
-    "Approved live Qoyod mada canary send for order 270513107 only")
+    "Approved live Qoyod mada canary send for order 269875747 only")
 REQUIRED_PAYMENT_METHOD: str = "mada"
 REQUIRED_SKU: str = "AMS11981"
 _ACCEPTED_STATUSES = frozenset({"completed", "تم التنفيذ"})

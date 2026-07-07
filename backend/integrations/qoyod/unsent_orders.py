@@ -248,7 +248,8 @@ async def list_unsent_orders(
             # canonical totals yet the created row does).
             for f in ("total_amount", "payment_method", "salla_status",
                       "salla_status_slug"):
-                if prev.get(f) in (None, "") and entry.get(f) not in (None, ""):
+                if prev.get(f) in (None, "") \
+                        and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
 
     # rev37.3 — Salla-status facet: distinct statuses ACTUALLY present

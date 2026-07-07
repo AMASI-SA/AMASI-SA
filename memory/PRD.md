@@ -1,6 +1,31 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV39.3 — Gift-task REVERTED + send tool re-pinned to 269875747
+# ══════════════════════════════════════════════════════════════════
+- User ordered full revert of the gift-orders task (rev40 WIP):
+  removed _detect_order_type/_parse_any_date, order_type param/facet,
+  unified_orders union, order-type UI select/column. KEPT (rev37.3
+  approved scope): salla_status filter/select + حالة سلة table column
+  + backend order-number search. Verified: no order_type refs left;
+  42/42 tests pass.
+- `mada_canary_send` re-pinned: MADA_CANARY_ORDER_NUMBER="269875747"
+  (trace dc5f8877ab4049c09440baa94a655a8b, ready_now, stage
+  INVOICE_CREATED — NOT in BLOCKED_FOR_WRITE_STAGES ✓, diff 0.0,
+  no unmapped SKUs). Approval phrase: "Approved live Qoyod mada
+  canary send for order 269875747 only". Tests use the constants →
+  auto-updated.
+- Previous vetoed picks untouched: 270513107 (SKIPPED), 269997994
+  (DEAD_LETTER).
+- NEEDS DEPLOY. User flow: deploy → GET admin/send-preflight/
+  269875747?expected_payment_method=mada → review (expect 6 checks
+  incl. skipped_history + dead_letter green) → user approval → arm
+  pinned budget (pinned_order_number=269875747) → mada-canary/send.
+- NOTE: stage INVOICE_CREATED likely means a previous DRY: invoice id
+  on the row (real-invoice dup check passed in finder; pipeline rev36
+  dup guard re-checks at send time anyway).
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV39.2 — DEAD_LETTER veto surfaced (finder gap fixed)
 # ══════════════════════════════════════════════════════════════════
 User picked candidate 269997994 (trace cf802d6f…) — but its row is

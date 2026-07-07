@@ -146,6 +146,7 @@ export default function QoyodUnsentOrders() {
                 <th className="px-3 py-2 text-right">التاريخ</th>
                 <th className="px-3 py-2 text-right">المبلغ</th>
                 <th className="px-3 py-2 text-right">طريقة الدفع</th>
+                <th className="px-3 py-2 text-right">حالة سلة</th>
                 <th className="px-3 py-2 text-right">الحالة</th>
                 <th className="px-3 py-2 text-right">السبب</th>
                 <th className="px-3 py-2 text-right">فاتورة قيود</th>
@@ -162,6 +163,13 @@ export default function QoyodUnsentOrders() {
                   </td>
                   <td className="px-3 py-2">{o.total_amount != null ? `${o.total_amount} ر.س` : "—"}</td>
                   <td className="px-3 py-2">{o.payment_method || "—"}</td>
+                  <td className="px-3 py-2" data-testid={`unsent-salla-status-${o.order_number}`}>
+                    {o.salla_status || o.salla_status_slug ? (
+                      <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs text-sky-800">
+                        {o.salla_status || o.salla_status_slug}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status] || ""}`}>
                       {o.status}
