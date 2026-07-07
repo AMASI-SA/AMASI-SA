@@ -477,19 +477,33 @@ def should_allow_selective_live_send(
         )
 
     # ── Check 10: Customer resolved & non-DRY ───────────────────
-    if not customer_status.get("resolved"):
-        return _block(
-            BlockerCode.CUSTOMER_NOT_RESOLVED,
-            f"العميل غير مربوط في قيود. "
-            f"({customer_status.get('reason') or 'لم يُذكر السبب'})",
-        )
-    qcid = customer_status.get("qoyod_id")
-    if qcid is None or _looks_like_dry_id(qcid) or \
-            _looks_like_preview_id(qcid):
-        return _block(
-            BlockerCode.CUSTOMER_DRY_OR_NULL,
-            f"customer.qoyod_id يحمل قيمة DRY/PREVIEW أو null: {qcid}",
-        )
+    # rev45 (user decree, option أ): an UNRESOLVED customer is not a
+    # pre-send blocker — the audited send itself creates/matches the
+    # customer (pipeline design; fail-closed: resolution failure
+    # dead-letters BEFORE any invoice). Callers opt in explicitly via
+    # `pending_resolution_during_send`. DRY/PREVIEW ids stay FATAL.
+    if customer_status.get("pending_resolution_during_send"):
+        qcid = customer_status.get("qoyod_id")
+        if qcid is not None and (_looks_like_dry_id(qcid)
+                                 or _looks_like_preview_id(qcid)):
+            return _block(
+                BlockerCode.CUSTOMER_DRY_OR_NULL,
+                f"customer.qoyod_id يحمل قيمة DRY/PREVIEW: {qcid}",
+            )
+    else:
+        if not customer_status.get("resolved"):
+            return _block(
+                BlockerCode.CUSTOMER_NOT_RESOLVED,
+                f"العميل غير مربوط في قيود. "
+                f"({customer_status.get('reason') or 'لم يُذكر السبب'})",
+            )
+        qcid = customer_status.get("qoyod_id")
+        if qcid is None or _looks_like_dry_id(qcid) or \
+                _looks_like_preview_id(qcid):
+            return _block(
+                BlockerCode.CUSTOMER_DRY_OR_NULL,
+                f"customer.qoyod_id يحمل قيمة DRY/PREVIEW أو null: {qcid}",
+            )
 
     # ── Check 11: Products resolved & non-DRY & no missing ──────
     missing_skus = products_status.get("missing") or []

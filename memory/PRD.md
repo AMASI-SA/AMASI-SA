@@ -7036,3 +7036,29 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - PROOF FOR USER (after redeploy, read-only):
   skipped-forensics (skip_class visible) + send-eligibility-preview
   (transient orders no longer carry skipped_dead_letter_check).
+
+### Rev45 — Customer resolved DURING the audited send (user option أ)
+- USER DECREE: unresolved customer is NOT a pre-send blocker; the
+  audited one-shot send creates/matches the customer (pipeline
+  design). Conditions: DRY/fake customer id stays FATAL; resolution
+  failure during execution = fail-closed (dead-letter BEFORE invoice
+  — existing pipeline behavior, untouched). NO send, NO budget pin
+  by agent.
+- IMPLEMENTED: selective_send_policy check 10 accepts explicit
+  opt-in flag customer_status.pending_resolution_during_send (skips
+  customer_not_resolved; DRY still blocks customer_dry_or_null).
+  Auto-send path (no flag) UNCHANGED. one_shot 7a + SSOT set the
+  flag when row.qoyod_customer_id is None. SSOT dedupe map +
+  customer_dry_or_null → dry_check.
+- Tests: test_rev45_customer_during_send.py 6/6 (policy 3 paths,
+  SSOT green 270939808-class, DRY customer fatal, one_shot passes 7a
+  → SSOT gate). Regression 193/193 targeted; 7 policy-adjacent
+  failures verified PRE-EXISTING via git stash.
+- NEXT (user steps on prod after redeploy): re-run
+  send-diagnosis/270939808 → expect only budget_pinned_to_other_order
+  → user decides budget re-pin (mada→credit_card scope note!) →
+  ONE send → invoice → payment → reconciliation. NOTE: canary budget
+  arm + CANARY_SCOPE_ALLOWLIST=["mada"] and mada_canary_send
+  REQUIRED_PAYMENT_METHOD=mada — sending credit_card 270939808 will
+  need scope decision (either via generic one-shot endpoint with
+  approval phrase, or updating canary scope const with permission).

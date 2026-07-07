@@ -43,6 +43,7 @@ _ONE_SHOT_DIRECT_STAGES = {
 _POLICY_CODES_COVERED = {
     "dry_invoice_id_detected": "dry_check",
     "preview_id_detected":     "dry_check",
+    "customer_dry_or_null":    "dry_check",
     "already_sent":            "duplicate_check",
     "before_sync_start_date":  "sync_start_date_check",
     "product_missing_mapping": "product_mapping_check",
@@ -176,7 +177,12 @@ async def evaluate_order_for_qoyod_send(
         "customer_status": {
             "resolved": row.get("qoyod_customer_id") is not None,
             "qoyod_id": row.get("qoyod_customer_id"),
-            "reason": None},
+            "reason": None,
+            # rev45 — mirror one_shot: unresolved customer is
+            # resolved during the audited send (DRY stays fatal).
+            "pending_resolution_during_send":
+                row.get("qoyod_customer_id") is None,
+        },
         "products_status": {
             "resolved": not unmapped, "resolved_count": 1,
             "dry_run_only": 0, "missing": list(unmapped)},

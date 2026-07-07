@@ -876,6 +876,12 @@ async def reprocess_one_order(
             "resolved": fresh.get("qoyod_customer_id") is not None,
             "qoyod_id": fresh.get("qoyod_customer_id"),
             "reason": None,
+            # rev45 (user decree): unresolved customer is
+            # created/matched INSIDE this audited send — fail-closed
+            # (resolution failure dead-letters before any invoice).
+            # DRY ids remain fatal in the policy engine.
+            "pending_resolution_during_send":
+                fresh.get("qoyod_customer_id") is None,
         },
         "products_status": {
             # We haven't run product_resolver here — leave as
