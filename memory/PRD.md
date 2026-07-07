@@ -7170,3 +7170,38 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
       READY_TO_SEND_ONCE, all_blockers=[], budget pinned.
   (5) ONLY after explicit user permission: POST /admin/mada-canary/
       send (same phrase as Rev46). AGENT MUST NOT SEND.
+
+### Rev47.1 — Deploy-verification markers + fresh-reason surfacing (2026-07)
+- PROD FOLLOW-UP: user ran steps 1-4 successfully on prod (pattern-check
+  safe_to_requeue=true; requeue-one final_stage=SKIPPED; budget re-armed
+  remaining=1; send-diagnosis READY_TO_SEND_ONCE) then the send returned
+  outcome=SKIPPED with MISLEADING stale fields (failed_at_stage=
+  FAILED_CUSTOMER + old rev32 pipeline_error were forensic leftovers).
+  The REAL fresh skip reason was hidden. Local E2E repro of the exact
+  flow (recovery → one-shot resume → process_normalized with scoped
+  overlay) WORKS on Rev47 (gate eligible → CUSTOMER_RESOLVED DRY) —
+  so prod skip came from a path/data difference not yet identified.
+  KEY DEDUCTION: one_shot's SSOT pre-gate passed but pipeline skipped →
+  possible SSOT gap (candidates: stored hard-block lists
+  status_hard_blocked/payment_method_hard_blocked, or stored trigger
+  statuses — overlay does NOT override those). AWAITING fresh prod
+  read: GET /admin/order-recovery-diagnostics?order_number=270939808
+  (the fresh SKIPPED stage_history note names the exact reason).
+- IMPLEMENTED:
+  1. sas_build_diagnostics: MODULE_MARKERS (rev44_transient_skip,
+     rev45_customer_pending_resolution, rev46_credit_card_canary_scope,
+     rev46_1_payment_account_mapping_check, rev47_skip_history_exemption,
+     rev47_manual_only_recovery_pattern) with per-module sha256_first16
+     → module_marker_check in GET /admin/diagnostics/build; acceptance
+     now requires pipeline + module markers.
+  2. one_shot Step A failure response now surfaces fresh_attempt_outcome/
+     fresh_attempt_reason/fresh_attempt_note/fresh_attempt_stage_written/
+     fresh_gate_decision (this attempt's ACTUAL reason, not stale rows).
+  3. rev47 test suite ids made tenant-unique (row-id pollution had
+     broken 4 tests via cross-tenant find_one({id}) in guard). 19/19 +
+     one_shot/build/dead-letter suites 51/51 pass.
+- USER CONDITIONS STANDING: NO requeue, NO send, NO batch, NO resets
+  until deployed build proves markers AND the fresh skip reason is read.
+- NEXT: user runs (read-only, prod): order-recovery-diagnostics for the
+  fresh note NOW; redeploy; verify diagnostics/build module markers all
+  true; then analyze skip reason and decide next fix (likely SSOT gap).

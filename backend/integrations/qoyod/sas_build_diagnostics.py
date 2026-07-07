@@ -233,6 +233,63 @@ def _marker_check(source_text: str) -> dict:
     }
 
 
+# rev47.1 — Cross-module markers. rev44+ revisions live OUTSIDE
+# pipeline.py, so the pipeline-only marker scan above can NEVER prove
+# they are deployed (prod incident 2026-07: operator could not verify
+# rev47 was live). Each entry: marker_id → (module filename relative
+# to this directory, needle that MUST appear in the deployed source).
+MODULE_MARKERS: dict[str, tuple[str, str]] = {
+    "rev44_transient_skip": (
+        "skip_classification.py",
+        "rev44 — Skip classification"),
+    "rev45_customer_pending_resolution": (
+        "selective_send_policy.py",
+        "rev45 (user decree, option أ)"),
+    "rev46_credit_card_canary_scope": (
+        "canary_budget.py",
+        "rev46 — canary scope moved mada → credit_card"),
+    "rev46_1_payment_account_mapping_check": (
+        "send_eligibility_ssot.py",
+        "rev46.1 — the SAS gate"),
+    "rev47_skip_history_exemption": (
+        "rev32_hardening.py",
+        "rev47 — SKIPPED-history veto exemption"),
+    "rev47_manual_only_recovery_pattern": (
+        "dead_letter_requeue.py",
+        "false_skip_history_veto_2026_07_07"),
+}
+
+
+def _module_marker_check() -> dict:
+    """Scan sibling qoyod modules for the rev44+ markers. Read-only.
+    Also reports each module's sha256_first16 so preview vs deployed
+    builds can be compared byte-for-byte."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    out: dict = {}
+    for mid, (fname, needle) in MODULE_MARKERS.items():
+        path = os.path.join(base_dir, fname)
+        entry: dict = {"module": fname, "needle": needle}
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read()
+            count = text.count(needle)
+            entry.update({
+                "present": count >= 1,
+                "count":   count,
+                "sha256_first16": hashlib.sha256(
+                    text.encode("utf-8")).hexdigest()[:16],
+            })
+        except OSError as e:
+            entry.update({"present": False, "count": 0,
+                          "read_error": str(e)})
+        out[mid] = entry
+    all_present = all(v.get("present") for v in out.values())
+    return {
+        "all_module_markers_present": all_present,
+        "markers":                    out,
+    }
+
+
 def _worker_task_info() -> dict:
     """Introspect the running worker (async task) — is it running,
     interval, last round timestamp. Read-only view into the module."""
@@ -265,6 +322,7 @@ def build_diagnostics_report() -> dict:
     src = _pipeline_source_snapshot()
     source_text = src.pop("_raw_source", "") if src.get("loaded") else ""
     markers = _marker_check(source_text)
+    module_markers = _module_marker_check()
     return {
         "generated_at":       datetime.now(timezone.utc).isoformat(),
         "python_version":     sys.version.split()[0],
@@ -273,6 +331,7 @@ def build_diagnostics_report() -> dict:
         "git_sha":            _resolve_git_sha(),
         "pipeline_module":    src,
         "marker_check":       markers,
+        "module_marker_check": module_markers,
         "worker_task":        _worker_task_info(),
         "env_flags": {
             # Presence booleans only — never leak values.
@@ -285,7 +344,12 @@ def build_diagnostics_report() -> dict:
         },
         "acceptance": {
             # For the UI/operator to read at a glance.
-            "code_matches_expected": markers["all_markers_present"],
+            "code_matches_expected": (
+                markers["all_markers_present"]
+                and module_markers["all_module_markers_present"]),
+            "pipeline_markers_ok":  markers["all_markers_present"],
+            "module_markers_ok":
+                module_markers["all_module_markers_present"],
             "if_false_action": (
                 "Production worker is on an OLDER build. Redeploy "
                 "backend AND ensure the worker process restarts. "

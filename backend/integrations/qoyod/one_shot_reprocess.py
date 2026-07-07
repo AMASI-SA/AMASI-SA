@@ -1031,7 +1031,7 @@ async def reprocess_one_order(
         result_log.append({"step": "normalized", "result": out})
         if out.get("outcome") in ("DEAD_LETTER", "SKIPPED"):
             after = await _refresh() or {}
-            return _build_failure_response(
+            _resp = _build_failure_response(
                 outcome=out.get("outcome"),
                 row_id=row["id"],
                 trace_id=row.get("trace_id"),
@@ -1042,6 +1042,28 @@ async def reprocess_one_order(
                 stage_sequence=_extract_observed_sequence(after),
                 quarantine_summary=quarantine_summary,
             )
+            # rev47.1 — the row-level pipeline_error/last_failed_stage
+            # may be STALE forensics from an older failure (prod
+            # incident 2026-07: a fresh SKIPPED surfaced the old
+            # FAILED_CUSTOMER fields and misled the operator). Surface
+            # THIS attempt's actual reason + the freshly written
+            # stage_history note.
+            _resp["fresh_attempt_outcome"] = out.get("outcome")
+            _resp["fresh_attempt_reason"] = out.get("reason")
+            _hist = after.get("stage_history") or []
+            _last = _hist[-1] if _hist else None
+            if isinstance(_last, dict):
+                _resp["fresh_attempt_note"] = _last.get("note")
+                _resp["fresh_attempt_stage_written"] = _last.get(
+                    "to_stage")
+            _gate = after.get("selective_auto_send_gate")
+            if isinstance(_gate, dict):
+                _resp["fresh_gate_decision"] = {
+                    "eligible": _gate.get("eligible"),
+                    "reason":   _gate.get("reason"),
+                    "detail":   _gate.get("detail"),
+                }
+            return _resp
         if out.get("outcome") == "CUSTOMER_RESOLVED":
             stage_sequence.append("CUSTOMER_RESOLVED")
 

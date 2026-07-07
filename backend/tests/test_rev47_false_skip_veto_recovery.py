@@ -89,8 +89,8 @@ def _prod_replica_row(order, *, stage="DEAD_LETTER",
             _h("FAILED_CUSTOMER", "DEAD_LETTER"),
         ]
     row = {
-        "user_id": TENANT, "id": f"row-{order}",
-        "trace_id": f"tr-{order}",
+        "user_id": TENANT, "id": f"{TENANT}-row-{order}",
+        "trace_id": f"{TENANT}-tr-{order}",
         "idempotency_key": f"idem-{order}",
         "connector_key": "salla",
         "salla_order_number": str(order), "salla_order_id": str(order),
@@ -257,7 +257,7 @@ async def test_guard_vetoes_fatal_and_unknown_notes(db):
     for order in ("2002", "2003", "2004"):
         with pytest.raises(Rev32Violation) as ex:
             await assert_final_write_permitted(
-                db, f"row-{order}", action="create_customer",
+                db, f"{TENANT}-row-{order}", action="create_customer",
                 payment_method="credit_card", user_id=TENANT)
         assert ex.value.violation_type \
             == "post_skipped_history_write_violation"
@@ -322,7 +322,7 @@ async def test_auto_requeue_ignores_manual_only(db):
     assert cands == []
     out = await auto_requeue_known_fixed(db, user_id=TENANT)
     assert out["requeued"] == 0
-    saved = await db.integration_inbox.find_one({"id": "row-4001"})
+    saved = await db.integration_inbox.find_one({"id": f"{TENANT}-row-4001"})
     assert saved["pipeline_stage"] == "DEAD_LETTER"
     assert saved.get("dead_lettered_at") is not None
 
@@ -331,13 +331,13 @@ async def test_auto_requeue_ignores_manual_only(db):
 @pytest.mark.asyncio
 async def test_requeue_one_recovers_to_skipped_hold(db):
     await db.integration_inbox.insert_one(_prod_replica_row("270939808"))
-    out = await requeue_one(db, user_id=TENANT, row_id="row-270939808",
+    out = await requeue_one(db, user_id=TENANT, row_id=f"{TENANT}-row-270939808",
                             actor="operator:test")
     assert out["ok"] is True
     res = out["result"]
     assert res["final_stage"] == "SKIPPED"
     assert res["held_in_skipped"] is True
-    saved = await db.integration_inbox.find_one({"id": "row-270939808"})
+    saved = await db.integration_inbox.find_one({"id": f"{TENANT}-row-270939808"})
     assert saved["pipeline_stage"] == "SKIPPED"
     assert saved["skip_class"] == "transient"
     assert saved["skip_class_reason"] \
@@ -358,7 +358,7 @@ async def test_requeue_one_refuses_generic_dead_letter(db):
     row = _prod_replica_row("4002", error={
         "code": "qoyod_api_error", "message": "totally different"})
     await db.integration_inbox.insert_one(row)
-    out = await requeue_one(db, user_id=TENANT, row_id="row-4002")
+    out = await requeue_one(db, user_id=TENANT, row_id=f"{TENANT}-row-4002")
     assert out["ok"] is False
     assert out["reason"] == "no_known_fix_pattern_matches"
 
@@ -371,11 +371,11 @@ async def test_requeue_one_refuses_when_history_has_fatal_skip(db):
               note="duplicate blocked: real invoice 99 already exists"))
     row["stage_history"].insert(5, _h("SKIPPED", "RETRYING"))
     await db.integration_inbox.insert_one(row)
-    out = await requeue_one(db, user_id=TENANT, row_id="row-4003")
+    out = await requeue_one(db, user_id=TENANT, row_id=f"{TENANT}-row-4003")
     assert out["ok"] is False
     assert out["result"]["reason"] \
         == "historical_skip_not_transient_or_not_resumed"
-    saved = await db.integration_inbox.find_one({"id": "row-4003"})
+    saved = await db.integration_inbox.find_one({"id": f"{TENANT}-row-4003"})
     assert saved["pipeline_stage"] == "DEAD_LETTER"
     assert saved.get("dead_lettered_at") is not None
 
@@ -388,7 +388,7 @@ async def test_ssot_ready_after_recovery(db):
     await db.qoyod_settings.insert_one(dict(_LIVE_SETTINGS))
     await db.qoyod_products_mapping.insert_one(
         {"user_id": TENANT, "sku": "SKU-R47", "qoyod_product_id": "9"})
-    out = await requeue_one(db, user_id=TENANT, row_id=f"row-{order}")
+    out = await requeue_one(db, user_id=TENANT, row_id=f"{TENANT}-row-{order}")
     assert out["ok"] is True
     ev = await evaluate_order_for_qoyod_send(
         db, user_id=TENANT, order_number=order)
@@ -404,18 +404,18 @@ async def test_guard_passes_after_recovery_and_audited_resume(db):
     order = "270939808"
     await db.integration_inbox.insert_one(_prod_replica_row(order))
     await _seed_live_guard_env(db, order)
-    out = await requeue_one(db, user_id=TENANT, row_id=f"row-{order}")
+    out = await requeue_one(db, user_id=TENANT, row_id=f"{TENANT}-row-{order}")
     assert out["ok"] is True
     # Simulate the audited canary one-shot resume + RULES_APPLIED.
     resume = [_h("SKIPPED", "RETRYING", actor="mada_canary:operator"),
               _h("RETRYING", "NORMALIZED", actor="mada_canary:operator"),
               _h("NORMALIZED", "RULES_APPLIED")]
     await db.integration_inbox.update_one(
-        {"id": f"row-{order}"},
+        {"id": f"{TENANT}-row-{order}"},
         {"$set": {"pipeline_stage": "RULES_APPLIED"},
          "$push": {"stage_history": {"$each": resume}}})
     await assert_final_write_permitted(
-        db, f"row-{order}", action="create_customer",
+        db, f"{TENANT}-row-{order}", action="create_customer",
         payment_method="credit_card", user_id=TENANT)
     settings = await db.qoyod_settings.find_one({"user_id": TENANT})
     assert not settings.get("kill_switch_triggered")
@@ -439,7 +439,7 @@ async def test_pattern_check_exclusive_match(db):
     assert out["other_matches_count"] == 0
     assert out["safe_to_requeue"] is True
     # No writes happened.
-    saved = await db.integration_inbox.find_one({"id": f"row-{order}"})
+    saved = await db.integration_inbox.find_one({"id": f"{TENANT}-row-{order}"})
     assert saved["pipeline_stage"] == "DEAD_LETTER"
 
 
@@ -460,3 +460,26 @@ async def test_pattern_check_not_found(db):
     out = await pattern_check(db, user_id=TENANT, order_number="999999")
     assert out["ok"] is False
     assert out["found"] is False
+
+
+# ── 10. rev47.1 — build diagnostics module markers ──────────────────
+def test_build_diagnostics_module_markers_present():
+    from integrations.qoyod.sas_build_diagnostics import (
+        build_diagnostics_report,
+    )
+    r = build_diagnostics_report()
+    mm = r["module_marker_check"]
+    assert mm["all_module_markers_present"] is True
+    expected = {"rev44_transient_skip",
+                "rev45_customer_pending_resolution",
+                "rev46_credit_card_canary_scope",
+                "rev46_1_payment_account_mapping_check",
+                "rev47_skip_history_exemption",
+                "rev47_manual_only_recovery_pattern"}
+    assert set(mm["markers"]) == expected
+    for v in mm["markers"].values():
+        assert v["present"] and v["sha256_first16"]
+    acc = r["acceptance"]
+    assert acc["module_markers_ok"] is True
+    assert acc["code_matches_expected"] == (
+        acc["pipeline_markers_ok"] and acc["module_markers_ok"])
