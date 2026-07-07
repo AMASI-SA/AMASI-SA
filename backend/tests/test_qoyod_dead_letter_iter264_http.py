@@ -71,11 +71,12 @@ def test_preview_returns_registry(client):
     assert "candidate_count" in data
     assert data["max_requeue_attempts"] == 2
     assert isinstance(data["patterns"], list)
-    # rev47 — registry now carries the two reviewed patterns.
-    assert len(data["patterns"]) == 2
+    # rev47/rev48 — registry carries the three reviewed patterns.
+    assert len(data["patterns"]) == 3
     ids = {p["id"] for p in data["patterns"]}
     assert ids == {"contact_name_blank_2026_02_26",
-                   "false_skip_history_veto_2026_07_07"}
+                   "false_skip_history_veto_2026_07_07",
+                   "canary_budget_false_block_2026_07_07"}
     p = next(x for x in data["patterns"]
              if x["id"] == "contact_name_blank_2026_02_26")
     assert "FAILED_CUSTOMER" in p["applies_to_failed_stages"]

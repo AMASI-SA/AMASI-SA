@@ -103,6 +103,17 @@ def _false_skip_history_veto_matcher(err: dict | None) -> bool:
             == "post_skipped_history_write_violation")
 
 
+def _canary_budget_false_block_matcher(err: dict | None) -> bool:
+    """rev48 — Match EXACTLY the rev35 budget veto caused by the
+    missing reserve_canary_budget call in the one-shot canary path
+    (prod order 270939808, 2026-07-07 ~19:5x UTC). Fixed by rev48
+    (execute_mada_canary_send reserves before dispatch)."""
+    if not isinstance(err, dict):
+        return False
+    return (err.get("code") == "rev32_guard_blocked"
+            and err.get("violation_type") == "canary_budget_violation")
+
+
 KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
     {
         "id":            "contact_name_blank_2026_02_26",
@@ -133,6 +144,23 @@ KNOWN_FIXED_PATTERNS: list[dict[str, Any]] = [
         "hold_in_skipped":          True,
         "hold_skip_reason":  "dead_letter_false_veto_recovery_hold",
     },
+    {
+        "id":            "canary_budget_false_block_2026_07_07",
+        "description":   ("rev35 write-guard refused create_customer "
+                          "because the one-shot canary path never "
+                          "reserved the budget slot (only "
+                          "pipeline._get_api_client did). Fixed by "
+                          "rev48: execute_mada_canary_send reserves "
+                          "before dispatch. Same manual-only recovery "
+                          "mechanics as the rev47 pattern."),
+        "applies_to_failed_stages": frozenset({"FAILED_CUSTOMER"}),
+        "matcher":       _canary_budget_false_block_matcher,
+        "fixed_at":      "2026-07-07",
+        "manual_only":              True,
+        "clear_dead_letter_evidence": True,
+        "hold_in_skipped":          True,
+        "hold_skip_reason":  "dead_letter_false_veto_recovery_hold",
+    },
 ]
 
 
@@ -158,6 +186,9 @@ _REVIEWED_PATTERN_IDS: frozenset[str] = frozenset({
     # rev47 — reviewed + user-approved 2026-07: manual-only recovery
     # for the false rev33 SKIPPED-history veto (order 270939808).
     "false_skip_history_veto_2026_07_07",
+    # rev48 — reviewed 2026-07: manual-only recovery for the rev35
+    # budget veto caused by the missing one-shot reservation call.
+    "canary_budget_false_block_2026_07_07",
 })
 _unreviewed = {p["id"] for p in KNOWN_FIXED_PATTERNS} - _REVIEWED_PATTERN_IDS
 assert not _unreviewed, (
@@ -608,7 +639,8 @@ async def pattern_check(db, *, user_id: str, order_number: str) -> dict:
         "other_matches_count": len(other_matches),
         "safe_to_requeue": bool(
             pat
-            and pat.get("id") == "false_skip_history_veto_2026_07_07"
+            and pat.get("manual_only")
+            and pat.get("hold_in_skipped")
             and all_exempt
             and not other_matches),
         "note": ("قراءة فقط — لا كتابة ولا استدعاء لقيود. "

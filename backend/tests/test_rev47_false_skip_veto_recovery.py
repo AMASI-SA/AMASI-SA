@@ -298,13 +298,14 @@ def test_matcher_matches_only_the_false_veto():
 
 
 def test_registry_contains_reviewed_manual_only_pattern():
-    pat = next(p for p in KNOWN_FIXED_PATTERNS
-               if p["id"] == "false_skip_history_veto_2026_07_07")
-    assert pat["manual_only"] is True
-    assert pat["clear_dead_letter_evidence"] is True
-    assert pat["hold_in_skipped"] is True
-    assert pat["applies_to_failed_stages"] == frozenset(
-        {"FAILED_CUSTOMER"})
+    for pid in ("false_skip_history_veto_2026_07_07",
+                "canary_budget_false_block_2026_07_07"):
+        pat = next(p for p in KNOWN_FIXED_PATTERNS if p["id"] == pid)
+        assert pat["manual_only"] is True
+        assert pat["clear_dead_letter_evidence"] is True
+        assert pat["hold_in_skipped"] is True
+        assert pat["applies_to_failed_stages"] == frozenset(
+            {"FAILED_CUSTOMER"})
 
 
 def test_match_pattern_excludes_manual_only_by_default():
@@ -596,3 +597,97 @@ async def test_expired_claim_is_visible_to_worker_again(db):
     # skipped by the WORKER (fail-closed behaviour preserved).
     assert fresh["pipeline_stage"] == "SKIPPED"
     assert fresh["skip_class"] == "transient"
+
+
+# ── 12. rev48 — missing one-shot budget reservation (prod RCA) ───────
+_BUDGET_VETO_ERROR = {
+    "code": "rev32_guard_blocked",
+    "violation_type": "canary_budget_violation",
+    "message": ("order '270939808' is not reserved in the canary "
+                "budget (max_orders=1) — write forbidden (rev35)"),
+}
+
+
+def test_budget_false_block_matcher_exactness():
+    from integrations.qoyod.dead_letter_requeue import (
+        _canary_budget_false_block_matcher,
+    )
+    assert _canary_budget_false_block_matcher(
+        dict(_BUDGET_VETO_ERROR)) is True
+    assert _canary_budget_false_block_matcher(dict(_VETO_ERROR)) is False
+    assert _canary_budget_false_block_matcher(
+        {"code": "qoyod_api_error"}) is False
+    assert _canary_budget_false_block_matcher(None) is False
+
+
+@pytest.mark.asyncio
+async def test_requeue_one_recovers_budget_false_block(db):
+    order = "270939808"
+    row = _prod_replica_row(order, error=dict(_BUDGET_VETO_ERROR))
+    await db.integration_inbox.insert_one(row)
+    out = await requeue_one(db, user_id=TENANT,
+                            row_id=f"{TENANT}-row-{order}",
+                            actor="operator:test")
+    assert out["ok"] is True
+    assert out["result"]["pattern_id"] \
+        == "canary_budget_false_block_2026_07_07"
+    assert out["result"]["final_stage"] == "SKIPPED"
+    saved = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert saved["pipeline_stage"] == "SKIPPED"
+    assert saved["skip_class"] == "transient"
+    assert saved.get("dead_lettered_at") is None
+    # pattern_check reports it safe (manual-only recovery pattern).
+    chk = await pattern_check(db, user_id=TENANT, order_number=order)
+    assert chk["matched_pattern_id"] \
+        == "canary_budget_false_block_2026_07_07"
+
+
+@pytest.mark.asyncio
+async def test_canary_send_reserves_budget_before_dispatch(db, monkeypatch):
+    from integrations.qoyod import mada_canary_send as mcs
+    from integrations.qoyod import one_shot_reprocess as osr
+
+    order = "270939808"
+    row = _prod_replica_row(order, error=dict(_BUDGET_VETO_ERROR))
+    row["canonical_payload"]["items"][0]["sku"] = mcs.REQUIRED_SKU
+    await db.integration_inbox.insert_one(row)
+    stored = dict(_LIVE_SETTINGS)
+    stored.update({
+        "selective_auto_send_allowed_payment_methods": ["mada"],
+        "production_writes_locked": True,
+        "selective_live_send_enabled": False,
+    })
+    await db.qoyod_settings.insert_one(stored)
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": mcs.REQUIRED_SKU,
+         "qoyod_product_id": "9"})
+    await db.qoyod_canary_budget.insert_one({
+        "user_id": TENANT, "max_orders": 1, "order_numbers": [],
+        "pinned_order_number": order,
+        "armed_at": datetime.now(timezone.utc), "armed_by": "test"})
+
+    # Recover the row first (rev48 pattern) → SKIPPED hold.
+    out = await requeue_one(db, user_id=TENANT,
+                            row_id=f"{TENANT}-row-{order}")
+    assert out["ok"] is True
+
+    reserved_at_dispatch: dict = {}
+
+    async def _stub_reprocess(*args, **kwargs):
+        doc = await db.qoyod_canary_budget.find_one({"user_id": TENANT})
+        reserved_at_dispatch["order_numbers"] = list(
+            doc.get("order_numbers") or [])
+        return {"outcome": "COMPLETED", "ok": True}
+
+    monkeypatch.setattr(osr, "reprocess_one_order", _stub_reprocess)
+
+    res = await mcs.execute_mada_canary_send(
+        db, user_id=TENANT, order_number=order,
+        approval_phrase=mcs.MADA_CANARY_APPROVAL_PHRASE,
+        actor="test")
+    assert res["outcome"] == "COMPLETED", res
+    # rev48 pin: the slot was ALREADY reserved when dispatch started.
+    assert reserved_at_dispatch["order_numbers"] == [order]
+    doc = await db.qoyod_canary_budget.find_one({"user_id": TENANT})
+    assert doc["order_numbers"] == [order]  # idempotent single slot

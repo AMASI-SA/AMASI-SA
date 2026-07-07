@@ -226,6 +226,26 @@ async def execute_mada_canary_send(
                  trace_id=pf.get("trace_id"),
                  total_amount=pf.get("total_amount"))
 
+    # rev48 — reserve the rev35 budget slot BEFORE dispatch. The
+    # one-shot mints its Qoyod client directly and NEVER passes
+    # through pipeline._get_api_client (the only place that called
+    # reserve_canary_budget), so the write-time guard
+    # (is_order_reserved) correctly refused and DEAD_LETTERed the
+    # prod send (canary_budget_violation, 2026-07-07). Idempotent:
+    # re-reserving the SAME order consumes one slot.
+    from integrations.qoyod.canary_budget import reserve_canary_budget
+    _rsv_ok, _rsv_reason = await reserve_canary_budget(
+        db, user_id=user_id, order_number=MADA_CANARY_ORDER_NUMBER)
+    if not _rsv_ok:
+        await _audit(db, attempt_id, "budget_reserve", "refused",
+                     reason=_rsv_reason)
+        return {"attempt_id": attempt_id, "outcome": "REFUSED",
+                "code": "canary_budget_reserve_refused",
+                "detail": _rsv_reason, "no_qoyod_api_calls": True,
+                "settings_untouched": True}
+    await _audit(db, attempt_id, "budget_reserve", "reserved",
+                 order_number=MADA_CANARY_ORDER_NUMBER)
+
     from integrations.qoyod.one_shot_reprocess import (
         APPROVAL_PHRASE_TEMPLATE, CONFIRM_TOKEN_TEMPLATE,
         reprocess_one_order,

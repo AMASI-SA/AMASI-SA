@@ -7238,3 +7238,41 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   /admin/diagnostics/build (module markers all true) → GET
   /admin/send-diagnosis/270939808 → review → explicit permission →
   single canary send.
+
+### Rev48 — Missing one-shot budget reservation (2026-07, austerity mode)
+- USER DECREE: liquidity crunch — ONLY work that directly closes the
+  270939808 send. No enhancements/UI/expansions.
+- PROD FAILURE #3 (post rev47.2 deploy): DEAD_LETTER at
+  create_customer with rev32_guard_blocked / canary_budget_violation
+  ("order not reserved in the canary budget — rev35"). ROOT CAUSE:
+  reprocess_one_order mints QoyodAPIClient DIRECTLY (line ~1037) and
+  never calls reserve_canary_budget — that call lived ONLY in
+  pipeline._get_api_client, which the one-shot path bypasses. The gap
+  was always there, previously masked by earlier guard layers (rev33
+  veto fired first).
+- FIX: execute_mada_canary_send reserves the slot (idempotent)
+  IMMEDIATELY after guards pass and before dispatch; refusal →
+  clean REFUSED (code canary_budget_reserve_refused), audited.
+- RECOVERY: new reviewed manual-only pattern
+  canary_budget_false_block_2026_07_07 (matches EXACTLY
+  rev32_guard_blocked + canary_budget_violation at FAILED_CUSTOMER;
+  same mechanics: clear dead_lettered_at + SKIPPED transient hold).
+  pattern_check safe_to_requeue now attribute-based (manual_only +
+  hold_in_skipped). Registry = 3 patterns (tests updated).
+- SEMANTICS CHANGE (pinned): a dispatch attempt consumes the pinned
+  slot even if refused (never auto-released — fail-closed); retrying
+  the SAME order stays permitted. test_mada_canary_rev39 updated.
+- TESTS: 24/24 rev47/48 suite (incl. reservation-before-dispatch pin
+  via monkeypatched dispatch) + 61 combined; full qoyod regression: 0
+  new failures vs baseline (64 pre-existing Rev46 tabby-pinned).
+- PROD STATE: row 270939808 at DEAD_LETTER (canary_budget_violation),
+  kill switch re-fired (harmless — overlay ignores stored flips).
+- USER NEXT (shortest path, after redeploy):
+  (1) READ pattern-check?order_number=270939808 → expect
+      matched_pattern_id=canary_budget_false_block_2026_07_07,
+      safe_to_requeue=true.
+  (2) POST /dead-letter/requeue-one {"trace_id":"ad0c8807…"} →
+      final_stage=SKIPPED.
+  (3) READ send-diagnosis → READY_TO_SEND_ONCE (budget: order may
+      show used=1 reserved to itself — guard passes as reserved).
+  (4) Single canary send (explicit user action).

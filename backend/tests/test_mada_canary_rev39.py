@@ -273,7 +273,10 @@ async def test_error_surfaces_blocker_code_and_guard_snapshot(
         == "TRIGGER_STATUS_NOT_ENABLED"
     snap = out["guards_snapshot"]
     assert snap["budget"]["pinned_order_number"] == MADA_CANARY_ORDER_NUMBER
-    assert snap["budget"]["used"] == 0 and snap["budget"]["remaining"] == 1
+    # rev48 — the slot is reserved BEFORE dispatch (fail-closed: never
+    # auto-released on refusal). Idempotent: retrying the SAME pinned
+    # order is still permitted (order sits in order_numbers).
+    assert snap["budget"]["used"] == 1 and snap["budget"]["remaining"] == 0
     assert snap["pipeline_stage"] == "INVOICE_CREATED"
     assert snap["allow_reset_from_partial_invoice_created"] is True
     assert snap["checks"]["duplicate_check"]["passed"] is True
