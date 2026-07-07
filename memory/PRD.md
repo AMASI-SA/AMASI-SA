@@ -1,6 +1,32 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV38.1 — Single-SKU Product Fix (AMS11981 / mada canary prep)
+# ══════════════════════════════════════════════════════════════════
+User's production preflight for mada order 270513107 (total 198.72,
+trace fbf9b48371304703aff2e4b60b35a39d): 3 checks green, amount_check
+FAILED — unmapped SKU AMS11981 (عباية ستيتش بناتي - تصميم أنيق مع طرحة).
+Built scope-locked tool (NO invoice send / reprocess / run-now / canary):
+- `product_fix.py` + routes:
+  • `GET /admin/product-fix/{sku}` — READ-ONLY plan: mapping +
+    external snapshot + LIVE قيود GET search (auth-probed via `me()`
+    first so 401 → `search_failed`, never a false `create_needed`)
+    + exact create-payload preview (pure `_build_product_payload`).
+  • `POST /admin/product-fix/{sku}/adopt` body
+    {"confirm_token":"ADOPT-{sku}"} — DB-ONLY mapping upsert via
+    audited `adopt_qoyod_product`. Refuses 0 or ≥2 matches.
+- If product truly absent in قيود: NO standalone create (rev32 gates
+  would refuse create_product anyway) — creation happens inside the
+  approved canary send by the pipeline resolver, or operator creates
+  manually in قيود UI then adopts.
+- Tests: test_product_fix_rev38_1.py = 6 (incl. full user flow:
+  preflight red → adopt → preflight GREEN, and 401≠absent). Total
+  13 with preflight suite. NEEDS DEPLOY.
+- PRODUCTION steps for user: deploy → GET product-fix/AMS11981 →
+  if action=adopt: POST adopt with token → re-run send-preflight →
+  send result back for approval.
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV38 — Send Preflight (READ-ONLY, per order) for mada canary
 # ══════════════════════════════════════════════════════════════════
 User is preparing the FIRST mada canary order 270513107 (تم التنفيذ).

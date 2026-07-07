@@ -1996,6 +1996,37 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             user_id=_tenant_id(user),
         )
 
+    # ── rev38.1 — Single-SKU Product Fix (READ plan + DB-only adopt) ─
+    @router.get("/admin/product-fix/{sku}")
+    async def admin_product_fix_plan(
+        sku: str, user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        from integrations.qoyod.product_fix import build_product_fix_plan
+        return await build_product_fix_plan(
+            db, user_id=tenant, sku=sku,
+            api_client=await _build_qoyod_client_for(db, tenant, key))
+
+    @router.post("/admin/product-fix/{sku}/adopt")
+    async def admin_product_fix_adopt(
+        sku: str,
+        body: dict = Body(...),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        from integrations.qoyod.product_fix import execute_product_fix_adopt
+        return await execute_product_fix_adopt(
+            db, user_id=tenant, sku=sku,
+            api_client=await _build_qoyod_client_for(db, tenant, key),
+            confirm_token=str(body.get("confirm_token") or ""),
+            actor=f"operator:{getattr(user, 'email', tenant)}")
+
     # ── rev38 — Send Preflight (READ-ONLY, per-order) ────────────────
     # فحص ما قبل الإرسال: نطاق التاريخ + طريقة الدفع + فاتورة مكررة +
     # فرق المبلغ + معاينة الـ payload. صفر كتابة، صفر نداء لقيود.
