@@ -1,6 +1,29 @@
 # PRD — MEZAN E-commerce Accounting App
 
 # ══════════════════════════════════════════════════════════════════
+# ✅ REV37 COMPLETE — Reconciliation Report ميزان ↔ قيود (READ-ONLY)
+# ══════════════════════════════════════════════════════════════════
+**Status**: VERIFIED (6/6 pytest + endpoint smoke). User request:
+"prove MEZAN's successful orders == قيود invoices".
+
+- `reconciliation_report.py`: joins MEZAN sent orders (real
+  qoyod_invoice_id, Salla CREATION date >= 2026-07-01, DRY excluded)
+  against قيود GET /invoices (issue_date >= 2026-07-01 → today).
+  Match by invoice id, fallback by reference (Salla order number).
+  Statuses: مطابق / فرق مبلغ (>0.01) / في ميزان فقط / في قيود فقط.
+  Persists each run to `qoyod_reconciliation_reports`. ZERO writes
+  to قيود (test pins any create/delete attr access as failure).
+- `GET /api/integrations/qoyod/reconciliation-report` (auth).
+  Graceful ok=false + Arabic error on Qoyod 401 (stale preview key).
+- UI: `/integrations/qoyod/reconciliation` (QoyodReconciliation.jsx)
+  + sidebar link. Verdict banner (مطابقة كاملة / فروقات), count
+  cards, filter tabs, detail table with difference column.
+- NOTE: preview DB has a STALE rotated Qoyod key → live run returns
+  the clean 401 Arabic error in preview; works in production where
+  the fresh key lives. App is DEPLOYED at https://mezansalla.com.
+- Tests: `test_reconciliation_report_rev37.py` (6 passed).
+
+# ══════════════════════════════════════════════════════════════════
 # ✅ REV36.2 COMPLETE — Absolute Integration Floor Date 2026-07-01
 #    (2026-06, this session)
 # ══════════════════════════════════════════════════════════════════

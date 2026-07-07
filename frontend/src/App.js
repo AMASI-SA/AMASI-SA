@@ -33,6 +33,7 @@ import SallaIntegration from "./pages/SallaIntegration";
 import QoyodSettings from "./pages/QoyodSettings";
 import QoyodInvoices from "./pages/QoyodInvoices";
 import QoyodUnsentOrders from "./pages/QoyodUnsentOrders";
+import QoyodReconciliation from "./pages/QoyodReconciliation";
 import QoyodGoLive from "./pages/QoyodGoLive";
 import QoyodMigration from "./pages/QoyodMigration";
 import QoyodFreshStart from "./pages/QoyodFreshStart";
@@ -181,6 +182,7 @@ function AppRoutes() {
             <Route path="/integrations/qoyod/first-sync-monitor" element={<ProtectedRoute><Layout><QoyodFirstSyncMonitor /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Layout><QoyodUnsentOrders /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Layout><QoyodReconciliation /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/rounding-report" element={<ProtectedRoute><Layout><QoyodRoundingReport /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/cod-receipts-report" element={<ProtectedRoute><Layout><QoyodCodReceiptsReport /></Layout></ProtectedRoute>} />

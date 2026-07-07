@@ -3170,6 +3170,23 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await list_unsent_orders(
             db, user_id=tenant, days=days, limit=limit, status=status)
 
+    # ── rev37 — تقرير المطابقة ميزان ↔ قيود. READ-ONLY ───────────────
+    # Proves MEZAN's successful orders == قيود invoices (id + total),
+    # scoped to Salla creation date >= 2026-07-01 and قيود
+    # issue_date >= 2026-07-01. Only GET calls to قيود.
+    @router.get("/reconciliation-report")
+    async def reconciliation_report_endpoint(user=Depends(current_user)):
+        tenant = _tenant_id(user)
+        key = await get_api_key(db, tenant)
+        if not key:
+            raise HTTPException(400, "no_credentials")
+        from integrations.qoyod.reconciliation_report import (
+            run_reconciliation_report,
+        )
+        return await run_reconciliation_report(
+            db, user_id=tenant,
+            api_client=await _build_qoyod_client_for(db, tenant, key))
+
     # ── Iter-2026-02.rev36 — Stale-Worker (Zombie) Detector ─────────
     # READ-ONLY. Incident 2026-07-06: invoice 195/payment 166 written
     # by a process running pre-rev24 code during the open canary
