@@ -1106,12 +1106,41 @@ async def process_normalized_row(
                 "step":           "create_customer",
                 "trace_id":       trace_id,
             }
-    res: ResolutionResult = await resolve_customer(
-        db, user_id, dto.customer,
-        trace_id=trace_id,
-        default_customer_id=settings.get("default_customer_id"),
-        api_client=api_client,
-    )
+    try:
+        res: ResolutionResult = await resolve_customer(
+            db, user_id, dto.customer,
+            trace_id=trace_id,
+            default_customer_id=settings.get("default_customer_id"),
+            api_client=api_client,
+        )
+    except Rev32Violation as _v:
+        # rev48.1 — the CLIENT-level rev32.1 pre-flight can ALSO raise
+        # (prod attempt d1636e4c: Rev32MissingRowContextError escaped
+        # resolve_customer and STRANDED the row at RULES_APPLIED).
+        # Route it to FAILED_CUSTOMER exactly like guard #1 above.
+        logger.error(
+            "rev32 client_preflight_blocked_in_resolve row_id=%s "
+            "trace_id=%s violation_type=%s reason=%s",
+            row.get("id"), trace_id, _v.violation_type, _v.reason)
+        await _dead_letter(
+            db, row_id=row["id"],
+            from_stage="RULES_APPLIED",
+            fail_stage="FAILED_CUSTOMER",
+            error={
+                "code":           "rev32_guard_blocked",
+                "violation_type": _v.violation_type,
+                "message":        _v.reason,
+                "evidence":       _v.evidence,
+            },
+            started_at=row.get("pipeline_started_at"))
+        return {
+            "row_id":         row["id"],
+            "outcome":        "REV32_BLOCKED",
+            "reason":         _v.violation_type,
+            "violation_type": _v.violation_type,
+            "step":           "create_customer",
+            "trace_id":       trace_id,
+        }
 
     if not res.success:
         await _dead_letter(

@@ -340,6 +340,11 @@ def _resume_target_for(row: dict, *, force_full: bool) -> str:
 _REPROCESSABLE_STAGES: frozenset[str] = frozenset(
     {"DEAD_LETTER", "PARTIAL_FAILURE", "NORMALIZED", "NEW", "RECEIVED",
      "VALIDATED", "ELIGIBLE", "SKIPPED",
+     # rev48.1 — RULES_APPLIED became strandable when a client-level
+     # rev32.1 pre-flight violation escaped resolve_customer (prod
+     # attempt d1636e4c). Resumable via RULES_APPLIED → RETRYING →
+     # NORMALIZED (edge added in state_machine).
+     "RULES_APPLIED",
      # Iter-293.4-rev3 — Locked rows are reprocessable via per-order
      # approval. The reset path takes them through RETRYING → NORMALIZED
      # so customer/product/preflight/payload are rebuilt from scratch
@@ -428,6 +433,8 @@ async def _reset_row_to_stage(
         (current in FAILURE_TO_RESUME)
         or (current in ("DEAD_LETTER", "PARTIAL_FAILURE",
                         "LOCKED_AWAITING_APPROVAL"))
+        # rev48.1 — stranded mid-stage (see _REPROCESSABLE_STAGES).
+        or (current == "RULES_APPLIED")
         # rev44 — transient SKIPPED resumes via the SKIPPED →
         # RETRYING edge (registered in state_machine line ~303).
         or (current == "SKIPPED"
@@ -1040,6 +1047,13 @@ async def reprocess_one_order(
         # Use UNLOCKED client only when per-order approval validated.
         write_lock_enabled=(False if use_unlocked_client
                             else global_lock_active),
+        # rev48.1 — row context is MANDATORY for the client's own
+        # rev32.1 write pre-flight (fresh DB read before every POST).
+        # Without it create_customer raises
+        # Rev32MissingRowContextError (prod attempt d1636e4c,
+        # 2026-07-07). NO allow_writes_without_row bypass.
+        row_id=row["id"],
+        trace_id=row.get("trace_id"),
     )
     stage_sequence: list[str] = []
     result_log: list[dict] = []

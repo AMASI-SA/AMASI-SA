@@ -7276,3 +7276,36 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   (3) READ send-diagnosis → READY_TO_SEND_ONCE (budget: order may
       show used=1 reserved to itself — guard passes as reserved).
   (4) Single canary send (explicit user action).
+
+### Rev48.1 — Missing row context on one-shot client + stranded row (2026-07)
+- PROD FAILURE #4 (attempt d1636e4c): Rev32MissingRowContextError —
+  reprocess_one_order minted QoyodAPIClient WITHOUT row_id/trace_id;
+  the client's own rev32.1 pre-flight (assert_client_write_permitted)
+  fail-closed at create_customer. Exception escaped resolve_customer
+  (catches only QoyodAPIError) → row STRANDED at RULES_APPLIED (no
+  resume edge, worker doesn't drain it).
+- FIXES (per user: pass context, NO allow_writes_without_row bypass):
+  1. one_shot client mint now passes row_id=row["id"] +
+     trace_id=row.get("trace_id").
+  2. pipeline: resolve_customer call wrapped — Rev32Violation from the
+     client pre-flight routes to FAILED_CUSTOMER → DEAD_LETTER
+     (REV32_BLOCKED outcome) instead of stranding.
+  3. RULES_APPLIED made resumable: state_machine edge
+     RULES_APPLIED→RETRYING; one_shot _REPROCESSABLE_STAGES +
+     needs_retry_hop include RULES_APPLIED; SSOT
+     _ONE_SHOT_DIRECT_STAGES includes RULES_APPLIED (stage_check
+     passes → diagnosis READY).
+- TESTS: 28/28 rev suite (client mint kwargs pin via capturing stub;
+  stranded RULES_APPLIED resume; SSOT ready at RULES_APPLIED;
+  client-preflight violation → DEAD_LETTER not strand). Full qoyod
+  regression: 0 new failures vs baseline (64 pre-existing).
+- PROD STATE: row 270939808 at RULES_APPLIED (stranded, dead_lettered
+  _at=None), budget order_numbers=["270939808"] (used=1 remaining=0 —
+  reserved by rev48 before the failed dispatch; idempotent, passes
+  guard + diagnosis as already-reserved).
+- USER NEXT (3 steps, NO requeue needed — RULES_APPLIED now directly
+  resumable by the canary send): redeploy → diagnostics/build →
+  send-diagnosis (expect READY, budget used=1 reserved-to-self) →
+  single send. All internal guard layers now peeled (rev33 history ✓,
+  rev35 budget ✓, rev32.1 row-context ✓): any next failure will be a
+  GENUINE Qoyod API response surfaced in fresh_attempt fields.

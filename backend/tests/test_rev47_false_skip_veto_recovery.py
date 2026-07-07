@@ -691,3 +691,153 @@ async def test_canary_send_reserves_budget_before_dispatch(db, monkeypatch):
     assert reserved_at_dispatch["order_numbers"] == [order]
     doc = await db.qoyod_canary_budget.find_one({"user_id": TENANT})
     assert doc["order_numbers"] == [order]  # idempotent single slot
+
+
+# ── 13. rev48.1 — one-shot client MUST carry row context ─────────────
+# Prod attempt d1636e4c: QoyodAPIClient minted inside
+# reprocess_one_order without row_id/trace_id → the client's own
+# rev32.1 pre-flight raised Rev32MissingRowContextError at
+# create_customer. Pin: the mint passes db+row_id+trace_id (NO
+# allow_writes_without_row bypass).
+@pytest.mark.asyncio
+async def test_one_shot_client_minted_with_row_context(db, monkeypatch):
+    from integrations.qoyod import mada_canary_send as mcs
+    from integrations.qoyod import one_shot_reprocess as osr
+
+    order = "270939808"
+    row = _prod_replica_row(order, error=dict(_BUDGET_VETO_ERROR))
+    row["canonical_payload"]["items"][0]["sku"] = mcs.REQUIRED_SKU
+    await db.integration_inbox.insert_one(row)
+    stored = dict(_LIVE_SETTINGS)
+    stored["selective_auto_send_allowed_payment_methods"] = ["mada"]
+    await db.qoyod_settings.insert_one(stored)
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": mcs.REQUIRED_SKU,
+         "qoyod_product_id": "9"})
+    await db.qoyod_canary_budget.insert_one({
+        "user_id": TENANT, "max_orders": 1,
+        "order_numbers": [order],  # reserved (rev48 does this live)
+        "pinned_order_number": order,
+        "armed_at": datetime.now(timezone.utc), "armed_by": "test"})
+    out = await requeue_one(db, user_id=TENANT,
+                            row_id=f"{TENANT}-row-{order}")
+    assert out["ok"] is True
+
+    minted: dict = {}
+
+    class _CapturingClient:
+        def __init__(self, api_key, **kw):
+            minted.update(kw)
+
+        def __getattr__(self, name):
+            raise RuntimeError("stop_after_mint")
+
+    async def _fake_key(_db, _uid):
+        return "test-key-not-real"
+
+    monkeypatch.setattr(osr, "QoyodAPIClient", _CapturingClient)
+    monkeypatch.setattr(osr, "get_api_key", _fake_key)
+
+    scoped = mcs._ScopedDB(db)
+    try:
+        await osr.reprocess_one_order(
+            scoped, user_id=TENANT, order_number=order,
+            trace_id=f"{TENANT}-tr-{order}",
+            confirm=osr.CONFIRM_TOKEN_TEMPLATE.format(
+                order_number=order),
+            approval_phrase=osr.APPROVAL_PHRASE_TEMPLATE.format(
+                order_number=order),
+            actor="mada_canary:test")
+    except Exception:
+        pass  # downstream flow is irrelevant — the mint already ran
+    assert minted.get("row_id") == f"{TENANT}-row-{order}"
+    assert minted.get("trace_id") == f"{TENANT}-tr-{order}"
+    assert minted.get("db") is not None
+    assert not minted.get("allow_writes_without_row")
+
+
+# ── 14. rev48.1 — stranded RULES_APPLIED row is recoverable ──────────
+@pytest.mark.asyncio
+async def test_one_shot_resumes_stranded_rules_applied_row(db):
+    from integrations.qoyod.one_shot_reprocess import _reset_row_to_stage
+
+    order = "7001"
+    row = _prod_replica_row(order, stage="RULES_APPLIED",
+                            dead_lettered=False)
+    await db.integration_inbox.insert_one(row)
+    saved = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    await _reset_row_to_stage(db, saved, resume_stage="NORMALIZED",
+                              actor="mada_canary:test")
+    fresh = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    assert fresh["pipeline_stage"] == "NORMALIZED"
+    tail = [(e.get("from_stage"), e.get("to_stage"))
+            for e in fresh["stage_history"][-2:]]
+    assert tail == [("RULES_APPLIED", "RETRYING"),
+                    ("RETRYING", "NORMALIZED")]
+    assert fresh["one_shot_claim_until"] is not None  # rev47.2 claim
+
+
+@pytest.mark.asyncio
+async def test_ssot_ready_for_rules_applied_row(db):
+    order = "7002"
+    row = _prod_replica_row(order, stage="RULES_APPLIED",
+                            dead_lettered=False)
+    row["pipeline_error"] = None
+    row["last_failed_stage"] = None
+    await db.integration_inbox.insert_one(row)
+    await db.qoyod_settings.insert_one(dict(_LIVE_SETTINGS))
+    await db.qoyod_products_mapping.insert_one(
+        {"user_id": TENANT, "sku": "SKU-R47", "qoyod_product_id": "9"})
+    ev = await evaluate_order_for_qoyod_send(
+        db, user_id=TENANT, order_number=order)
+    assert ev["stage_check"]["passed"] is True
+    assert ev["ready_to_send"] is True
+
+
+# ── 15. rev48.1 — client-preflight violation routes to FAILED_CUSTOMER
+@pytest.mark.asyncio
+async def test_client_preflight_violation_dead_letters_not_strands(db):
+    from integrations.qoyod.mada_canary_send import _ScopedDB
+    from integrations.qoyod.pipeline import process_normalized_row
+    from integrations.qoyod.rev32_hardening import (
+        Rev32MissingRowContextError,
+    )
+
+    order = "270939808"
+    row = _prod_replica_row(order, stage="SKIPPED")
+    row["dead_lettered_at"] = None
+    row["pipeline_error"] = None
+    row["last_failed_stage"] = None
+    await db.integration_inbox.insert_one(row)
+    await _seed_live_guard_env(db, order)
+
+    class _NoContextClient:
+        async def create_contact(self, payload, idem=None):
+            raise Rev32MissingRowContextError(
+                row_id=None, action="create_customer",
+                violation_type="rev32_1_missing_row_context_on_write",
+                reason="called without row context — rev32.1 fail-closed",
+                evidence={})
+
+    scoped = _ScopedDB(db)
+    fresh = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    # move to NORMALIZED like the one-shot resume does
+    from integrations.qoyod.one_shot_reprocess import _reset_row_to_stage
+    await _reset_row_to_stage(scoped, fresh, resume_stage="NORMALIZED",
+                              actor="mada_canary:test")
+    fresh = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    out = await process_normalized_row(scoped, fresh,
+                                       api_client=_NoContextClient())
+    assert out["outcome"] == "REV32_BLOCKED"
+    saved = await db.integration_inbox.find_one(
+        {"id": f"{TENANT}-row-{order}"})
+    # NOT stranded at RULES_APPLIED — routed to DEAD_LETTER with the
+    # violation persisted for pattern-based recovery.
+    assert saved["pipeline_stage"] == "DEAD_LETTER"
+    assert saved["last_failed_stage"] == "FAILED_CUSTOMER"
+    assert saved["pipeline_error"]["violation_type"] \
+        == "rev32_1_missing_row_context_on_write"

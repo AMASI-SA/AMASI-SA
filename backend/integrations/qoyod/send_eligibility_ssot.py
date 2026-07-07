@@ -39,6 +39,9 @@ POLICY_EVAL_OVERLAY = {
 _ONE_SHOT_DIRECT_STAGES = {
     "DEAD_LETTER", "PARTIAL_FAILURE", "LOCKED_AWAITING_APPROVAL",
     "NORMALIZED", "NEW", "RECEIVED", "VALIDATED", "ELIGIBLE",
+    # rev48.1 — stranded mid-stage recoverable via RULES_APPLIED →
+    # RETRYING → NORMALIZED (see one_shot _REPROCESSABLE_STAGES).
+    "RULES_APPLIED",
 }
 
 # Policy codes already represented by a dedicated SSOT check — skip

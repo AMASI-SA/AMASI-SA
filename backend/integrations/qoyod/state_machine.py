@@ -262,6 +262,12 @@ def _build_allowed() -> set[tuple[str, str]]:
     # generic DEAD_LETTER row cannot be smuggled back into the pipeline.
     allowed.add(("DEAD_LETTER",     RETRYING))
     allowed.add(("PARTIAL_FAILURE", RETRYING))
+    # rev48.1 — RULES_APPLIED → RETRYING. RCA prod attempt d1636e4c:
+    # a client-preflight Rev32Violation escaped resolve_customer and
+    # stranded the row at RULES_APPLIED with NO resume edge. It is a
+    # healthy mid-pipeline stage; the audited one-shot resumes it via
+    # RETRYING → NORMALIZED so rules re-evaluate from scratch.
+    allowed.add(("RULES_APPLIED",   RETRYING))
     allowed.add((RETRYING, "NORMALIZED"))
     allowed.add((RETRYING, "CUSTOMER_RESOLVED"))
     # Iter-290h — Operator-driven retry of the payment-link step.
