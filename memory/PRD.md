@@ -6982,3 +6982,23 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
   clean order (any stable payment method) → green diagnosis → one
   send → one invoice → one payment → reconciliation match. No old
   orders, no second payment method until this closes.
+
+### Rev43.1 — SKIPPED Forensics endpoint (READ-ONLY proof tool)
+- RCA (code-level, confirmed by prod preview data): ALL 20 latest
+  orders blocked. Root cause chain: SAS gate at NORMALIZED skips any
+  payment method outside selective_auto_send_allowed_payment_methods
+  (stale tabby-era list) + status-based skips; rev33 makes SKIPPED
+  absolutely terminal per-row; orders at final status get no further
+  webhooks ⇒ permanently locked.
+- NEW: GET /api/integrations/qoyod/admin/skipped-forensics?limit=20
+  → last N SKIPPED transitions (old_stage/reason/reason_class/status/
+  event/trace_id) + for each status-skipped order: did a completed
+  webhook arrive later, and was IT also skipped (verdict
+  completed_webhook_also_skipped = LOCKED proof) + locked examples.
+- reason_class: status_not_enabled / payment_method_scope /
+  pre_activation / other. Zero writes, no logic changed, no
+  reprocess/reset/send. Test 1/1 + e2e (preview empty as expected).
+- PENDING USER DECISION (after prod proof): make status-based SKIPPED
+  non-terminal (pending_until_eligible/ignored_event) while keeping
+  fatal: pre-floor date, real invoice, DRY, DEAD_LETTER. NOT
+  IMPLEMENTED YET — user decree: analysis first.

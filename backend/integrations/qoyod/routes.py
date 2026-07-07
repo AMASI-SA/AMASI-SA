@@ -3290,6 +3290,20 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             result["eligibility_enriched_cap"] = _CAP
         return result
 
+    # ── rev43.1 — SKIPPED Forensics (READ-ONLY proof) ────────────────
+    # Proves whether status-based SKIPPED permanently locks orders
+    # even after a completed webhook arrives. Zero writes.
+    @router.get("/admin/skipped-forensics")
+    async def skipped_forensics_endpoint(
+        limit: int = Query(20, ge=1, le=50),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.skipped_forensics import (
+            build_skipped_forensics,
+        )
+        return await build_skipped_forensics(
+            db, user_id=_tenant_id(user), limit=limit)
+
     # ── rev43 — SSOT Send-Eligibility Preview (READ-ONLY) ────────────
     # ONE source of truth for every consumer. First N orders (any
     # payment method) evaluated by evaluate_order_for_qoyod_send.
