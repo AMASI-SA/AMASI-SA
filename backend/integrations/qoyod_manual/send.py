@@ -526,62 +526,17 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
 
     raw_items = canon.get("items") or []
     for it in raw_items:
+        # `_compute_item_line` is the SINGLE source of truth for a
+        # product line: it validates the SKU→product_id resolution,
+        # quantises unit_price/discount to 2dp, computes the gross,
+        # AND builds the RCA breakdown row. Do NOT re-do this work
+        # inline — an accidental duplicate append here caused the
+        # double-line bug on order 27027791 (Plan-B rev 2026-07-09).
         payload, row, gross = _compute_item_line(
             it, line_resolutions, tax_factor, tax_percent)
         lines.append(payload)
         breakdown_items.append(row)
         expected_total_dec += Decimal(str(gross))
-        sku = str(it.get("sku") or "").strip()
-        pid = line_resolutions.get(sku)
-        if pid is None:
-            raise ManualSendRefused(
-                "product_id_missing",
-                f"تعذّر ربط منتج بـ SKU={sku!r}",
-                {"sku": sku})
-        qty = _f(it.get("quantity"), 1.0) or 1.0
-        unit_price_raw = _f(it.get("unit_price"))
-        target_gross = _f(it.get("total"))
-        target_net = target_gross / tax_factor if tax_factor else target_gross
-        original_base = unit_price_raw * qty
-        discount_raw = original_base - target_net
-        if discount_raw < 0:
-            # Salla's price < computed net (rare): shrink unit_price,
-            # zero the discount so قيود's math still lands on target.
-            unit_price = _q2(target_net / qty) if qty else _q2(target_net)
-            discount = 0.0
-        else:
-            unit_price = _q2(unit_price_raw)
-            discount = _q2(discount_raw)
-        line_gross = _line_gross(
-            unit_price=unit_price, quantity=qty,
-            discount=discount, tax_percent=tax_percent)
-        lines.append({
-            "product_id":    pid,
-            "description":   it.get("name") or sku,
-            "quantity":      qty,
-            "unit_price":    unit_price,
-            "discount":      discount,
-            "discount_type": "amount",
-            "tax_percent":   tax_percent,
-        })
-        expected_total_dec += Decimal(str(line_gross))
-        # RCA row.
-        line_net_after_disc = _q2(unit_price * qty - discount)
-        line_tax = _q2(line_gross - line_net_after_disc)
-        breakdown_items.append({
-            "sku":                       sku,
-            "product_id":                pid,
-            "description":               it.get("name") or sku,
-            "quantity":                  qty,
-            "salla_unit_price":          _q2(unit_price_raw),
-            "qoyod_unit_price":          unit_price,
-            "salla_line_total":          _q2(target_gross),
-            "computed_discount":         discount,
-            "line_net_after_discount":   line_net_after_disc,
-            "line_tax_15pct":            line_tax,
-            "line_gross_after_tax":      line_gross,
-            "delta_vs_salla_line":       _q2(line_gross - target_gross),
-        })
 
     # Shipping line (optional — only if configured AND non-zero).
     shipping_amount = _q2(canon.get("shipping_amount"))
@@ -749,6 +704,49 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     expected_total = float(
         expected_total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
     diff = _q2(expected_total - salla_total)
+
+    # ── Structural guard: line-count integrity ────────────────────
+    # User directive 2026-07-09 (order 27027791 caught duplicated
+    # AMS10841 / AMS11961 lines and a ~×2 total). Refuse to send
+    # if the number of Qoyod line_items doesn't equal:
+    #     len(canonical.items) + shipping? + cod? + adjustment?
+    # This catches ANY future double-append regression BEFORE the
+    # invoice reaches قيود.
+    shipping_added = bool(isinstance(shipping_breakdown, dict)
+                          and shipping_breakdown.get("included"))
+    cod_added = bool(isinstance(cod_breakdown, dict)
+                     and cod_breakdown.get("included"))
+    adjustment_added = bool(rounding_adjustment
+                            and rounding_adjustment.get("applied"))
+    expected_line_count = (
+        len(raw_items)
+        + (1 if shipping_added else 0)
+        + (1 if cod_added else 0)
+        + (1 if adjustment_added else 0)
+    )
+    if len(lines) != expected_line_count:
+        raise ManualSendRefused(
+            "duplicated_invoice_items_detected",
+            (f"عدد بنود الفاتورة ({len(lines)}) لا يطابق العدد "
+              f"المتوقّع ({expected_line_count} = "
+              f"{len(raw_items)} منتج + "
+              f"{'شحن+' if shipping_added else ''}"
+              f"{'COD+' if cod_added else ''}"
+              f"{'تسوية+' if adjustment_added else ''}0). "
+              "تم إيقاف الإرسال حفاظاً على سلامة الفاتورة."),
+            {
+                "actual_lines":         len(lines),
+                "expected_lines":       expected_line_count,
+                "canonical_items":      len(raw_items),
+                "shipping_added":       shipping_added,
+                "cod_added":            cod_added,
+                "adjustment_added":     adjustment_added,
+                "line_skus":            [
+                    (li.get("description") or "?")
+                    for li in lines
+                ],
+            },
+        )
 
     # Human-readable RCA hint. Sums the per-line deltas + shipping +
     # cod delta to point at the exact source of the residual diff.
