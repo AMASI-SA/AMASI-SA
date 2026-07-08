@@ -900,6 +900,60 @@ async def manual_send_one(
             "يوجد فاتورة قيود سابقة لهذا الطلب من المسار القديم",
             {"qoyod_invoice_id": legacy_qid})
 
+    # ── Guard G1c — Preflight against qoyod_invoices (2026-07-09) ──
+    # User directive: some historical sends hit HTTP 500 in Mezan
+    # AFTER قيود had already created the invoice. The next click
+    # would create a DUPLICATE invoice in قيود. Refuse the send if
+    # a matching invoice already exists locally (from the recon
+    # sync or a prior Plan-B write-through).
+    existing_inv = await db.qoyod_invoices.find_one(
+        {"user_id": user_id,
+         "$or": [
+             {"reference":          str(order_number)},
+             {"salla_order_number": str(order_number)},
+         ]},
+        {"_id": 0, "qoyod_invoice_id": 1, "invoice_number": 1,
+         "issue_date": 1, "total": 1, "status": 1, "source": 1},
+        sort=[("last_sync_at", -1)],
+    )
+    if existing_inv and _is_real(existing_inv.get("qoyod_invoice_id")):
+        # Repair the marker on THIS inbox row so the reconciliation
+        # page picks it up and the diagnostic stops surfacing this
+        # order as "needs Plan-B send".
+        try:
+            await db.integration_inbox.update_one(
+                {"id": row.get("id")},
+                {"$set": {
+                    "manual_qoyod_invoice_id":
+                        str(existing_inv["qoyod_invoice_id"]),
+                    "qoyod_invoice_id":
+                        str(existing_inv["qoyod_invoice_id"]),
+                    "qoyod_invoice_number":
+                        (str(existing_inv.get("invoice_number"))
+                         if existing_inv.get("invoice_number")
+                         else None),
+                    "qoyod_invoice_source":     "repair_from_local_sync",
+                    "manual_send_last_status":  "repaired_from_existing",
+                    "manual_send_at":           datetime.now(timezone.utc),
+                }})
+        except Exception:  # noqa: BLE001
+            pass
+        raise ManualSendRefused(
+            "already_in_qoyod_local",
+            (f"توجد فاتورة قيود سابقة (#{existing_inv.get('invoice_number') or existing_inv['qoyod_invoice_id']}) "
+             "لهذا الطلب في السجل المحلي — تم إصلاح العلامة "
+             "دون إرسال جديد."),
+            {
+                "qoyod_invoice_id":
+                    str(existing_inv["qoyod_invoice_id"]),
+                "invoice_number": existing_inv.get("invoice_number"),
+                "issue_date":     existing_inv.get("issue_date"),
+                "total":          existing_inv.get("total"),
+                "status":         existing_inv.get("status"),
+                "source":         existing_inv.get("source"),
+                "action":         "marker_repaired",
+            })
+
     canon = row.get("canonical_payload") or {}
     salla_total = _q2(canon.get("total_amount"))
     payment_method = (canon.get("payment_method")
@@ -1187,28 +1241,43 @@ async def _run_all_steps(
     # source the reconciliation page reads. Every Plan-B success
     # writes here immediately — no need to wait for the next full
     # sync. Idempotent upsert keyed by (user_id, qoyod_invoice_id).
-    _reconciliation_upsert = {
-        "user_id":            user_id,
-        "qoyod_invoice_id":   str(invoice_id),
-        "invoice_number":     (str(invoice_number)
-                               if invoice_number else str(invoice_id)),
-        "reference":          str(order_number),
-        "salla_order_number": str(order_number),
-        "customer_name":      (canon.get("customer") or {}).get("name"),
-        "issue_date":         send_date_iso,
-        "total":              round(float(expected_total), 2),
-        "paid_amount":        round(float(expected_total), 2),
-        "remaining":          0.0,
-        "status":             "paid",
-        "source":             "plan_b_send",
-        "last_sync_at":       datetime.now(timezone.utc),
-    }
-    await db.qoyod_invoices.update_one(
-        {"user_id": user_id, "qoyod_invoice_id": str(invoice_id)},
-        {"$set":         _reconciliation_upsert,
-         "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
-        upsert=True,
-    )
+    #
+    # CRITICAL: This entire block is wrapped in try/except. The
+    # invoice ALREADY exists in Qoyod at this point. If the local
+    # upsert fails for ANY reason (DB hiccup, index conflict,
+    # BSON-serialisation quirk), we MUST NOT propagate the
+    # exception — otherwise the API returns 500 while قيود silently
+    # holds a real invoice, causing the operator to retry and
+    # create a duplicate. Every catch here degrades to
+    # `PARTIAL_CREATED_IN_QOYOD` and returns cleanly.
+    _local_write_through_ok = True
+    _local_write_through_error: Optional[str] = None
+    try:
+        _reconciliation_upsert = {
+            "user_id":            user_id,
+            "qoyod_invoice_id":   str(invoice_id),
+            "invoice_number":     (str(invoice_number)
+                                    if invoice_number else str(invoice_id)),
+            "reference":          str(order_number),
+            "salla_order_number": str(order_number),
+            "customer_name":      (canon.get("customer") or {}).get("name"),
+            "issue_date":         send_date_iso,
+            "total":              round(float(expected_total), 2),
+            "paid_amount":        round(float(expected_total), 2),
+            "remaining":          0.0,
+            "status":             "paid",
+            "source":             "plan_b_send",
+            "last_sync_at":       datetime.now(timezone.utc),
+        }
+        await db.qoyod_invoices.update_one(
+            {"user_id": user_id, "qoyod_invoice_id": str(invoice_id)},
+            {"$set":         _reconciliation_upsert,
+             "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        _local_write_through_ok = False
+        _local_write_through_error = f"{type(e).__name__}: {e}"
 
     # ── 5) POST invoice payment ────────────────────────────────────
     # amount = expected_total (post-quantisation قيود total) so قيود
