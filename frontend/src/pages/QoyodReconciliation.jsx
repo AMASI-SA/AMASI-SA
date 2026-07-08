@@ -12,7 +12,7 @@
  *
  * NO send button. NO edit. NO write-back to قيود. Read + sync + compare.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import api from "../lib/api";
 
 const OUTCOMES = [
@@ -60,11 +60,13 @@ function extractDetail(err) {
 }
 
 export default function QoyodReconciliation() {
+  const PAGE_SIZE = 15;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("الكل");
   const [error, setError] = useState(null);
   const [syncFirst, setSyncFirst] = useState(true);
+  const [page, setPage] = useState(1);
 
   const runReport = async () => {
     setLoading(true);
@@ -78,6 +80,7 @@ export default function QoyodReconciliation() {
         setData(null);
       } else {
         setData(res.data);
+        setPage(1);
       }
     } catch (e) {
       setError(extractDetail(e));
@@ -86,11 +89,25 @@ export default function QoyodReconciliation() {
     }
   };
 
-  const rows = (data?.rows || []).filter(
-    (r) => tab === "الكل" || r.match === tab,
+  const rows = useMemo(
+    () =>
+      (data?.rows || []).filter(
+        (r) => tab === "الكل" || r.match === tab,
+      ),
+    [data, tab],
   );
   const counts = data?.counts || {};
   const sync = data?.sync_summary;
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(startIdx, startIdx + PAGE_SIZE);
+  // Reset to first page when switching tab.
+  const switchTab = (t) => {
+    setTab(t);
+    setPage(1);
+  };
 
   return (
     <div
@@ -223,7 +240,7 @@ export default function QoyodReconciliation() {
                 label={t}
                 value={counts[t]}
                 active={tab === t}
-                onClick={() => setTab(tab === t ? "الكل" : t)}
+                onClick={() => switchTab(tab === t ? "الكل" : t)}
               />
             ))}
           </div>
@@ -233,7 +250,7 @@ export default function QoyodReconciliation() {
             {TABS.map((t) => (
               <button
                 key={t}
-                onClick={() => setTab(t)}
+                onClick={() => switchTab(t)}
                 data-testid={`recon-tab-${t}`}
                 className={`rounded-full border px-3 py-1 text-xs ${
                   tab === t
@@ -279,7 +296,7 @@ export default function QoyodReconciliation() {
                     </td>
                   </tr>
                 )}
-                {rows.map((r, i) => (
+                {pageRows.map((r, i) => (
                   <tr
                     key={`${r.qoyod_invoice_id || r.order_number || i}-${i}`}
                     className="border-t border-slate-100 hover:bg-slate-50"
@@ -359,6 +376,62 @@ export default function QoyodReconciliation() {
                 ))}
               </tbody>
             </table>
+
+            {rows.length > 0 && (
+              <div
+                className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+                data-testid="recon-pagination"
+              >
+                <div className="text-slate-500">
+                  عرض{" "}
+                  <span dir="ltr" className="font-mono">
+                    {startIdx + 1}–
+                    {Math.min(startIdx + PAGE_SIZE, rows.length)}
+                  </span>{" "}
+                  من{" "}
+                  <span dir="ltr" className="font-mono">
+                    {rows.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    data-testid="recon-prev-page"
+                    className={`rounded-lg border px-3 py-1.5 text-xs ${
+                      currentPage <= 1
+                        ? "border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    → السابق
+                  </button>
+                  <span
+                    dir="ltr"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono"
+                    data-testid="recon-page-indicator"
+                  >
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage >= totalPages}
+                    data-testid="recon-next-page"
+                    className={`rounded-lg border px-3 py-1.5 text-xs ${
+                      currentPage >= totalPages
+                        ? "border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    التالي ←
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div
