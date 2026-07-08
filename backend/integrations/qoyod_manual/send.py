@@ -845,6 +845,170 @@ def _build_payment_payload(*, invoice_id: int, amount: float,
     }
 
 
+# ─── Local qoyod_invoices ledger — post-payment write-through ────────
+async def _upsert_local_qoyod_invoice(
+    db, *, user_id: str, invoice_id: int,
+    invoice_number: Any, order_number: str,
+    canon: dict, expected_total: float,
+    send_date_iso: str, paid: bool,
+) -> None:
+    """Upsert the local `qoyod_invoices` ledger row for a Plan-B invoice.
+
+    CRITICAL rules (2026-07-09):
+      • NEVER called BEFORE `POST /invoice_payments` succeeds — the
+        previous version wrote `status=paid, remaining=0.0` after the
+        invoice POST but before the payment POST. When the payment
+        failed, the ledger lied and reconciliation broke.
+      • Called EXACTLY ONCE per pipeline outcome:
+          - Payment succeeded → paid=True  (remaining=0)
+          - Payment failed    → paid=False (remaining=expected_total)
+      • Wrapped in a try/except that swallows DB errors — the قيود
+        side is the source of truth. A local write-through failure
+        must not surface as an HTTP 500 to the operator.
+    """
+    total = round(float(expected_total), 2)
+    upsert_doc = {
+        "user_id":            user_id,
+        "qoyod_invoice_id":   str(invoice_id),
+        "invoice_number":     (str(invoice_number)
+                                if invoice_number else str(invoice_id)),
+        "reference":          str(order_number),
+        "salla_order_number": str(order_number),
+        "customer_name":      (canon.get("customer") or {}).get("name"),
+        "issue_date":         send_date_iso,
+        "total":              total,
+        "paid_amount":        total if paid else 0.0,
+        "remaining":          0.0 if paid else total,
+        "status":             "paid" if paid else "partial",
+        "source":             "plan_b_send",
+        "last_sync_at":       datetime.now(timezone.utc),
+    }
+    try:
+        await db.qoyod_invoices.update_one(
+            {"user_id": user_id, "qoyod_invoice_id": str(invoice_id)},
+            {"$set":         upsert_doc,
+             "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "plan-b local qoyod_invoices upsert failed order=%s invoice=%s: %s",
+            order_number, invoice_id, e)
+
+
+async def _retry_payment_only(
+    db, *, client: "ManualQoyodClient", row: dict, canon: dict,
+    user_id: str, order_number: str, lock_id: str,
+    qoyod_account_id: int, existing_invoice_id: Optional[int],
+    existing_invoice_number: Any,
+) -> dict:
+    """Surgical retry of `POST /invoice_payments` for a Plan-B invoice
+    whose previous send left the payment step incomplete.
+
+    Preconditions (asserted by the caller):
+      • `row["manual_qoyod_invoice_id"]` is set (invoice exists).
+      • `row["manual_qoyod_payment_id"]` is NOT set (payment missing).
+
+    Contract:
+      • NEVER calls `/customers`, `/products`, or `/invoices`.
+      • Refuses if the persisted invoice_id is not a positive int.
+      • On success:
+          - Writes qoyod_invoices as paid=True (remaining=0).
+          - Sets `manual_qoyod_payment_id` + unified `qoyod_invoice_id`
+            markers on the inbox row.
+          - Finalises the lock as `succeeded`.
+      • On failure:
+          - Writes qoyod_invoices as paid=False (remaining=full).
+          - Raises `invoice_created_payment_failed` so the operator
+            can try again later. The `manual_qoyod_invoice_id` marker
+            is preserved so the next click re-enters this same path.
+    """
+    if not existing_invoice_id or existing_invoice_id <= 0:
+        raise ManualSendRefused(
+            "manual_invoice_id_invalid",
+            "معرف فاتورة قيود المحفوظ في العلامة غير صالح — "
+            "يتعذّر إعادة تسجيل السداد",
+            {"manual_qoyod_invoice_id":
+                row.get("manual_qoyod_invoice_id")})
+
+    send_date_iso = _riyadh_today_iso()
+    expected_total = _q2(canon.get("total_amount"))
+    payment_payload = _build_payment_payload(
+        invoice_id=existing_invoice_id, amount=expected_total,
+        account_id=qoyod_account_id, reference=order_number,
+        send_date_iso=send_date_iso)
+    idem_pay = f"pay-retry-{order_number}"
+    try:
+        created_pay = await client.create_invoice_payment(
+            payment_payload, idem=idem_pay)
+    except ManualQoyodError as exc:
+        # Reflect the true (still-unpaid) state locally.
+        await _upsert_local_qoyod_invoice(
+            db, user_id=user_id, invoice_id=existing_invoice_id,
+            invoice_number=existing_invoice_number,
+            order_number=order_number, canon=canon,
+            expected_total=expected_total,
+            send_date_iso=send_date_iso, paid=False)
+        raise ManualSendRefused(
+            "invoice_created_payment_failed",
+            f"إعادة تسجيل السداد للفاتورة #{existing_invoice_id} "
+            f"فشلت ({exc.status_code}) — راجع سجل قيود",
+            {"invoice_id":  existing_invoice_id,
+             "qoyod_error": exc.to_dict(),
+             "retry_only":  True})
+
+    pay_node = (created_pay.get("invoice_payment")
+                if isinstance(created_pay, dict) else None) \
+        or (created_pay if isinstance(created_pay, dict) else {})
+    payment_id = _to_int(pay_node.get("id"))
+
+    # Payment succeeded — close the ledger and mark the row.
+    await _upsert_local_qoyod_invoice(
+        db, user_id=user_id, invoice_id=existing_invoice_id,
+        invoice_number=existing_invoice_number,
+        order_number=order_number, canon=canon,
+        expected_total=expected_total,
+        send_date_iso=send_date_iso, paid=True)
+    await _finalize_lock(
+        db, order_number=order_number, user_id=user_id,
+        lock_id=lock_id, status="succeeded",
+        invoice_id=str(existing_invoice_id),
+        payment_id=str(payment_id) if payment_id else None)
+    await db.integration_inbox.update_one(
+        {"id": row.get("id")},
+        {"$set": {"manual_qoyod_payment_id":
+                   (str(payment_id) if payment_id else None),
+                   "qoyod_invoice_id":         str(existing_invoice_id),
+                   "qoyod_invoice_number":     (str(existing_invoice_number)
+                                                 if existing_invoice_number
+                                                 else None),
+                   "qoyod_invoice_source":     "manual_plan_b",
+                   "manual_send_last_status":  "succeeded",
+                   "manual_send_at":           datetime.now(timezone.utc)}})
+
+    logger.info(
+        "plan-b retry_payment_only order=%s invoice=%s payment=%s",
+        order_number, existing_invoice_id, payment_id)
+    return {
+        "ok":                True,
+        "order_number":      order_number,
+        "invoice_id":        existing_invoice_id,
+        "invoice_number":    (str(existing_invoice_number)
+                              if existing_invoice_number else None),
+        "payment_id":        payment_id,
+        "send_date":         send_date_iso,
+        "salla_total":       _q2(canon.get("total_amount")),
+        "expected_total":    expected_total,
+        "payment_amount":    expected_total,
+        "difference":        0.0,
+        "qoyod_account_id":  qoyod_account_id,
+        "retry_payment_only": True,
+        "steps": [{"step": "invoice_payment_retry_only",
+                   "invoice_id": existing_invoice_id,
+                   "payment_id": payment_id}],
+    }
+
+
 # ─── Main entrypoint ─────────────────────────────────────────────────
 async def manual_send_one(
     db, *, user_id: str, order_number: str, actor: str = "manual-ui",
@@ -887,72 +1051,45 @@ async def manual_send_one(
             "حالة الطلب ليست ضمن الحالات المسموحة يدوياً "
             "(تم التنفيذ / جاري التوصيل / تم التوصيل)")
 
-    # ── Guard G1a — DB says already-sent? ──────────────────────────
-    if row.get("manual_qoyod_invoice_id"):
+    # ── Guard G1a — DB says already-sent? (revised 2026-07-09) ─────
+    # A send is considered "already completed" ONLY when BOTH markers
+    # are present:
+    #    • manual_qoyod_invoice_id  (Step 4 succeeded)
+    #    • manual_qoyod_payment_id  (Step 5 succeeded)
+    # If invoice exists but payment doesn't, we do NOT refuse — we
+    # route the retry to the payment-only path below.
+    manual_inv_id_existing = row.get("manual_qoyod_invoice_id")
+    manual_pay_id_existing = row.get("manual_qoyod_payment_id")
+    if manual_inv_id_existing and manual_pay_id_existing:
         raise ManualSendRefused(
             "already_sent",
-            "الطلب أُرسل مسبقاً من مسار الإرسال اليدوي",
-            {"manual_qoyod_invoice_id": row["manual_qoyod_invoice_id"]})
+            "الطلب أُرسل مسبقاً من مسار الإرسال اليدوي (فاتورة + سداد)",
+            {"manual_qoyod_invoice_id": manual_inv_id_existing,
+             "manual_qoyod_payment_id": manual_pay_id_existing})
+    # Legacy guard: only refuse when the invoice originated OUTSIDE
+    # Plan B (webhook / legacy path). Plan-B-created invoices with
+    # missing payments must fall through to the retry-payment-only
+    # path — they are not "legacy".
     legacy_qid = row.get("qoyod_invoice_id")
-    if legacy_qid and _is_real(legacy_qid):
+    legacy_source = row.get("qoyod_invoice_source")
+    if legacy_qid and _is_real(legacy_qid) \
+            and legacy_source != "manual_plan_b":
         raise ManualSendRefused(
             "already_sent_legacy",
             "يوجد فاتورة قيود سابقة لهذا الطلب من المسار القديم",
-            {"qoyod_invoice_id": legacy_qid})
+            {"qoyod_invoice_id": legacy_qid,
+             "qoyod_invoice_source": legacy_source})
 
-    # ── Guard G1c — Preflight against qoyod_invoices (2026-07-09) ──
-    # User directive: some historical sends hit HTTP 500 in Mezan
-    # AFTER قيود had already created the invoice. The next click
-    # would create a DUPLICATE invoice in قيود. Refuse the send if
-    # a matching invoice already exists locally (from the recon
-    # sync or a prior Plan-B write-through).
-    existing_inv = await db.qoyod_invoices.find_one(
-        {"user_id": user_id,
-         "$or": [
-             {"reference":          str(order_number)},
-             {"salla_order_number": str(order_number)},
-         ]},
-        {"_id": 0, "qoyod_invoice_id": 1, "invoice_number": 1,
-         "issue_date": 1, "total": 1, "status": 1, "source": 1},
-        sort=[("last_sync_at", -1)],
-    )
-    if existing_inv and _is_real(existing_inv.get("qoyod_invoice_id")):
-        # Repair the marker on THIS inbox row so the reconciliation
-        # page picks it up and the diagnostic stops surfacing this
-        # order as "needs Plan-B send".
-        try:
-            await db.integration_inbox.update_one(
-                {"id": row.get("id")},
-                {"$set": {
-                    "manual_qoyod_invoice_id":
-                        str(existing_inv["qoyod_invoice_id"]),
-                    "qoyod_invoice_id":
-                        str(existing_inv["qoyod_invoice_id"]),
-                    "qoyod_invoice_number":
-                        (str(existing_inv.get("invoice_number"))
-                         if existing_inv.get("invoice_number")
-                         else None),
-                    "qoyod_invoice_source":     "repair_from_local_sync",
-                    "manual_send_last_status":  "repaired_from_existing",
-                    "manual_send_at":           datetime.now(timezone.utc),
-                }})
-        except Exception:  # noqa: BLE001
-            pass
-        raise ManualSendRefused(
-            "already_in_qoyod_local",
-            (f"توجد فاتورة قيود سابقة (#{existing_inv.get('invoice_number') or existing_inv['qoyod_invoice_id']}) "
-             "لهذا الطلب في السجل المحلي — تم إصلاح العلامة "
-             "دون إرسال جديد."),
-            {
-                "qoyod_invoice_id":
-                    str(existing_inv["qoyod_invoice_id"]),
-                "invoice_number": existing_inv.get("invoice_number"),
-                "issue_date":     existing_inv.get("issue_date"),
-                "total":          existing_inv.get("total"),
-                "status":         existing_inv.get("status"),
-                "source":         existing_inv.get("source"),
-                "action":         "marker_repaired",
-            })
+    # ── Guard G1c (DISABLED 2026-07-09) ────────────────────────────
+    # The old "already_in_qoyod_local" preflight read from the
+    # `qoyod_invoices` collection. That collection was being written
+    # to as `status=paid, remaining=0` BEFORE the payment step ran,
+    # so it lied whenever the payment failed. Removing this guard
+    # eliminates the false-positive block. Duplicate protection is
+    # still enforced by:
+    #   1. `_acquire_lock` (Mongo unique index on order_number).
+    #   2. `client.find_invoice_by_reference` (Qoyod-side check
+    #      below — the only real source of truth).
 
     canon = row.get("canonical_payload") or {}
     salla_total = _q2(canon.get("total_amount"))
@@ -984,6 +1121,41 @@ async def manual_send_one(
     # ── Guard G1b — atomic idempotency lock ────────────────────────
     lock_id = await _acquire_lock(
         db, user_id=user_id, order_number=str(order_number), actor=actor)
+
+    # ── Payment-only retry branch (2026-07-09) ─────────────────────
+    # If Plan B previously created an invoice (`manual_qoyod_invoice_id`
+    # is set) but the payment step never completed (`manual_qoyod_
+    # payment_id` is missing), we DO NOT re-run steps 1-4 (which
+    # would create a duplicate invoice). Instead, we go straight to
+    # Step 5 with the persisted invoice id.
+    if manual_inv_id_existing and not manual_pay_id_existing:
+        try:
+            return await _retry_payment_only(
+                db, client=client, row=row, canon=canon,
+                user_id=user_id, order_number=str(order_number),
+                lock_id=lock_id, qoyod_account_id=qoyod_account_id,
+                existing_invoice_id=_to_int(manual_inv_id_existing),
+                existing_invoice_number=row.get(
+                    "manual_qoyod_invoice_number"),
+            )
+        except ManualSendRefused as exc:
+            await _finalize_lock(
+                db, order_number=str(order_number), user_id=user_id,
+                lock_id=lock_id, status="failed",
+                error={"code": exc.code, "message": exc.message,
+                        "detail": exc.extra})
+            raise
+        except ManualQoyodError as exc:
+            await _finalize_lock(
+                db, order_number=str(order_number), user_id=user_id,
+                lock_id=lock_id, status="failed",
+                error={"code": "qoyod_http_error",
+                        "message": f"استجابة غير ناجحة من قيود ({exc.status_code})",
+                        "detail":  exc.to_dict()})
+            raise ManualSendRefused(
+                "qoyod_http_error",
+                f"استجابة غير ناجحة من قيود ({exc.status_code})",
+                exc.to_dict())
 
     # ── Guard G1c — Qoyod-side safety net (invoice with same ref) ──
     try:
@@ -1217,67 +1389,18 @@ async def _run_all_steps(
                         "difference": diff})
 
     # Persist marker immediately so a retry can't double-post.
-    # We write BOTH markers atomically:
-    #   • `manual_qoyod_invoice_id`  — Plan-B source-of-truth field.
-    #   • `qoyod_invoice_id`         — unified marker read by the
-    #     reconciliation report and any legacy tool. Writing it here
-    #     is the "repair/migration" step the user requested so the
-    #     comparison page sees Plan-B invoices as first-class.
-    # `send_source="manual_plan_b"` disambiguates the origin.
+    # We ONLY set `manual_qoyod_invoice_id` here (not the unified
+    # `qoyod_invoice_id`) — because the invoice exists in قيود but
+    # the payment hasn't run yet. The unified marker is set only
+    # AFTER Step 5 succeeds (so a mid-flight failure still allows
+    # the retry-payment-only branch to fire on the next click).
     await db.integration_inbox.update_one(
         {"id": row.get("id")},
         {"$set": {"manual_qoyod_invoice_id":         str(invoice_id),
                    "manual_qoyod_invoice_number":    (str(invoice_number)
                                                        if invoice_number else None),
-                   "qoyod_invoice_id":               str(invoice_id),
-                   "qoyod_invoice_number":           (str(invoice_number)
-                                                       if invoice_number else None),
-                   "qoyod_invoice_source":           "manual_plan_b",
                    "manual_send_last_status":        "invoice_created",
                    "manual_send_at":                 datetime.now(timezone.utc)}})
-
-    # Write-through to the RECONCILIATION source-of-truth table
-    # (user directive 2026-07-09). `qoyod_invoices` is the single
-    # source the reconciliation page reads. Every Plan-B success
-    # writes here immediately — no need to wait for the next full
-    # sync. Idempotent upsert keyed by (user_id, qoyod_invoice_id).
-    #
-    # CRITICAL: This entire block is wrapped in try/except. The
-    # invoice ALREADY exists in Qoyod at this point. If the local
-    # upsert fails for ANY reason (DB hiccup, index conflict,
-    # BSON-serialisation quirk), we MUST NOT propagate the
-    # exception — otherwise the API returns 500 while قيود silently
-    # holds a real invoice, causing the operator to retry and
-    # create a duplicate. Every catch here degrades to
-    # `PARTIAL_CREATED_IN_QOYOD` and returns cleanly.
-    _local_write_through_ok = True
-    _local_write_through_error: Optional[str] = None
-    try:
-        _reconciliation_upsert = {
-            "user_id":            user_id,
-            "qoyod_invoice_id":   str(invoice_id),
-            "invoice_number":     (str(invoice_number)
-                                    if invoice_number else str(invoice_id)),
-            "reference":          str(order_number),
-            "salla_order_number": str(order_number),
-            "customer_name":      (canon.get("customer") or {}).get("name"),
-            "issue_date":         send_date_iso,
-            "total":              round(float(expected_total), 2),
-            "paid_amount":        round(float(expected_total), 2),
-            "remaining":          0.0,
-            "status":             "paid",
-            "source":             "plan_b_send",
-            "last_sync_at":       datetime.now(timezone.utc),
-        }
-        await db.qoyod_invoices.update_one(
-            {"user_id": user_id, "qoyod_invoice_id": str(invoice_id)},
-            {"$set":         _reconciliation_upsert,
-             "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
-            upsert=True,
-        )
-    except Exception as e:  # noqa: BLE001
-        _local_write_through_ok = False
-        _local_write_through_error = f"{type(e).__name__}: {e}"
 
     # ── 5) POST invoice payment ────────────────────────────────────
     # amount = expected_total (post-quantisation قيود total) so قيود
@@ -1291,8 +1414,17 @@ async def _run_all_steps(
         created_pay = await client.create_invoice_payment(
             payment_payload, idem=idem_pay)
     except ManualQoyodError as exc:
-        # Invoice succeeded, payment failed — surface a distinct code
-        # so the operator can retry ONLY the payment via a follow-up.
+        # Invoice succeeded, payment failed. Reflect the TRUE state in
+        # the local qoyod_invoices ledger (status=partial, remaining=
+        # full total) so the reconciliation page does NOT lie about
+        # this invoice being closed. The operator will see it as
+        # unpaid and can click Send again — the manual_send_one
+        # entrypoint will then route to the payment-only retry branch.
+        await _upsert_local_qoyod_invoice(
+            db, user_id=user_id, invoice_id=invoice_id,
+            invoice_number=invoice_number, order_number=order_number,
+            canon=canon, expected_total=expected_total,
+            send_date_iso=send_date_iso, paid=False)
         await _finalize_lock(
             db, order_number=order_number, user_id=user_id,
             lock_id=lock_id, status="partial_payment_failed",
@@ -1311,6 +1443,17 @@ async def _run_all_steps(
     steps_trace.append({"step": "invoice_payment",
                         "payment_id": payment_id})
 
+    # ── 5.5) Write-through to qoyod_invoices (AFTER payment success) ─
+    # ONLY now, after قيود has confirmed the payment, do we mark the
+    # invoice as paid in the local ledger. This eliminates the
+    # "reconciliation lies" bug where a mid-flight payment failure
+    # would leave the local ledger claiming status=paid.
+    await _upsert_local_qoyod_invoice(
+        db, user_id=user_id, invoice_id=invoice_id,
+        invoice_number=invoice_number, order_number=order_number,
+        canon=canon, expected_total=expected_total,
+        send_date_iso=send_date_iso, paid=True)
+
     # ── 6) Success ─────────────────────────────────────────────────
     await _finalize_lock(
         db, order_number=order_number, user_id=user_id,
@@ -1321,8 +1464,12 @@ async def _run_all_steps(
         {"id": row.get("id")},
         {"$set": {"manual_qoyod_payment_id":
                    (str(payment_id) if payment_id else None),
-                   "manual_send_last_status": "succeeded",
-                   "manual_send_at": datetime.now(timezone.utc)}})
+                   "qoyod_invoice_id":         str(invoice_id),
+                   "qoyod_invoice_number":     (str(invoice_number)
+                                                 if invoice_number else None),
+                   "qoyod_invoice_source":     "manual_plan_b",
+                   "manual_send_last_status":  "succeeded",
+                   "manual_send_at":           datetime.now(timezone.utc)}})
 
     logger.info(
         "plan-b-manual-send order=%s invoice=%s payment=%s",

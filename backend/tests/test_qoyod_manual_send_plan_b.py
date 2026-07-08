@@ -144,14 +144,20 @@ async def test_pending_orders_filters(db):
 
 
 # ────────────────────────────────────────────────────────────────────
-# T2 — G1: already-sent short-circuit
+# T2 — G1: already-sent short-circuit (revised 2026-07-09)
+# already_sent now requires BOTH manual_qoyod_invoice_id AND
+# manual_qoyod_payment_id. If only the invoice marker exists, the
+# send is routed to the payment-only retry branch, NOT refused.
+# See test_plan_b_payment_path_fix.py::test_already_sent_requires_both_markers
+# for the retry-branch coverage.
 # ────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_send_refuses_when_already_sent(db):
     await _seed_settings(db)
     await _seed_credentials(db)
-    await db.integration_inbox.insert_one(
-        _inbox_row(order_number="A100", with_manual_id=True))
+    row = _inbox_row(order_number="A100", with_manual_id=True)
+    row["manual_qoyod_payment_id"] = "8888"  # both markers → refuse
+    await db.integration_inbox.insert_one(row)
     with pytest.raises(ManualSendRefused) as exc:
         await manual_send_one(db, user_id=TENANT, order_number="A100")
     assert exc.value.code == "already_sent"

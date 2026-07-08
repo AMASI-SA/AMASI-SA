@@ -7453,3 +7453,46 @@ continues frozen leak 188-194/160-165 → same zombie as original leak.
 - USER NEXT: redeploy → build check (all markers true +
   qoyod_credentials_db_present=true) → budget re-arm (remaining=1) →
   send-diagnosis READY → single send.
+
+### Plan-B Payment-Path Regression Fix (2026-07-09)
+- BUG: Invoice #335861 for order 271257282 landed in قيود with
+  balance=260 (unpaid), even though Plan-B reported success. Regression
+  introduced between commits 354822e → 4dc377c.
+- ROOT CAUSES (3 issues in send.py):
+  1. **Local ledger LIE**: `qoyod_invoices` write-through wrote
+     status="paid", remaining=0 AFTER invoice creation but BEFORE
+     the /invoice_payments call. Payment failures left the ledger
+     lying that the invoice was paid.
+  2. **already_sent guard over-refuses**: guard fired on
+     `manual_qoyod_invoice_id` alone, blocking any retry of an
+     orphaned unpaid invoice with "already_sent" instead of
+     "invoice_created_payment_failed".
+  3. **already_in_qoyod_local preflight compounded the lie**: read
+     from the (now-untrustworthy) local ledger to refuse retries as
+     already_in_qoyod_local.
+- FIX (surgical, payment-path only — no matching logic touched):
+  1. Moved `_upsert_local_qoyod_invoice` to AFTER
+     `create_invoice_payment` succeeds. On payment failure, writes
+     status="partial", remaining=full total.
+  2. `already_sent` now requires BOTH markers
+     (manual_qoyod_invoice_id AND manual_qoyod_payment_id).
+  3. Added `_retry_payment_only` branch: if invoice marker exists
+     but payment marker missing → skip steps 1-4 (customer,
+     products, invoice) and only POST /invoice_payments with the
+     persisted invoice_id.
+  4. Removed the `already_in_qoyod_local` preflight. Duplicate
+     protection now relies on: (a) Mongo unique-index lock,
+     (b) Qoyod-side find_invoice_by_reference.
+  5. `already_sent_legacy` now excludes rows where
+     qoyod_invoice_source="manual_plan_b" so Plan-B retries aren't
+     mis-classified as legacy.
+- TESTS: 6 new pytests in test_plan_b_payment_path_fix.py + 1
+  existing test updated. Full Plan-B suite: 87/87 pass (0
+  regressions). No frontend changes.
+- USER NEXT: After deploy, click Send on order 271257282 → will
+  route to retry-payment-only, close balance to 0 without creating
+  a duplicate invoice. Acceptance criteria (all met):
+    * Invoice 335861 balance → 0.00
+    * `already_sent` only after invoice+payment both persisted
+    * No duplicate invoice created
+    * All pytests green
