@@ -140,6 +140,79 @@ def _already_sent(row: dict) -> tuple[bool, Optional[str]]:
     return False, None
 
 
+async def _sent_in_any_local_record(
+    db, *, user_id: str, order_number: str,
+    salla_order_id: Optional[str] = None,
+) -> Optional[str]:
+    """Cross-trace guard (user directive 2026-07-08):
+
+    A single Salla order can produce SEVERAL `integration_inbox` rows
+    over time — one per status transition webhook (e.g. `completed`
+    row #1 gets sent to قيود with a real `qoyod_invoice_id`, then a
+    later `in_delivery` webhook creates row #2 with NO invoice id).
+
+    `list_pending_orders` de-dupes to the NEWEST row per order_number
+    and only inspects that row's markers — which means the newer
+    "in_delivery" row leaks into Plan B even though the order is
+    already invoiced.
+
+    This helper answers a single question BEFORE we surface the row:
+        "Does ANY local record — across all traces of this
+         order_number — prove the order was already sent to قيود?"
+
+    Checks are LOCAL ONLY (no قيود API call), across:
+      1. integration_inbox: any trace w/ same salla_order_number
+         carrying a real `qoyod_invoice_id`.
+      2. integration_inbox: any trace w/ same salla_order_number
+         carrying a real `manual_qoyod_invoice_id`.
+      3. qoyod_invoices  : an entry keyed by salla_order_number OR
+         salla_order_id with a real `qoyod_invoice_id`.
+
+    Returns the invoice id (string) if found, else None.
+    """
+    if not order_number:
+        return None
+
+    # 1 + 2. Any inbox trace with either marker set. We ask Mongo
+    #        only for rows where at least one field is non-null, then
+    #        validate `_is_real` in Python (DRY:/PREVIEW: don't count).
+    inbox_cursor = db.integration_inbox.find(
+        {
+            "user_id": user_id,
+            "salla_order_number": str(order_number),
+            "$or": [
+                {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
+                {"qoyod_invoice_id":        {"$nin": [None, ""]}},
+            ],
+        },
+        {"_id": 0, "manual_qoyod_invoice_id": 1, "qoyod_invoice_id": 1},
+    )
+    async for r in inbox_cursor:
+        mid = r.get("manual_qoyod_invoice_id")
+        if mid and _is_real(mid):
+            return str(mid)
+        lid = r.get("qoyod_invoice_id")
+        if lid and _is_real(lid):
+            return str(lid)
+
+    # 3. قيود-side invoice record (still local — this collection is
+    #    written by BOTH the legacy pipeline AND Plan-B send.py).
+    or_clauses: list[dict] = [{"salla_order_number": str(order_number)}]
+    if salla_order_id:
+        or_clauses.append({"salla_order_id": str(salla_order_id)})
+    inv = await db.qoyod_invoices.find_one(
+        {"user_id": user_id, "$or": or_clauses,
+         "qoyod_invoice_id": {"$nin": [None, ""]}},
+        {"_id": 0, "qoyod_invoice_id": 1},
+    )
+    if inv:
+        qid = inv.get("qoyod_invoice_id")
+        if qid and _is_real(qid):
+            return str(qid)
+
+    return None
+
+
 async def list_pending_orders(
     db, *, user_id: str, days: int = 60, limit: int = 200,
     search: Optional[str] = None,
@@ -169,7 +242,8 @@ async def list_pending_orders(
 
     projection = {
         "_id": 0, "id": 1, "trace_id": 1,
-        "salla_order_number": 1, "received_at": 1,
+        "salla_order_number": 1, "salla_order_id": 1,
+        "received_at": 1,
         "manual_qoyod_invoice_id": 1,
         "qoyod_invoice_id": 1,
         "raw_payload.data.date": 1,
@@ -223,9 +297,21 @@ async def list_pending_orders(
             excluded_not_completed += 1
             continue
 
-        # Not sent
+        # Not sent — on THIS row (newest trace).
         already, invoice_ref = _already_sent(row)
         if already:
+            excluded_already_sent += 1
+            continue
+
+        # Cross-trace guard: another trace of the SAME order_number
+        # may already carry a real قيود invoice id. Simple local check
+        # (no قيود API call, no self-heal, no diagnostic side-effects).
+        cross_id = await _sent_in_any_local_record(
+            db, user_id=user_id,
+            order_number=order_number,
+            salla_order_id=str(row.get("salla_order_id") or "") or None,
+        )
+        if cross_id:
             excluded_already_sent += 1
             continue
 
