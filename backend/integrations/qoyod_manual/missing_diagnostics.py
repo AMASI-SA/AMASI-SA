@@ -100,17 +100,41 @@ def _q_invoice_hit(inv_row: Optional[dict]) -> tuple[bool, Optional[str]]:
 async def _load_qoyod_invoice(db, user_id: str,
                               order_number: str,
                               order_id: Optional[str]) -> Optional[dict]:
-    or_clauses: list[dict] = []
-    if order_number:
-        or_clauses.append({"salla_order_number": str(order_number)})
+    """Strict match: `qoyod_invoices.reference == order_number`.
+
+    User directive 2026-07-09: `order_number` is the SOLE match-key
+    between Salla, Mezan, and قيود. We query multiple synonym fields
+    because different write paths (webhook sync vs Plan-B write-
+    through) may fill different subsets:
+
+        • reference          — Qoyod's canonical field
+        • salla_order_number — alias populated by both write paths
+        • external_reference / source_reference — raw Qoyod aliases
+
+    We do NOT fall back to customer / amount / notes / description
+    here — those are matching lies. If none of the reference fields
+    equal `order_number` for a given قيود invoice, the invoice is
+    treated as `orphan` (surfaced in reconciliation, NOT in the
+    Plan-B "needs send" bucket).
+    """
+    on = str(order_number).strip()
+    if not on:
+        return None
+    or_clauses: list[dict] = [
+        {"reference":          on},
+        {"salla_order_number": on},
+        {"external_reference": on},
+        {"source_reference":   on},
+    ]
     if order_id:
         or_clauses.append({"salla_order_id": str(order_id)})
-    if not or_clauses:
-        return None
     return await db.qoyod_invoices.find_one(
         {"user_id": user_id, "$or": or_clauses},
         {"_id": 0, "qoyod_invoice_id": 1, "invoice_number": 1,
-         "status": 1, "posting_mode": 1, "created_at": 1},
+         "reference": 1, "salla_order_number": 1,
+         "status": 1, "posting_mode": 1, "created_at": 1,
+         "total": 1, "paid_amount": 1, "remaining": 1,
+         "issue_date": 1},
         sort=[("created_at", -1)],
     )
 
@@ -293,16 +317,20 @@ async def list_missing_from_plan_b(
     # applied to `list_pending_orders` in pending.py.
     plan_b_marker_by_number: dict[str, str] = {}
     legacy_marker_by_number: dict[str, str] = {}
+    payment_marker_by_number: dict[str, str] = {}
     marker_cursor = db.integration_inbox.find(
         {
             "user_id": markers_user_id,
             "$or": [
                 {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
+                {"manual_qoyod_payment_id": {"$nin": [None, ""]}},
                 {"qoyod_invoice_id":        {"$nin": [None, ""]}},
             ],
         },
         {"_id": 0, "salla_order_number": 1,
-         "manual_qoyod_invoice_id": 1, "qoyod_invoice_id": 1},
+         "manual_qoyod_invoice_id": 1,
+         "manual_qoyod_payment_id": 1,
+         "qoyod_invoice_id": 1},
     ).sort([("received_at", -1)])
     async for mrow in marker_cursor:
         on = str(mrow.get("salla_order_number") or "").strip()
@@ -312,6 +340,10 @@ async def list_missing_from_plan_b(
         if (mid and _is_real(mid)
                 and on not in plan_b_marker_by_number):
             plan_b_marker_by_number[on] = str(mid)
+        pid = mrow.get("manual_qoyod_payment_id")
+        if (pid and _is_real(pid)
+                and on not in payment_marker_by_number):
+            payment_marker_by_number[on] = str(pid)
         lid = mrow.get("qoyod_invoice_id")
         if (lid and _is_real(lid)
                 and on not in legacy_marker_by_number):
@@ -418,6 +450,23 @@ async def list_missing_from_plan_b(
             "missing_stage":      stage,
             "reason":             reason,
             "trace_id":           (ib or {}).get("trace_id"),
+            # ── Debug bag (user directive 2026-07-09) ──
+            # Exposes the EXACT fields the operator needs to verify
+            # why an order was classified the way it was. `order_number`
+            # is the sole match-key; everything else is here to prove
+            # it either matched or diverged in قيود.
+            "debug": {
+                "order_number":     on,
+                "qoyod_reference":  (q_row or {}).get("reference"),
+                "invoice_id":       marker_id or q_invoice_id,
+                "payment_id":       payment_marker_by_number.get(on),
+                "remaining":        (q_row or {}).get("remaining"),
+                "qoyod_total":      (q_row or {}).get("total"),
+                "qoyod_paid":       (q_row or {}).get("paid_amount"),
+                "qoyod_status":     (q_row or {}).get("status"),
+                "match_source":     ("qoyod_invoices.reference"
+                                     if qoyod_side_hit else marker_source),
+            },
         })
 
     # Newest first by Salla creation date.
