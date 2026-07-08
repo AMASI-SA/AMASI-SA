@@ -1,174 +1,376 @@
+/**
+ * Qoyod Reconciliation v2 — the SINGLE source of truth for
+ * Mezan ↔ قيود parity.
+ *
+ * Flow (user directive 2026-07-09):
+ *   1. Operator clicks "تشغيل المطابقة".
+ *   2. Backend syncs invoices from Qoyod → local `qoyod_invoices`.
+ *   3. Backend compares `unified_orders` (Salla side) vs the local
+ *      `qoyod_invoices` (كسوة قيود المحلية).
+ *   4. Five outcome labels: matched / needs Plan-B send / qoyod
+ *      only / needs Repair Marker / amount mismatch.
+ *
+ * NO send button. NO edit. NO write-back to قيود. Read + sync + compare.
+ */
 import { useState } from "react";
 import api from "../lib/api";
 
+const OUTCOMES = [
+  "مطابق",
+  "يحتاج إرسال Plan B",
+  "موجود في قيود فقط",
+  "يحتاج Repair Marker",
+  "فرق مبلغ",
+];
+
 const STATUS_STYLE = {
-  "مطابق":        "bg-emerald-100 text-emerald-800 border-emerald-300",
-  "فرق مبلغ":     "bg-amber-100 text-amber-800 border-amber-300",
-  "في ميزان فقط": "bg-red-100 text-red-700 border-red-300",
-  "في قيود فقط":  "bg-orange-100 text-orange-800 border-orange-300",
+  "مطابق":                "bg-emerald-100 text-emerald-800 border-emerald-300",
+  "يحتاج إرسال Plan B":   "bg-red-100 text-red-800 border-red-300",
+  "موجود في قيود فقط":     "bg-orange-100 text-orange-800 border-orange-300",
+  "يحتاج Repair Marker":  "bg-indigo-100 text-indigo-800 border-indigo-300",
+  "فرق مبلغ":              "bg-amber-100 text-amber-900 border-amber-300",
 };
-const TABS = ["الكل", "مطابق", "فرق مبلغ", "في ميزان فقط", "في قيود فقط"];
+
+const TABS = ["الكل", ...OUTCOMES];
 
 function CountCard({ label, value, active, onClick }) {
   return (
-    <button onClick={onClick} data-testid={`recon-count-${label}`}
+    <button
+      onClick={onClick}
+      data-testid={`recon-count-${label}`}
       className={`rounded-xl border px-4 py-3 text-right transition-colors ${
-        active ? "border-slate-800 bg-slate-900 text-white"
-               : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+        active
+          ? "border-slate-800 bg-slate-900 text-white"
+          : "border-slate-200 bg-white hover:bg-slate-50"
+      }`}
+    >
       <div className="text-xs opacity-70">{label}</div>
       <div className="text-2xl font-bold">{value ?? 0}</div>
     </button>
   );
 }
 
-const fmt = (v) => (v === null || v === undefined ? "—" : Number(v).toFixed(2));
+const fmt = (v) =>
+  v === null || v === undefined || v === "" ? "—" : Number(v).toFixed(2);
+
+function extractDetail(err) {
+  const d = err?.response?.data?.detail;
+  if (typeof d === "string") return d;
+  return d?.message || err?.message || "خطأ غير معروف";
+}
 
 export default function QoyodReconciliation() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("الكل");
   const [error, setError] = useState(null);
+  const [syncFirst, setSyncFirst] = useState(true);
 
   const runReport = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await api.get("/integrations/qoyod/reconciliation-report");
+      const res = await api.get("/integrations/qoyod/reconciliation-report", {
+        params: { sync_first: syncFirst },
+      });
       if (res.data?.ok === false) {
         setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
         setData(null);
       } else {
         setData(res.data);
-        setError(null);
       }
     } catch (e) {
-      setError(e?.response?.data?.detail || "تعذر تشغيل تقرير المطابقة");
+      setError(extractDetail(e));
     } finally {
       setLoading(false);
     }
   };
 
   const rows = (data?.rows || []).filter(
-    (r) => tab === "الكل" || r.status === tab);
+    (r) => tab === "الكل" || r.match === tab,
+  );
   const counts = data?.counts || {};
+  const sync = data?.sync_summary;
 
   return (
-    <div className="space-y-6" dir="rtl" data-testid="qoyod-reconciliation-page">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
+    <div
+      className="space-y-6"
+      dir="rtl"
+      data-testid="qoyod-reconciliation-page"
+    >
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="max-w-3xl">
           <h1 className="text-2xl font-bold text-slate-900">
             تقرير المطابقة — ميزان ↔ قيود
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            يقارن طلبات ميزان الناجحة مع فواتير قيود الفعلية (قراءة فقط — لا إرسال).
-            {data?.sync_start_date && (
-              <span className="mr-2 text-xs text-slate-400" data-testid="recon-sync-start-note">
-                (النطاق: من {data.sync_start_date} حتى اليوم — تاريخ إنشاء الطلب في سلة)
-              </span>
-            )}
+            مصدر الحقيقة الوحيد للمقارنة. عند الضغط على &quot;تشغيل
+            المطابقة&quot; النظام يقوم أولاً بجلب فواتير قيود إلى
+            الجدول المحلي <code className="font-mono">qoyod_invoices</code>{" "}
+            ثم يقارن مع طلبات سلة في{" "}
+            <code className="font-mono">unified_orders</code> (نفس مصدر
+            صفحة الطلبات). النطاق: من{" "}
+            {data?.sync_start_date || "2026-07-01"} حتى اليوم.
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            🔒 قراءة فقط — لا زر إرسال، لا تعديل، ولا كتابة على قيود.
           </p>
         </div>
-        <button onClick={runReport} disabled={loading}
-          data-testid="recon-run-btn"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
-          {loading ? "جارٍ المقارنة مع قيود..." : "تشغيل المطابقة الآن"}
-        </button>
+        <div className="flex items-center gap-2">
+          <label
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+            data-testid="recon-sync-first-toggle"
+          >
+            <input
+              type="checkbox"
+              checked={syncFirst}
+              onChange={(e) => setSyncFirst(e.target.checked)}
+            />
+            مزامنة قيود قبل المطابقة
+          </label>
+          <button
+            onClick={runReport}
+            disabled={loading}
+            data-testid="recon-run-btn"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            {loading
+              ? syncFirst
+                ? "جاري المزامنة والمقارنة…"
+                : "جاري المقارنة…"
+              : "تشغيل المطابقة الآن"}
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700"
-          data-testid="recon-error">{error}</div>
+        <div
+          className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700"
+          data-testid="recon-error"
+        >
+          {String(error)}
+        </div>
       )}
 
       {!data && !loading && !error && (
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
-          data-testid="recon-empty-state">
-          اضغط «تشغيل المطابقة الآن» لجلب فواتير قيود ومقارنتها بسجلات ميزان.
+        <div
+          className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
+          data-testid="recon-empty-state"
+        >
+          اضغط &quot;تشغيل المطابقة الآن&quot; لبدء المزامنة والمقارنة.
         </div>
       )}
 
       {data && (
         <>
-          <div className={`rounded-xl border p-4 text-sm font-semibold ${
-            data.all_matched
-              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-              : "border-amber-300 bg-amber-50 text-amber-800"}`}
-            data-testid="recon-verdict">
+          {/* Sync summary strip */}
+          {sync?.ran && (
+            <div
+              className={`rounded-xl border p-3 text-sm ${
+                sync.ok
+                  ? "border-sky-200 bg-sky-50 text-sky-900"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }`}
+              data-testid="recon-sync-summary"
+            >
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="font-semibold">
+                  {sync.ok ? "✅ اكتمل جلب فواتير قيود:" : "⚠️ فشل الجلب:"}
+                </span>
+                {sync.ok ? (
+                  <>
+                    <span dir="ltr" className="font-mono text-xs">
+                      fetched=
+                      <b>{sync.fetched ?? 0}</b> · in_scope=
+                      <b>{sync.in_scope ?? 0}</b> · created=
+                      <b>{sync.created ?? 0}</b> · updated=
+                      <b>{sync.updated ?? 0}</b> · skipped=
+                      <b>{sync.skipped ?? 0}</b>
+                    </span>
+                    <span className="text-xs opacity-70">
+                      في{" "}
+                      <span dir="ltr" className="font-mono">
+                        {sync.duration_ms ?? 0}ms
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs">{sync.error}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Overall verdict */}
+          <div
+            className={`rounded-xl border p-4 text-sm font-semibold ${
+              data.all_matched
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                : "border-amber-300 bg-amber-50 text-amber-800"
+            }`}
+            data-testid="recon-verdict"
+          >
             {data.all_matched
-              ? `✓ مطابقة كاملة: ${counts["مطابق"] ?? 0} طلب في ميزان = ${data.qoyod_invoices_total} فاتورة في قيود — لا فروقات`
+              ? `✓ مطابقة كاملة: ${counts["مطابق"] ?? 0} طلب في سلة = ${data.qoyod_invoices_total} فاتورة في قيود المحلية — لا فروقات`
               : "⚠ توجد فروقات تحتاج مراجعة — راجع الجدول أدناه"}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {TABS.slice(1).map((t) => (
-              <CountCard key={t} label={t} value={counts[t]}
+          {/* 5 outcome counts */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {OUTCOMES.map((t) => (
+              <CountCard
+                key={t}
+                label={t}
+                value={counts[t]}
                 active={tab === t}
-                onClick={() => setTab(tab === t ? "الكل" : t)} />
+                onClick={() => setTab(tab === t ? "الكل" : t)}
+              />
             ))}
           </div>
 
+          {/* Tabs */}
           <div className="flex gap-2 flex-wrap">
             {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)}
+              <button
+                key={t}
+                onClick={() => setTab(t)}
                 data-testid={`recon-tab-${t}`}
                 className={`rounded-full border px-3 py-1 text-xs ${
-                  tab === t ? "border-slate-800 bg-slate-900 text-white"
-                            : "border-slate-300 bg-white text-slate-600"}`}>
+                  tab === t
+                    ? "border-slate-800 bg-slate-900 text-white"
+                    : "border-slate-300 bg-white text-slate-600"
+                }`}
+              >
                 {t}
               </button>
             ))}
           </div>
 
+          {/* Reconciliation table — user directive columns */}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table className="w-full text-sm" data-testid="recon-table">
+            <table
+              className="w-full text-sm"
+              data-testid="recon-table"
+            >
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-3 py-2 text-right">رقم الطلب (سلة)</th>
-                  <th className="px-3 py-2 text-right">تاريخ الإنشاء</th>
+                  <th className="px-3 py-2 text-right">رقم الطلب</th>
                   <th className="px-3 py-2 text-right">فاتورة قيود</th>
-                  <th className="px-3 py-2 text-right">مبلغ ميزان</th>
-                  <th className="px-3 py-2 text-right">مبلغ قيود</th>
-                  <th className="px-3 py-2 text-right">الفرق</th>
-                  <th className="px-3 py-2 text-right">الحالة</th>
-                  <th className="px-3 py-2 text-right">ملاحظة</th>
+                  <th className="px-3 py-2 text-right">تاريخ سلة</th>
+                  <th className="px-3 py-2 text-right">تاريخ قيود</th>
+                  <th className="px-3 py-2 text-right">العميل</th>
+                  <th className="px-3 py-2 text-right">إجمالي سلة</th>
+                  <th className="px-3 py-2 text-right">إجمالي قيود</th>
+                  <th className="px-3 py-2 text-right">المدفوع</th>
+                  <th className="px-3 py-2 text-right">المتبقي</th>
+                  <th className="px-3 py-2 text-right">حالة قيود</th>
+                  <th className="px-3 py-2 text-right">نتيجة المطابقة</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 && (
-                  <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">
-                    لا توجد سجلات في هذا التصنيف
-                  </td></tr>
+                  <tr>
+                    <td
+                      colSpan={11}
+                      className="px-3 py-6 text-center text-slate-400"
+                      data-testid="recon-empty-rows"
+                    >
+                      لا توجد سجلات في هذا التصنيف
+                    </td>
+                  </tr>
                 )}
                 {rows.map((r, i) => (
-                  <tr key={`${r.qoyod_invoice_id}-${i}`}
-                    className="border-t border-slate-100"
-                    data-testid={`recon-row-${r.order_number || r.qoyod_invoice_id}`}>
-                    <td className="px-3 py-2 font-mono">{r.order_number || "—"}</td>
-                    <td className="px-3 py-2">{r.order_date || "—"}</td>
+                  <tr
+                    key={`${r.qoyod_invoice_id || r.order_number || i}-${i}`}
+                    className="border-t border-slate-100 hover:bg-slate-50"
+                    data-testid={`recon-row-${r.order_number || r.qoyod_invoice_id}`}
+                  >
                     <td className="px-3 py-2 font-mono">
-                      {r.qoyod_invoice_id}
-                      {r.invoice_number ? ` (#${r.invoice_number})` : ""}
+                      {r.order_number || "—"}
                     </td>
-                    <td className="px-3 py-2">{fmt(r.mezan_total)}</td>
-                    <td className="px-3 py-2">{fmt(r.qoyod_total)}</td>
-                    <td className={`px-3 py-2 font-semibold ${
-                      r.difference ? "text-red-600" : "text-slate-400"}`}>
-                      {r.difference === null || r.difference === undefined
-                        ? "—" : fmt(r.difference)}
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {r.qoyod_invoice_id || "—"}
+                      {r.invoice_number &&
+                        r.invoice_number !== r.qoyod_invoice_id && (
+                          <div className="text-[10px] text-slate-500">
+                            #{r.invoice_number}
+                          </div>
+                        )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs" dir="ltr">
+                      {r.salla_date || "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs" dir="ltr">
+                      {r.qoyod_date || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {r.customer_name || "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono" dir="ltr">
+                      {fmt(r.salla_total)}
+                    </td>
+                    <td className="px-3 py-2 font-mono" dir="ltr">
+                      {fmt(r.qoyod_total)}
+                    </td>
+                    <td className="px-3 py-2 font-mono" dir="ltr">
+                      {fmt(r.paid_amount)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 font-mono ${
+                        r.remaining && Math.abs(r.remaining) > 0.01
+                          ? "text-amber-700 font-bold"
+                          : "text-slate-500"
+                      }`}
+                      dir="ltr"
+                    >
+                      {fmt(r.remaining)}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                        {r.qoyod_status || "—"}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`rounded-full border px-2 py-0.5 text-xs ${
-                        STATUS_STYLE[r.status] || ""}`}>{r.status}</span>
+                      <span
+                        className={`inline-block rounded-full border px-2 py-0.5 text-xs ${
+                          STATUS_STYLE[r.match] || ""
+                        }`}
+                        data-testid={`recon-match-${r.order_number || r.qoyod_invoice_id}`}
+                      >
+                        {r.match}
+                      </span>
+                      {r.difference !== null &&
+                        r.difference !== undefined &&
+                        Math.abs(r.difference) > 0.005 && (
+                          <div
+                            dir="ltr"
+                            className="mt-0.5 font-mono text-[10px] text-amber-700"
+                          >
+                            Δ {fmt(r.difference)}
+                          </div>
+                        )}
+                      {r.note && (
+                        <div className="mt-0.5 text-[10px] text-slate-500">
+                          {r.note}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{r.note}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="text-xs text-slate-400" data-testid="recon-meta">
-            آخر تشغيل: {data.run_at} — طلبات ميزان المُرسلة: {data.mezan_sent_total} —
-            فواتير قيود ضمن النطاق: {data.qoyod_invoices_total}
+          <div
+            className="text-xs text-slate-400"
+            data-testid="recon-meta"
+          >
+            آخر تشغيل:{" "}
+            <span dir="ltr" className="font-mono">
+              {data.run_at}
+            </span>{" "}
+            — طلبات سلة المؤهلة: {data.salla_orders_total ?? 0} — فواتير قيود
+            المحلية: {data.qoyod_invoices_total ?? 0}
           </div>
         </>
       )}

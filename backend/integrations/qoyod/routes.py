@@ -3354,21 +3354,57 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             scan_limit=scan_limit)
 
     # ── rev37 — تقرير المطابقة ميزان ↔ قيود. READ-ONLY ───────────────
-    # Proves MEZAN's successful orders == قيود invoices (id + total),
-    # scoped to Salla creation date >= 2026-07-01 and قيود
-    # issue_date >= 2026-07-01. Only GET calls to قيود.
+    # V2 (2026-07-09): the button now (a) syncs Qoyod invoices into
+    # the local `qoyod_invoices` table, (b) compares against
+    # `unified_orders` — NOT integration_inbox — and (c) emits five
+    # outcome labels including "يحتاج Repair Marker".
     @router.get("/reconciliation-report")
-    async def reconciliation_report_endpoint(user=Depends(current_user)):
+    async def reconciliation_report_endpoint(
+        sync_first: bool = Query(
+            True,
+            description=("If true (default), fetch invoices from "
+                          "قيود first and upsert them into the local "
+                          "qoyod_invoices table before running the "
+                          "reconciliation.")),
+        user=Depends(current_user),
+    ):
         tenant = _tenant_id(user)
-        key = await get_api_key(db, tenant)
-        if not key:
-            raise HTTPException(400, "no_credentials")
-        from integrations.qoyod.reconciliation_report import (
-            run_reconciliation_report,
+        # v2 result must include a `sync_summary` block so the UI
+        # can show operator-visible metrics.
+        sync_summary: dict = {"ran": False}
+
+        if sync_first:
+            key = await get_api_key(db, tenant)
+            if not key:
+                raise HTTPException(400, "no_credentials")
+            from integrations.qoyod.qoyod_invoices_sync import (
+                sync_qoyod_invoices,
+            )
+            api_client = await _build_qoyod_client_for(db, tenant, key)
+            sync_summary = await sync_qoyod_invoices(
+                db, user_id=tenant, api_client=api_client)
+            sync_summary["ran"] = True
+            if not sync_summary.get("ok"):
+                # Surface the sync error but STILL run the reconciliation
+                # against whatever the local table already holds, so
+                # the operator can at least see the current state.
+                pass
+
+        from integrations.qoyod.reconciliation_v2 import (
+            run_reconciliation_v2,
         )
-        return await run_reconciliation_report(
-            db, user_id=tenant,
-            api_client=await _build_qoyod_client_for(db, tenant, key))
+        report = await run_reconciliation_v2(
+            db,
+            orders_user_id=user["id"],  # /orders tenant
+            markers_user_id=tenant,     # qoyod_invoices / inbox tenant
+        )
+        report["sync_summary"] = sync_summary
+        # Persist a snapshot for historical audit.
+        await db.qoyod_reconciliation_reports.insert_one({
+            "user_id":         tenant,
+            **{k: v for k, v in report.items() if k != "ok"},
+        })
+        return report
 
     # ── Iter-2026-02.rev36 — Stale-Worker (Zombie) Detector ─────────
     # READ-ONLY. Incident 2026-07-06: invoice 195/payment 166 written

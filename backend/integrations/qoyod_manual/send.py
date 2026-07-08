@@ -1182,6 +1182,34 @@ async def _run_all_steps(
                    "manual_send_last_status":        "invoice_created",
                    "manual_send_at":                 datetime.now(timezone.utc)}})
 
+    # Write-through to the RECONCILIATION source-of-truth table
+    # (user directive 2026-07-09). `qoyod_invoices` is the single
+    # source the reconciliation page reads. Every Plan-B success
+    # writes here immediately — no need to wait for the next full
+    # sync. Idempotent upsert keyed by (user_id, qoyod_invoice_id).
+    _reconciliation_upsert = {
+        "user_id":            user_id,
+        "qoyod_invoice_id":   str(invoice_id),
+        "invoice_number":     (str(invoice_number)
+                               if invoice_number else str(invoice_id)),
+        "reference":          str(order_number),
+        "salla_order_number": str(order_number),
+        "customer_name":      (canon.get("customer") or {}).get("name"),
+        "issue_date":         send_date_iso,
+        "total":              round(float(expected_total), 2),
+        "paid_amount":        round(float(expected_total), 2),
+        "remaining":          0.0,
+        "status":             "paid",
+        "source":             "plan_b_send",
+        "last_sync_at":       datetime.now(timezone.utc),
+    }
+    await db.qoyod_invoices.update_one(
+        {"user_id": user_id, "qoyod_invoice_id": str(invoice_id)},
+        {"$set":         _reconciliation_upsert,
+         "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+
     # ── 5) POST invoice payment ────────────────────────────────────
     # amount = expected_total (post-quantisation قيود total) so قيود
     # closes the invoice to zero → status Paid, remaining 0.00.
