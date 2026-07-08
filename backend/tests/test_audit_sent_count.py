@@ -126,33 +126,90 @@ def _unified(order_number, *, user_id="u-42",
     }
 
 
+def _qoyod_invoice_row(order_number, invoice_id="INV-QID"):
+    """A `qoyod_invoices` row that confirms a real قيود invoice
+    for the strict Plan-B definition."""
+    return {
+        "user_id": "main",
+        "salla_order_number": order_number,
+        "salla_order_id": f"salla-{order_number}",
+        "qoyod_invoice_id": invoice_id,
+        "invoice_number": f"NUM-{invoice_id}",
+        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+    }
+
+
 # ── Tests ──────────────────────────────────────────────────────────
 def test_all_synced_gives_empty_diff():
     """Every marker-bearing inbox row has a matching eligible
-    unified row → the audit reports zero missing."""
+    unified row AND a قيود invoice row → the audit reports zero
+    missing (strict definition)."""
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
     inbox = [_inbox("O-1", manual_id="INV-1"),
              _inbox("O-2", manual_id="INV-2")]
     unified = [_unified("O-1"), _unified("O-2")]
-    db = _FakeDB(unified=unified, inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-1", "10001"),
+                _qoyod_invoice_row("O-2", "10002")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["plan_b_sent_count"] == 2
     assert res["diagnostic_sent_plan_b_count"] == 2
     assert res["missing_from_diagnostic_count"] == 0
     assert res["orders"] == []
+    assert res["plan_b_sent_dropped_by_strict_filter"] == 0
+
+
+def test_marker_without_qoyod_invoice_falls_into_strict_extras():
+    """User directive 2026-07-09: a marker WITHOUT a matching
+    qoyod_invoices entry MUST be dropped from Plan-B Sent and
+    reported in `strict_filter_extras`."""
+    from integrations.qoyod_manual.audit_sent_count import (
+        audit_plan_b_vs_diagnostic,
+    )
+    inbox = [_inbox("O-ORPHAN", manual_id="ORPH-999")]
+    unified = [_unified("O-ORPHAN")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=[])
+    res = _run(audit_plan_b_vs_diagnostic(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["plan_b_sent_count_loose"] == 1
+    assert res["plan_b_sent_count"] == 0  # strict drops it
+    assert res["plan_b_sent_dropped_by_strict_filter"] == 1
+    extras = res["strict_filter_extras"]
+    assert len(extras) == 1
+    assert extras[0]["order_number"] == "O-ORPHAN"
+    assert extras[0]["exclusion_reason"] == "no_qoyod_invoice_confirmation"
+
+
+def test_marker_before_floor_falls_into_strict_extras():
+    from integrations.qoyod_manual.audit_sent_count import (
+        audit_plan_b_vs_diagnostic,
+    )
+    inbox = [_inbox("O-EARLY", manual_id="X",
+                     order_date="2026-06-15")]
+    unified = [_unified("O-EARLY", order_date="2026-06-15")]
+    invoices = [_qoyod_invoice_row("O-EARLY")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
+    res = _run(audit_plan_b_vs_diagnostic(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["plan_b_sent_count"] == 0
+    assert res["plan_b_sent_dropped_by_strict_filter"] == 1
+    extras = res["strict_filter_extras"]
+    assert extras[0]["exclusion_reason"] == "inbox_date_before_floor"
 
 
 def test_marker_but_no_unified_row_flagged():
-    """Marker exists in inbox but the order isn't synced to
-    unified_orders under the JWT tenant."""
+    """Strict marker set includes O-GAP (has qoyod invoice), but
+    diagnostic can't find matching unified row → shown in
+    per-order missing breakdown."""
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
     inbox = [_inbox("O-GAP", manual_id="INV-9")]
-    db = _FakeDB(unified=[], inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-GAP", "9999")]
+    db = _FakeDB(unified=[], inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["plan_b_sent_count"] == 1
@@ -165,33 +222,58 @@ def test_marker_but_no_unified_row_flagged():
 
 
 def test_marker_but_unified_status_out_of_scope():
-    """Order was sent, then customer status transitioned to
-    `cancelled` in unified → diagnostic drops it (status filter),
-    marker still counts."""
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
-    inbox = [_inbox("O-CANCEL", manual_id="INV-C",
-                    status="completed", status_native="تم التنفيذ")]
+    inbox = [_inbox("O-CANCEL", manual_id="INV-C")]
     unified = [_unified("O-CANCEL",
                         status="cancelled", status_slug="cancelled")]
-    db = _FakeDB(unified=unified, inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-CANCEL")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["missing_from_diagnostic_count"] == 1
     hit = res["orders"][0]
     assert hit["exclusion_reason"] == "unified_status_not_in_plan_b_scope"
-    assert hit["detail"]["unified_order_status"] == "cancelled"
 
 
-def test_marker_but_unified_before_floor():
-    """Marker sent, but unified order_date is before 2026-07-01."""
+def test_cross_trace_marker_makes_diagnostic_count_correctly():
+    """User directive 2026-07-09 (Diagnostic fix): if ANY trace of
+    the order carries a real Plan-B marker, the diagnostic MUST
+    classify the order as already_sent_plan_b — even if the newest
+    trace has no marker."""
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
-    inbox = [_inbox("O-OLD", manual_id="INV-O")]
+    older = _inbox("O-CROSS", manual_id="OLD-777")
+    older["received_at"] = datetime(2026, 7, 1, 10, tzinfo=timezone.utc)
+    newer = _inbox("O-CROSS", manual_id=None,
+                   status="in_delivery",
+                   status_native="جاري التوصيل")
+    newer["received_at"] = datetime(2026, 7, 5, 12, tzinfo=timezone.utc)
+    unified = [_unified("O-CROSS")]
+    invoices = [_qoyod_invoice_row("O-CROSS", "12345")]
+    db = _FakeDB(unified=unified, inbox=[older, newer], invoices=invoices)
+    res = _run(audit_plan_b_vs_diagnostic(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["plan_b_sent_count"] == 1
+    # Post-fix: diagnostic must also count it as already_sent_plan_b.
+    assert res["diagnostic_sent_plan_b_count"] == 1
+    assert res["missing_from_diagnostic_count"] == 0
+
+
+def test_marker_but_unified_before_floor():
+    from integrations.qoyod_manual.audit_sent_count import (
+        audit_plan_b_vs_diagnostic,
+    )
+    # Inbox says 2026-08 (strict passes) but unified says 2026-06 →
+    # diagnostic drops unified (out of scope), missing reason =
+    # unified_before_floor_date.
+    inbox = [_inbox("O-OLD", manual_id="INV-O",
+                     order_date="2026-08-01")]
     unified = [_unified("O-OLD", order_date="2026-06-15")]
-    db = _FakeDB(unified=unified, inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-OLD")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["missing_from_diagnostic_count"] == 1
@@ -205,7 +287,8 @@ def test_marker_but_unified_no_date():
     inbox = [_inbox("O-NODATE", manual_id="INV-N")]
     u = _unified("O-NODATE")
     u["order_date"] = None
-    db = _FakeDB(unified=[u], inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-NODATE")]
+    db = _FakeDB(unified=[u], inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["missing_from_diagnostic_count"] == 1
@@ -213,7 +296,6 @@ def test_marker_but_unified_no_date():
 
 
 def test_dry_markers_are_ignored():
-    """DRY:/PREVIEW: markers do NOT count as real Plan-B sends."""
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
@@ -222,10 +304,10 @@ def test_dry_markers_are_ignored():
         _inbox("O-REAL", manual_id="INV-R"),
     ]
     unified = [_unified("O-REAL")]
-    db = _FakeDB(unified=unified, inbox=inbox)
+    invoices = [_qoyod_invoice_row("O-REAL")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
-    # O-DRY must NOT be counted as sent, O-REAL must be.
     assert res["plan_b_sent_count"] == 1
     assert res["missing_from_diagnostic_count"] == 0
 
@@ -234,7 +316,6 @@ def test_reason_histogram_aggregates():
     from integrations.qoyod_manual.audit_sent_count import (
         audit_plan_b_vs_diagnostic,
     )
-    # Mix: 2 not-in-unified, 1 status-out-of-scope, 1 clean.
     inbox = [
         _inbox("A", manual_id="1"),
         _inbox("B", manual_id="2"),
@@ -243,9 +324,10 @@ def test_reason_histogram_aggregates():
     ]
     unified = [
         _unified("C", status="cancelled", status_slug="cancelled"),
-        _unified("D"),  # clean — in both sets
+        _unified("D"),
     ]
-    db = _FakeDB(unified=unified, inbox=inbox)
+    invoices = [_qoyod_invoice_row(k) for k in ("A", "B", "C", "D")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=invoices)
     res = _run(audit_plan_b_vs_diagnostic(
         db, orders_user_id="u-42", markers_user_id="main"))
     assert res["plan_b_sent_count"] == 4

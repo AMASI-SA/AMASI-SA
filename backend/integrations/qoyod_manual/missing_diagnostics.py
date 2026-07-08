@@ -283,6 +283,40 @@ async def list_missing_from_plan_b(
         if on not in eligible_unified:
             orphan_inbox_rows.append(ib)
 
+    # ── Step 3½: cross-trace marker maps ─────────────────────────────
+    # User directive 2026-07-09: a Plan-B send is authoritatively
+    # proven by ANY trace of the order carrying a real
+    # `manual_qoyod_invoice_id` — not only the newest one. Before this
+    # fix, an order whose newest trace was a later status webhook
+    # WITHOUT the marker was mis-classified as "not sent" even though
+    # an older trace was clearly sent. This mirrors the same fix
+    # applied to `list_pending_orders` in pending.py.
+    plan_b_marker_by_number: dict[str, str] = {}
+    legacy_marker_by_number: dict[str, str] = {}
+    marker_cursor = db.integration_inbox.find(
+        {
+            "user_id": markers_user_id,
+            "$or": [
+                {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
+                {"qoyod_invoice_id":        {"$nin": [None, ""]}},
+            ],
+        },
+        {"_id": 0, "salla_order_number": 1,
+         "manual_qoyod_invoice_id": 1, "qoyod_invoice_id": 1},
+    ).sort([("received_at", -1)])
+    async for mrow in marker_cursor:
+        on = str(mrow.get("salla_order_number") or "").strip()
+        if not on:
+            continue
+        mid = mrow.get("manual_qoyod_invoice_id")
+        if (mid and _is_real(mid)
+                and on not in plan_b_marker_by_number):
+            plan_b_marker_by_number[on] = str(mid)
+        lid = mrow.get("qoyod_invoice_id")
+        if (lid and _is_real(lid)
+                and on not in legacy_marker_by_number):
+            legacy_marker_by_number[on] = str(lid)
+
     # ── Step 4: classify each eligible order ─────────────────────────
     sent_count = 0
     visible_count = 0
@@ -295,7 +329,19 @@ async def list_missing_from_plan_b(
         ib = inbox_by_number.get(on)
         salla_order_id = str(u.get("order_id") or "") or None
 
-        marker_sent, marker_id, marker_source = _has_plan_b_marker(ib)
+        # Cross-trace marker check: does ANY trace of this order
+        # (not just the newest) carry a real Plan-B / legacy marker?
+        cross_plan_b_id = plan_b_marker_by_number.get(on)
+        cross_legacy_id = legacy_marker_by_number.get(on)
+        if cross_plan_b_id:
+            marker_sent, marker_id, marker_source = (
+                True, cross_plan_b_id, "plan_b")
+        elif cross_legacy_id:
+            marker_sent, marker_id, marker_source = (
+                True, cross_legacy_id, "legacy")
+        else:
+            marker_sent, marker_id, marker_source = _has_plan_b_marker(ib)
+
         q_row = await _load_qoyod_invoice(db, markers_user_id, on, salla_order_id)
         qoyod_side_hit, q_invoice_id = _q_invoice_hit(q_row)
 

@@ -450,12 +450,14 @@ export default function QoyodPendingOrders() {
                 data-testid="audit-plan-b-count"
               >
                 <div className="text-[11px] text-emerald-800">
-                  Plan-B Sent (من علامات inbox)
+                  Plan-B Sent (STRICT)
                 </div>
                 <div className="text-2xl font-semibold text-emerald-900">
                   {audit.plan_b_sent_count ?? 0}
                 </div>
-                <div className="text-[10px] text-emerald-700">المرجع</div>
+                <div className="text-[10px] text-emerald-700">
+                  marker حقيقي + مؤكَّد في قيود + ضمن النطاق
+                </div>
               </div>
               <div
                 className="rounded-lg border border-amber-200 bg-amber-50 p-3"
@@ -482,21 +484,25 @@ export default function QoyodPendingOrders() {
                   {audit.missing_from_diagnostic_count ?? 0}
                 </div>
                 <div className="text-[10px] text-rose-700">
-                  Plan_B_Sent − Diagnostic
+                  Plan_B_Sent (STRICT) − Diagnostic
                 </div>
               </div>
               <div
                 className="rounded-lg border border-slate-200 bg-slate-50 p-3"
-                data-testid="audit-extra-count"
+                data-testid="audit-strict-drop-count"
               >
                 <div className="text-[11px] text-slate-600">
-                  Extra في التشخيص (بلا علامة)
+                  استُبعدت بفلتر الفحص الصارم
                 </div>
                 <div className="text-2xl font-semibold text-slate-800">
-                  {audit.extra_in_diagnostic_count ?? 0}
+                  {audit.plan_b_sent_dropped_by_strict_filter ?? 0}
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  حالة نادرة
+                  loose{" "}
+                  <span dir="ltr" className="font-mono">
+                    ({audit.plan_b_sent_count_loose ?? 0})
+                  </span>{" "}
+                  − strict
                 </div>
               </div>
             </div>
@@ -616,6 +622,124 @@ export default function QoyodPendingOrders() {
               >
                 ✅ لا يوجد فرق. عدّاد التشخيص مطابق تماماً لعدد علامات
                 Plan-B الحقيقية.
+              </div>
+            )}
+
+            {/* Strict-filter extras — the loose − strict delta */}
+            {audit.strict_filter_extras && audit.strict_filter_extras.length > 0 && (
+              <div
+                className="rounded-lg border border-slate-300 bg-slate-50/70"
+                data-testid="audit-strict-extras-section"
+              >
+                <div className="border-b border-slate-200 px-3 py-2">
+                  <div className="text-xs font-bold text-slate-800">
+                    📉 استُبعدت بفلتر الفحص الصارم (
+                    {audit.strict_filter_extras.length})
+                  </div>
+                  <div className="text-[11px] text-slate-600">
+                    هذه الصفوف كانت تُحسب سابقاً كـ Plan-B Sent
+                    (loose)، لكن الفلتر الصارم استبعدها لأحد الأسباب
+                    أدناه — لتصحيح العدّاد للرقم الفعلي.
+                  </div>
+                </div>
+                {audit.strict_filter_reason_histogram &&
+                  Object.keys(audit.strict_filter_reason_histogram)
+                    .length > 0 && (
+                    <div className="border-b border-slate-200 bg-white px-3 py-2 flex flex-wrap gap-2 text-[11px]">
+                      {Object.entries(
+                        audit.strict_filter_reason_histogram,
+                      )
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([k, v]) => (
+                          <span
+                            key={k}
+                            className="rounded border border-slate-300 bg-slate-50 px-2 py-0.5"
+                            data-testid={`audit-strict-reason-${k}`}
+                          >
+                            <code className="font-mono text-slate-600">
+                              {k}
+                            </code>{" "}
+                            <span
+                              dir="ltr"
+                              className="font-mono font-bold"
+                            >
+                              ({v})
+                            </span>
+                          </span>
+                        ))}
+                    </div>
+                  )}
+                <div className="overflow-x-auto bg-white">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        <th className="px-3 py-2 text-right">
+                          رقم الطلب
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          manual_qoyod_invoice_id
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          تاريخ inbox
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          حالة inbox
+                        </th>
+                        <th className="px-3 py-2 text-right">مبلغ</th>
+                        <th className="px-3 py-2 text-right">
+                          سبب الاستبعاد
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {audit.strict_filter_extras.map((o) => (
+                        <tr
+                          key={o.order_number}
+                          className="border-t border-slate-100"
+                          data-testid={`audit-strict-extra-${o.order_number}`}
+                        >
+                          <td className="px-3 py-2 font-mono font-medium">
+                            {o.order_number}
+                          </td>
+                          <td
+                            className="px-3 py-2 font-mono text-slate-600"
+                            dir="ltr"
+                          >
+                            {o.manual_qoyod_invoice_id || "—"}
+                          </td>
+                          <td
+                            className="px-3 py-2 font-mono text-slate-600"
+                            dir="ltr"
+                          >
+                            {o.salla_created_date_from_inbox || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">
+                            {o.salla_status_from_inbox || "—"}
+                          </td>
+                          <td className="px-3 py-2 font-mono" dir="ltr">
+                            {o.total_amount != null
+                              ? `${Number(o.total_amount).toFixed(2)} ${
+                                  o.currency || "SAR"
+                                }`
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="text-slate-800">
+                              {o.exclusion_label ||
+                                o.exclusion_reason}
+                            </div>
+                            <code
+                              dir="ltr"
+                              className="mt-0.5 block font-mono text-[10px] text-slate-500"
+                            >
+                              {o.exclusion_reason}
+                            </code>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>

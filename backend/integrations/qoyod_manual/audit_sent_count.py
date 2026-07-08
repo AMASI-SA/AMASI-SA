@@ -37,7 +37,7 @@ from integrations.qoyod.unsent_orders import _is_real
 from integrations.qoyod_manual.pending import _salla_order_created_date
 from integrations.qoyod_manual.missing_diagnostics import (
     _FLOOR_DATE, _status_key_from_unified, _status_key_from_inbox,
-    _unified_salla_date,
+    _unified_salla_date, _load_qoyod_invoice, _q_invoice_hit,
 )
 
 
@@ -61,13 +61,19 @@ _EXCLUSION_LABELS = {
 
 async def _list_plan_b_marker_order_numbers(
     db, *, markers_user_id: str,
-) -> dict[str, dict]:
-    """Return a mapping order_number → newest integration_inbox row,
-    over ALL rows whose `manual_qoyod_invoice_id` is a real value.
+) -> tuple[dict[str, dict], dict[str, dict], list[dict]]:
+    """Return three views of the Plan-B marker universe:
 
-    NO date filter here — Plan-B has already applied one at send
-    time; we want the authoritative marker set. We de-duplicate on
-    order_number, keeping the newest inbox row (by received_at).
+      • `strict_by_number`  — order_number → newest inbox row.
+        Passes the STRICT definition (user directive 2026-07-09):
+          - manual_qoyod_invoice_id is real
+          - Salla creation date (from inbox canonical) >= FLOOR
+          - a matching `qoyod_invoices` entry with a real
+            `qoyod_invoice_id` confirms the قيود side
+      • `loose_by_number`  — same key, but only requires that a
+        real `manual_qoyod_invoice_id` exists (previous logic).
+      • `extras`  — list of {order_number, reason, ib_row}
+        explaining WHY each loose entry failed the strict filter.
     """
     q = {
         "user_id": markers_user_id,
@@ -89,7 +95,7 @@ async def _list_plan_b_marker_order_numbers(
         "canonical_payload.payment_method_native": 1,
         "canonical_payload.payment_method": 1,
     }
-    by_number: dict[str, dict] = {}
+    loose_by_number: dict[str, dict] = {}
     cursor = db.integration_inbox.find(q, projection) \
         .sort([("received_at", -1)])
     async for ib in cursor:
@@ -97,10 +103,60 @@ async def _list_plan_b_marker_order_numbers(
         if not (mid and _is_real(mid)):
             continue
         on = str(ib.get("salla_order_number") or "").strip()
-        if not on or on in by_number:
+        if not on or on in loose_by_number:
             continue
-        by_number[on] = ib
-    return by_number
+        loose_by_number[on] = ib
+
+    # ── Strict filter ──────────────────────────────────────────────
+    strict_by_number: dict[str, dict] = {}
+    extras: list[dict] = []
+    for on, ib in loose_by_number.items():
+        # 1) Salla creation date must exist AND be >= FLOOR.
+        sdate = _salla_order_created_date(ib)
+        if sdate is None:
+            extras.append({
+                "order_number": on,
+                "reason": "no_salla_order_date_in_inbox",
+                "reason_label": ("لا يوجد تاريخ إنشاء لهذا الطلب في "
+                                  "integration_inbox — لا يمكن تأكيد "
+                                  "أنه ضمن نطاق Plan-B (>= 2026-07-01)"),
+                "ib": ib,
+                "sdate": None,
+                "qoyod_confirmed": False,
+            })
+            continue
+        if sdate < _FLOOR_DATE:
+            extras.append({
+                "order_number": on,
+                "reason": "inbox_date_before_floor",
+                "reason_label": (f"تاريخ سلة في inbox ({sdate.isoformat()}) "
+                                  "قبل 2026-07-01 — خارج نطاق Plan-B"),
+                "ib": ib,
+                "sdate": sdate.isoformat(),
+                "qoyod_confirmed": False,
+            })
+            continue
+        # 2) Confirm the قيود side has a real invoice for this order.
+        salla_order_id = str(ib.get("salla_order_id") or "") or None
+        q_row = await _load_qoyod_invoice(
+            db, markers_user_id, on, salla_order_id)
+        qhit, _qid = _q_invoice_hit(q_row)
+        if not qhit:
+            extras.append({
+                "order_number": on,
+                "reason": "no_qoyod_invoice_confirmation",
+                "reason_label": ("علامة manual_qoyod_invoice_id موجودة "
+                                  "في inbox لكن لا توجد فاتورة مؤكَّدة "
+                                  "في qoyod_invoices — قد تكون علامة "
+                                  "قديمة/يتيمة لم تُوثَّق"),
+                "ib": ib,
+                "sdate": sdate.isoformat(),
+                "qoyod_confirmed": False,
+            })
+            continue
+        strict_by_number[on] = ib
+
+    return strict_by_number, loose_by_number, extras
 
 
 async def _list_diagnostic_plan_b_sent(
@@ -182,11 +238,14 @@ async def audit_plan_b_vs_diagnostic(
     markers_user_id: str,
     days: int = 365,
 ) -> dict:
-    """Compute `Plan_B_Sent \\ Diagnostic_Sent_Plan_B` with a
-    per-order exclusion reason. Purely diagnostic, no side-effects.
+    """Compute Plan-B-Sent (STRICT) vs diagnostic sent count, with
+    per-order exclusion reasons AND a report of the entries that
+    fell out of the strict filter (user directive 2026-07-09).
     """
-    plan_b_marker_rows = await _list_plan_b_marker_order_numbers(
-        db, markers_user_id=markers_user_id)
+    strict_by_number, loose_by_number, strict_extras = \
+        await _list_plan_b_marker_order_numbers(
+            db, markers_user_id=markers_user_id)
+    plan_b_marker_rows = strict_by_number
     plan_b_sent_set: set[str] = set(plan_b_marker_rows)
 
     diagnostic_sent_plan_b, diag_counts = \
@@ -199,7 +258,7 @@ async def audit_plan_b_vs_diagnostic(
     extra_in_diag: list[str] = sorted(
         diagnostic_sent_plan_b - plan_b_sent_set)
 
-    # Per-order breakdown
+    # Per-order breakdown for missing (strict Plan-B ⊄ diagnostic)
     breakdown: list[dict] = []
     reason_hist: dict[str, int] = {}
     for on in missing_from_diag:
@@ -232,16 +291,42 @@ async def audit_plan_b_vs_diagnostic(
             "detail": detail,
         })
 
+    # Strict-filter extras report — orders that used to be in
+    # loose_by_number but got dropped by the strict definition.
+    strict_extras_out: list[dict] = []
+    strict_reason_hist: dict[str, int] = {}
+    for e in strict_extras:
+        ib = e["ib"]
+        canon = ib.get("canonical_payload") or {}
+        strict_reason_hist[e["reason"]] = strict_reason_hist.get(
+            e["reason"], 0) + 1
+        strict_extras_out.append({
+            "order_number":              e["order_number"],
+            "manual_qoyod_invoice_id":   ib.get("manual_qoyod_invoice_id"),
+            "salla_created_date_from_inbox": e.get("sdate"),
+            "salla_status_from_inbox": (canon.get("order_status_native")
+                                        or canon.get("order_status")),
+            "total_amount":              canon.get("total_amount"),
+            "currency":                  canon.get("currency") or "SAR",
+            "qoyod_confirmed":           e.get("qoyod_confirmed", False),
+            "exclusion_reason":          e["reason"],
+            "exclusion_label":           e["reason_label"],
+        })
+
     return {
         "ok":                True,
         "at":                datetime.now(timezone.utc).isoformat(),
-        "plan_b_sent_count": len(plan_b_sent_set),
+        "plan_b_sent_count": len(plan_b_sent_set),                   # STRICT
+        "plan_b_sent_count_loose": len(loose_by_number),             # for context
+        "plan_b_sent_dropped_by_strict_filter": len(strict_extras),  # loose − strict
         "diagnostic_sent_plan_b_count": len(diagnostic_sent_plan_b),
         "diagnostic_sent_all_buckets_count":
             int(diag_counts.get("sent_to_qoyod", 0)),
         "missing_from_diagnostic_count": len(missing_from_diag),
         "extra_in_diagnostic_count":     len(extra_in_diag),
         "reason_histogram":  reason_hist,
+        "strict_filter_reason_histogram": strict_reason_hist,
         "orders":            breakdown,
-        "extra_in_diagnostic": extra_in_diag,  # small array, order_numbers only
+        "strict_filter_extras": strict_extras_out,
+        "extra_in_diagnostic": extra_in_diag,
     }
