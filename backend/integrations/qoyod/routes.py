@@ -3363,43 +3363,66 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         sync_first: bool = Query(
             True,
             description=("If true (default), fetch invoices from "
-                          "قيود first and upsert them into the local "
-                          "qoyod_invoices table before running the "
-                          "reconciliation.")),
+                          "قيود first, save them to local "
+                          "qoyod_invoices, and ONLY THEN compare. "
+                          "If sync fails the comparison is skipped "
+                          "— we never compare against stale data.")),
         user=Depends(current_user),
     ):
         tenant = _tenant_id(user)
         sync_summary: dict = {"ran": False}
 
+        # ── Phase 1 — SYNC (save Qoyod invoices to Mezan) ────────
         if sync_first:
             try:
                 key = await get_api_key(db, tenant)
                 if not key:
-                    sync_summary = {
-                        "ran": True, "ok": False,
-                        "error": ("no_credentials — لم يتم ضبط API "
-                                    "key لقيود بعد. المطابعة ستعتمد "
-                                    "على البيانات المحلية فقط."),
+                    return {
+                        "ok": False,
+                        "error": ("لم يتم ضبط API key لقيود. "
+                                    "أضف المفتاح من إعدادات قيود "
+                                    "قبل تشغيل المطابقة."),
+                        "sync_summary": {
+                            "ran": True, "ok": False,
+                            "error": "no_credentials",
+                        },
+                        "counts": {}, "rows": [],
                     }
-                else:
-                    from integrations.qoyod.qoyod_invoices_sync import (
-                        sync_qoyod_invoices,
-                    )
-                    api_client = await _build_qoyod_client_for(
-                        db, tenant, key)
-                    sync_summary = await sync_qoyod_invoices(
-                        db, user_id=tenant, api_client=api_client)
-                    sync_summary["ran"] = True
+                from integrations.qoyod.qoyod_invoices_sync import (
+                    sync_qoyod_invoices,
+                )
+                api_client = await _build_qoyod_client_for(
+                    db, tenant, key)
+                sync_summary = await sync_qoyod_invoices(
+                    db, user_id=tenant, api_client=api_client)
+                sync_summary["ran"] = True
             except Exception as e:  # noqa: BLE001
-                sync_summary = {
-                    "ran": True, "ok": False,
-                    "error": (f"خطأ غير متوقع أثناء المزامنة: "
-                                f"{type(e).__name__}: {e}"),
+                return {
+                    "ok": False,
+                    "error": (f"خطأ غير متوقع أثناء جلب فواتير قيود: "
+                                f"{type(e).__name__}: {e}. لم تتم "
+                                "المطابقة."),
+                    "sync_summary": {
+                        "ran": True, "ok": False,
+                        "error": f"{type(e).__name__}: {e}",
+                    },
+                    "counts": {}, "rows": [],
                 }
 
-        # The reconciliation itself. If IT fails we STILL want a
-        # legible response with the sync summary — return a 200 with
-        # ok=false so the operator sees the actual error text.
+            # ★ User directive 2026-07-09: if sync FAILED, do NOT
+            #   compare against potentially stale local data.
+            if not sync_summary.get("ok"):
+                return {
+                    "ok": False,
+                    "error": ("فشل جلب فواتير قيود — لن تُنفَّذ "
+                                "المطابقة على بيانات محلية قديمة. "
+                                "راجع الخطأ في ملخّص المزامنة "
+                                "وأعد المحاولة."),
+                    "sync_summary": sync_summary,
+                    "counts": {}, "rows": [],
+                }
+
+        # ── Phase 2 — COMPARE (only after successful sync) ───────
         try:
             from integrations.qoyod.reconciliation_v2 import (
                 run_reconciliation_v2,
@@ -3425,8 +3448,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 **{k: v for k, v in report.items() if k != "ok"},
             })
         except Exception:  # noqa: BLE001
-            # Persisting the snapshot is best-effort — never let a
-            # snapshot-write failure break the operator's live view.
             pass
         return report
 

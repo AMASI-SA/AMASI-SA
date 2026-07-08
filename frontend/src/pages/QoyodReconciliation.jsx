@@ -77,7 +77,13 @@ export default function QoyodReconciliation() {
       });
       if (res.data?.ok === false) {
         setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
-        setData(null);
+        // Retain the sync_summary so the operator can see WHY it
+        // failed (e.g. Qoyod 401 / DNS / row_errors).
+        setData({
+          ok: false,
+          sync_summary: res.data.sync_summary,
+          counts: {}, rows: [],
+        });
       } else {
         setData(res.data);
         setPage(1);
