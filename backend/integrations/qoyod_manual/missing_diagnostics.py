@@ -145,32 +145,33 @@ def _classify_eligible(  # noqa: C901 — trivial branches
 
 
 async def list_missing_from_plan_b(
-    db, *, user_id: str, days: int = 90, limit: int = 1000,
+    db, *,
+    orders_user_id: str,
+    markers_user_id: Optional[str] = None,
+    days: int = 90, limit: int = 1000,
     search: Optional[str] = None,
     include_already_sent: bool = True,
 ) -> dict:
     """Enumerate Salla-eligible orders NOT visible in Plan B pending.
 
+    Two `user_id` axes — because the /orders page and the Plan-B
+    pipeline can live in DIFFERENT tenant namespaces on production:
+
+      • `orders_user_id`  — the caller's JWT `user["id"]`. Used
+        for `unified_orders`. This MUST match the tenant that the
+        /orders page uses, otherwise this diagnostic returns an
+        empty universe (webhook data was captured under a global
+        `_TENANT="main"` while merchant orders synced under the
+        real user id).
+      • `markers_user_id` — where Plan-B stores its markers
+        (`integration_inbox`, `qoyod_invoices`, `list_pending_orders`).
+        Defaults to `orders_user_id` when omitted.
+
     Scope: unified_orders ONLY. `integration_inbox` is a diagnostic
     aid. See module docstring for the invariant.
-
-    Returns
-    ───────
-    {
-      "counts": {
-        "eligible_salla_orders": N,
-        "sent_to_qoyod":         S,
-        "visible_in_plan_b":     V,
-        "hidden_with_reason":    H,   # = N - S - V
-        "webhooks_without_unified": W,
-        "returned":              len(orders),
-      },
-      "by_stage":  { stage → count },   # over eligible orders
-      "by_reason": { reason → count },  # over eligible orders
-      "orders":    [ ... hidden + optionally-sent rows ... ],
-      "webhooks_without_unified": [ ... orphan inbox rows ... ],
-    }
     """
+    if markers_user_id is None:
+        markers_user_id = orders_user_id
     days = max(1, min(int(days), 365))
     limit = max(1, min(int(limit), 5000))
     now_utc = datetime.now(timezone.utc)
@@ -182,7 +183,7 @@ async def list_missing_from_plan_b(
     plan_b_visible: set[str] = set()
     for status_key in _PLAN_B_STATUSES:
         res = await list_pending_orders(
-            db, user_id=user_id, days=days, limit=1000,
+            db, user_id=markers_user_id, days=days, limit=1000,
             status=status_key)
         for row in (res.get("orders") or []):
             on = str(row.get("order_number") or "").strip()
@@ -197,7 +198,7 @@ async def list_missing_from_plan_b(
     # This is the SOLE source of "الطلبات المفحوصة". integration_inbox
     # never expands this set.
     uni_query: dict = {
-        "user_id": user_id,
+        "user_id": orders_user_id,
         "order_date": {"$gte": floor_iso},  # ISO 'YYYY-MM-DD' string
     }
     if search and str(search).strip():
@@ -246,7 +247,8 @@ async def list_missing_from_plan_b(
     inbox_by_number: dict[str, dict] = {}
     orphan_inbox_rows: list[dict] = []
 
-    ib_query: dict = {"user_id": user_id, "received_at": {"$gte": since_dt}}
+    ib_query: dict = {"user_id": markers_user_id,
+                       "received_at": {"$gte": since_dt}}
     if search and str(search).strip():
         ib_query["salla_order_number"] = {
             "$regex": _re_escape(str(search).strip())}
@@ -294,7 +296,7 @@ async def list_missing_from_plan_b(
         salla_order_id = str(u.get("order_id") or "") or None
 
         marker_sent, marker_id, marker_source = _has_plan_b_marker(ib)
-        q_row = await _load_qoyod_invoice(db, user_id, on, salla_order_id)
+        q_row = await _load_qoyod_invoice(db, markers_user_id, on, salla_order_id)
         qoyod_side_hit, q_invoice_id = _q_invoice_hit(q_row)
 
         bucket, stage, reason = _classify_eligible(

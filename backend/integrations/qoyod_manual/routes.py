@@ -204,9 +204,18 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
 
         NO writes. NO قيود network calls. NO send buttons on the UI
         side either — this page is 100% diagnostic.
+
+        Tenant axis (user directive 2026-07-09):
+          • unified_orders is queried under the CALLER's JWT user_id
+            (same tenant used by /orders).
+          • integration_inbox / qoyod_invoices / Plan-B pending logic
+            stay under `_TENANT` — that's where webhook markers live.
         """
         return await list_missing_from_plan_b(
-            db, user_id=_TENANT, days=days, limit=limit,
+            db,
+            orders_user_id=user["id"],
+            markers_user_id=_TENANT,
+            days=days, limit=limit,
             search=search, include_already_sent=include_already_sent)
 
     @router.get("/diagnose/{order_number}")

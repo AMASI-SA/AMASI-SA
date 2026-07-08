@@ -157,7 +157,7 @@ def test_endpoint_shape_and_empty_universe():
         list_missing_from_plan_b,
     )
     db = _FakeDB()
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["ok"] is True
     assert res["floor_date"] == "2026-07-01"
     assert res["supported_statuses"] == ["completed", "delivered", "in_delivery"]
@@ -188,7 +188,7 @@ def test_invariant_eligible_equals_sum_of_buckets():
             # no inbox for O-HIDDEN
         ],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     c = res["counts"]
     assert c["eligible_salla_orders"] == 3
     assert c["sent_to_qoyod"] == 1
@@ -214,7 +214,7 @@ def test_pre_floor_date_unified_does_NOT_enter_universe():
                           received_at=datetime(2026, 8, 1,
                                                 tzinfo=timezone.utc))],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["counts"]["eligible_salla_orders"] == 0
     assert res["orders"] == []
 
@@ -231,7 +231,7 @@ def test_status_not_supported_unified_does_NOT_enter_universe():
         inbox=[_inbox_row("O-PENDING", status="pending",
                           status_native="بانتظار الدفع")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["counts"]["eligible_salla_orders"] == 0
     assert res["counts"]["status_out_of_scope_unified"] == 1
 
@@ -244,7 +244,7 @@ def test_visible_in_plan_b_counted_but_not_returned():
         unified=[_unified_row("O-VIS")],
         inbox=[_inbox_row("O-VIS")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["counts"]["eligible_salla_orders"] == 1
     assert res["counts"]["visible_in_plan_b"] == 1
     assert [o["order_number"] for o in res["orders"]] == []
@@ -258,7 +258,7 @@ def test_already_sent_plan_b_marker_appears_in_orders():
         unified=[_unified_row("O-SENT")],
         inbox=[_inbox_row("O-SENT", manual_id="12345")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     hits = [o for o in res["orders"] if o["order_number"] == "O-SENT"]
     assert len(hits) == 1
     assert hits[0]["missing_stage"] == "already_sent_plan_b"
@@ -274,7 +274,7 @@ def test_already_sent_legacy_marker():
         unified=[_unified_row("O-LEG")],
         inbox=[_inbox_row("O-LEG", legacy_id="55555")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     hits = [o for o in res["orders"] if o["order_number"] == "O-LEG"]
     assert len(hits) == 1
     assert hits[0]["missing_stage"] == "already_sent_legacy"
@@ -288,7 +288,7 @@ def test_missing_from_integration_inbox_is_hidden():
         unified=[_unified_row("O-NOWH")],
         inbox=[],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     hits = [o for o in res["orders"] if o["order_number"] == "O-NOWH"]
     assert len(hits) == 1
     assert hits[0]["missing_stage"] == "missing_from_integration_inbox"
@@ -306,7 +306,7 @@ def test_orphan_inbox_goes_to_separate_bucket():
         unified=[],
         inbox=[_inbox_row("O-ORPHAN")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["counts"]["eligible_salla_orders"] == 0
     assert res["counts"]["webhooks_without_unified"] == 1
     orphans = res["webhooks_without_unified"]
@@ -325,9 +325,9 @@ def test_include_already_sent_toggle():
         inbox=[_inbox_row("O-S1", manual_id="777")],
     )
     res_incl = _run(list_missing_from_plan_b(
-        db, user_id="main", include_already_sent=True))
+        db, orders_user_id="main", include_already_sent=True))
     res_excl = _run(list_missing_from_plan_b(
-        db, user_id="main", include_already_sent=False))
+        db, orders_user_id="main", include_already_sent=False))
     assert "O-S1" in [o["order_number"] for o in res_incl["orders"]]
     assert "O-S1" not in [o["order_number"] for o in res_excl["orders"]]
     # The bucket counter is unaffected by the display toggle.
@@ -346,7 +346,7 @@ def test_duplicate_invoice_in_qoyod_is_sent_bucket():
         inbox=[_inbox_row("O-DUP")],  # no marker in inbox
         invoices=[_qoyod_invoice("O-DUP", "88888")],
     )
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     hits = [o for o in res["orders"] if o["order_number"] == "O-DUP"]
     assert len(hits) == 1
     assert hits[0]["missing_stage"] == "already_in_qoyod"
@@ -364,5 +364,41 @@ def test_unified_without_order_date_excluded():
     row = _unified_row("O-NODATE")
     row["order_date"] = None
     db = _FakeDB(unified=[row], inbox=[])
-    res = _run(list_missing_from_plan_b(db, user_id="main"))
+    res = _run(list_missing_from_plan_b(db, orders_user_id="main"))
     assert res["counts"]["eligible_salla_orders"] == 0
+
+
+def test_tenant_axis_separation():
+    """Directive 2026-07-09: unified_orders is queried under the
+    JWT user_id (production tenant), while integration_inbox and
+    qoyod_invoices stay under the webhook capture tenant
+    (`_TENANT`). Both axes independently namespace their data."""
+    from integrations.qoyod_manual.missing_diagnostics import (
+        list_missing_from_plan_b,
+    )
+    # unified_orders is populated under real-user "u-42".
+    unified_row = _unified_row("O-TENANT")
+    unified_row["user_id"] = "u-42"
+
+    # integration_inbox is populated under global "main".
+    inbox_row = _inbox_row("O-TENANT", manual_id="INV-777")
+    inbox_row["user_id"] = "main"
+
+    db = _FakeDB(unified=[unified_row], inbox=[inbox_row])
+
+    # Calling with orders_user_id="u-42" and markers_user_id="main"
+    # must (a) find the unified row, (b) still detect the marker
+    # from the inbox row → sent bucket.
+    res = _run(list_missing_from_plan_b(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["counts"]["eligible_salla_orders"] == 1
+    assert res["counts"]["sent_to_qoyod"] == 1
+    hits = [o for o in res["orders"] if o["order_number"] == "O-TENANT"]
+    assert len(hits) == 1
+    assert hits[0]["missing_stage"] == "already_sent_plan_b"
+
+    # And with a WRONG orders_user_id, the diagnostic returns empty
+    # (which is exactly what production was seeing before this fix).
+    res_wrong = _run(list_missing_from_plan_b(
+        db, orders_user_id="main", markers_user_id="main"))
+    assert res_wrong["counts"]["eligible_salla_orders"] == 0
