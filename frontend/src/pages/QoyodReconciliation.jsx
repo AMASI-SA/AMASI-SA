@@ -12,7 +12,7 @@
  *
  * NO send button. NO edit. NO write-back to قيود. Read + sync + compare.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 
 const OUTCOMES = [
@@ -68,32 +68,42 @@ export default function QoyodReconciliation() {
   const [syncFirst, setSyncFirst] = useState(true);
   const [page, setPage] = useState(1);
 
-  const runReport = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.get("/integrations/qoyod/reconciliation-report", {
-        params: { sync_first: syncFirst },
-      });
-      if (res.data?.ok === false) {
-        setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
-        // Retain the sync_summary so the operator can see WHY it
-        // failed (e.g. Qoyod 401 / DNS / row_errors).
-        setData({
-          ok: false,
-          sync_summary: res.data.sync_summary,
-          counts: {}, rows: [],
-        });
-      } else {
-        setData(res.data);
-        setPage(1);
+  const runReport = useCallback(
+    async ({ withSync = true } = {}) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.get(
+          "/integrations/qoyod/reconciliation-report",
+          { params: { sync_first: withSync } },
+        );
+        if (res.data?.ok === false) {
+          setError(res.data.error || "تعذر تشغيل تقرير المطابقة");
+          setData({
+            ok: false,
+            sync_summary: res.data.sync_summary,
+            counts: {}, rows: [],
+          });
+        } else {
+          setData(res.data);
+          setPage(1);
+        }
+      } catch (e) {
+        setError(extractDetail(e));
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError(extractDetail(e));
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [],
+  );
+
+  // On mount — auto-load the LATEST locally-saved comparison (no
+  // sync). User directive 2026-07-09: the page must never appear
+  // empty after refresh; the local `qoyod_invoices` table is
+  // persistent and reconciliation must reflect it on every open.
+  useEffect(() => {
+    runReport({ withSync: false });
+  }, [runReport]);
 
   const rows = useMemo(
     () =>
@@ -152,7 +162,7 @@ export default function QoyodReconciliation() {
             مزامنة قيود قبل المطابقة
           </label>
           <button
-            onClick={runReport}
+            onClick={() => runReport({ withSync: syncFirst })}
             disabled={loading}
             data-testid="recon-run-btn"
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
@@ -160,7 +170,7 @@ export default function QoyodReconciliation() {
             {loading
               ? syncFirst
                 ? "جاري المزامنة والمقارنة…"
-                : "جاري المقارنة…"
+                : "جاري التحميل…"
               : "تشغيل المطابقة الآن"}
           </button>
         </div>
@@ -180,7 +190,8 @@ export default function QoyodReconciliation() {
           className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
           data-testid="recon-empty-state"
         >
-          اضغط &quot;تشغيل المطابقة الآن&quot; لبدء المزامنة والمقارنة.
+          لا توجد بيانات محلية بعد. اضغط &quot;تشغيل المطابقة الآن&quot;
+          لجلب فواتير قيود وحفظها.
         </div>
       )}
 
@@ -236,6 +247,39 @@ export default function QoyodReconciliation() {
             {data.all_matched
               ? `✓ مطابقة كاملة: ${counts["مطابق"] ?? 0} طلب في سلة = ${data.qoyod_invoices_total} فاتورة في قيود المحلية — لا فروقات`
               : "⚠ توجد فروقات تحتاج مراجعة — راجع الجدول أدناه"}
+          </div>
+
+          {/* Source totals — 2 informational cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <div
+              className="rounded-xl border border-sky-200 bg-sky-50 p-4"
+              data-testid="recon-count-فواتير-قيود"
+            >
+              <div className="text-xs text-sky-800 opacity-80">
+                فواتير قيود (محفوظة محلياً)
+              </div>
+              <div className="text-3xl font-bold text-sky-900">
+                {data.qoyod_invoices_total ?? 0}
+              </div>
+              <div className="text-[10px] text-sky-700 opacity-70">
+                مصدر المقارنة من جهة قيود
+              </div>
+            </div>
+            <div
+              className="rounded-xl border border-indigo-200 bg-indigo-50 p-4"
+              data-testid="recon-count-طلبات-سلة-المؤهلة"
+            >
+              <div className="text-xs text-indigo-800 opacity-80">
+                طلبات سلة المؤهلة
+              </div>
+              <div className="text-3xl font-bold text-indigo-900">
+                {data.salla_orders_total ?? 0}
+              </div>
+              <div className="text-[10px] text-indigo-700 opacity-70">
+                تم التنفيذ / جاري التوصيل / تم التوصيل — منذ{" "}
+                {data.sync_start_date || "2026-07-01"}
+              </div>
+            </div>
           </div>
 
           {/* 5 outcome counts */}
