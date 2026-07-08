@@ -279,9 +279,14 @@ def test_match_key_falls_back_to_salla_order_number():
     assert res["counts"]["موجود في قيود فقط"] == 0
 
 
-def test_match_key_extracts_from_notes():
-    """When BOTH `reference` and `salla_order_number` are missing,
-    the order number is regex-extracted from `notes`."""
+def test_notes_field_no_longer_used_for_primary_matching():
+    """User directive 2026-07-09 (final): `notes` is NEVER a primary
+    match source. When both `reference` and `salla_order_number` are
+    empty, the invoice becomes a `qoyod_only` orphan even if `notes`
+    contains a valid-looking order number. The Salla order (which
+    has NO Qoyod invoice with matching reference) stays as
+    `needs_plan_b_send`.
+    """
     from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
     inv = _invoice("dummy", qid="INV-B", total=200.0)
     inv["reference"] = ""
@@ -292,11 +297,13 @@ def test_match_key_extracts_from_notes():
     db = _FakeDB(unified=unified, inbox=inbox, invoices=[inv])
     res = _run(run_reconciliation_v2(
         db, orders_user_id="u-42", markers_user_id="main"))
-    assert res["counts"]["مطابق"] == 1
-    assert res["counts"]["يحتاج إرسال Plan B"] == 0
+    assert res["counts"]["مطابق"] == 0
+    assert res["counts"]["يحتاج إرسال Plan B"] == 1
+    assert res["counts"]["موجود في قيود فقط"] == 1
 
 
-def test_match_key_extracts_from_description():
+def test_description_field_no_longer_used_for_primary_matching():
+    """Same rule as `notes`: `description` is Debug ONLY."""
     from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
     inv = _invoice("", qid="INV-C", total=50.0)
     inv["reference"] = ""
@@ -307,7 +314,9 @@ def test_match_key_extracts_from_description():
     db = _FakeDB(unified=unified, inbox=inbox, invoices=[inv])
     res = _run(run_reconciliation_v2(
         db, orders_user_id="u-42", markers_user_id="main"))
-    assert res["counts"]["مطابق"] == 1
+    assert res["counts"]["مطابق"] == 0
+    assert res["counts"]["يحتاج إرسال Plan B"] == 1
+    assert res["counts"]["موجود في قيود فقط"] == 1
 
 
 def test_qoyod_only_row_carries_debug_fields():

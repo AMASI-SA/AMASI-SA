@@ -68,11 +68,25 @@ def _is_real(v) -> bool:
     return bool(s) and not s.upper().startswith(("DRY:", "PREVIEW:"))
 
 
-def simplify_row(row: dict) -> dict:
-    """Map one integration_inbox row to the 4-status contract."""
+def simplify_row(row: dict, *,
+                 in_qoyod_by_reference: bool = False) -> dict:
+    """Map one integration_inbox row to the 4-status contract.
+
+    `in_qoyod_by_reference` (user directive 2026-07-09): True when
+    the caller has pre-loaded `qoyod_invoices` under this tenant and
+    confirmed that `qoyod_invoices.reference == salla_order_number`
+    for this row. When True, the row is forced into the SENT bucket
+    regardless of the local pipeline_stage / marker state — this is
+    the STRICT match rule: any order that already has an invoice in
+    قيود with matching reference is "sent", full stop.
+    """
     stage = row.get("pipeline_stage") or ""
     qid   = row.get("qoyod_invoice_id")
     real  = _is_real(qid)
+    # Plan-B marker equivalent — a real `manual_qoyod_invoice_id`
+    # is as authoritative as the unified `qoyod_invoice_id`.
+    mid   = row.get("manual_qoyod_invoice_id")
+    real_manual = _is_real(mid)
     err   = row.get("pipeline_error") or {}
     err_code = str(err.get("code") or "")
     fail_stage = str((row.get("dead_letter_evidence") or {})
@@ -84,6 +98,18 @@ def simplify_row(row: dict) -> dict:
         return {"status": DUPLICATE,
                 "reason": ("فاتورة موجودة مسبقاً في قيود "
                            f"(#{dup.get('qoyod_invoice_number') or dup.get('qoyod_invoice_id')})")}
+
+    # ── أُرسل (STRICT rule: reference match in قيود trumps everything) ─
+    if in_qoyod_by_reference:
+        inv_id_shown = qid if real else (mid if real_manual else None)
+        note = f"فاتورة قيود #{inv_id_shown}" if inv_id_shown \
+            else "فاتورة موجودة في قيود بنفس رقم الطلب"
+        return {"status": SENT,
+                "reason": f"{note} — مطابق برقم الطلب"}
+    # ── أُرسل (Plan-B marker present) ────────────────────────────────
+    if real_manual:
+        return {"status": SENT,
+                "reason": f"فاتورة قيود #{mid} (Plan B) — مرسلة يدوياً"}
 
     # ── أُرسل ────────────────────────────────────────────────────────
     if real and stage in ("COMPLETED", "COMPLETED_WITH_ROUNDING_WARNING"):
@@ -169,6 +195,26 @@ async def list_unsent_orders(
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))
     excluded_pre_sync = 0
+
+    # ── Preload قيود reference set (user directive 2026-07-09) ──
+    # STRICT rule: any inbox row whose salla_order_number matches a
+    # `reference` in `qoyod_invoices` under this tenant is SENT, no
+    # matter what the local pipeline_stage says. We build this map
+    # ONCE per request (bulk find_one → set) so `simplify_row` can
+    # short-circuit without any extra DB lookups per row.
+    ref_set: set[str] = set()
+    ref_cursor = db.qoyod_invoices.find(
+        {"user_id": user_id},
+        {"_id": 0, "reference": 1, "salla_order_number": 1,
+         "external_reference": 1, "source_reference": 1},
+    )
+    async for _inv in ref_cursor:
+        for _f in ("reference", "salla_order_number",
+                    "external_reference", "source_reference"):
+            v = str(_inv.get(_f) or "").strip()
+            if v:
+                ref_set.add(v)
+
     # rev37.1 — ONE entry per SALLA ORDER, not per inbox row. The
     # inbox intentionally stores a row per status transition
     # (idempotency key includes status_slug), so a single order can
@@ -190,6 +236,8 @@ async def list_unsent_orders(
         {"_id": 0, "id": 1, "trace_id": 1, "salla_order_number": 1,
          "received_at": 1, "pipeline_stage": 1, "pipeline_error": 1,
          "qoyod_invoice_id": 1, "duplicate_of_invoice": 1,
+         "manual_qoyod_invoice_id": 1,
+         "manual_qoyod_payment_id": 1,
          "canary_budget_hold": 1, "dead_letter_evidence": 1,
          "selective_auto_send_gate": 1,
          "stage_history": {"$slice": -6},
@@ -210,9 +258,16 @@ async def list_unsent_orders(
         if order_date is not None and order_date < sync_start:
             excluded_pre_sync += 1
             continue
-        s = simplify_row(row)
+        on = str(row.get("salla_order_number") or "").strip()
+        in_qoyod = bool(on) and (on in ref_set)
+        s = simplify_row(row, in_qoyod_by_reference=in_qoyod)
         canon = row.get("canonical_payload") or {}
         received = row.get("received_at")
+        # Debug bag (user directive 2026-07-09): every row surfaces
+        # the exact fields needed to prove the classification.
+        _mid = row.get("manual_qoyod_invoice_id")
+        _pid = row.get("manual_qoyod_payment_id")
+        _qid = row.get("qoyod_invoice_id")
         entry = {
             "order_number":   row.get("salla_order_number"),
             "received_at":    (received.isoformat()
@@ -230,6 +285,21 @@ async def list_unsent_orders(
                                  else None),
             "trace_id":       row.get("trace_id"),
             "events_count":   1,
+            "debug": {
+                "order_number":    on or None,
+                "qoyod_reference": on if in_qoyod else None,
+                "invoice_id":      (str(_qid) if _is_real(_qid) else
+                                     (str(_mid) if _is_real(_mid) else None)),
+                "payment_id":      (str(_pid) if _is_real(_pid) else None),
+                "remaining":       None,   # unsent view has no ledger
+                "match_source":    ("qoyod_invoices.reference"
+                                     if in_qoyod
+                                     else ("manual_qoyod_invoice_id"
+                                            if _is_real(_mid)
+                                            else ("qoyod_invoice_id"
+                                                   if _is_real(_qid)
+                                                   else "none"))),
+            },
         }
         key = str(row.get("salla_order_number") or "") \
             or f"__row__{row.get('id')}"

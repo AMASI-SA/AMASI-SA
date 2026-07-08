@@ -59,35 +59,38 @@ _ORDER_NUMBER_RE = re.compile(r"\b(\d{8,12})\b")
 
 
 def _extract_match_key(inv: dict) -> tuple[Optional[str], str]:
-    """Return (order_number, source) — the reconciliation key for
-    this Qoyod invoice, resolved via a strict fallback chain:
+    """Return (order_number, source) — the STRICT reconciliation key
+    for this Qoyod invoice.
 
-        1. `reference`        — the standard Qoyod field
-        2. `salla_order_number` — legacy alias written by write-through
-        3. `notes` / `description` — regex-extracted digits
+    User directive 2026-07-09 (final): `order_number` is the SOLE
+    match-key between Salla, Mezan, and قيود. The primary path is
+    ONLY these authoritative reference fields:
 
-    Returns (None, "orphan") when no key can be resolved.
+        1. `reference`          — Qoyod's canonical field
+        2. `salla_order_number` — alias written by write-through
+        3. `external_reference` — Qoyod alias
+        4. `source_reference`   — Qoyod alias
+
+    `notes` and `description` are NEVER used as a matching source —
+    they carry too much free-text noise. They are surfaced in the
+    row-level `debug` bag purely for the operator to inspect why an
+    orphan invoice failed to join a Salla order.
+
+    Returns (None, "orphan") when no strict key can be resolved.
     """
-    ref = str(inv.get("reference") or "").strip()
-    if ref and _ORDER_NUMBER_RE.fullmatch(ref):
-        return ref, "reference"
-    son = str(inv.get("salla_order_number") or "").strip()
-    if son and son != ref and _ORDER_NUMBER_RE.fullmatch(son):
-        return son, "salla_order_number"
-    # Fallback: scan free-text fields for a plausible order id.
-    for field in ("notes", "description"):
-        txt = str(inv.get(field) or "").strip()
-        if not txt:
-            continue
-        m = _ORDER_NUMBER_RE.search(txt)
-        if m:
-            return m.group(1), field
+    for field in ("reference", "salla_order_number",
+                  "external_reference", "source_reference"):
+        v = str(inv.get(field) or "").strip()
+        if v and _ORDER_NUMBER_RE.fullmatch(v):
+            return v, field
     # Last resort: reference itself, even if it doesn't match the
     # strict digit pattern (e.g. legacy invoices with alphanumeric
     # references — still countable, still deduped, but won't join
     # to a Salla order_number).
+    ref = str(inv.get("reference") or "").strip()
     if ref:
         return ref, "reference_loose"
+    son = str(inv.get("salla_order_number") or "").strip()
     if son:
         return son, "salla_order_number_loose"
     return None, "orphan"
@@ -161,28 +164,43 @@ async def _load_local_qoyod_invoices(
 
 async def _has_marker_in_inbox(
     db, *, markers_user_id: str, order_number: str,
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, Optional[str], Optional[str]]:
     """Helper signal ONLY. Is there ANY inbox trace for this order
-    that carries a real Plan-B / legacy marker?"""
+    that carries a real Plan-B / legacy marker?
+
+    Returns (has_marker, invoice_marker_id, payment_marker_id).
+    """
     cursor = db.integration_inbox.find(
         {
             "user_id": markers_user_id,
             "salla_order_number": order_number,
             "$or": [
                 {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
+                {"manual_qoyod_payment_id": {"$nin": [None, ""]}},
                 {"qoyod_invoice_id":        {"$nin": [None, ""]}},
             ],
         },
-        {"_id": 0, "manual_qoyod_invoice_id": 1, "qoyod_invoice_id": 1},
+        {"_id": 0, "manual_qoyod_invoice_id": 1,
+         "manual_qoyod_payment_id": 1, "qoyod_invoice_id": 1},
     )
+    inv_marker: Optional[str] = None
+    pay_marker: Optional[str] = None
     async for r in cursor:
-        mid = r.get("manual_qoyod_invoice_id")
-        if mid and _is_real(mid):
-            return True, str(mid)
-        lid = r.get("qoyod_invoice_id")
-        if lid and _is_real(lid):
-            return True, str(lid)
-    return False, None
+        if inv_marker is None:
+            mid = r.get("manual_qoyod_invoice_id")
+            if mid and _is_real(mid):
+                inv_marker = str(mid)
+            else:
+                lid = r.get("qoyod_invoice_id")
+                if lid and _is_real(lid):
+                    inv_marker = str(lid)
+        if pay_marker is None:
+            pid = r.get("manual_qoyod_payment_id")
+            if pid and _is_real(pid):
+                pay_marker = str(pid)
+        if inv_marker and pay_marker:
+            break
+    return (inv_marker is not None), inv_marker, pay_marker
 
 
 def _fmt(v):
@@ -236,7 +254,15 @@ async def run_reconciliation_v2(
                          "match": NEEDS_PLAN_B_SEND,
                          "note": ("طلب موجود في سلة (ضمن النطاق) "
                                   "لكن لا يوجد فاتورة مقابلة في "
-                                  "قيود — يحتاج إرسال يدوي عبر Plan B")})
+                                  "قيود — يحتاج إرسال يدوي عبر Plan B"),
+                         "debug": {
+                             "order_number":     on,
+                             "qoyod_reference":  None,
+                             "invoice_id":       None,
+                             "payment_id":       None,
+                             "remaining":        None,
+                             "match_source":     "none",
+                         }})
             continue
 
         claimed_refs.add(on)
@@ -250,8 +276,21 @@ async def run_reconciliation_v2(
 
         # Marker check — helper signal only. If invoice exists in
         # قيود but NO marker in inbox → Mezan needs a Repair Marker.
-        has_marker, _ = await _has_marker_in_inbox(
+        has_marker, inv_marker, pay_marker = await _has_marker_in_inbox(
             db, markers_user_id=markers_user_id, order_number=on)
+
+        # Debug bag (user directive 2026-07-09): STRICT match by
+        # `order_number == reference` — proves the match without
+        # ambiguity. `match_source` is always populated.
+        _match_source = inv.get("_match_source") or "reference"
+        debug = {
+            "order_number":     on,
+            "qoyod_reference":  inv.get("reference"),
+            "invoice_id":       qoyod_invoice_id,
+            "payment_id":       pay_marker,
+            "remaining":        qoyod_remaining,
+            "match_source":     _match_source,
+        }
 
         base.update({
             "qoyod_invoice_id": qoyod_invoice_id,
@@ -261,6 +300,7 @@ async def run_reconciliation_v2(
             "paid_amount":      qoyod_paid,
             "remaining":        qoyod_remaining,
             "qoyod_status":     qoyod_status,
+            "debug":            debug,
         })
 
         if not has_marker:
