@@ -249,14 +249,16 @@ export default function QoyodReconciliation() {
               : "⚠ توجد فروقات تحتاج مراجعة — راجع الجدول أدناه"}
           </div>
 
-          {/* Source totals — 2 informational cards */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Source + outcome cards — 6 total, in the exact order
+              requested by the operator. All click-filterable. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {/* 1. Qoyod invoices (informational, not a filter) */}
             <div
               className="rounded-xl border border-sky-200 bg-sky-50 p-4"
               data-testid="recon-count-فواتير-قيود"
             >
               <div className="text-xs text-sky-800 opacity-80">
-                فواتير قيود (محفوظة محلياً)
+                فواتير قيود محفوظة محلياً
               </div>
               <div className="text-3xl font-bold text-sky-900">
                 {data.qoyod_invoices_total ?? 0}
@@ -265,26 +267,29 @@ export default function QoyodReconciliation() {
                 مصدر المقارنة من جهة قيود
               </div>
             </div>
-            <div
-              className="rounded-xl border border-indigo-200 bg-indigo-50 p-4"
-              data-testid="recon-count-طلبات-سلة-المؤهلة"
-            >
-              <div className="text-xs text-indigo-800 opacity-80">
-                طلبات سلة المؤهلة
-              </div>
-              <div className="text-3xl font-bold text-indigo-900">
-                {data.salla_orders_total ?? 0}
-              </div>
-              <div className="text-[10px] text-indigo-700 opacity-70">
-                تم التنفيذ / جاري التوصيل / تم التوصيل — منذ{" "}
-                {data.sync_start_date || "2026-07-01"}
-              </div>
-            </div>
-          </div>
 
-          {/* 5 outcome counts */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {OUTCOMES.map((t) => (
+            {/* 2. Salla-eligible NOT sent yet — same set as
+                 "يحتاج إرسال Plan B" (avoid double-counting). */}
+            <CountCard
+              label="طلبات مؤهلة لم تُرسل"
+              value={counts["يحتاج إرسال Plan B"]}
+              active={tab === "يحتاج إرسال Plan B"}
+              onClick={() =>
+                switchTab(
+                  tab === "يحتاج إرسال Plan B"
+                    ? "الكل"
+                    : "يحتاج إرسال Plan B",
+                )
+              }
+            />
+
+            {/* 3–6. Matched / Qoyod-only / Repair-marker / Diff */}
+            {[
+              "مطابق",
+              "موجود في قيود فقط",
+              "يحتاج Repair Marker",
+              "فرق مبلغ",
+            ].map((t) => (
               <CountCard
                 key={t}
                 label={t}
