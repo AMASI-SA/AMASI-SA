@@ -1,420 +1,563 @@
 /**
- * Iter-293.5 — Qoyod Pending Orders (read-only surface).
+ * Plan-B Diagnostic — orders MISSING from Plan B pending.
  *
- * Purpose
- * ───────
- * Categorised view of every inbox row that is not COMPLETED. The
- * operator uses this page to triage rows into the seven categories
- * emitted by GET /admin/qoyod/pending-orders. The page is 100%
- * read-only:
+ * Historical note
+ * ────────────────
+ * This route used to render the legacy Rev32 "Qoyod Pending Orders"
+ * screen. Since the legacy pipeline is now frozen, the URL has been
+ * repurposed (per user directive 2026-02) into a READ-ONLY diagnostic
+ * page that answers a SINGLE question for every Salla order:
  *
- *   • No approve-and-send button (endpoint doesn't exist yet).
- *   • No one-shot-reprocess.
- *   • Only the safe Preview endpoint is reachable, from the row's
- *     detail drawer.
- *   • `production_writes_locked` and `selective_live_send_enabled`
- *     are surfaced but NEVER toggled from here.
+ *     "Why is this order NOT showing up in Plan B pending?"
+ *
+ * NO send button. NO approve/preview. Sending stays exclusive to
+ * /admin/qoyod-manual-send.
  *
  * Server contract
  * ───────────────
- * See backend/integrations/qoyod/routes.py — admin_qoyod_pending_orders.
+ * GET /api/integrations/qoyod/manual/missing-from-plan-b
+ *      ?days=90&limit=1000&include_already_sent=true
+ * See backend/integrations/qoyod_manual/missing_diagnostics.py
  */
-import { useEffect, useState, useMemo } from "react";
-import axios from "axios";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import api from "../lib/api";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const BASE = "/integrations/qoyod/manual";
 
-const CATEGORY_META = [
-  // Iter-293.5 — Renamed from "Ready to Send" to "Candidate" —
-  // a row here is BILLABLE but MUST pass Preview + sendability
-  // before it can be sent. True readiness is proven per-row via
-  // Preview, not by simple category membership.
-  { key: "ready_to_send",         label: "مرشّح للإرسال",       color: "emerald" },
-  { key: "needs_mapping",         label: "يحتاج ربط",           color: "amber"   },
-  { key: "bank_transfer_hold",    label: "تحويل بنكي (سداد لاحق)", color: "sky" },
-  { key: "cod",                   label: "الدفع عند الاستلام",  color: "indigo"  },
-  { key: "unsupported_method",    label: "طريقة دفع غير مدعومة", color: "rose"  },
-  { key: "total_rounding_review", label: "مراجعة الإجمالي",     color: "orange"  },
-  { key: "stale_or_cancelled",    label: "ملغي/قديم",           color: "slate"   },
-];
-
-const STAGE_LABELS = {
-  LOCKED_AWAITING_APPROVAL:              "بانتظار موافقة",
-  UNRESOLVED_QOYOD_DEPENDENCY:           "تبعية غير محلولة",
-  BANK_TRANSFER_PAYMENT_ROUTING_PENDING: "سداد بنكي مؤجل",
-  HOLD_COD_PENDING_FIX:                  "COD يحتاج إصلاح",
-  HOLD_UNSUPPORTED_PAYMENT_METHOD:       "طريقة دفع غير مدعومة",
-  INVOICE_CREATED_TOTAL_MISMATCH:        "فرق إجمالي > 0.01",
-  STALE_TRACE_NOT_CURRENT_ORDER_STATE:   "trace قديم",
-  FAILED_INVOICE:                        "فشل الفاتورة",
-  DEAD_LETTER:                           "مُهمَل (dead-letter)",
+// ── Missing-stage → Arabic label + badge colour ────────────────────
+const STAGE_META = {
+  already_sent_plan_b: {
+    label: "أُرسل عبر Plan B",
+    tone: "emerald",
+  },
+  already_sent_legacy: {
+    label: "أُرسل عبر المسار القديم",
+    tone: "sky",
+  },
+  already_in_qoyod: {
+    label: "موجود في قيود (بدون علامة في ميزان)",
+    tone: "amber",
+  },
+  missing_from_unified_orders: {
+    label: "مفقود من unified_orders",
+    tone: "orange",
+  },
+  missing_from_integration_inbox: {
+    label: "مفقود من integration_inbox",
+    tone: "rose",
+  },
+  filtered_by_policy: {
+    label: "مستبعد بسبب سياسة",
+    tone: "slate",
+  },
+  missing_from_plan_b_pending: {
+    label: "لم يظهر في Plan B رغم توفّر الشروط",
+    tone: "red",
+  },
+  unknown: {
+    label: "غير معروف",
+    tone: "purple",
+  },
 };
 
-export default function QoyodPendingOrders() {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [tab,     setTab]     = useState("ready_to_send");
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [previewing, setPreviewing] = useState(false);
+const REASON_LABELS = {
+  before_floor_date:              "قبل تاريخ التكامل (< 2026-07-01)",
+  no_salla_order_date:            "لا يوجد تاريخ إنشاء في سلة",
+  already_sent:                   "أُرسل مسبقاً",
+  duplicate_invoice_in_qoyod:     "توجد فاتورة في قيود",
+  missing_from_unified_orders:    "غير موجود في unified_orders",
+  missing_from_integration_inbox: "غير موجود في integration_inbox",
+  status_not_supported_by_plan_b: "الحالة غير مدعومة في Plan B",
+  unknown_reason:                 "سبب غير معروف — يحتاج مراجعة",
+};
 
-  async function load() {
+const TONE_CLASSES = {
+  emerald: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  sky:     "bg-sky-100 text-sky-800 border-sky-300",
+  amber:   "bg-amber-100 text-amber-900 border-amber-300",
+  orange:  "bg-orange-100 text-orange-800 border-orange-300",
+  rose:    "bg-rose-100 text-rose-800 border-rose-300",
+  slate:   "bg-slate-100 text-slate-700 border-slate-300",
+  red:     "bg-red-100 text-red-800 border-red-300",
+  purple:  "bg-purple-100 text-purple-800 border-purple-300",
+};
+
+function fmtMoney(v, currency = "SAR") {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  return `${n.toFixed(2)} ${currency === "SAR" ? "ر.س" : currency}`;
+}
+
+function extractDetail(err) {
+  const d = err?.response?.data?.detail;
+  if (!d) return err?.response?.data?.message || err?.message || "خطأ غير معروف";
+  if (typeof d === "string") return d;
+  return d.message || d.code || JSON.stringify(d);
+}
+
+function StageBadge({ stage }) {
+  const meta = STAGE_META[stage] || STAGE_META.unknown;
+  const cls = TONE_CLASSES[meta.tone] || TONE_CLASSES.slate;
+  return (
+    <span
+      data-testid={`missing-stage-badge-${stage}`}
+      className={`inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${cls}`}
+      title={stage}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+function YesNo({ value, testid }) {
+  return (
+    <span
+      data-testid={testid}
+      className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-mono ${
+        value
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-rose-100 text-rose-800"
+      }`}
+    >
+      {value ? "نعم" : "لا"}
+    </span>
+  );
+}
+
+export default function QoyodPendingOrders() {
+  const PAGE_SIZE = 25;
+
+  const [rows, setRows] = useState([]);
+  const [counts, setCounts] = useState(null);
+  const [byStage, setByStage] = useState({});
+  const [byReason, setByReason] = useState({});
+  const [floorDate, setFloorDate] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Filters
+  const [days, setDays] = useState(90);
+  const [search, setSearch] = useState("");
+  const [includeAlreadySent, setIncludeAlreadySent] = useState(true);
+  const [stageFilter, setStageFilter] = useState("all");
+
+  const [page, setPage] = useState(1);
+
+  const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const { data } = await axios.get(
-        `${API}/integrations/qoyod/admin/qoyod/pending-orders?limit=200`
-      );
-      setData(data);
+      const params = {
+        days,
+        limit: 2000,
+        include_already_sent: includeAlreadySent,
+      };
+      if (search && search.trim()) params.search = search.trim();
+      const res = await api.get(`${BASE}/missing-from-plan-b`, { params });
+      setRows(res.data?.orders || []);
+      setCounts(res.data?.counts || null);
+      setByStage(res.data?.by_stage || {});
+      setByReason(res.data?.by_reason || {});
+      setFloorDate(res.data?.floor_date || null);
+      setPage(1);
     } catch (e) {
-      toast.error(e.response?.data?.detail?.message || e.message);
+      setError(extractDetail(e));
+      setRows([]);
+      setCounts(null);
+      setByStage({});
+      setByReason({});
     } finally {
       setLoading(false);
     }
-  }
+  }, [days, search, includeAlreadySent]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, [days, includeAlreadySent, load]);
 
-  async function runPreview(row) {
-    setPreviewing(true);
-    setPreview(null);
-    try {
-      // Iter-293.5 fix — a single order_number may have multiple
-      // inbox traces (SKIPPED → COMPLETED → SKIPPED etc). We MUST
-      // disambiguate by trace_id so preview-reprocess targets THIS
-      // specific row, not "any" match.
-      const { data } = await axios.post(
-        `${API}/integrations/qoyod/admin/preview-reprocess`,
-        {
-          trace_id:     row.trace_id,
-          order_number: row.salla_order_number || row.salla_order_id,
-        }
-      );
-      setPreview(data);
-    } catch (e) {
-      toast.error(e.response?.data?.detail?.message
-                  || e.response?.data?.detail?.code
-                  || e.message);
-    } finally {
-      setPreviewing(false);
-    }
-  }
+  const filteredRows = useMemo(() => {
+    if (stageFilter === "all") return rows;
+    return rows.filter((r) => r.missing_stage === stageFilter);
+  }, [rows, stageFilter]);
 
-  const counts = data?.counts || {};
-  const flagOn = Boolean(data?.selective_live_send_enabled);
-  const lockOn = Boolean(data?.production_writes_locked);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = filteredRows.slice(start, start + PAGE_SIZE);
 
-  const activeRows = useMemo(
-    () => (data?.categories?.[tab]) || [],
-    [data, tab]
-  );
+  const stageChips = useMemo(() => {
+    const keys = Object.keys(byStage);
+    keys.sort((a, b) => (byStage[b] || 0) - (byStage[a] || 0));
+    return keys;
+  }, [byStage]);
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6" data-testid="qoyod-pending-orders-page">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <div
+      className="space-y-6"
+      dir="rtl"
+      data-testid="qoyod-pending-orders-page"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">
-            🗂️ طلبات قيود المعلقة
+          <h1 className="text-2xl font-bold text-slate-900">
+            🩺 تشخيص الطلبات غير الظاهرة في Plan B
           </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            قائمة المراجعة اليدوية لطلبات قيود — عرض قراءة فقط.
+          <p className="mt-1 text-sm text-slate-600 max-w-3xl">
+            صفحة قراءة فقط: تعرض كل طلبات سلة (تم التنفيذ / جاري التوصيل / تم
+            التوصيل) بتاريخ ≥ {floorDate || "2026-07-01"} التي{" "}
+            <b>لا تظهر</b> في صفحة الإرسال اليدوي — مع بيان{" "}
+            <b>مرحلة الاختفاء</b> والسبب المحدد لكل طلب.
+          </p>
+          <p className="mt-1 text-xs text-slate-500 max-w-3xl">
+            🛑 لا زر إرسال في هذه الصفحة. الإرسال يبقى فقط من صفحة{" "}
+            <span className="font-mono">/admin/qoyod-manual-send</span>.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          data-testid="btn-refresh"
-          disabled={loading}
-          className="px-3 py-1.5 text-xs font-bold rounded bg-slate-200 hover:bg-slate-300 disabled:opacity-40"
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            dir="ltr"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && load()}
+            placeholder="بحث برقم الطلب…"
+            data-testid="missing-search-input"
+            className="w-44 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={load}
+            data-testid="missing-search-btn"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+          >
+            بحث
+          </button>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            data-testid="missing-days-select"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value={30}>آخر 30 يوم</option>
+            <option value={60}>آخر 60 يوم</option>
+            <option value={90}>آخر 90 يوم</option>
+            <option value={180}>آخر 180 يوم</option>
+            <option value={365}>آخر سنة</option>
+          </select>
+          <label
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
+            data-testid="missing-include-sent-toggle"
+          >
+            <input
+              type="checkbox"
+              checked={includeAlreadySent}
+              onChange={(e) => setIncludeAlreadySent(e.target.checked)}
+            />
+            إظهار &quot;مُرسل&quot;
+          </label>
+          <button
+            type="button"
+            onClick={load}
+            data-testid="missing-refresh-btn"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+          >
+            تحديث
+          </button>
+        </div>
+      </div>
+
+      {/* Counters */}
+      {counts && (
+        <div
+          className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+          data-testid="missing-counters"
         >
-          {loading ? "…" : "تحديث"}
-        </button>
-      </div>
-
-      {/* Read-only status banner — never omitted, always accurate. */}
-      <div
-        data-testid="read-only-banner"
-        className={`mb-4 rounded-lg border-2 p-3 ${
-          flagOn ? "border-emerald-300 bg-emerald-50"
-                 : "border-amber-300 bg-amber-50"}`}
-      >
-        <div className="flex items-center gap-3 flex-wrap text-[12px]">
-          <span className="font-extrabold text-amber-900">
-            الوضع الحالي: قراءة فقط
-          </span>
-          <span className="font-mono">
-            production_writes_locked =
-            <b className={lockOn ? "text-emerald-700" : "text-rose-700"}>
-              {" "}{String(lockOn)}
-            </b>
-            {data?.lock_source && (
-              <span className="text-slate-500 mr-1">
-                {" "}<i>({data.lock_source})</i>
-              </span>
-            )}
-          </span>
-          <span className="font-mono">
-            selective_live_send_enabled =
-            <b className={flagOn ? "text-emerald-700" : "text-rose-700"}>
-              {" "}{String(flagOn)}
-            </b>
-          </span>
-          <span className="text-slate-600">
-            — لا يوجد إرسال فعلي إلى قيود من هذه الصفحة.
-          </span>
+          {[
+            ["الطلبات المفحوصة", counts.scanned ?? counts.universe_total],
+            ["ظاهر في Plan B", counts.visible_in_plan_b],
+            ["الظاهر هنا (غير ظاهر في Plan B)", counts.returned],
+            ["الحد الأدنى للتاريخ", floorDate || "—"],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+              data-testid={`missing-counter-${label}`}
+            >
+              <div className="text-xs text-slate-500">{label}</div>
+              <div className="text-2xl font-semibold text-slate-900">
+                {value ?? 0}
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="mt-2 text-[11px] text-slate-700">
-          Preview فقط متاح لكل طلب. لا Approve & Send. لا one-shot. لا batch.
-          لا backfill. لا فتح للـ global lock.
-        </div>
-      </div>
+      )}
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 mb-3"
-           data-testid="pending-tabs">
-        {CATEGORY_META.map(c => {
-          const active = tab === c.key;
-          const count  = counts[c.key] ?? 0;
-          return (
+      {/* Stage histogram / filter chips */}
+      {stageChips.length > 0 && (
+        <div
+          className="rounded-xl border border-slate-200 bg-white p-3"
+          data-testid="missing-stage-histogram"
+        >
+          <div className="mb-2 text-xs font-semibold text-slate-600">
+            🔎 تصفية حسب مرحلة الاختفاء:
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             <button
-              key={c.key}
               type="button"
-              onClick={() => setTab(c.key)}
-              data-testid={`tab-${c.key}`}
-              className={`px-3 py-2 text-xs font-bold rounded-t transition-colors ${
-                active
-                  ? `bg-${c.color}-600 text-white`
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+              onClick={() => setStageFilter("all")}
+              data-testid="missing-stage-filter-all"
+              className={`rounded-full border px-3 py-1 text-xs ${
+                stageFilter === "all"
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
               }`}
             >
-              {c.label} <span className="opacity-80">({count})</span>
+              الكل ({rows.length})
             </button>
-          );
-        })}
-      </div>
-
-      {/* Rows table */}
-      {loading ? (
-        <div className="text-center text-slate-500 py-10">جارِ التحميل…</div>
-      ) : activeRows.length === 0 ? (
-        <div className="text-center text-slate-400 py-10 text-sm"
-             data-testid="empty-category">
-          لا يوجد طلبات في هذه الفئة.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px] border border-slate-200"
-                 data-testid="pending-orders-table">
-            <thead className="bg-slate-100">
-              <tr className="text-right">
-                <th className="p-2 border-b border-slate-200">رقم الطلب</th>
-                <th className="p-2 border-b border-slate-200">trace_id</th>
-                <th className="p-2 border-b border-slate-200">طريقة الدفع</th>
-                <th className="p-2 border-b border-slate-200">حالة سلة</th>
-                <th className="p-2 border-b border-slate-200">مبلغ سلة</th>
-                <th className="p-2 border-b border-slate-200">pipeline_stage</th>
-                <th className="p-2 border-b border-slate-200">reason</th>
-                <th className="p-2 border-b border-slate-200">فاتورة قيود؟</th>
-                <th className="p-2 border-b border-slate-200">sendable</th>
-                <th className="p-2 border-b border-slate-200">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeRows.map(r => (
-                <tr key={r.row_id}
-                    className="hover:bg-slate-50 border-b border-slate-100"
-                    data-testid={`row-${r.row_id}`}>
-                  <td className="p-2 font-mono">
-                    {r.salla_order_number || r.salla_order_id || "—"}
-                  </td>
-                  <td className="p-2 font-mono text-[10px] text-slate-500">
-                    {r.trace_id?.slice(0, 12) || "—"}
-                  </td>
-                  <td className="p-2">{r.payment_method || "—"}</td>
-                  <td className="p-2">{r.salla_order_status || "—"}</td>
-                  <td className="p-2 font-mono">
-                    {r.salla_total != null ? Number(r.salla_total).toFixed(2)
-                                            : "—"}
-                  </td>
-                  <td className="p-2">
-                    <span
-                      className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200"
-                      title={r.pipeline_stage}>
-                      {STAGE_LABELS[r.pipeline_stage] || r.pipeline_stage}
-                    </span>
-                  </td>
-                  <td className="p-2 text-[10px] text-slate-600">
-                    {r.reason || "—"}
-                  </td>
-                  <td className="p-2 text-center">
-                    {r.has_existing_invoice ? (
-                      <span
-                        className="text-emerald-700 font-bold"
-                        title={r.qoyod_invoice_id}>
-                        ✓ {r.qoyod_invoice_number || "yes"}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className="p-2 text-center">
-                    {r.dependency_status?.sendable === true
-                      ? <span className="text-emerald-700 font-bold">✓</span>
-                      : r.dependency_status?.sendable === false
-                        ? <span className="text-rose-700 font-bold">✗</span>
-                        : "—"}
-                  </td>
-                  <td className="p-2 flex flex-wrap gap-1">
-                    {(r.actions_available || []).includes("preview") && (
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedRow(r); runPreview(r); }}
-                        data-testid={`btn-preview-${r.row_id}`}
-                        className="px-2 py-1 text-[11px] font-bold rounded bg-sky-600 text-white hover:bg-sky-700"
-                      >
-                        🔍 Preview
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRow(r)}
-                      data-testid={`btn-details-${r.row_id}`}
-                      className="px-2 py-1 text-[11px] font-bold rounded bg-slate-200 hover:bg-slate-300"
-                    >
-                      تفاصيل
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Detail drawer */}
-      {selectedRow && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-             data-testid="row-drawer-backdrop"
-             onClick={() => { setSelectedRow(null); setPreview(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-5 max-h-[90vh] overflow-y-auto"
-               onClick={e => e.stopPropagation()}
-               data-testid="row-drawer">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-900">
-                  الطلب {selectedRow.salla_order_number || selectedRow.salla_order_id || "—"}
-                </h2>
-                <div className="text-[11px] font-mono text-slate-500">
-                  trace_id: {selectedRow.trace_id}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setSelectedRow(null); setPreview(null); }}
-                data-testid="btn-close-drawer"
-                className="text-slate-400 hover:text-slate-700 text-xl">
-                ✕
-              </button>
-            </div>
-
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px] mb-4">
-              <dt className="text-slate-500">pipeline_stage</dt>
-              <dd className="font-mono">{selectedRow.pipeline_stage}</dd>
-              <dt className="text-slate-500">payment_method</dt>
-              <dd>{selectedRow.payment_method || "—"}</dd>
-              <dt className="text-slate-500">salla_order_status</dt>
-              <dd>{selectedRow.salla_order_status || "—"}</dd>
-              <dt className="text-slate-500">salla_total</dt>
-              <dd className="font-mono">
-                {selectedRow.salla_total != null
-                  ? Number(selectedRow.salla_total).toFixed(2)
-                  : "—"}
-              </dd>
-              <dt className="text-slate-500">qoyod_invoice_id</dt>
-              <dd className="font-mono">{selectedRow.qoyod_invoice_id || "—"}</dd>
-              {selectedRow.existing_invoice_source && (
-                <>
-                  <dt className="text-slate-500">existing_invoice_source</dt>
-                  <dd className="font-mono text-amber-800" data-testid="drawer-existing-invoice-source">
-                    {selectedRow.existing_invoice_source}
-                    {selectedRow.existing_invoice_info?.qoyod_invoice_id && (
-                      <span className="ms-1 text-slate-500">
-                        ({selectedRow.existing_invoice_info.qoyod_invoice_id})
-                      </span>
-                    )}
-                  </dd>
-                </>
-              )}
-              <dt className="text-slate-500">qoyod_invoice_payment_id</dt>
-              <dd className="font-mono">
-                {selectedRow.qoyod_invoice_payment_id || "—"}
-              </dd>
-              <dt className="text-slate-500">qoyod_receipt_id</dt>
-              <dd className="font-mono">
-                {selectedRow.qoyod_receipt_id || "—"}
-              </dd>
-              <dt className="text-slate-500">reason</dt>
-              <dd className="text-rose-700">{selectedRow.reason || "—"}</dd>
-            </dl>
-
-            {selectedRow.dependency_status && (
-              <details className="mb-3 text-[11px]"
-                       data-testid="drawer-dependency-status">
-                <summary className="cursor-pointer font-bold text-slate-700">
-                  dependency_status
-                </summary>
-                <pre dir="ltr"
-                     className="mt-1 bg-slate-100 p-2 rounded font-mono text-[10px] whitespace-pre-wrap break-words max-h-60 overflow-auto">
-{JSON.stringify(selectedRow.dependency_status, null, 2)}
-                </pre>
-              </details>
-            )}
-
-            {selectedRow.totals_comparison && (
-              <details className="mb-3 text-[11px]"
-                       data-testid="drawer-totals-comparison">
-                <summary className="cursor-pointer font-bold text-slate-700">
-                  totals_comparison
-                </summary>
-                <pre dir="ltr"
-                     className="mt-1 bg-slate-100 p-2 rounded font-mono text-[10px] whitespace-pre-wrap break-words max-h-60 overflow-auto">
-{JSON.stringify(selectedRow.totals_comparison, null, 2)}
-                </pre>
-              </details>
-            )}
-
-            <div className="mt-4 p-2 rounded bg-amber-50 border border-amber-300 text-[11px] text-amber-900"
-                 data-testid="drawer-safety-note">
-              الإجراءات المتاحة: <b>{(selectedRow.actions_available || []).join(", ") || "—"}</b>.
-              زر Approve & Send مُعطَّل حالياً (يحتاج تفعيل selective_live_send_enabled).
-            </div>
-
-            {/* Preview panel */}
-            {previewing && (
-              <div className="mt-3 text-sm text-slate-500">
-                جارِ بناء المعاينة…
-              </div>
-            )}
-            {preview && (
-              <div className="mt-3" data-testid="drawer-preview-result">
-                <div className={`rounded border p-2 mb-2 text-[12px] font-bold ${
-                  preview.ok ? "bg-emerald-50 border-emerald-300"
-                             : "bg-rose-50 border-rose-300"}`}>
-                  Preview: {preview.ok ? "✓ نجح" : "✗ فشل"} — mode={preview.mode || "—"},
-                  qoyod_request_sent={String(preview.qoyod_request_sent ?? false)}
-                </div>
-                <details open>
-                  <summary className="cursor-pointer text-[11px] font-bold text-slate-700">
-                    Preview JSON كامل
-                  </summary>
-                  <pre dir="ltr"
-                       className="mt-1 bg-slate-900 text-slate-100 p-2 rounded font-mono text-[10px] whitespace-pre-wrap break-words max-h-72 overflow-auto">
-{JSON.stringify(preview, null, 2)}
-                  </pre>
-                </details>
-              </div>
-            )}
+            {stageChips.map((s) => {
+              const meta = STAGE_META[s] || STAGE_META.unknown;
+              const active = stageFilter === s;
+              const tone = TONE_CLASSES[meta.tone] || TONE_CLASSES.slate;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStageFilter(s)}
+                  data-testid={`missing-stage-filter-${s}`}
+                  className={`rounded-full border px-3 py-1 text-xs ${
+                    active
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : tone
+                  }`}
+                >
+                  {meta.label}
+                  <span dir="ltr" className="ms-1 font-mono">
+                    ({byStage[s] || 0})
+                  </span>
+                </button>
+              );
+            })}
           </div>
+          {Object.keys(byReason).length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
+              <div className="mb-1 font-semibold">توزيع الأسباب:</div>
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid="missing-reason-histogram"
+              >
+                {Object.entries(byReason)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([k, v]) => (
+                    <span
+                      key={k}
+                      className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5"
+                    >
+                      {REASON_LABELS[k] || k}
+                      <span dir="ltr" className="ms-1 font-mono">
+                        ({v})
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {error && (
+        <div
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          data-testid="missing-error"
+        >
+          {String(error)}
+        </div>
+      )}
+
+      {/* Table */}
+      <div
+        className="overflow-x-auto rounded-xl border border-slate-200 bg-white"
+        data-testid="missing-orders-table"
+      >
+        {loading ? (
+          <div className="p-6 text-sm text-slate-500">جاري التحميل…</div>
+        ) : filteredRows.length === 0 ? (
+          <div
+            className="p-6 text-sm text-slate-500"
+            data-testid="missing-empty"
+          >
+            ✅ لا توجد طلبات مفقودة ضمن هذه المعايير.
+          </div>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-right">رقم الطلب</th>
+                  <th className="px-3 py-2 text-right">حالة سلة</th>
+                  <th className="px-3 py-2 text-right">
+                    تاريخ إنشاء الطلب في سلة
+                  </th>
+                  <th className="px-3 py-2 text-right">طريقة الدفع</th>
+                  <th className="px-3 py-2 text-right">مبلغ سلة</th>
+                  <th className="px-3 py-2 text-right">فاتورة قيود؟</th>
+                  <th className="px-3 py-2 text-right">
+                    ظاهر في Plan B؟
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    مرحلة الاختفاء
+                  </th>
+                  <th className="px-3 py-2 text-right">السبب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((o) => (
+                  <tr
+                    key={`${o.order_number}-${o.missing_stage}`}
+                    className="border-t border-slate-100 hover:bg-slate-50"
+                    data-testid={`missing-row-${o.order_number}`}
+                  >
+                    <td className="px-3 py-2 font-medium">
+                      <div>{o.order_number}</div>
+                      {o.trace_id && (
+                        <div
+                          dir="ltr"
+                          className="text-[10px] font-mono text-slate-400"
+                        >
+                          {String(o.trace_id).slice(0, 12)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
+                        {o.salla_status || "—"}
+                      </span>
+                    </td>
+                    <td
+                      className="px-3 py-2 text-slate-600 font-mono"
+                      dir="ltr"
+                      data-testid={`missing-salla-date-${o.order_number}`}
+                    >
+                      {o.salla_created_date || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {o.payment_method || "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono" dir="ltr">
+                      {fmtMoney(o.total_amount, o.currency)}
+                    </td>
+                    <td
+                      className="px-3 py-2 text-center"
+                      data-testid={`missing-has-invoice-${o.order_number}`}
+                    >
+                      {o.has_qoyod_invoice ? (
+                        <span
+                          className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-mono text-emerald-800"
+                          title={o.qoyod_invoice_id || ""}
+                        >
+                          نعم
+                          {o.qoyod_invoice_number && (
+                            <span className="ms-1 text-emerald-700">
+                              #{o.qoyod_invoice_number}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-mono text-slate-500">
+                          لا
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <YesNo
+                        value={o.visible_in_plan_b}
+                        testid={`missing-visible-${o.order_number}`}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <StageBadge stage={o.missing_stage} />
+                      <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5">
+                          unified:{" "}
+                          {o.in_unified_orders ? "✓" : "✗"}
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5">
+                          inbox:{" "}
+                          {o.in_integration_inbox ? "✓" : "✗"}
+                        </span>
+                        {o.marker_source && o.marker_source !== "none" && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5">
+                            marker: {o.marker_source}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700 text-xs">
+                      <div>{REASON_LABELS[o.reason] || o.reason}</div>
+                      <div
+                        dir="ltr"
+                        className="mt-0.5 font-mono text-[10px] text-slate-400"
+                      >
+                        {o.reason}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div
+              className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+              data-testid="missing-pagination"
+            >
+              <div className="text-slate-500">
+                عرض{" "}
+                <span dir="ltr" className="font-mono">
+                  {start + 1}–{Math.min(start + PAGE_SIZE, filteredRows.length)}
+                </span>{" "}
+                من{" "}
+                <span dir="ltr" className="font-mono">
+                  {filteredRows.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  data-testid="missing-prev-page"
+                  className={`rounded-lg border px-3 py-1.5 text-xs ${
+                    currentPage <= 1
+                      ? "border-slate-200 bg-slate-100 text-slate-400"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  → السابق
+                </button>
+                <span
+                  dir="ltr"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono"
+                  data-testid="missing-page-indicator"
+                >
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  data-testid="missing-next-page"
+                  className={`rounded-lg border px-3 py-1.5 text-xs ${
+                    currentPage >= totalPages
+                      ? "border-slate-200 bg-slate-100 text-slate-400"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  التالي ←
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

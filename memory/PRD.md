@@ -1,5 +1,64 @@
 # PRD — MEZAN E-commerce Accounting App
 
+
+# ══════════════════════════════════════════════════════════════════
+# 🩺 PLAN B DIAGNOSTIC — Missing-From-Plan-B page (2026-07-08)
+# ══════════════════════════════════════════════════════════════════
+User directive (2026-07-08): the operator sees ~263 Salla orders since
+2026-07-01, ~195 sent to قيود, ~12 pending in Plan B — leaving ~56
+orders INVISIBLE. Build a diagnostic page that answers a single
+question for each order: **"Why is this order NOT showing up in Plan
+B pending?"**.
+
+NEW backend module:
+- /app/backend/integrations/qoyod_manual/missing_diagnostics.py
+    list_missing_from_plan_b() cross-references SIX sources:
+      1. unified_orders            (Salla source of truth)
+      2. integration_inbox         (webhook capture)
+      3. Plan-B pending logic      (list_pending_orders — authoritative
+                                    definition of "visible")
+      4. qoyod_invoices            (قيود side)
+      5. manual_qoyod_invoice_id   (Plan-B marker)
+      6. qoyod_invoice_id          (legacy marker)
+    Emits per-order (missing_stage, reason) with rich display fields.
+
+    Reasons: before_floor_date, no_salla_order_date, already_sent,
+    duplicate_invoice_in_qoyod, missing_from_unified_orders,
+    missing_from_integration_inbox, status_not_supported_by_plan_b,
+    unknown_reason.
+
+    Stages (WHERE it dropped in the pipeline): already_sent_plan_b,
+    already_sent_legacy, already_in_qoyod, missing_from_unified_orders,
+    missing_from_integration_inbox, filtered_by_policy,
+    missing_from_plan_b_pending, unknown.
+
+NEW endpoint (mounted under existing Plan-B router):
+    GET /api/integrations/qoyod/manual/missing-from-plan-b
+        ?days=90&limit=1000&search=…&include_already_sent=true
+
+Frontend: REPURPOSED /app/frontend/src/pages/QoyodPendingOrders.jsx
+(kept legacy route `/integrations/qoyod/pending-orders` intact per user
+directive — code fully rewritten to diagnostic-only). NO send button.
+NO approve/preview. Sending remains exclusive to
+`/admin/qoyod-manual-send`.
+
+Table columns per user spec:
+    1. رقم الطلب
+    2. حالة الطلب في سلة
+    3. تاريخ إنشاء الطلب الحقيقي في سلة
+    4. طريقة الدفع
+    5. مبلغ سلة
+    6. هل توجد فاتورة قيود؟
+    7. هل يظهر في Plan B؟
+    8. مرحلة الاختفاء (missing_stage) + السبب (reason)
+
+Tests: /app/backend/tests/test_missing_from_plan_b.py — 10 cases
+(empty universe, Plan-B-visible exclusion, both marker sources,
+before-floor-date, unsupported status, missing-from-inbox,
+missing-from-unified, include-already-sent toggle, duplicate-in-qoyod).
+All passing.
+
+
 # ══════════════════════════════════════════════════════════════════
 # ✅ PLAN B — Manual Send (2026-02, this session)
 # ══════════════════════════════════════════════════════════════════

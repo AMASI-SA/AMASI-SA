@@ -24,6 +24,9 @@ from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
 )
 from integrations.qoyod_manual.diagnose import diagnose_totals
+from integrations.qoyod_manual.missing_diagnostics import (
+    list_missing_from_plan_b,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +180,34 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                                         if isinstance(_upd, datetime)
                                         else _upd),
         }
+
+    @router.get("/missing-from-plan-b")
+    async def missing_from_plan_b(
+        days: int = Query(90, ge=1, le=365),
+        limit: int = Query(1000, ge=1, le=5000),
+        search: Optional[str] = Query(None),
+        include_already_sent: bool = Query(
+            True,
+            description=("Include rows whose invisibility reason is "
+                          "`already_sent` / `duplicate_invoice_in_qoyod`. "
+                          "Default True — the diagnostic view wants to "
+                          "prove that these ARE sent, not lost.")),
+        user=Depends(current_user),
+    ):
+        """Read-only: enumerate every Salla order that is NOT visible
+        on the Plan-B pending page, with the pipeline stage where it
+        got stuck and a short reason code.
+
+        Cross-references six independent sources: unified_orders,
+        integration_inbox, Plan-B pending logic, qoyod_invoices,
+        `manual_qoyod_invoice_id` and `qoyod_invoice_id` markers.
+
+        NO writes. NO قيود network calls. NO send buttons on the UI
+        side either — this page is 100% diagnostic.
+        """
+        return await list_missing_from_plan_b(
+            db, user_id=_TENANT, days=days, limit=limit,
+            search=search, include_already_sent=include_already_sent)
 
     @router.get("/diagnose/{order_number}")
     async def diagnose(order_number: str,
