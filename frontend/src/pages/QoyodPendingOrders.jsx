@@ -129,7 +129,9 @@ export default function QoyodPendingOrders() {
   const PAGE_SIZE = 25;
 
   const [rows, setRows] = useState([]);
+  const [orphans, setOrphans] = useState([]);
   const [counts, setCounts] = useState(null);
+  const [invariantHolds, setInvariantHolds] = useState(true);
   const [byStage, setByStage] = useState({});
   const [byReason, setByReason] = useState({});
   const [floorDate, setFloorDate] = useState(null);
@@ -156,7 +158,9 @@ export default function QoyodPendingOrders() {
       if (search && search.trim()) params.search = search.trim();
       const res = await api.get(`${BASE}/missing-from-plan-b`, { params });
       setRows(res.data?.orders || []);
+      setOrphans(res.data?.webhooks_without_unified || []);
       setCounts(res.data?.counts || null);
+      setInvariantHolds(res.data?.invariant_holds !== false);
       setByStage(res.data?.by_stage || {});
       setByReason(res.data?.by_reason || {});
       setFloorDate(res.data?.floor_date || null);
@@ -164,7 +168,9 @@ export default function QoyodPendingOrders() {
     } catch (e) {
       setError(extractDetail(e));
       setRows([]);
+      setOrphans([]);
       setCounts(null);
+      setInvariantHolds(true);
       setByStage({});
       setByReason({});
     } finally {
@@ -266,29 +272,105 @@ export default function QoyodPendingOrders() {
         </div>
       </div>
 
-      {/* Counters */}
+      {/* Counters — main invariant */}
       {counts && (
         <div
-          className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+          className="space-y-3"
           data-testid="missing-counters"
         >
-          {[
-            ["الطلبات المفحوصة", counts.scanned ?? counts.universe_total],
-            ["ظاهر في Plan B", counts.visible_in_plan_b],
-            ["الظاهر هنا (غير ظاهر في Plan B)", counts.returned],
-            ["الحد الأدنى للتاريخ", floorDate || "—"],
-          ].map(([label, value]) => (
+          {/* Invariant strip */}
+          <div
+            className={`rounded-xl border p-3 text-sm ${
+              invariantHolds
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-800"
+            }`}
+            data-testid="missing-invariant-strip"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold">
+                {invariantHolds ? "✅ التحقق المحاسبي:" : "⚠️ خلل في التحقق:"}
+              </span>
+              <span dir="ltr" className="font-mono">
+                {counts.eligible_salla_orders} = {counts.sent_to_qoyod} +{" "}
+                {counts.visible_in_plan_b} + {counts.hidden_with_reason}
+              </span>
+              <span className="text-xs opacity-80">
+                (الطلبات المؤهلة = مُرسل + ظاهر في Plan B + مخفي بسبب)
+              </span>
+            </div>
+          </div>
+
+          {/* Main 4 counters */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              [
+                "الطلبات المفحوصة (سلة ≥ 2026-07-01)",
+                counts.eligible_salla_orders,
+                "sky",
+              ],
+              ["مُرسلة إلى قيود", counts.sent_to_qoyod, "emerald"],
+              ["ظاهرة في Plan B", counts.visible_in_plan_b, "amber"],
+              [
+                "مخفية بسبب (تحتاج مراجعة)",
+                counts.hidden_with_reason,
+                "rose",
+              ],
+            ].map(([label, value, tone]) => {
+              const toneCls = {
+                sky: "border-sky-200 bg-sky-50 text-sky-900",
+                emerald:
+                  "border-emerald-200 bg-emerald-50 text-emerald-900",
+                amber:
+                  "border-amber-200 bg-amber-50 text-amber-900",
+                rose: "border-rose-200 bg-rose-50 text-rose-900",
+              }[tone];
+              return (
+                <div
+                  key={label}
+                  className={`rounded-xl border px-4 py-3 ${toneCls}`}
+                  data-testid={`missing-counter-${label}`}
+                >
+                  <div className="text-xs opacity-80">{label}</div>
+                  <div className="text-2xl font-semibold">
+                    {value ?? 0}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Secondary informational counters */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 text-xs">
             <div
-              key={label}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-              data-testid={`missing-counter-${label}`}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              data-testid="missing-counter-orphan-webhooks"
             >
-              <div className="text-xs text-slate-500">{label}</div>
-              <div className="text-2xl font-semibold text-slate-900">
-                {value ?? 0}
+              <div className="text-slate-500">
+                Webhooks خارج مصدر سلة (تحتاج Sync)
+              </div>
+              <div className="text-lg font-semibold text-slate-800">
+                {counts.webhooks_without_unified ?? 0}
               </div>
             </div>
-          ))}
+            <div
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              data-testid="missing-counter-status-oos"
+            >
+              <div className="text-slate-500">
+                طلبات سلة بحالة خارج نطاق Plan B
+              </div>
+              <div className="text-lg font-semibold text-slate-800">
+                {counts.status_out_of_scope_unified ?? 0}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <div className="text-slate-500">الحد الأدنى للتاريخ</div>
+              <div dir="ltr" className="text-lg font-mono text-slate-800">
+                {floorDate || "2026-07-01"}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -558,6 +640,86 @@ export default function QoyodPendingOrders() {
           </>
         )}
       </div>
+
+      {/* Orphan webhooks section — informational only */}
+      {orphans && orphans.length > 0 && (
+        <div
+          className="rounded-xl border border-orange-200 bg-orange-50 p-4"
+          data-testid="missing-orphans-section"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-bold text-orange-900">
+                📥 Webhooks خارج مصدر سلة / تحتاج Sync
+              </div>
+              <div className="text-xs text-orange-800/80">
+                هذه Webhooks موجودة في <code>integration_inbox</code>{" "}
+                لكن لا يوجد لها ما يقابلها في <code>unified_orders</code>.{" "}
+                لا تُحتسب في العدّاد الرئيسي — تحتاج تشغيل salla sync
+                لإضافتها إلى قاعدة سلة المحلية.
+              </div>
+            </div>
+            <span
+              className="rounded-full bg-orange-200 px-3 py-1 text-sm font-mono text-orange-900"
+              data-testid="missing-orphans-count"
+            >
+              {orphans.length}
+            </span>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-orange-200 bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-orange-100/60 text-orange-900">
+                <tr>
+                  <th className="px-3 py-2 text-right">رقم الطلب</th>
+                  <th className="px-3 py-2 text-right">حالة سلة</th>
+                  <th className="px-3 py-2 text-right">
+                    تاريخ Salla (إن وُجد)
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    وقت وصول Webhook
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {orphans.slice(0, 100).map((o) => (
+                  <tr
+                    key={o.order_number + (o.trace_id || "")}
+                    className="border-t border-orange-100"
+                    data-testid={`missing-orphan-${o.order_number}`}
+                  >
+                    <td className="px-3 py-2 font-mono text-slate-800">
+                      {o.order_number || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {o.salla_status || "—"}
+                    </td>
+                    <td
+                      className="px-3 py-2 font-mono text-slate-600"
+                      dir="ltr"
+                    >
+                      {o.salla_created_date || "—"}
+                    </td>
+                    <td
+                      className="px-3 py-2 font-mono text-slate-500"
+                      dir="ltr"
+                    >
+                      {o.received_at
+                        ? String(o.received_at).slice(0, 19)
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {orphans.length > 100 && (
+              <div className="border-t border-orange-100 bg-orange-50/60 px-3 py-1.5 text-[11px] text-orange-800">
+                عرض أول 100 صف من {orphans.length} — قم بتشغيل salla sync
+                لمعالجة الباقي.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
