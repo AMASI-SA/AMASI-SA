@@ -136,6 +136,45 @@ function TotalsBreakdown({ detail }) {
           </tbody>
         </table>
       </div>
+      {b.rounding_adjustment && (
+        <div
+          className={`mt-2 rounded border p-2 ${
+            b.rounding_adjustment.applied
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+              : "border-red-300 bg-red-50 text-red-900"
+          }`}
+          data-testid="breakdown-rounding-adjustment"
+        >
+          <div className="font-semibold">
+            {b.rounding_adjustment.applied ? "✅" : "⚠️"} تسوية فرق التقريب
+            مع سلة:
+          </div>
+          {b.rounding_adjustment.applied ? (
+            <div>
+              قيمة السطر:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(b.rounding_adjustment.amount)}
+              </span>{" "}
+              (بدون ضريبة) · معرف المنتج في قيود:{" "}
+              <span dir="ltr" className="font-mono">
+                {b.rounding_adjustment.product_id}
+              </span>
+              . {b.rounding_adjustment.note}
+            </div>
+          ) : (
+            <div>
+              قيمة التسوية المطلوبة:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(b.rounding_adjustment.would_be_amount)}
+              </span>{" "}
+              — {b.rounding_adjustment.reason ===
+                "rounding_adjustment_product_missing"
+                ? "لم يُعرَّف rounding_adjustment_product_id في إعدادات قيود. أنشئ منتج تسوية في قيود واضبط معرّفه لتفعيل الإرسال التلقائي."
+                : b.rounding_adjustment.reason}
+            </div>
+          )}
+        </div>
+      )}
       {ship && (
         <div
           className={`mt-2 rounded border p-2 ${

@@ -190,6 +190,13 @@ class SettingsPatch(BaseModel):
     # this set, the pre-POST totals guard refuses to send the invoice
     # rather than silently dropping the fee on the floor.
     default_cod_fee_product_id:    Optional[str] = None
+    # Plan-B (2026-07) — Qoyod product id used for a "rounding
+    # adjustment" line when tax-quantisation drifts leave a residual
+    # of a few cents between Salla's declared total and the sum of
+    # قيود-computed line grosses. Required ONLY when the manual send
+    # detects a rounding-only mismatch; without it, Plan-B refuses to
+    # send with `rounding_adjustment_product_missing`.
+    rounding_adjustment_product_id: Optional[str] = None
     # Iter-293.3 — Production Writes Kill Switch. When True, the live
     # webhook pipeline runs every stage (normalize/preflight/builders)
     # but STOPS before any POST to api.qoyod.com. Each order is parked

@@ -555,9 +555,77 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
                                            "مُهمَل في الحسبة"),
             }
 
-    expected_total = float(
+    expected_total_before_adj = float(
         expected_total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
     salla_total = _q2(canon.get("total_amount"))
+    diff_before_adj = _q2(expected_total_before_adj - salla_total)
+
+    # ── Rounding adjustment (Plan-B rev 2026-07-08) ────────────────
+    # When 2dp × 1.15 tax quantisation leaves a residual of a few
+    # cents between Salla's declared total and the قيود-computed
+    # sum, add a SINGLE dedicated adjustment line so the invoice
+    # closes exactly to Salla's number. The adjustment is applied
+    # ONLY when:
+    #   (a) the ONLY source of the residual is items rounding — NOT
+    #       an ignored shipping / COD line (those are real config
+    #       gaps and MUST still fail with totals_mismatch);
+    #   (b) the residual is small (≤ 1.00 SAR — larger diffs are
+    #       structural and must not be silently absorbed);
+    #   (c) `rounding_adjustment_product_id` is configured in
+    #       qoyod_settings — otherwise refuse with
+    #       `rounding_adjustment_product_missing`.
+    rounding_adjustment: Optional[dict] = None
+    shipping_config_gap = (
+        isinstance(shipping_breakdown, dict)
+        and not shipping_breakdown.get("included")
+        and _f(shipping_breakdown.get("salla_declared_amount")) > 0
+    )
+    cod_config_gap = (
+        isinstance(cod_breakdown, dict)
+        and not cod_breakdown.get("included")
+        and _f(cod_breakdown.get("salla_declared_amount")) > 0
+    )
+    residual = _q2(salla_total - expected_total_before_adj)
+    if (abs(diff_before_adj) > 0.01
+            and abs(residual) <= 1.00
+            and not shipping_config_gap
+            and not cod_config_gap):
+        adj_pid = _unwrap_id(
+            settings.get("rounding_adjustment_product_id"))
+        if adj_pid is None:
+            rounding_adjustment = {
+                "applied":            False,
+                "reason":             "rounding_adjustment_product_missing",
+                "would_be_amount":    residual,
+                "salla_total":        salla_total,
+                "qoyod_total_before": expected_total_before_adj,
+            }
+        else:
+            # Tax-free adjustment line so line_gross == residual
+            # exactly. Sign is preserved (positive when Salla > Qoyod,
+            # negative when Salla < Qoyod).
+            lines.append({
+                "product_id":    adj_pid,
+                "description":   "تسوية فرق التقريب مع سلة",
+                "quantity":      1,
+                "unit_price":    residual,
+                "discount":      0.0,
+                "discount_type": "amount",
+                "tax_percent":   0.0,
+            })
+            expected_total_dec += Decimal(str(residual))
+            rounding_adjustment = {
+                "applied":            True,
+                "product_id":         adj_pid,
+                "amount":             residual,
+                "salla_total":        salla_total,
+                "qoyod_total_before": expected_total_before_adj,
+                "note":               ("سطر تسوية تلقائي بلا ضريبة — "
+                                        "لغلق فرق التقريب بين قيود وسلة"),
+            }
+
+    expected_total = float(
+        expected_total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
     diff = _q2(expected_total - salla_total)
 
     # Human-readable RCA hint. Sums the per-line deltas + shipping +
@@ -600,6 +668,10 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
         "items":                  breakdown_items,
         "shipping":               shipping_breakdown,
         "cod_fee":                cod_breakdown,
+        "qoyod_total_before_adjustment": expected_total_before_adj,
+        "residual_before_adjustment":    _q2(salla_total
+                                              - expected_total_before_adj),
+        "rounding_adjustment":    rounding_adjustment,
         "expected_qoyod_total":   expected_total,
         "difference":             diff,
         "difference_source_hint": hint,
@@ -923,6 +995,21 @@ async def _run_all_steps(
         send_date_iso=send_date_iso)
     diff = _q2(expected_total - salla_total)
     if abs(diff) > 0.01:
+        # If the ONLY reason we still exceed tolerance is that the
+        # rounding-adjustment product wasn't configured, surface a
+        # dedicated code so the operator knows the ONE-LINE fix.
+        adj = breakdown.get("rounding_adjustment") or {}
+        if adj.get("reason") == "rounding_adjustment_product_missing":
+            raise ManualSendRefused(
+                "rounding_adjustment_product_missing",
+                "الفرق سنتات تقريب فقط. أضف منتج قيود مخصّص للتسويات "
+                "ثم اضبط `rounding_adjustment_product_id` في إعدادات "
+                "قيود لتفعيل سطر التسوية التلقائي — لن نرسل حتى ذلك.",
+                {"salla_total":            salla_total,
+                 "expected_qoyod_total":   expected_total,
+                 "difference":             diff,
+                 "residual_would_be":      adj.get("would_be_amount"),
+                 "breakdown":              breakdown})
         raise ManualSendRefused(
             "totals_mismatch",
             f"فرق المبلغ {abs(diff)} ريال أكبر من 0.01 — أُوقف الإرسال",
