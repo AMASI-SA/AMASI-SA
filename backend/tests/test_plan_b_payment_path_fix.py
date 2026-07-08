@@ -418,3 +418,64 @@ async def test_retry_payment_only_second_failure_stays_partial(db):
     assert inv is not None
     assert inv["status"] == "partial"
     assert inv["remaining"] == 260.0
+
+
+# ─────────────────────────────────────────────────────────────────────
+# F6 — `_acquire_lock` refuses `already_sent` only when BOTH markers
+#      exist on the lock record (mirrors the inbox-level guard). A
+#      lock left as `succeeded` by a pre-2026-07-09 send that never
+#      actually posted the payment must NOT block a retry.
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_acquire_lock_ignores_succeeded_without_payment_marker(db):
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="P700", total=260.0,
+                   with_manual_id="1201",
+                   with_manual_inv_number="INV-1201"))
+    # Simulate a stale lock left as `succeeded` from a broken pre-fix
+    # send that DID create the invoice but never registered payment.
+    await db.qoyod_manual_send_locks.insert_one({
+        "order_number": "P700",
+        "user_id":      TENANT,
+        "lock_id":      "manual-P700-stale",
+        "status":       "succeeded",
+        "manual_qoyod_invoice_id": "1201",   # invoice marker set
+        # NOTE: manual_qoyod_payment_id intentionally MISSING
+        "started_at":   datetime.now(timezone.utc),
+    })
+
+    async def _pay(payload, *, idem):
+        return {"invoice_payment": {"id": 11001}}
+
+    with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "create_invoice_payment",
+               new=AsyncMock(side_effect=_pay)):
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="P700")
+
+    assert result["ok"] is True
+    assert result["retry_payment_only"] is True
+    assert result["invoice_id"] == 1201
+    assert result["payment_id"] == 11001
+
+
+@pytest.mark.asyncio
+async def test_acquire_lock_still_refuses_when_both_markers_on_lock(db):
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="P800", total=260.0,
+                   with_manual_id="1301",
+                   with_manual_pay_id="12001"))
+    await db.qoyod_manual_send_locks.insert_one({
+        "order_number": "P800",
+        "user_id":      TENANT,
+        "lock_id":      "manual-P800-done",
+        "status":       "succeeded",
+        "manual_qoyod_invoice_id": "1301",
+        "manual_qoyod_payment_id": "12001",
+        "started_at":   datetime.now(timezone.utc),
+    })
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(db, user_id=TENANT, order_number="P800")
+    assert exc.value.code == "already_sent"

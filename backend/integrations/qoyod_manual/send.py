@@ -156,13 +156,22 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
         {"order_number": order_number, "user_id": user_id})
     if existing:
         status = str(existing.get("status") or "")
-        if status == "succeeded":
+        # `already_sent` here mirrors the inbox-level guard in
+        # `manual_send_one`: refuse ONLY when BOTH the invoice and
+        # payment markers are persisted on the lock record. A lock
+        # marked `succeeded` from a pre-2026-07-09 send that never
+        # actually completed step 5 must NOT block the retry.
+        if status == "succeeded" \
+                and existing.get("manual_qoyod_invoice_id") \
+                and existing.get("manual_qoyod_payment_id"):
             raise ManualSendRefused(
                 "already_sent",
                 "الطلب أُرسل مسبقاً من مسار الإرسال اليدوي",
                 {"lock_id": existing.get("lock_id"),
                  "manual_qoyod_invoice_id": existing.get(
-                     "manual_qoyod_invoice_id")})
+                     "manual_qoyod_invoice_id"),
+                 "manual_qoyod_payment_id": existing.get(
+                     "manual_qoyod_payment_id")})
         if status == "in_progress":
             # Auto-release stale locks after 5 minutes.
             started = existing.get("started_at")
