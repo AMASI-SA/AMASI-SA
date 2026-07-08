@@ -36,7 +36,7 @@ from integrations.qoyod_manual.client import (
     ManualQoyodClient, ManualQoyodError,
 )
 from integrations.qoyod_manual.pending import (
-    _is_completed, _salla_order_created_date,
+    _matches_status, _salla_order_created_date, SUPPORTED_STATUSES,
 )
 
 logger = logging.getLogger(__name__)
@@ -761,10 +761,11 @@ async def manual_send_one(
             "before_floor_date",
             f"تاريخ إنشاء الطلب ({odate.isoformat()}) أقدم من "
             f"{_FLOOR_DATE.isoformat()} — خارج نطاق التكامل")
-    if not _is_completed(row):
+    if not any(_matches_status(row, s) for s in SUPPORTED_STATUSES):
         raise ManualSendRefused(
             "not_completed",
-            "حالة الطلب ليست (تم التنفيذ) — الإرسال مسموح لهذه الحالة فقط")
+            "حالة الطلب ليست ضمن الحالات المسموحة يدوياً "
+            "(تم التنفيذ / جاري التوصيل / تم التوصيل)")
 
     # ── Guard G1a — DB says already-sent? ──────────────────────────
     if row.get("manual_qoyod_invoice_id"):

@@ -77,10 +77,17 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         days: int = Query(60, ge=1, le=365),
         limit: int = Query(200, ge=1, le=1000),
         search: Optional[str] = Query(None),
+        status: str = Query(
+            "completed",
+            description=("Salla status filter: completed | delivered | "
+                          "in_delivery. Default = completed. Each tab in "
+                          "the UI hits this endpoint with a different "
+                          "value.")),
         user=Depends(current_user),
     ):
         return await list_pending_orders(
-            db, user_id=_TENANT, days=days, limit=limit, search=search)
+            db, user_id=_TENANT, days=days, limit=limit,
+            search=search, status=status)
 
     @router.post("/send/{order_number}")
     async def send_one(order_number: str, user=Depends(current_user)):

@@ -73,15 +73,56 @@ def _salla_order_created_date(row: dict) -> Optional[date]:
 
 
 def _is_completed(row: dict) -> bool:
-    """Salla status filter — only "completed" (canonical slug)."""
+    """Salla status filter — only "completed" (canonical slug).
+
+    Legacy alias kept for external callers; new code should use
+    `_matches_status(row, "completed")` which is strictly equivalent.
+    """
+    return _matches_status(row, "completed")
+
+
+# ── Multi-status support (user directive 2026-07-08) ────────────────
+# Plan-B page now offers three tabs. Each tab filters on a Salla
+# status. The mapping below is intentionally explicit — we match on
+# BOTH the canonical slug and the native Arabic string so tenants
+# with non-normalised rows still surface correctly:
+#
+#   completed    — تم التنفيذ (canonical: "completed")
+#   delivered    — تم التوصيل (canonical: "delivered")
+#   in_delivery  — جاري التوصيل (canonical fallback slug: "جاري_التوصيل")
+#
+# NEW statuses go here and here only — no other Plan-B code needs to
+# change (send.py checks each row against `_matches_status` at request
+# time, using the same helper).
+_STATUS_MATCHERS: dict[str, tuple[frozenset, frozenset]] = {
+    "completed": (
+        frozenset({"completed"}),
+        frozenset({"تم التنفيذ", "منتهي", "مكتمل"}),
+    ),
+    "delivered": (
+        frozenset({"delivered"}),
+        frozenset({"تم التوصيل"}),
+    ),
+    "in_delivery": (
+        frozenset({"in_delivery", "جاري_التوصيل", "جاري التوصيل"}),
+        frozenset({"جاري التوصيل", "جارٍ التوصيل"}),
+    ),
+}
+
+SUPPORTED_STATUSES: tuple[str, ...] = tuple(_STATUS_MATCHERS.keys())
+
+
+def _matches_status(row: dict, status_key: str) -> bool:
+    matcher = _STATUS_MATCHERS.get(status_key)
+    if matcher is None:
+        return False
+    canonical_set, native_set = matcher
     canon = row.get("canonical_payload") or {}
     slug = str(canon.get("order_status") or "").strip().lower()
-    if slug == "completed":
+    if slug in canonical_set:
         return True
-    # Legacy rows may carry the native Arabic string too. Trust the
-    # canonical slug first; the native check is a defensive fallback.
     native = str(canon.get("order_status_native") or "").strip()
-    return native in ("تم التنفيذ", "منتهي", "مكتمل")
+    return native in native_set
 
 
 def _already_sent(row: dict) -> tuple[bool, Optional[str]]:
@@ -102,9 +143,20 @@ def _already_sent(row: dict) -> tuple[bool, Optional[str]]:
 async def list_pending_orders(
     db, *, user_id: str, days: int = 60, limit: int = 200,
     search: Optional[str] = None,
+    status: str = "completed",
 ) -> dict:
-    """Return orders that meet ALL 3 Plan-B criteria (completed +
-    on/after floor date + no real invoice)."""
+    """Return orders that meet ALL 3 Plan-B criteria:
+        • Salla status matches `status` (one of SUPPORTED_STATUSES).
+        • Salla creation date >= 2026-07-01 (floor).
+        • No real Qoyod invoice recorded on this row yet.
+
+    `status` defaults to "completed" (backwards-compatible with the
+    original 3-rule spec). NEW values: "delivered", "in_delivery".
+    Unknown values fall back to "completed" — the endpoint validator
+    forbids them at the API boundary too.
+    """
+    if status not in SUPPORTED_STATUSES:
+        status = "completed"
     days = max(1, min(int(days), 365))
     limit = max(1, min(int(limit), 1000))
 
@@ -167,7 +219,7 @@ async def list_pending_orders(
             continue
 
         # Completed
-        if not _is_completed(row):
+        if not _matches_status(row, status):
             excluded_not_completed += 1
             continue
 
@@ -200,6 +252,8 @@ async def list_pending_orders(
 
     return {
         "ok":            True,
+        "status":        status,
+        "supported_statuses": list(SUPPORTED_STATUSES),
         "floor_date":    _FLOOR_DATE.isoformat(),
         "days_window":   days,
         "counts": {

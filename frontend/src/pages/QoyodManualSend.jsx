@@ -3,6 +3,12 @@ import api from "../lib/api";
 
 const BASE = "/integrations/qoyod/manual";
 
+const STATUS_TABS = [
+  { key: "completed",   label: "تم التنفيذ",   icon: "✅" },
+  { key: "in_delivery", label: "جاري التوصيل", icon: "🚚" },
+  { key: "delivered",   label: "تم التوصيل",   icon: "📦" },
+];
+
 function formatMoney(v, currency = "SAR") {
   if (v == null || v === "") return "—";
   const num = Number(v);
@@ -347,6 +353,7 @@ export default function QoyodManualSend() {
   const [result, setResult] = useState(null);
   const [floorDate, setFloorDate] = useState(null);
   const [page, setPage] = useState(1);
+  const [statusTab, setStatusTab] = useState("completed");
   const [diagnoseFor, setDiagnoseFor] = useState(null);
   const [diagnoseResult, setDiagnoseResult] = useState(null);
   const [diagnoseLoading, setDiagnoseLoading] = useState(false);
@@ -361,11 +368,11 @@ export default function QoyodManualSend() {
   }, []);
 
   const loadRows = useCallback(
-    async (d = days, q = search) => {
+    async (d = days, q = search, s = statusTab) => {
       setLoading(true);
       setError(null);
       try {
-        const params = { days: d, limit: 500 };
+        const params = { days: d, limit: 500, status: s };
         if (q && q.trim()) params.search = q.trim();
         const res = await api.get(`${BASE}/pending-orders`, { params });
         setRows(res.data?.orders || []);
@@ -380,7 +387,7 @@ export default function QoyodManualSend() {
         setLoading(false);
       }
     },
-    [days, search]
+    [days, search, statusTab]
   );
 
   useEffect(() => {
@@ -390,9 +397,9 @@ export default function QoyodManualSend() {
   }, []);
 
   useEffect(() => {
-    loadRows(days, search);
+    loadRows(days, search, statusTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [days, statusTab]);
 
   const handleSend = async (orderNumber) => {
     const confirmed = window.confirm(
@@ -478,7 +485,7 @@ export default function QoyodManualSend() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") loadRows(days, search);
+              if (e.key === "Enter") loadRows(days, search, statusTab);
             }}
             placeholder="بحث برقم الطلب…"
             data-testid="manual-send-search-input"
@@ -486,7 +493,7 @@ export default function QoyodManualSend() {
           />
           <button
             type="button"
-            onClick={() => loadRows(days, search)}
+            onClick={() => loadRows(days, search, statusTab)}
             data-testid="manual-send-search-btn"
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
           >
@@ -509,7 +516,7 @@ export default function QoyodManualSend() {
             type="button"
             onClick={() => {
               loadHealth();
-              loadRows(days, search);
+              loadRows(days, search, statusTab);
             }}
             data-testid="manual-send-refresh-btn"
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
@@ -686,7 +693,41 @@ export default function QoyodManualSend() {
       )}
 
       {counts && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <>
+          {/* Status tabs — user directive 2026-07-08 */}
+          <div
+            className="flex flex-wrap gap-2 border-b border-slate-200"
+            data-testid="manual-send-status-tabs"
+          >
+            {STATUS_TABS.map((tab) => {
+              const active = statusTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStatusTab(tab.key)}
+                  data-testid={`manual-send-tab-${tab.key}`}
+                  className={`-mb-px rounded-t-lg border-b-2 px-4 py-2 text-sm font-medium transition ${
+                    active
+                      ? "border-emerald-600 bg-white text-emerald-700"
+                      : "border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  }`}
+                >
+                  <span className="ml-2">{tab.icon}</span>
+                  {tab.label}
+                  {active && counts && (
+                    <span
+                      dir="ltr"
+                      className="mr-2 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-mono text-emerald-800"
+                    >
+                      {counts.returned ?? 0}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
             ["ظاهرة الآن", counts.returned],
             ["فُحص من الاستلام", counts.scanned_inbox_rows],
@@ -705,7 +746,8 @@ export default function QoyodManualSend() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       <div
@@ -719,7 +761,10 @@ export default function QoyodManualSend() {
             className="p-6 text-sm text-slate-500"
             data-testid="manual-send-empty"
           >
-            ✅ لا توجد طلبات مؤهلة للإرسال اليدوي في هذه الفترة.
+            ✅ لا توجد طلبات مؤهلة في تبويب &quot;
+            {STATUS_TABS.find((t) => t.key === statusTab)?.label ||
+              statusTab}
+            &quot; خلال هذه الفترة.
           </div>
         ) : (
           (() => {
