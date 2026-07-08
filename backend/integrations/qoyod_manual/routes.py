@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 
 from integrations.qoyod_manual.pending import list_pending_orders
@@ -96,7 +96,9 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             search=search, status=status)
 
     @router.post("/send/{order_number}")
-    async def send_one(order_number: str, user=Depends(current_user)):
+    async def send_one(order_number: str,
+                       request: Request,
+                       user=Depends(current_user)):
         actor = "manual-ui"
         try:
             username = (user or {}).get("email") or (user or {}).get("id")
@@ -114,6 +116,58 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=exc.to_dict())
+        except HTTPException:
+            # Never wrap explicit HTTPException in the diagnostic path.
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # ── Diagnostic Mode (temporary, opt-in) ────────────────
+            # By default the operator sees a plain HTTP 500 with no
+            # payload — the full Python traceback goes ONLY to the
+            # backend logger. This preserves production hygiene.
+            #
+            # To surface the traceback in the API response for a
+            # single call, either:
+            #   • append `?diag=1` to the URL
+            #   • or send header `X-Debug-Diagnostic: 1`
+            # Both routes require the authenticated `Depends(current_user)`,
+            # so a random visitor cannot trigger the diagnostic payload.
+            #
+            # REMOVE THIS ENTIRE except-block once the root cause of
+            # the current 500 is found and fixed.
+            import traceback as _tb
+            import uuid as _uuid
+            ref = _uuid.uuid4().hex[:8]
+            tb_text = _tb.format_exc()
+            logger.error(
+                "manual/send unhandled_exception order=%s ref=%s\n%s",
+                order_number, ref, tb_text)
+            diag_flag = False
+            try:
+                if str(request.query_params.get("diag") or "") == "1":
+                    diag_flag = True
+                if request.headers.get("X-Debug-Diagnostic") == "1":
+                    diag_flag = True
+            except Exception:
+                diag_flag = False
+            if not diag_flag:
+                # Production-hygiene default: HTTP 500, no body detail.
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"error_reference": ref})
+            # Diagnostic on: return the last few frames only.
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code":              "unhandled_exception",
+                    "error_reference":   ref,
+                    "exception_type":    type(exc).__name__,
+                    "exception_message": str(exc)[:500],
+                    "traceback_tail":    tb_text.splitlines()[-20:],
+                    "diagnostic_mode":   True,
+                    "note":              ("هذا الرد التشخيصي مؤقّت — "
+                                           "يُحذَف من الكود بعد إصلاح "
+                                           "السبب الجذري."),
+                })
 
     @router.get("/status/{order_number}")
     async def send_status(order_number: str,
