@@ -479,3 +479,79 @@ async def test_acquire_lock_still_refuses_when_both_markers_on_lock(db):
     with pytest.raises(ManualSendRefused) as exc:
         await manual_send_one(db, user_id=TENANT, order_number="P800")
     assert exc.value.code == "already_sent"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# F7 — `_acquire_lock` handles naive-datetime `started_at` cleanly.
+#      Regression guard for the TypeError observed in production
+#      (2026-07-09): "can't subtract offset-naive and offset-aware
+#      datetimes" at send.py:180 during retry-payment-only.
+# ─────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_acquire_lock_survives_naive_started_at(db):
+    """Reproduces the production 500. When the existing lock row was
+    inserted by an older code path with a `datetime.utcnow()` (naive)
+    value, subtracting from `datetime.now(timezone.utc)` raised
+    TypeError and bubbled up as HTTP 500. The fix coerces `started`
+    to tz-aware UTC before subtraction.
+    """
+    from datetime import datetime as _dt
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="P900", total=260.0,
+                   with_manual_id="1401",
+                   with_manual_inv_number="INV-1401"))
+    # Insert a lock with a NAIVE started_at from 10 minutes ago —
+    # long-stale so the lock must be released and the retry allowed.
+    from datetime import timedelta
+    stale_naive = _dt.utcnow() - timedelta(minutes=10)
+    assert stale_naive.tzinfo is None, "sanity: must be naive"
+    await db.qoyod_manual_send_locks.insert_one({
+        "order_number":            "P900",
+        "user_id":                 TENANT,
+        "lock_id":                 "manual-P900-legacy",
+        "status":                  "in_progress",
+        "manual_qoyod_invoice_id": "1401",
+        "started_at":              stale_naive,
+    })
+
+    async def _pay(payload, *, idem):
+        return {"invoice_payment": {"id": 22001}}
+
+    with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "create_invoice_payment",
+               new=AsyncMock(side_effect=_pay)):
+        # Must NOT raise TypeError. Must dispatch to retry-payment-only.
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="P900")
+
+    assert result["ok"] is True
+    assert result.get("retry_payment_only") is True
+    assert result["invoice_id"] == 1401
+    assert result["payment_id"] == 22001
+
+
+@pytest.mark.asyncio
+async def test_acquire_lock_refuses_fresh_naive_in_progress(db):
+    """A NAIVE `started_at` that is only 30s old must still be
+    treated as `in_progress` (recent) — the fix must not accidentally
+    treat all naive locks as stale.
+    """
+    from datetime import datetime as _dt
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="PA10", total=260.0,
+                   with_manual_id="1501"))
+    from datetime import timedelta
+    fresh_naive = _dt.utcnow() - timedelta(seconds=30)
+    await db.qoyod_manual_send_locks.insert_one({
+        "order_number":            "PA10",
+        "user_id":                 TENANT,
+        "lock_id":                 "manual-PA10-recent",
+        "status":                  "in_progress",
+        "manual_qoyod_invoice_id": "1501",
+        "started_at":              fresh_naive,
+    })
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(db, user_id=TENANT, order_number="PA10")
+    assert exc.value.code == "in_progress"

@@ -177,6 +177,13 @@ async def _acquire_lock(db, *, user_id: str, order_number: str,
             started = existing.get("started_at")
             age_ok = False
             if isinstance(started, datetime):
+                # Normalise to timezone-aware UTC. Mongo drivers can
+                # return `started_at` as naive when the DB was seeded
+                # by an older code path — subtracting a naive value
+                # from `now` (tz-aware) raises TypeError. Coerce here
+                # so lock arithmetic is always safe.
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
                 age_ok = (now - started).total_seconds() > 300
             if not age_ok:
                 raise ManualSendRefused(
