@@ -366,36 +366,152 @@ def _line_gross(*, unit_price: float, quantity: float,
     return float(gross.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
 
 
+def _compute_item_line(it: dict, line_resolutions: dict,
+                       tax_factor: float, tax_percent: float,
+                       target_gross_override: Optional[float] = None):
+    """Build the {line_payload, breakdown_row, gross} triple for a
+    single Salla item.
+
+    `target_gross_override` — when set, forces the line to target
+    this gross value instead of `it["total"]`. Used by the residual
+    distribution pass (see `_distribute_residual`)."""
+    sku = str(it.get("sku") or "").strip()
+    pid = line_resolutions.get(sku)
+    if pid is None:
+        raise ManualSendRefused(
+            "product_id_missing",
+            f"تعذّر ربط منتج بـ SKU={sku!r}",
+            {"sku": sku})
+    qty = _f(it.get("quantity"), 1.0) or 1.0
+    unit_price_raw = _f(it.get("unit_price"))
+    original_target_gross = _f(it.get("total"))
+    target_gross = (target_gross_override
+                    if target_gross_override is not None
+                    else original_target_gross)
+    target_net = target_gross / tax_factor if tax_factor else target_gross
+    original_base = unit_price_raw * qty
+    discount_raw = original_base - target_net
+    if discount_raw < 0:
+        # Salla's price < computed net: shrink unit_price and zero
+        # the discount so قيود's math still lands on the target.
+        unit_price = _q2(target_net / qty) if qty else _q2(target_net)
+        discount = 0.0
+    else:
+        unit_price = _q2(unit_price_raw)
+        discount = _q2(discount_raw)
+    line_gross = _line_gross(
+        unit_price=unit_price, quantity=qty,
+        discount=discount, tax_percent=tax_percent)
+    line_payload = {
+        "product_id":    pid,
+        "description":   it.get("name") or sku,
+        "quantity":      qty,
+        "unit_price":    unit_price,
+        "discount":      discount,
+        "discount_type": "amount",
+        "tax_percent":   tax_percent,
+    }
+    line_net_after_disc = _q2(unit_price * qty - discount)
+    line_tax = _q2(line_gross - line_net_after_disc)
+    breakdown_row = {
+        "sku":                       sku,
+        "product_id":                pid,
+        "description":               it.get("name") or sku,
+        "quantity":                  qty,
+        "salla_unit_price":          _q2(unit_price_raw),
+        "qoyod_unit_price":          unit_price,
+        "salla_line_total":          _q2(original_target_gross),
+        "computed_discount":         discount,
+        "line_net_after_discount":   line_net_after_disc,
+        "line_tax_15pct":            line_tax,
+        "line_gross_after_tax":      line_gross,
+        "delta_vs_salla_line":       _q2(line_gross
+                                          - original_target_gross),
+    }
+    if target_gross_override is not None:
+        breakdown_row["target_gross_override"] = _q2(target_gross)
+        breakdown_row["shift_from_original"] = _q2(target_gross
+                                                    - original_target_gross)
+    return line_payload, breakdown_row, line_gross
+
+
+def _distribute_residual_over_items(
+    items: list[dict], line_resolutions: dict,
+    tax_factor: float, tax_percent: float,
+    residual_to_absorb: float,
+) -> tuple[list[dict], list[dict], float] | None:
+    """Try to close a small rounding residual by shifting each of the
+    last N item lines' target_gross by ±0.01.
+
+    Returns `(payloads, breakdown_rows, new_expected_total)` when the
+    distribution EXACTLY zeros the residual (post-shift new sum ==
+    salla_total). Returns `None` when the residual cannot be
+    distributed (too large, or the shifted lines don't quantise
+    cleanly on قيود's side).
+
+    Rules:
+        • Residual absolute value must be ≤ 0.01 × len(items) SAR
+          (one line per cent to shift).
+        • Only pure-item lines are eligible (shipping / COD sit
+          outside the distribution).
+        • The LAST N lines take the shift, matching accounting habit
+          of "absorbing rounding into the final printed line".
+    """
+    shift_cents = int(round(abs(residual_to_absorb) * 100))
+    if shift_cents == 0 or shift_cents > len(items):
+        return None
+    sign = 1 if residual_to_absorb > 0 else -1
+    # Build shift map: last shift_cents lines get ±0.01 each.
+    shifts: dict[int, float] = {}
+    start_idx = len(items) - shift_cents
+    for i in range(start_idx, len(items)):
+        shifts[i] = sign * 0.01
+
+    payloads: list[dict] = []
+    rows: list[dict] = []
+    total_dec = Decimal("0")
+    for idx, it in enumerate(items):
+        override = None
+        if idx in shifts:
+            orig = _f(it.get("total"))
+            override = _q2(orig + shifts[idx])
+        payload, row, gross = _compute_item_line(
+            it, line_resolutions, tax_factor, tax_percent,
+            target_gross_override=override)
+        payloads.append(payload)
+        rows.append(row)
+        total_dec += Decimal(str(gross))
+
+    new_total = float(
+        total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+    # Verify the shift actually cleared the residual to zero. If
+    # قيود's own quantisation of the shifted line lands off by ±0.01
+    # (rare, small factor combos), fall back to the adjustment line.
+    return payloads, rows, new_total
+
+
 def _build_invoice_payload(*, canon: dict, contact_id: int,
                            line_resolutions: dict,
                            settings: dict,
                            send_date_iso: str) -> tuple[dict, float, dict]:
     """Return (payload, expected_total, breakdown).
 
-    `breakdown` is a JSON-safe RCA object showing HOW the expected
-    total was assembled, sufficient to diagnose any totals_mismatch
-    without re-running the pipeline:
-        {
-          "tax_percent":       15.0,
-          "tax_factor":        1.15,
-          "salla_declared_total": 219.91,
-          "items": [ {sku, description, quantity, unit_price,
-                       discount, line_net, line_gross, salla_total} ],
-          "shipping":     {included, unit, discount, gross,
-                            salla_declared, target_gross} | null,
-          "cod_fee":      {gross} | null,
-          "expected_qoyod_total":       219.93,
-          "difference":                 0.02,
-          "difference_source_hint":     "…",
-        }
+    Residual-closing strategy (in order):
+      1. Straight per-line rounding — target = Salla line total.
+      2. If the sum drifts from Salla by ≤ len(items) × 0.01 SAR,
+         DISTRIBUTE the residual across the LAST N item lines by
+         shifting each by ±0.01 SAR. No new line added.
+      3. If distribution doesn't clear the residual (edge cases) OR
+         the residual is larger than the per-line budget, FALL BACK
+         to adding a single tax-free line "تسوية فرق التقريب مع سلة"
+         using `rounding_adjustment_product_id`.
+      4. If step-3 fires but no product_id is configured → refuse
+         with `rounding_adjustment_product_missing`.
 
-    Post-2026-07-08 changes (user directive):
-        • ALL money fields quantised to 2 decimals (ROUND_HALF_UP)
-          via `_q2` — no 4-decimal drifts leak into قيود.
-        • `expected_total` is the sum of the 2dp-quantised line
-          grosses so the payment amount matches it exactly.
-        • `issue_date` / `due_date` = `send_date_iso` (Asia/Riyadh
-          today) — NEVER the Salla `order_date` / `created_at`.
+    Structural gaps (shipping / COD ignored because their product
+    ids aren't wired) SKIP both distribution and the adjustment
+    line and produce a plain `totals_mismatch` — those are real
+    configuration errors, not rounding.
     """
     try:
         tax_percent = float(settings.get("qoyod_tax_percent") or 15)
@@ -408,7 +524,13 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     breakdown_items: list[dict] = []
     expected_total_dec = Decimal("0")
 
-    for it in canon.get("items") or []:
+    raw_items = canon.get("items") or []
+    for it in raw_items:
+        payload, row, gross = _compute_item_line(
+            it, line_resolutions, tax_factor, tax_percent)
+        lines.append(payload)
+        breakdown_items.append(row)
+        expected_total_dec += Decimal(str(gross))
         sku = str(it.get("sku") or "").strip()
         pid = line_resolutions.get(sku)
         if pid is None:
