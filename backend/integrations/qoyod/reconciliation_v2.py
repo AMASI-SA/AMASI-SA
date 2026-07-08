@@ -50,6 +50,49 @@ _ALL_STATUSES = (MATCHED, NEEDS_PLAN_B_SEND, QOYOD_ONLY,
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
 _TOLERANCE = 0.01
 
+# ── Match-key extractor (user directive 2026-07-09) ──────────────
+# Salla order numbers are LONG numeric strings — typically 9 digits,
+# always ≥ 8. This pattern is intentionally strict to avoid picking
+# up random receipt/customer ids in `notes` / `description`.
+import re
+_ORDER_NUMBER_RE = re.compile(r"\b(\d{8,12})\b")
+
+
+def _extract_match_key(inv: dict) -> tuple[Optional[str], str]:
+    """Return (order_number, source) — the reconciliation key for
+    this Qoyod invoice, resolved via a strict fallback chain:
+
+        1. `reference`        — the standard Qoyod field
+        2. `salla_order_number` — legacy alias written by write-through
+        3. `notes` / `description` — regex-extracted digits
+
+    Returns (None, "orphan") when no key can be resolved.
+    """
+    ref = str(inv.get("reference") or "").strip()
+    if ref and _ORDER_NUMBER_RE.fullmatch(ref):
+        return ref, "reference"
+    son = str(inv.get("salla_order_number") or "").strip()
+    if son and son != ref and _ORDER_NUMBER_RE.fullmatch(son):
+        return son, "salla_order_number"
+    # Fallback: scan free-text fields for a plausible order id.
+    for field in ("notes", "description"):
+        txt = str(inv.get(field) or "").strip()
+        if not txt:
+            continue
+        m = _ORDER_NUMBER_RE.search(txt)
+        if m:
+            return m.group(1), field
+    # Last resort: reference itself, even if it doesn't match the
+    # strict digit pattern (e.g. legacy invoices with alphanumeric
+    # references — still countable, still deduped, but won't join
+    # to a Salla order_number).
+    if ref:
+        return ref, "reference_loose"
+    if son:
+        return son, "salla_order_number_loose"
+    return None, "orphan"
+
+
 
 async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
     """Return `order_number → row` for every Salla order eligible
@@ -83,11 +126,11 @@ async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
 async def _load_local_qoyod_invoices(
     db, *, markers_user_id: str,
 ) -> dict[str, dict]:
-    """Return `reference → newest invoice row`. `reference` is the
-    Salla order_number that Plan-B / legacy pipelines write in the
-    Qoyod invoice's `reference` field. If a row has no reference,
-    it's still returned under a synthetic `__ORPHAN__:{qid}` key so
-    it can surface as `qoyod_only` with an obvious indicator.
+    """Return `match_key → newest invoice row` using the strict
+    fallback chain from `_extract_match_key`. Orphans (no
+    resolvable order_number) get a synthetic key
+    `__ORPHAN__:{qid}` so they still surface as `qoyod_only`
+    with an explicit marker.
     """
     out: dict[str, dict] = {}
     cursor = db.qoyod_invoices.find(
@@ -96,18 +139,23 @@ async def _load_local_qoyod_invoices(
          "reference": 1, "salla_order_number": 1,
          "customer_name": 1, "issue_date": 1,
          "total": 1, "paid_amount": 1, "remaining": 1,
-         "status": 1, "source": 1, "last_sync_at": 1},
+         "status": 1, "source": 1, "last_sync_at": 1,
+         "notes": 1, "description": 1},
     ).sort([("issue_date", -1), ("qoyod_invoice_id", -1)])
     async for inv in cursor:
-        ref = str(inv.get("reference")
-                  or inv.get("salla_order_number") or "").strip()
-        if not ref:
-            key = f"__ORPHAN__:{inv.get('qoyod_invoice_id')}"
-            out[key] = inv
+        key, source = _extract_match_key(inv)
+        # Stash the resolved key + source on the row for the
+        # reconciliation UI to show as a debug badge on qoyod_only
+        # rows.
+        inv["_match_key"] = key
+        inv["_match_source"] = source
+        if key is None:
+            k = f"__ORPHAN__:{inv.get('qoyod_invoice_id')}"
+            out[k] = inv
             continue
-        if ref in out:
+        if key in out:
             continue  # keep newest by issue_date sort
-        out[ref] = inv
+        out[key] = inv
     return out
 
 
@@ -250,9 +298,18 @@ async def run_reconciliation_v2(
             if not ref.startswith("__ORPHAN__:") and ref in claimed_refs:
                 continue
             counts[QOYOD_ONLY] += 1
+            match_key = inv.get("_match_key")
+            match_source = inv.get("_match_source", "orphan")
+            # Debug bag — surfaces WHY we couldn't join this invoice
+            # to a Salla order, so the operator can decide whether
+            # to backfill the reference on the قيود side.
+            notes_snippet = (
+                (inv.get("notes") or "")[:120] or None)
+            desc_snippet = (
+                (inv.get("description") or "")[:120] or None)
             rows.append({
-                "order_number":     (None if ref.startswith("__ORPHAN__:")
-                                     else ref),
+                "order_number":     (match_key if not ref.startswith(
+                    "__ORPHAN__:") else None),
                 "salla_date":       None,
                 "salla_status":     None,
                 "customer_name":    inv.get("customer_name"),
@@ -265,9 +322,20 @@ async def run_reconciliation_v2(
                 "remaining":        _fmt(inv.get("remaining")),
                 "qoyod_status":     inv.get("status"),
                 "match":            QOYOD_ONLY,
+                "debug": {
+                    "reference":            inv.get("reference"),
+                    "salla_order_number":   inv.get("salla_order_number"),
+                    "match_key":            match_key,
+                    "match_source":         match_source,
+                    "notes_snippet":        notes_snippet,
+                    "description_snippet":  desc_snippet,
+                },
                 "note": (
-                    "فاتورة موجودة في قيود بلا مرجع سلة (reference فارغ)"
-                    if ref.startswith("__ORPHAN__:") else
+                    "فاتورة موجودة في قيود بلا مرجع سلة صالح "
+                    f"(source={match_source}) — لا يمكن ربطها بطلب"
+                    if ref.startswith("__ORPHAN__:") or match_source
+                    in ("reference_loose", "salla_order_number_loose",
+                        "orphan") else
                     ("فاتورة قيود موجودة لكن لا يوجد طلب مقابل في سلة "
                      "ضمن النطاق — قد يكون طلب خارج النطاق أو تم "
                      "إنشاؤه من مسار خارجي")

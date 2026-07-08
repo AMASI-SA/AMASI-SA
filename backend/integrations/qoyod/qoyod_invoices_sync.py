@@ -50,7 +50,11 @@ def _trim_raw(it: dict) -> dict:
             "due_date", "total", "total_amount",
             "paid_amount", "amount_paid", "outstanding",
             "customer_name", "customer_id", "status",
-            "currency", "created_at", "updated_at")
+            "currency", "created_at", "updated_at",
+            # Free-text fields used by the reconciliation match-key
+            # fallback (user directive 2026-07-09).
+            "notes", "description", "internal_notes",
+            "salla_order_number")
     return {k: it.get(k) for k in keep if k in it}
 
 
@@ -160,6 +164,13 @@ async def sync_qoyod_invoices(
                               or reference or "").strip()
             status = str(it.get("status") or "").strip().lower() or None
             customer = _customer_name(it)
+            # Persist the free-text fields at the top level too — the
+            # reconciliation match-key fallback (user directive
+            # 2026-07-09) reads them without touching `raw_response`.
+            notes = str(it.get("notes") or it.get("internal_notes")
+                          or "").strip() or None
+            description = str(it.get("description") or "").strip() \
+                or None
 
             now_iso = datetime.now(timezone.utc)
             set_fields = {
@@ -174,6 +185,8 @@ async def sync_qoyod_invoices(
                 "paid_amount":        paid,
                 "remaining":          remaining,
                 "status":             status,
+                "notes":              notes,
+                "description":        description,
                 "last_sync_at":       now_iso,
                 "raw_response":       _trim_raw(it),
             }

@@ -426,6 +426,48 @@ export default function QoyodReconciliation() {
                           {r.note}
                         </div>
                       )}
+                      {r.debug && (
+                        <details
+                          className="mt-1 cursor-pointer"
+                          data-testid={`recon-debug-${r.qoyod_invoice_id}`}
+                        >
+                          <summary className="text-[10px] text-indigo-700 hover:underline">
+                            Debug
+                          </summary>
+                          <div
+                            dir="ltr"
+                            className="mt-1 rounded bg-slate-50 p-2 font-mono text-[10px] text-slate-700 space-y-0.5"
+                          >
+                            <div>
+                              reference:{" "}
+                              <b>{r.debug.reference || "—"}</b>
+                            </div>
+                            <div>
+                              salla_order_number:{" "}
+                              <b>{r.debug.salla_order_number || "—"}</b>
+                            </div>
+                            <div>
+                              match_source:{" "}
+                              <b>{r.debug.match_source}</b>
+                            </div>
+                            <div>
+                              match_key:{" "}
+                              <b>{r.debug.match_key || "—"}</b>
+                            </div>
+                            {r.debug.notes_snippet && (
+                              <div className="truncate">
+                                notes: <b>{r.debug.notes_snippet}</b>
+                              </div>
+                            )}
+                            {r.debug.description_snippet && (
+                              <div className="truncate">
+                                description:{" "}
+                                <b>{r.debug.description_snippet}</b>
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      )}
                     </td>
                   </tr>
                 ))}

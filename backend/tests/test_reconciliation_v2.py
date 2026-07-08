@@ -259,3 +259,86 @@ def test_all_five_outcomes_together():
     assert c["فرق مبلغ"] == 1
     assert c["موجود في قيود فقط"] == 1
     assert res["all_matched"] is False
+
+
+# ── Fallback match-key chain (user directive 2026-07-09) ─────────
+def test_match_key_falls_back_to_salla_order_number():
+    """Invoice has empty `reference` but a valid `salla_order_number`
+    — the reconciliation MUST use it as the join key."""
+    from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
+    inv = _invoice("O-A", qid="INV-A", total=100.0)
+    inv["reference"] = ""          # blank the standard field
+    inv["salla_order_number"] = "270883333"
+    unified = [_unified("270883333", total=100.0)]
+    inbox = [_inbox_marker("270883333", manual_id="INV-A")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=[inv])
+    res = _run(run_reconciliation_v2(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["counts"]["مطابق"] == 1
+    assert res["counts"]["يحتاج إرسال Plan B"] == 0
+    assert res["counts"]["موجود في قيود فقط"] == 0
+
+
+def test_match_key_extracts_from_notes():
+    """When BOTH `reference` and `salla_order_number` are missing,
+    the order number is regex-extracted from `notes`."""
+    from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
+    inv = _invoice("dummy", qid="INV-B", total=200.0)
+    inv["reference"] = ""
+    inv["salla_order_number"] = ""
+    inv["notes"] = "طلب سلة رقم 270884444 - عميل تجريبي"
+    unified = [_unified("270884444", total=200.0)]
+    inbox = [_inbox_marker("270884444", manual_id="INV-B")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=[inv])
+    res = _run(run_reconciliation_v2(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["counts"]["مطابق"] == 1
+    assert res["counts"]["يحتاج إرسال Plan B"] == 0
+
+
+def test_match_key_extracts_from_description():
+    from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
+    inv = _invoice("", qid="INV-C", total=50.0)
+    inv["reference"] = ""
+    inv["salla_order_number"] = ""
+    inv["description"] = "Order ref: 270885555"
+    unified = [_unified("270885555", total=50.0)]
+    inbox = [_inbox_marker("270885555", manual_id="INV-C")]
+    db = _FakeDB(unified=unified, inbox=inbox, invoices=[inv])
+    res = _run(run_reconciliation_v2(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["counts"]["مطابق"] == 1
+
+
+def test_qoyod_only_row_carries_debug_fields():
+    """When we can't resolve a Salla order, the qoyod_only row
+    MUST include the debug bag so the operator can inspect why."""
+    from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
+    inv = _invoice("", qid="INV-D", total=75.0)
+    inv["reference"] = ""
+    inv["salla_order_number"] = ""
+    inv["notes"] = "no digits here"
+    inv["description"] = "also no order number"
+    db = _FakeDB(unified=[], inbox=[], invoices=[inv])
+    res = _run(run_reconciliation_v2(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    assert res["counts"]["موجود في قيود فقط"] == 1
+    row = res["rows"][0]
+    assert row["debug"]["match_source"] == "orphan"
+    assert "notes_snippet" in row["debug"]
+    assert row["debug"]["notes_snippet"] == "no digits here"
+
+
+def test_short_ref_is_not_matched_as_order_number():
+    """`reference='X-1'` is not 8+ digits → shouldn't be treated
+    as a Salla order_number join key (would produce false matches)."""
+    from integrations.qoyod.reconciliation_v2 import run_reconciliation_v2
+    inv = _invoice("X-1", qid="INV-E", total=100.0)
+    inv["reference"] = "X-1"
+    inv["salla_order_number"] = ""
+    db = _FakeDB(unified=[], inbox=[], invoices=[inv])
+    res = _run(run_reconciliation_v2(
+        db, orders_user_id="u-42", markers_user_id="main"))
+    # Loose match → surfaces as qoyod_only with match_source=reference_loose
+    assert res["counts"]["موجود في قيود فقط"] == 1
+    assert res["rows"][0]["debug"]["match_source"] == "reference_loose"
