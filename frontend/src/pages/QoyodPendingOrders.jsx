@@ -146,6 +146,29 @@ export default function QoyodPendingOrders() {
 
   const [page, setPage] = useState(1);
 
+  // Audit — read-only comparison of Plan-B marker count vs diagnostic
+  // sent counter (user directive 2026-07-09).
+  const [audit, setAudit] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const runAudit = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const res = await api.get(
+        `${BASE}/audit/plan-b-sent-vs-diagnostic`,
+        { params: { days: 365 } },
+      );
+      setAudit(res.data);
+      setAuditOpen(true);
+    } catch (e) {
+      setAuditError(extractDetail(e));
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -269,6 +292,16 @@ export default function QoyodPendingOrders() {
           >
             تحديث
           </button>
+          <button
+            type="button"
+            onClick={runAudit}
+            disabled={auditLoading}
+            data-testid="missing-audit-btn"
+            className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+            title="مقارنة عدّاد Plan B الحقيقي (من علامات manual_qoyod_invoice_id) مع عدّاد صفحة التشخيص"
+          >
+            {auditLoading ? "جاري التدقيق…" : "🔍 تدقيق العدّاد"}
+          </button>
         </div>
       </div>
 
@@ -370,6 +403,221 @@ export default function QoyodPendingOrders() {
                 {floorDate || "2026-07-01"}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit panel — read-only, shown only after user clicks the button */}
+      {auditError && (
+        <div
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          data-testid="missing-audit-error"
+        >
+          فشل التدقيق: {String(auditError)}
+        </div>
+      )}
+      {audit && auditOpen && (
+        <div
+          className="rounded-xl border border-indigo-200 bg-white shadow-sm"
+          data-testid="missing-audit-panel"
+        >
+          <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-4 py-3">
+            <div>
+              <div className="text-sm font-bold text-indigo-900">
+                🔍 تدقيق العدّاد — Plan-B markers مقابل التشخيص
+              </div>
+              <div className="text-[11px] text-indigo-800/80">
+                مقارنة مباشرة بين علامات{" "}
+                <code className="font-mono bg-white px-1 rounded">
+                  manual_qoyod_invoice_id
+                </code>{" "}
+                في integration_inbox والعدّاد الحالي في هذه الصفحة.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAuditOpen(false)}
+              data-testid="missing-audit-close"
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              إخفاء
+            </button>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div
+                className="rounded-lg border border-emerald-200 bg-emerald-50 p-3"
+                data-testid="audit-plan-b-count"
+              >
+                <div className="text-[11px] text-emerald-800">
+                  Plan-B Sent (من علامات inbox)
+                </div>
+                <div className="text-2xl font-semibold text-emerald-900">
+                  {audit.plan_b_sent_count ?? 0}
+                </div>
+                <div className="text-[10px] text-emerald-700">المرجع</div>
+              </div>
+              <div
+                className="rounded-lg border border-amber-200 bg-amber-50 p-3"
+                data-testid="audit-diagnostic-count"
+              >
+                <div className="text-[11px] text-amber-800">
+                  Diagnostic Sent Plan-B
+                </div>
+                <div className="text-2xl font-semibold text-amber-900">
+                  {audit.diagnostic_sent_plan_b_count ?? 0}
+                </div>
+                <div className="text-[10px] text-amber-700">
+                  الظاهر في هذه الصفحة
+                </div>
+              </div>
+              <div
+                className="rounded-lg border border-rose-200 bg-rose-50 p-3"
+                data-testid="audit-diff-count"
+              >
+                <div className="text-[11px] text-rose-800">
+                  الفرق (مفقود من التشخيص)
+                </div>
+                <div className="text-2xl font-semibold text-rose-900">
+                  {audit.missing_from_diagnostic_count ?? 0}
+                </div>
+                <div className="text-[10px] text-rose-700">
+                  Plan_B_Sent − Diagnostic
+                </div>
+              </div>
+              <div
+                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                data-testid="audit-extra-count"
+              >
+                <div className="text-[11px] text-slate-600">
+                  Extra في التشخيص (بلا علامة)
+                </div>
+                <div className="text-2xl font-semibold text-slate-800">
+                  {audit.extra_in_diagnostic_count ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  حالة نادرة
+                </div>
+              </div>
+            </div>
+
+            {audit.reason_histogram &&
+              Object.keys(audit.reason_histogram).length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <div className="mb-1.5 text-xs font-semibold text-slate-700">
+                    توزيع أسباب الاستبعاد:
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px]">
+                    {Object.entries(audit.reason_histogram)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([k, v]) => (
+                        <span
+                          key={k}
+                          className="rounded border border-slate-300 bg-white px-2 py-0.5"
+                          data-testid={`audit-reason-${k}`}
+                        >
+                          <code className="font-mono text-slate-600">
+                            {k}
+                          </code>{" "}
+                          <span dir="ltr" className="font-mono font-bold">
+                            ({v})
+                          </span>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+            {audit.orders && audit.orders.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-rose-200 bg-white">
+                <table className="w-full text-xs">
+                  <thead className="bg-rose-50 text-rose-900">
+                    <tr>
+                      <th className="px-3 py-2 text-right">رقم الطلب</th>
+                      <th className="px-3 py-2 text-right">
+                        manual_qoyod_invoice_id
+                      </th>
+                      <th className="px-3 py-2 text-right">
+                        تاريخ سلة (من inbox)
+                      </th>
+                      <th className="px-3 py-2 text-right">حالة inbox</th>
+                      <th className="px-3 py-2 text-right">مبلغ</th>
+                      <th className="px-3 py-2 text-right">
+                        سبب الاستبعاد
+                      </th>
+                      <th className="px-3 py-2 text-right">تفاصيل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audit.orders.map((o) => (
+                      <tr
+                        key={o.order_number}
+                        className="border-t border-rose-100"
+                        data-testid={`audit-row-${o.order_number}`}
+                      >
+                        <td className="px-3 py-2 font-mono font-medium">
+                          {o.order_number}
+                        </td>
+                        <td
+                          className="px-3 py-2 font-mono text-slate-600"
+                          dir="ltr"
+                        >
+                          {o.manual_qoyod_invoice_id || "—"}
+                        </td>
+                        <td
+                          className="px-3 py-2 font-mono text-slate-600"
+                          dir="ltr"
+                        >
+                          {o.salla_created_date_from_inbox || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {o.salla_status_from_inbox || "—"}
+                        </td>
+                        <td className="px-3 py-2 font-mono" dir="ltr">
+                          {o.total_amount != null
+                            ? `${Number(o.total_amount).toFixed(2)} ${
+                                o.currency || "SAR"
+                              }`
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="text-slate-800">
+                            {o.exclusion_label || o.exclusion_reason}
+                          </div>
+                          <code
+                            dir="ltr"
+                            className="mt-0.5 block font-mono text-[10px] text-slate-500"
+                          >
+                            {o.exclusion_reason}
+                          </code>
+                        </td>
+                        <td className="px-3 py-2">
+                          <details className="cursor-pointer">
+                            <summary className="text-[11px] text-indigo-700 hover:underline">
+                              JSON
+                            </summary>
+                            <pre
+                              dir="ltr"
+                              className="mt-1 max-w-md overflow-x-auto rounded bg-slate-900 p-2 text-[10px] text-emerald-200"
+                            >
+                              {JSON.stringify(o.detail || {}, null, 2)}
+                            </pre>
+                          </details>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div
+                className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+                data-testid="audit-no-diff"
+              >
+                ✅ لا يوجد فرق. عدّاد التشخيص مطابق تماماً لعدد علامات
+                Plan-B الحقيقية.
+              </div>
+            )}
           </div>
         </div>
       )}

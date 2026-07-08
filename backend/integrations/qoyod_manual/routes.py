@@ -27,6 +27,9 @@ from integrations.qoyod_manual.diagnose import diagnose_totals
 from integrations.qoyod_manual.missing_diagnostics import (
     list_missing_from_plan_b,
 )
+from integrations.qoyod_manual.audit_sent_count import (
+    audit_plan_b_vs_diagnostic,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +220,22 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             markers_user_id=_TENANT,
             days=days, limit=limit,
             search=search, include_already_sent=include_already_sent)
+
+    @router.get("/audit/plan-b-sent-vs-diagnostic")
+    async def audit_sent(
+        days: int = Query(365, ge=1, le=365),
+        user=Depends(current_user),
+    ):
+        """Read-only audit: compare Plan-B marker-based sent count
+        (authoritative) with the diagnostic's `already_sent_plan_b`
+        counter, and enumerate the delta with a per-order exclusion
+        reason. No side-effects, no writes."""
+        return await audit_plan_b_vs_diagnostic(
+            db,
+            orders_user_id=user["id"],
+            markers_user_id=_TENANT,
+            days=days,
+        )
 
     @router.get("/diagnose/{order_number}")
     async def diagnose(order_number: str,
