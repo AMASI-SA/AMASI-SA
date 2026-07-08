@@ -100,7 +100,7 @@ export default function SallaIntegration() {
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [config, setConfig] = useState(null);
-    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, reset: false });
+    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncRange: false, reset: false });
     const [showDisconnect, setShowDisconnect] = useState(false);
     const [showReset, setShowReset] = useState(false);
     const [liveStoreInfo, setLiveStoreInfo] = useState(null);
@@ -270,6 +270,45 @@ export default function SallaIntegration() {
             setBusy(b => ({ ...b, syncOrders: false }));
         }
     };
+
+    // ── Date-range sync (user directive 2026-07-09): backfill
+    // unified_orders for the whole Qoyod window (from 2026-07-01)
+    // when the Plan-B diagnostic shows heavy orphan-webhook counts
+    // (webhooks captured but no matching unified_orders row).
+    const [rangeSyncFrom, setRangeSyncFrom] = useState("2026-07-01");
+    const [rangeSyncTo, setRangeSyncTo] = useState("");
+    const handleSyncOrdersRange = async () => {
+        const from_date = (rangeSyncFrom || "").trim();
+        const to_date = (rangeSyncTo || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from_date)) {
+            toast.error("تاريخ (من) غير صحيح. الصيغة: YYYY-MM-DD");
+            return;
+        }
+        if (to_date && !/^\d{4}-\d{2}-\d{2}$/.test(to_date)) {
+            toast.error("تاريخ (إلى) غير صحيح. الصيغة: YYYY-MM-DD");
+            return;
+        }
+        setBusy(b => ({ ...b, syncRange: true }));
+        try {
+            const payload = { from_date };
+            if (to_date) payload.to_date = to_date;
+            const { data } = await api.post("/salla/sync/orders", payload);
+            const rng = to_date ? `${from_date} → ${to_date}` : `${from_date} → اليوم`;
+            toast.success(
+                `مزامنة (${rng}): ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`,
+                { duration: 8000 }
+            );
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string" ? det : (det?.message || "فشل مزامنة النطاق");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncRange: false }));
+        }
+    };
+
 
     const handleReset = async () => {
         setShowReset(false);
@@ -592,6 +631,59 @@ export default function SallaIntegration() {
                         </button>
                     </div>
 
+                    {/* Date-range sync — for backfilling unified_orders */}
+                    <div
+                        className="border-t border-slate-100 bg-indigo-50/40 px-5 py-4"
+                        data-testid="salla-sync-range-block"
+                    >
+                        <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                            📅 مزامنة نطاق تاريخي (Backfill)
+                        </h4>
+                        <p className="text-[11px] text-slate-600 mt-1 mb-3 leading-relaxed">
+                            لملء <code className="font-mono bg-white px-1 rounded">unified_orders</code> من تاريخ محدد.
+                            استخدم <b>2026-07-01</b> (بداية تكامل قيود) لسحب كامل النطاق.
+                            الحقل الأيمن اختياري — اتركه فارغاً للمزامنة حتى اليوم.
+                        </p>
+                        <div className="flex flex-wrap items-end gap-2">
+                            <label className="flex flex-col gap-1">
+                                <span className="text-[11px] font-semibold text-slate-600">من تاريخ</span>
+                                <input
+                                    type="date"
+                                    value={rangeSyncFrom}
+                                    onChange={(e) => setRangeSyncFrom(e.target.value)}
+                                    data-testid="salla-sync-range-from"
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-mono"
+                                    dir="ltr"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                                <span className="text-[11px] font-semibold text-slate-600">إلى تاريخ (اختياري)</span>
+                                <input
+                                    type="date"
+                                    value={rangeSyncTo}
+                                    onChange={(e) => setRangeSyncTo(e.target.value)}
+                                    data-testid="salla-sync-range-to"
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-mono"
+                                    dir="ltr"
+                                    placeholder="اليوم"
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleSyncOrdersRange}
+                                disabled={busy.syncRange}
+                                data-testid="salla-sync-range-btn"
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-sm"
+                            >
+                                <ArrowsClockwise size={14} weight="bold" className={busy.syncRange ? "animate-spin" : ""} />
+                                {busy.syncRange ? "جاري المزامنة…" : "مزامنة النطاق"}
+                            </button>
+                            <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-md">
+                                ⚠️ المزامنة الطويلة قد تستغرق دقائق بحسب عدد الطلبات. لا تُغلق النافذة أثناء التنفيذ.
+                            </p>
+                        </div>
+                    </div>
+
                     {/* Sync logs */}
                     <div className="border-t border-slate-100 bg-slate-50">
                         <div className="px-5 py-3 flex items-center justify-between">
@@ -600,7 +692,7 @@ export default function SallaIntegration() {
                         </div>
                         {syncLogs.length === 0 ? (
                             <div className="text-center py-6 text-xs text-slate-400" data-testid="salla-sync-empty">
-                                لا توجد عمليات مزامنة بعد. اضغط "مزامنة الطلبات الآن" للبدء.
+                                لا توجد عمليات مزامنة بعد. اضغط &quot;مزامنة الطلبات الآن&quot; للبدء.
                             </div>
                         ) : (
                             <div className="max-h-96 overflow-y-auto">
