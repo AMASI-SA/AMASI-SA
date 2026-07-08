@@ -97,9 +97,21 @@ async def sync_qoyod_invoices(
 ) -> dict:
     """Pull invoices from Qoyod and upsert them into
     `qoyod_invoices` under `user_id`. Returns a summary dict.
+
+    Defensive: every possible failure path (network, pagination,
+    row-level upsert, coercion) is caught. The function NEVER
+    raises — it either returns `ok=true` or `ok=false` with an
+    `error` field. This keeps the reconciliation endpoint working
+    even when قيود is briefly unreachable.
     """
     sync_start = from_date or _FLOOR_DATE
     started_at = datetime.now(timezone.utc)
+    fetched = 0
+    in_scope = 0
+    created = 0
+    updated = 0
+    skipped = 0
+    row_errors = 0
 
     try:
         items = await _paginate(
@@ -107,86 +119,87 @@ async def sync_qoyod_invoices(
             page_size=page_size, max_pages=max_pages,
             extract_keys=("invoices", "data", "items"),
         )
-    except Exception as e:  # noqa: BLE001 — surface any transport error
+    except Exception as e:  # noqa: BLE001
         return {
             "ok": False,
-            "error": f"تعذر جلب فواتير قيود: {type(e).__name__}: {e}",
+            "error": (f"تعذر جلب فواتير قيود: "
+                       f"{type(e).__name__}: {e}"),
             "fetched": 0, "in_scope": 0,
             "created": 0, "updated": 0, "skipped": 0,
+            "row_errors": 0,
             "started_at": started_at.isoformat(),
             "finished_at": datetime.now(timezone.utc).isoformat(),
         }
 
     fetched = len(items)
-    in_scope = 0
-    created = 0
-    updated = 0
-    skipped = 0
 
     for it in items:
-        if not isinstance(it, dict):
-            skipped += 1
-            continue
-        qid = str(it.get("id") or "").strip()
-        if not qid:
-            skipped += 1
-            continue
-        issue_date = it.get("issue_date") or ""
-        if not _in_scope(issue_date, sync_start):
-            skipped += 1
-            continue
-        in_scope += 1
+        try:
+            if not isinstance(it, dict):
+                skipped += 1
+                continue
+            qid = str(it.get("id") or "").strip()
+            if not qid:
+                skipped += 1
+                continue
+            issue_date = it.get("issue_date") or ""
+            if not _in_scope(issue_date, sync_start):
+                skipped += 1
+                continue
+            in_scope += 1
 
-        total = _coerce_float(it.get("total") or it.get("total_amount")) \
-            or 0.0
-        paid, remaining = _paid_and_remaining(it, total)
-        reference = str(it.get("reference")
-                        or it.get("external_reference")
-                        or it.get("source_reference") or "").strip()
-        inv_number = str(it.get("invoice_number")
-                          or it.get("number")
-                          or reference or "").strip()
-        status = str(it.get("status") or "").strip().lower() or None
-        customer = _customer_name(it)
+            total_raw = _coerce_float(
+                it.get("total") or it.get("total_amount"))
+            total = float(total_raw or 0.0)
+            paid, remaining = _paid_and_remaining(it, total)
+            reference = str(it.get("reference")
+                            or it.get("external_reference")
+                            or it.get("source_reference") or "").strip()
+            inv_number = str(it.get("invoice_number")
+                              or it.get("number")
+                              or reference or "").strip()
+            status = str(it.get("status") or "").strip().lower() or None
+            customer = _customer_name(it)
 
-        now_iso = datetime.now(timezone.utc)
-        set_fields = {
-            "user_id":         user_id,
-            "qoyod_invoice_id": qid,
-            "invoice_number":  inv_number,
-            "reference":       reference,
-            "salla_order_number": reference,  # legacy alias for
-            # `pending._sent_in_any_local_record` cross-tenant lookup.
-            "customer_name":   customer,
-            "issue_date":      issue_date or None,
-            "total":           round(total, 2),
-            "paid_amount":     paid,
-            "remaining":       remaining,
-            "status":          status,
-            "last_sync_at":    now_iso,
-            "raw_response":    _trim_raw(it),
-        }
-        set_on_insert = {
-            "source":          "synced_from_qoyod",
-            "created_at":      now_iso,
-        }
+            now_iso = datetime.now(timezone.utc)
+            set_fields = {
+                "user_id":            user_id,
+                "qoyod_invoice_id":   qid,
+                "invoice_number":     inv_number,
+                "reference":          reference,
+                "salla_order_number": reference,
+                "customer_name":      customer,
+                "issue_date":         issue_date or None,
+                "total":              round(total, 2),
+                "paid_amount":        paid,
+                "remaining":          remaining,
+                "status":             status,
+                "last_sync_at":       now_iso,
+                "raw_response":       _trim_raw(it),
+            }
+            set_on_insert = {
+                "source":     "synced_from_qoyod",
+                "created_at": now_iso,
+            }
 
-        res = await db.qoyod_invoices.update_one(
-            {"user_id": user_id, "qoyod_invoice_id": qid},
-            {"$set": set_fields, "$setOnInsert": set_on_insert},
-            upsert=True,
-        )
-        if res.upserted_id is not None:
-            created += 1
-        elif res.modified_count:
-            updated += 1
-        else:
-            # Row existed and every field was identical. Still counts
-            # as touched — advance `last_sync_at` unconditionally.
-            await db.qoyod_invoices.update_one(
+            res = await db.qoyod_invoices.update_one(
                 {"user_id": user_id, "qoyod_invoice_id": qid},
-                {"$set": {"last_sync_at": now_iso}},
+                {"$set": set_fields, "$setOnInsert": set_on_insert},
+                upsert=True,
             )
+            if res.upserted_id is not None:
+                created += 1
+            elif res.modified_count:
+                updated += 1
+            else:
+                await db.qoyod_invoices.update_one(
+                    {"user_id": user_id, "qoyod_invoice_id": qid},
+                    {"$set": {"last_sync_at": now_iso}},
+                )
+        except Exception:  # noqa: BLE001
+            # Never let one bad row abort the whole sync. Count and
+            # continue — the operator sees `row_errors` in the summary.
+            row_errors += 1
 
     finished_at = datetime.now(timezone.utc)
     return {
@@ -196,6 +209,7 @@ async def sync_qoyod_invoices(
         "created":     created,
         "updated":     updated,
         "skipped":     skipped,
+        "row_errors":  row_errors,
         "sync_start":  sync_start.isoformat(),
         "started_at":  started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
