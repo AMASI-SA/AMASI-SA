@@ -919,7 +919,8 @@ async def upsert_salla_direct_to_inbox(
         "idempotency_key": idem_key,
     }
     existing = await db.integration_inbox.find_one(
-        filt, {"_id": 0, "id": 1, "pipeline_stage": 1, "trace_id": 1},
+        filt, {"_id": 0, "id": 1, "pipeline_stage": 1, "trace_id": 1,
+               "canonical_payload": 1},
     )
 
     # ── Path A: new row ────────────────────────────────────────────
@@ -981,6 +982,48 @@ async def upsert_salla_direct_to_inbox(
 
     # ── Path B: existing row (upsert / status refresh) ────────────
     prior_stage = (existing or {}).get("pipeline_stage") if existing else None
+    prior_canonical = (existing or {}).get("canonical_payload") or {}
+
+    # ── Money-preservation guard (2026-02, user-reported bug) ────
+    # (see block comment above)
+    def _money_amount(node) -> float:
+        """Handle both shapes canonical_payload can carry:
+        flat float (normalizer output) or `{amount, currency}` dict
+        (legacy Make adapter path)."""
+        if node is None:
+            return 0.0
+        if isinstance(node, (int, float)):
+            try:
+                return float(node)
+            except (TypeError, ValueError):
+                return 0.0
+        if isinstance(node, str):
+            try:
+                return float(node)
+            except (TypeError, ValueError):
+                return 0.0
+        if isinstance(node, dict):
+            try:
+                return float(node.get("amount") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        return 0.0
+
+    MONEY_FIELDS = ("total_amount", "subtotal", "tax_amount",
+                    "shipping_amount", "discount_amount")
+    money_preserved: list[str] = []
+    for _f in MONEY_FIELDS:
+        new_val = _money_amount(canonical.get(_f))
+        old_val = _money_amount(prior_canonical.get(_f))
+        if new_val <= 0 and old_val > 0:
+            canonical[_f] = prior_canonical[_f]
+            money_preserved.append(_f)
+
+    # If items are missing/empty on the new payload but present in
+    # prior — same rule: don't lose data on a status-only refresh.
+    if not canonical.get("items") and prior_canonical.get("items"):
+        canonical["items"] = prior_canonical["items"]
+        money_preserved.append("items")
 
     update_set: dict = {
         "raw_payload": wrapped,
@@ -995,11 +1038,15 @@ async def upsert_salla_direct_to_inbox(
     if prior_stage in (None, "NEW"):
         update_set["pipeline_stage"] = "NORMALIZED"
 
+    history_note = "Salla Direct sync refreshed payload"
+    if money_preserved:
+        history_note += f" · preserved from prior: {money_preserved}"
+
     history_entry = {
         "stage": prior_stage or "NORMALIZED",
         "actor": "salla_direct_sync",
         "at": now,
-        "note": "Salla Direct sync refreshed payload",
+        "note": history_note,
     }
     await db.integration_inbox.update_one(
         filt,
@@ -1011,4 +1058,5 @@ async def upsert_salla_direct_to_inbox(
         "created": False,
         "row_id": (existing or {}).get("id"),
         "trace_id": (existing or {}).get("trace_id"),
+        "money_preserved": money_preserved,
     }

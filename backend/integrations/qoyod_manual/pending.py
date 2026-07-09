@@ -301,6 +301,55 @@ async def list_pending_orders(
 
     cursor = db.integration_inbox.aggregate(pipeline)
 
+    # Money-preservation helper (2026-02).
+    # (block comment above)
+    async def _resolve_safe_total(order_number_: str,
+                                  newest_total_node) -> Any:
+        def _amt(node):
+            """Handle both canonical shapes: flat float (normalizer)
+            or `{amount, currency}` dict (legacy adapter path)."""
+            if node is None:
+                return 0.0
+            if isinstance(node, (int, float)):
+                try:
+                    return float(node)
+                except (TypeError, ValueError):
+                    return 0.0
+            if isinstance(node, str):
+                try:
+                    return float(node)
+                except (TypeError, ValueError):
+                    return 0.0
+            if isinstance(node, dict):
+                try:
+                    return float(node.get("amount") or 0)
+                except (TypeError, ValueError):
+                    return 0.0
+            return 0.0
+        if _amt(newest_total_node) > 0:
+            return newest_total_node
+
+        best_node = newest_total_node
+        best_amt = 0.0
+        async for other in db.integration_inbox.find(
+            {"user_id": user_id, "salla_order_number": order_number_},
+            {"_id": 0, "canonical_payload.total_amount": 1,
+             "canonical_payload.currency": 1,
+             "connector_key": 1},
+        ):
+            cp = other.get("canonical_payload") or {}
+            node = cp.get("total_amount")
+            amt = _amt(node)
+            # Salla Direct wins ties.
+            if amt > best_amt or (
+                amt == best_amt and best_amt > 0
+                and other.get("connector_key") == "salla_direct"
+                and node is not None
+            ):
+                best_amt = amt
+                best_node = node
+        return best_node
+
     seen_orders: set[str] = set()
     pending: list[dict] = []
     scanned = 0
@@ -354,6 +403,8 @@ async def list_pending_orders(
 
         canon = row.get("canonical_payload") or {}
         received = row.get("received_at")
+        safe_total = await _resolve_safe_total(
+            order_number, canon.get("total_amount"))
         pending.append({
             "order_number":    order_number,
             "trace_id":        row.get("trace_id"),
@@ -362,7 +413,7 @@ async def list_pending_orders(
             "received_at":     (received.isoformat()
                                 if hasattr(received, "isoformat")
                                 else received),
-            "total_amount":    canon.get("total_amount"),
+            "total_amount":    safe_total,
             "currency":        canon.get("currency") or "SAR",
             "payment_method":  (canon.get("payment_method")
                                 or canon.get("payment_method_native")),

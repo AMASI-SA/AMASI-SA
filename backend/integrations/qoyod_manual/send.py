@@ -1112,6 +1112,57 @@ async def manual_send_one(
     payment_method = (canon.get("payment_method")
                        or canon.get("payment_method_native"))
 
+    # ── Guard G0 — refuse zero-total sends (2026-02) ──────────────
+    # Symptom: Tabby/Make (or a stripped Salla status refresh) posts
+    # a payload whose `amounts.total.amount` is 0. If that trace is
+    # the newest, canonical_payload.total_amount collapses to 0 and
+    # this send would create a قيود invoice of 0 SAR against a real
+    # 134 SAR Salla order. Refuse hard — the operator must resolve
+    # the source data before Plan B lets a zero-total invoice reach
+    # قيود. `list_pending_orders` also falls back to the highest
+    # positive total across all traces (see pending.py), so an
+    # actual send should almost never hit this guard — but the guard
+    # is the last line of defence.
+    if salla_total <= 0:
+        # One more look — maybe another trace of the same order in
+        # inbox carries a positive total we can trust.
+        # Scan all traces (canonical shape may be flat float OR
+        # `{amount, currency}` dict — check both).
+        best_other = None
+        best_amt = 0.0
+        async for other in db.integration_inbox.find(
+            {"salla_order_number": str(order_number)},
+            {"_id": 0, "canonical_payload.total_amount": 1,
+             "connector_key": 1},
+        ):
+            node = ((other.get("canonical_payload") or {})
+                    .get("total_amount"))
+            if node is None:
+                continue
+            if isinstance(node, (int, float)):
+                v = float(node)
+            elif isinstance(node, dict):
+                try:
+                    v = float(node.get("amount") or 0)
+                except (TypeError, ValueError):
+                    v = 0.0
+            else:
+                try:
+                    v = float(node)
+                except (TypeError, ValueError):
+                    v = 0.0
+            if v > best_amt:
+                best_amt = v
+                best_other = other
+        raise ManualSendRefused(
+            "zero_total_refused",
+            "لا يمكن إرسال طلب مبلغه 0.00 ريال إلى قيود. تحقق من "
+            "بيانات الطلب في سلة ثم أعد المزامنة.",
+            {"canonical_total":  canon.get("total_amount"),
+             "other_trace_total": ((best_other or {}).get(
+                                    "canonical_payload", {}) or {}).get("total_amount"),
+             "other_trace_connector": (best_other or {}).get("connector_key")})
+
     # ── Load settings + resolve payment account (Guard G4) ─────────
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
