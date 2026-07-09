@@ -29,6 +29,17 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
+from pydantic import BaseModel as _PydBaseModel
+
+
+class _RepairIntegrationPayload(_PydBaseModel):
+    """Body for POST /webhook-diagnose/repair-integration.
+
+    MUST be at module level so FastAPI binds it as request body.
+    Defining it inside make_salla_router() closure caused 422
+    'query.payload missing' (2026-07-09 regression)."""
+    source_user_id: str
+    target_user_id: str
 
 from .service import (
     DEFAULT_SCOPES,
@@ -292,6 +303,80 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             diagnose_salla_webhook_state,
         )
         return await diagnose_salla_webhook_state(db)
+
+    # ── Repair endpoint (temporary, opt-in) ────────────────────────
+    # Moves a salla_integrations document from `source_user_id` to
+    # `target_user_id` — needed when Easy Mode's earliest-owner
+    # resolver picked a seed/admin user instead of the actual
+    # merchant login. Safe by design:
+    #     • Requires both user IDs to be explicit (no wildcards).
+    #     • The caller MUST be authenticated as `target_user_id` —
+    #       nobody can steal another user's integration.
+    #     • The token payload is copied verbatim (never re-encrypted
+    #       or refreshed), so Salla API calls resume immediately.
+    #     • Source doc is deleted ONLY after the target upsert
+    #       succeeds and is verified.
+    # REMOVE this route once the connection state is stabilised.
+    @router.post("/webhook-diagnose/repair-integration")
+    async def repair_integration(
+        payload: _RepairIntegrationPayload,
+        user: dict = Depends(current_user),
+    ):
+        if str(user.get("id")) != str(payload.target_user_id):
+            raise HTTPException(
+                status_code=403,
+                detail={"code":    "target_not_self",
+                        "message": ("target_user_id must equal the "
+                                     "authenticated user's id.")})
+        if payload.source_user_id == payload.target_user_id:
+            raise HTTPException(
+                status_code=400,
+                detail={"code":    "same_user",
+                        "message": "source and target user IDs are identical."})
+        source_doc = await db.salla_integrations.find_one(
+            {"user_id": payload.source_user_id})
+        if not source_doc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code":    "source_not_found",
+                        "message": ("No salla_integrations document "
+                                     "under source_user_id.")})
+        target_existing = await db.salla_integrations.find_one(
+            {"user_id": payload.target_user_id})
+        # Prepare the moved doc: keep every field EXCEPT the Mongo _id
+        # and rewrite user_id.
+        moved = {k: v for k, v in source_doc.items()
+                  if k not in ("_id",)}
+        moved["user_id"] = payload.target_user_id
+        moved["moved_from_user_id"]  = payload.source_user_id
+        moved["moved_at"]            = datetime.now(timezone.utc)
+        await db.salla_integrations.update_one(
+            {"user_id": payload.target_user_id},
+            {"$set": moved},
+            upsert=True,
+        )
+        # Verify.
+        verify = await db.salla_integrations.find_one(
+            {"user_id": payload.target_user_id})
+        if not verify or verify.get("status") != source_doc.get("status"):
+            raise HTTPException(
+                status_code=500,
+                detail={"code":    "target_upsert_verify_failed",
+                        "message": ("The upsert into the target user "
+                                     "did not verify — source doc is "
+                                     "still intact.")})
+        # Delete source only after target is confirmed.
+        await db.salla_integrations.delete_one(
+            {"user_id": payload.source_user_id})
+        return {
+            "ok":                 True,
+            "moved":               True,
+            "source_user_id":      payload.source_user_id,
+            "target_user_id":      payload.target_user_id,
+            "target_replaced_existing": bool(target_existing),
+            "status":              verify.get("status"),
+            "store_id":            verify.get("store_id"),
+        }
 
     # ── 2. Begin OAuth flow ───────────────────────────────────────────
     @router.get("/oauth/login")
