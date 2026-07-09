@@ -170,6 +170,19 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 getattr(request.client, "host", None), len(raw_body),
             )
             if not verified:
+                try:
+                    await db.salla_webhook_events_log.insert_one({
+                        "received_at": datetime.now(timezone.utc),
+                        "event":       "<unverified>",
+                        "strategy":    strategy,
+                        "verified":    False,
+                        "stored":      False,
+                        "reason":      "token_verification_failed",
+                        "http_status": 401,
+                        "ip":          getattr(request.client, "host", None),
+                    })
+                except Exception:  # noqa: BLE001
+                    pass
                 raise HTTPException(
                     status_code=401,
                     detail={"code": "INVALID_TOKEN",
@@ -192,6 +205,21 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     bool(provided_sig),
                     len(raw_body),
                 )
+                # Diagnostic trace — signature failure.
+                try:
+                    await db.salla_webhook_events_log.insert_one({
+                        "received_at": datetime.now(timezone.utc),
+                        "event":       "<unverified>",
+                        "strategy":    strategy,
+                        "verified":    False,
+                        "stored":      False,
+                        "reason":      "signature_verification_failed",
+                        "http_status": 401,
+                        "sig_present": bool(provided_sig),
+                        "ip":          getattr(request.client, "host", None),
+                    })
+                except Exception:  # noqa: BLE001
+                    pass
                 raise HTTPException(
                     status_code=401,
                     detail={"code": "INVALID_SIGNATURE",
@@ -220,6 +248,31 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             (body or {}).get("event") or "<none>",
             (result or {}).get("stored"),
         )
+
+        # ── Diagnostic trace (2026-07-09, temporary) ───────────────
+        # Append a short row to `salla_webhook_events_log` for every
+        # verified webhook. Read by the /api/salla/webhook-diagnose
+        # endpoint. NEVER stores payload bodies or token values —
+        # only the event name + outcome flags.
+        try:
+            await db.salla_webhook_events_log.insert_one({
+                "received_at":  datetime.now(timezone.utc),
+                "event":        (body or {}).get("event") or "<none>",
+                "merchant":     (body or {}).get("merchant"),
+                "strategy":     strategy,
+                "verified":     bool(verified),
+                "stored":       bool((result or {}).get("stored")),
+                "reason":       (result or {}).get("reason"),
+                "user_id":      (result or {}).get("user_id"),
+                "user_email":   (result or {}).get("user_email"),
+                "http_status":  200,
+                "ip":           getattr(request.client, "host", None),
+            })
+        except Exception:  # noqa: BLE001
+            # Never let diagnostic-write failures affect Salla's retry
+            # decision — the webhook itself already succeeded.
+            pass
+
         return result
 
     # ── 1. Status (always safe — never returns tokens) ────────────────
@@ -227,6 +280,18 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     async def status(user: dict = Depends(current_user)):
         doc = await get_integration(db, user["id"])
         return integration_to_public(doc)
+
+    # ── Diagnostic endpoint (temporary, opt-in) ────────────────────
+    # READ-ONLY. Never returns tokens. Used to diagnose why an
+    # Easy-Mode install doesn't show as connected. REMOVE this route
+    # + the salla_integration/webhook_diagnose.py module once the
+    # connection state is stabilised.
+    @router.get("/webhook-diagnose")
+    async def webhook_diagnose(user: dict = Depends(current_user)):
+        from salla_integration.webhook_diagnose import (
+            diagnose_salla_webhook_state,
+        )
+        return await diagnose_salla_webhook_state(db)
 
     # ── 2. Begin OAuth flow ───────────────────────────────────────────
     @router.get("/oauth/login")
