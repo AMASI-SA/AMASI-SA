@@ -260,7 +260,7 @@ async def run_orders_sync(
     try:
         page = 1
         while page <= MAX_PAGES_PER_RUN:
-            params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "expanded": "true"}
+            params: dict = {"page": page, "per_page": ORDERS_PER_PAGE}
             if from_date:
                 params["from_date"] = from_date
             if to_date:
@@ -403,7 +403,7 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     try:
         resp = await call_salla(
             db, user_id, "GET", "/orders",
-            params={"keyword": order_number, "expanded": "true", "per_page": 10},
+            params={"keyword": order_number, "per_page": 10},
         )
     except SallaError as e:
         return {"ok": False, "found": False, "error": str(e),
