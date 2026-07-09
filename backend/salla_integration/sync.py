@@ -28,11 +28,18 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
+from pymongo.errors import DuplicateKeyError
+
 from .service import SallaError, call_salla
 
 # orders_db is imported at module top-level to keep `salla_direct` writes
 # routed through the same merge logic Make/Excel use.
 from orders_db import upsert_order
+
+# Plan-B bridge (2026-02) — Salla Direct rows are also written to
+# `integration_inbox` so Plan B Pending UI can source orders from the
+# API pull without depending on Make.com webhooks. Import lazily inside
+# the helper to avoid a circular import at module load time.
 
 
 # Salla's /orders endpoint uses page-based pagination. Default per_page is
@@ -294,6 +301,30 @@ async def run_orders_sync(
                         created += 1
                     else:
                         updated += 1
+
+                    # Plan-B bridge — mirror the raw Salla order into
+                    # `integration_inbox` so Pending UI sees Salla Direct
+                    # orders even when Make.com webhooks are off.
+                    # Never blocks the main sync loop: any failure here
+                    # is counted as an error but the order stays committed
+                    # in `unified_orders`.
+                    try:
+                        inbox_res = await upsert_salla_direct_to_inbox(
+                            db, user_id=user_id, raw_salla_order=raw,
+                        )
+                        if not inbox_res.get("ok") and len(errors_sample) < 20:
+                            errors_sample.append({
+                                "order_number": doc.get("order_number"),
+                                "inbox_reason": inbox_res.get("reason"),
+                                "inbox_error": inbox_res.get("error"),
+                            })
+                    except Exception as inbox_exc:  # pragma: no cover
+                        if len(errors_sample) < 20:
+                            errors_sample.append({
+                                "order_number": doc.get("order_number"),
+                                "inbox_error":
+                                    f"{inbox_exc.__class__.__name__}: {inbox_exc}"[:300],
+                            })
                 except Exception as exc:  # pragma: no cover — defensive
                     errors_count += 1
                     if len(errors_sample) < 20:
@@ -759,3 +790,183 @@ async def ensure_sync_indexes(db) -> None:
     await db.salla_products.create_index(
         [("user_id", 1), ("product_id", 1)], unique=True
     )
+
+
+# ── Plan-B bridge — Salla Direct → integration_inbox (upsert) ────────────
+# Constants scoped so the tests can monkey-patch them if needed.
+SALLA_DIRECT_CONNECTOR_KEY = "salla_direct"
+SALLA_DIRECT_SOURCE_TAG = "salla_direct"
+
+
+def _salla_direct_idempotency_key(order_number: str) -> str:
+    """Stable per-order key — NO status suffix.
+
+    User directive (2026-02): a single Salla order maps to exactly ONE
+    `integration_inbox` row from the Salla Direct pull, regardless of
+    how many times its status changes. Status transitions UPDATE the
+    same row instead of inserting new ones.
+    """
+    return f"salla_direct:order:{order_number}"
+
+
+async def upsert_salla_direct_to_inbox(
+    db, *, user_id: str, raw_salla_order: dict,
+) -> dict:
+    """Idempotent writer: Salla Direct raw order → `integration_inbox`.
+
+    Contract (user directive 2026-02):
+      • Exactly one active row per (user_id, connector_key="salla_direct",
+        salla_order_number).
+      • Status transitions on the same order UPDATE that row (do NOT
+        create a second).
+      • NEVER calls Qoyod. NEVER auto-sends. Pure canonical persistence.
+      • Preserves any real invoice markers already on the row
+        (`manual_qoyod_invoice_id`, `qoyod_invoice_id`) — Plan B send.py
+        may have written them from a prior push.
+      • Preserves `pipeline_stage` when the existing row is past
+        NORMALIZED (e.g. INVOICE_CREATED / COMPLETED). We only bring a
+        NEW row up to NORMALIZED.
+
+    Cross-source dedup with Make.com:
+      Plan-B `list_pending_orders` groups by `salla_order_number` at the
+      aggregation level, so a Make row + a Salla-Direct row for the
+      same order collapse to a single Pending entry. The distinct
+      `connector_key` values keep their unique-index namespaces clean.
+
+    Returns:
+        {"ok": True/False, "created": bool, "row_id": str, ...}
+    """
+    # Local imports — avoid circular deps at module load time.
+    from integrations.qoyod.normalizer import (
+        validate as _validate,
+        normalize as _normalize,
+        NormalizationError,
+    )
+    from integrations.qoyod.state_machine import initial_history_entry
+
+    order_number = str(
+        raw_salla_order.get("reference_id")
+        or raw_salla_order.get("id")
+        or ""
+    ).strip()
+    if not order_number:
+        return {"ok": False, "reason": "missing_order_number"}
+
+    wrapped = {"event": "salla_direct_sync", "data": raw_salla_order}
+    now = _now()
+    idem_key = _salla_direct_idempotency_key(order_number)
+    salla_order_id = str(raw_salla_order.get("id") or "") or None
+
+    ok, err = _validate(wrapped)
+    if not ok:
+        return {"ok": False, "reason": "invalid_payload", "error": err}
+
+    try:
+        dto = _normalize(wrapped, received_at=now)
+        canonical = dto.model_dump(mode="json")
+    except NormalizationError as ne:
+        return {"ok": False, "reason": "normalization_error",
+                "error": ne.to_log_dict()}
+    except Exception as exc:  # defensive — never crash the sync loop
+        return {"ok": False, "reason": "normalizer_crash",
+                "error": f"{exc.__class__.__name__}: {exc}"}
+
+    filt = {
+        "user_id": user_id,
+        "connector_key": SALLA_DIRECT_CONNECTOR_KEY,
+        "idempotency_key": idem_key,
+    }
+    existing = await db.integration_inbox.find_one(
+        filt, {"_id": 0, "id": 1, "pipeline_stage": 1, "trace_id": 1},
+    )
+
+    # ── Path A: new row ────────────────────────────────────────────
+    if existing is None:
+        row_id = uuid.uuid4().hex
+        trace_id = uuid.uuid4().hex
+        item_count = len(canonical.get("items") or [])
+        history = [
+            initial_history_entry(
+                actor="salla_direct_sync",
+                note=f"trace_id={trace_id} · connector=salla_direct",
+            ),
+            {
+                "stage": "NORMALIZED",
+                "actor": "salla_direct_sync",
+                "at": now,
+                "note": f"DTO built · {item_count} items",
+            },
+        ]
+        doc = {
+            "id": row_id,
+            "schema_version": 1,
+            "user_id": user_id,
+            "trace_id": trace_id,
+            "connector_key": SALLA_DIRECT_CONNECTOR_KEY,
+            "source": SALLA_DIRECT_SOURCE_TAG,
+            "received_at": now,
+            "raw_payload": wrapped,
+            "adapted_payload": None,
+            "adapter_meta": {
+                "adapter_applied": False,
+                "items_source": "items",
+                "legacy_status_slug": None,
+                "legacy_extras": {},
+            },
+            "enrichment_fallback_used": False,
+            "raw_headers": {},
+            "signature_status": "internal",
+            "salla_order_id": salla_order_id,
+            "salla_order_number": order_number,
+            "idempotency_key": idem_key,
+            "pipeline_stage": "NORMALIZED",
+            "pipeline_error": None,
+            "attempts": 0,
+            "next_retry_at": None,
+            "processed_at": None,
+            "canonical_payload": canonical,
+            "pipeline_started_at": now,
+            "stage_history": history,
+        }
+        try:
+            await db.integration_inbox.insert_one(doc)
+            return {"ok": True, "created": True, "row_id": row_id,
+                    "trace_id": trace_id}
+        except DuplicateKeyError:
+            # Race: another writer inserted between find and insert.
+            # Fall through to the update path.
+            pass
+
+    # ── Path B: existing row (upsert / status refresh) ────────────
+    prior_stage = (existing or {}).get("pipeline_stage") if existing else None
+
+    update_set: dict = {
+        "raw_payload": wrapped,
+        "canonical_payload": canonical,
+        "salla_order_id": salla_order_id,
+        "salla_order_number": order_number,
+        "received_at": now,
+    }
+    # Only advance NEW → NORMALIZED. NEVER regress an advanced stage
+    # (INVOICE_CREATED / COMPLETED / DEAD_LETTER) — Plan B may have
+    # already moved the row past NORMALIZED.
+    if prior_stage in (None, "NEW"):
+        update_set["pipeline_stage"] = "NORMALIZED"
+
+    history_entry = {
+        "stage": prior_stage or "NORMALIZED",
+        "actor": "salla_direct_sync",
+        "at": now,
+        "note": "Salla Direct sync refreshed payload",
+    }
+    await db.integration_inbox.update_one(
+        filt,
+        {"$set": update_set,
+         "$push": {"stage_history": history_entry}},
+    )
+    return {
+        "ok": True,
+        "created": False,
+        "row_id": (existing or {}).get("id"),
+        "trace_id": (existing or {}).get("trace_id"),
+    }

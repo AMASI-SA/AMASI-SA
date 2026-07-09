@@ -1,5 +1,49 @@
 # PRD — MEZAN E-commerce Accounting App
 
+# ══════════════════════════════════════════════════════════════════
+# 🔗 SALLA DIRECT → integration_inbox BRIDGE (Plan B) — 2026-02
+# ══════════════════════════════════════════════════════════════════
+User directive (2026-02): decouple Plan B Pending UI from Make.com
+webhooks. Every order pulled by `run_orders_sync` must ALSO appear
+in `integration_inbox` so Plan B works even when Make is offline.
+
+Contract (strict — user-approved):
+- `connector_key = "salla_direct"`, `source = "salla_direct"`.
+- `idempotency_key = "salla_direct:order:{order_number}"`  (NO status
+  suffix — one row per order, status transitions UPDATE that row).
+- Upsert by `(user_id, connector_key, idempotency_key)` (unique index).
+- NEW row is seeded through validate + normalize → NORMALIZED with
+  `canonical_payload` populated (SalesOrderDTO).
+- Existing row: refresh `raw_payload`, `canonical_payload`, status,
+  `received_at`. NEVER touch `manual_qoyod_invoice_id` /
+  `qoyod_invoice_id`. NEVER regress `pipeline_stage` past NORMALIZED.
+- ZERO Qoyod HTTP calls from the sync path. Plan B send behaviour
+  unchanged (still triggered manually via the UI button only).
+- Cross-source dedup handled by existing `$group by salla_order_number`
+  aggregation in `list_pending_orders` — Make row + Salla-Direct row
+  for the same order collapse to a single Pending entry.
+
+Files:
+- /app/backend/salla_integration/sync.py
+    NEW: `upsert_salla_direct_to_inbox()`, constants
+    `SALLA_DIRECT_CONNECTOR_KEY`, `_salla_direct_idempotency_key()`.
+    Called from `run_orders_sync` after every successful
+    `upsert_order` — errors are collected in the sync log but never
+    block `unified_orders` writes.
+
+Tests (all passing):
+- /app/backend/tests/test_salla_direct_writes_to_inbox.py  (7 cases)
+    T1 first-sync creates NORMALIZED inbox row
+    T2 second sync is idempotent (no duplicate row)
+    T3 status change UPDATES same row (no new row)
+    T4 cross-source dedup with a Make row (single Pending entry)
+    T5 existing invoice markers + advanced pipeline_stage preserved
+    T6 no Qoyod HTTP calls happen from the sync path
+    T7 payload without reference_id/id is skipped defensively
+
+
+
+
 
 # ══════════════════════════════════════════════════════════════════
 # 🩺 PLAN B DIAGNOSTIC — Missing-From-Plan-B page (2026-07-08)
