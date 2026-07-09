@@ -799,7 +799,36 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
             try:
                 await db.integration_inbox.insert_one(new_row)
             except DuplicateKeyError:
-                # 3) Idempotency: already received — return the existing trace.
+                # 3) Idempotency: already received.
+                #
+                # BUG FIX 2026-02 (status-return regression): when
+                # Salla fires the SAME status a second time (e.g.
+                # completed → under_review → completed again), the
+                # idempotency key collides with the original row and
+                # we used to silently drop the event. `list_pending`
+                # aggregates by newest `received_at`, so the newer
+                # intermediate-status row (under_review) would out-
+                # rank the stale original completed row → the order
+                # disappeared from Plan B and never came back.
+                #
+                # Fix (surgical): bump `received_at` on the existing
+                # row and append a stage_history entry. NOTHING else
+                # is touched — `pipeline_stage`, `manual_qoyod_invoice_id`,
+                # `qoyod_invoice_id`, `canonical_payload` all stay
+                # exactly as they were. No Qoyod call, no re-processing.
+                _refresh_now = _now()
+                await db.integration_inbox.update_one(
+                    {"user_id": tenant, "connector_key": CONNECTOR_KEY,
+                     "idempotency_key": idem_key},
+                    {"$set": {"received_at": _refresh_now},
+                     "$push": {"stage_history": {
+                         "stage":  "DUPLICATE_REPLAY",
+                         "actor":  "webhook",
+                         "at":     _refresh_now,
+                         "note":   "Webhook re-received with same "
+                                   "idempotency_key — received_at refreshed",
+                     }}},
+                )
                 existing = await db.integration_inbox.find_one(
                     {"user_id": tenant, "connector_key": CONNECTOR_KEY,
                      "idempotency_key": idem_key},
