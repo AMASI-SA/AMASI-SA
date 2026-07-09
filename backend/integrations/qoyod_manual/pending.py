@@ -214,7 +214,7 @@ async def _sent_in_any_local_record(
 
 
 async def list_pending_orders(
-    db, *, user_id: str, days: int = 60, limit: int = 200,
+    db, *, user_id: str, days: int = 60, limit: int = 500,
     search: Optional[str] = None,
     status: str = "completed",
 ) -> dict:
@@ -227,6 +227,15 @@ async def list_pending_orders(
     original 3-rule spec). NEW values: "delivered", "in_delivery".
     Unknown values fall back to "completed" — the endpoint validator
     forbids them at the API boundary too.
+
+    Limit-vs-filter ordering (2026-07-09):
+    The Salla-status filter is pushed DOWN into the Mongo query so
+    the `limit` cap applies to the STATUS-FILTERED subset. Previously
+    limit=200 was applied first (sort by received_at desc), then the
+    Python-side status matcher filtered — meaning heavy webhook
+    traffic in unrelated statuses could evict eligible "delivered"
+    orders from the window. Default `limit` also raised 200 → 500
+    to match `list_unsent_orders`.
     """
     if status not in SUPPORTED_STATUSES:
         status = "completed"
@@ -235,6 +244,19 @@ async def list_pending_orders(
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     query: dict = {"user_id": user_id, "received_at": {"$gte": cutoff}}
+
+    # Status filter — Mongo-side. Matches EXACTLY the same set that
+    # `_matches_status` would accept in Python, but does so BEFORE
+    # the limit takes effect. This is the single change that fixes
+    # the "24 vs 6" discrepancy observed on production 2026-07-09.
+    canonical_set, native_set = _STATUS_MATCHERS[status]
+    query["$or"] = [
+        {"canonical_payload.order_status":
+             {"$in": list(canonical_set)}},
+        {"canonical_payload.order_status_native":
+             {"$in": list(native_set)}},
+    ]
+
     if search and str(search).strip():
         import re
         query["salla_order_number"] = {

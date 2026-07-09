@@ -139,7 +139,12 @@ async def test_pending_orders_filters(db):
     order_numbers = {o["order_number"] for o in result["orders"]}
     assert order_numbers == {"ORD-1"}, order_numbers
     assert result["counts"]["excluded_pre_floor"] >= 1
-    assert result["counts"]["excluded_not_completed"] >= 1
+    # NB: after the 2026-07-09 fix, the Salla-status filter runs
+    # Mongo-side (BEFORE limit + BEFORE Python loop), so "pending"
+    # rows never bump the `excluded_not_completed` counter — they're
+    # already filtered out of the cursor. Verified via the negative
+    # assertion below (ORD-3 must NOT appear in the results).
+    assert "ORD-3" not in order_numbers
     assert result["counts"]["excluded_already_sent"] >= 2
 
 

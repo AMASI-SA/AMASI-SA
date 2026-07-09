@@ -98,7 +98,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
     @router.get("/pending-orders")
     async def pending_orders(
         days: int = Query(60, ge=1, le=365),
-        limit: int = Query(200, ge=1, le=1000),
+        limit: int = Query(500, ge=1, le=1000),
         search: Optional[str] = Query(None),
         status: str = Query(
             "completed",
