@@ -253,9 +253,13 @@ async def run_orders_sync(
     created = 0
     updated = 0
     skipped = 0
+    inbox_created = 0
+    inbox_updated = 0
+    inbox_failed  = 0
     errors_count = 0
     errors_sample: list[dict] = []
     pages_fetched = 0
+    orders_seen_ids: list[str] = []   # first 3 raw ids, for diagnostics
 
     try:
         page = 1
@@ -293,6 +297,8 @@ async def run_orders_sync(
                     if not doc.get("order_number"):
                         skipped += 1
                         continue
+                    if len(orders_seen_ids) < 3:
+                        orders_seen_ids.append(doc.get("order_number"))
                     res = await upsert_order(
                         db, user_id, doc["order_number"], doc,
                         source="salla_direct", raw=raw,
@@ -305,20 +311,31 @@ async def run_orders_sync(
                     # Plan-B bridge — mirror the raw Salla order into
                     # `integration_inbox` so Pending UI sees Salla Direct
                     # orders even when Make.com webhooks are off.
+                    # Rows are written under the shared "main" tenant
+                    # so they land in the SAME namespace Plan-B reads
+                    # from (see INBOX_TENANT above).
                     # Never blocks the main sync loop: any failure here
                     # is counted as an error but the order stays committed
                     # in `unified_orders`.
                     try:
                         inbox_res = await upsert_salla_direct_to_inbox(
-                            db, user_id=user_id, raw_salla_order=raw,
+                            db, user_id=INBOX_TENANT, raw_salla_order=raw,
                         )
-                        if not inbox_res.get("ok") and len(errors_sample) < 20:
-                            errors_sample.append({
-                                "order_number": doc.get("order_number"),
-                                "inbox_reason": inbox_res.get("reason"),
-                                "inbox_error": inbox_res.get("error"),
-                            })
+                        if inbox_res.get("ok"):
+                            if inbox_res.get("created"):
+                                inbox_created += 1
+                            else:
+                                inbox_updated += 1
+                        else:
+                            inbox_failed += 1
+                            if len(errors_sample) < 20:
+                                errors_sample.append({
+                                    "order_number": doc.get("order_number"),
+                                    "inbox_reason": inbox_res.get("reason"),
+                                    "inbox_error": inbox_res.get("error"),
+                                })
                     except Exception as inbox_exc:  # pragma: no cover
+                        inbox_failed += 1
                         if len(errors_sample) < 20:
                             errors_sample.append({
                                 "order_number": doc.get("order_number"),
@@ -347,12 +364,20 @@ async def run_orders_sync(
 
         await finish_sync_log(db, log_id, "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
+            "inbox_created": inbox_created,
+            "inbox_updated": inbox_updated,
+            "inbox_failed":  inbox_failed,
+            "sample_order_numbers": orders_seen_ids,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
         })
     except Exception as exc:
         await finish_sync_log(db, log_id, "failed", extra={
             "created": created, "updated": updated, "skipped": skipped,
+            "inbox_created": inbox_created,
+            "inbox_updated": inbox_updated,
+            "inbox_failed":  inbox_failed,
+            "sample_order_numbers": orders_seen_ids,
             "errors_count": errors_count + 1,
             "errors_sample": (errors_sample + [{"error": str(exc)[:300]}])[:20],
             "pages_fetched": pages_fetched,
@@ -365,6 +390,10 @@ async def run_orders_sync(
         "created": created,
         "updated": updated,
         "skipped": skipped,
+        "inbox_created": inbox_created,
+        "inbox_updated": inbox_updated,
+        "inbox_failed":  inbox_failed,
+        "sample_order_numbers": orders_seen_ids,
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
     }
@@ -796,6 +825,19 @@ async def ensure_sync_indexes(db) -> None:
 # Constants scoped so the tests can monkey-patch them if needed.
 SALLA_DIRECT_CONNECTOR_KEY = "salla_direct"
 SALLA_DIRECT_SOURCE_TAG = "salla_direct"
+
+# ── CRITICAL: tenant namespace alignment ─────────────────────────────
+# `webhook.py` writes rows to `integration_inbox` under `user_id="main"`
+# (single-tenant MVP convention, ADR-001 #11). `qoyod_manual` Pending
+# reads under the same `"main"` namespace. If Salla Direct writes
+# under the LOGGED-IN user's UUID instead, its rows are INVISIBLE to
+# Plan B — reproducing the user report (2026-02): "Salla Direct never
+# actually feeds Mezan; orders only ever come from Make".
+#
+# Fix: pin ALL `integration_inbox` writes coming from the Salla-Direct
+# pull to the same `"main"` tenant. `unified_orders` still keeps the
+# real user_id (that collection IS per-user).
+INBOX_TENANT = "main"
 
 
 def _salla_direct_idempotency_key(order_number: str) -> str:
