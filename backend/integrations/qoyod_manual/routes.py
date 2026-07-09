@@ -30,6 +30,9 @@ from integrations.qoyod_manual.missing_diagnostics import (
 from integrations.qoyod_manual.audit_sent_count import (
     audit_plan_b_vs_diagnostic,
 )
+from integrations.qoyod_manual.pending_exclusion_diagnose import (
+    diagnose_pending_exclusion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,31 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         return await list_pending_orders(
             db, user_id=_TENANT, days=days, limit=limit,
             search=search, status=status)
+
+    class _ExclusionDiagPayload(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+        order_numbers: list[str]
+        status: str = "delivered"
+        days:   int = 60
+        limit:  int = 200
+
+    # ── Diagnostic-only endpoint (temporary, opt-in) ──────────────
+    # Read-only. Simulates the exact filter chain of
+    # `list_pending_orders` for a caller-supplied list of order
+    # numbers and reports the primary exclusion reason (or a positive
+    # verdict) for each. REMOVE this route + module + tests once the
+    # Plan-B pending list is unified with `list_unsent_orders`.
+    @router.post("/pending-orders/diagnose-exclusion")
+    async def diagnose_exclusion(
+        payload: _ExclusionDiagPayload,
+        user=Depends(current_user),
+    ):
+        return await diagnose_pending_exclusion(
+            db, user_id=_TENANT,
+            order_numbers=list(payload.order_numbers),
+            status=payload.status,
+            days=payload.days, limit=payload.limit,
+        )
 
     @router.post("/send/{order_number}")
     async def send_one(order_number: str,
