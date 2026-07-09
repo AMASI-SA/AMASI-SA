@@ -3994,6 +3994,15 @@ from integrations.qoyod_manual.routes import (
 )
 api.include_router(_make_qoyod_manual_router(db, current_user))
 
+# TEMP (2026-02) — read-only diagnostic endpoint for a single
+# pre-authorised order. Deactivates by removing `DIAGNOSTIC_TOKEN`
+# env var (returns 404 with no env). Delete this block + the module
+# file after the diagnostic report is captured.
+from integrations.qoyod_manual.admin_diagnostics import (
+    make_admin_diagnostics_router as _make_admin_diagnostics_router,
+)
+api.include_router(_make_admin_diagnostics_router(db))
+
 from ad_spend_scheduler_diagnostics import (
     make_ad_spend_scheduler_diagnostics_router,
 )
