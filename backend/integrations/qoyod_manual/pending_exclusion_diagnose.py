@@ -80,12 +80,21 @@ async def diagnose_pending_exclusion(
     db, *, user_id: str, order_numbers: list[str],
     status: str = "delivered",
     days: int = 60, limit: int = 200,
+    trace_ids_by_order: Optional[dict[str, str]] = None,
 ) -> dict:
     """For each order_number, return a comprehensive diagnostic on
     whether/why it appears in `list_pending_orders(status=...)`.
 
     Parameters mirror the pending endpoint EXACTLY: same defaults,
-    same status set. Any drift here would defeat the purpose."""
+    same status set. Any drift here would defeat the purpose.
+
+    Optional `trace_ids_by_order`: {order_number: trace_id}. When
+    supplied for an order, the diagnostic analyses THAT trace rather
+    than the newest. If the caller-specified trace is NOT the newest
+    for the order, the primary_exclusion_reason becomes
+    `not_newest_trace` — Page B never surfaces non-newest traces
+    (as of the 2026-07-09 aggregation-pipeline refactor).
+    """
     if status not in SUPPORTED_STATUSES:
         return {"ok": False, "error": "unsupported_status",
                 "supported": list(SUPPORTED_STATUSES)}
@@ -93,6 +102,7 @@ async def diagnose_pending_exclusion(
     days = max(1, min(int(days), 365))
     limit = max(1, min(int(limit), 1000))
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    trace_ids_by_order = trace_ids_by_order or {}
 
     # Build the SAME cursor Page B uses, then rank each row so we can
     # tell if the caller's target order made the top-`limit` window.
@@ -129,7 +139,10 @@ async def diagnose_pending_exclusion(
         traces = await _all_traces(db, user_id=user_id, order_number=on)
         entry["in_integration_inbox"] = len(traces) > 0
         entry["inbox_trace_count"]    = len(traces)
+        entry["total_traces_for_order"] = len(traces)
         newest = traces[0] if traces else None
+        newest_trace_id = (newest or {}).get("trace_id")
+        entry["newest_trace_id_snapshot"] = newest_trace_id
 
         # 2. قيود ref hit (strict by reference).
         inv = await _qoyod_ref_hit(db, user_id=user_id, order_number=on)
@@ -139,13 +152,38 @@ async def diagnose_pending_exclusion(
         if not newest:
             entry["verdict"] = "excluded"
             entry["primary_exclusion_reason"] = "no_inbox_row"
+            entry["is_newest_trace"] = None
             results.append(entry)
             continue
 
-        # 3. Extract fields from newest trace.
-        canon = newest.get("canonical_payload") or {}
-        received = newest.get("received_at")
-        salla_date = _salla_order_created_date(newest)
+        # Which trace should we analyse? Default = newest. If the
+        # caller pinned a specific trace_id, use that — this lets the
+        # operator ask "why doesn't THIS older trace show up in Page
+        # B?" (answer: not_newest_trace, per the 2026-07-09 pipeline).
+        pinned_id = trace_ids_by_order.get(on)
+        target = newest
+        is_newest = True
+        if pinned_id:
+            match = next((t for t in traces
+                          if str(t.get("trace_id")) == str(pinned_id)),
+                          None)
+            if match is None:
+                entry["verdict"] = "excluded"
+                entry["primary_exclusion_reason"] = "pinned_trace_not_found"
+                entry["is_newest_trace"] = False
+                entry["pinned_trace_id"] = pinned_id
+                results.append(entry)
+                continue
+            target = match
+            is_newest = (str(match.get("trace_id"))
+                         == str(newest_trace_id))
+        entry["is_newest_trace"] = is_newest
+        entry["analysed_trace_id"] = target.get("trace_id")
+
+        # 3. Extract fields from the analysed trace.
+        canon = target.get("canonical_payload") or {}
+        received = target.get("received_at")
+        salla_date = _salla_order_created_date(target)
         entry["received_at"] = (received.isoformat()
                                  if hasattr(received, "isoformat")
                                  else received)
@@ -153,25 +191,32 @@ async def diagnose_pending_exclusion(
                                       if salla_date else None)
         entry["salla_status_slug"]   = canon.get("order_status")
         entry["salla_status_native"] = canon.get("order_status_native")
-        entry["newest_trace_id"]     = newest.get("trace_id")
-        entry["newest_row_id"]       = newest.get("id")
+        entry["newest_trace_id"]     = newest_trace_id
+        entry["newest_row_id"]       = (newest or {}).get("id")
 
         # 4. Run each gate in the SAME order as list_pending_orders.
         checks = entry["checks"]
 
+        # Gate 0: is this the newest trace? Non-newest traces are
+        # never surfaced by the pipeline — surface as the primary
+        # exclusion for pinned-trace analysis. Newest-trace analysis
+        # continues down the normal gate chain.
+        checks["is_newest_trace"] = is_newest
+        checks["total_traces_for_order"] = len(traces)
+
         # Gate A: received_at within days window.
         rx_pass = False
         if isinstance(received, datetime):
-            # Normalise tz.
             rx = received.replace(tzinfo=timezone.utc) \
                 if received.tzinfo is None else received
             rx_pass = rx >= cutoff
         checks["passes_received_at_window"] = rx_pass
 
         # Gate B: newest row is in the top-`limit` window (only
-        # meaningful if received_at also passes).
+        # meaningful if received_at also passes). We simulate on the
+        # NEWEST row id — that's what Page B actually resolves.
         checks["passes_top_limit_window"] = (
-            entry["newest_row_id"] in top_ids)
+            (newest or {}).get("id") in top_ids)
 
         # Gate C: Salla-source date resolvable.
         checks["passes_salla_date_extraction"] = salla_date is not None
@@ -180,25 +225,34 @@ async def diagnose_pending_exclusion(
         checks["passes_floor_date"] = (
             salla_date is not None and salla_date >= _FLOOR_DATE)
 
-        # Gate E: Salla status matches the requested tab.
-        checks["passes_status_matcher"] = _matches_status(newest, status)
+        # Gate E: Salla status matches the requested tab. This runs
+        # against the analysed trace's status. In production the tab
+        # only ever sees the NEWEST trace (via aggregation), so a
+        # mismatch here means the order's CURRENT status doesn't fit
+        # this tab.
+        checks["passes_status_matcher"] = _matches_status(target, status)
         checks["status_matcher_target"] = status
 
-        # Gate F: newest trace has NO already-sent marker.
-        already, marker_ref = _already_sent(newest)
+        # Gate F: analysed trace has NO already-sent marker.
+        already, marker_ref = _already_sent(target)
         checks["excluded_by_already_sent_marker"] = already
         checks["already_sent_marker_ref"]         = marker_ref
 
         # Gate G: cross-trace sent.
         cross = await _sent_in_any_local_record(
             db, user_id=user_id, order_number=on,
-            salla_order_id=str(newest.get("salla_order_id") or "") or None)
+            salla_order_id=str(target.get("salla_order_id") or "") or None)
         checks["excluded_by_cross_trace_sent"] = bool(cross)
         checks["cross_trace_invoice_id"]      = cross
 
         # ── Compose final verdict — first failing gate wins.
+        # not_newest_trace takes priority: since the pipeline only
+        # surfaces newest traces, any older trace is invisible to
+        # Page B regardless of all other gates.
         reason: Optional[str] = None
-        if not checks["passes_received_at_window"]:
+        if not is_newest:
+            reason = "not_newest_trace"
+        elif not checks["passes_received_at_window"]:
             reason = "received_at_out_of_window"
         elif not checks["passes_top_limit_window"]:
             reason = "outside_top_limit_window"

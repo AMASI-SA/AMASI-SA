@@ -57,10 +57,14 @@ class PendingExclusionDiagPayload(BaseModel):
     to the request body, not to a query parameter.
     """
     model_config = ConfigDict(extra="ignore")
-    order_numbers: list[str]
-    status:        str = "delivered"
-    days:          int = 60
-    limit:         int = 200
+    order_numbers:      list[str]
+    status:             str = "delivered"
+    days:               int = 60
+    limit:              int = 200
+    # Optional {order_number: trace_id}. When set for an order, the
+    # diagnostic analyses THAT trace instead of the newest one. Used
+    # to prove `not_newest_trace` exclusion.
+    trace_ids_by_order: dict[str, str] = {}
 
 
 def _now() -> datetime:
@@ -134,6 +138,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 order_numbers=list(payload.order_numbers),
                 status=payload.status,
                 days=payload.days, limit=payload.limit,
+                trace_ids_by_order=dict(payload.trace_ids_by_order or {}),
             )
         except HTTPException:
             raise

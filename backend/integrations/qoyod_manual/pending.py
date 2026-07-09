@@ -243,48 +243,63 @@ async def list_pending_orders(
     limit = max(1, min(int(limit), 1000))
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    query: dict = {"user_id": user_id, "received_at": {"$gte": cutoff}}
 
-    # Status filter — Mongo-side. Matches EXACTLY the same set that
-    # `_matches_status` would accept in Python, but does so BEFORE
-    # the limit takes effect. This is the single change that fixes
-    # the "24 vs 6" discrepancy observed on production 2026-07-09.
+    # Base match — user_id + window. NO status filter here on purpose;
+    # the status must be resolved from the NEWEST trace per order,
+    # not from ANY trace that happens to match the tab.
+    base_match: dict = {
+        "user_id":     user_id,
+        "received_at": {"$gte": cutoff},
+    }
+    if search and str(search).strip():
+        import re
+        base_match["salla_order_number"] = {
+            "$regex": re.escape(str(search).strip())}
+
+    # Post-group status filter — applied to the NEWEST trace only.
     canonical_set, native_set = _STATUS_MATCHERS[status]
-    query["$or"] = [
+    status_match: dict = {"$or": [
         {"canonical_payload.order_status":
              {"$in": list(canonical_set)}},
         {"canonical_payload.order_status_native":
              {"$in": list(native_set)}},
+    ]}
+
+    projection_fields = [
+        "id", "trace_id",
+        "salla_order_number", "salla_order_id",
+        "received_at",
+        "manual_qoyod_invoice_id",
+        "qoyod_invoice_id",
+        "raw_payload",
+        "canonical_payload",
     ]
 
-    if search and str(search).strip():
-        import re
-        query["salla_order_number"] = {
-            "$regex": re.escape(str(search).strip())}
+    # ── Aggregation pipeline (cross-tab duplicate fix, 2026-07-09) ──
+    # A single Salla order accumulates many inbox traces — one per
+    # status-transition webhook. Before this fix, each tab query
+    # matched at ROW level, so an order X with traces
+    #     [in_delivery, delivered, completed]
+    # would appear in ALL THREE tabs at once. This pipeline resolves
+    # the canonical current status per order first (via $group +
+    # $first after sort DESC), then applies the tab status filter on
+    # that newest trace only. Result: every order lands in exactly
+    # one tab — the one matching its most recent Salla status.
+    pipeline = [
+        {"$match": base_match},
+        {"$sort":  {"received_at": -1}},
+        {"$group": {
+            "_id":    "$salla_order_number",
+            "newest": {"$first": "$$ROOT"},
+        }},
+        {"$replaceRoot": {"newRoot": "$newest"}},
+        {"$match":  status_match},
+        {"$sort":   {"received_at": -1}},
+        {"$limit":  limit},
+        {"$project": {f: 1 for f in projection_fields} | {"_id": 0}},
+    ]
 
-    projection = {
-        "_id": 0, "id": 1, "trace_id": 1,
-        "salla_order_number": 1, "salla_order_id": 1,
-        "received_at": 1,
-        "manual_qoyod_invoice_id": 1,
-        "qoyod_invoice_id": 1,
-        "raw_payload.data.date": 1,
-        "raw_payload.data.created_at": 1,
-        "canonical_payload.order_date": 1,
-        "canonical_payload.created_at": 1,
-        "canonical_payload.total_amount": 1,
-        "canonical_payload.currency": 1,
-        "canonical_payload.payment_method": 1,
-        "canonical_payload.payment_method_native": 1,
-        "canonical_payload.order_status": 1,
-        "canonical_payload.order_status_native": 1,
-        "canonical_payload.customer.name": 1,
-        "canonical_payload.customer.phone": 1,
-    }
-
-    # Sorted by received_at desc so newest orders surface first.
-    cursor = db.integration_inbox.find(query, projection) \
-        .sort("received_at", -1).limit(limit)
+    cursor = db.integration_inbox.aggregate(pipeline)
 
     seen_orders: set[str] = set()
     pending: list[dict] = []

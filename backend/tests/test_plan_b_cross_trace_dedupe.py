@@ -72,6 +72,82 @@ class _FakeColl:
                 return d
         return None
 
+    def aggregate(self, pipeline):
+        return _FakeAggCursor(_run_pipeline_static(self.docs, pipeline))
+
+
+def _dotted(doc, path):
+    cur = doc
+    for part in path.split("."):
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        else:
+            return None
+    return cur
+
+
+def _run_pipeline_static(docs, pipeline):
+    out = list(docs)
+    for stage in pipeline:
+        if "$match" in stage:
+            out = [d for d in out if _matches(d, stage["$match"])]
+        elif "$sort" in stage:
+            for key, direction in reversed(list(stage["$sort"].items())):
+                out.sort(key=lambda d, k=key: _dotted(d, k) or 0,
+                         reverse=(direction == -1))
+        elif "$group" in stage:
+            spec = stage["$group"]
+            def _resolve(doc, expr):
+                if isinstance(expr, str) and expr.startswith("$"):
+                    return _dotted(doc, expr[1:])
+                return expr
+            groups: dict = {}
+            for d in out:
+                key = _resolve(d, spec["_id"])
+                if key not in groups:
+                    groups[key] = {"_id": key}
+                    for out_field, sub in spec.items():
+                        if out_field == "_id":
+                            continue
+                        if isinstance(sub, dict) and "$first" in sub:
+                            groups[key][out_field] = (
+                                d if sub["$first"] == "$$ROOT"
+                                else _resolve(d, sub["$first"]))
+            out = list(groups.values())
+        elif "$replaceRoot" in stage:
+            nr = stage["$replaceRoot"]["newRoot"]
+            if isinstance(nr, str) and nr.startswith("$"):
+                out = [d.get(nr[1:], {}) for d in out]
+        elif "$limit" in stage:
+            out = out[:int(stage["$limit"])]
+        elif "$project" in stage:
+            proj = stage["$project"]
+            keep = {k for k, v in proj.items() if v == 1}
+            drop = {k for k, v in proj.items() if v == 0}
+            new_out = []
+            for d in out:
+                nd = {k: v for k, v in d.items()
+                       if (not keep or k in keep) and k not in drop}
+                new_out.append(nd)
+            out = new_out
+    return out
+
+
+class _FakeAggCursor:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def __aiter__(self):
+        self._i = 0
+        return self
+
+    async def __anext__(self):
+        if self._i >= len(self._docs):
+            raise StopAsyncIteration
+        d = self._docs[self._i]
+        self._i += 1
+        return d
+
 
 def _matches(doc, q):
     for k, v in q.items():
