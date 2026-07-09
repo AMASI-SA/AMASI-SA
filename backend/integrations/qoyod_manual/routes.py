@@ -49,6 +49,20 @@ class FreezeLegacyPipelinePayload(BaseModel):
     enabled: bool
 
 
+class PendingExclusionDiagPayload(BaseModel):
+    """Body for POST /pending-orders/diagnose-exclusion.
+
+    Diagnostic-only. Must be a JSON body — FastAPI needs the class at
+    module level so `payload: PendingExclusionDiagPayload` is bound
+    to the request body, not to a query parameter.
+    """
+    model_config = ConfigDict(extra="ignore")
+    order_numbers: list[str]
+    status:        str = "delivered"
+    days:          int = 60
+    limit:         int = 200
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -98,30 +112,48 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             db, user_id=_TENANT, days=days, limit=limit,
             search=search, status=status)
 
-    class _ExclusionDiagPayload(BaseModel):
-        model_config = ConfigDict(extra="ignore")
-        order_numbers: list[str]
-        status: str = "delivered"
-        days:   int = 60
-        limit:  int = 200
-
     # ── Diagnostic-only endpoint (temporary, opt-in) ──────────────
     # Read-only. Simulates the exact filter chain of
     # `list_pending_orders` for a caller-supplied list of order
     # numbers and reports the primary exclusion reason (or a positive
     # verdict) for each. REMOVE this route + module + tests once the
     # Plan-B pending list is unified with `list_unsent_orders`.
+    #
+    # Body binding note: `PendingExclusionDiagPayload` MUST be defined
+    # at module level (see top of file). Nesting it inside this
+    # closure causes FastAPI to fall back to query-parameter binding
+    # and return HTTP 422 "Field required" for `payload` as a query.
     @router.post("/pending-orders/diagnose-exclusion")
     async def diagnose_exclusion(
-        payload: _ExclusionDiagPayload,
+        payload: PendingExclusionDiagPayload,
         user=Depends(current_user),
     ):
-        return await diagnose_pending_exclusion(
-            db, user_id=_TENANT,
-            order_numbers=list(payload.order_numbers),
-            status=payload.status,
-            days=payload.days, limit=payload.limit,
-        )
+        try:
+            return await diagnose_pending_exclusion(
+                db, user_id=_TENANT,
+                order_numbers=list(payload.order_numbers),
+                status=payload.status,
+                days=payload.days, limit=payload.limit,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # Return a structured JSON error instead of a bare 500.
+            import traceback as _tb
+            import uuid as _uuid
+            ref = _uuid.uuid4().hex[:8]
+            tb_text = _tb.format_exc()
+            logger.error(
+                "diagnose_exclusion failed ref=%s\n%s", ref, tb_text)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code":              "diagnose_exclusion_failed",
+                    "error_reference":   ref,
+                    "exception_type":    type(exc).__name__,
+                    "exception_message": str(exc)[:500],
+                    "traceback_tail":    tb_text.splitlines()[-15:],
+                })
 
     @router.post("/send/{order_number}")
     async def send_one(order_number: str,
