@@ -30,8 +30,17 @@ jobs:
           PYTHONPATH: backend
         run: |
           set +e
-          pytest -q --tb=short backend/tests/test_qoyod_rounding_lrm.py > /tmp/pytest-output.txt 2>&1
+          pytest -q --tb=short backend/tests/test_qoyod_rounding_lrm.py > pytest-output.txt 2>&1
           code=$?
           echo '===== PYTEST RESULT ====='
-          cat /tmp/pytest-output.txt
+          cat pytest-output.txt
+          echo "$code" > pytest-exit-code.txt
           exit $code
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qoyod-rounding-pytest-output
+          path: |
+            pytest-output.txt
+            pytest-exit-code.txt
