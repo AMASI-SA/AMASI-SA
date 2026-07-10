@@ -3985,6 +3985,15 @@ api.include_router(make_ads_v2_router(db, current_user))
 from integrations.qoyod.routes import make_qoyod_router as _make_qoyod_router
 api.include_router(_make_qoyod_router(db, current_user))
 
+# Plan-B Manual Send (2026-02) — isolated, manual, one-order-at-a-time
+# push path. Legacy Rev32→Rev48 pipeline stays frozen via
+# `qoyod_settings.legacy_pipeline_frozen=true`; only this router can
+# push new invoices to Qoyod.
+from integrations.qoyod_manual.routes import (
+    make_qoyod_manual_router as _make_qoyod_manual_router,
+)
+api.include_router(_make_qoyod_manual_router(db, current_user))
+
 from ad_spend_scheduler_diagnostics import (
     make_ad_spend_scheduler_diagnostics_router,
 )
