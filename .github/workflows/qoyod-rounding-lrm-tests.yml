@@ -33,6 +33,7 @@ jobs:
       - name: Run rounding and Plan-B regression tests
         env:
           PYTHONPATH: backend
+          QOYOD_TOKEN_ENC_KEY: v1Guxdh8dNuwTcKgGBozqhu6aivwDfoBS9-i6XEmapA=
         run: |
           set +e
           pytest -q --tb=short \
