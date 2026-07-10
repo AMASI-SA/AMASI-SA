@@ -3137,6 +3137,117 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return {"ok": True, "statuses": statuses,
                 "source": source, "error": error}
 
+
+    # ── تقرير المطابقة ميزان ↔ قيود — READ-ONLY ─────────────────────
+    @router.get("/reconciliation-report")
+    async def reconciliation_report_endpoint(
+        sync_first: bool = Query(
+            True,
+            description=(
+                "If true, fetch invoices from Qoyod into the local "
+                "qoyod_invoices table before comparison."
+            ),
+        ),
+        user=Depends(current_user),
+    ):
+        tenant = _tenant_id(user)
+        sync_summary: dict = {"ran": False}
+
+        if sync_first:
+            try:
+                key = await get_api_key(db, tenant)
+                if not key:
+                    return {
+                        "ok": False,
+                        "error": (
+                            "لم يتم ضبط API key لقيود. أضف المفتاح من "
+                            "إعدادات قيود قبل تشغيل المطابقة."
+                        ),
+                        "sync_summary": {
+                            "ran": True,
+                            "ok": False,
+                            "error": "no_credentials",
+                        },
+                        "counts": {},
+                        "rows": [],
+                    }
+
+                from integrations.qoyod.qoyod_invoices_sync import (
+                    sync_qoyod_invoices,
+                )
+
+                api_client = await _build_qoyod_client_for(
+                    db, tenant, key
+                )
+                sync_summary = await sync_qoyod_invoices(
+                    db,
+                    user_id=tenant,
+                    api_client=api_client,
+                )
+                sync_summary["ran"] = True
+
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "error": (
+                        "خطأ أثناء جلب فواتير قيود: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                    "sync_summary": {
+                        "ran": True,
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    },
+                    "counts": {},
+                    "rows": [],
+                }
+
+            if not sync_summary.get("ok"):
+                return {
+                    "ok": False,
+                    "error": (
+                        "فشل جلب فواتير قيود؛ لم تُنفذ المطابقة "
+                        "على بيانات محلية قديمة."
+                    ),
+                    "sync_summary": sync_summary,
+                    "counts": {},
+                    "rows": [],
+                }
+
+        try:
+            from integrations.qoyod.reconciliation_v2 import (
+                run_reconciliation_v2,
+            )
+
+            report = await run_reconciliation_v2(
+                db,
+                orders_user_id=str(user["id"]),
+                markers_user_id=tenant,
+            )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": (
+                    "فشل تشغيل تقرير المطابقة: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+                "sync_summary": sync_summary,
+                "counts": {},
+                "rows": [],
+            }
+
+        report["sync_summary"] = sync_summary
+
+        try:
+            await db.qoyod_reconciliation_reports.insert_one({
+                "user_id": tenant,
+                **{k: v for k, v in report.items() if k != "ok"},
+            })
+        except Exception:
+            pass
+
+        return report
+
     # ── Iter-294 — Global Qoyod Production Write Lock report ────────
     # Read-only audit endpoint. Shows every write attempt that was
     # refused by the global lock, with the locked payload, action,
