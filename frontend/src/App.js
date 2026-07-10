@@ -42,6 +42,9 @@ import QoyodRoundingReport from "./pages/QoyodRoundingReport";
 import QoyodRoundingDryRun from "./pages/QoyodRoundingDryRun";
 import QoyodCodReceiptsReport from "./pages/QoyodCodReceiptsReport";
 import QoyodPendingOrders from "./pages/QoyodPendingOrders";
+import QoyodManualSend from "./pages/QoyodManualSend";
+import QoyodUnsentOrders from "./pages/QoyodUnsentOrders";
+import QoyodReconciliation from "./pages/QoyodReconciliation";
 import EligibleOrders from "./pages/EligibleOrders";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
@@ -180,6 +183,9 @@ function AppRoutes() {
             <Route path="/integrations/qoyod/rounding-report" element={<ProtectedRoute><Layout><QoyodRoundingReport /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/cod-receipts-report" element={<ProtectedRoute><Layout><QoyodCodReceiptsReport /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Layout><QoyodUnsentOrders /></Layout></ProtectedRoute>} />
+            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Layout><QoyodManualSend /></Layout></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Layout><QoyodReconciliation /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/pending-orders" element={<ProtectedRoute><Layout><QoyodPendingOrders /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/eligible-orders" element={<ProtectedRoute><Layout><EligibleOrders /></Layout></ProtectedRoute>} />
             <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
