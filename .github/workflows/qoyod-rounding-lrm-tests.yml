@@ -1,0 +1,62 @@
+name: Qoyod rounding LRM tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/integrations/qoyod_manual/**'
+      - 'backend/tests/test_qoyod_rounding_lrm.py'
+      - 'backend/tests/test_qoyod_manual_send_plan_b.py'
+      - 'backend/tests/test_plan_b_payment_path_fix.py'
+      - 'backend/tests/test_pending_cross_tab_dedupe.py'
+      - 'backend/tests/test_plan_b_cross_trace_dedupe.py'
+      - 'backend/tests/test_pending_limit_and_status_filter_ordering.py'
+      - '.github/workflows/qoyod-rounding-lrm-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install -q pytest pytest-asyncio mongomock-motor motor==3.3.1 pymongo==4.5.0 fastapi==0.110.1 python-dotenv cryptography python-jose passlib bcrypt httpx requests openpyxl
+      - name: Compile changed modules
+        run: |
+          python -m py_compile \
+            backend/integrations/qoyod_manual/__init__.py \
+            backend/integrations/qoyod_manual/rounding_lrm.py
+      - name: Run rounding and Plan-B regression tests
+        env:
+          PYTHONPATH: backend
+          QOYOD_TOKEN_ENC_KEY: v1Guxdh8dNuwTcKgGBozqhu6aivwDfoBS9-i6XEmapA=
+          QOYOD_API_BASE: https://api.qoyod.com
+        run: |
+          set +e
+          pytest -q --tb=short \
+            backend/tests/test_qoyod_rounding_lrm.py \
+            backend/tests/test_qoyod_manual_send_plan_b.py \
+            backend/tests/test_plan_b_payment_path_fix.py \
+            backend/tests/test_pending_cross_tab_dedupe.py \
+            backend/tests/test_plan_b_cross_trace_dedupe.py \
+            backend/tests/test_pending_limit_and_status_filter_ordering.py \
+            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_worker_respects_frozen_flag \
+            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_freeze_toggle_stops_worker \
+            > pytest-output.txt 2>&1
+          code=$?
+          echo '===== PYTEST RESULT ====='
+          cat pytest-output.txt
+          echo "$code" > pytest-exit-code.txt
+          exit $code
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qoyod-rounding-pytest-output
+          path: |
+            pytest-output.txt
+            pytest-exit-code.txt
