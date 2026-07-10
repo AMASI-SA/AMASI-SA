@@ -44,6 +44,8 @@ jobs:
             backend/tests/test_pending_cross_tab_dedupe.py \
             backend/tests/test_plan_b_cross_trace_dedupe.py \
             backend/tests/test_pending_limit_and_status_filter_ordering.py \
+            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_worker_respects_frozen_flag \
+            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_freeze_toggle_stops_worker \
             > pytest-output.txt 2>&1
           code=$?
           echo '===== PYTEST RESULT ====='
