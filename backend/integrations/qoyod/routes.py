@@ -3138,6 +3138,30 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "source": source, "error": error}
 
 
+
+    # ── طلبات لم تُرسل إلى قيود — READ-ONLY ────────────────────────
+    @router.get("/unsent-orders")
+    async def unsent_orders_endpoint(
+        days: int = Query(30, ge=1, le=365),
+        limit: int = Query(1000, ge=1, le=5000),
+        status: Optional[str] = Query(None),
+        salla_status: Optional[str] = Query(None),
+        search: Optional[str] = Query(None),
+        user=Depends(current_user),
+    ):
+        from integrations.qoyod.unsent_orders import list_unsent_orders
+
+        tenant = _tenant_id(user)
+        return await list_unsent_orders(
+            db,
+            user_id=tenant,
+            days=days,
+            limit=limit,
+            status=status,
+            salla_status=salla_status,
+            search=search,
+        )
+
     # ── تقرير المطابقة ميزان ↔ قيود — READ-ONLY ─────────────────────
     @router.get("/reconciliation-report")
     async def reconciliation_report_endpoint(
