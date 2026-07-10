@@ -34,6 +34,7 @@ jobs:
         env:
           PYTHONPATH: backend
           QOYOD_TOKEN_ENC_KEY: v1Guxdh8dNuwTcKgGBozqhu6aivwDfoBS9-i6XEmapA=
+          QOYOD_API_BASE: https://api.qoyod.com
         run: |
           set +e
           pytest -q --tb=short \
