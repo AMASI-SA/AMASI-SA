@@ -1,0 +1,305 @@
+name: Apply Qoyod rounding LRM patch
+
+on:
+  push:
+    branches:
+      - fix/qoyod-rounding-lrm
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: "!contains(github.event.head_commit.message, '[lrm-bot]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/qoyod-rounding-lrm
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply surgical patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('backend/integrations/qoyod_manual/send.py')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              '    G2: |Salla total − Qoyod-expected total| ≤ 0.01 SAR.\n'
+              '        Refuses BEFORE the invoice POST.',
+              '    G2: Salla total − Qoyod-expected total == 0.00 SAR.\n'
+              '        Refuses BEFORE the invoice POST when exact parity is not reached.'
+          )
+
+          new_distributor = '''def _distribute_residual_over_items(
+              items: list[dict], line_resolutions: dict,
+              tax_factor: float, tax_percent: float,
+              residual_to_absorb: float,
+          ) -> tuple[list[dict], list[dict], float] | None:
+              """Absorb a rounding residual into existing positive item lines.
+
+              The residual is distributed in 0.01 SAR increments across the
+              last eligible positive-value product lines. Zero-value gifts are
+              never changed. Shipping and COD are never touched here.
+
+              The supported rounding envelope is ±0.10 SAR. Larger gaps are
+              structural and must remain blocked by Guard G2.
+              """
+              cents = int(round(abs(_q2(residual_to_absorb)) * 100))
+              if cents == 0 or cents > 10:
+                  return None
+
+              eligible = [
+                  idx for idx, item in enumerate(items)
+                  if _q2(item.get("total")) > 0
+              ]
+              if not eligible:
+                  return None
+
+              sign = 1 if residual_to_absorb > 0 else -1
+              shifts: dict[int, float] = {idx: 0.0 for idx in eligible}
+              order = list(reversed(eligible))
+
+              allocated = 0
+              cursor = 0
+              safety = 0
+              while allocated < cents and safety < cents * max(len(order), 1) * 4:
+                  idx = order[cursor % len(order)]
+                  proposed = _q2(shifts[idx] + sign * 0.01)
+                  original = _q2(items[idx].get("total"))
+                  if _q2(original + proposed) >= 0:
+                      shifts[idx] = proposed
+                      allocated += 1
+                  cursor += 1
+                  safety += 1
+
+              if allocated != cents:
+                  return None
+
+              payloads: list[dict] = []
+              rows: list[dict] = []
+              total_dec = Decimal("0")
+              for idx, item in enumerate(items):
+                  override = None
+                  shift = shifts.get(idx, 0.0)
+                  if shift:
+                      override = _q2(_f(item.get("total")) + shift)
+                  payload, row, gross = _compute_item_line(
+                      item, line_resolutions, tax_factor, tax_percent,
+                      target_gross_override=override)
+                  payloads.append(payload)
+                  rows.append(row)
+                  total_dec += Decimal(str(gross))
+
+              new_total = float(
+                  total_dec.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+              return payloads, rows, new_total
+          '''
+
+          text, count = re.subn(
+              r'def _distribute_residual_over_items\(.*?\n\ndef _build_invoice_payload',
+              new_distributor + '\n\ndef _build_invoice_payload',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          assert count == 1, 'distributor replacement failed'
+
+          text = re.sub(
+              r'    Residual-closing strategy \(in order\):.*?    """',
+              '''    Residual-closing strategy:
+                1. Build normal item/shipping/COD lines at 2 decimals.
+                2. For a pure rounding gap within ±0.10 SAR, distribute the
+                   residual across existing positive product lines in 0.01
+                   increments (LRM-style). No extra product line is created.
+                3. Structural gaps, missing shipping/COD configuration, or a
+                   residual that cannot reach exact 0.00 parity remain blocked.
+
+              The dedicated rounding-adjustment product is intentionally not
+              used by this path.
+              """''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+
+          start = text.index('    # ── Rounding adjustment (Plan-B rev 2026-07-08)')
+          end = text.index('    expected_total = float(', start)
+          new_rounding = '''    # ── Exact rounding distribution (LRM) ───────────────────────
+              shipping_config_gap = (
+                  isinstance(shipping_breakdown, dict)
+                  and not shipping_breakdown.get("included")
+                  and _f(shipping_breakdown.get("salla_declared_amount")) > 0
+              )
+              cod_config_gap = (
+                  isinstance(cod_breakdown, dict)
+                  and not cod_breakdown.get("included")
+                  and _f(cod_breakdown.get("salla_declared_amount")) > 0
+              )
+              residual = _q2(salla_total - expected_total_before_adj)
+              rounding_distribution: dict = {
+                  "applied": False,
+                  "residual": residual,
+                  "reason": "not_needed" if residual == 0 else "not_applied",
+                  "qoyod_total_before": expected_total_before_adj,
+                  "salla_total": salla_total,
+              }
+
+              if (residual != 0.0
+                      and abs(residual) <= 0.10
+                      and not shipping_config_gap
+                      and not cod_config_gap):
+                  item_total_before = _q2(sum(
+                      _f(row.get("line_gross_after_tax"))
+                      for row in breakdown_items
+                  ))
+                  non_item_total = _q2(
+                      expected_total_before_adj - item_total_before)
+                  distributed = _distribute_residual_over_items(
+                      raw_items, line_resolutions, tax_factor, tax_percent,
+                      residual)
+                  if distributed is not None:
+                      item_lines, item_rows, item_total_after = distributed
+                      candidate_total = _q2(item_total_after + non_item_total)
+                      if candidate_total == salla_total:
+                          lines = item_lines + lines[len(raw_items):]
+                          breakdown_items = item_rows
+                          expected_total_dec = Decimal(str(candidate_total))
+                          shifted = [
+                              {
+                                  "sku": row.get("sku"),
+                                  "shift": row.get("shift_from_original"),
+                                  "target_gross": row.get("target_gross_override"),
+                              }
+                              for row in item_rows
+                              if _q2(row.get("shift_from_original")) != 0.0
+                          ]
+                          rounding_distribution = {
+                              "applied": True,
+                              "method": "item_line_lrm",
+                              "residual": residual,
+                              "qoyod_total_before": expected_total_before_adj,
+                              "qoyod_total_after": candidate_total,
+                              "salla_total": salla_total,
+                              "shifted_lines": shifted,
+                          }
+                      else:
+                          rounding_distribution["reason"] = (
+                              "distribution_did_not_reach_exact_parity")
+                          rounding_distribution["candidate_total"] = candidate_total
+                  else:
+                      rounding_distribution["reason"] = "residual_not_distributable"
+              elif shipping_config_gap:
+                  rounding_distribution["reason"] = "shipping_configuration_gap"
+              elif cod_config_gap:
+                  rounding_distribution["reason"] = "cod_configuration_gap"
+              elif abs(residual) > 0.10:
+                  rounding_distribution["reason"] = "residual_exceeds_0_10"
+
+              # Compatibility metadata only. No adjustment product line is
+              # ever appended by this implementation.
+              rounding_adjustment = {
+                  "applied": False,
+                  "reason": "disabled_use_item_line_lrm",
+              }
+
+          '''
+          text = text[:start] + new_rounding + text[end:]
+
+          text = text.replace(
+              '    #     len(canonical.items) + shipping? + cod? + adjustment?\n',
+              '    #     len(canonical.items) + shipping? + cod?\n'
+          )
+          text = text.replace(
+              '    adjustment_added = bool(rounding_adjustment\n'
+              '                            and rounding_adjustment.get("applied"))\n',
+              ''
+          )
+          text = text.replace(
+              '        + (1 if cod_added else 0)\n'
+              '        + (1 if adjustment_added else 0)\n',
+              '        + (1 if cod_added else 0)\n'
+          )
+          text = text.replace(
+              '              f"{\'COD+\' if cod_added else \'\'}"\n'
+              '              f"{\'تسوية+\' if adjustment_added else \'\'}0). "\n',
+              '              f"{\'COD+\' if cod_added else \'\'}0). "\n'
+          )
+          text = text.replace(
+              '                "adjustment_added":     adjustment_added,\n',
+              ''
+          )
+
+          text = text.replace(
+              '        "qoyod_total_before_adjustment": expected_total_before_adj,\n'
+              '        "residual_before_adjustment":    _q2(salla_total\n'
+              '                                              - expected_total_before_adj),\n'
+              '        "rounding_adjustment":    rounding_adjustment,\n',
+              '        "qoyod_total_before_distribution": expected_total_before_adj,\n'
+              '        "residual_before_distribution":    _q2(salla_total\n'
+              '                                                - expected_total_before_adj),\n'
+              '        "rounding_distribution":  rounding_distribution,\n'
+              '        "rounding_adjustment":    rounding_adjustment,\n'
+          )
+
+          guard_pattern = re.compile(
+              r'    diff = _q2\(expected_total - salla_total\)\n'
+              r'    if abs\(diff\) > 0\.01:.*?\n\n'
+              r'    # ── 4\) POST invoice',
+              re.S,
+          )
+          guard_replacement = '''    diff = _q2(expected_total - salla_total)
+              if diff != 0.0:
+                  raise ManualSendRefused(
+                      "totals_mismatch",
+                      f"فرق المبلغ {abs(diff)} ريال — يجب أن يكون 0.00 قبل الإرسال",
+                      {"salla_total":            salla_total,
+                       "expected_qoyod_total":   expected_total,
+                       "difference":             diff,
+                       "difference_source_hint": breakdown["difference_source_hint"],
+                       "rounding_distribution":  breakdown.get("rounding_distribution"),
+                       "breakdown":              breakdown})
+
+              # ── 4) POST invoice'''
+          text, count = guard_pattern.subn(guard_replacement, text, count=1)
+          assert count == 1, 'G2 exact-parity guard replacement failed'
+
+          assert 'تسوية فرق التقريب مع سلة' not in text
+          assert 'rounding_adjustment_product_missing' not in text
+          assert 'if diff != 0.0:' in text
+          assert '"method": "item_line_lrm"' in text
+
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('backend/tests/test_qoyod_rounding_lrm.py')
+          test_path.write_text('''from integrations.qoyod_manual.send import (\n    _build_invoice_payload, _distribute_residual_over_items, _q2,\n)\n\n\ndef _known_order():\n    return {\n        "order_number": "270457540",\n        "order_id": "270457540",\n        "currency": "SAR",\n        "total_amount": 1250.87,\n        "shipping_amount": 0.0,\n        "cod_fee_amount": 0.0,\n        "items": [\n            {"sku": "AMS11923", "name": "A", "quantity": 1, "unit_price": 299, "total": 247.03},\n            {"sku": "AMS11237", "name": "B", "quantity": 1, "unit_price": 149, "total": 123.10},\n            {"sku": "AMS12080", "name": "C", "quantity": 1, "unit_price": 269, "total": 222.24},\n            {"sku": "AMS12040", "name": "D", "quantity": 1, "unit_price": 269, "total": 222.24},\n            {"sku": "AMS11935", "name": "E", "quantity": 1, "unit_price": 269, "total": 222.24},\n            {"sku": "AMS11914", "name": "F", "quantity": 1, "unit_price": 259, "total": 213.98},\n            {"sku": "GIFT1", "name": "Gift", "quantity": 1, "unit_price": 0, "total": 0},\n            {"sku": "GIFT2", "name": "Gift", "quantity": 1, "unit_price": 0, "total": 0},\n            {"sku": "GIFT3", "name": "Gift", "quantity": 1, "unit_price": 0, "total": 0},\n            {"sku": "GIFT4", "name": "Gift", "quantity": 1, "unit_price": 0, "total": 0},\n        ],\n    }\n\n\ndef test_order_270457540_reaches_exact_parity_without_adjustment_line():\n    canon = _known_order()\n    resolutions = {item["sku"]: idx + 1 for idx, item in enumerate(canon["items"])}\n    payload, expected, breakdown = _build_invoice_payload(\n        canon=canon, contact_id=99, line_resolutions=resolutions,\n        settings={"qoyod_tax_percent": 15}, send_date_iso="2026-07-10")\n\n    assert expected == 1250.87\n    assert breakdown["difference"] == 0.0\n    assert breakdown["rounding_distribution"]["applied"] is True\n    assert breakdown["rounding_distribution"]["method"] == "item_line_lrm"\n    assert len(payload["invoice"]["line_items"]) == len(canon["items"])\n    assert all(line["description"] != "تسوية فرق التقريب مع سلة"\n               for line in payload["invoice"]["line_items"])\n    zero_rows = [row for row in breakdown["items"] if row["salla_line_total"] == 0]\n    assert zero_rows\n    assert all(_q2(row.get("shift_from_original")) == 0.0 for row in zero_rows)\n\n\ndef test_distributor_handles_positive_and_negative_four_cents():\n    items = [\n        {"sku": f"SKU-{idx}", "name": f"Item {idx}", "quantity": 1,\n         "unit_price": 100, "total": 115.00}\n        for idx in range(1, 5)\n    ] + [{"sku": "FREE", "name": "Free", "quantity": 1,\n           "unit_price": 0, "total": 0}]\n    resolutions = {item["sku"]: idx + 1 for idx, item in enumerate(items)}\n\n    plus = _distribute_residual_over_items(items, resolutions, 1.15, 15, 0.04)\n    minus = _distribute_residual_over_items(items, resolutions, 1.15, 15, -0.04)\n    assert plus is not None and minus is not None\n    _, plus_rows, plus_total = plus\n    _, minus_rows, minus_total = minus\n    assert plus_total == 460.04\n    assert minus_total == 459.96\n    assert _q2(sum(_q2(r.get("shift_from_original")) for r in plus_rows)) == 0.04\n    assert _q2(sum(_q2(r.get("shift_from_original")) for r in minus_rows)) == -0.04\n    assert _q2(plus_rows[-1].get("shift_from_original")) == 0.0\n    assert _q2(minus_rows[-1].get("shift_from_original")) == 0.0\n\n\ndef test_residual_above_ten_cents_is_refused_by_distributor():\n    items = [{"sku": "SKU", "name": "Item", "quantity": 1,\n              "unit_price": 100, "total": 115.00}]\n    assert _distribute_residual_over_items(\n        items, {"SKU": 1}, 1.15, 15, 0.11) is None\n''', encoding='utf-8')
+          PY
+
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio fastapi motor==3.3.1 pymongo==4.5.0 pydantic python-dotenv cryptography
+
+      - name: Compile and run focused tests
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m py_compile backend/integrations/qoyod_manual/send.py
+          pytest -q backend/tests/test_qoyod_rounding_lrm.py
+
+      - name: Commit tested patch
+        run: |
+          rm -f .github/workflows/apply-qoyod-rounding-lrm.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/integrations/qoyod_manual/send.py backend/tests/test_qoyod_rounding_lrm.py .github/workflows/apply-qoyod-rounding-lrm.yml
+          git commit -m "[lrm-bot] Enforce exact Qoyod parity with item-line LRM"
+          git push origin HEAD:fix/qoyod-rounding-lrm
