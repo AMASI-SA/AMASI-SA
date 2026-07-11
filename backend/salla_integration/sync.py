@@ -400,12 +400,26 @@ async def run_orders_sync(
                             "error": str(exc)[:300],
                         })
 
-            # Salla pagination meta (when available)
+            # Salla may cap /orders pages at 30 rows even when a larger
+            # per_page value is requested. Do not treat a short page as the
+            # final page; otherwise a 30-day sync stops after the newest 30
+            # orders. Prefer pagination metadata and otherwise continue until
+            # Salla returns an empty page, bounded by MAX_PAGES_PER_RUN.
             pagination = resp.get("pagination") or {}
-            total_pages = int(pagination.get("totalPages") or pagination.get("total_pages") or 0)
-            if total_pages and page >= total_pages:
-                break
-            if len(data) < ORDERS_PER_PAGE:
+            total_pages = int(
+                pagination.get("totalPages")
+                or pagination.get("total_pages")
+                or pagination.get("last_page")
+                or 0
+            )
+            current_page = int(
+                pagination.get("currentPage")
+                or pagination.get("current_page")
+                or pagination.get("page")
+                or page
+            )
+
+            if total_pages and current_page >= total_pages:
                 break
 
             page += 1
