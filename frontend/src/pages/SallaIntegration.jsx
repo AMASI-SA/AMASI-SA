@@ -107,6 +107,9 @@ export default function SallaIntegration() {
     const [showConfigForm, setShowConfigForm] = useState(false);
     const [cfgInputs, setCfgInputs] = useState({ client_id: "", client_secret: "", redirect_uri: "" });
     const [syncLogs, setSyncLogs] = useState([]);
+    const [syncToDate, setSyncToDate] = useState(
+        new Date().toISOString().slice(0, 10)
+    );
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -264,6 +267,42 @@ export default function SallaIntegration() {
         } catch (e) {
             const det = e?.response?.data?.detail;
             const msg = typeof det === "string" ? det : (det?.message || "فشل مزامنة الطلبات");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncOrders: false }));
+        }
+    };
+
+    const handleSyncOrdersRange = async () => {
+        const fixedFromDate = "2026-07-01";
+
+        if (!syncToDate) {
+            toast.error("حدد تاريخ النهاية أولاً");
+            return;
+        }
+
+        if (syncToDate < fixedFromDate) {
+            toast.error("تاريخ النهاية يجب ألا يكون قبل 2026-07-01");
+            return;
+        }
+
+        setBusy(b => ({ ...b, syncOrders: true }));
+        try {
+            const { data } = await api.post("/salla/sync/orders", {
+                from_date: fixedFromDate,
+                to_date: syncToDate,
+            });
+
+            toast.success(
+                `مزامنة الفترة: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`
+            );
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string"
+                ? det
+                : (det?.message || "فشل مزامنة الفترة المحددة");
             toast.error(msg);
             await load();
         } finally {
@@ -578,7 +617,56 @@ export default function SallaIntegration() {
                             مصدر جديد بجانب Make.com و Excel — يتم حفظه باسم <code className="font-mono bg-slate-100 px-1 rounded">salla_direct</code>. لا يُلغي أي مصدر سابق، ولا يستبدل بيانات Make.com لحماية البيانات الفورية.
                         </p>
                     </div>
-                    <div className="p-5 flex flex-wrap gap-2">
+                    <div className="p-5 space-y-3">
+                        <div
+                            className="flex flex-wrap items-end gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3"
+                            data-testid="salla-date-range-sync"
+                        >
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">
+                                    من تاريخ
+                                </label>
+                                <input
+                                    type="date"
+                                    value="2026-07-01"
+                                    disabled
+                                    className="px-3 py-2 rounded-lg border border-slate-300 bg-slate-100 text-sm font-mono"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">
+                                    إلى تاريخ
+                                </label>
+                                <input
+                                    type="date"
+                                    value={syncToDate}
+                                    min="2026-07-01"
+                                    onChange={(e) => setSyncToDate(e.target.value)}
+                                    className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono"
+                                    data-testid="salla-sync-to-date"
+                                />
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleSyncOrdersRange}
+                                disabled={busy.syncOrders || !syncToDate}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm"
+                                data-testid="salla-sync-date-range-btn"
+                            >
+                                <ArrowsClockwise
+                                    size={14}
+                                    weight="bold"
+                                    className={busy.syncOrders ? "animate-spin" : ""}
+                                />
+                                {busy.syncOrders
+                                    ? "جاري مزامنة الفترة…"
+                                    : "مزامنة من 01-07 إلى التاريخ المحدد"}
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
                             onClick={handleSyncOrders}
@@ -608,6 +696,7 @@ export default function SallaIntegration() {
                             <ChartPieSlice size={14} weight="bold" />
                             مقارنة المصادر (Excel / Make / Salla Direct)
                         </button>
+                        </div>
                     </div>
 
                     {/* Sync logs */}
