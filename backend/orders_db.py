@@ -575,10 +575,19 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 merged[f] = new_val
                 field_sources[f] = source
                 continue
-            if fills_empty_only:
-                # Excel/Salla-direct only fill blanks once Make has been here.
+            # Salla Direct remains fill-empty-only after Make, except for
+            # the two authoritative order-status fields. Salla is the source
+            # of truth for the current order lifecycle state, while products,
+            # totals, customer and payment data remain protected.
+            salla_status_override = (
+                source == "salla_direct"
+                and f in {"order_status", "order_status_slug"}
+            )
+            if fills_empty_only and not salla_status_override:
                 continue
-            if f in CRITICAL_FIELDS and new_val != old_val:
+            if (
+                f in CRITICAL_FIELDS or salla_status_override
+            ) and new_val != old_val:
                 merged[f] = new_val
                 field_sources[f] = source
             # else: keep existing (first writer wins for non-critical)
