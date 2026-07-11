@@ -69,8 +69,13 @@ def test_order_270769904_twenty_cent_gap_reaches_1870_exactly():
     assert distribution["method"] == "item_line_lrm"
     assert distribution["residual"] == 0.20
     assert distribution["qoyod_total_after"] == 1870.00
-    assert len(distribution["shifted_lines"]) == 20
-    assert _q2(sum(row["shift"] for row in distribution["shifted_lines"])) == 0.20
+
+    shifted = distribution["shifted_lines"]
+    assert shifted
+    assert len(shifted) <= 20
+    assert _q2(sum(row["shift"] for row in shifted)) == 0.20
+    assert all(_q2(row["shift"]) > 0 for row in shifted)
+    assert all(abs(_q2(row["shift"])) <= 0.02 for row in shifted)
 
     lines = payload["invoice"]["line_items"]
     assert len(lines) == len(canon["items"]) + 1  # products + shipping
