@@ -88,6 +88,76 @@ def _q2(v: Any) -> float:
     return float(d.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
 
 
+def _extract_qoyod_invoice_total(payload: Any) -> Optional[float]:
+    """Extract the persisted invoice total from a Qoyod response.
+
+    Qoyod responses differ between create/show API versions, so support
+    the known wrappers and money-object shapes without falling back to a
+    locally simulated amount.
+    """
+    if not isinstance(payload, dict):
+        return None
+
+    node = payload.get("invoice") or payload.get("data") or payload
+    if not isinstance(node, dict):
+        return None
+
+    for key in (
+        "total",
+        "total_amount",
+        "grand_total",
+        "gross_total",
+        "total_after_tax",
+        "total_including_tax",
+    ):
+        value = node.get(key)
+        if isinstance(value, dict):
+            value = value.get("amount") or value.get("value")
+        if value in (None, ""):
+            continue
+        try:
+            return _q2(value)
+        except Exception:
+            continue
+
+    return None
+
+
+def _validate_qoyod_actual_total(
+    *, actual_total: Optional[float], salla_total: float, invoice_id: int,
+) -> float:
+    """Require exact 0.00 parity before any invoice payment is created."""
+    if actual_total is None:
+        raise ManualSendRefused(
+            "qoyod_actual_total_missing",
+            "تم إنشاء فاتورة قيود لكن تعذّر قراءة إجماليها الفعلي — "
+            "لن يتم إنشاء السداد.",
+            {
+                "invoice_id": invoice_id,
+                "salla_total": _q2(salla_total),
+            },
+        )
+
+    actual = _q2(actual_total)
+    expected = _q2(salla_total)
+    difference = _q2(actual - expected)
+
+    if difference != 0.0:
+        raise ManualSendRefused(
+            "qoyod_actual_total_mismatch",
+            "إجمالي قيود الفعلي لا يطابق إجمالي سلة — "
+            "تم إيقاف السداد لمنع فاتورة مدفوعة جزئياً.",
+            {
+                "invoice_id": invoice_id,
+                "salla_total": expected,
+                "qoyod_actual_total": actual,
+                "difference": difference,
+            },
+        )
+
+    return actual
+
+
 class ManualSendRefused(Exception):
     """A guard rejected the send — the response body has the detail."""
 
@@ -948,9 +1018,19 @@ async def _retry_payment_only(
                 row.get("manual_qoyod_invoice_id")})
 
     send_date_iso = _riyadh_today_iso()
-    expected_total = _q2(canon.get("total_amount"))
+    salla_total = _q2(canon.get("total_amount"))
+
+    fetched_invoice = await client.get_invoice(existing_invoice_id)
+    actual_total = _extract_qoyod_invoice_total(fetched_invoice)
+    actual_total = _validate_qoyod_actual_total(
+        actual_total=actual_total,
+        salla_total=salla_total,
+        invoice_id=existing_invoice_id,
+    )
+
+    expected_total = actual_total
     payment_payload = _build_payment_payload(
-        invoice_id=existing_invoice_id, amount=expected_total,
+        invoice_id=existing_invoice_id, amount=actual_total,
         account_id=qoyod_account_id, reference=order_number,
         send_date_iso=send_date_iso)
     idem_pay = f"pay-retry-{order_number}"
@@ -1447,13 +1527,36 @@ async def _run_all_steps(
             "قيود لم يُعِد رقم فاتورة صالحاً",
             {"response": created_inv})
     invoice_number = inv_node.get("number") or inv_node.get("reference_no")
-    steps_trace.append({"step": "invoice",
-                        "invoice_id": invoice_id,
-                        "invoice_number": invoice_number,
-                        "send_date": send_date_iso,
-                        "expected_total": expected_total,
-                        "salla_total": salla_total,
-                        "difference": diff})
+
+    # Qoyod actual-total gate:
+    # Never trust the local simulation after POST /invoices. Read the total
+    # that Qoyod actually persisted, because its internal tax/line rounding
+    # can differ by 0.01 even when local expected_total shows exact parity.
+    actual_total = _extract_qoyod_invoice_total(created_inv)
+    actual_total_source = "create_invoice_response"
+
+    if actual_total is None:
+        fetched_invoice = await client.get_invoice(invoice_id)
+        actual_total = _extract_qoyod_invoice_total(fetched_invoice)
+        actual_total_source = "get_invoice"
+
+    actual_difference = (
+        _q2(actual_total - salla_total)
+        if actual_total is not None else None
+    )
+
+    steps_trace.append({
+        "step": "invoice",
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "send_date": send_date_iso,
+        "expected_total": expected_total,
+        "qoyod_actual_total": actual_total,
+        "actual_total_source": actual_total_source,
+        "salla_total": salla_total,
+        "simulated_difference": diff,
+        "actual_difference": actual_difference,
+    })
 
     # Persist marker immediately so a retry can't double-post.
     # We ONLY set `manual_qoyod_invoice_id` here (not the unified
@@ -1469,11 +1572,19 @@ async def _run_all_steps(
                    "manual_send_last_status":        "invoice_created",
                    "manual_send_at":                 datetime.now(timezone.utc)}})
 
+    # ── 4.5) Exact actual-total parity gate ────────────────────────
+    # The invoice now exists in Qoyod. Before creating ANY payment, require
+    # its persisted total to equal Salla exactly to 0.00 SAR.
+    actual_total = _validate_qoyod_actual_total(
+        actual_total=actual_total,
+        salla_total=salla_total,
+        invoice_id=invoice_id,
+    )
+
     # ── 5) POST invoice payment ────────────────────────────────────
-    # amount = expected_total (post-quantisation قيود total) so قيود
-    # closes the invoice to zero → status Paid, remaining 0.00.
+    # Pay the Qoyod-persisted total, never the local simulation.
     payment_payload = _build_payment_payload(
-        invoice_id=invoice_id, amount=expected_total,
+        invoice_id=invoice_id, amount=actual_total,
         account_id=qoyod_account_id, reference=order_number,
         send_date_iso=send_date_iso)
     idem_pay = f"pay-{order_number}"

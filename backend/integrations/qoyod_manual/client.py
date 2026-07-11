@@ -188,6 +188,19 @@ class ManualQoyodClient:
                     return r
         return None
 
+    async def get_invoice(self, invoice_id: int) -> dict:
+        """Read one invoice from Qoyod after creation.
+
+        This is the accounting source of truth for the amount that Qoyod
+        actually persisted after applying its own line/tax rounding.
+        """
+        body = await self._request("GET", f"/invoices/{int(invoice_id)}")
+        if isinstance(body, dict):
+            node = body.get("invoice") or body.get("data") or body
+            return node if isinstance(node, dict) else {}
+        return {}
+
+
     async def find_invoice_by_reference(self, reference: str
                                          ) -> Optional[dict]:
         """Return the first invoice whose reference matches — used by
