@@ -142,16 +142,17 @@ def _validate_qoyod_actual_total(
     expected = _q2(salla_total)
     difference = _q2(actual - expected)
 
-    if difference != 0.0:
+    if abs(difference) > 0.01:
         raise ManualSendRefused(
             "qoyod_actual_total_mismatch",
-            "إجمالي قيود الفعلي لا يطابق إجمالي سلة — "
-            "تم إيقاف السداد لمنع فاتورة مدفوعة جزئياً.",
+            "إجمالي قيود الفعلي يختلف عن إجمالي سلة بأكثر من هللة — "
+            "تم إيقاف السداد.",
             {
                 "invoice_id": invoice_id,
                 "salla_total": expected,
                 "qoyod_actual_total": actual,
                 "difference": difference,
+                "allowed_tolerance": 0.01,
             },
         )
 
