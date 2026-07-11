@@ -49,7 +49,7 @@ async def test_status_change_creates_fresh_plan_b_trace():
     await db.integration_inbox.insert_one({
         "id": "old-id",
         "trace_id": "old-trace",
-        "user_id": "tenant",
+        "user_id": "main",
         "salla_order_number": "270212453",
         "received_at": "2026-07-03T17:49:25",
         "canonical_payload": {

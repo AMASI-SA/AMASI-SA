@@ -73,7 +73,7 @@ async def _refresh_plan_b_status_snapshot(
 
     latest = await db.integration_inbox.find_one(
         {
-            "user_id": user_id,
+            "user_id": {"$in": [user_id, "main"]},
             "$or": [
                 {"salla_order_number": order_number},
                 {"canonical_payload.order_number": order_number},
