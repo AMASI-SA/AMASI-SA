@@ -24,6 +24,7 @@ state (page, last order_id). The UI reads this to render a log feed.
 from __future__ import annotations
 
 import asyncio
+import copy
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
@@ -45,6 +46,100 @@ MAX_PRODUCT_PAGES = 20
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def _refresh_plan_b_status_snapshot(
+    db,
+    user_id: str,
+    order_number: str,
+    order_doc: dict,
+) -> dict:
+    """Create a fresh Plan-B trace when Salla reports a newer status.
+
+    The existing canonical payload is cloned so products, totals, customer,
+    payment and shipping data remain unchanged. Only the Salla lifecycle
+    status and audit metadata are replaced.
+    """
+    order_number = str(order_number or "").strip()
+    status_slug = str(
+        order_doc.get("order_status_slug")
+        or order_doc.get("order_status")
+        or ""
+    ).strip()
+    status_native = str(order_doc.get("order_status") or "").strip()
+
+    if not order_number or not status_slug:
+        return {"created": False, "reason": "missing_order_or_status"}
+
+    latest = await db.integration_inbox.find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"salla_order_number": order_number},
+                {"canonical_payload.order_number": order_number},
+                {"canonical_payload.order_id": order_number},
+            ],
+        },
+        sort=[("received_at", -1)],
+    )
+
+    if not latest:
+        return {"created": False, "reason": "no_existing_plan_b_trace"}
+
+    canonical = latest.get("canonical_payload") or {}
+    old_slug = str(canonical.get("order_status") or "").strip()
+    old_native = str(canonical.get("order_status_native") or "").strip()
+
+    if old_slug == status_slug and (
+        not status_native or old_native == status_native
+    ):
+        return {"created": False, "reason": "status_already_current"}
+
+    fresh = copy.deepcopy(latest)
+    fresh.pop("_id", None)
+
+    now = _now()
+    fresh["id"] = uuid.uuid4().hex
+    fresh["trace_id"] = uuid.uuid4().hex
+    fresh["received_at"] = now
+    fresh["updated_at"] = now
+    fresh["source"] = "salla_direct_status_resync"
+    fresh["salla_order_number"] = order_number
+
+    fresh_canonical = dict(canonical)
+    fresh_canonical["order_status"] = status_slug
+    fresh_canonical["order_status_native"] = (
+        status_native or status_slug
+    )
+    fresh["canonical_payload"] = fresh_canonical
+
+    fresh["salla_direct_status_resync"] = {
+        "at": now,
+        "previous_status_slug": old_slug or None,
+        "previous_status_native": old_native or None,
+        "new_status_slug": status_slug,
+        "new_status_native": status_native or status_slug,
+    }
+
+    # Never copy send-result markers onto a new eligibility snapshot.
+    for key in (
+        "manual_qoyod_invoice_id",
+        "manual_qoyod_payment_id",
+        "qoyod_invoice_id",
+        "qoyod_payment_id",
+        "manual_sent_at",
+        "sent_at",
+    ):
+        fresh.pop(key, None)
+
+    await db.integration_inbox.insert_one(fresh)
+
+    return {
+        "created": True,
+        "trace_id": fresh["trace_id"],
+        "previous_status": old_slug or None,
+        "new_status": status_slug,
+    }
 
 
 # ── Salla order → unified_orders document shape ──────────────────────────
@@ -290,6 +385,9 @@ async def run_orders_sync(
                         db, user_id, doc["order_number"], doc,
                         source="salla_direct", raw=raw,
                     )
+                    await _refresh_plan_b_status_snapshot(
+                        db, user_id, doc["order_number"], doc
+                    )
                     if res.get("created"):
                         created += 1
                     else:
@@ -403,6 +501,9 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
         db, user_id, doc["order_number"], doc,
         source="salla_direct", raw=raw,
     )
+    plan_b_snapshot = await _refresh_plan_b_status_snapshot(
+        db, user_id, doc["order_number"], doc
+    )
 
     # Iter-91 Phase 2 — recompute COGS from the (possibly mutated)
     # products[] array so total_product_cost reflects current items.
@@ -444,6 +545,7 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
         "before": before,
         "after": after,
         "adjustment": adjustment,
+        "plan_b_status_snapshot": plan_b_snapshot,
     }
 
 
