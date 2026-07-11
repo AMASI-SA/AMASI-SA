@@ -173,18 +173,36 @@ def resolve_strategy(headers) -> str:
 
 # ── Owner resolution ──────────────────────────────────────────────────
 async def resolve_owner_user_id(db) -> tuple[Optional[str], Optional[str]]:
-    """Return `(user_id, email)` of the merchant who owns this Mezan
-    install. Strategy: oldest user with `role == 'owner'`.
+    """Return the Mezan user that owns the Salla Easy Mode installation.
 
-    Mezan is currently a single-tenant SaaS — one merchant per instance.
-    `created_at` is stored as an ISO-8601 string at registration so
-    lexicographic sort is equivalent to chronological sort.
-
-    If multiple owners exist (rare), we pick the EARLIEST one and emit
-    a warning. If no owner exists we fall through to the earliest user
-    of any role — still deterministic.
+    The production tenant owner is selected explicitly by email first.
+    Falling back to the oldest owner is retained only for other
+    environments where the configured account does not exist.
     """
-    # 1) Earliest owner.
+    target_email = (
+        os.environ.get("SALLA_OWNER_EMAIL")
+        or "amasi.jewelery@gmail.com"
+    ).strip().lower()
+
+    target = await db.users.find_one(
+        {"email": {"$regex": f"^{target_email}$", "$options": "i"}},
+        {"id": 1, "email": 1, "role": 1, "created_at": 1},
+    )
+    if target and target.get("id"):
+        log.info(
+            "easy_mode.target_owner_selected email=%s user_id=%s",
+            target.get("email"),
+            target.get("id"),
+        )
+        return target.get("id"), target.get("email")
+
+    log.error(
+        "easy_mode.target_owner_not_found target_email=%s; "
+        "falling back to earliest owner",
+        target_email,
+    )
+
+    # Fallback for non-production/test environments only.
     cursor = (
         db.users
         .find({"role": "owner"}, {"id": 1, "email": 1, "created_at": 1})
