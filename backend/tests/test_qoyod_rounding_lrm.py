@@ -117,7 +117,7 @@ def test_distributor_handles_positive_and_negative_four_cents():
     assert _q2(minus_rows[-1].get("shift_from_original")) == 0.0
 
 
-def test_residual_above_ten_cents_remains_blocked():
+def test_residual_above_single_item_dynamic_cap_remains_blocked():
     canon = {
         "order_number": "TOO-LARGE",
         "order_id": "TOO-LARGE",
@@ -142,7 +142,7 @@ def test_residual_above_ten_cents_remains_blocked():
 
     assert exc.value.code == "totals_mismatch"
     assert exc.value.extra["rounding_distribution"]["reason"] == (
-        "residual_exceeds_0_10")
+        "residual_exceeds_dynamic_item_cap")
 
 
 def test_missing_shipping_product_is_not_hidden_by_lrm():
