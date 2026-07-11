@@ -30,7 +30,10 @@ from typing import Any, Optional
 
 from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
-from integrations.qoyod.payment_methods import resolve_payment_account
+from integrations.qoyod.payment_methods import (
+    resolve_payment_account,
+    is_cod_family,
+)
 from integrations.qoyod.unsent_orders import _is_real
 from integrations.qoyod_manual.client import (
     ManualQoyodClient, ManualQoyodError,
@@ -938,6 +941,7 @@ async def _upsert_local_qoyod_invoice(
     invoice_number: Any, order_number: str,
     canon: dict, expected_total: float,
     send_date_iso: str, paid: bool,
+    unpaid_status: str = "partial",
 ) -> None:
     """Upsert the local `qoyod_invoices` ledger row for a Plan-B invoice.
 
@@ -966,7 +970,7 @@ async def _upsert_local_qoyod_invoice(
         "total":              total,
         "paid_amount":        total if paid else 0.0,
         "remaining":          0.0 if paid else total,
-        "status":             "paid" if paid else "partial",
+        "status":             "paid" if paid else unpaid_status,
         "source":             "plan_b_send",
         "last_sync_at":       datetime.now(timezone.utc),
     }
@@ -1157,12 +1161,31 @@ async def manual_send_one(
     # route the retry to the payment-only path below.
     manual_inv_id_existing = row.get("manual_qoyod_invoice_id")
     manual_pay_id_existing = row.get("manual_qoyod_payment_id")
-    if manual_inv_id_existing and manual_pay_id_existing:
+
+    marker_canon = row.get("canonical_payload") or {}
+    marker_payment_method = (
+        marker_canon.get("payment_method")
+        or marker_canon.get("payment_method_native")
+    )
+    is_cod = is_cod_family(marker_payment_method)
+
+    if manual_inv_id_existing and (
+        manual_pay_id_existing or is_cod
+    ):
         raise ManualSendRefused(
             "already_sent",
-            "الطلب أُرسل مسبقاً من مسار الإرسال اليدوي (فاتورة + سداد)",
-            {"manual_qoyod_invoice_id": manual_inv_id_existing,
-             "manual_qoyod_payment_id": manual_pay_id_existing})
+            (
+                "طلب الدفع عند الاستلام أُرسل مسبقاً كفاتورة بدون سداد"
+                if is_cod
+                else "الطلب أُرسل مسبقاً من مسار الإرسال اليدوي "
+                     "(فاتورة + سداد)"
+            ),
+            {
+                "manual_qoyod_invoice_id": manual_inv_id_existing,
+                "manual_qoyod_payment_id": manual_pay_id_existing,
+                "invoice_only": is_cod,
+            },
+        )
     # Legacy guard: only refuse when the invoice originated OUTSIDE
     # Plan B (webhook / legacy path). Plan-B-created invoices with
     # missing payments must fall through to the retry-payment-only
@@ -1247,15 +1270,26 @@ async def manual_send_one(
     # ── Load settings + resolve payment account (Guard G4) ─────────
     settings = await db.qoyod_settings.find_one(
         {"user_id": user_id}, {"_id": 0}) or {}
-    qoyod_account_id_raw = resolve_payment_account(settings, payment_method)
-    qoyod_account_id = _to_int(qoyod_account_id_raw)
-    if qoyod_account_id is None:
-        raise ManualSendRefused(
-            "payment_method_unmapped",
-            "طريقة الدفع غير مرتبطة بحساب في قيود — "
-            "اربطها من إعدادات قيود → طرق الدفع",
-            {"payment_method": payment_method,
-             "resolved_raw":  qoyod_account_id_raw})
+    qoyod_account_id_raw = None
+    qoyod_account_id = None
+
+    if not is_cod:
+        qoyod_account_id_raw = resolve_payment_account(
+            settings,
+            payment_method,
+        )
+        qoyod_account_id = _to_int(qoyod_account_id_raw)
+
+        if qoyod_account_id is None:
+            raise ManualSendRefused(
+                "payment_method_unmapped",
+                "طريقة الدفع غير مرتبطة بحساب في قيود — "
+                "اربطها من إعدادات قيود → طرق الدفع",
+                {
+                    "payment_method": payment_method,
+                    "resolved_raw": qoyod_account_id_raw,
+                },
+            )
 
     # ── Load Qoyod credentials ─────────────────────────────────────
     api_key = await get_api_key(db, user_id)
@@ -1276,7 +1310,11 @@ async def manual_send_one(
     # payment_id` is missing), we DO NOT re-run steps 1-4 (which
     # would create a duplicate invoice). Instead, we go straight to
     # Step 5 with the persisted invoice id.
-    if manual_inv_id_existing and not manual_pay_id_existing:
+    if (
+        manual_inv_id_existing
+        and not manual_pay_id_existing
+        and not is_cod
+    ):
         try:
             return await _retry_payment_only(
                 db, client=client, row=row, canon=canon,
@@ -1581,6 +1619,83 @@ async def _run_all_steps(
         salla_total=salla_total,
         invoice_id=invoice_id,
     )
+
+    # ── COD: invoice only, no payment ──────────────────────────────
+    if is_cod:
+        await _upsert_local_qoyod_invoice(
+            db,
+            user_id=user_id,
+            invoice_id=invoice_id,
+            invoice_number=invoice_number,
+            order_number=order_number,
+            canon=canon,
+            expected_total=actual_total,
+            send_date_iso=send_date_iso,
+            paid=False,
+            unpaid_status="unpaid",
+        )
+
+        await _finalize_lock(
+            db,
+            order_number=order_number,
+            user_id=user_id,
+            lock_id=lock_id,
+            status="succeeded",
+            invoice_id=str(invoice_id),
+        )
+
+        await db.integration_inbox.update_one(
+            {"id": row.get("id")},
+            {
+                "$set": {
+                    "qoyod_invoice_id": str(invoice_id),
+                    "qoyod_invoice_number": (
+                        str(invoice_number)
+                        if invoice_number else None
+                    ),
+                    "qoyod_invoice_source": "manual_plan_b",
+                    "manual_send_last_status":
+                        "succeeded_invoice_only",
+                    "manual_send_at":
+                        datetime.now(timezone.utc),
+                    "manual_send_mode": "invoice_only",
+                },
+                "$unset": {
+                    "manual_qoyod_payment_id": "",
+                },
+            },
+        )
+
+        logger.info(
+            "plan-b-manual-send COD invoice-only "
+            "order=%s invoice=%s",
+            order_number,
+            invoice_id,
+        )
+
+        return {
+            "ok": True,
+            "order_number": order_number,
+            "invoice_id": invoice_id,
+            "invoice_number": (
+                str(invoice_number)
+                if invoice_number else None
+            ),
+            "payment_id": None,
+            "send_date": send_date_iso,
+            "salla_total": salla_total,
+            "expected_total": actual_total,
+            "payment_amount": 0.0,
+            "difference": _q2(actual_total - salla_total),
+            "qoyod_account_id": None,
+            "invoice_only": True,
+            "payment_method": payment_method,
+            "steps": steps_trace + [{
+                "step": "invoice_only_complete",
+                "reason": "cash_on_delivery",
+                "payment_created": False,
+            }],
+        }
 
     # ── 5) POST invoice payment ────────────────────────────────────
     # Pay the Qoyod-persisted total, never the local simulation.
