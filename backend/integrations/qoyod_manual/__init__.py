@@ -31,7 +31,7 @@ def _install_exact_rounding() -> None:
     # Install once here so manual send and diagnostic routes use the same
     # exact-parity builder without touching the frozen legacy pipeline.
     from integrations.qoyod_manual import send as _send
-    from integrations.qoyod_manual.rounding_lrm import install
+    from integrations.qoyod_manual.rounding_lrm_exact import install
 
     install(_send)
 
