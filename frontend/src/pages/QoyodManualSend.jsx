@@ -274,33 +274,64 @@ function ResultBanner({ result, onDismiss }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           {ok ? (
-            <>
-              <div className="font-semibold">
-                ✅ تم إرسال الطلب #{result.order_number} إلى قيود
-              </div>
-              <div className="mt-1 text-sm">
-                رقم الفاتورة في قيود:{" "}
-                <span className="font-mono">
-                  {result.invoice_number || result.invoice_id}
-                </span>{" "}
-                — رقم السداد:{" "}
-                <span className="font-mono">{result.payment_id ?? "—"}</span>
-              </div>
-              <div className="mt-1 text-xs opacity-75">
-                إجمالي سلة: {formatMoney(result.salla_total)} — إجمالي قيود
-                المتوقع: {formatMoney(result.expected_total)} — قيمة السداد:{" "}
-                {formatMoney(result.payment_amount ?? result.expected_total)} —
-                الفرق: {result.difference}
-              </div>
-              {result.send_date && (
-                <div className="mt-1 text-xs opacity-75">
-                  تاريخ إنشاء الفاتورة والسداد في قيود (توقيت السعودية):{" "}
-                  <span dir="ltr" className="font-mono">
-                    {result.send_date}
+            result.invoice_only ? (
+              <>
+                <div className="font-semibold">
+                  ✅ تم إنشاء فاتورة الدفع عند الاستلام بنجاح
+                  {result.order_number ? ` — الطلب #${result.order_number}` : ""}
+                </div>
+                <div className="mt-1 text-sm">
+                  رقم الفاتورة في قيود:{" "}
+                  <span className="font-mono">
+                    {result.invoice_number || result.invoice_id}
                   </span>
                 </div>
-              )}
-            </>
+                <div className="mt-1 text-xs opacity-75">
+                  إجمالي الفاتورة: {formatMoney(result.expected_total)}
+                  {" "}— الفرق: {result.difference}
+                </div>
+                <div className="mt-2 rounded-lg border border-emerald-200 bg-white/70 p-2 text-sm">
+                  لا يتم إنشاء سند الآن. ستبقى الفاتورة غير مدفوعة حتى تحصيل
+                  المبلغ من شركة الشحن.
+                </div>
+                {result.send_date && (
+                  <div className="mt-1 text-xs opacity-75">
+                    تاريخ إنشاء الفاتورة في قيود (توقيت السعودية):{" "}
+                    <span dir="ltr" className="font-mono">
+                      {result.send_date}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="font-semibold">
+                  ✅ تم إرسال الطلب #{result.order_number} إلى قيود
+                </div>
+                <div className="mt-1 text-sm">
+                  رقم الفاتورة في قيود:{" "}
+                  <span className="font-mono">
+                    {result.invoice_number || result.invoice_id}
+                  </span>{" "}
+                  — رقم السداد:{" "}
+                  <span className="font-mono">{result.payment_id ?? "—"}</span>
+                </div>
+                <div className="mt-1 text-xs opacity-75">
+                  إجمالي سلة: {formatMoney(result.salla_total)} — إجمالي قيود
+                  المتوقع: {formatMoney(result.expected_total)} — قيمة السداد:{" "}
+                  {formatMoney(result.payment_amount ?? result.expected_total)} —
+                  الفرق: {result.difference}
+                </div>
+                {result.send_date && (
+                  <div className="mt-1 text-xs opacity-75">
+                    تاريخ إنشاء الفاتورة والسداد في قيود (توقيت السعودية):{" "}
+                    <span dir="ltr" className="font-mono">
+                      {result.send_date}
+                    </span>
+                  </div>
+                )}
+              </>
+            )
           ) : (
             <>
               <div className="font-semibold">
