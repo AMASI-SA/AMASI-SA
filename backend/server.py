@@ -141,6 +141,12 @@ app = FastAPI(title="Hesab — Salla Accounting API")
 api = APIRouter(prefix="/api")
 
 
+@app.get("/health", include_in_schema=False)
+async def health_check():
+    """Deployment health probe; no database or external API calls."""
+    return {"ok": True, "service": "backend"}
+
+
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
     return await get_current_user_from_db(request, db)
