@@ -145,17 +145,19 @@ def _validate_qoyod_actual_total(
     expected = _q2(salla_total)
     difference = _q2(actual - expected)
 
-    if abs(difference) > 0.01:
+    if difference != 0.0:
         raise ManualSendRefused(
             "qoyod_actual_total_mismatch",
-            "إجمالي قيود الفعلي يختلف عن إجمالي سلة بأكثر من هللة — "
+            "إجمالي فاتورة قيود الفعلي لا يطابق إجمالي سلة تمامًا — "
             "تم إيقاف السداد.",
             {
                 "invoice_id": invoice_id,
                 "salla_total": expected,
                 "qoyod_actual_total": actual,
                 "difference": difference,
-                "allowed_tolerance": 0.01,
+                "allowed_tolerance": 0.0,
+                "payment_created": False,
+                "requires_manual_review": True,
             },
         )
 
@@ -1528,7 +1530,7 @@ async def _run_all_steps(
         line_resolutions=line_resolutions, settings=settings,
         send_date_iso=send_date_iso)
     diff = _q2(expected_total - salla_total)
-    if abs(diff) > 0.01:
+    if diff != 0.0:
         # If the ONLY reason we still exceed tolerance is that the
         # rounding-adjustment product wasn't configured, surface a
         # dedicated code so the operator knows the ONE-LINE fix.
@@ -1546,7 +1548,7 @@ async def _run_all_steps(
                  "breakdown":              breakdown})
         raise ManualSendRefused(
             "totals_mismatch",
-            f"فرق المبلغ {abs(diff)} ريال أكبر من 0.01 — أُوقف الإرسال",
+            f"فرق المبلغ {abs(diff)} ريال؛ المطلوب تطابق 0.00 — أُوقف الإرسال",
             {"salla_total":            salla_total,
              "expected_qoyod_total":   expected_total,
              "difference":             diff,
