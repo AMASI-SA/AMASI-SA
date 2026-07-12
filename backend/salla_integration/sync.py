@@ -24,16 +24,21 @@ state (page, last order_id). The UI reads this to render a log feed.
 from __future__ import annotations
 
 import asyncio
-import copy
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
+
+from pymongo.errors import DuplicateKeyError
 
 from .service import SallaError, call_salla
 
 # orders_db is imported at module top-level to keep `salla_direct` writes
 # routed through the same merge logic Make/Excel use.
 from orders_db import upsert_order
+
+
+logger = logging.getLogger(__name__)
 
 
 # Salla's /orders endpoint uses page-based pagination. Default per_page is
@@ -54,22 +59,26 @@ async def _refresh_plan_b_status_snapshot(
     order_number: str,
     order_doc: dict,
 ) -> dict:
-    """Create a fresh Plan-B trace when Salla reports a newer status.
+    """Upsert a read-only current-status snapshot for Plan B.
 
-    The existing canonical payload is cloned so products, totals, customer,
-    payment and shipping data remain unchanged. Only the Salla lifecycle
-    status and audit metadata are replaced.
+    This snapshot uses its own connector and is explicitly ineligible for
+    Qoyod processing. Repeating the same status updates the same snapshot
+    instead of violating the inbox idempotency index.
     """
     order_number = str(order_number or "").strip()
     status_slug = str(
         order_doc.get("order_status_slug")
         or order_doc.get("order_status")
         or ""
-    ).strip()
-    status_native = str(order_doc.get("order_status") or "").strip()
+    ).strip().lower()
+    status_native = str(order_doc.get("order_status") or status_slug).strip()
 
     if not order_number or not status_slug:
-        return {"created": False, "reason": "missing_order_or_status"}
+        return {
+            "created": False,
+            "updated": False,
+            "reason": "missing_order_or_status",
+        }
 
     latest = await db.integration_inbox.find_one(
         {
@@ -83,62 +92,99 @@ async def _refresh_plan_b_status_snapshot(
         sort=[("received_at", -1)],
     )
 
-    if not latest:
-        return {"created": False, "reason": "no_existing_plan_b_trace"}
-
-    canonical = latest.get("canonical_payload") or {}
-    old_slug = str(canonical.get("order_status") or "").strip()
-    old_native = str(canonical.get("order_status_native") or "").strip()
-
-    if old_slug == status_slug and (
-        not status_native or old_native == status_native
-    ):
-        return {"created": False, "reason": "status_already_current"}
-
-    fresh = copy.deepcopy(latest)
-    fresh.pop("_id", None)
+    canonical = dict((latest or {}).get("canonical_payload") or {})
+    previous_slug = str(canonical.get("order_status") or "").strip().lower()
+    previous_native = str(canonical.get("order_status_native") or "").strip()
+    # Always store the current-status snapshot under the authenticated
+    # tenant. Legacy traces under "main" may be read as a payload fallback,
+    # but must never decide the tenant of the new snapshot.
+    snapshot_user_id = str(user_id).strip()
 
     now = _now()
-    fresh["id"] = uuid.uuid4().hex
-    fresh["trace_id"] = uuid.uuid4().hex
-    fresh["received_at"] = now
-    fresh["updated_at"] = now
-    fresh["source"] = "salla_direct_status_resync"
-    fresh["salla_order_number"] = order_number
+    metadata = dict(canonical.get("metadata") or {})
+    metadata.update({
+        "source_event": "order.updated",
+        "status_source": "salla_order_details",
+        "resynced_at": now,
+    })
+    canonical.update({
+        "order_number": order_number,
+        "order_status": status_slug,
+        "order_status_native": status_native,
+        "metadata": metadata,
+    })
 
-    fresh_canonical = dict(canonical)
-    fresh_canonical["order_status"] = status_slug
-    fresh_canonical["order_status_native"] = (
-        status_native or status_slug
+    connector_key = "salla_direct_status_resync"
+    idempotency_key = (
+        f"salla:order:{order_number}:order.updated:{status_slug}"
     )
-    fresh["canonical_payload"] = fresh_canonical
+    trace_id = uuid.uuid4().hex
 
-    fresh["salla_direct_status_resync"] = {
-        "at": now,
-        "previous_status_slug": old_slug or None,
-        "previous_status_native": old_native or None,
-        "new_status_slug": status_slug,
-        "new_status_native": status_native or status_slug,
+    snapshot = {
+        "trace_id": trace_id,
+        "user_id": snapshot_user_id,
+        "connector_key": connector_key,
+        "idempotency_key": idempotency_key,
+        "salla_order_number": order_number,
+        "source": connector_key,
+        "received_at": now,
+        "updated_at": now,
+        "canonical_payload": canonical,
+        "pipeline_stage": "STATUS_SNAPSHOT",
+        "no_qoyod_send": True,
+        "eligibility_only": True,
+        "manual_send_allowed": False,
+        "auto_send_allowed": False,
+        "salla_direct_status_resync": {
+            "at": now,
+            "source_endpoint": "GET /orders/{id}",
+            "previous_status_slug": previous_slug or None,
+            "previous_status_native": previous_native or None,
+            "new_status_slug": status_slug,
+            "new_status_native": status_native,
+        },
     }
 
-    # Never copy send-result markers onto a new eligibility snapshot.
-    for key in (
-        "manual_qoyod_invoice_id",
-        "manual_qoyod_payment_id",
-        "qoyod_invoice_id",
-        "qoyod_payment_id",
-        "manual_sent_at",
-        "sent_at",
-    ):
-        fresh.pop(key, None)
-
-    await db.integration_inbox.insert_one(fresh)
+    selector = {
+        "user_id": snapshot_user_id,
+        "connector_key": connector_key,
+        "idempotency_key": idempotency_key,
+    }
+    try:
+        result = await db.integration_inbox.update_one(
+            selector,
+            {
+                "$set": snapshot,
+                "$setOnInsert": {
+                    "id": uuid.uuid4().hex,
+                    "created_at": now,
+                },
+            },
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        await db.integration_inbox.update_one(selector, {"$set": snapshot})
+        return {
+            "created": False,
+            "updated": True,
+            "reason": "concurrent_duplicate_snapshot_updated",
+            "trace_id": trace_id,
+            "status_slug": status_slug,
+            "status_native": status_native,
+            "no_qoyod_send": True,
+        }
 
     return {
-        "created": True,
-        "trace_id": fresh["trace_id"],
-        "previous_status": old_slug or None,
+        "created": result.upserted_id is not None,
+        "updated": result.upserted_id is None,
+        "trace_id": trace_id,
+        "connector_key": connector_key,
+        "idempotency_key": idempotency_key,
+        "previous_status": previous_slug or None,
         "new_status": status_slug,
+        "status_slug": status_slug,
+        "status_native": status_native,
+        "no_qoyod_send": True,
     }
 
 
@@ -451,6 +497,71 @@ async def run_orders_sync(
     }
 
 
+async def _fetch_salla_order_details(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict | None:
+    """Resolve the internal Salla id, then fetch authoritative details."""
+    search_resp = await call_salla(
+        db,
+        user_id,
+        "GET",
+        "/orders",
+        params={
+            "keyword": order_number,
+            "format": "light",
+            "per_page": 10,
+        },
+    )
+    rows = search_resp.get("data") if isinstance(search_resp, dict) else None
+    if not isinstance(rows, list):
+        rows = []
+
+    match = None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        reference_id = str(row.get("reference_id") or "").strip()
+        row_id = str(row.get("id") or "").strip()
+        if reference_id == order_number or row_id == order_number:
+            match = row
+            break
+
+    if match is None and len(rows) == 1 and isinstance(rows[0], dict):
+        match = rows[0]
+    if match is None:
+        return None
+
+    internal_id = str(match.get("id") or "").strip()
+    if not internal_id:
+        raise RuntimeError(
+            f"Salla search result missing internal id: {order_number}"
+        )
+
+    details_resp = await call_salla(
+        db,
+        user_id,
+        "GET",
+        f"/orders/{internal_id}",
+    )
+    details = details_resp.get("data") if isinstance(details_resp, dict) else None
+    if not isinstance(details, dict):
+        raise RuntimeError(
+            f"Salla Order Details returned invalid payload: {order_number}"
+        )
+
+    actual_reference = str(
+        details.get("reference_id") or details.get("order_number") or ""
+    ).strip()
+    if actual_reference and actual_reference != order_number:
+        raise RuntimeError(
+            "Salla Order Details reference mismatch: "
+            f"expected={order_number} actual={actual_reference}"
+        )
+    return details
+
+
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     """Iter-87 — Pull a single order from Salla by its reference_id
     (order_number) and re-upsert it into unified_orders. This is the
@@ -480,28 +591,13 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
          "products": 1, "total_product_cost": 1},
     )
 
-    # Salla supports keyword search on reference_id
     try:
-        resp = await call_salla(
-            db, user_id, "GET", "/orders",
-            params={"keyword": order_number, "format": "light", "per_page": 10},
+        raw = await _fetch_salla_order_details(
+            db, user_id, order_number
         )
     except SallaError as e:
         return {"ok": False, "found": False, "error": str(e),
                 "needs_reauth": e.needs_reauth}
-
-    data = resp.get("data") or []
-    # Find exact match (keyword can return partials)
-    raw = None
-    for o in data:
-        if str(o.get("reference_id") or o.get("id")) == order_number:
-            raw = o
-            break
-    if raw is None and data:
-        # Some Salla tenants only return id-based matches when reference_id
-        # is searched; accept the single result if it's a unique hit.
-        if len(data) == 1:
-            raw = data[0]
 
     if raw is None:
         return {"ok": True, "found": False, "before": before,
@@ -510,6 +606,13 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     doc = _salla_order_to_doc(raw)
     if not doc.get("order_number"):
         return {"ok": False, "found": False, "error": "order_number missing in payload"}
+    current_slug = str(
+        doc.get("order_status_slug") or doc.get("order_status") or ""
+    ).strip().lower()
+    if not current_slug:
+        raise RuntimeError(
+            f"Salla Order Details missing status: {order_number}"
+        )
 
     res = await upsert_order(
         db, user_id, doc["order_number"], doc,

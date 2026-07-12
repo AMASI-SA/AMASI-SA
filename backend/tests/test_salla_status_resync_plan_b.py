@@ -85,6 +85,7 @@ async def test_status_change_creates_fresh_plan_b_trace():
         if row["trace_id"] != "old-trace"
     )
 
+    assert newest["user_id"] == "tenant"
     assert newest["canonical_payload"]["order_status"] == "completed"
     assert newest["canonical_payload"]["order_status_native"] == "تم التنفيذ"
     assert newest["canonical_payload"]["total_amount"] == 133.73
