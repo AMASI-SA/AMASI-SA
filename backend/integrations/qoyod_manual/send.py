@@ -1567,6 +1567,20 @@ async def _run_all_steps(
             {"response": created_inv})
     invoice_number = inv_node.get("number") or inv_node.get("reference_no")
 
+    # Persist immediately after POST /invoices succeeds. Any later
+    # timeout/error must never allow a duplicate invoice on retry.
+    await db.integration_inbox.update_one(
+        {"id": row.get("id")},
+        {"$set": {
+            "manual_qoyod_invoice_id": str(invoice_id),
+            "manual_qoyod_invoice_number": (
+                str(invoice_number) if invoice_number else None
+            ),
+            "manual_send_last_status": "invoice_created",
+            "manual_send_at": datetime.now(timezone.utc),
+        }},
+    )
+
     # Qoyod actual-total gate:
     # Never trust the local simulation after POST /invoices. Read the total
     # that Qoyod actually persisted, because its internal tax/line rounding
@@ -1574,10 +1588,13 @@ async def _run_all_steps(
     actual_total = _extract_qoyod_invoice_total(created_inv)
     actual_total_source = "create_invoice_response"
 
-    if actual_total is None:
+    if actual_total is None and not is_cod:
         fetched_invoice = await client.get_invoice(invoice_id)
         actual_total = _extract_qoyod_invoice_total(fetched_invoice)
         actual_total_source = "get_invoice"
+    elif actual_total is None and is_cod:
+        actual_total = expected_total
+        actual_total_source = "local_expected_invoice_only"
 
     actual_difference = (
         _q2(actual_total - salla_total)
@@ -1597,31 +1614,15 @@ async def _run_all_steps(
         "actual_difference": actual_difference,
     })
 
-    # Persist marker immediately so a retry can't double-post.
-    # We ONLY set `manual_qoyod_invoice_id` here (not the unified
-    # `qoyod_invoice_id`) — because the invoice exists in قيود but
-    # the payment hasn't run yet. The unified marker is set only
-    # AFTER Step 5 succeeds (so a mid-flight failure still allows
-    # the retry-payment-only branch to fire on the next click).
-    await db.integration_inbox.update_one(
-        {"id": row.get("id")},
-        {"$set": {"manual_qoyod_invoice_id":         str(invoice_id),
-                   "manual_qoyod_invoice_number":    (str(invoice_number)
-                                                       if invoice_number else None),
-                   "manual_send_last_status":        "invoice_created",
-                   "manual_send_at":                 datetime.now(timezone.utc)}})
-
-    # ── 4.5) Exact actual-total parity gate ────────────────────────
-    # The invoice now exists in Qoyod. Before creating ANY payment, require
-    # its persisted total to equal Salla exactly to 0.00 SAR.
-    actual_total = _validate_qoyod_actual_total(
-        actual_total=actual_total,
-        salla_total=salla_total,
-        invoice_id=invoice_id,
-    )
-
     # ── COD: invoice only, no payment ──────────────────────────────
+    # No payment parity gate is needed because COD intentionally stays
+    # open and unpaid until the courier remits the collected amount.
     if is_cod:
+        cod_total = _q2(
+            actual_total
+            if actual_total is not None
+            else expected_total
+        )
         await _upsert_local_qoyod_invoice(
             db,
             user_id=user_id,
@@ -1629,7 +1630,7 @@ async def _run_all_steps(
             invoice_number=invoice_number,
             order_number=order_number,
             canon=canon,
-            expected_total=actual_total,
+            expected_total=cod_total,
             send_date_iso=send_date_iso,
             paid=False,
             unpaid_status="unpaid",
@@ -1684,9 +1685,9 @@ async def _run_all_steps(
             "payment_id": None,
             "send_date": send_date_iso,
             "salla_total": salla_total,
-            "expected_total": actual_total,
+            "expected_total": cod_total,
             "payment_amount": 0.0,
-            "difference": _q2(actual_total - salla_total),
+            "difference": _q2(cod_total - salla_total),
             "qoyod_account_id": None,
             "invoice_only": True,
             "payment_method": payment_method,
@@ -1696,6 +1697,13 @@ async def _run_all_steps(
                 "payment_created": False,
             }],
         }
+
+    # ── 4.5) Paid-method actual-total gate ────────────────────────
+    actual_total = _validate_qoyod_actual_total(
+        actual_total=actual_total,
+        salla_total=salla_total,
+        invoice_id=invoice_id,
+    )
 
     # ── 5) POST invoice payment ────────────────────────────────────
     # Pay the Qoyod-persisted total, never the local simulation.

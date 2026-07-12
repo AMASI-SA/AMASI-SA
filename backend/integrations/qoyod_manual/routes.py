@@ -203,9 +203,44 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             import uuid as _uuid
             ref = _uuid.uuid4().hex[:8]
             tb_text = _tb.format_exc()
-            logger.error(
-                "manual/send unhandled_exception order=%s ref=%s\n%s",
-                order_number, ref, tb_text)
+            logger.exception(
+                "manual/send unhandled_exception order=%s ref=%s",
+                order_number,
+                ref,
+            )
+
+            # Never leave a manual-send lock hanging after the request
+            # has already terminated with an unexpected exception.
+            try:
+                await db.qoyod_manual_send_locks.update_many(
+                    {
+                        "order_number": str(order_number),
+                        "user_id": _TENANT,
+                        "status": "in_progress",
+                    },
+                    {
+                        "$set": {
+                            "status": "failed_unhandled",
+                            "finished_at": datetime.now(timezone.utc),
+                            "last_error": {
+                                "code": "unhandled_exception",
+                                "error_reference": ref,
+                                "exception_type": type(exc).__name__,
+                                "exception_message": str(exc)[:500],
+                                "traceback_tail":
+                                    tb_text.splitlines()[-15:],
+                            },
+                        }
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "failed to release manual-send lock "
+                    "order=%s ref=%s",
+                    order_number,
+                    ref,
+                )
+
             diag_flag = False
             try:
                 if str(request.query_params.get("diag") or "") == "1":
