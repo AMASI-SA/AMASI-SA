@@ -89,13 +89,27 @@ class ManualQoyodClient:
         idem: Optional[str] = None,
     ) -> Any:
         url = f"{self._base_url}{path}"
-        async with httpx.AsyncClient(timeout=self._timeout,
-                                     follow_redirects=True) as http:
-            resp = await http.request(
-                method, url,
-                headers=self._headers(idem=idem),
-                json=json_body, params=params,
-            )
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout,
+                follow_redirects=True,
+            ) as http:
+                resp = await http.request(
+                    method,
+                    url,
+                    headers=self._headers(idem=idem),
+                    json=json_body,
+                    params=params,
+                )
+        except httpx.RequestError as exc:
+            raise ManualQoyodError(
+                status_code=0,
+                endpoint=f"{method} {path}",
+                response_excerpt=(
+                    f"{type(exc).__name__}: {str(exc)[:500]}"
+                ),
+                request_body=json_body,
+            ) from exc
         try:
             body = resp.json()
         except Exception:
