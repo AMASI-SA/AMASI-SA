@@ -11,8 +11,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 _TWO_PLACES = Decimal("0.01")
+_THREE_PLACES = Decimal("0.001")
 _MAX_RESIDUAL = Decimal("0.10")
 _SEARCH_CENTS = 12
+_SEARCH_MILLS = 120
 
 
 def _d(value: Any) -> Decimal:
@@ -24,7 +26,12 @@ def _d(value: Any) -> Decimal:
 
 def _line_variants(send_module, item: dict, line_resolutions: dict,
                    tax_factor: float, tax_percent: float) -> dict[int, tuple]:
-    """Return the cheapest sendable representation for each gross-cent delta."""
+    """Return the cheapest sendable representation for each gross-cent delta.
+
+    Search order:
+      1. Existing 0.01 SAR unit/discount variants.
+      2. Exact 0.001 SAR single-field fallback.
+    """
     base_payload, base_row, base_gross = send_module._compute_item_line(
         item, line_resolutions, tax_factor, tax_percent)
     base_gross_dec = _d(base_gross).quantize(
@@ -32,26 +39,34 @@ def _line_variants(send_module, item: dict, line_resolutions: dict,
     original_total = _d(item.get("total")).quantize(
         _TWO_PLACES, rounding=ROUND_HALF_UP)
     qty = _d(base_payload.get("quantity") or 1)
+
     base_unit = _d(base_payload.get("unit_price")).quantize(
-        _TWO_PLACES, rounding=ROUND_HALF_UP)
+        _THREE_PLACES, rounding=ROUND_HALF_UP)
     base_discount = _d(base_payload.get("discount")).quantize(
-        _TWO_PLACES, rounding=ROUND_HALF_UP)
+        _THREE_PLACES, rounding=ROUND_HALF_UP)
 
     variants: dict[int, tuple] = {}
 
-    def consider(unit_price: Decimal, discount: Decimal,
-                 unit_shift: int, discount_shift: int) -> None:
+    def consider(
+        unit_price: Decimal,
+        discount: Decimal,
+        unit_shift_mills: int,
+        discount_shift_mills: int,
+    ) -> None:
         if unit_price < 0 or discount < 0:
             return
+
         line_net = unit_price * qty - discount
         if line_net < 0:
             return
+
         gross = _d(send_module._line_gross(
             unit_price=float(unit_price),
             quantity=float(qty),
             discount=float(discount),
             tax_percent=tax_percent,
         )).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+
         delta_cents = int((gross - base_gross_dec) * 100)
         if abs(delta_cents) > int(_MAX_RESIDUAL * 100):
             return
@@ -61,13 +76,14 @@ def _line_variants(send_module, item: dict, line_resolutions: dict,
         payload["discount"] = float(discount)
 
         row = dict(base_row)
-        net_q2 = (unit_price * qty - discount).quantize(
+        net_q2 = line_net.quantize(
             _TWO_PLACES, rounding=ROUND_HALF_UP)
         row["qoyod_unit_price"] = float(unit_price)
         row["computed_discount"] = float(discount)
         row["line_net_after_discount"] = float(net_q2)
         row["line_tax_15pct"] = float(
-            (gross - net_q2).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+            (gross - net_q2).quantize(
+                _TWO_PLACES, rounding=ROUND_HALF_UP))
         row["line_gross_after_tax"] = float(gross)
         row["delta_vs_salla_line"] = float(
             (gross - original_total).quantize(
@@ -75,36 +91,77 @@ def _line_variants(send_module, item: dict, line_resolutions: dict,
         row["target_gross_override"] = float(gross)
         row["shift_from_original"] = row["delta_vs_salla_line"]
         row["lrm_payload_adjustment"] = {
-            "unit_price_shift": float(Decimal(unit_shift) * _TWO_PLACES),
-            "discount_shift": float(Decimal(discount_shift) * _TWO_PLACES),
+            "precision": "0.001",
+            "unit_price_shift": float(
+                Decimal(unit_shift_mills) * _THREE_PLACES),
+            "discount_shift": float(
+                Decimal(discount_shift_mills) * _THREE_PLACES),
             "gross_delta_from_baseline": float(
                 (gross - base_gross_dec).quantize(
                     _TWO_PLACES, rounding=ROUND_HALF_UP)),
         }
 
+        changed_fields = int(unit_shift_mills != 0) + int(
+            discount_shift_mills != 0)
         score = (
-            abs(unit_shift) + abs(discount_shift),
-            abs(unit_shift),
-            abs(discount_shift),
+            abs(unit_shift_mills) + abs(discount_shift_mills),
+            changed_fields,
+            abs(unit_shift_mills),
         )
+
         current = variants.get(delta_cents)
         if current is None or score < current[3]:
-            variants[delta_cents] = (payload, row, float(gross), score)
+            variants[delta_cents] = (
+                payload, row, float(gross), score)
 
     consider(base_unit, base_discount, 0, 0)
 
     for unit_shift in range(-_SEARCH_CENTS, _SEARCH_CENTS + 1):
-        for discount_shift in range(-_SEARCH_CENTS, _SEARCH_CENTS + 1):
+        for discount_shift in range(
+                -_SEARCH_CENTS, _SEARCH_CENTS + 1):
             if unit_shift == 0 and discount_shift == 0:
                 continue
+
             consider(
-                (base_unit + Decimal(unit_shift) * _TWO_PLACES).quantize(
-                    _TWO_PLACES, rounding=ROUND_HALF_UP),
-                (base_discount + Decimal(discount_shift) * _TWO_PLACES).quantize(
-                    _TWO_PLACES, rounding=ROUND_HALF_UP),
-                unit_shift,
-                discount_shift,
+                (
+                    base_unit
+                    + Decimal(unit_shift) * _TWO_PLACES
+                ).quantize(
+                    _THREE_PLACES, rounding=ROUND_HALF_UP),
+                (
+                    base_discount
+                    + Decimal(discount_shift) * _TWO_PLACES
+                ).quantize(
+                    _THREE_PLACES, rounding=ROUND_HALF_UP),
+                unit_shift * 10,
+                discount_shift * 10,
             )
+
+    for mill_shift in range(-_SEARCH_MILLS, _SEARCH_MILLS + 1):
+        if mill_shift == 0 or mill_shift % 10 == 0:
+            continue
+
+        consider(
+            base_unit,
+            (
+                base_discount
+                + Decimal(mill_shift) * _THREE_PLACES
+            ).quantize(
+                _THREE_PLACES, rounding=ROUND_HALF_UP),
+            0,
+            mill_shift,
+        )
+
+        consider(
+            (
+                base_unit
+                + Decimal(mill_shift) * _THREE_PLACES
+            ).quantize(
+                _THREE_PLACES, rounding=ROUND_HALF_UP),
+            base_discount,
+            mill_shift,
+            0,
+        )
 
     return variants
 
