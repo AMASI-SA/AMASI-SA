@@ -129,7 +129,7 @@ def _extract_qoyod_invoice_total(payload: Any) -> Optional[float]:
 def _validate_qoyod_actual_total(
     *, actual_total: Optional[float], salla_total: float, invoice_id: int,
 ) -> float:
-    """Require exact 0.00 parity before any invoice payment is created."""
+    """Allow up to ±0.01 SAR parity difference before invoice payment."""
     if actual_total is None:
         raise ManualSendRefused(
             "qoyod_actual_total_missing",
@@ -145,17 +145,17 @@ def _validate_qoyod_actual_total(
     expected = _q2(salla_total)
     difference = _q2(actual - expected)
 
-    if difference != 0.0:
+    if abs(difference) > 0.01:
         raise ManualSendRefused(
             "qoyod_actual_total_mismatch",
-            "إجمالي فاتورة قيود الفعلي لا يطابق إجمالي سلة تمامًا — "
+            "إجمالي قيود الفعلي يختلف عن إجمالي سلة بأكثر من 0.01 ريال — "
             "تم إيقاف السداد.",
             {
                 "invoice_id": invoice_id,
                 "salla_total": expected,
                 "qoyod_actual_total": actual,
                 "difference": difference,
-                "allowed_tolerance": 0.0,
+                "allowed_tolerance": 0.01,
                 "payment_created": False,
                 "requires_manual_review": True,
             },
@@ -1306,27 +1306,6 @@ async def manual_send_one(
     lock_id = await _acquire_lock(
         db, user_id=user_id, order_number=str(order_number), actor=actor)
 
-    # A one-halalah warning invoice is intentionally invoice-only.
-    # Never route it to payment-only retry, because payment creation
-    # requires exact 0.00 parity with Salla.
-    if (
-        manual_inv_id_existing
-        and not manual_pay_id_existing
-        and row.get("manual_send_last_status")
-            == "invoice_created_with_rounding_warning"
-    ):
-        raise ManualSendRefused(
-            "rounding_warning_invoice_already_created",
-            "تم إنشاء فاتورة قيود سابقاً مع فرق تقريب 0.01 ريال، "
-            "ولم يُنشأ السداد حسب السياسة المعتمدة.",
-            {
-                "manual_qoyod_invoice_id": manual_inv_id_existing,
-                "payment_created": False,
-                "requires_manual_review": True,
-                "retry_allowed": False,
-            },
-        )
-
     # ── Payment-only retry branch (2026-07-09) ─────────────────────
     # If Plan B previously created an invoice (`manual_qoyod_invoice_id`
     # is set) but the payment step never completed (`manual_qoyod_
@@ -1723,117 +1702,9 @@ async def _run_all_steps(
         }
 
     # ── 4.5) Paid-method actual-total gate ────────────────────────
-    # Policy:
-    #   0.00 difference → continue to invoice payment.
-    #   ±0.01 difference → keep invoice, do NOT create payment, and
-    #                      return success-with-rounding-warning.
-    #   > 0.01 difference or missing total → strict failure.
-    if actual_total is not None:
-        actual_difference = _q2(actual_total - salla_total)
-    else:
-        actual_difference = None
-
-    if actual_difference is not None and abs(actual_difference) == 0.01:
-        warning_total = _q2(actual_total)
-
-        # Persist the real unpaid invoice in the local ledger.
-        await _upsert_local_qoyod_invoice(
-            db,
-            user_id=user_id,
-            invoice_id=invoice_id,
-            invoice_number=invoice_number,
-            order_number=order_number,
-            canon=canon,
-            expected_total=warning_total,
-            send_date_iso=send_date_iso,
-            paid=False,
-            unpaid_status="rounding_warning",
-        )
-
-        # Finalise the lock without a payment marker. This prevents
-        # duplicate invoice creation while preserving the fact that
-        # no invoice payment was created.
-        await _finalize_lock(
-            db,
-            order_number=order_number,
-            user_id=user_id,
-            lock_id=lock_id,
-            status="succeeded_rounding_warning",
-            invoice_id=str(invoice_id),
-        )
-
-        await db.integration_inbox.update_one(
-            {"id": row.get("id")},
-            {
-                "$set": {
-                    "manual_qoyod_invoice_id": str(invoice_id),
-                    "manual_qoyod_invoice_number": (
-                        str(invoice_number) if invoice_number else None
-                    ),
-                    "qoyod_invoice_id": str(invoice_id),
-                    "qoyod_invoice_number": (
-                        str(invoice_number) if invoice_number else None
-                    ),
-                    "qoyod_invoice_source": "manual_plan_b",
-                    "manual_send_last_status":
-                        "invoice_created_with_rounding_warning",
-                    "manual_send_at": datetime.now(timezone.utc),
-                    "manual_send_mode":
-                        "invoice_only_rounding_warning",
-                    "manual_rounding_warning": {
-                        "salla_total": salla_total,
-                        "qoyod_actual_total": warning_total,
-                        "difference": actual_difference,
-                        "payment_created": False,
-                        "requires_manual_review": True,
-                    },
-                },
-                "$unset": {
-                    "manual_qoyod_payment_id": "",
-                },
-            },
-        )
-
-        steps_trace.append({
-            "step": "invoice_created_with_rounding_warning",
-            "invoice_id": invoice_id,
-            "invoice_number": invoice_number,
-            "salla_total": salla_total,
-            "qoyod_actual_total": warning_total,
-            "difference": actual_difference,
-            "payment_created": False,
-            "requires_manual_review": True,
-        })
-
-        return {
-            "ok": True,
-            "status": "invoice_created_with_rounding_warning",
-            "order_number": order_number,
-            "invoice_id": invoice_id,
-            "invoice_number": (
-                str(invoice_number) if invoice_number else None
-            ),
-            "payment_id": None,
-            "invoice_created": True,
-            "payment_created": False,
-            "send_date": send_date_iso,
-            "salla_total": salla_total,
-            "expected_total": warning_total,
-            "qoyod_actual_total": warning_total,
-            "payment_amount": 0.0,
-            "difference": actual_difference,
-            "allowed_rounding_difference": 0.01,
-            "requires_manual_review": True,
-            "warning_code": "qoyod_rounding_difference_accepted",
-            "message": (
-                "تم إنشاء فاتورة قيود مع فرق تقريب 0.01 ريال. "
-                "لم يتم إنشاء السداد وتحتاج الفاتورة مراجعة يدوية."
-            ),
-            "qoyod_account_id": qoyod_account_id,
-            "steps": steps_trace,
-        }
-
-    # Exact-zero parity remains mandatory for payment creation.
+    # Accept exact parity or a one-halalah Qoyod rounding difference.
+    # The payment amount below uses Qoyod's persisted actual total so
+    # the invoice closes to a zero balance.
     actual_total = _validate_qoyod_actual_total(
         actual_total=actual_total,
         salla_total=salla_total,
