@@ -260,7 +260,15 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
             // Insert "إدارة الفريق" just before /settings so settings stays last.
             const settingsIdx = items.findIndex((i) => i.to === "/settings");
             const teamLink = { to: "/team", label: "إدارة الفريق", icon: UsersThree, testid: "nav-team" };
-            items.splice(settingsIdx >= 0 ? settingsIdx : items.length, 0, teamLink);
+            const ordersV2Link = {
+                to: "/orders-v2",
+                label: "🛒 الطلبات الجديدة V2",
+                icon: Package,
+                testid: "nav-orders-v2",
+            };
+
+            const insertAt = settingsIdx >= 0 ? settingsIdx : items.length;
+            items.splice(insertAt, 0, ordersV2Link, teamLink);
             return { ...s, items };
         });
     }, [user?.is_owner]);
