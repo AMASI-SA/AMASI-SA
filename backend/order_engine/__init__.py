@@ -7,6 +7,13 @@ It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
 from .mapper import OrderMappingError, map_salla_order
+from .service import (
+    InvalidOrderCursorError,
+    OrderNotFoundError,
+    OrderPage,
+    get_order,
+    list_orders,
+)
 
 from .models import (
     AddressDTO,
@@ -30,4 +37,9 @@ __all__ = [
     "ShippingDTO",
     "OrderMappingError",
     "map_salla_order",
+    "InvalidOrderCursorError",
+    "OrderNotFoundError",
+    "OrderPage",
+    "get_order",
+    "list_orders",
 ]
