@@ -58,6 +58,9 @@ PAYMENT_METHOD_ALIASES: dict[str, str] = {
     # Bank
     "bank":                "bank_transfer",
     "wire_transfer":       "bank_transfer",
+    "bank_rajhi":          "bank_transfer",
+    "bank_inma":           "bank_transfer",
+    "bank_ahli":           "bank_transfer",
     # Cards
     "credit":              "credit_card",
     "card":                "credit_card",

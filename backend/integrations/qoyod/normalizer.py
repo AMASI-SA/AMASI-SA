@@ -305,6 +305,32 @@ def _canonical_payment_method(native: Optional[str]) -> Optional[str]:
         "bank":           "bank_transfer",
         "bank transfer":  "bank_transfer",
         "تحويل بنكي":     "bank_transfer",
+
+        # Receiving-bank-specific transfer methods.
+        # Keep these separate so Qoyod account routing does not collapse
+        # Alinma / Ahli into the generic Rajhi bank_transfer mapping.
+        "بنك الراجحي":     "bank_rajhi",
+        "الراجحي":         "bank_rajhi",
+        "مصرف الراجحي":    "bank_rajhi",
+        "rajhi":           "bank_rajhi",
+        "al rajhi":        "bank_rajhi",
+
+        "بنك الإنماء":     "bank_inma",
+        "بنك الانماء":     "bank_inma",
+        "الإنماء":         "bank_inma",
+        "الانماء":         "bank_inma",
+        "alinma":          "bank_inma",
+        "al inma":         "bank_inma",
+        "inma":            "bank_inma",
+
+        "البنك الأهلي":    "bank_ahli",
+        "بنك الأهلي":      "bank_ahli",
+        "الأهلي":          "bank_ahli",
+        "الاهلي":          "bank_ahli",
+        "ahli":            "bank_ahli",
+        "ncb":             "bank_ahli",
+        "saudi national bank": "bank_ahli",
+
         "tamara":         "tamara",
         "tabby":          "tabby",
         "emkan":          "emkan",
@@ -315,6 +341,58 @@ def _canonical_payment_method(native: Optional[str]) -> Optional[str]:
         "paypal":         "paypal",
     }
     return table.get(low, low.replace(" ", "_"))
+
+
+def _extract_receiving_bank_method(data: dict) -> Optional[str]:
+    """Return a bank-specific canonical payment key when the payload
+    carries the receiving bank separately from the generic
+    `payment_method=bank_transfer` value.
+
+    This is intentionally narrow: only known receiving-bank fields and
+    known bank names are considered. Unresolved transfers remain
+    `bank_transfer` and use the existing fallback configuration.
+    """
+    candidate_keys = {
+        "bank_name",
+        "receiving_bank",
+        "receiving_bank_name",
+        "target_bank",
+        "target_bank_name",
+        "payment_method_name",
+    }
+
+    def walk(value, depth: int = 0) -> Optional[str]:
+        if depth > 5:
+            return None
+
+        if isinstance(value, dict):
+            # Prefer explicitly named bank fields.
+            for key, child in value.items():
+                key_norm = str(key).strip().lower()
+                if key_norm in candidate_keys:
+                    if isinstance(child, dict):
+                        child = child.get("name") or child.get("label")
+                    canonical = _canonical_payment_method(
+                        str(child).strip() if child else None
+                    )
+                    if canonical in {"bank_rajhi", "bank_inma", "bank_ahli"}:
+                        return canonical
+
+            # Then inspect nested payment / transaction objects.
+            for child in value.values():
+                found = walk(child, depth + 1)
+                if found:
+                    return found
+
+        elif isinstance(value, list):
+            for child in value:
+                found = walk(child, depth + 1)
+                if found:
+                    return found
+
+        return None
+
+    return walk(data)
 
 
 def _normalize_customer(data: dict, order_number: str | None = None) -> CustomerDTO:
@@ -641,10 +719,31 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
             )
 
     # Payment
-    pm_native = data.get("payment_method") or data.get("payment_method_name")
-    if isinstance(pm_native, dict):
-        pm_native = pm_native.get("name")
-    pm_native = str(pm_native).strip() if pm_native else None
+    pm_raw = data.get("payment_method")
+    pm_name = data.get("payment_method_name")
+
+    if isinstance(pm_raw, dict):
+        pm_raw = pm_raw.get("name") or pm_raw.get("code")
+    if isinstance(pm_name, dict):
+        pm_name = pm_name.get("name") or pm_name.get("label")
+
+    pm_raw = str(pm_raw).strip() if pm_raw else None
+    pm_name = str(pm_name).strip() if pm_name else None
+
+    pm_native = pm_raw or pm_name
+    pm_canonical = _canonical_payment_method(pm_native)
+
+    # Salla/Make may send:
+    #   payment_method      = bank_transfer
+    #   payment_method_name = بنك الإنماء / البنك الأهلي / بنك الراجحي
+    # or carry bank_name inside payment / transactions objects.
+    if pm_canonical == "bank_transfer":
+        detailed = _canonical_payment_method(pm_name)
+        if detailed not in {"bank_rajhi", "bank_inma", "bank_ahli"}:
+            detailed = _extract_receiving_bank_method(data)
+        if detailed in {"bank_rajhi", "bank_inma", "bank_ahli"}:
+            pm_canonical = detailed
+            pm_native = pm_name or detailed
 
     dto = SalesOrderDTO(
         order_id=order_id,
@@ -678,7 +777,7 @@ def normalize(raw: dict, *, received_at: Optional[datetime] = None) -> SalesOrde
         extra_charges=extra_charges,
         customer=_normalize_customer(data, order_number=order_number),
         items=items,
-        payment_method=_canonical_payment_method(pm_native),
+        payment_method=pm_canonical,
         payment_method_native=pm_native,
         shipping_address=_normalize_address(data.get("shipping_address")
                                             or data.get("ship_to")),
