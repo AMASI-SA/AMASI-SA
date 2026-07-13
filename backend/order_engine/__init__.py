@@ -1,0 +1,29 @@
+"""Mezan OS Order Engine.
+
+This package owns the canonical order contract used by future Mezan
+workspaces and engines.
+
+It must not expose MongoDB-shaped documents to frontend consumers.
+"""
+
+from .models import (
+    AddressDTO,
+    CustomerDTO,
+    MoneyTotalsDTO,
+    OrderDTO,
+    OrderItemDTO,
+    OrderSourceDTO,
+    PaymentDTO,
+    ShippingDTO,
+)
+
+__all__ = [
+    "AddressDTO",
+    "CustomerDTO",
+    "MoneyTotalsDTO",
+    "OrderDTO",
+    "OrderItemDTO",
+    "OrderSourceDTO",
+    "PaymentDTO",
+    "ShippingDTO",
+]

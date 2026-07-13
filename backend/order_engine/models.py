@@ -1,0 +1,230 @@
+"""Canonical Order Engine DTOs.
+
+Architecture rules
+------------------
+1. These models are API contracts, not MongoDB models.
+2. Frontend code must not depend on `unified_orders`, `raw_by_source`,
+   Salla response nesting, or any database-specific shape.
+3. Salla owns external order facts.
+4. Mezan owns future operational projections.
+5. Qoyod owns accounting records.
+6. This module performs no I/O and contains no business calculations.
+
+See:
+- docs/MEZAN_OS_ARCHITECTURE.md
+- docs/PROJECT_DECISIONS.md
+- docs/ORDER_CAPABILITY_AUDIT.md
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CanonicalDTO(BaseModel):
+    """Strict base class for all public Order Engine contracts."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
+
+
+class OrderSourceDTO(CanonicalDTO):
+    """Traceability metadata without exposing raw provider payloads."""
+
+    provider: Literal["salla"] = "salla"
+    source_order_id: Optional[str] = None
+    source_reference: Optional[str] = None
+    source_event: Optional[str] = None
+    fetched_at: Optional[datetime] = None
+    received_at: Optional[datetime] = None
+
+
+class AddressDTO(CanonicalDTO):
+    """Canonical customer or shipping address."""
+
+    country: Optional[str] = None
+    country_code: Optional[str] = None
+    city: Optional[str] = None
+    district: Optional[str] = None
+    street: Optional[str] = None
+    postal_code: Optional[str] = None
+    building_number: Optional[str] = None
+    additional_number: Optional[str] = None
+    formatted: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class CustomerDTO(CanonicalDTO):
+    """Customer snapshot attached to the order."""
+
+    customer_id: Optional[str] = None
+    name: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    is_guest: bool = False
+    shipping_address: Optional[AddressDTO] = None
+    billing_address: Optional[AddressDTO] = None
+
+
+class PaymentDTO(CanonicalDTO):
+    """Payment facts supplied by the commerce source.
+
+    `receiving_bank_*` is intentionally explicit. A generic bank transfer
+    must not silently collapse Al Rajhi, Alinma and SNB/Ahli into one account.
+    """
+
+    method: Optional[str] = None
+    method_native: Optional[str] = None
+    status: Optional[str] = None
+
+    receiving_bank_code: Optional[
+        Literal["bank_rajhi", "bank_inma", "bank_ahli"]
+    ] = None
+    receiving_bank_name: Optional[str] = None
+
+    transaction_reference: Optional[str] = None
+    paid_at: Optional[datetime] = None
+
+    # Future gateway details. Never store full card data.
+    card_brand: Optional[str] = None
+    card_last_four: Optional[str] = Field(
+        default=None,
+        min_length=4,
+        max_length=4,
+    )
+
+
+class ShippingDTO(CanonicalDTO):
+    """Shipping snapshot supplied by Salla."""
+
+    company: Optional[str] = None
+    company_code: Optional[str] = None
+    method: Optional[str] = None
+    status: Optional[str] = None
+    tracking_number: Optional[str] = None
+    tracking_url: Optional[str] = None
+    label_url: Optional[str] = None
+    shipped_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    address: Optional[AddressDTO] = None
+
+
+class MoneyTotalsDTO(CanonicalDTO):
+    """Commercial order totals.
+
+    These values represent the Salla commercial order snapshot. They are not
+    an accounting calculation engine and must not replace Qoyod accounting
+    records or Mezan's future Profit Engine.
+    """
+
+    currency: str = "SAR"
+    subtotal: float = 0.0
+    shipping: float = 0.0
+    discount: float = 0.0
+    tax_reported_by_source: float = 0.0
+    total: float = 0.0
+
+
+class OrderItemDTO(CanonicalDTO):
+    """Canonical item inside one specific order.
+
+    `order_item_id` is the permanent Mezan operational identity. It is not
+    interchangeable with product_id or SKU.
+
+    Future engines will attach Availability, Inventory, Preparation,
+    Supplier, Purchase Batch, Shipping, Marketing and audit projections to
+    this identity.
+    """
+
+    order_item_id: str = Field(min_length=1)
+
+    source_item_id: Optional[str] = None
+    product_id: Optional[str] = None
+    parent_product_id: Optional[str] = None
+    variant_id: Optional[str] = None
+
+    sku: Optional[str] = None
+    barcode: Optional[str] = None
+
+    name: str = Field(min_length=1)
+    quantity: float = Field(default=1.0, gt=0)
+
+    image_url: Optional[str] = None
+    image_urls: list[str] = Field(default_factory=list)
+    product_url: Optional[str] = None
+
+    unit_price: float = 0.0
+    discount: float = 0.0
+    tax_reported_by_source: float = 0.0
+    total: float = 0.0
+
+    weight: Optional[float] = None
+    weight_unit: Optional[str] = None
+
+    # Preserve provider options and also expose normalized values.
+    options_raw: list[dict[str, Any]] = Field(default_factory=list)
+    options_normalized: dict[str, Any] = Field(default_factory=dict)
+
+    color: Optional[str] = None
+    size: Optional[str] = None
+    material: Optional[str] = None
+
+    # Customer-entered personalization, engraving, gift text, uploaded
+    # image references, or other product-specific inputs.
+    custom_fields: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Reserved contracts for future engines. Sprint 001 does not mutate them.
+    preparation_status: Optional[str] = None
+    availability_status: Optional[str] = None
+    fulfillment_source: Optional[
+        Literal[
+            "operational_inventory",
+            "returned_item",
+            "previously_prepared",
+            "supplier",
+        ]
+    ] = None
+
+
+class OrderDTO(CanonicalDTO):
+    """Single canonical order contract for list and detail consumers."""
+
+    schema_version: Literal[1] = 1
+
+    order_id: str = Field(min_length=1)
+    order_number: str = Field(min_length=1)
+
+    # Order lists must sort and display this field, never updated_at.
+    created_at: datetime
+
+    status: Optional[str] = None
+    status_native: Optional[str] = None
+
+    completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    refunded_at: Optional[datetime] = None
+
+    source: OrderSourceDTO
+    customer: CustomerDTO = Field(default_factory=CustomerDTO)
+    payment: PaymentDTO = Field(default_factory=PaymentDTO)
+    shipping: ShippingDTO = Field(default_factory=ShippingDTO)
+    totals: MoneyTotalsDTO = Field(default_factory=MoneyTotalsDTO)
+    items: list[OrderItemDTO] = Field(default_factory=list)
+
+    customer_notes: Optional[str] = None
+    staff_notes: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+
+    # Provider events will be normalized by a later Timeline capability.
+    timeline: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Internal update metadata is available for diagnostics only.
+    # It must never control list ordering.
+    engine_updated_at: Optional[datetime] = None
