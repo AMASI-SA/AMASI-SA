@@ -12,6 +12,7 @@ from .repository import (
     OrderDiscoveryRow,
     OrderRepository,
 )
+from .routes import OrderListResponse, make_order_engine_router
 from .service import (
     InvalidOrderCursorError,
     OrderNotFoundError,
@@ -50,4 +51,6 @@ __all__ = [
     "MongoOrderRepository",
     "OrderDiscoveryRow",
     "OrderRepository",
+    "OrderListResponse",
+    "make_order_engine_router",
 ]
