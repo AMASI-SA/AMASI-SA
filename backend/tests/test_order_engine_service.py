@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from order_engine.repository import OrderDiscoveryRow
 from order_engine.service import (
     InvalidOrderCursorError,
     OrderNotFoundError,
@@ -41,93 +42,80 @@ def make_raw(order_number: str, created_at: str) -> dict:
     }
 
 
-class FakeAsyncCursor:
-    def __init__(self, rows):
-        self.rows = list(rows)
-
-    def sort(self, fields):
-        for key, direction in reversed(fields):
-            self.rows.sort(
-                key=lambda row: str(row.get(key) or ""),
-                reverse=direction < 0,
-            )
-        return self
-
-    def limit(self, value):
-        self.rows = self.rows[:value]
-        return self
-
-    def __aiter__(self):
-        self._iterator = iter(self.rows)
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self._iterator)
-        except StopIteration as exc:
-            raise StopAsyncIteration from exc
-
-
-class FakeCollection:
+class FakeOrderRepository:
     def __init__(self, rows):
         self.rows = deepcopy(rows)
-        self.writes = 0
+        self.calls = []
 
-    def find(self, query, projection):
+    async def list_salla_orders(
+        self,
+        *,
+        user_id,
+        limit,
+        before_order_date=None,
+        before_order_number=None,
+    ):
+        self.calls.append({
+            "method": "list",
+            "user_id": user_id,
+            "limit": limit,
+            "before_order_date": before_order_date,
+            "before_order_number": before_order_number,
+        })
+
         rows = [
             row for row in self.rows
-            if row.get("user_id") == query.get("user_id")
-            and isinstance(
-                ((row.get("raw_by_source") or {}).get("salla_direct")),
-                dict,
-            )
+            if row["user_id"] == user_id
         ]
 
-        cursor_or = query.get("$or")
-        if cursor_or:
-            date_limit = cursor_or[0]["order_date"]["$lt"]
-            exact_date = cursor_or[1]["order_date"]
-            number_limit = cursor_or[1]["order_number"]["$lt"]
-
+        if before_order_date and before_order_number:
             rows = [
                 row for row in rows
                 if (
-                    str(row.get("order_date") or "") < date_limit
+                    row["order_date"] < before_order_date
                     or (
-                        str(row.get("order_date") or "") == exact_date
-                        and str(row.get("order_number") or "") < number_limit
+                        row["order_date"] == before_order_date
+                        and row["order_number"] < before_order_number
                     )
                 )
             ]
 
-        return FakeAsyncCursor(rows)
+        rows.sort(
+            key=lambda row: (
+                row["order_date"],
+                row["order_number"],
+            ),
+            reverse=True,
+        )
 
-    async def find_one(self, query, projection):
+        return [
+            OrderDiscoveryRow(
+                order_number=row["order_number"],
+                order_date=row["order_date"],
+                salla_raw=deepcopy(row["salla_raw"]),
+            )
+            for row in rows[:limit]
+        ]
+
+    async def get_salla_order(self, *, user_id, order_number):
+        self.calls.append({
+            "method": "get",
+            "user_id": user_id,
+            "order_number": order_number,
+        })
+
         for row in self.rows:
             if (
-                row.get("user_id") == query.get("user_id")
-                and row.get("order_number") == query.get("order_number")
-                and isinstance(
-                    ((row.get("raw_by_source") or {}).get("salla_direct")),
-                    dict,
-                )
+                row["user_id"] == user_id
+                and row["order_number"] == order_number
             ):
-                return deepcopy(row)
+                return OrderDiscoveryRow(
+                    order_number=row["order_number"],
+                    order_date=row["order_date"],
+                    salla_raw=deepcopy(row["salla_raw"]),
+                )
 
         return None
-
-    async def insert_one(self, *args, **kwargs):
-        self.writes += 1
-        raise AssertionError("Order Engine service must not write")
-
-    async def update_one(self, *args, **kwargs):
-        self.writes += 1
-        raise AssertionError("Order Engine service must not write")
-
-
-class FakeDB:
-    def __init__(self, rows):
-        self.unified_orders = FakeCollection(rows)
 
 
 @pytest.fixture
@@ -137,67 +125,66 @@ def rows():
             "user_id": "u1",
             "order_number": "300",
             "order_date": "2026-07-13",
-            "raw_by_source": {
-                "salla_direct": make_raw(
-                    "300",
-                    "2026-07-13 10:00:00",
-                )
-            },
+            "salla_raw": make_raw(
+                "300",
+                "2026-07-13 10:00:00",
+            ),
         },
         {
             "user_id": "u1",
             "order_number": "200",
             "order_date": "2026-07-12",
-            "raw_by_source": {
-                "salla_direct": make_raw(
-                    "200",
-                    "2026-07-12 10:00:00",
-                )
-            },
+            "salla_raw": make_raw(
+                "200",
+                "2026-07-12 10:00:00",
+            ),
         },
         {
             "user_id": "u1",
             "order_number": "100",
             "order_date": "2026-07-11",
-            "raw_by_source": {
-                "salla_direct": make_raw(
-                    "100",
-                    "2026-07-11 10:00:00",
-                )
-            },
+            "salla_raw": make_raw(
+                "100",
+                "2026-07-11 10:00:00",
+            ),
         },
         {
             "user_id": "other",
             "order_number": "999",
             "order_date": "2026-07-14",
-            "raw_by_source": {
-                "salla_direct": make_raw(
-                    "999",
-                    "2026-07-14 10:00:00",
-                )
-            },
+            "salla_raw": make_raw(
+                "999",
+                "2026-07-14 10:00:00",
+            ),
         },
     ]
 
 
 @pytest.mark.asyncio
 async def test_list_orders_returns_creation_date_ordered_page(rows):
-    db = FakeDB(rows)
+    repository = FakeOrderRepository(rows)
 
-    page = await list_orders(db, user_id="u1", limit=2)
+    page = await list_orders(
+        repository,
+        user_id="u1",
+        limit=2,
+    )
 
     assert [item.order_number for item in page.items] == ["300", "200"]
     assert page.next_cursor is not None
-    assert db.unified_orders.writes == 0
 
 
 @pytest.mark.asyncio
 async def test_cursor_returns_next_page_without_duplicates(rows):
-    db = FakeDB(rows)
+    repository = FakeOrderRepository(rows)
 
-    first = await list_orders(db, user_id="u1", limit=2)
+    first = await list_orders(
+        repository,
+        user_id="u1",
+        limit=2,
+    )
     second = await list_orders(
-        db,
+        repository,
         user_id="u1",
         limit=2,
         cursor=first.next_cursor,
@@ -213,10 +200,10 @@ async def test_cursor_returns_next_page_without_duplicates(rows):
 
 @pytest.mark.asyncio
 async def test_get_order_returns_exact_tenant_order(rows):
-    db = FakeDB(rows)
+    repository = FakeOrderRepository(rows)
 
     order = await get_order(
-        db,
+        repository,
         user_id="u1",
         order_number="200",
     )
@@ -227,11 +214,11 @@ async def test_get_order_returns_exact_tenant_order(rows):
 
 @pytest.mark.asyncio
 async def test_get_order_rejects_other_tenant(rows):
-    db = FakeDB(rows)
+    repository = FakeOrderRepository(rows)
 
     with pytest.raises(OrderNotFoundError):
         await get_order(
-            db,
+            repository,
             user_id="u1",
             order_number="999",
         )
@@ -245,17 +232,19 @@ async def test_invalid_raw_rows_are_skipped(rows):
             "user_id": "u1",
             "order_number": "400",
             "order_date": "2026-07-14",
-            "raw_by_source": {
-                "salla_direct": {
-                    "id": "400",
-                    "reference_id": "400",
-                }
+            "salla_raw": {
+                "id": "400",
+                "reference_id": "400",
             },
         },
     )
-    db = FakeDB(rows)
+    repository = FakeOrderRepository(rows)
 
-    page = await list_orders(db, user_id="u1", limit=2)
+    page = await list_orders(
+        repository,
+        user_id="u1",
+        limit=2,
+    )
 
     assert [item.order_number for item in page.items] == ["300", "200"]
     assert page.skipped_invalid == 1
@@ -273,3 +262,43 @@ def test_cursor_round_trip():
 def test_invalid_cursor_is_rejected():
     with pytest.raises(InvalidOrderCursorError):
         _decode_cursor("not-a-valid-cursor")
+
+
+def test_service_has_no_mongo_collection_dependency():
+    import ast
+    import inspect
+    import order_engine.service as service
+
+    source = inspect.getsource(service)
+    tree = ast.parse(source)
+
+    imported_modules = set()
+    attribute_names = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imported_modules.add(node.module)
+        elif isinstance(node, ast.Attribute):
+            attribute_names.add(node.attr)
+
+    assert not any(
+        module == "motor"
+        or module.startswith("motor.")
+        or module == "pymongo"
+        or module.startswith("pymongo.")
+        for module in imported_modules
+    )
+
+    forbidden_attributes = {
+        "unified_orders",
+        "find",
+        "find_one",
+        "insert_one",
+        "update_one",
+        "delete_one",
+    }
+
+    assert attribute_names.isdisjoint(forbidden_attributes)

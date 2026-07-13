@@ -1,19 +1,20 @@
 """Read-only Order Engine service.
 
-Sprint 001 bridge
------------------
-`unified_orders` is used only as a temporary discovery index.
+Service responsibilities
+------------------------
+- Decode pagination cursors.
+- Request discovery rows through OrderRepository.
+- Convert Salla raw payloads into canonical OrderDTO objects.
+- Skip invalid historical rows safely.
 
-Authoritative order facts come from:
-    raw_by_source.salla_direct
-        → map_salla_order()
-        → OrderDTO
+The service does not know:
 
-This module performs:
-- No database writes
-- No Salla HTTP calls
-- No Qoyod calls
-- No operational workflow mutations
+- MongoDB collection names
+- `unified_orders`
+- Mongo query syntax
+- FastAPI
+- Salla HTTP
+- Qoyod
 """
 
 from __future__ import annotations
@@ -21,10 +22,11 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
+from .repository import OrderRepository
 
 
 DEFAULT_LIMIT = 15
@@ -90,104 +92,67 @@ def _decode_cursor(cursor: str) -> dict[str, str]:
     }
 
 
-def _salla_raw(row: dict[str, Any]) -> Optional[dict[str, Any]]:
-    raw_by_source = row.get("raw_by_source")
-    if not isinstance(raw_by_source, dict):
-        return None
-
-    raw = raw_by_source.get("salla_direct")
-    return raw if isinstance(raw, dict) else None
-
-
-def _cursor_query(cursor: Optional[str]) -> dict[str, Any]:
-    if not cursor:
-        return {}
-
-    decoded = _decode_cursor(cursor)
-    order_date = decoded["order_date"]
-    order_number = decoded["order_number"]
-
-    return {
-        "$or": [
-            {"order_date": {"$lt": order_date}},
-            {
-                "order_date": order_date,
-                "order_number": {"$lt": order_number},
-            },
-        ]
-    }
-
-
 async def list_orders(
-    db: Any,
+    repository: OrderRepository,
     *,
     user_id: str,
     limit: int = DEFAULT_LIMIT,
     cursor: Optional[str] = None,
 ) -> OrderPage:
-    """Return newest Salla-backed orders using keyset pagination.
-
-    `order_date` and `order_number` are used only for discovery pagination.
-    The DTO's exact creation timestamp comes from the Salla raw payload.
-    """
+    """Return newest Salla-backed orders using keyset pagination."""
 
     safe_limit = _normalise_limit(limit)
 
-    query: dict[str, Any] = {
-        "user_id": str(user_id),
-        "raw_by_source.salla_direct": {"$exists": True},
-    }
-    query.update(_cursor_query(cursor))
+    before_order_date = None
+    before_order_number = None
 
-    projection = {
-        "_id": 0,
-        "order_number": 1,
-        "order_date": 1,
-        "raw_by_source.salla_direct": 1,
-    }
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        before_order_date = decoded["order_date"]
+        before_order_number = decoded["order_number"]
 
-    # Over-fetch so malformed historical rows do not unnecessarily shorten
-    # the page. The public result is still capped at safe_limit.
-    fetch_limit = min(MAX_LIMIT * 3, max(safe_limit * 3, safe_limit + 1))
+    fetch_limit = min(
+        MAX_LIMIT * 3,
+        max(safe_limit * 3, safe_limit + 1),
+    )
 
-    cursor_obj = (
-        db.unified_orders.find(query, projection)
-        .sort([("order_date", -1), ("order_number", -1)])
-        .limit(fetch_limit)
+    rows = await repository.list_salla_orders(
+        user_id=str(user_id),
+        limit=fetch_limit,
+        before_order_date=before_order_date,
+        before_order_number=before_order_number,
     )
 
     items: list[OrderDTO] = []
     skipped_invalid = 0
-    last_valid_row: Optional[dict[str, Any]] = None
+    last_valid_order_date: Optional[str] = None
+    last_valid_order_number: Optional[str] = None
 
-    async for row in cursor_obj:
-        raw = _salla_raw(row)
-        if raw is None:
-            skipped_invalid += 1
-            continue
-
+    for row in rows:
         try:
-            dto = map_salla_order(raw)
+            dto = map_salla_order(row.salla_raw)
         except OrderMappingError:
             skipped_invalid += 1
             continue
 
         items.append(dto)
-        last_valid_row = row
+        last_valid_order_date = row.order_date
+        last_valid_order_number = row.order_number
 
         if len(items) >= safe_limit:
             break
 
     next_cursor = None
-    if len(items) == safe_limit and last_valid_row is not None:
-        order_date = str(last_valid_row.get("order_date") or "").strip()
-        order_number = str(
-            last_valid_row.get("order_number")
-            or items[-1].order_number
-        ).strip()
 
-        if order_date and order_number:
-            next_cursor = _encode_cursor(order_date, order_number)
+    if (
+        len(items) == safe_limit
+        and last_valid_order_date
+        and last_valid_order_number
+    ):
+        next_cursor = _encode_cursor(
+            last_valid_order_date,
+            last_valid_order_number,
+        )
 
     return OrderPage(
         items=items,
@@ -197,7 +162,7 @@ async def list_orders(
 
 
 async def get_order(
-    db: Any,
+    repository: OrderRepository,
     *,
     user_id: str,
     order_number: str,
@@ -205,29 +170,22 @@ async def get_order(
     """Return one exact Salla-backed order."""
 
     normalized_order_number = str(order_number or "").strip()
+
     if not normalized_order_number:
         raise OrderNotFoundError("order not found")
 
-    row = await db.unified_orders.find_one(
-        {
-            "user_id": str(user_id),
-            "order_number": normalized_order_number,
-            "raw_by_source.salla_direct": {"$exists": True},
-        },
-        {
-            "_id": 0,
-            "raw_by_source.salla_direct": 1,
-        },
+    row = await repository.get_salla_order(
+        user_id=str(user_id),
+        order_number=normalized_order_number,
     )
 
-    raw = _salla_raw(row or {})
-    if raw is None:
+    if row is None:
         raise OrderNotFoundError(
             f"order not found: {normalized_order_number}"
         )
 
     try:
-        return map_salla_order(raw)
+        return map_salla_order(row.salla_raw)
     except OrderMappingError as exc:
         raise OrderNotFoundError(
             f"order payload invalid: {normalized_order_number}"

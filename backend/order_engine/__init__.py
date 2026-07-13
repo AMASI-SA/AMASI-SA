@@ -7,6 +7,11 @@ It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
 from .mapper import OrderMappingError, map_salla_order
+from .repository import (
+    MongoOrderRepository,
+    OrderDiscoveryRow,
+    OrderRepository,
+)
 from .service import (
     InvalidOrderCursorError,
     OrderNotFoundError,
@@ -42,4 +47,7 @@ __all__ = [
     "OrderPage",
     "get_order",
     "list_orders",
+    "MongoOrderRepository",
+    "OrderDiscoveryRow",
+    "OrderRepository",
 ]
