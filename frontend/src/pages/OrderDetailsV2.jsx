@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
     ArrowRight,
@@ -14,15 +14,7 @@ import {
     SpinnerGap,
     WarningCircle,
 } from "@phosphor-icons/react";
-import api from "../lib/api";
-
-function firstValue(obj, keys, fallback = null) {
-    for (const key of keys) {
-        const value = obj?.[key];
-        if (value !== undefined && value !== null && value !== "") return value;
-    }
-    return fallback;
-}
+import { useOrder } from "../hooks/useOrders";
 
 function formatMoney(value) {
     return `${Number(value || 0).toLocaleString("en-US", {
@@ -61,75 +53,12 @@ function Field({ label, value }) {
 
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
-    const [order, setOrder] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const { order, loading, error } = useOrder(orderNumber);
 
-    useEffect(() => {
-        let cancelled = false;
-
-        (async () => {
-            setLoading(true);
-            setError("");
-
-            try {
-                const { data } = await api.get("/orders", {
-                    params: {
-                        search: orderNumber,
-                        limit: 15,
-                        page: 1,
-                    },
-                });
-
-                const rows = Array.isArray(data?.items)
-                    ? data.items
-                    : Array.isArray(data?.orders)
-                        ? data.orders
-                        : [];
-
-                const exact = rows.find((row) => {
-                    const number = String(
-                        firstValue(row, [
-                            "order_number",
-                            "reference_id",
-                            "salla_order_number",
-                            "order_id",
-                            "id",
-                        ], "")
-                    );
-                    return number === String(orderNumber);
-                });
-
-                if (!cancelled) {
-                    if (!exact) {
-                        setError("لم يتم العثور على الطلب في مصدر البيانات الحالي.");
-                    } else {
-                        setOrder(exact);
-                    }
-                }
-            } catch (err) {
-                if (!cancelled) {
-                    setError(
-                        err?.response?.data?.detail ||
-                        err?.message ||
-                        "تعذّر تحميل تفاصيل الطلب."
-                    );
-                }
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [orderNumber]);
-
-    const items = useMemo(() => {
-        if (Array.isArray(order?.items)) return order.items;
-        if (Array.isArray(order?.products)) return order.products;
-        return [];
-    }, [order]);
+    const items = useMemo(
+        () => (Array.isArray(order?.items) ? order.items : []),
+        [order]
+    );
 
     if (loading) {
         return (
@@ -162,32 +91,18 @@ export default function OrderDetailsV2() {
     }
 
     const customer = order.customer || {};
-    const total = firstValue(order, [
-        "total_amount",
-        "total",
-        "amount",
-        "grand_total",
-    ], 0);
-
-    const createdAt = firstValue(order, [
-        "order_created_at",
-        "order_date",
-        "created_at",
-        "date",
-    ]);
-
-    const status = firstValue(order, [
-        "order_status_native",
-        "status_name",
-        "order_status",
-        "status",
-    ], "غير محدد");
-
-    const paymentMethod = firstValue(order, [
-        "payment_method_native",
-        "payment_method_name",
-        "payment_method",
-    ], "غير محدد");
+    const payment = order.payment || {};
+    const shipping = order.shipping || {};
+    const total = order.totals?.total || 0;
+    const createdAt = order.created_at;
+    const status =
+        order.status_native ||
+        order.status ||
+        "غير محدد";
+    const paymentMethod =
+        payment.method_native ||
+        payment.method ||
+        "غير محدد";
 
     return (
         <div
@@ -365,28 +280,24 @@ export default function OrderDetailsV2() {
                                 label="الاسم"
                                 value={
                                     customer.name ||
-                                    order.customer_name ||
                                     "—"
                                 }
                             />
                             <Field
                                 label="الجوال"
                                 value={
-                                    customer.phone ||
-                                    customer.mobile ||
-                                    order.customer_mobile
+                                    customer.mobile
                                 }
                             />
                             <Field
                                 label="البريد"
-                                value={customer.email || order.customer_email}
+                                value={customer.email}
                             />
                             <Field
                                 label="العنوان"
                                 value={
-                                    order.shipping_address?.formatted ||
-                                    order.shipping_address ||
-                                    customer.address
+                                    customer.shipping_address?.formatted ||
+                                    shipping.address?.formatted
                                 }
                             />
                         </div>
@@ -402,14 +313,12 @@ export default function OrderDetailsV2() {
                             <Field
                                 label="البنك المستلم"
                                 value={
-                                    order.receiving_bank_name ||
-                                    order.receiving_bank ||
-                                    order.bank_name
+                                    payment.receiving_bank_name
                                 }
                             />
                             <Field
                                 label="حالة الدفع"
-                                value={order.payment_status}
+                                value={payment.status}
                             />
                         </div>
                     </InfoCard>
@@ -423,20 +332,18 @@ export default function OrderDetailsV2() {
                             <Field
                                 label="شركة الشحن"
                                 value={
-                                    order.shipping_company ||
-                                    order.shipping_company_name
+                                    shipping.company
                                 }
                             />
                             <Field
                                 label="رقم التتبع"
                                 value={
-                                    order.tracking_number ||
-                                    order.shipment_number
+                                    shipping.tracking_number
                                 }
                             />
                             <Field
                                 label="حالة الشحن"
-                                value={order.shipping_status}
+                                value={shipping.status}
                             />
                         </div>
                     </InfoCard>
