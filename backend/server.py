@@ -4231,12 +4231,6 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 
 app.include_router(api)
 
-# TEMP (2026-07) — one-off secure endpoint for primary-owner promotion.
-# Guarded by `DIAGNOSTIC_TOKEN` env. Delete this block + the module
-# file + the env var after the promotion is verified.
-from temporary_owner_promotion_routes import make_owner_promotion_router
-app.include_router(make_owner_promotion_router(db), prefix="/api")
-
 # CORS
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 extra = os.environ.get("CORS_ORIGINS", "").split(",")
