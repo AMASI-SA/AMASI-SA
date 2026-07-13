@@ -1,0 +1,981 @@
+"""Pure Salla payload → canonical OrderDTO mapper.
+
+This module performs no database, HTTP, FastAPI or Qoyod operations.
+
+Input:
+    Raw Salla order payload.
+
+Output:
+    Canonical OrderDTO.
+
+Architecture:
+- Salla owns external order facts.
+- Mezan creates a stable operational `order_item_id`.
+- Frontend consumers never depend on Salla or MongoDB response shapes.
+
+See:
+- docs/MEZAN_OS_ARCHITECTURE.md
+- docs/PROJECT_DECISIONS.md
+- docs/ORDER_CAPABILITY_AUDIT.md
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from copy import deepcopy
+from datetime import datetime, timezone
+from typing import Any, Iterable, Optional
+
+from .models import (
+    AddressDTO,
+    CustomerDTO,
+    MoneyTotalsDTO,
+    OrderDTO,
+    OrderItemDTO,
+    OrderSourceDTO,
+    PaymentDTO,
+    ShippingDTO,
+)
+
+
+class OrderMappingError(ValueError):
+    """Raised when the provider payload cannot produce a valid OrderDTO."""
+
+
+def _text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return str(value).lower()
+
+    text = str(value).strip()
+    return text or None
+
+
+def _number(value: Any, default: float = 0.0) -> float:
+    if value is None or value == "":
+        return default
+
+    if isinstance(value, dict):
+        for key in ("amount", "value", "total"):
+            if key in value:
+                return _number(value.get(key), default)
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _first(*values: Any) -> Any:
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _nested(data: dict[str, Any], *path: str) -> Any:
+    current: Any = data
+
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+
+    return current
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    if isinstance(value, dict):
+        return _parse_datetime(
+            _first(
+                value.get("date"),
+                value.get("datetime"),
+                value.get("value"),
+            )
+        )
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace("Z", "+00:00")
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        parsed = None
+
+    if parsed is None:
+        formats = (
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        )
+
+        for fmt in formats:
+            try:
+                parsed = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                continue
+
+    if parsed is None:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
+
+def _canonical_bank(value: Any) -> tuple[Optional[str], Optional[str]]:
+    text = (_text(value) or "").lower()
+
+    if not text:
+        return None, None
+
+    aliases = {
+        "bank_rajhi": (
+            "الراجحي",
+            "مصرف الراجحي",
+            "بنك الراجحي",
+            "rajhi",
+            "al rajhi",
+        ),
+        "bank_inma": (
+            "الإنماء",
+            "الانماء",
+            "بنك الإنماء",
+            "بنك الانماء",
+            "alinma",
+            "al inma",
+            "inma",
+        ),
+        "bank_ahli": (
+            "الأهلي",
+            "الاهلي",
+            "البنك الأهلي",
+            "البنك الاهلي",
+            "بنك الأهلي",
+            "بنك الاهلي",
+            "ahli",
+            "snb",
+            "ncb",
+            "saudi national bank",
+        ),
+    }
+
+    names = {
+        "bank_rajhi": "مصرف الراجحي",
+        "bank_inma": "مصرف الإنماء",
+        "bank_ahli": "البنك الأهلي السعودي",
+    }
+
+    for code, values in aliases.items():
+        if any(alias.lower() in text for alias in values):
+            return code, names[code]
+
+    return None, _text(value)
+
+
+def _address_from(value: Any) -> Optional[AddressDTO]:
+    data = _dict(value)
+    if not data:
+        return None
+
+    location = _dict(data.get("location"))
+    coordinates = _dict(
+        _first(
+            data.get("coordinates"),
+            location.get("coordinates"),
+        )
+    )
+
+    latitude = _first(
+        data.get("latitude"),
+        data.get("lat"),
+        location.get("latitude"),
+        location.get("lat"),
+        coordinates.get("latitude"),
+        coordinates.get("lat"),
+    )
+    longitude = _first(
+        data.get("longitude"),
+        data.get("lng"),
+        location.get("longitude"),
+        location.get("lng"),
+        coordinates.get("longitude"),
+        coordinates.get("lng"),
+    )
+
+    country = _dict(data.get("country"))
+    city = _dict(data.get("city"))
+
+    address = AddressDTO(
+        country=_text(_first(country.get("name"), data.get("country"))),
+        country_code=_text(
+            _first(
+                country.get("code"),
+                country.get("country_code"),
+                data.get("country_code"),
+            )
+        ),
+        city=_text(_first(city.get("name"), data.get("city"))),
+        district=_text(
+            _first(
+                data.get("district"),
+                data.get("neighborhood"),
+            )
+        ),
+        street=_text(
+            _first(
+                data.get("street"),
+                data.get("street_name"),
+                data.get("address_line"),
+            )
+        ),
+        postal_code=_text(
+            _first(
+                data.get("postal_code"),
+                data.get("zip_code"),
+            )
+        ),
+        building_number=_text(
+            _first(
+                data.get("building_number"),
+                data.get("building_no"),
+            )
+        ),
+        additional_number=_text(data.get("additional_number")),
+        formatted=_text(
+            _first(
+                data.get("formatted"),
+                data.get("formatted_address"),
+                data.get("description"),
+                data.get("address"),
+            )
+        ),
+        latitude=_number(latitude, default=0.0) if latitude is not None else None,
+        longitude=_number(longitude, default=0.0) if longitude is not None else None,
+    )
+
+    if all(value is None for value in address.model_dump().values()):
+        return None
+
+    return address
+
+
+def _normalise_option_name(value: Any) -> str:
+    return (_text(value) or "").lower().replace("_", " ").strip()
+
+
+def _normalise_options(
+    options: Iterable[Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    raw: list[dict[str, Any]] = []
+    normalized: dict[str, Any] = {}
+
+    for option in options:
+        if not isinstance(option, dict):
+            continue
+
+        clean = deepcopy(option)
+        raw.append(clean)
+
+        name = _first(
+            option.get("name"),
+            option.get("label"),
+            option.get("key"),
+            option.get("option"),
+        )
+        value = _first(
+            option.get("value"),
+            option.get("selected"),
+            option.get("choice"),
+            option.get("text"),
+        )
+
+        key = _normalise_option_name(name)
+        if key and value is not None:
+            normalized[key] = value
+
+    return raw, normalized
+
+
+def _option_value(
+    normalized: dict[str, Any],
+    aliases: Iterable[str],
+) -> Optional[str]:
+    aliases_normalized = {
+        _normalise_option_name(alias)
+        for alias in aliases
+    }
+
+    for key, value in normalized.items():
+        if _normalise_option_name(key) in aliases_normalized:
+            return _text(value)
+
+    return None
+
+
+def _image_urls(item: dict[str, Any], product: dict[str, Any]) -> list[str]:
+    candidates: list[Any] = [
+        item.get("image_url"),
+        item.get("image"),
+        product.get("main_image"),
+        product.get("image"),
+        product.get("images"),
+        item.get("images"),
+    ]
+
+    urls: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            text = value.strip()
+            if text and text not in urls:
+                urls.append(text)
+            return
+
+        if isinstance(value, dict):
+            add(
+                _first(
+                    value.get("url"),
+                    value.get("original"),
+                    value.get("medium"),
+                    value.get("thumbnail"),
+                )
+            )
+            return
+
+        if isinstance(value, list):
+            for entry in value:
+                add(entry)
+
+    for candidate in candidates:
+        add(candidate)
+
+    return urls
+
+
+def _custom_fields(item: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = [
+        item.get("custom_fields"),
+        item.get("customizations"),
+        item.get("personalization"),
+        item.get("attachments"),
+    ]
+
+    result: list[dict[str, Any]] = []
+
+    for candidate in candidates:
+        if isinstance(candidate, dict):
+            result.append(deepcopy(candidate))
+        elif isinstance(candidate, list):
+            result.extend(
+                deepcopy(entry)
+                for entry in candidate
+                if isinstance(entry, dict)
+            )
+
+    return result
+
+
+def _stable_order_item_id(
+    *,
+    order_number: str,
+    item: dict[str, Any],
+    index: int,
+    product_id: Optional[str],
+    variant_id: Optional[str],
+    sku: Optional[str],
+    name: str,
+    options: list[dict[str, Any]],
+    custom_fields: list[dict[str, Any]],
+) -> str:
+    source_item_id = _text(
+        _first(
+            item.get("id"),
+            item.get("item_id"),
+            item.get("order_item_id"),
+        )
+    )
+
+    if source_item_id:
+        return f"salla:{order_number}:{source_item_id}"
+
+    signature = {
+        "order_number": order_number,
+        "index": index,
+        "product_id": product_id,
+        "variant_id": variant_id,
+        "sku": sku,
+        "name": name,
+        "options": options,
+        "custom_fields": custom_fields,
+    }
+
+    canonical = json.dumps(
+        signature,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
+    return f"salla:{order_number}:generated:{digest}"
+
+
+def _map_item(
+    *,
+    order_number: str,
+    item: dict[str, Any],
+    index: int,
+) -> OrderItemDTO:
+    product = _dict(item.get("product"))
+    variant = _dict(
+        _first(
+            item.get("variant"),
+            product.get("variant"),
+        )
+    )
+    amounts = _dict(item.get("amounts"))
+
+    product_id = _text(
+        _first(
+            product.get("id"),
+            item.get("product_id"),
+        )
+    )
+    parent_product_id = _text(
+        _first(
+            product.get("parent_id"),
+            item.get("parent_product_id"),
+        )
+    )
+    variant_id = _text(
+        _first(
+            variant.get("id"),
+            item.get("variant_id"),
+            product.get("variant_id"),
+        )
+    )
+
+    sku = _text(
+        _first(
+            variant.get("sku"),
+            product.get("sku"),
+            item.get("sku"),
+        )
+    )
+
+    name = _text(
+        _first(
+            variant.get("name"),
+            product.get("name"),
+            item.get("name"),
+        )
+    )
+    if not name:
+        name = "منتج بدون اسم"
+
+    option_candidates: list[Any] = []
+    for candidate in (
+        item.get("options"),
+        item.get("choices"),
+        item.get("attributes"),
+        variant.get("options"),
+        product.get("options"),
+    ):
+        if isinstance(candidate, list):
+            option_candidates.extend(candidate)
+        elif isinstance(candidate, dict):
+            option_candidates.append(candidate)
+
+    options_raw, options_normalized = _normalise_options(option_candidates)
+    custom_fields = _custom_fields(item)
+
+    color = _text(
+        _first(
+            item.get("color"),
+            variant.get("color"),
+            _option_value(
+                options_normalized,
+                ("color", "colour", "اللون", "لون"),
+            ),
+        )
+    )
+    size = _text(
+        _first(
+            item.get("size"),
+            variant.get("size"),
+            _option_value(
+                options_normalized,
+                ("size", "المقاس", "مقاس"),
+            ),
+        )
+    )
+    material = _text(
+        _first(
+            item.get("material"),
+            variant.get("material"),
+            _option_value(
+                options_normalized,
+                ("material", "الخامة", "المادة"),
+            ),
+        )
+    )
+
+    images = _image_urls(item, product)
+
+    order_item_id = _stable_order_item_id(
+        order_number=order_number,
+        item=item,
+        index=index,
+        product_id=product_id,
+        variant_id=variant_id,
+        sku=sku,
+        name=name,
+        options=options_raw,
+        custom_fields=custom_fields,
+    )
+
+    return OrderItemDTO(
+        order_item_id=order_item_id,
+        source_item_id=_text(
+            _first(
+                item.get("id"),
+                item.get("item_id"),
+                item.get("order_item_id"),
+            )
+        ),
+        product_id=product_id,
+        parent_product_id=parent_product_id,
+        variant_id=variant_id,
+        sku=sku,
+        barcode=_text(
+            _first(
+                variant.get("barcode"),
+                product.get("barcode"),
+                item.get("barcode"),
+            )
+        ),
+        name=name,
+        quantity=max(_number(item.get("quantity"), 1.0), 0.000001),
+        image_url=images[0] if images else None,
+        image_urls=images,
+        product_url=_text(
+            _first(
+                product.get("url"),
+                item.get("product_url"),
+            )
+        ),
+        unit_price=_number(
+            _first(
+                amounts.get("price_without_tax"),
+                amounts.get("price"),
+                item.get("price"),
+            )
+        ),
+        discount=_number(
+            _first(
+                amounts.get("total_discount"),
+                amounts.get("discount"),
+                item.get("discount"),
+            )
+        ),
+        tax_reported_by_source=_number(
+            _first(
+                amounts.get("tax"),
+                item.get("tax"),
+            )
+        ),
+        total=_number(
+            _first(
+                amounts.get("total"),
+                item.get("total"),
+            )
+        ),
+        weight=_number(
+            _first(
+                item.get("weight"),
+                variant.get("weight"),
+                product.get("weight"),
+            ),
+            default=0.0,
+        )
+        if _first(
+            item.get("weight"),
+            variant.get("weight"),
+            product.get("weight"),
+        )
+        is not None
+        else None,
+        weight_unit=_text(
+            _first(
+                item.get("weight_unit"),
+                variant.get("weight_unit"),
+                product.get("weight_unit"),
+            )
+        ),
+        options_raw=options_raw,
+        options_normalized=options_normalized,
+        color=color,
+        size=size,
+        material=material,
+        custom_fields=custom_fields,
+    )
+
+
+def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
+    """Convert one raw Salla order payload into the canonical OrderDTO."""
+
+    if not isinstance(raw_order, dict):
+        raise OrderMappingError("Salla order payload must be an object")
+
+    source_order_id = _text(raw_order.get("id"))
+    order_number = _text(
+        _first(
+            raw_order.get("reference_id"),
+            raw_order.get("order_number"),
+            raw_order.get("id"),
+        )
+    )
+
+    if not order_number:
+        raise OrderMappingError("Salla order is missing reference_id/order number")
+
+    if not source_order_id:
+        source_order_id = order_number
+
+    created_at = _parse_datetime(
+        _first(
+            raw_order.get("date"),
+            raw_order.get("created_at"),
+            raw_order.get("order_date"),
+        )
+    )
+    if created_at is None:
+        raise OrderMappingError(
+            f"Salla order {order_number} is missing a valid creation date"
+        )
+
+    customer_raw = _dict(raw_order.get("customer"))
+    shipping_raw = _dict(
+        _first(
+            raw_order.get("shipping"),
+            raw_order.get("shipping_address"),
+        )
+    )
+    payment_raw = _dict(raw_order.get("payment"))
+
+    status_raw = raw_order.get("status")
+    status_obj = _dict(status_raw)
+
+    status_native = _text(
+        _first(
+            status_obj.get("name"),
+            status_obj.get("customized"),
+            status_raw if isinstance(status_raw, str) else None,
+        )
+    )
+    status = _text(
+        _first(
+            status_obj.get("slug"),
+            raw_order.get("status_slug"),
+            status_native,
+        )
+    )
+
+    payment_method_raw = _first(
+        raw_order.get("payment_method"),
+        payment_raw.get("method"),
+    )
+    payment_method_obj = _dict(payment_method_raw)
+
+    method_native = _text(
+        _first(
+            payment_method_obj.get("name"),
+            payment_method_obj.get("label"),
+            payment_method_raw
+            if isinstance(payment_method_raw, str)
+            else None,
+        )
+    )
+    method = _text(
+        _first(
+            payment_method_obj.get("code"),
+            payment_method_obj.get("slug"),
+            method_native,
+        )
+    )
+
+    bank_candidate = _first(
+        raw_order.get("receiving_bank"),
+        raw_order.get("bank_name"),
+        payment_raw.get("receiving_bank"),
+        payment_raw.get("bank"),
+        payment_method_obj.get("name"),
+        payment_method_obj.get("label"),
+    )
+    receiving_bank_code, receiving_bank_name = _canonical_bank(bank_candidate)
+
+    amounts = _dict(raw_order.get("amounts"))
+    total_obj = _first(
+        amounts.get("total"),
+        raw_order.get("total"),
+        raw_order.get("total_amount"),
+    )
+
+    currency = _text(
+        _first(
+            _nested(_dict(total_obj), "currency"),
+            amounts.get("currency"),
+            raw_order.get("currency"),
+        )
+    ) or "SAR"
+
+    shipments = _list(raw_order.get("shipments"))
+    first_shipment = _dict(shipments[0]) if shipments else {}
+
+    courier = _dict(
+        _first(
+            first_shipment.get("courier"),
+            shipping_raw.get("company"),
+        )
+    )
+
+    shipping_address_raw = _first(
+        first_shipment.get("shipping_address"),
+        first_shipment.get("address"),
+        shipping_raw.get("address"),
+        raw_order.get("shipping_address"),
+        customer_raw.get("shipping_address"),
+        customer_raw.get("address"),
+    )
+
+    item_rows = _list(raw_order.get("items"))
+    items = [
+        _map_item(
+            order_number=order_number,
+            item=item,
+            index=index,
+        )
+        for index, item in enumerate(item_rows)
+        if isinstance(item, dict)
+    ]
+
+    tags: list[str] = []
+    for tag in _list(raw_order.get("tags")):
+        if isinstance(tag, dict):
+            value = _text(_first(tag.get("name"), tag.get("value")))
+        else:
+            value = _text(tag)
+
+        if value and value not in tags:
+            tags.append(value)
+
+    return OrderDTO(
+        order_id=source_order_id,
+        order_number=order_number,
+        created_at=created_at,
+        status=status,
+        status_native=status_native,
+        completed_at=_parse_datetime(raw_order.get("completed_at")),
+        cancelled_at=_parse_datetime(raw_order.get("cancelled_at")),
+        refunded_at=_parse_datetime(raw_order.get("refunded_at")),
+        source=OrderSourceDTO(
+            source_order_id=source_order_id,
+            source_reference=order_number,
+            source_event=_text(
+                _first(
+                    raw_order.get("event_type"),
+                    raw_order.get("event"),
+                )
+            ),
+            fetched_at=_parse_datetime(raw_order.get("fetched_at")),
+            received_at=_parse_datetime(raw_order.get("received_at")),
+        ),
+        customer=CustomerDTO(
+            customer_id=_text(customer_raw.get("id")),
+            name=_text(
+                _first(
+                    customer_raw.get("full_name"),
+                    customer_raw.get("name"),
+                    customer_raw.get("first_name"),
+                )
+            ),
+            mobile=_text(
+                _first(
+                    customer_raw.get("mobile"),
+                    customer_raw.get("phone"),
+                )
+            ),
+            email=_text(customer_raw.get("email")),
+            is_guest=bool(
+                _first(
+                    customer_raw.get("is_guest"),
+                    customer_raw.get("guest"),
+                    False,
+                )
+            ),
+            shipping_address=_address_from(shipping_address_raw),
+            billing_address=_address_from(
+                _first(
+                    raw_order.get("billing_address"),
+                    customer_raw.get("billing_address"),
+                )
+            ),
+        ),
+        payment=PaymentDTO(
+            method=method,
+            method_native=method_native,
+            status=_text(payment_raw.get("status")),
+            receiving_bank_code=receiving_bank_code,
+            receiving_bank_name=receiving_bank_name,
+            transaction_reference=_text(
+                _first(
+                    payment_raw.get("reference"),
+                    payment_raw.get("transaction_reference"),
+                    raw_order.get("transaction_reference"),
+                )
+            ),
+            paid_at=_parse_datetime(
+                _first(
+                    payment_raw.get("paid_at"),
+                    raw_order.get("paid_at"),
+                )
+            ),
+            card_brand=_text(
+                _first(
+                    payment_raw.get("card_brand"),
+                    _nested(payment_raw, "card", "brand"),
+                )
+            ),
+            card_last_four=_text(
+                _first(
+                    payment_raw.get("card_last_four"),
+                    _nested(payment_raw, "card", "last_four"),
+                )
+            ),
+        ),
+        shipping=ShippingDTO(
+            company=_text(
+                _first(
+                    courier.get("name"),
+                    first_shipment.get("courier_name"),
+                    shipping_raw.get("company_name"),
+                )
+            ),
+            company_code=_text(
+                _first(
+                    courier.get("code"),
+                    first_shipment.get("courier_code"),
+                    shipping_raw.get("company_code"),
+                )
+            ),
+            method=_text(
+                _first(
+                    first_shipment.get("method"),
+                    shipping_raw.get("method"),
+                )
+            ),
+            status=_text(
+                _first(
+                    first_shipment.get("status"),
+                    shipping_raw.get("status"),
+                )
+            ),
+            tracking_number=_text(
+                _first(
+                    first_shipment.get("tracking_number"),
+                    first_shipment.get("tracking_id"),
+                    shipping_raw.get("tracking_number"),
+                )
+            ),
+            tracking_url=_text(
+                _first(
+                    first_shipment.get("tracking_url"),
+                    shipping_raw.get("tracking_url"),
+                )
+            ),
+            label_url=_text(
+                _first(
+                    first_shipment.get("label_url"),
+                    shipping_raw.get("label_url"),
+                )
+            ),
+            shipped_at=_parse_datetime(
+                _first(
+                    first_shipment.get("shipped_at"),
+                    shipping_raw.get("shipped_at"),
+                )
+            ),
+            delivered_at=_parse_datetime(
+                _first(
+                    first_shipment.get("delivered_at"),
+                    shipping_raw.get("delivered_at"),
+                )
+            ),
+            address=_address_from(shipping_address_raw),
+        ),
+        totals=MoneyTotalsDTO(
+            currency=currency,
+            subtotal=_number(
+                _first(
+                    amounts.get("sub_total"),
+                    amounts.get("subtotal"),
+                    raw_order.get("subtotal"),
+                )
+            ),
+            shipping=_number(
+                _first(
+                    amounts.get("shipping_cost"),
+                    raw_order.get("shipping_cost"),
+                )
+            ),
+            discount=_number(
+                _first(
+                    amounts.get("discounts"),
+                    amounts.get("discount"),
+                    raw_order.get("discount"),
+                )
+            ),
+            tax_reported_by_source=_number(
+                _first(
+                    amounts.get("tax"),
+                    raw_order.get("tax"),
+                )
+            ),
+            total=_number(total_obj),
+        ),
+        items=items,
+        customer_notes=_text(
+            _first(
+                raw_order.get("customer_notes"),
+                raw_order.get("note"),
+            )
+        ),
+        staff_notes=_text(raw_order.get("staff_notes")),
+        tags=tags,
+    )

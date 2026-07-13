@@ -6,6 +6,8 @@ workspaces and engines.
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
+from .mapper import OrderMappingError, map_salla_order
+
 from .models import (
     AddressDTO,
     CustomerDTO,
@@ -26,4 +28,6 @@ __all__ = [
     "OrderSourceDTO",
     "PaymentDTO",
     "ShippingDTO",
+    "OrderMappingError",
+    "map_salla_order",
 ]

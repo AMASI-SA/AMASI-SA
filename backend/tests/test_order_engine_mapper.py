@@ -1,0 +1,236 @@
+"""Pure mapper tests: Salla raw payload → canonical OrderDTO."""
+
+from copy import deepcopy
+
+import pytest
+
+from order_engine.mapper import OrderMappingError, map_salla_order
+
+
+@pytest.fixture
+def salla_order_payload():
+    return {
+        "id": 1065072654,
+        "reference_id": "272139435",
+        "date": {
+            "date": "2026-07-13 16:11:37.000000",
+            "timezone": "Asia/Riyadh",
+        },
+        "status": {
+            "slug": "in_progress",
+            "name": "قيد التنفيذ",
+        },
+        "customer": {
+            "id": 9001,
+            "full_name": "عميل اختبار",
+            "mobile": "0500000000",
+            "email": "customer@example.test",
+            "is_guest": False,
+        },
+        "payment_method": {
+            "code": "bank",
+            "name": "بنك الإنماء",
+        },
+        "payment": {
+            "status": "paid",
+            "reference": "TX-100",
+            "paid_at": "2026-07-13T16:12:00+03:00",
+        },
+        "amounts": {
+            "sub_total": {"amount": 100, "currency": "SAR"},
+            "shipping_cost": {"amount": 25, "currency": "SAR"},
+            "discounts": {"amount": 5, "currency": "SAR"},
+            "tax": {"amount": 15, "currency": "SAR"},
+            "total": {"amount": 135, "currency": "SAR"},
+        },
+        "shipments": [
+            {
+                "courier": {
+                    "name": "مندوب الرياض",
+                    "code": "riyadh_delegate",
+                },
+                "tracking_number": "SHIP-100",
+                "status": "created",
+                "shipping_address": {
+                    "country": {
+                        "name": "السعودية",
+                        "code": "SA",
+                    },
+                    "city": {"name": "الرياض"},
+                    "district": "العليا",
+                    "street": "شارع الاختبار",
+                    "postal_code": "12345",
+                },
+            }
+        ],
+        "items": [
+            {
+                "id": 50001,
+                "quantity": 1,
+                "product": {
+                    "id": 11912,
+                    "name": "اسوارة الفراشة",
+                    "sku": "AMS11912",
+                    "main_image": "https://example.test/product.jpg",
+                },
+                "variant": {
+                    "id": 70001,
+                    "sku": "AMS11912-GOLD-18",
+                },
+                "options": [
+                    {"name": "اللون", "value": "ذهبي"},
+                    {"name": "المقاس", "value": "18"},
+                ],
+                "custom_fields": [
+                    {"name": "النقش", "value": "سارة"},
+                ],
+                "amounts": {
+                    "price_without_tax": {
+                        "amount": 100,
+                        "currency": "SAR",
+                    },
+                    "total_discount": {
+                        "amount": 5,
+                        "currency": "SAR",
+                    },
+                    "tax": {
+                        "amount": 15,
+                        "currency": "SAR",
+                    },
+                    "total": {
+                        "amount": 110,
+                        "currency": "SAR",
+                    },
+                },
+            }
+        ],
+        "tags": [{"name": "هدية"}],
+        "customer_notes": "تغليف هدية",
+    }
+
+
+def test_maps_realistic_salla_order(salla_order_payload):
+    order = map_salla_order(salla_order_payload)
+
+    assert order.order_id == "1065072654"
+    assert order.order_number == "272139435"
+    assert order.status == "in_progress"
+    assert order.status_native == "قيد التنفيذ"
+    assert order.created_at.year == 2026
+
+    assert order.customer.name == "عميل اختبار"
+    assert order.customer.shipping_address.city == "الرياض"
+
+    assert order.payment.method == "bank"
+    assert order.payment.receiving_bank_code == "bank_inma"
+    assert order.payment.receiving_bank_name == "مصرف الإنماء"
+
+    assert order.shipping.company == "مندوب الرياض"
+    assert order.shipping.tracking_number == "SHIP-100"
+
+    assert order.totals.total == 135
+    assert order.totals.shipping == 25
+
+    assert len(order.items) == 1
+    item = order.items[0]
+
+    assert item.order_item_id == "salla:272139435:50001"
+    assert item.product_id == "11912"
+    assert item.variant_id == "70001"
+    assert item.sku == "AMS11912-GOLD-18"
+    assert item.color == "ذهبي"
+    assert item.size == "18"
+    assert item.image_url == "https://example.test/product.jpg"
+    assert item.custom_fields[0]["value"] == "سارة"
+
+
+def test_mapper_does_not_mutate_raw_payload(salla_order_payload):
+    original = deepcopy(salla_order_payload)
+
+    map_salla_order(salla_order_payload)
+
+    assert salla_order_payload == original
+
+
+def test_stable_generated_order_item_id_without_source_item_id(
+    salla_order_payload,
+):
+    del salla_order_payload["items"][0]["id"]
+
+    first = map_salla_order(salla_order_payload)
+    second = map_salla_order(deepcopy(salla_order_payload))
+
+    assert first.items[0].order_item_id == second.items[0].order_item_id
+    assert first.items[0].order_item_id.startswith(
+        "salla:272139435:generated:"
+    )
+
+
+def test_duplicate_identical_lines_receive_different_ids(
+    salla_order_payload,
+):
+    item = deepcopy(salla_order_payload["items"][0])
+    item.pop("id")
+    salla_order_payload["items"] = [deepcopy(item), deepcopy(item)]
+
+    order = map_salla_order(salla_order_payload)
+
+    assert len(order.items) == 2
+    assert order.items[0].order_item_id != order.items[1].order_item_id
+
+
+@pytest.mark.parametrize(
+    ("bank_name", "expected"),
+    [
+        ("مصرف الراجحي", "bank_rajhi"),
+        ("بنك الإنماء", "bank_inma"),
+        ("البنك الأهلي السعودي", "bank_ahli"),
+        ("SNB", "bank_ahli"),
+    ],
+)
+def test_receiving_bank_mapping(
+    salla_order_payload,
+    bank_name,
+    expected,
+):
+    salla_order_payload["payment_method"] = {
+        "code": "bank",
+        "name": bank_name,
+    }
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.payment.receiving_bank_code == expected
+
+
+def test_missing_creation_date_is_rejected(salla_order_payload):
+    salla_order_payload.pop("date")
+
+    with pytest.raises(OrderMappingError, match="creation date"):
+        map_salla_order(salla_order_payload)
+
+
+def test_missing_order_number_is_rejected(salla_order_payload):
+    salla_order_payload.pop("id")
+    salla_order_payload.pop("reference_id")
+
+    with pytest.raises(OrderMappingError, match="order number"):
+        map_salla_order(salla_order_payload)
+
+
+def test_mapper_has_no_database_or_http_dependency():
+    import order_engine.mapper as mapper
+
+    names = set(mapper.__dict__)
+
+    forbidden = {
+        "db",
+        "motor",
+        "pymongo",
+        "requests",
+        "httpx",
+        "FastAPI",
+        "APIRouter",
+    }
+
+    assert names.isdisjoint(forbidden)
