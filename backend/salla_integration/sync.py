@@ -532,6 +532,44 @@ async def run_orders_sync(
     }
 
 
+async def _fetch_salla_order_items(
+    db,
+    user_id: str,
+    internal_order_id: str,
+) -> list[dict]:
+    """Fetch authoritative line items for one Salla order.
+
+    Salla Order Details does not embed line items. They are retrieved
+    separately through GET /orders/items?order_id=<internal id>.
+    """
+    internal_order_id = str(internal_order_id or "").strip()
+
+    if not internal_order_id:
+        raise RuntimeError("Salla order items missing internal order id")
+
+    response = await call_salla(
+        db,
+        user_id,
+        "GET",
+        "/orders/items",
+        params={"order_id": internal_order_id},
+    )
+
+    rows = response.get("data") if isinstance(response, dict) else None
+
+    if not isinstance(rows, list):
+        raise RuntimeError(
+            "Salla List Order Items returned invalid payload: "
+            f"internal_order_id={internal_order_id}"
+        )
+
+    return [
+        dict(row)
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
 async def _fetch_salla_order_details(
     db,
     user_id: str,
@@ -594,7 +632,17 @@ async def _fetch_salla_order_details(
             "Salla Order Details reference mismatch: "
             f"expected={order_number} actual={actual_reference}"
         )
-    return details
+
+    items = await _fetch_salla_order_items(
+        db,
+        user_id,
+        internal_id,
+    )
+
+    enriched_details = dict(details)
+    enriched_details["items"] = items
+
+    return enriched_details
 
 
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:

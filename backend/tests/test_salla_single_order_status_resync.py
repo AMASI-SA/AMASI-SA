@@ -21,12 +21,48 @@ async def test_fetch_uses_order_details_as_authority():
                 "reference_id": "271887616",
                 "status": {"slug": "completed", "name": "تم التنفيذ"},
             }]}
-        assert path == "/orders/987654"
-        return {"data": {
-            "id": 987654,
-            "reference_id": "271887616",
-            "status": {"slug": "under_review", "name": "تم المراجعة"},
-        }}
+        if path == "/orders/987654":
+            return {"data": {
+                "id": 987654,
+                "reference_id": "271887616",
+                "status": {
+                    "slug": "under_review",
+                    "name": "تم المراجعة",
+                },
+            }}
+
+        assert path == "/orders/items"
+        assert params == {"order_id": "987654"}
+
+        return {
+            "data": [
+                {
+                    "id": 365435777,
+                    "name": "منتج اختبار",
+                    "sku": "SKU-TEST",
+                    "quantity": 1,
+                    "amounts": {
+                        "price_without_tax": {
+                            "amount": 100,
+                            "currency": "SAR",
+                        },
+                        "total": {
+                            "amount": 115,
+                            "currency": "SAR",
+                        },
+                    },
+                    "options": [
+                        {
+                            "name": "المقاس",
+                            "value": {
+                                "id": 55,
+                                "name": "60",
+                            },
+                        },
+                    ],
+                },
+            ],
+        }
 
     with patch("salla_integration.sync.call_salla", new=fake_call):
         details = await _fetch_salla_order_details(
@@ -34,8 +70,17 @@ async def test_fetch_uses_order_details_as_authority():
         )
 
     assert details["status"]["slug"] == "under_review"
+    assert len(details["items"]) == 1
+    assert details["items"][0]["sku"] == "SKU-TEST"
+    assert details["items"][0]["options"][0]["name"] == "المقاس"
+
     assert calls[0][1] == "/orders"
     assert calls[1][1] == "/orders/987654"
+    assert calls[2] == (
+        "GET",
+        "/orders/items",
+        {"order_id": "987654"},
+    )
 
 
 class _Result:
