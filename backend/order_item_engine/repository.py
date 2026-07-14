@@ -28,6 +28,7 @@ from typing import Optional, Protocol
 
 from order_engine.repository import OrderRepository
 from order_engine.service import (
+    InvalidOrderCursorError,
     OrderNotFoundError,
     get_order,
     list_orders,
@@ -43,6 +44,10 @@ MAX_ITEM_PAGE_LIMIT = 50
 
 class OrderItemNotFoundError(LookupError):
     """Raised when one exact operational item identity does not exist."""
+
+
+class InvalidOrderItemCursorError(ValueError):
+    """Raised when the underlying order cursor is invalid."""
 
 
 @dataclass(frozen=True)
@@ -113,12 +118,17 @@ class OrderEngineItemRepository:
     ) -> OrderItemPage:
         safe_limit = _normalise_limit(limit)
 
-        order_page = await list_orders(
-            self._order_repository,
-            user_id=str(user_id),
-            limit=safe_limit,
-            cursor=cursor,
-        )
+        try:
+            order_page = await list_orders(
+                self._order_repository,
+                user_id=str(user_id),
+                limit=safe_limit,
+                cursor=cursor,
+            )
+        except InvalidOrderCursorError as exc:
+            raise InvalidOrderItemCursorError(
+                "invalid order item cursor"
+            ) from exc
 
         identities: list[OrderItemIdentityDTO] = []
 

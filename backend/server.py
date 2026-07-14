@@ -69,6 +69,7 @@ from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from order_engine.routes import make_order_engine_router
+from order_item_engine.routes import make_order_item_engine_router
 from settlement_cycle import attach_settlement_cycle_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
@@ -3921,6 +3922,9 @@ attach_order_status_policy_routes(api, db)
 attach_shipping_ledger_routes(api, db, current_user)
 attach_orders_explorer_routes(api, db)
 api.include_router(make_order_engine_router(db, current_user))
+api.include_router(
+    make_order_item_engine_router(db, current_user)
+)
 attach_settlement_cycle_routes(api, db)
 attach_liabilities_routes(api, db)
 attach_counterparties_routes(api, db)

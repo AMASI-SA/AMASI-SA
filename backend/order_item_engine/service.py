@@ -24,6 +24,7 @@ from .models import OrderItemIdentityDTO
 from .repository import (
     DEFAULT_ITEM_PAGE_LIMIT,
     MAX_ITEM_PAGE_LIMIT,
+    InvalidOrderItemCursorError,
     OrderItemNotFoundError,
     OrderItemPage,
     OrderItemRepository,
@@ -32,6 +33,10 @@ from .repository import (
 
 class InvalidOrderItemRequestError(ValueError):
     """Raised when required Order Item request data is invalid."""
+
+
+class InvalidOrderItemCursorRequestError(ValueError):
+    """Raised when a public pagination cursor is invalid."""
 
 
 class OrderItemServiceNotFoundError(LookupError):
@@ -84,11 +89,16 @@ class OrderItemService:
             field_name="user_id",
         )
 
-        return await self._repository.list_items(
-            user_id=normalized_user_id,
-            limit=_normalise_limit(limit),
-            cursor=_normalise_cursor(cursor),
-        )
+        try:
+            return await self._repository.list_items(
+                user_id=normalized_user_id,
+                limit=_normalise_limit(limit),
+                cursor=_normalise_cursor(cursor),
+            )
+        except InvalidOrderItemCursorError as exc:
+            raise InvalidOrderItemCursorRequestError(
+                "invalid order item cursor"
+            ) from exc
 
     async def get_items_for_order(
         self,
