@@ -13,6 +13,12 @@ from .mapper import (
     map_order_item_identity,
 )
 
+from .service import (
+    InvalidOrderItemRequestError,
+    OrderItemService,
+    OrderItemServiceNotFoundError,
+)
+
 from .repository import (
     OrderEngineItemRepository,
     OrderItemNotFoundError,
@@ -37,4 +43,7 @@ __all__ = [
     "OrderItemNotFoundError",
     "OrderItemPage",
     "OrderItemRepository",
+    "InvalidOrderItemRequestError",
+    "OrderItemService",
+    "OrderItemServiceNotFoundError",
 ]
