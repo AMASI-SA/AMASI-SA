@@ -178,6 +178,20 @@ const SECTIONS = [
         ],
     },
     {
+        id: "mezan_os",
+        label: "Mezan OS",
+        icon: Lightning,
+        ownerOnly: true,
+        items: [
+            {
+                to: "/orders-v2",
+                label: "الطلبات",
+                icon: Package,
+                testid: "nav-mezan-os-orders",
+            },
+        ],
+    },
+    {
         id: "operations",
         label: "إدارة التشغيل",
         icon: GearSix,
@@ -250,26 +264,38 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
     const { user, logout } = useAuth();
     const location = useLocation();
 
-    // The Owner-only "إدارة الفريق" link sits inside إدارة التشغيل so it
-    // stays grouped with the other operational pages.
+    // Owner-only workspaces are hidden completely from non-owner users.
+    // The team-management link remains inside إدارة التشغيل.
     const sections = useMemo(() => {
-        if (!user?.is_owner) return SECTIONS;
-        return SECTIONS.map((s) => {
-            if (s.id !== "operations") return s;
-            const items = [...s.items];
-            // Insert "إدارة الفريق" just before /settings so settings stays last.
-            const settingsIdx = items.findIndex((i) => i.to === "/settings");
-            const teamLink = { to: "/team", label: "إدارة الفريق", icon: UsersThree, testid: "nav-team" };
-            const ordersV2Link = {
-                to: "/orders-v2",
-                label: "🛒 الطلبات الجديدة V2",
-                icon: Package,
-                testid: "nav-orders-v2",
+        const visibleSections = SECTIONS.filter(
+            (section) => !section.ownerOnly || user?.is_owner
+        );
+
+        if (!user?.is_owner) return visibleSections;
+
+        return visibleSections.map((section) => {
+            if (section.id !== "operations") return section;
+
+            const items = [...section.items];
+            const settingsIdx = items.findIndex(
+                (item) => item.to === "/settings"
+            );
+            const teamLink = {
+                to: "/team",
+                label: "إدارة الفريق",
+                icon: UsersThree,
+                testid: "nav-team",
             };
 
-            const insertAt = settingsIdx >= 0 ? settingsIdx : items.length;
-            items.splice(insertAt, 0, ordersV2Link, teamLink);
-            return { ...s, items };
+            const insertAt =
+                settingsIdx >= 0 ? settingsIdx : items.length;
+
+            items.splice(insertAt, 0, teamLink);
+
+            return {
+                ...section,
+                items,
+            };
         });
     }, [user?.is_owner]);
 
