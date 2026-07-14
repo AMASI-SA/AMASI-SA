@@ -563,107 +563,195 @@ async def _fetch_salla_order_details(
 
 
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
-    """Iter-87 — Pull a single order from Salla by its reference_id
-    (order_number) and re-upsert it into unified_orders. This is the
-    manual "re-check" path the merchant can trigger from the Orders
-    page when they suspect Make.com missed an update event.
+    """Pull one authoritative Order Details payload from Salla.
 
-    Iter-91 Phase 2 — additionally:
-      • Snapshot total_amount + products items list BEFORE the upsert.
-      • Call attach_cost_to_order_doc after upsert so COGS reflects the
-        new product list immediately (Dashboard/Reports stay accurate).
-      • If total_amount changed OR the items list changed, write a diff
-        row to the `order_adjustments` collection so we have a paper
-        trail of every Salla-side modification.
+    This path updates Mezan storage only. It performs no Qoyod API calls.
 
-    Returns: { ok, found, created, updated, before, after, adjustment }.
+    On an unexpected failure, return a safe stage diagnostic so operators
+    can identify the failing boundary without exposing tokens or raw payloads.
     """
     order_number = str(order_number).strip()
     if not order_number:
-        return {"ok": False, "found": False, "error": "missing order_number"}
+        return {
+            "ok": False,
+            "found": False,
+            "error": "missing_order_number",
+        }
 
-    # Snapshot current state so we can show before/after on the UI +
-    # detect order-value / product-list changes (Iter-91 Phase 2).
-    before = await db.unified_orders.find_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"_id": 0, "order_status": 1, "payment_status": 1,
-         "total_amount": 1, "payment_method": 1, "updated_at": 1,
-         "products": 1, "total_product_cost": 1},
-    )
+    stage = "snapshot_before"
 
     try:
-        raw = await _fetch_salla_order_details(
-            db, user_id, order_number
-        )
-    except SallaError as e:
-        return {"ok": False, "found": False, "error": str(e),
-                "needs_reauth": e.needs_reauth}
-
-    if raw is None:
-        return {"ok": True, "found": False, "before": before,
-                "error": "not_found_in_salla"}
-
-    doc = _salla_order_to_doc(raw)
-    if not doc.get("order_number"):
-        return {"ok": False, "found": False, "error": "order_number missing in payload"}
-    current_slug = str(
-        doc.get("order_status_slug") or doc.get("order_status") or ""
-    ).strip().lower()
-    if not current_slug:
-        raise RuntimeError(
-            f"Salla Order Details missing status: {order_number}"
+        before = await db.unified_orders.find_one(
+            {
+                "user_id": user_id,
+                "order_number": order_number,
+            },
+            {
+                "_id": 0,
+                "order_status": 1,
+                "payment_status": 1,
+                "total_amount": 1,
+                "payment_method": 1,
+                "updated_at": 1,
+                "products": 1,
+                "total_product_cost": 1,
+            },
         )
 
-    res = await upsert_order(
-        db, user_id, doc["order_number"], doc,
-        source="salla_direct", raw=raw,
-    )
-    plan_b_snapshot = await _refresh_plan_b_status_snapshot(
-        db, user_id, doc["order_number"], doc
-    )
+        stage = "fetch_order_details"
 
-    # Iter-91 Phase 2 — recompute COGS from the (possibly mutated)
-    # products[] array so total_product_cost reflects current items.
-    post = await db.unified_orders.find_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"_id": 0, "order_number": 1, "products": 1, "total_amount": 1,
-         "total_product_cost": 1},
-    )
-    adjustment = None
-    if post is not None:
         try:
-            from product_costs import attach_cost_to_order_doc
-            cost_patch = await attach_cost_to_order_doc(db, user_id, post)
-            await db.unified_orders.update_one(
-                {"user_id": user_id, "order_number": order_number},
-                {"$set": cost_patch},
+            raw = await _fetch_salla_order_details(
+                db,
+                user_id,
+                order_number,
             )
-            post["total_product_cost"] = cost_patch.get("total_product_cost")
-        except Exception:
-            pass  # never fail resync if COGS recompute fails
+        except SallaError as exc:
+            return {
+                "ok": False,
+                "found": False,
+                "error": str(exc),
+                "stage": stage,
+                "exception_type": type(exc).__name__,
+                "needs_reauth": exc.needs_reauth,
+            }
 
-        # Compare BEFORE vs AFTER → write an `order_adjustments` row when
-        # total_amount changed OR the items list changed (item added,
-        # removed, qty/price modified).
-        adjustment = await _record_order_adjustment(
-            db, user_id, order_number, before, post, reason="resync"
+        if raw is None:
+            return {
+                "ok": True,
+                "found": False,
+                "before": before,
+                "error": "not_found_in_salla",
+                "stage": stage,
+            }
+
+        stage = "map_order"
+        doc = _salla_order_to_doc(raw)
+
+        if not doc.get("order_number"):
+            return {
+                "ok": False,
+                "found": False,
+                "error": "order_number_missing_in_payload",
+                "stage": stage,
+            }
+
+        current_slug = str(
+            doc.get("order_status_slug")
+            or doc.get("order_status")
+            or ""
+        ).strip().lower()
+
+        if not current_slug:
+            raise RuntimeError(
+                f"Salla Order Details missing status: {order_number}"
+            )
+
+        stage = "upsert_order"
+        res = await upsert_order(
+            db,
+            user_id,
+            doc["order_number"],
+            doc,
+            source="salla_direct",
+            raw=raw,
         )
 
-    # Refresh snapshot
-    after = await db.unified_orders.find_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"_id": 0, "raw_by_source": 0, "raw_by_user": 0, "products": 0},
-    )
-    return {
-        "ok": True,
-        "found": True,
-        "created": bool(res.get("created")),
-        "updated": not bool(res.get("created")),
-        "before": before,
-        "after": after,
-        "adjustment": adjustment,
-        "plan_b_status_snapshot": plan_b_snapshot,
-    }
+        stage = "plan_b_snapshot"
+        plan_b_snapshot = await _refresh_plan_b_status_snapshot(
+            db,
+            user_id,
+            doc["order_number"],
+            doc,
+        )
+
+        stage = "load_post_upsert"
+        post = await db.unified_orders.find_one(
+            {
+                "user_id": user_id,
+                "order_number": order_number,
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "products": 1,
+                "total_amount": 1,
+                "total_product_cost": 1,
+            },
+        )
+
+        adjustment = None
+
+        if post is not None:
+            # COGS enrichment is non-critical and must never fail resync.
+            try:
+                from product_costs import attach_cost_to_order_doc
+
+                cost_patch = await attach_cost_to_order_doc(
+                    db,
+                    user_id,
+                    post,
+                )
+
+                await db.unified_orders.update_one(
+                    {
+                        "user_id": user_id,
+                        "order_number": order_number,
+                    },
+                    {"$set": cost_patch},
+                )
+
+                post["total_product_cost"] = cost_patch.get(
+                    "total_product_cost"
+                )
+            except Exception:
+                pass
+
+            stage = "adjustment_audit"
+            adjustment = await _record_order_adjustment(
+                db,
+                user_id,
+                order_number,
+                before,
+                post,
+                reason="resync",
+            )
+
+        stage = "final_snapshot"
+        after = await db.unified_orders.find_one(
+            {
+                "user_id": user_id,
+                "order_number": order_number,
+            },
+            {
+                "_id": 0,
+                "raw_by_source": 0,
+                "raw_by_user": 0,
+                "products": 0,
+            },
+        )
+
+        return {
+            "ok": True,
+            "found": True,
+            "created": bool(res.get("created")),
+            "updated": not bool(res.get("created")),
+            "before": before,
+            "after": after,
+            "adjustment": adjustment,
+            "plan_b_status_snapshot": plan_b_snapshot,
+        }
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "resync_stage_failed",
+            "stage": stage,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)[:300],
+            "order_number": order_number,
+        }
 
 
 def _summarise_items(products) -> list[dict]:
