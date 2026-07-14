@@ -661,6 +661,51 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
             }
 
         stage = "map_order"
+
+        def _container_shape(value):
+            if isinstance(value, list):
+                first_keys = []
+                if value and isinstance(value[0], dict):
+                    first_keys = sorted(str(key) for key in value[0].keys())
+                return {
+                    "type": "list",
+                    "count": len(value),
+                    "first_item_keys": first_keys,
+                }
+
+            if isinstance(value, dict):
+                return {
+                    "type": "dict",
+                    "count": len(value),
+                    "keys": sorted(str(key) for key in value.keys()),
+                }
+
+            if value is None:
+                return {
+                    "type": "missing",
+                    "count": 0,
+                }
+
+            return {
+                "type": type(value).__name__,
+                "count": 0,
+            }
+
+        raw_shape = {
+            "top_level_keys": sorted(str(key) for key in raw.keys()),
+            "candidate_containers": {
+                key: _container_shape(raw.get(key))
+                for key in (
+                    "items",
+                    "products",
+                    "order_items",
+                    "lines",
+                    "line_items",
+                    "data",
+                )
+            },
+        }
+
         doc = _salla_order_to_doc(raw)
 
         if not doc.get("order_number"):
@@ -775,6 +820,7 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
             "after": after,
             "adjustment": adjustment,
             "plan_b_status_snapshot": plan_b_snapshot,
+            "salla_raw_shape": raw_shape,
         }
 
     except Exception as exc:
@@ -786,6 +832,11 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
             "exception_type": type(exc).__name__,
             "exception_message": str(exc)[:300],
             "order_number": order_number,
+            "salla_raw_shape": (
+                raw_shape
+                if "raw_shape" in locals()
+                else None
+            ),
         }
 
 

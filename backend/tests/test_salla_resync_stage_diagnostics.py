@@ -60,4 +60,12 @@ async def test_resync_reports_map_stage_without_exposing_payload():
     assert result["ok"] is False
     assert result["stage"] == "map_order"
     assert result["exception_type"] == "ValueError"
-    assert "reference_id" not in str(result)
+
+    serialized = str(result)
+
+    # Safe structure diagnostics may expose field names, but never raw
+    # field values or payload content.
+    assert "272291728" not in str(
+        result.get("salla_raw_shape")
+    )
+    assert "invalid details shape" in serialized
