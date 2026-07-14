@@ -13,6 +13,13 @@ from .mapper import (
     map_order_item_identity,
 )
 
+from .repository import (
+    OrderEngineItemRepository,
+    OrderItemNotFoundError,
+    OrderItemPage,
+    OrderItemRepository,
+)
+
 from .models import (
     OrderItemIdentityDTO,
     OrderItemOptionDTO,
@@ -26,4 +33,8 @@ __all__ = [
     "OrderItemMappingError",
     "map_order_item_identities",
     "map_order_item_identity",
+    "OrderEngineItemRepository",
+    "OrderItemNotFoundError",
+    "OrderItemPage",
+    "OrderItemRepository",
 ]
