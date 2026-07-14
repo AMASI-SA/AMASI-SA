@@ -288,6 +288,52 @@ def _normalise_option_name(value: Any) -> str:
     return (_text(value) or "").lower().replace("_", " ").strip()
 
 
+def _display_option_value(value: Any) -> Any:
+    """Extract the customer-visible value from Salla option objects.
+
+    Salla order items may return option values as nested objects containing
+    identifiers, prices and metadata. Operational screens need the selected
+    human-readable value while the original provider object remains preserved
+    inside options_raw.
+    """
+    if isinstance(value, dict):
+        for key in (
+            "name",
+            "value",
+            "label",
+            "text",
+            "option_value",
+            "title",
+        ):
+            candidate = value.get(key)
+
+            if candidate in (None, "", [], {}):
+                continue
+
+            extracted = _display_option_value(candidate)
+
+            if extracted not in (None, "", [], {}):
+                return extracted
+
+        return None
+
+    if isinstance(value, list):
+        extracted_values = []
+
+        for entry in value:
+            extracted = _display_option_value(entry)
+
+            if extracted not in (None, "", [], {}):
+                extracted_values.append(extracted)
+
+        if not extracted_values:
+            return None
+
+        return " / ".join(str(entry) for entry in extracted_values)
+
+    return value
+
+
 def _normalise_options(
     options: Iterable[Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -307,16 +353,22 @@ def _normalise_options(
             option.get("key"),
             option.get("option"),
         )
-        value = _first(
+        raw_value = _first(
             option.get("value"),
             option.get("selected"),
             option.get("choice"),
             option.get("text"),
         )
+        value = _display_option_value(raw_value)
 
         key = _normalise_option_name(name)
         if key and value is not None:
             normalized[key] = value
+
+        # Keep raw option structure for auditing, but expose a normalized
+        # customer-visible value to downstream Order Item consumers.
+        if value is not None:
+            clean["value"] = value
 
     return raw, normalized
 
@@ -341,8 +393,11 @@ def _image_urls(item: dict[str, Any], product: dict[str, Any]) -> list[str]:
     candidates: list[Any] = [
         item.get("image_url"),
         item.get("image"),
+        item.get("thumbnail"),
+        item.get("product_thumbnail"),
         product.get("main_image"),
         product.get("image"),
+        product.get("thumbnail"),
         product.get("images"),
         item.get("images"),
     ]
@@ -477,6 +532,7 @@ def _map_item(
         _first(
             variant.get("id"),
             item.get("variant_id"),
+            item.get("product_sku_id"),
             product.get("variant_id"),
         )
     )
@@ -578,6 +634,8 @@ def _map_item(
                 variant.get("barcode"),
                 product.get("barcode"),
                 item.get("barcode"),
+                item.get("gtin"),
+                item.get("mpn"),
             )
         ),
         name=name,
