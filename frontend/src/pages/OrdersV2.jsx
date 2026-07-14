@@ -38,13 +38,13 @@ function formatOrderDate(value) {
         return String(value);
     }
 
-    return new Intl.DateTimeFormat("ar-SA", {
+    return new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
         timeZone: "Asia/Riyadh",
-        year: "numeric",
-        month: "short",
         day: "numeric",
+        month: "short",
         hour: "numeric",
         minute: "2-digit",
+        hour12: true,
     }).format(date);
 }
 
@@ -288,25 +288,25 @@ export default function OrdersV2() {
                                             )}`
                                         )
                                     }
-                                    className="grid w-full grid-cols-1 gap-4 px-5 py-5 text-right transition hover:bg-violet-50/40 lg:grid-cols-[1.5fr_1fr_1fr_auto]"
+                                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 text-right transition hover:bg-violet-50/40 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:gap-4 lg:px-5 lg:py-5"
                                     data-testid={`orders-v2-row-${order.order_number}`}
                                 >
-                                    <div className="flex min-w-0 items-start gap-3">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                                    <div className="col-start-1 row-start-1 flex min-w-0 items-start gap-2.5 lg:col-auto lg:row-auto lg:gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 lg:h-11 lg:w-11">
                                             <User size={22} weight="fill" />
                                         </div>
 
                                         <div className="min-w-0">
-                                            <div className="truncate font-extrabold text-slate-950">
+                                            <div className="truncate text-sm font-extrabold text-slate-950 lg:text-base">
                                                 {order.customer?.name ||
                                                     "عميل بدون اسم"}
                                             </div>
 
-                                            <div className="num mt-1 text-sm font-bold text-violet-700">
+                                            <div className="num mt-0.5 text-xs font-bold text-violet-700 lg:mt-1 lg:text-sm">
                                                 #{order.order_number}
                                             </div>
 
-                                            <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                                            <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 lg:mt-2 lg:text-xs">
                                                 <CalendarBlank size={15} />
                                                 <span>
                                                     {formatOrderDate(
@@ -317,18 +317,27 @@ export default function OrdersV2() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
+                                    <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 pr-[50px] lg:col-auto lg:row-auto lg:block lg:space-y-2 lg:pr-0">
                                         <span
-                                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass(
+                                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold lg:px-2.5 lg:py-1 lg:text-xs ${statusClass(
                                                 status
                                             )}`}
                                         >
                                             {status}
                                         </span>
 
-                                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                                            <CreditCard size={16} />
+                                        <div className="flex items-center gap-1 text-[10px] text-slate-600 lg:gap-1.5 lg:text-xs">
+                                            <CreditCard size={14} className="lg:h-4 lg:w-4" />
                                             <span>{paymentMethod}</span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 text-[10px] text-slate-600 lg:hidden">
+                                            <Package size={14} />
+                                            <span>
+                                                {Number(
+                                                    order.items?.length || 0
+                                                ).toLocaleString("en-US")} منتج
+                                            </span>
                                         </div>
 
                                         {order.payment?.receiving_bank_name && (
@@ -342,7 +351,7 @@ export default function OrdersV2() {
                                         )}
                                     </div>
 
-                                    <div className="space-y-2 text-sm text-slate-600">
+                                    <div className="hidden space-y-2 text-sm text-slate-600 lg:block">
                                         <div className="flex items-center gap-1.5">
                                             <Truck size={16} />
                                             <span>
@@ -362,15 +371,15 @@ export default function OrdersV2() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between gap-4 lg:justify-end">
-                                        <div className="num whitespace-nowrap text-lg font-extrabold text-slate-950">
+                                    <div className="col-start-2 row-span-2 row-start-1 flex min-w-[92px] flex-col items-end justify-center gap-2 lg:col-auto lg:row-auto lg:min-w-0 lg:flex-row lg:items-center lg:justify-end lg:gap-4">
+                                        <div className="num whitespace-nowrap text-base font-extrabold text-slate-950 lg:text-lg">
                                             {formatMoney(
                                                 order.totals?.total
                                             )}
                                         </div>
                                         <CaretLeft
-                                            size={20}
-                                            className="text-slate-400"
+                                            size={18}
+                                            className="text-slate-400 lg:h-5 lg:w-5"
                                         />
                                     </div>
                                 </button>
