@@ -235,3 +235,38 @@ updated with implementation changes.
 
 Important future capabilities must not exist only in conversations or generic
 TODO comments.
+
+## Decision-024 — Manufactured Products Are Composite Workflows
+
+Any manufactured or assembled product is represented through:
+
+1. Order Item — what the customer purchased.
+2. Components — physical inputs and stock parts.
+3. Production Operations — manufacturing and assembly steps.
+
+A manufactured Order Item must not be treated as one indivisible supplier
+purchase.
+
+## Decision-025 — Supplier Ownership Is Below Order Level
+
+Supplier assignment belongs to a Component or Production Operation.
+
+A parent Order may summarize suppliers but must not own one authoritative
+supplier field.
+
+## Decision-026 — Receiving Is an Event
+
+The receiving employee is recorded only when an item or operation is ready
+and the employee performs the receiving action.
+
+Receiving must not be preassigned when the item is uploaded or initially
+sent to a supplier.
+
+## Decision-027 — Cost Engine Is Deferred
+
+Detailed product cost rules, option-based cost, supplier liability,
+inventory consumption valuation and production cost allocation are deferred
+until the Product Definition phase.
+
+Current contracts must preserve all required identity and option data
+without calculating cost.
