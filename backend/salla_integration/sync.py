@@ -195,15 +195,50 @@ def _str(v: Any) -> str:
     return str(v).strip()
 
 
-def _money(v: Any) -> float:
+def _money(v: Any, *, _depth: int = 0) -> float:
+    """Safely normalize Salla money values into a float.
+
+    Supported examples:
+    - 123.45
+    - "123.45"
+    - {"amount": 123.45, "currency": "SAR"}
+    - {"amount": {"amount": 123.45, "currency": "SAR"}}
+    - {"value": {"amount": "123.45"}}
+
+    Invalid or excessively nested values resolve to 0.0.
+    """
     if v is None or v == "":
         return 0.0
+
+    if _depth > 8:
+        return 0.0
+
+    if isinstance(v, bool):
+        return 0.0
+
     if isinstance(v, dict):
-        # Salla often nests money as {"amount": 123.45, "currency": "SAR"}
-        return float(v.get("amount") or 0)
+        for key in (
+            "amount",
+            "value",
+            "total",
+            "price",
+            "sub_total",
+            "subtotal",
+        ):
+            if key in v and v.get(key) not in (None, ""):
+                return _money(v.get(key), _depth=_depth + 1)
+        return 0.0
+
+    if isinstance(v, (list, tuple)):
+        for candidate in v:
+            amount = _money(candidate, _depth=_depth + 1)
+            if amount != 0.0:
+                return amount
+        return 0.0
+
     try:
         return float(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0.0
 
 
