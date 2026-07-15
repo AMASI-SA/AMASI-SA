@@ -1,87 +1,34 @@
-"""Read-only filter summaries for the Mezan OS orders screen.
+"""Exact, read-only Salla status summaries for the Mezan OS orders screen.
 
-Salla status counters must remain fast and exact. Qoyod classification is an
-independent, potentially expensive diagnostic and must never block the order
-screen or cause Cloudflare origin timeouts.
+The orders screen must mirror Salla's merchant-visible workflow states. Salla may
+return a parent state in ``status.name`` and the actual child/custom state in
+``status.customized``. The customized state is therefore authoritative.
+
+This module intentionally contains no Qoyod classification. Accounting cards
+belong to the Qoyod area and must never slow down or break the orders screen.
 """
 from __future__ import annotations
 
-import asyncio
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
-
-from integrations.qoyod.eligible_orders import build_eligible_orders_report
-
-QOYOD_DEFAULT_FROM_DATE = date(2026, 7, 1)
-QOYOD_SUMMARY_TIMEOUT_SECONDS = 4.0
 
 
 def _status_key(value: Any) -> str:
     return " ".join(str(value or "").replace("_", " ").strip().casefold().split())
 
 
-_STATUS_VALUES: dict[str, set[str]] = {
-    "under_review": {
-        "under review",
-        "waiting review",
-        "pending review",
-        "بإنتظار المراجعة",
-        "بانتظار المراجعة",
-        "انتظار المراجعة",
-    },
-    "reviewed": {
-        "reviewed",
-        "تمت المراجعة",
-        "تم المراجعة",
-    },
-    "processing": {
-        "processing",
-        "in progress",
-        "قيد التنفيذ",
-        "جاري التنفيذ",
-    },
-    "completed": {
-        "completed",
-        "delivered",
-        "تم التنفيذ",
-        "تم التوصيل",
-    },
-    "shipping": {
-        "shipping",
-        "shipped",
-        "delivering",
-        "out for delivery",
-        "جاري التوصيل",
-        "تم الشحن",
-    },
-    "cancelled": {
-        "cancelled",
-        "canceled",
-        "deleted",
-        "ملغي",
-        "ملغى",
-        "محذوف",
-    },
-    "refunded": {
-        "refunded",
-        "returned",
-        "restored",
-        "مسترجع",
-        "تم الاسترجاع",
-    },
-}
-
-
-def _status_group(value: Any) -> str:
-    key = _status_key(value)
-    for group, values in _STATUS_VALUES.items():
-        if key in values:
-            return group
-    return "other"
+def _status_label(value: Any) -> str:
+    text = " ".join(str(value or "").strip().split())
+    return text or "غير محدد"
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Use Salla's actual customized child state before its parent state."""
+    """Return Salla's exact merchant-visible child status.
+
+    Example:
+      status.name       = بإنتظار المراجعة   (parent workflow)
+      status.customized = تم المراجعة        (actual child state)
+    """
     return {
         "$ifNull": [
             "$raw_by_source.salla_direct.status.customized",
@@ -105,83 +52,38 @@ def _effective_status_expression() -> dict[str, Any]:
     }
 
 
-async def _qoyod_summary(db: Any, *, user_id: str) -> dict[str, Any]:
-    today = datetime.now(timezone.utc).date()
-    since_days = max(1, (today - QOYOD_DEFAULT_FROM_DATE).days + 1)
-    report = await build_eligible_orders_report(
-        db,
-        user_id=str(user_id),
-        since_days=since_days,
-        limit=1,
-        show_already_sent=False,
-        debug=False,
-    )
-    counts = dict(report.get("counts") or {})
-    eligible_not_sent = int(counts.get("ready_for_preview") or 0) + int(
-        counts.get("ready_for_manual_approval") or 0
-    )
-    return {
-        "from_date": QOYOD_DEFAULT_FROM_DATE.isoformat(),
-        "sent": int(counts.get("already_sent") or 0),
-        "eligible_not_sent": eligible_not_sent,
-        "available": True,
-        "error": None,
-    }
-
-
 async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]:
-    """Return exact full-dataset Salla card counts without slow-page failure."""
+    """Return all exact Salla statuses as dynamic cards.
+
+    No fixed enum is used. Custom statuses created in Salla therefore appear
+    automatically without another Mezan deployment.
+    """
     base_query = {
         "user_id": str(user_id),
         "raw_by_source.salla_direct": {"$exists": True},
     }
 
-    status_counts = {
-        "all": await db.unified_orders.count_documents(base_query),
-        "under_review": 0,
-        "reviewed": 0,
-        "processing": 0,
-        "completed": 0,
-        "shipping": 0,
-        "cancelled": 0,
-        "refunded": 0,
-        "other": 0,
-    }
-
+    total = await db.unified_orders.count_documents(base_query)
     pipeline = [
         {"$match": base_query},
         {"$project": {"status": _effective_status_expression()}},
         {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1, "_id": 1}},
     ]
-    async for row in db.unified_orders.aggregate(pipeline):
-        group = _status_group(row.get("_id"))
-        status_counts[group] = status_counts.get(group, 0) + int(row.get("count") or 0)
 
-    try:
-        qoyod = await asyncio.wait_for(
-            _qoyod_summary(db, user_id=str(user_id)),
-            timeout=QOYOD_SUMMARY_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        qoyod = {
-            "from_date": QOYOD_DEFAULT_FROM_DATE.isoformat(),
-            "sent": None,
-            "eligible_not_sent": None,
-            "available": False,
-            "error": "qoyod_summary_timeout",
-        }
-    except Exception as exc:
-        qoyod = {
-            "from_date": QOYOD_DEFAULT_FROM_DATE.isoformat(),
-            "sent": None,
-            "eligible_not_sent": None,
-            "available": False,
-            "error": f"qoyod_summary_failed:{type(exc).__name__}",
-        }
+    status_cards: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {"all": int(total)}
+    async for row in db.unified_orders.aggregate(pipeline):
+        label = _status_label(row.get("_id"))
+        key = _status_key(label)
+        count = int(row.get("count") or 0)
+        status_cards.append({"key": key, "label": label, "count": count})
+        status_counts[key] = count
 
     return {
+        "total": int(total),
+        "status_cards": status_cards,
         "status_counts": status_counts,
-        "qoyod": qoyod,
     }
 
 
@@ -191,13 +93,13 @@ async def build_order_status_diagnostic(
     user_id: str,
     sample_limit: int = 100,
 ) -> dict[str, Any]:
-    """Explain exactly why a status card has its current count."""
+    """Explain exact status sources without modifying orders."""
     base_query = {
         "user_id": str(user_id),
         "raw_by_source.salla_direct": {"$exists": True},
     }
 
-    distribution_pipeline = [
+    pipeline = [
         {"$match": base_query},
         {
             "$project": {
@@ -209,17 +111,6 @@ async def build_order_status_diagnostic(
                 "raw_customized": "$raw_by_source.salla_direct.status.customized",
                 "order_date": 1,
                 "updated_at": 1,
-                "last_salla_update": {
-                    "$ifNull": [
-                        "$last_salla_direct_update_at",
-                        {
-                            "$ifNull": [
-                                "$raw_by_source.salla_direct.updated_at",
-                                "$updated_at",
-                            ]
-                        },
-                    ]
-                },
             }
         },
         {
@@ -235,21 +126,18 @@ async def build_order_status_diagnostic(
                 "count": {"$sum": 1},
                 "oldest_order_date": {"$min": "$order_date"},
                 "newest_order_date": {"$max": "$order_date"},
-                "oldest_update": {"$min": "$last_salla_update"},
-                "newest_update": {"$max": "$last_salla_update"},
+                "oldest_update": {"$min": "$updated_at"},
+                "newest_update": {"$max": "$updated_at"},
             }
         },
         {"$sort": {"count": -1}},
     ]
 
     distribution: list[dict[str, Any]] = []
-    async for row in db.unified_orders.aggregate(distribution_pipeline):
-        identity = dict(row.get("_id") or {})
-        effective = identity.get("effective_status")
+    async for row in db.unified_orders.aggregate(pipeline):
         distribution.append(
             {
-                **identity,
-                "group": _status_group(effective),
+                **dict(row.get("_id") or {}),
                 "count": int(row.get("count") or 0),
                 "oldest_order_date": row.get("oldest_order_date"),
                 "newest_order_date": row.get("newest_order_date"),
@@ -258,52 +146,28 @@ async def build_order_status_diagnostic(
             }
         )
 
-    target_values = list(_STATUS_VALUES["under_review"])
-    sample_query = {
-        **base_query,
-        "$expr": {
-            "$in": [
-                {
-                    "$toLower": {
-                        "$trim": {
-                            "input": {
-                                "$replaceAll": {
-                                    "input": {"$toString": _effective_status_expression()},
-                                    "find": "_",
-                                    "replacement": " ",
-                                }
-                            }
-                        }
-                    }
-                },
-                target_values,
-            ]
-        },
-    }
-
-    sample_projection = {
-        "_id": 0,
-        "order_number": 1,
-        "order_date": 1,
-        "updated_at": 1,
-        "order_status_slug": 1,
-        "order_status": 1,
-        "last_salla_direct_update_at": 1,
-        "raw_by_source.salla_direct.status": 1,
-        "raw_by_source.salla_direct.updated_at": 1,
-    }
     sample_cursor = (
-        db.unified_orders.find(sample_query, sample_projection)
-        .sort([("order_date", 1), ("order_number", 1)])
+        db.unified_orders.find(
+            base_query,
+            {
+                "_id": 0,
+                "order_number": 1,
+                "order_date": 1,
+                "updated_at": 1,
+                "order_status_slug": 1,
+                "order_status": 1,
+                "raw_by_source.salla_direct.status": 1,
+            },
+        )
+        .sort([("order_date", -1), ("order_number", -1)])
         .limit(max(1, min(int(sample_limit), 200)))
     )
-    under_review_sample = [row async for row in sample_cursor]
 
     return {
         "generated_at": datetime.now(timezone.utc),
         "total_salla_direct": await db.unified_orders.count_documents(base_query),
         "distribution": distribution,
-        "under_review_sample": under_review_sample,
+        "sample": [row async for row in sample_cursor],
         "sample_limit": max(1, min(int(sample_limit), 200)),
         "read_only": True,
         "no_qoyod_calls": True,
