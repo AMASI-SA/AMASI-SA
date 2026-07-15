@@ -3,6 +3,7 @@
 Mounted under the parent `/api` router:
 
 - GET /api/orders-v2
+- GET /api/orders-v2/filters/summary
 - GET /api/orders-v2/{order_number}
 
 Sprint 001 rules:
@@ -15,7 +16,6 @@ Sprint 001 rules:
 The routes may schedule a non-blocking Salla Direct refresh. The refresh runs
 outside the response path and never changes the HTTP read contract.
 """
-
 from __future__ import annotations
 
 from typing import Any, Callable, Optional
@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 from salla_integration.auto_sync import schedule_salla_auto_sync
 
+from .filter_summary import build_order_filter_summary
 from .models import OrderDTO
 from .repository import MongoOrderRepository, OrderRepository
 from .service import (
@@ -46,6 +47,34 @@ class OrderListResponse(BaseModel):
     next_cursor: Optional[str] = None
     limit: int
     skipped_invalid: int = 0
+
+
+class OrderStatusCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    all: int = 0
+    under_review: int = 0
+    processing: int = 0
+    completed: int = 0
+    shipping: int = 0
+    cancelled: int = 0
+    refunded: int = 0
+    other: int = 0
+
+
+class QoyodOrderCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_date: str = "2026-07-01"
+    sent: int = 0
+    eligible_not_sent: int = 0
+
+
+class OrderFilterSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status_counts: OrderStatusCounts
+    qoyod: QoyodOrderCounts
 
 
 def _is_owner(user: Any) -> bool:
@@ -105,9 +134,6 @@ def make_order_engine_router(
     ) -> OrderListResponse:
         owner = _require_owner(user)
 
-        # Non-blocking: return the current canonical page immediately while a
-        # throttled Salla Direct refresh runs in the background. The frontend
-        # polls this endpoint and will see the new order on the next cycle.
         schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
@@ -132,6 +158,21 @@ def make_order_engine_router(
             limit=limit,
             skipped_invalid=page.skipped_invalid,
         )
+
+    @router.get(
+        "/filters/summary",
+        response_model=OrderFilterSummaryResponse,
+        summary="Get full order status and Qoyod card counts",
+    )
+    async def get_filter_summary(
+        user: dict = Depends(current_user),
+    ) -> OrderFilterSummaryResponse:
+        owner = _require_owner(user)
+        summary = await build_order_filter_summary(
+            db,
+            user_id=str(owner["id"]),
+        )
+        return OrderFilterSummaryResponse(**summary)
 
     @router.get(
         "/{order_number}",
