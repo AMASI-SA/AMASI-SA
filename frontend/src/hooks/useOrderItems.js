@@ -10,6 +10,8 @@ import {
     getOrderItems,
 } from "../services/orderItemEngine";
 
+const ORDER_ITEM_REFRESH_INTERVAL_MS = 10_000;
+
 function uniqueOrderItems(rows) {
     const unique = new Map();
 
@@ -28,16 +30,16 @@ function uniqueOrderItems(rows) {
 
 export function useOrderItems(orderNumber) {
     const requestIdRef = useRef(0);
+    const requestInFlightRef = useRef(false);
+    const mountedRef = useRef(true);
 
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const load = useCallback(async () => {
+    const load = useCallback(async ({ background = false } = {}) => {
         const normalizedOrderNumber =
             String(orderNumber || "").trim();
-
-        const requestId = ++requestIdRef.current;
 
         if (!normalizedOrderNumber) {
             setItems([]);
@@ -46,38 +48,78 @@ export function useOrderItems(orderNumber) {
             return;
         }
 
-        setLoading(true);
-        setError("");
+        if (requestInFlightRef.current) return;
+
+        requestInFlightRef.current = true;
+        const requestId = ++requestIdRef.current;
+
+        if (!background) {
+            setLoading(true);
+            setError("");
+        }
 
         try {
             const result = await getOrderItems(
                 normalizedOrderNumber
             );
 
-            if (requestId !== requestIdRef.current) {
+            if (
+                !mountedRef.current ||
+                requestId !== requestIdRef.current
+            ) {
                 return;
             }
 
             setItems(uniqueOrderItems(result));
+            setError("");
         } catch (loadError) {
-            if (requestId !== requestIdRef.current) {
+            if (
+                !mountedRef.current ||
+                requestId !== requestIdRef.current
+            ) {
                 return;
             }
 
-            setItems([]);
+            if (!background) setItems([]);
             setError(loadError.message);
         } finally {
-            if (requestId === requestIdRef.current) {
+            requestInFlightRef.current = false;
+            if (
+                mountedRef.current &&
+                requestId === requestIdRef.current &&
+                !background
+            ) {
                 setLoading(false);
             }
         }
     }, [orderNumber]);
 
     useEffect(() => {
+        mountedRef.current = true;
         load();
 
+        const refresh = () => {
+            if (!document.hidden && navigator.onLine) {
+                load({ background: true });
+            }
+        };
+
+        const intervalId = window.setInterval(
+            refresh,
+            ORDER_ITEM_REFRESH_INTERVAL_MS
+        );
+
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", refresh);
+
         return () => {
+            mountedRef.current = false;
             requestIdRef.current += 1;
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", refresh);
         };
     }, [load]);
 
@@ -85,7 +127,8 @@ export function useOrderItems(orderNumber) {
         items,
         loading,
         error,
-        reload: load,
+        reload: () => load(),
+        refresh: () => load({ background: true }),
     };
 }
 
@@ -94,17 +137,23 @@ export function useOrderItem(
     orderItemId
 ) {
     const requestIdRef = useRef(0);
+    const requestInFlightRef = useRef(false);
+    const mountedRef = useRef(true);
 
     const [item, setItem] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const load = useCallback(async () => {
+    const load = useCallback(async ({ background = false } = {}) => {
+        if (requestInFlightRef.current) return;
+
+        requestInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
 
-        setLoading(true);
-        setError("");
-        setItem(null);
+        if (!background) {
+            setLoading(true);
+            setError("");
+        }
 
         try {
             const result = await getOrderItem(
@@ -112,29 +161,62 @@ export function useOrderItem(
                 orderItemId
             );
 
-            if (requestId !== requestIdRef.current) {
+            if (
+                !mountedRef.current ||
+                requestId !== requestIdRef.current
+            ) {
                 return;
             }
 
             setItem(result);
+            setError("");
         } catch (loadError) {
-            if (requestId !== requestIdRef.current) {
+            if (
+                !mountedRef.current ||
+                requestId !== requestIdRef.current
+            ) {
                 return;
             }
 
             setError(loadError.message);
         } finally {
-            if (requestId === requestIdRef.current) {
+            requestInFlightRef.current = false;
+            if (
+                mountedRef.current &&
+                requestId === requestIdRef.current &&
+                !background
+            ) {
                 setLoading(false);
             }
         }
     }, [orderItemId, orderNumber]);
 
     useEffect(() => {
+        mountedRef.current = true;
         load();
 
+        const refresh = () => {
+            if (!document.hidden && navigator.onLine) {
+                load({ background: true });
+            }
+        };
+
+        const intervalId = window.setInterval(
+            refresh,
+            ORDER_ITEM_REFRESH_INTERVAL_MS
+        );
+
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", refresh);
+
         return () => {
+            mountedRef.current = false;
             requestIdRef.current += 1;
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", refresh);
         };
     }, [load]);
 
@@ -142,6 +224,7 @@ export function useOrderItem(
         item,
         loading,
         error,
-        reload: load,
+        reload: () => load(),
+        refresh: () => load({ background: true }),
     };
 }
