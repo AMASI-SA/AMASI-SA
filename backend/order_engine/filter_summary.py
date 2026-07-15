@@ -44,6 +44,7 @@ _STATUS_VALUES: dict[str, set[str]] = {
     "shipping": {
         "shipping",
         "shipped",
+        "delivering",
         "out for delivery",
         "جاري التوصيل",
         "تم الشحن",
@@ -59,6 +60,7 @@ _STATUS_VALUES: dict[str, set[str]] = {
     "refunded": {
         "refunded",
         "returned",
+        "restored",
         "مسترجع",
         "تم الاسترجاع",
     },
@@ -74,19 +76,22 @@ def _status_group(value: Any) -> str:
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Use the same source precedence for cards and diagnostics."""
+    """Use authoritative Salla status first and stale canonical slug last.
+
+    Production diagnostics proved historical rows may contain:
+    ``order_status_slug=under_review`` while the current provider/native status
+    is already completed, delivering or delivered. Raw Salla Direct status is
+    therefore authoritative for cards and filters. Canonical native name is the
+    next fallback; canonical slug is used only when no newer fact exists.
+    """
+
     return {
         "$ifNull": [
-            "$order_status_slug",
+            "$raw_by_source.salla_direct.status.slug",
             {
                 "$ifNull": [
-                    "$order_status",
-                    {
-                        "$ifNull": [
-                            "$raw_by_source.salla_direct.status.slug",
-                            "$raw_by_source.salla_direct.status.name",
-                        ]
-                    },
+                    "$raw_by_source.salla_direct.status.name",
+                    {"$ifNull": ["$order_status", "$order_status_slug"]},
                 ]
             },
         ]
