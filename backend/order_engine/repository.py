@@ -55,6 +55,7 @@ _STATUS_PATTERNS: dict[str, str] = {
         r"^(under[_ ]?review|waiting[_ ]?review|pending[_ ]?review|"
         r"بإنتظار المراجعة|بانتظار المراجعة|انتظار المراجعة)$"
     ),
+    "reviewed": r"^(reviewed|تمت المراجعة|تم المراجعة)$",
     "processing": r"^(processing|in[_ ]?progress|قيد التنفيذ|جاري التنفيذ)$",
     "completed": r"^(completed|delivered|تم التنفيذ|تم التوصيل)$",
     "shipping": r"^(shipping|shipped|delivering|out[_ ]?for[_ ]?delivery|جاري التوصيل|تم الشحن)$",
@@ -64,25 +65,29 @@ _STATUS_PATTERNS: dict[str, str] = {
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Return one current status used by every list filter.
+    """Return one current child/native status used by every list filter.
 
-    Production diagnostics proved that historical records can retain stale
-    provider/raw slugs such as ``under_review`` while ``order_status`` already
-    contains the newer native Salla state (for example ``تم التنفيذ`` or
-    ``تم التوصيل``). The current native name is therefore authoritative.
-    Raw Salla values and the canonical slug are fallbacks only.
+    Salla custom workflows expose the parent workflow through ``status.name``
+    and the actual merchant-visible child state through ``status.customized``.
+    For example, the parent may remain ``بإنتظار المراجعة`` while the child is
+    already ``تم المراجعة``. Customized status must therefore win.
     """
 
     return {
         "$ifNull": [
-            "$order_status",
+            "$raw_by_source.salla_direct.status.customized",
             {
                 "$ifNull": [
-                    "$raw_by_source.salla_direct.status.name",
+                    "$order_status",
                     {
                         "$ifNull": [
-                            "$raw_by_source.salla_direct.status.slug",
-                            "$order_status_slug",
+                            "$raw_by_source.salla_direct.status.name",
+                            {
+                                "$ifNull": [
+                                    "$raw_by_source.salla_direct.status.slug",
+                                    "$order_status_slug",
+                                ]
+                            },
                         ]
                     },
                 ]
