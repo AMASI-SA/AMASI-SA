@@ -1,9 +1,4 @@
-import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
     getOrder,
@@ -23,7 +18,7 @@ function uniqueOrders(rows) {
     return Array.from(unique.values());
 }
 
-export function useOrders({ statusGroup = null } = {}) {
+export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     const requestIdRef = useRef(0);
     const refreshInFlightRef = useRef(false);
     const ordersRef = useRef([]);
@@ -41,11 +36,7 @@ export function useOrders({ statusGroup = null } = {}) {
     useEffect(() => { searchModeRef.current = searchMode; }, [searchMode]);
 
     const loadFirstPage = useCallback(async ({ background = false } = {}) => {
-        // A foreground load (including a status-card change) must supersede any
-        // background refresh.  Otherwise the new filter can be ignored while an
-        // older request is in flight and stale rows remain visible.
         if (background && refreshInFlightRef.current) return;
-
         const requestId = ++requestIdRef.current;
         refreshInFlightRef.current = true;
 
@@ -63,20 +54,21 @@ export function useOrders({ statusGroup = null } = {}) {
             const result = await listOrders({
                 limit: ORDER_PAGE_SIZE,
                 statusGroup,
+                statusExact,
             });
             if (requestId !== requestIdRef.current) return;
-
             const refreshedOrders = uniqueOrders(result.items);
             if (background) {
-                setOrders((current) => {
-                    const keys = new Set(
-                        refreshedOrders.map((order) => String(order.order_number))
-                    );
-                    const retained = current.filter(
-                        (order) => !keys.has(String(order.order_number))
-                    );
-                    return uniqueOrders([...refreshedOrders, ...retained]);
-                });
+                // Exact-status pages must never retain rows that moved to another state.
+                if (statusExact || statusGroup) {
+                    setOrders(refreshedOrders);
+                } else {
+                    setOrders((current) => {
+                        const keys = new Set(refreshedOrders.map((order) => String(order.order_number)));
+                        const retained = current.filter((order) => !keys.has(String(order.order_number)));
+                        return uniqueOrders([...refreshedOrders, ...retained]);
+                    });
+                }
             } else {
                 setOrders(refreshedOrders);
                 setNextCursor(result.nextCursor);
@@ -99,16 +91,12 @@ export function useOrders({ statusGroup = null } = {}) {
                 refreshInFlightRef.current = false;
             }
         }
-    }, [statusGroup]);
+    }, [statusExact, statusGroup]);
 
     useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
 
     const loadMore = useCallback(async () => {
-        if (
-            loading || initialLoading || searchMode || !hasMore ||
-            !nextCursor || refreshInFlightRef.current
-        ) return;
-
+        if (loading || initialLoading || searchMode || !hasMore || !nextCursor || refreshInFlightRef.current) return;
         refreshInFlightRef.current = true;
         setLoading(true);
         setError("");
@@ -117,6 +105,7 @@ export function useOrders({ statusGroup = null } = {}) {
                 limit: ORDER_PAGE_SIZE,
                 cursor: nextCursor,
                 statusGroup,
+                statusExact,
             });
             setOrders((current) => uniqueOrders([...current, ...result.items]));
             setNextCursor(result.nextCursor);
@@ -127,7 +116,7 @@ export function useOrders({ statusGroup = null } = {}) {
             setLoading(false);
             refreshInFlightRef.current = false;
         }
-    }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusGroup]);
+    }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusExact, statusGroup]);
 
     const searchExactOrder = useCallback(async (orderNumber) => {
         const normalized = String(orderNumber || "").trim();
@@ -135,14 +124,12 @@ export function useOrders({ statusGroup = null } = {}) {
             await loadFirstPage();
             return;
         }
-
         const requestId = ++requestIdRef.current;
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
         setError("");
         setSearchMode(true);
-
         try {
             const order = await getOrder(normalized);
             if (requestId !== requestIdRef.current) return;
@@ -170,11 +157,8 @@ export function useOrders({ statusGroup = null } = {}) {
             (typeof document !== "undefined" && document.hidden) ||
             (typeof navigator !== "undefined" && !navigator.onLine)
         ) return;
-
         if (searchModeRef.current) {
-            const orderNumber = String(
-                ordersRef.current[0]?.order_number || ""
-            ).trim();
+            const orderNumber = String(ordersRef.current[0]?.order_number || "").trim();
             if (!orderNumber) return;
             refreshInFlightRef.current = true;
             try {
@@ -192,14 +176,9 @@ export function useOrders({ statusGroup = null } = {}) {
     }, [loadFirstPage]);
 
     useEffect(() => {
-        const intervalId = window.setInterval(
-            refreshVisibleOrders,
-            ORDER_REFRESH_INTERVAL_MS
-        );
+        const intervalId = window.setInterval(refreshVisibleOrders, ORDER_REFRESH_INTERVAL_MS);
         const handleFocus = () => refreshVisibleOrders();
-        const handleVisibilityChange = () => {
-            if (!document.hidden) refreshVisibleOrders();
-        };
+        const handleVisibilityChange = () => { if (!document.hidden) refreshVisibleOrders(); };
         window.addEventListener("focus", handleFocus);
         window.addEventListener("online", handleFocus);
         document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -241,7 +220,6 @@ export function useOrder(orderNumber) {
             setLoading(true);
             setError("");
         }
-
         try {
             if (!background && openedOrderRef.current !== normalized) {
                 await openOrderFromSalla(normalized);
@@ -264,9 +242,7 @@ export function useOrder(orderNumber) {
         mountedRef.current = true;
         load();
         const refresh = () => {
-            if (!document.hidden && navigator.onLine) {
-                load({ background: true });
-            }
+            if (!document.hidden && navigator.onLine) load({ background: true });
         };
         const intervalId = window.setInterval(refresh, ORDER_REFRESH_INTERVAL_MS);
         window.addEventListener("focus", refresh);
@@ -281,11 +257,5 @@ export function useOrder(orderNumber) {
         };
     }, [load]);
 
-    return {
-        order,
-        loading,
-        error,
-        reload: () => load(),
-        refresh: () => load({ background: true }),
-    };
+    return { order, loading, error, reload: () => load(), refresh: () => load({ background: true }) };
 }
