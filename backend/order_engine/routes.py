@@ -1,21 +1,4 @@
-"""Read-only HTTP routes for the Mezan Order Engine.
-
-Mounted under the parent `/api` router:
-
-- GET /api/orders-v2
-- GET /api/orders-v2/filters/summary
-- GET /api/orders-v2/{order_number}
-
-Sprint 001 rules:
-- Owner-only backend authorization
-- Order responses remain read-only
-- No Qoyod calls
-- Routes call Service only for order reads
-- Routes never query Mongo directly
-
-The routes may schedule a non-blocking Salla Direct refresh. The refresh runs
-outside the response path and never changes the HTTP read contract.
-"""
+"""Read-only HTTP routes for the Mezan Order Engine."""
 from __future__ import annotations
 
 from typing import Any, Callable, Optional
@@ -39,10 +22,7 @@ from .service import (
 
 
 class OrderListResponse(BaseModel):
-    """Public list response without exposing storage details."""
-
     model_config = ConfigDict(extra="forbid")
-
     items: list[OrderDTO]
     next_cursor: Optional[str] = None
     limit: int
@@ -51,7 +31,6 @@ class OrderListResponse(BaseModel):
 
 class OrderStatusCounts(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     all: int = 0
     under_review: int = 0
     processing: int = 0
@@ -64,7 +43,6 @@ class OrderStatusCounts(BaseModel):
 
 class QoyodOrderCounts(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     from_date: str = "2026-07-01"
     sent: int = 0
     eligible_not_sent: int = 0
@@ -72,16 +50,13 @@ class QoyodOrderCounts(BaseModel):
 
 class OrderFilterSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     status_counts: OrderStatusCounts
     qoyod: QoyodOrderCounts
 
 
 def _is_owner(user: Any) -> bool:
-    """Support the current role field and older explicit owner flag."""
     if not isinstance(user, dict):
         return False
-
     role = str(user.get("role") or "").strip().lower()
     return role == "owner" or user.get("is_owner") is True
 
@@ -95,7 +70,6 @@ def _require_owner(user: Any) -> dict:
                 "message": "هذه الصفحة متاحة للمالك فقط.",
             },
         )
-
     return user
 
 
@@ -105,35 +79,19 @@ def make_order_engine_router(
     *,
     repository_factory: Callable[[Any], OrderRepository] = MongoOrderRepository,
 ) -> APIRouter:
-    """Build the Order Engine router.
-
-    `repository_factory` is injectable so HTTP contract tests do not need
-    MongoDB or the running `server.py` application.
-    """
-    router = APIRouter(
-        prefix="/orders-v2",
-        tags=["order-engine"],
-    )
+    router = APIRouter(prefix="/orders-v2", tags=["order-engine"])
 
     def repository() -> OrderRepository:
         return repository_factory(db)
 
-    @router.get(
-        "",
-        response_model=OrderListResponse,
-        summary="List canonical Salla orders",
-    )
+    @router.get("", response_model=OrderListResponse)
     async def list_order_rows(
-        limit: int = Query(
-            DEFAULT_LIMIT,
-            ge=1,
-            le=MAX_LIMIT,
-        ),
+        limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
         cursor: Optional[str] = Query(default=None),
+        status_group: Optional[str] = Query(default=None),
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
-
         schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
@@ -142,6 +100,7 @@ def make_order_engine_router(
                 user_id=str(owner["id"]),
                 limit=limit,
                 cursor=cursor,
+                status_group=status_group,
             )
         except InvalidOrderCursorError as exc:
             raise HTTPException(
@@ -162,7 +121,6 @@ def make_order_engine_router(
     @router.get(
         "/filters/summary",
         response_model=OrderFilterSummaryResponse,
-        summary="Get full order status and Qoyod card counts",
     )
     async def get_filter_summary(
         user: dict = Depends(current_user),
@@ -174,17 +132,12 @@ def make_order_engine_router(
         )
         return OrderFilterSummaryResponse(**summary)
 
-    @router.get(
-        "/{order_number}",
-        response_model=OrderDTO,
-        summary="Get one canonical Salla order",
-    )
+    @router.get("/{order_number}", response_model=OrderDTO)
     async def get_order_row(
         order_number: str,
         user: dict = Depends(current_user),
     ) -> OrderDTO:
         owner = _require_owner(user)
-
         schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
