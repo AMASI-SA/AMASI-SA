@@ -57,10 +57,32 @@ _STATUS_PATTERNS: dict[str, str] = {
     ),
     "processing": r"^(processing|in[_ ]?progress|قيد التنفيذ|جاري التنفيذ)$",
     "completed": r"^(completed|delivered|تم التنفيذ|تم التوصيل)$",
-    "shipping": r"^(shipping|shipped|out[_ ]?for[_ ]?delivery|جاري التوصيل|تم الشحن)$",
+    "shipping": r"^(shipping|shipped|delivering|out[_ ]?for[_ ]?delivery|جاري التوصيل|تم الشحن)$",
     "cancelled": r"^(cancelled|canceled|deleted|ملغي|ملغى|محذوف)$",
-    "refunded": r"^(refunded|returned|مسترجع|تم الاسترجاع)$",
+    "refunded": r"^(refunded|returned|restored|مسترجع|تم الاسترجاع)$",
 }
+
+
+def _effective_status_expression() -> dict[str, Any]:
+    """Return the authoritative status expression used by list filters.
+
+    Salla Direct raw status is authoritative. Canonical name is the next
+    fallback because historical rows proved that ``order_status_slug`` may lag
+    behind while the native name has already advanced. The canonical slug is
+    therefore the final fallback only.
+    """
+
+    return {
+        "$ifNull": [
+            "$raw_by_source.salla_direct.status.slug",
+            {
+                "$ifNull": [
+                    "$raw_by_source.salla_direct.status.name",
+                    {"$ifNull": ["$order_status", "$order_status_slug"]},
+                ]
+            },
+        ]
+    }
 
 
 class MongoOrderRepository:
@@ -85,14 +107,17 @@ class MongoOrderRepository:
 
         pattern = _STATUS_PATTERNS.get(str(status_group or "").strip())
         if pattern:
-            query["$and"] = [{
-                "$or": [
-                    {"order_status": {"$regex": pattern, "$options": "i"}},
-                    {"order_status_slug": {"$regex": pattern, "$options": "i"}},
-                    {"raw_by_source.salla_direct.status.name": {"$regex": pattern, "$options": "i"}},
-                    {"raw_by_source.salla_direct.status.slug": {"$regex": pattern, "$options": "i"}},
-                ]
-            }]
+            query["$and"] = [
+                {
+                    "$expr": {
+                        "$regexMatch": {
+                            "input": {"$toString": _effective_status_expression()},
+                            "regex": pattern,
+                            "options": "i",
+                        }
+                    }
+                }
+            ]
 
         if before_order_date and before_order_number:
             cursor_clause = {
