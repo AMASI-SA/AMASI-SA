@@ -11,6 +11,16 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+_REVIEW_PARENT_VALUES = [
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
+]
+
+
 def _status_key(value: Any) -> str:
     return " ".join(str(value or "").replace("_", " ").strip().casefold().split())
 
@@ -59,27 +69,66 @@ def _customized_status_expression() -> dict[str, Any]:
     }
 
 
-def _effective_status_expression() -> dict[str, Any]:
+def _normalized_text_expression(value: Any) -> dict[str, Any]:
     return {
-        "$ifNull": [
-            _customized_status_expression(),
-            {
-                "$ifNull": [
-                    "$order_status",
+        "$toLower": {
+            "$trim": {
+                "input": {
+                    "$replaceAll": {
+                        "input": {"$toString": {"$ifNull": [value, ""]}},
+                        "find": "_",
+                        "replacement": " ",
+                    }
+                }
+            }
+        }
+    }
+
+
+def _effective_status_expression() -> dict[str, Any]:
+    current = "$order_status"
+    customized = _customized_status_expression()
+    current_normalized = _normalized_text_expression(current)
+    return {
+        "$let": {
+            "vars": {
+                "current": current,
+                "customized": customized,
+                "current_normalized": current_normalized,
+            },
+            "in": {
+                "$cond": [
+                    {
+                        "$and": [
+                            {"$ne": ["$$current_normalized", ""]},
+                            {"$not": [{"$in": ["$$current_normalized", _REVIEW_PARENT_VALUES]}]},
+                        ]
+                    },
+                    "$$current",
                     {
                         "$ifNull": [
-                            "$raw_by_source.salla_direct.status.name",
+                            "$$customized",
                             {
                                 "$ifNull": [
-                                    "$raw_by_source.salla_direct.status.slug",
-                                    "$order_status_slug",
+                                    "$$current",
+                                    {
+                                        "$ifNull": [
+                                            "$raw_by_source.salla_direct.status.name",
+                                            {
+                                                "$ifNull": [
+                                                    "$raw_by_source.salla_direct.status.slug",
+                                                    "$order_status_slug",
+                                                ]
+                                            },
+                                        ]
+                                    },
                                 ]
                             },
                         ]
                     },
                 ]
             },
-        ]
+        }
     }
 
 
