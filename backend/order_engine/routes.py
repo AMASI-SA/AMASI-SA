@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from salla_integration.auto_sync import schedule_salla_auto_sync
-
 from .filter_summary import build_order_filter_summary
 from .models import OrderDTO
 from .repository import MongoOrderRepository, OrderRepository
@@ -42,10 +41,18 @@ class OrderStatusCounts(BaseModel):
 
 
 class QoyodOrderCounts(BaseModel):
+    """Qoyod card counts may degrade independently from Salla status cards.
+
+    `None` means the expensive Qoyod classifier was unavailable or exceeded its
+    bounded timeout. It must not be represented as a factual zero.
+    """
+
     model_config = ConfigDict(extra="forbid")
     from_date: str = "2026-07-01"
-    sent: int = 0
-    eligible_not_sent: int = 0
+    sent: Optional[int] = None
+    eligible_not_sent: Optional[int] = None
+    available: bool = True
+    error: Optional[str] = None
 
 
 class OrderFilterSummaryResponse(BaseModel):
