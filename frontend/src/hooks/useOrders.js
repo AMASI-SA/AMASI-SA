@@ -8,6 +8,7 @@ import {
 import {
     getOrder,
     listOrders,
+    openOrderFromSalla,
     ORDER_PAGE_SIZE,
 } from "../services/orderEngine";
 
@@ -284,6 +285,7 @@ export function useOrders() {
 export function useOrder(orderNumber) {
     const requestInFlightRef = useRef(false);
     const mountedRef = useRef(true);
+    const openedOrderRef = useRef("");
 
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -306,6 +308,14 @@ export function useOrder(orderNumber) {
         }
 
         try {
+            if (
+                !background &&
+                openedOrderRef.current !== normalizedOrderNumber
+            ) {
+                await openOrderFromSalla(normalizedOrderNumber);
+                openedOrderRef.current = normalizedOrderNumber;
+            }
+
             const result = await getOrder(normalizedOrderNumber);
 
             if (mountedRef.current) {
