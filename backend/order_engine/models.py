@@ -67,6 +67,8 @@ class CustomerDTO(CanonicalDTO):
     name: Optional[str] = None
     mobile: Optional[str] = None
     email: Optional[str] = None
+    avatar_url: Optional[str] = None
+    gender: Optional[Literal["male", "female"]] = None
     is_guest: bool = False
     shipping_address: Optional[AddressDTO] = None
     billing_address: Optional[AddressDTO] = None
@@ -187,6 +189,7 @@ class OrderDTO(CanonicalDTO):
     status: Optional[str] = None
     status_native: Optional[str] = None
     is_new: bool = False
+    is_gift: bool = False
 
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
