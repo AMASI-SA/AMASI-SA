@@ -104,9 +104,85 @@ def _provider_is_new(raw: dict[str, Any]) -> bool:
     return False
 
 
+def _text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _url_value(value: Any) -> Optional[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return text if text.startswith(("https://", "http://")) else None
+    if isinstance(value, dict):
+        for key in ("url", "original", "medium", "thumbnail", "image"):
+            candidate = _url_value(value.get(key))
+            if candidate:
+                return candidate
+    return None
+
+
+def _customer_avatar(raw: dict[str, Any]) -> Optional[str]:
+    customer = raw.get("customer") if isinstance(raw.get("customer"), dict) else {}
+    for candidate in (
+        customer.get("avatar_url"),
+        customer.get("avatar"),
+        customer.get("profile_image"),
+        customer.get("image"),
+        customer.get("photo"),
+        raw.get("customer_avatar"),
+    ):
+        url = _url_value(candidate)
+        if url:
+            return url
+    return None
+
+
+def _customer_gender(raw: dict[str, Any]) -> Optional[str]:
+    customer = raw.get("customer") if isinstance(raw.get("customer"), dict) else {}
+    value = _text(customer.get("gender") or raw.get("customer_gender"))
+    if not value:
+        return None
+    normalized = value.lower()
+    if normalized in {"male", "m", "man", "ذكر"}:
+        return "male"
+    if normalized in {"female", "f", "woman", "أنثى", "انثى"}:
+        return "female"
+    return None
+
+
+def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
+    for key in ("is_gift", "gift", "gift_order"):
+        if key not in raw:
+            continue
+        value = raw.get(key)
+        if isinstance(value, dict):
+            enabled = _bool_value(value.get("enabled") or value.get("is_gift"))
+        else:
+            enabled = _bool_value(value)
+        if enabled is not None:
+            return enabled
+
+    normalized_tags = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+    return bool(normalized_tags.intersection({"gift", "هدية", "إهداء", "اهداء"}))
+
+
 def _map_row(raw: dict[str, Any]) -> OrderDTO:
     dto = map_salla_order(raw)
-    return dto.model_copy(update={"is_new": _provider_is_new(raw)})
+    customer = dto.customer.model_copy(
+        update={
+            "avatar_url": _customer_avatar(raw),
+            "gender": _customer_gender(raw),
+        }
+    )
+    return dto.model_copy(
+        update={
+            "is_new": _provider_is_new(raw),
+            "is_gift": _provider_is_gift(raw, dto.tags),
+            "customer": customer,
+        }
+    )
 
 
 async def list_orders(
