@@ -113,6 +113,17 @@ def _text(value: Any) -> Optional[str]:
     return text or None
 
 
+def _named_value(value: Any) -> Optional[str]:
+    """Return the merchant-visible text from a Salla scalar or object."""
+    if isinstance(value, dict):
+        for key in ("name", "label", "title", "value", "slug"):
+            text = _text(value.get(key))
+            if text:
+                return text
+        return None
+    return _text(value)
+
+
 def _url_value(value: Any) -> Optional[str]:
     if isinstance(value, str):
         text = value.strip()
@@ -153,8 +164,12 @@ def _customer_gender(raw: dict[str, Any]) -> Optional[str]:
 def _provider_status_native(raw: dict[str, Any]) -> Optional[str]:
     status = raw.get("status")
     if isinstance(status, dict):
-        return _text(status.get("customized") or status.get("name") or status.get("slug"))
-    return _text(status)
+        return (
+            _named_value(status.get("customized"))
+            or _named_value(status.get("name"))
+            or _named_value(status.get("slug"))
+        )
+    return _named_value(status)
 
 
 def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
