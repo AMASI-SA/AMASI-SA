@@ -64,21 +64,27 @@ _STATUS_PATTERNS: dict[str, str] = {
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Return the authoritative status expression used by list filters.
+    """Return one current status used by every list filter.
 
-    Salla Direct raw status is authoritative. Canonical name is the next
-    fallback because historical rows proved that ``order_status_slug`` may lag
-    behind while the native name has already advanced. The canonical slug is
-    therefore the final fallback only.
+    Production diagnostics proved that historical records can retain stale
+    provider/raw slugs such as ``under_review`` while ``order_status`` already
+    contains the newer native Salla state (for example ``تم التنفيذ`` or
+    ``تم التوصيل``). The current native name is therefore authoritative.
+    Raw Salla values and the canonical slug are fallbacks only.
     """
 
     return {
         "$ifNull": [
-            "$raw_by_source.salla_direct.status.slug",
+            "$order_status",
             {
                 "$ifNull": [
                     "$raw_by_source.salla_direct.status.name",
-                    {"$ifNull": ["$order_status", "$order_status_slug"]},
+                    {
+                        "$ifNull": [
+                            "$raw_by_source.salla_direct.status.slug",
+                            "$order_status_slug",
+                        ]
+                    },
                 ]
             },
         ]
