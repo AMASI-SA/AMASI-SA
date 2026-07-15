@@ -1,6 +1,6 @@
 """Pure mapper tests: Salla raw payload → canonical OrderDTO."""
-
 from copy import deepcopy
+from datetime import timezone
 
 import pytest
 
@@ -142,6 +142,48 @@ def test_maps_realistic_salla_order(salla_order_payload):
     assert item.size == "18"
     assert item.image_url == "https://example.test/product.jpg"
     assert item.custom_fields[0]["value"] == "سارة"
+
+
+def test_salla_riyadh_wall_clock_is_normalized_to_utc(salla_order_payload):
+    order = map_salla_order(salla_order_payload)
+
+    assert order.created_at.tzinfo == timezone.utc
+    assert order.created_at.isoformat() == "2026-07-13T13:11:37+00:00"
+
+
+def test_naive_salla_timestamp_defaults_to_riyadh_then_utc(salla_order_payload):
+    salla_order_payload["date"] = "2026-07-15 19:23:00"
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.created_at.isoformat() == "2026-07-15T16:23:00+00:00"
+
+
+def test_explicit_utc_timestamp_remains_authoritative(salla_order_payload):
+    salla_order_payload["date"] = "2026-07-15T16:23:00Z"
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.created_at.isoformat() == "2026-07-15T16:23:00+00:00"
+
+
+def test_explicit_offset_is_normalized_to_utc(salla_order_payload):
+    salla_order_payload["date"] = "2026-07-15T19:23:00+03:00"
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.created_at.isoformat() == "2026-07-15T16:23:00+00:00"
+
+
+def test_unknown_source_timezone_falls_back_to_riyadh(salla_order_payload):
+    salla_order_payload["date"] = {
+        "date": "2026-07-15 19:23:00",
+        "timezone": "Invalid/Timezone",
+    }
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.created_at.isoformat() == "2026-07-15T16:23:00+00:00"
 
 
 def test_mapper_does_not_mutate_raw_payload(salla_order_payload):
