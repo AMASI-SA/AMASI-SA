@@ -6,13 +6,10 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    CalendarBlank,
     CaretLeft,
-    CreditCard,
     MagnifyingGlass,
     Package,
     SpinnerGap,
-    Truck,
     User,
     WarningCircle,
     X,
@@ -30,7 +27,7 @@ function formatMoney(value) {
 }
 
 function formatOrderDate(value) {
-    if (!value) return "تاريخ الإنشاء غير متاح";
+    if (!value) return "";
 
     const date = new Date(value);
 
@@ -57,7 +54,7 @@ function statusClass(status) {
         value.includes("تم التنفيذ") ||
         value.includes("تم التوصيل")
     ) {
-        return "border-emerald-200 bg-emerald-50 text-emerald-800";
+        return "text-emerald-700";
     }
 
     if (
@@ -66,7 +63,7 @@ function statusClass(status) {
         value.includes("refunded") ||
         value.includes("مسترج")
     ) {
-        return "border-rose-200 bg-rose-50 text-rose-800";
+        return "text-rose-700";
     }
 
     if (
@@ -74,10 +71,18 @@ function statusClass(status) {
         value.includes("مراجعة") ||
         value.includes("pending")
     ) {
-        return "border-black bg-black text-white";
+        return "text-slate-950";
     }
 
-    return "border-sky-200 bg-sky-50 text-sky-800";
+    return "text-sky-700";
+}
+
+function cityName(order) {
+    return (
+        order.shipping?.address?.city ||
+        order.customer?.shipping_address?.city ||
+        "غير محدد"
+    );
 }
 
 export default function OrdersV2() {
@@ -219,7 +224,7 @@ export default function OrdersV2() {
                 </form>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-5 py-4">
                     <h2 className="font-extrabold text-slate-900">
                         {searchMode
@@ -271,11 +276,13 @@ export default function OrdersV2() {
                                 order.status_native ||
                                 order.status ||
                                 "غير محدد";
-
                             const paymentMethod =
                                 order.payment?.method_native ||
                                 order.payment?.method ||
                                 "غير محدد";
+                            const itemCount = Number(
+                                order.items?.length || 0
+                            );
 
                             return (
                                 <button
@@ -288,105 +295,61 @@ export default function OrdersV2() {
                                             )}`
                                         )
                                     }
-                                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3 text-right transition hover:bg-violet-50/40 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:gap-4 lg:px-5 lg:py-5"
+                                    className="flex w-full items-center gap-3 px-4 py-4 text-right transition hover:bg-slate-50 sm:px-5 sm:py-5"
                                     data-testid={`orders-v2-row-${order.order_number}`}
                                 >
-                                    <div className="col-start-1 row-start-1 flex min-w-0 items-start gap-2.5 lg:col-auto lg:row-auto lg:gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 lg:h-11 lg:w-11">
-                                            <User size={22} weight="fill" />
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                                        <User size={22} weight="fill" />
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                        <div className="truncate text-[15px] font-semibold text-slate-800 sm:text-base">
+                                            {order.customer?.name ||
+                                                "عميل بدون اسم"}
                                         </div>
 
-                                        <div className="min-w-0">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <div className="truncate text-sm font-extrabold text-slate-950 lg:text-base">
-                                                    {order.customer?.name ||
-                                                        "عميل بدون اسم"}
-                                                </div>
+                                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 sm:text-xs">
+                                            <span className="num">
+                                                #{order.order_number}
+                                            </span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{cityName(order)}</span>
+                                            <span aria-hidden="true">•</span>
+                                            <span className={statusClass(status)}>
+                                                {status}
+                                            </span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>
+                                                {itemCount.toLocaleString("en-US")} قطعة
+                                            </span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{paymentMethod}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex shrink-0 items-center gap-3">
+                                        <div className="flex flex-col items-end gap-1">
+                                            <div className="flex items-center gap-2">
                                                 {order.is_new && (
-                                                    <span className="shrink-0 rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-rose-600 lg:text-xs">
+                                                    <span className="rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-rose-600 sm:text-xs">
                                                         جديد
                                                     </span>
                                                 )}
-                                            </div>
-
-                                            <div className="num mt-0.5 text-xs font-bold text-violet-700 lg:mt-1 lg:text-sm">
-                                                #{order.order_number}
-                                            </div>
-
-                                            <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 lg:mt-2 lg:text-xs">
-                                                <CalendarBlank size={15} />
-                                                <span>
-                                                    {formatOrderDate(
-                                                        order.created_at
+                                                <span className="num whitespace-nowrap text-[15px] font-semibold text-teal-800 sm:text-base">
+                                                    {formatMoney(
+                                                        order.totals?.total
                                                     )}
                                                 </span>
                                             </div>
-                                        </div>
-                                    </div>
 
-                                    <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 pr-[50px] lg:col-auto lg:row-auto lg:block lg:space-y-2 lg:pr-0">
-                                        <span
-                                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold lg:px-2.5 lg:py-1 lg:text-xs ${statusClass(
-                                                status
-                                            )}`}
-                                        >
-                                            {status}
-                                        </span>
-
-                                        <div className="flex items-center gap-1 text-[10px] text-slate-600 lg:gap-1.5 lg:text-xs">
-                                            <CreditCard size={14} className="lg:h-4 lg:w-4" />
-                                            <span>{paymentMethod}</span>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 text-[10px] text-slate-600 lg:hidden">
-                                            <Package size={14} />
-                                            <span>
-                                                {Number(
-                                                    order.items?.length || 0
-                                                ).toLocaleString("en-US")} منتج
+                                            <span className="text-[10px] text-slate-400 sm:text-xs">
+                                                {formatOrderDate(order.created_at)}
                                             </span>
                                         </div>
 
-                                        {order.payment?.receiving_bank_name && (
-                                            <div className="text-xs font-bold text-slate-700">
-                                                البنك:{" "}
-                                                {
-                                                    order.payment
-                                                        .receiving_bank_name
-                                                }
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="hidden space-y-2 text-sm text-slate-600 lg:block">
-                                        <div className="flex items-center gap-1.5">
-                                            <Truck size={16} />
-                                            <span>
-                                                {order.shipping?.company ||
-                                                    "غير محدد"}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-1.5">
-                                            <Package size={16} />
-                                            <span>
-                                                {Number(
-                                                    order.items?.length || 0
-                                                ).toLocaleString("en-US")}{" "}
-                                                منتج
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="col-start-2 row-span-2 row-start-1 flex min-w-[92px] flex-col items-end justify-center gap-2 lg:col-auto lg:row-auto lg:min-w-0 lg:flex-row lg:items-center lg:justify-end lg:gap-4">
-                                        <div className="num whitespace-nowrap text-base font-extrabold text-slate-950 lg:text-lg">
-                                            {formatMoney(
-                                                order.totals?.total
-                                            )}
-                                        </div>
                                         <CaretLeft
                                             size={18}
-                                            className="text-slate-400 lg:h-5 lg:w-5"
+                                            className="text-slate-300"
                                         />
                                     </div>
                                 </button>
