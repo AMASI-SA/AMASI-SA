@@ -35,6 +35,7 @@ class OrderStatusCounts(BaseModel):
     model_config = ConfigDict(extra="forbid")
     all: int = 0
     under_review: int = 0
+    reviewed: int = 0
     processing: int = 0
     completed: int = 0
     shipping: int = 0
