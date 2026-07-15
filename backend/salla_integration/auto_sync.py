@@ -1,22 +1,22 @@
 """Throttled Salla Direct auto-sync for Mezan OS order screens.
 
-The manual 30-day sync discovers orders from ``GET /orders``.  That response
-is intentionally light and is not the authoritative source for order lines.
-This module discovers recently changed orders, then sends every discovered
-order through ``resync_single_order`` which fetches:
+Background synchronization must not open Salla Order Details because Salla may
+interpret ``GET /orders/{id}`` as the merchant viewing the order and remove the
+provider-side "new" indicator.  This module therefore uses only:
 
-* Order Details
-* ``GET /orders/items?order_id=<internal id>``
-* unified ``products`` and ``cost_items``
+* ``GET /orders`` with ``format=light`` for order discovery and list facts.
+* ``GET /orders/items?order_id=<internal id>`` for authoritative line items.
+
+The explicit single-order resync path remains the detail/open path and may call
+``GET /orders/{id}`` after the merchant actually opens an order in Mezan.
 
 Safety invariants:
 * Salla Direct only; Make is never read.
-* No Qoyod calls.
+* No Qoyod API calls.
 * At most one task per user in this process.
 * Requests are throttled so frontend polling does not hammer Salla.
 * Failures are logged and never break the read-only Order Engine response.
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -25,8 +25,14 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from orders_db import upsert_order
+
 from .service import call_salla
-from .sync import resync_single_order
+from .sync import (
+    _fetch_salla_order_items,
+    _refresh_plan_b_status_snapshot,
+    _salla_order_to_doc,
+)
 
 log = logging.getLogger("salla.auto_sync")
 
@@ -50,7 +56,13 @@ def _reference_id(row: Any) -> str:
     return str(row.get("reference_id") or row.get("order_number") or "").strip()
 
 
-async def _discover_recent_order_numbers(db, user_id: str) -> list[str]:
+def _internal_id(row: Any) -> str:
+    if not isinstance(row, dict):
+        return ""
+    return str(row.get("id") or "").strip()
+
+
+async def _discover_recent_orders(db, user_id: str) -> list[dict]:
     now = _utcnow()
     last_success = _last_success_at.get(user_id)
 
@@ -76,13 +88,70 @@ async def _discover_recent_order_numbers(db, user_id: str) -> list[str]:
     if not isinstance(rows, list):
         return []
 
-    unique: dict[str, None] = {}
+    unique: dict[str, dict] = {}
     for row in rows[:MAX_DISCOVERED_ORDERS]:
+        if not isinstance(row, dict):
+            continue
         order_number = _reference_id(row)
-        if order_number:
-            unique.setdefault(order_number, None)
+        internal_id = _internal_id(row)
+        if order_number and internal_id:
+            unique.setdefault(order_number, dict(row))
 
-    return list(unique)
+    return list(unique.values())
+
+
+async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
+    """Persist one light order plus line items without opening Order Details."""
+    order_number = _reference_id(light_order)
+    internal_id = _internal_id(light_order)
+    if not order_number or not internal_id:
+        return False
+
+    items = await _fetch_salla_order_items(db, user_id, internal_id)
+    raw = dict(light_order)
+    raw["items"] = items
+    raw["mezan_background_sync"] = True
+
+    doc = _salla_order_to_doc(raw)
+    if not doc.get("order_number"):
+        return False
+
+    await upsert_order(
+        db,
+        user_id,
+        doc["order_number"],
+        doc,
+        source="salla_direct",
+        raw=raw,
+    )
+    await _refresh_plan_b_status_snapshot(
+        db,
+        user_id,
+        doc["order_number"],
+        doc,
+    )
+
+    post = await db.unified_orders.find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0, "order_number": 1, "products": 1, "total_amount": 1},
+    )
+    if post is not None:
+        try:
+            from product_costs import attach_cost_to_order_doc
+
+            cost_patch = await attach_cost_to_order_doc(db, user_id, post)
+            await db.unified_orders.update_one(
+                {"user_id": user_id, "order_number": order_number},
+                {"$set": cost_patch},
+            )
+        except Exception:
+            log.exception(
+                "salla.auto_sync.cost_enrichment_failed user_id=%s order_number=%s",
+                user_id,
+                order_number,
+            )
+
+    return True
 
 
 async def _run_auto_sync(db, user_id: str) -> None:
@@ -92,21 +161,23 @@ async def _run_auto_sync(db, user_id: str) -> None:
     failed = 0
 
     try:
-        order_numbers = await _discover_recent_order_numbers(db, user_id)
-        discovered = len(order_numbers)
+        orders = await _discover_recent_orders(db, user_id)
+        discovered = len(orders)
 
-        for order_number in order_numbers:
-            result = await resync_single_order(db, user_id, order_number)
-            if result.get("ok") and result.get("found"):
-                synced += 1
-            else:
+        for light_order in orders:
+            order_number = _reference_id(light_order)
+            try:
+                if await _sync_light_order(db, user_id, light_order):
+                    synced += 1
+                else:
+                    failed += 1
+            except Exception as exc:
                 failed += 1
                 log.warning(
-                    "salla.auto_sync.order_failed user_id=%s order_number=%s stage=%s error=%s",
+                    "salla.auto_sync.order_failed user_id=%s order_number=%s error=%s",
                     user_id,
                     order_number,
-                    result.get("stage"),
-                    result.get("error"),
+                    str(exc)[:300],
                 )
 
         _last_success_at[user_id] = started_at
