@@ -47,13 +47,19 @@ class OrderRepository(Protocol):
         """Return one exact Salla-backed discovery row."""
 
 
+# Exact provider/native values only. Broad substring patterns such as
+# ``review|pending|مراجعة`` are forbidden because they merge distinct Salla
+# states (for example under_review and reviewed).
 _STATUS_PATTERNS: dict[str, str] = {
-    "under_review": r"review|pending|مراجعة",
-    "processing": r"processing|in[_ ]?progress|قيد التنفيذ|جاري التنفيذ",
-    "completed": r"completed|delivered|تم التنفيذ|تم التوصيل",
-    "shipping": r"shipping|shipped|جاري التوصيل|تم الشحن",
-    "cancelled": r"cancel|ملغ|محذوف",
-    "refunded": r"refund|مسترج",
+    "under_review": (
+        r"^(under[_ ]?review|waiting[_ ]?review|pending[_ ]?review|"
+        r"بإنتظار المراجعة|بانتظار المراجعة|انتظار المراجعة)$"
+    ),
+    "processing": r"^(processing|in[_ ]?progress|قيد التنفيذ|جاري التنفيذ)$",
+    "completed": r"^(completed|delivered|تم التنفيذ|تم التوصيل)$",
+    "shipping": r"^(shipping|shipped|out[_ ]?for[_ ]?delivery|جاري التوصيل|تم الشحن)$",
+    "cancelled": r"^(cancelled|canceled|deleted|ملغي|ملغى|محذوف)$",
+    "refunded": r"^(refunded|returned|مسترجع|تم الاسترجاع)$",
 }
 
 
