@@ -16,19 +16,14 @@ const ORDER_REFRESH_INTERVAL_MS = 10_000;
 
 function uniqueOrders(rows) {
     const unique = new Map();
-
     for (const order of rows || []) {
         const key = String(order?.order_number || "").trim();
-
-        if (key && !unique.has(key)) {
-            unique.set(key, order);
-        }
+        if (key && !unique.has(key)) unique.set(key, order);
     }
-
     return Array.from(unique.values());
 }
 
-export function useOrders() {
+export function useOrders({ statusGroup = null } = {}) {
     const requestIdRef = useRef(0);
     const refreshInFlightRef = useRef(false);
     const ordersRef = useRef([]);
@@ -42,17 +37,11 @@ export function useOrders() {
     const [error, setError] = useState("");
     const [searchMode, setSearchMode] = useState(false);
 
-    useEffect(() => {
-        ordersRef.current = orders;
-    }, [orders]);
-
-    useEffect(() => {
-        searchModeRef.current = searchMode;
-    }, [searchMode]);
+    useEffect(() => { ordersRef.current = orders; }, [orders]);
+    useEffect(() => { searchModeRef.current = searchMode; }, [searchMode]);
 
     const loadFirstPage = useCallback(async ({ background = false } = {}) => {
         if (refreshInFlightRef.current) return;
-
         refreshInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
 
@@ -66,30 +55,20 @@ export function useOrders() {
         try {
             const result = await listOrders({
                 limit: ORDER_PAGE_SIZE,
+                statusGroup,
             });
-
             if (requestId !== requestIdRef.current) return;
 
             const refreshedOrders = uniqueOrders(result.items);
-
             if (background) {
                 setOrders((current) => {
-                    const refreshedKeys = new Set(
-                        refreshedOrders.map((order) =>
-                            String(order.order_number)
-                        )
+                    const keys = new Set(
+                        refreshedOrders.map((order) => String(order.order_number))
                     );
-                    const retainedTail = current.filter(
-                        (order) =>
-                            !refreshedKeys.has(
-                                String(order.order_number)
-                            )
+                    const retained = current.filter(
+                        (order) => !keys.has(String(order.order_number))
                     );
-
-                    return uniqueOrders([
-                        ...refreshedOrders,
-                        ...retainedTail,
-                    ]);
+                    return uniqueOrders([...refreshedOrders, ...retained]);
                 });
             } else {
                 setOrders(refreshedOrders);
@@ -98,7 +77,6 @@ export function useOrders() {
             }
         } catch (loadError) {
             if (requestId !== requestIdRef.current) return;
-
             if (!background) {
                 setOrders([]);
                 setNextCursor(null);
@@ -114,37 +92,26 @@ export function useOrders() {
                 refreshInFlightRef.current = false;
             }
         }
-    }, []);
+    }, [statusGroup]);
 
-    useEffect(() => {
-        loadFirstPage();
-    }, [loadFirstPage]);
+    useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
 
     const loadMore = useCallback(async () => {
         if (
-            loading ||
-            initialLoading ||
-            searchMode ||
-            !hasMore ||
-            !nextCursor ||
-            refreshInFlightRef.current
-        ) {
-            return;
-        }
+            loading || initialLoading || searchMode || !hasMore ||
+            !nextCursor || refreshInFlightRef.current
+        ) return;
 
         refreshInFlightRef.current = true;
         setLoading(true);
         setError("");
-
         try {
             const result = await listOrders({
                 limit: ORDER_PAGE_SIZE,
                 cursor: nextCursor,
+                statusGroup,
             });
-
-            setOrders((current) =>
-                uniqueOrders([...current, ...result.items])
-            );
+            setOrders((current) => uniqueOrders([...current, ...result.items]));
             setNextCursor(result.nextCursor);
             setHasMore(Boolean(result.nextCursor));
         } catch (loadError) {
@@ -153,27 +120,18 @@ export function useOrders() {
             setLoading(false);
             refreshInFlightRef.current = false;
         }
-    }, [
-        hasMore,
-        initialLoading,
-        loading,
-        nextCursor,
-        searchMode,
-    ]);
+    }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusGroup]);
 
     const searchExactOrder = useCallback(async (orderNumber) => {
         const normalized = String(orderNumber || "").trim();
-
         if (!normalized) {
             await loadFirstPage();
             return;
         }
-
         if (refreshInFlightRef.current) return;
 
         refreshInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
-
         setInitialLoading(true);
         setLoading(true);
         setError("");
@@ -181,15 +139,12 @@ export function useOrders() {
 
         try {
             const order = await getOrder(normalized);
-
             if (requestId !== requestIdRef.current) return;
-
             setOrders(order ? [order] : []);
             setNextCursor(null);
             setHasMore(false);
         } catch (searchError) {
             if (requestId !== requestIdRef.current) return;
-
             setOrders([]);
             setNextCursor(null);
             setHasMore(false);
@@ -206,21 +161,16 @@ export function useOrders() {
     const refreshVisibleOrders = useCallback(async () => {
         if (
             refreshInFlightRef.current ||
-            typeof document !== "undefined" && document.hidden ||
-            typeof navigator !== "undefined" && !navigator.onLine
-        ) {
-            return;
-        }
+            (typeof document !== "undefined" && document.hidden) ||
+            (typeof navigator !== "undefined" && !navigator.onLine)
+        ) return;
 
         if (searchModeRef.current) {
             const orderNumber = String(
                 ordersRef.current[0]?.order_number || ""
             ).trim();
-
             if (!orderNumber) return;
-
             refreshInFlightRef.current = true;
-
             try {
                 const order = await getOrder(orderNumber);
                 if (order) setOrders([order]);
@@ -232,7 +182,6 @@ export function useOrders() {
             }
             return;
         }
-
         await loadFirstPage({ background: true });
     }, [loadFirstPage]);
 
@@ -241,30 +190,18 @@ export function useOrders() {
             refreshVisibleOrders,
             ORDER_REFRESH_INTERVAL_MS
         );
-
-        const handleFocus = () => {
-            refreshVisibleOrders();
-        };
-
+        const handleFocus = () => refreshVisibleOrders();
         const handleVisibilityChange = () => {
             if (!document.hidden) refreshVisibleOrders();
         };
-
         window.addEventListener("focus", handleFocus);
         window.addEventListener("online", handleFocus);
-        document.addEventListener(
-            "visibilitychange",
-            handleVisibilityChange
-        );
-
+        document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             window.clearInterval(intervalId);
             window.removeEventListener("focus", handleFocus);
             window.removeEventListener("online", handleFocus);
-            document.removeEventListener(
-                "visibilitychange",
-                handleVisibilityChange
-            );
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, [refreshVisibleOrders]);
 
@@ -286,76 +223,49 @@ export function useOrder(orderNumber) {
     const requestInFlightRef = useRef(false);
     const mountedRef = useRef(true);
     const openedOrderRef = useRef("");
-
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
     const load = useCallback(async ({ background = false } = {}) => {
-        const normalizedOrderNumber = String(
-            orderNumber || ""
-        ).trim();
-
-        if (!normalizedOrderNumber || requestInFlightRef.current) {
-            return;
-        }
-
+        const normalized = String(orderNumber || "").trim();
+        if (!normalized || requestInFlightRef.current) return;
         requestInFlightRef.current = true;
-
         if (!background) {
             setLoading(true);
             setError("");
         }
 
         try {
-            if (
-                !background &&
-                openedOrderRef.current !== normalizedOrderNumber
-            ) {
-                await openOrderFromSalla(normalizedOrderNumber);
-                openedOrderRef.current = normalizedOrderNumber;
+            if (!background && openedOrderRef.current !== normalized) {
+                await openOrderFromSalla(normalized);
+                openedOrderRef.current = normalized;
             }
-
-            const result = await getOrder(normalizedOrderNumber);
-
+            const result = await getOrder(normalized);
             if (mountedRef.current) {
                 setOrder(result);
                 setError("");
             }
         } catch (loadError) {
-            if (mountedRef.current) {
-                setError(loadError.message);
-            }
+            if (mountedRef.current) setError(loadError.message);
         } finally {
             requestInFlightRef.current = false;
-            if (mountedRef.current && !background) {
-                setLoading(false);
-            }
+            if (mountedRef.current && !background) setLoading(false);
         }
     }, [orderNumber]);
 
     useEffect(() => {
         mountedRef.current = true;
         load();
-
         const refresh = () => {
-            if (
-                !document.hidden &&
-                navigator.onLine
-            ) {
+            if (!document.hidden && navigator.onLine) {
                 load({ background: true });
             }
         };
-
-        const intervalId = window.setInterval(
-            refresh,
-            ORDER_REFRESH_INTERVAL_MS
-        );
-
+        const intervalId = window.setInterval(refresh, ORDER_REFRESH_INTERVAL_MS);
         window.addEventListener("focus", refresh);
         window.addEventListener("online", refresh);
         document.addEventListener("visibilitychange", refresh);
-
         return () => {
             mountedRef.current = false;
             window.clearInterval(intervalId);
