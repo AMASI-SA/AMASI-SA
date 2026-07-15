@@ -1,19 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+    ArrowCounterClockwise,
     CaretLeft,
+    CheckCircle,
+    Clock,
+    CreditCard,
     Funnel,
+    Gear,
     Gift,
     MagnifyingGlass,
+    NotePencil,
     Package,
     SpinnerGap,
+    Truck,
     User,
+    UserCheck,
     WarningCircle,
     X,
+    XCircle,
 } from "@phosphor-icons/react";
 
 import { useOrders } from "../hooks/useOrders";
 import { getOrderFilterSummary } from "../services/orderEngine";
+
+const STATUS_PRIORITY = [
+    ["بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review"],
+    ["تم المراجعة", "تمت المراجعة", "reviewed"],
+    ["قيد التنفيذ", "جاري التنفيذ", "processing", "in progress"],
+    ["تم التنفيذ", "completed"],
+    ["جاري التوصيل", "delivering", "out for delivery"],
+    ["تم التوصيل", "delivered"],
+    ["بإنتظار الدفع", "بانتظار الدفع", "payment pending"],
+    ["بإنتظار تأكيد العميل", "بانتظار تأكيد العميل"],
+    ["بإنتظار مراجعة العميل", "بانتظار مراجعة العميل"],
+    ["مراجعة الملاحظات"],
+    ["مدمج", "merged"],
+    ["تم التجهيز", "prepared"],
+    ["مسند إلى مندوب التوصيل", "مسند الى مندوب التوصيل", "assigned"],
+    ["تم الشحن", "shipped"],
+    ["ملغي", "ملغى", "canceled", "cancelled"],
+    ["محذوف", "deleted"],
+    ["مسترجع", "refunded", "returned"],
+    ["قيد الاسترجاع", "refunding"],
+    ["طلب عرض سعر", "quote"],
+];
 
 function formatMoney(value) {
     const number = Number(value || 0);
@@ -41,29 +72,116 @@ function normalizedStatus(status) {
     return String(status || "").replaceAll("_", " ").trim().toLowerCase();
 }
 
-function statusDotClass(status) {
+function statusPriority(status) {
     const value = normalizedStatus(status);
-    if (
-        value.includes("completed") || value.includes("delivered") ||
-        value.includes("تم التنفيذ") || value.includes("تم التوصيل") ||
-        value.includes("تم التجهيز") || value.includes("تم الشحن")
-    ) return "bg-emerald-400";
-    if (
-        value.includes("shipping") || value.includes("جاري التوصيل") ||
-        value.includes("قيد التوصيل") || value.includes("مندوب التوصيل")
-    ) return "bg-amber-400";
-    if (
-        value.includes("processing") || value.includes("in progress") ||
-        value.includes("قيد التنفيذ") || value.includes("جاري التنفيذ") || value.includes("مدمج")
-    ) return "bg-sky-500";
-    if (value.includes("review") || value.includes("مراجعة") || value.includes("pending")) {
-        return "bg-slate-800";
+    const index = STATUS_PRIORITY.findIndex((aliases) =>
+        aliases.some((alias) => value === normalizedStatus(alias))
+    );
+    return index === -1 ? STATUS_PRIORITY.length + 100 : index;
+}
+
+function statusVisual(status) {
+    const value = normalizedStatus(status);
+
+    if (value.includes("بإنتظار المراجعة") || value.includes("بانتظار المراجعة") || value === "under review") {
+        return {
+            Icon: Clock,
+            dot: "bg-slate-800",
+            iconBox: "bg-slate-100 text-slate-700",
+            active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200",
+        };
     }
-    if (
-        value.includes("cancel") || value.includes("ملغ") || value.includes("محذوف") ||
-        value.includes("refunded") || value.includes("مسترج") || value.includes("استرجاع")
-    ) return "bg-rose-500";
-    return "bg-slate-400";
+    if (value.includes("تم المراجعة") || value.includes("تمت المراجعة") || value === "reviewed") {
+        return {
+            Icon: UserCheck,
+            dot: "bg-slate-800",
+            iconBox: "bg-slate-100 text-slate-700",
+            active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200",
+        };
+    }
+    if (value.includes("قيد التنفيذ") || value.includes("جاري التنفيذ") || value.includes("processing") || value.includes("مدمج")) {
+        return {
+            Icon: Gear,
+            dot: "bg-sky-500",
+            iconBox: "bg-sky-50 text-sky-600",
+            active: "border-sky-500 bg-sky-50 ring-2 ring-sky-100",
+        };
+    }
+    if (value === "تم التنفيذ" || value === "completed") {
+        return {
+            Icon: CheckCircle,
+            dot: "bg-emerald-400",
+            iconBox: "bg-emerald-50 text-emerald-600",
+            active: "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100",
+        };
+    }
+    if (value.includes("جاري التوصيل") || value.includes("delivering") || value.includes("out for delivery")) {
+        return {
+            Icon: Truck,
+            dot: "bg-amber-400",
+            iconBox: "bg-amber-50 text-amber-600",
+            active: "border-amber-500 bg-amber-50 ring-2 ring-amber-100",
+        };
+    }
+    if (value === "تم التوصيل" || value === "delivered") {
+        return {
+            Icon: Package,
+            dot: "bg-emerald-400",
+            iconBox: "bg-emerald-50 text-emerald-600",
+            active: "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100",
+        };
+    }
+    if (value.includes("الدفع") || value.includes("payment")) {
+        return {
+            Icon: CreditCard,
+            dot: "bg-rose-500",
+            iconBox: "bg-rose-50 text-rose-600",
+            active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100",
+        };
+    }
+    if (value.includes("التجهيز") || value.includes("الشحن") || value.includes("مندوب")) {
+        return {
+            Icon: Package,
+            dot: "bg-teal-400",
+            iconBox: "bg-teal-50 text-teal-600",
+            active: "border-teal-500 bg-teal-50 ring-2 ring-teal-100",
+        };
+    }
+    if (value.includes("مراجعة") || value.includes("تأكيد العميل") || value.includes("الملاحظات")) {
+        return {
+            Icon: NotePencil,
+            dot: "bg-slate-800",
+            iconBox: "bg-slate-100 text-slate-700",
+            active: "border-slate-700 bg-slate-50 ring-2 ring-slate-200",
+        };
+    }
+    if (value.includes("ملغ") || value.includes("محذوف") || value.includes("cancel") || value.includes("deleted")) {
+        return {
+            Icon: XCircle,
+            dot: "bg-rose-500",
+            iconBox: "bg-rose-50 text-rose-600",
+            active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100",
+        };
+    }
+    if (value.includes("مسترج") || value.includes("استرجاع") || value.includes("refund") || value.includes("return")) {
+        return {
+            Icon: ArrowCounterClockwise,
+            dot: "bg-rose-500",
+            iconBox: "bg-rose-50 text-rose-600",
+            active: "border-rose-500 bg-rose-50 ring-2 ring-rose-100",
+        };
+    }
+
+    return {
+        Icon: Package,
+        dot: "bg-violet-500",
+        iconBox: "bg-violet-50 text-violet-600",
+        active: "border-violet-500 bg-violet-50 ring-2 ring-violet-100",
+    };
+}
+
+function statusDotClass(status) {
+    return statusVisual(status).dot;
 }
 
 function cityName(order) {
@@ -91,16 +209,30 @@ function CustomerAvatar({ customer }) {
     );
 }
 
-function CountCard({ label, count, active, onClick }) {
+function CountCard({ label, count, active, onClick, isAll = false }) {
+    const visual = isAll
+        ? {
+            Icon: Package,
+            iconBox: "bg-violet-50 text-violet-600",
+            active: "border-violet-500 bg-violet-50 ring-2 ring-violet-100",
+        }
+        : statusVisual(label);
+    const Icon = visual.Icon;
+
     return (
         <button
             type="button"
             onClick={onClick}
-            className={`min-w-[160px] rounded-2xl border bg-white px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${
-                active ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200"
+            className={`min-w-[170px] rounded-2xl border bg-white px-4 py-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${
+                active ? visual.active : "border-slate-200"
             }`}
         >
-            <div className="text-xs font-bold text-slate-500">{label}</div>
+            <div className="flex items-start justify-between gap-3">
+                <div className="text-xs font-bold text-slate-500">{label}</div>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${visual.iconBox}`}>
+                    <Icon size={18} weight="duotone" />
+                </span>
+            </div>
             <div className="num mt-2 text-2xl font-extrabold text-slate-950">
                 {Number(count || 0).toLocaleString("en-US")}
             </div>
@@ -163,10 +295,22 @@ export default function OrdersV2() {
     }, [hasMore, initialLoading, loadMore, searchMode]);
 
     const shownCount = useMemo(() => orders.length, [orders]);
-    const statusCards = useMemo(() => [
-        { key: null, label: "كل الطلبات", count: summary.total },
-        ...(summary.statusCards || []),
-    ], [summary.statusCards, summary.total]);
+    const statusCards = useMemo(() => {
+        const providerCards = [...(summary.statusCards || [])].sort((left, right) => {
+            const priorityDifference = statusPriority(left.label) - statusPriority(right.label);
+            if (priorityDifference !== 0) return priorityDifference;
+            return String(left.label || "").localeCompare(String(right.label || ""), "ar");
+        });
+        return [
+            { key: null, label: "كل الطلبات", count: summary.total, isAll: true },
+            ...providerCards,
+        ];
+    }, [summary.statusCards, summary.total]);
+
+    const activeStatusLabel = useMemo(
+        () => statusCards.find((card) => card.key === activeStatus)?.label || null,
+        [activeStatus, statusCards]
+    );
 
     function submitSearch(event) {
         event.preventDefault();
@@ -212,6 +356,7 @@ export default function OrdersV2() {
                             key={card.key || "all"}
                             label={card.label}
                             count={card.count}
+                            isAll={card.isAll}
                             active={activeStatus === card.key}
                             onClick={() => setActiveStatus(card.key)}
                         />
@@ -248,7 +393,13 @@ export default function OrdersV2() {
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-5 py-4">
-                    <h2 className="font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2>
+                    <h2 className="font-extrabold text-slate-900">
+                        {searchMode
+                            ? "نتيجة البحث"
+                            : activeStatusLabel
+                                ? `طلبات: ${activeStatusLabel}`
+                                : "أحدث الطلبات حسب تاريخ الإنشاء"}
+                    </h2>
                 </div>
 
                 {error && (
@@ -323,12 +474,19 @@ export default function OrdersV2() {
                         <div className="mt-8">
                             <div className="mb-3 text-sm font-extrabold text-slate-800">حالة الطلب</div>
                             <div className="space-y-2">
-                                {statusCards.map((card) => (
-                                    <label key={card.key || "all"} className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-3">
-                                        <span className="text-sm text-slate-700">{card.label}</span>
-                                        <input type="radio" name="status-filter" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} />
-                                    </label>
-                                ))}
+                                {statusCards.map((card) => {
+                                    const visual = card.isAll ? statusVisual("all") : statusVisual(card.label);
+                                    const Icon = card.isAll ? Package : visual.Icon;
+                                    return (
+                                        <label key={card.key || "all"} className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-3">
+                                            <span className="inline-flex items-center gap-2 text-sm text-slate-700">
+                                                <Icon size={18} className={card.isAll ? "text-violet-600" : visual.iconBox.split(" ").at(-1)} />
+                                                {card.label}
+                                            </span>
+                                            <input type="radio" name="status-filter" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} />
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                         <div className="mt-8 grid grid-cols-2 gap-3">
