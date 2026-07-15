@@ -21,6 +21,14 @@ ALLOWED_STATUS_GROUPS = {
     "cancelled",
     "refunded",
 }
+_REVIEW_PARENT_VALUES = {
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
+}
 
 
 class OrderNotFoundError(LookupError):
@@ -54,6 +62,10 @@ def _normalise_status_group(value: Optional[str]) -> Optional[str]:
 def _normalise_status_exact(value: Optional[str]) -> Optional[str]:
     normalized = " ".join(str(value or "").replace("_", " ").strip().casefold().split())
     return normalized or None
+
+
+def _status_key(value: Any) -> str:
+    return " ".join(str(value or "").replace("_", " ").strip().casefold().split())
 
 
 def _encode_cursor(order_date: str, order_number: str) -> str:
@@ -114,7 +126,6 @@ def _text(value: Any) -> Optional[str]:
 
 
 def _named_value(value: Any) -> Optional[str]:
-    """Return the merchant-visible text from a Salla scalar or object."""
     if isinstance(value, dict):
         for key in ("name", "label", "title", "value", "slug"):
             text = _text(value.get(key))
@@ -161,15 +172,24 @@ def _customer_gender(raw: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _provider_status_native(raw: dict[str, Any]) -> Optional[str]:
+def _provider_status_native(
+    raw: dict[str, Any],
+    *,
+    current_status: Optional[str] = None,
+) -> Optional[str]:
     status = raw.get("status")
+    customized = None
+    parent = None
     if isinstance(status, dict):
-        return (
-            _named_value(status.get("customized"))
-            or _named_value(status.get("name"))
-            or _named_value(status.get("slug"))
-        )
-    return _named_value(status)
+        customized = _named_value(status.get("customized"))
+        parent = _named_value(status.get("name")) or _named_value(status.get("slug"))
+    else:
+        parent = _named_value(status)
+
+    current = _text(current_status)
+    if current and _status_key(current) not in _REVIEW_PARENT_VALUES:
+        return current
+    return customized or current or parent
 
 
 def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
@@ -184,12 +204,12 @@ def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
     return bool(normalized_tags.intersection({"gift", "هدية", "إهداء", "اهداء"}))
 
 
-def _map_row(raw: dict[str, Any]) -> OrderDTO:
+def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:
     dto = map_salla_order(raw)
     customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
     return dto.model_copy(
         update={
-            "status_native": _provider_status_native(raw) or dto.status_native,
+            "status_native": _provider_status_native(raw, current_status=current_status) or dto.status_native,
             "is_new": _provider_is_new(raw),
             "is_gift": _provider_is_gift(raw, dto.tags),
             "customer": customer,
@@ -232,7 +252,7 @@ async def list_orders(
     last_valid_order_number: Optional[str] = None
     for row in rows:
         try:
-            dto = _map_row(row.salla_raw)
+            dto = _map_row(row.salla_raw, current_status=row.current_status)
         except OrderMappingError:
             skipped_invalid += 1
             continue
@@ -256,6 +276,6 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
     if row is None:
         raise OrderNotFoundError(f"order not found: {normalized_order_number}")
     try:
-        return _map_row(row.salla_raw)
+        return _map_row(row.salla_raw, current_status=row.current_status)
     except OrderMappingError as exc:
         raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
