@@ -76,22 +76,26 @@ def _status_group(value: Any) -> str:
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Use authoritative Salla status first and stale canonical slug last.
+    """Use one current status for cards, filters and diagnostics.
 
-    Production diagnostics proved historical rows may contain:
-    ``order_status_slug=under_review`` while the current provider/native status
-    is already completed, delivering or delivered. Raw Salla Direct status is
-    therefore authoritative for cards and filters. Canonical native name is the
-    next fallback; canonical slug is used only when no newer fact exists.
+    Production diagnostics proved that historical rows can retain stale raw
+    and canonical slugs while ``order_status`` already contains the newer native
+    Salla state. The current native name is authoritative. Raw status fields and
+    the canonical slug are fallbacks only.
     """
 
     return {
         "$ifNull": [
-            "$raw_by_source.salla_direct.status.slug",
+            "$order_status",
             {
                 "$ifNull": [
                     "$raw_by_source.salla_direct.status.name",
-                    {"$ifNull": ["$order_status", "$order_status_slug"]},
+                    {
+                        "$ifNull": [
+                            "$raw_by_source.salla_direct.status.slug",
+                            "$order_status_slug",
+                        ]
+                    },
                 ]
             },
         ]
