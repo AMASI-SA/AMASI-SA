@@ -29,6 +29,11 @@ _STATUS_VALUES: dict[str, set[str]] = {
         "بانتظار المراجعة",
         "انتظار المراجعة",
     },
+    "reviewed": {
+        "reviewed",
+        "تمت المراجعة",
+        "تم المراجعة",
+    },
     "processing": {
         "processing",
         "in progress",
@@ -76,24 +81,22 @@ def _status_group(value: Any) -> str:
 
 
 def _effective_status_expression() -> dict[str, Any]:
-    """Use one current status for cards, filters and diagnostics.
-
-    Production diagnostics proved that historical rows can retain stale raw
-    and canonical slugs while ``order_status`` already contains the newer native
-    Salla state. The current native name is authoritative. Raw status fields and
-    the canonical slug are fallbacks only.
-    """
-
+    """Use Salla's actual customized child state before its parent state."""
     return {
         "$ifNull": [
-            "$order_status",
+            "$raw_by_source.salla_direct.status.customized",
             {
                 "$ifNull": [
-                    "$raw_by_source.salla_direct.status.name",
+                    "$order_status",
                     {
                         "$ifNull": [
-                            "$raw_by_source.salla_direct.status.slug",
-                            "$order_status_slug",
+                            "$raw_by_source.salla_direct.status.name",
+                            {
+                                "$ifNull": [
+                                    "$raw_by_source.salla_direct.status.slug",
+                                    "$order_status_slug",
+                                ]
+                            },
                         ]
                     },
                 ]
@@ -136,6 +139,7 @@ async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]
     status_counts = {
         "all": await db.unified_orders.count_documents(base_query),
         "under_review": 0,
+        "reviewed": 0,
         "processing": 0,
         "completed": 0,
         "shipping": 0,
@@ -166,7 +170,7 @@ async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]
             "available": False,
             "error": "qoyod_summary_timeout",
         }
-    except Exception as exc:  # Salla cards must remain available.
+    except Exception as exc:
         qoyod = {
             "from_date": QOYOD_DEFAULT_FROM_DATE.isoformat(),
             "sent": None,
@@ -187,11 +191,7 @@ async def build_order_status_diagnostic(
     user_id: str,
     sample_limit: int = 100,
 ) -> dict[str, Any]:
-    """Explain exactly why a status card has its current count.
-
-    Read-only and owner-only through the route. It exposes no payment payloads,
-    customer contacts or Qoyod calls.
-    """
+    """Explain exactly why a status card has its current count."""
     base_query = {
         "user_id": str(user_id),
         "raw_by_source.salla_direct": {"$exists": True},
@@ -206,6 +206,7 @@ async def build_order_status_diagnostic(
                 "top_name": "$order_status",
                 "raw_slug": "$raw_by_source.salla_direct.status.slug",
                 "raw_name": "$raw_by_source.salla_direct.status.name",
+                "raw_customized": "$raw_by_source.salla_direct.status.customized",
                 "order_date": 1,
                 "updated_at": 1,
                 "last_salla_update": {
@@ -229,6 +230,7 @@ async def build_order_status_diagnostic(
                     "top_name": "$top_name",
                     "raw_slug": "$raw_slug",
                     "raw_name": "$raw_name",
+                    "raw_customized": "$raw_customized",
                 },
                 "count": {"$sum": 1},
                 "oldest_order_date": {"$min": "$order_date"},
