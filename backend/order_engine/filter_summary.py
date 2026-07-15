@@ -73,6 +73,26 @@ def _status_group(value: Any) -> str:
     return "other"
 
 
+def _effective_status_expression() -> dict[str, Any]:
+    """Use the same source precedence for cards and diagnostics."""
+    return {
+        "$ifNull": [
+            "$order_status_slug",
+            {
+                "$ifNull": [
+                    "$order_status",
+                    {
+                        "$ifNull": [
+                            "$raw_by_source.salla_direct.status.slug",
+                            "$raw_by_source.salla_direct.status.name",
+                        ]
+                    },
+                ]
+            },
+        ]
+    }
+
+
 async def _qoyod_summary(db: Any, *, user_id: str) -> dict[str, Any]:
     today = datetime.now(timezone.utc).date()
     since_days = max(1, (today - QOYOD_DEFAULT_FROM_DATE).days + 1)
@@ -117,18 +137,7 @@ async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]
 
     pipeline = [
         {"$match": base_query},
-        {"$project": {
-            "status": {"$ifNull": [
-                "$order_status_slug",
-                {"$ifNull": [
-                    "$order_status",
-                    {"$ifNull": [
-                        "$raw_by_source.salla_direct.status.slug",
-                        "$raw_by_source.salla_direct.status.name",
-                    ]},
-                ]},
-            ]},
-        }},
+        {"$project": {"status": _effective_status_expression()}},
         {"$group": {"_id": "$status", "count": {"$sum": 1}}},
     ]
     async for row in db.unified_orders.aggregate(pipeline):
@@ -160,4 +169,131 @@ async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]
     return {
         "status_counts": status_counts,
         "qoyod": qoyod,
+    }
+
+
+async def build_order_status_diagnostic(
+    db: Any,
+    *,
+    user_id: str,
+    sample_limit: int = 100,
+) -> dict[str, Any]:
+    """Explain exactly why a status card has its current count.
+
+    Read-only and owner-only through the route. It exposes no payment payloads,
+    customer contacts or Qoyod calls.
+    """
+    base_query = {
+        "user_id": str(user_id),
+        "raw_by_source.salla_direct": {"$exists": True},
+    }
+
+    distribution_pipeline = [
+        {"$match": base_query},
+        {
+            "$project": {
+                "effective_status": _effective_status_expression(),
+                "top_slug": "$order_status_slug",
+                "top_name": "$order_status",
+                "raw_slug": "$raw_by_source.salla_direct.status.slug",
+                "raw_name": "$raw_by_source.salla_direct.status.name",
+                "order_date": 1,
+                "updated_at": 1,
+                "last_salla_update": {
+                    "$ifNull": [
+                        "$last_salla_direct_update_at",
+                        {
+                            "$ifNull": [
+                                "$raw_by_source.salla_direct.updated_at",
+                                "$updated_at",
+                            ]
+                        },
+                    ]
+                },
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "effective_status": "$effective_status",
+                    "top_slug": "$top_slug",
+                    "top_name": "$top_name",
+                    "raw_slug": "$raw_slug",
+                    "raw_name": "$raw_name",
+                },
+                "count": {"$sum": 1},
+                "oldest_order_date": {"$min": "$order_date"},
+                "newest_order_date": {"$max": "$order_date"},
+                "oldest_update": {"$min": "$last_salla_update"},
+                "newest_update": {"$max": "$last_salla_update"},
+            }
+        },
+        {"$sort": {"count": -1}},
+    ]
+
+    distribution: list[dict[str, Any]] = []
+    async for row in db.unified_orders.aggregate(distribution_pipeline):
+        identity = dict(row.get("_id") or {})
+        effective = identity.get("effective_status")
+        distribution.append(
+            {
+                **identity,
+                "group": _status_group(effective),
+                "count": int(row.get("count") or 0),
+                "oldest_order_date": row.get("oldest_order_date"),
+                "newest_order_date": row.get("newest_order_date"),
+                "oldest_update": row.get("oldest_update"),
+                "newest_update": row.get("newest_update"),
+            }
+        )
+
+    target_values = list(_STATUS_VALUES["under_review"])
+    sample_query = {
+        **base_query,
+        "$expr": {
+            "$in": [
+                {
+                    "$toLower": {
+                        "$trim": {
+                            "input": {
+                                "$replaceAll": {
+                                    "input": {"$toString": _effective_status_expression()},
+                                    "find": "_",
+                                    "replacement": " ",
+                                }
+                            }
+                        }
+                    }
+                },
+                target_values,
+            ]
+        },
+    }
+
+    sample_projection = {
+        "_id": 0,
+        "order_number": 1,
+        "order_date": 1,
+        "updated_at": 1,
+        "order_status_slug": 1,
+        "order_status": 1,
+        "last_salla_direct_update_at": 1,
+        "raw_by_source.salla_direct.status": 1,
+        "raw_by_source.salla_direct.updated_at": 1,
+    }
+    sample_cursor = (
+        db.unified_orders.find(sample_query, sample_projection)
+        .sort([("order_date", 1), ("order_number", 1)])
+        .limit(max(1, min(int(sample_limit), 200)))
+    )
+    under_review_sample = [row async for row in sample_cursor]
+
+    return {
+        "generated_at": datetime.now(timezone.utc),
+        "total_salla_direct": await db.unified_orders.count_documents(base_query),
+        "distribution": distribution,
+        "under_review_sample": under_review_sample,
+        "sample_limit": max(1, min(int(sample_limit), 200)),
+        "read_only": True,
+        "no_qoyod_calls": True,
     }
