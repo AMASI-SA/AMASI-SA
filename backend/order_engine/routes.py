@@ -7,12 +7,13 @@ Mounted under the parent `/api` router:
 
 Sprint 001 rules:
 - Owner-only backend authorization
-- Read-only
-- No Salla HTTP calls
+- Order responses remain read-only
 - No Qoyod calls
-- No database writes
-- Routes call Service only
+- Routes call Service only for order reads
 - Routes never query Mongo directly
+
+The routes may schedule a non-blocking Salla Direct refresh. The refresh runs
+outside the response path and never changes the HTTP read contract.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
+
+from salla_integration.auto_sync import schedule_salla_auto_sync
 
 from .models import OrderDTO
 from .repository import MongoOrderRepository, OrderRepository
@@ -47,12 +50,10 @@ class OrderListResponse(BaseModel):
 
 def _is_owner(user: Any) -> bool:
     """Support the current role field and older explicit owner flag."""
-
     if not isinstance(user, dict):
         return False
 
     role = str(user.get("role") or "").strip().lower()
-
     return role == "owner" or user.get("is_owner") is True
 
 
@@ -80,7 +81,6 @@ def make_order_engine_router(
     `repository_factory` is injectable so HTTP contract tests do not need
     MongoDB or the running `server.py` application.
     """
-
     router = APIRouter(
         prefix="/orders-v2",
         tags=["order-engine"],
@@ -104,6 +104,11 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
+
+        # Non-blocking: return the current canonical page immediately while a
+        # throttled Salla Direct refresh runs in the background. The frontend
+        # polls this endpoint and will see the new order on the next cycle.
+        schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
             page = await list_orders(
@@ -138,6 +143,8 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> OrderDTO:
         owner = _require_owner(user)
+
+        schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
             return await get_order(
