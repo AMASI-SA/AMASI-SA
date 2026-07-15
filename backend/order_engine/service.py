@@ -24,11 +24,11 @@ ALLOWED_STATUS_GROUPS = {
 
 
 class OrderNotFoundError(LookupError):
-    """Raised when an exact Salla-backed order does not exist."""
+    pass
 
 
 class InvalidOrderCursorError(ValueError):
-    """Raised when a list cursor is malformed."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,11 @@ def _normalise_status_group(value: Optional[str]) -> Optional[str]:
     return normalized if normalized in ALLOWED_STATUS_GROUPS else None
 
 
+def _normalise_status_exact(value: Optional[str]) -> Optional[str]:
+    normalized = " ".join(str(value or "").replace("_", " ").strip().casefold().split())
+    return normalized or None
+
+
 def _encode_cursor(order_date: str, order_number: str) -> str:
     payload = json.dumps(
         {"order_date": str(order_date), "order_number": str(order_number)},
@@ -67,7 +72,6 @@ def _decode_cursor(cursor: str) -> dict[str, str]:
         payload = json.loads(decoded.decode("utf-8"))
     except Exception as exc:
         raise InvalidOrderCursorError("invalid orders cursor") from exc
-
     order_date = str(payload.get("order_date") or "").strip()
     order_number = str(payload.get("order_number") or "").strip()
     if not order_date or not order_number:
@@ -91,17 +95,14 @@ def _bool_value(value: Any) -> Optional[bool]:
 
 
 def _provider_is_new(raw: dict[str, Any]) -> bool:
-    explicit_new = _bool_value(
-        raw.get("is_new") if "is_new" in raw else raw.get("unread")
-    )
+    explicit_new = _bool_value(raw.get("is_new") if "is_new" in raw else raw.get("unread"))
     if explicit_new is not None:
         return explicit_new
     for key in ("is_read", "read", "is_seen", "seen"):
-        if key not in raw:
-            continue
-        read_value = _bool_value(raw.get(key))
-        if read_value is not None:
-            return not read_value
+        if key in raw:
+            read_value = _bool_value(raw.get(key))
+            if read_value is not None:
+                return not read_value
     return False
 
 
@@ -127,12 +128,8 @@ def _url_value(value: Any) -> Optional[str]:
 def _customer_avatar(raw: dict[str, Any]) -> Optional[str]:
     customer = raw.get("customer") if isinstance(raw.get("customer"), dict) else {}
     for candidate in (
-        customer.get("avatar_url"),
-        customer.get("avatar"),
-        customer.get("profile_image"),
-        customer.get("image"),
-        customer.get("photo"),
-        raw.get("customer_avatar"),
+        customer.get("avatar_url"), customer.get("avatar"), customer.get("profile_image"),
+        customer.get("image"), customer.get("photo"), raw.get("customer_avatar"),
     ):
         url = _url_value(candidate)
         if url:
@@ -154,16 +151,9 @@ def _customer_gender(raw: dict[str, Any]) -> Optional[str]:
 
 
 def _provider_status_native(raw: dict[str, Any]) -> Optional[str]:
-    """Return the actual Salla child/custom status shown to merchants.
-
-    Salla can return a parent workflow state in ``status.name`` (for example
-    "بإنتظار المراجعة") while the actual child state is stored in
-    ``status.customized`` (for example "تم المراجعة"). The customized value
-    must therefore win for operational display and filtering.
-    """
     status = raw.get("status")
     if isinstance(status, dict):
-        return _text(status.get("customized") or status.get("name"))
+        return _text(status.get("customized") or status.get("name") or status.get("slug"))
     return _text(status)
 
 
@@ -172,29 +162,19 @@ def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
         if key not in raw:
             continue
         value = raw.get(key)
-        if isinstance(value, dict):
-            enabled = _bool_value(value.get("enabled") or value.get("is_gift"))
-        else:
-            enabled = _bool_value(value)
+        enabled = _bool_value(value.get("enabled") or value.get("is_gift")) if isinstance(value, dict) else _bool_value(value)
         if enabled is not None:
             return enabled
-
     normalized_tags = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
     return bool(normalized_tags.intersection({"gift", "هدية", "إهداء", "اهداء"}))
 
 
 def _map_row(raw: dict[str, Any]) -> OrderDTO:
     dto = map_salla_order(raw)
-    customer = dto.customer.model_copy(
-        update={
-            "avatar_url": _customer_avatar(raw),
-            "gender": _customer_gender(raw),
-        }
-    )
-    provider_status_native = _provider_status_native(raw)
+    customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
     return dto.model_copy(
         update={
-            "status_native": provider_status_native or dto.status_native,
+            "status_native": _provider_status_native(raw) or dto.status_native,
             "is_new": _provider_is_new(raw),
             "is_gift": _provider_is_gift(raw, dto.tags),
             "customer": customer,
@@ -209,10 +189,11 @@ async def list_orders(
     limit: int = DEFAULT_LIMIT,
     cursor: Optional[str] = None,
     status_group: Optional[str] = None,
+    status_exact: Optional[str] = None,
 ) -> OrderPage:
     safe_limit = _normalise_limit(limit)
     normalized_status_group = _normalise_status_group(status_group)
-
+    normalized_status_exact = _normalise_status_exact(status_exact)
     before_order_date = None
     before_order_number = None
     if cursor:
@@ -227,13 +208,13 @@ async def list_orders(
         before_order_date=before_order_date,
         before_order_number=before_order_number,
         status_group=normalized_status_group,
+        status_exact=normalized_status_exact,
     )
 
     items: list[OrderDTO] = []
     skipped_invalid = 0
     last_valid_order_date: Optional[str] = None
     last_valid_order_number: Optional[str] = None
-
     for row in rows:
         try:
             dto = _map_row(row.salla_raw)
@@ -249,34 +230,17 @@ async def list_orders(
     next_cursor = None
     if len(items) == safe_limit and last_valid_order_date and last_valid_order_number:
         next_cursor = _encode_cursor(last_valid_order_date, last_valid_order_number)
-
-    return OrderPage(
-        items=items,
-        next_cursor=next_cursor,
-        skipped_invalid=skipped_invalid,
-    )
+    return OrderPage(items=items, next_cursor=next_cursor, skipped_invalid=skipped_invalid)
 
 
-async def get_order(
-    repository: OrderRepository,
-    *,
-    user_id: str,
-    order_number: str,
-) -> OrderDTO:
+async def get_order(repository: OrderRepository, *, user_id: str, order_number: str) -> OrderDTO:
     normalized_order_number = str(order_number or "").strip()
     if not normalized_order_number:
         raise OrderNotFoundError("order not found")
-
-    row = await repository.get_salla_order(
-        user_id=str(user_id),
-        order_number=normalized_order_number,
-    )
+    row = await repository.get_salla_order(user_id=str(user_id), order_number=normalized_order_number)
     if row is None:
         raise OrderNotFoundError(f"order not found: {normalized_order_number}")
-
     try:
         return _map_row(row.salla_raw)
     except OrderMappingError as exc:
-        raise OrderNotFoundError(
-            f"order payload invalid: {normalized_order_number}"
-        ) from exc
+        raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
