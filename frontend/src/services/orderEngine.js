@@ -70,3 +70,20 @@ export async function getOrder(orderNumber) {
         );
     }
 }
+
+export async function openOrderFromSalla(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+
+    if (!normalized) return null;
+
+    try {
+        const { data } = await api.post(
+            `/orders/${encodeURIComponent(normalized)}/resync`
+        );
+        return data;
+    } catch (error) {
+        throw new Error(
+            errorMessage(error, "تعذّر تحديث الطلب عند فتحه.")
+        );
+    }
+}
