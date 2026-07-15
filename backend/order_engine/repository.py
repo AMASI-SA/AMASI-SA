@@ -43,10 +43,41 @@ _STATUS_PATTERNS: dict[str, str] = {
 }
 
 
+def _customized_status_expression() -> dict[str, Any]:
+    customized = "$raw_by_source.salla_direct.status.customized"
+    return {
+        "$let": {
+            "vars": {"customized": customized},
+            "in": {
+                "$cond": [
+                    {"$eq": [{"$type": "$$customized"}, "object"]},
+                    {
+                        "$ifNull": [
+                            "$$customized.name",
+                            {
+                                "$ifNull": [
+                                    "$$customized.label",
+                                    {
+                                        "$ifNull": [
+                                            "$$customized.title",
+                                            "$$customized.slug",
+                                        ]
+                                    },
+                                ]
+                            },
+                        ]
+                    },
+                    "$$customized",
+                ]
+            },
+        }
+    }
+
+
 def _effective_status_expression() -> dict[str, Any]:
     return {
         "$ifNull": [
-            "$raw_by_source.salla_direct.status.customized",
+            _customized_status_expression(),
             {
                 "$ifNull": [
                     "$order_status",
