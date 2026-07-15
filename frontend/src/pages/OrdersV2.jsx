@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import {
     CaretLeft,
     Funnel,
+    Gift,
     MagnifyingGlass,
     Package,
     SpinnerGap,
@@ -49,26 +50,59 @@ function formatOrderDate(value) {
     }).format(date);
 }
 
-function statusClass(status) {
-    const value = String(status || "").toLowerCase();
+function normalizedStatus(status) {
+    return String(status || "")
+        .replaceAll("_", " ")
+        .trim()
+        .toLowerCase();
+}
+
+function statusDotClass(status) {
+    const value = normalizedStatus(status);
+
     if (
         value.includes("completed") ||
         value.includes("delivered") ||
         value.includes("تم التنفيذ") ||
         value.includes("تم التوصيل")
-    ) return "text-emerald-700";
+    ) {
+        return "bg-emerald-400";
+    }
+
+    if (
+        value.includes("shipping") ||
+        value.includes("جاري التوصيل") ||
+        value.includes("قيد التوصيل")
+    ) {
+        return "bg-amber-400";
+    }
+
+    if (
+        value.includes("processing") ||
+        value.includes("in progress") ||
+        value.includes("قيد التنفيذ")
+    ) {
+        return "bg-sky-500";
+    }
+
+    if (
+        value.includes("review") ||
+        value.includes("مراجعة") ||
+        value.includes("pending")
+    ) {
+        return "bg-slate-800";
+    }
+
     if (
         value.includes("cancel") ||
         value.includes("ملغ") ||
         value.includes("refunded") ||
         value.includes("مسترج")
-    ) return "text-rose-700";
-    if (
-        value.includes("review") ||
-        value.includes("مراجعة") ||
-        value.includes("pending")
-    ) return "text-slate-950";
-    return "text-sky-700";
+    ) {
+        return "bg-rose-500";
+    }
+
+    return "bg-slate-400";
 }
 
 function cityName(order) {
@@ -76,6 +110,37 @@ function cityName(order) {
         order.shipping?.address?.city ||
         order.customer?.shipping_address?.city ||
         "غير محدد"
+    );
+}
+
+function CustomerAvatar({ customer }) {
+    const avatarUrl = String(customer?.avatar_url || "").trim();
+    const gender = String(customer?.gender || "").toLowerCase();
+    const fallback = gender === "female" ? "👩" : gender === "male" ? "👨" : null;
+
+    return (
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-600">
+            {fallback ? (
+                <span className="text-2xl leading-none" aria-hidden="true">
+                    {fallback}
+                </span>
+            ) : (
+                <User size={24} weight="fill" />
+            )}
+
+            {avatarUrl && (
+                <img
+                    src={avatarUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                    }}
+                />
+            )}
+        </div>
     );
 }
 
@@ -132,6 +197,7 @@ export default function OrdersV2() {
 
     useEffect(() => {
         let mounted = true;
+
         async function loadSummary() {
             try {
                 const result = await getOrderFilterSummary();
@@ -143,6 +209,7 @@ export default function OrdersV2() {
                 if (mounted) setSummaryError(loadError.message);
             }
         }
+
         loadSummary();
         const intervalId = window.setInterval(loadSummary, 30_000);
         return () => {
@@ -154,12 +221,14 @@ export default function OrdersV2() {
     useEffect(() => {
         const node = loadMoreRef.current;
         if (!node || !hasMore || initialLoading || searchMode) return undefined;
+
         const observer = new IntersectionObserver(
             (entries) => {
                 if (entries[0]?.isIntersecting) loadMore();
             },
             { rootMargin: "300px" }
         );
+
         observer.observe(node);
         return () => observer.disconnect();
     }, [hasMore, initialLoading, loadMore, searchMode]);
@@ -316,33 +385,56 @@ export default function OrdersV2() {
                             const status = order.status_native || order.status || "غير محدد";
                             const paymentMethod = order.payment?.method_native || order.payment?.method || "غير محدد";
                             const itemCount = Number(order.items?.length || 0);
+
                             return (
                                 <button
                                     type="button"
                                     key={order.order_number}
                                     onClick={() => navigate(`/orders-v2/${encodeURIComponent(order.order_number)}`)}
                                     className="flex w-full items-center gap-3 px-4 py-4 text-right transition hover:bg-slate-50 sm:px-5 sm:py-5"
+                                    data-testid={`orders-v2-row-${order.order_number}`}
                                 >
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                                        <User size={22} weight="fill" />
-                                    </div>
+                                    <CustomerAvatar customer={order.customer} />
+
                                     <div className="min-w-0 flex-1">
-                                        <div className="truncate text-[15px] font-semibold text-slate-800 sm:text-base">
-                                            {order.customer?.name || "عميل بدون اسم"}
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <div className="truncate text-[15px] font-semibold text-slate-800 sm:text-base">
+                                                {order.customer?.name || "عميل بدون اسم"}
+                                            </div>
+                                            {order.is_gift && (
+                                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500 px-2 py-1 text-[10px] font-extrabold text-white sm:text-xs">
+                                                    <Gift size={14} weight="fill" />
+                                                    إهداء
+                                                </span>
+                                            )}
                                         </div>
+
                                         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 sm:text-xs">
                                             <span className="num">#{order.order_number}</span>
-                                            <span>•</span><span>{cityName(order)}</span>
-                                            <span>•</span><span className={statusClass(status)}>{status}</span>
-                                            <span>•</span><span>{itemCount.toLocaleString("en-US")} قطعة</span>
-                                            <span>•</span><span>{paymentMethod}</span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{cityName(order)}</span>
+                                            <span aria-hidden="true">•</span>
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <span
+                                                    className={`h-3 w-3 shrink-0 rounded-full ${statusDotClass(status)}`}
+                                                    aria-hidden="true"
+                                                />
+                                                <span>{status}</span>
+                                            </span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{itemCount.toLocaleString("en-US")} قطعة</span>
+                                            <span aria-hidden="true">•</span>
+                                            <span>{paymentMethod}</span>
                                         </div>
                                     </div>
+
                                     <div className="flex shrink-0 items-center gap-3">
                                         <div className="flex flex-col items-end gap-1">
                                             <div className="flex items-center gap-2">
                                                 {order.is_new && (
-                                                    <span className="rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-rose-600 sm:text-xs">جديد</span>
+                                                    <span className="rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-rose-600 sm:text-xs">
+                                                        جديد
+                                                    </span>
                                                 )}
                                                 <span className="num whitespace-nowrap text-[15px] font-semibold text-teal-800 sm:text-base">
                                                     {formatMoney(order.totals?.total)}
@@ -386,7 +478,11 @@ export default function OrdersV2() {
                             <div className="flex items-center gap-2 text-lg font-extrabold text-slate-950">
                                 <Funnel size={22} /> فرز الطلبات حسب
                             </div>
-                            <button type="button" onClick={() => setDrawerOpen(false)} className="rounded-full border border-rose-200 p-2 text-rose-600">
+                            <button
+                                type="button"
+                                onClick={() => setDrawerOpen(false)}
+                                className="rounded-full border border-rose-200 p-2 text-rose-600"
+                            >
                                 <X size={18} />
                             </button>
                         </div>
@@ -395,7 +491,10 @@ export default function OrdersV2() {
                             <div className="mb-3 text-sm font-extrabold text-slate-800">حالة الطلب</div>
                             <div className="space-y-2">
                                 {STATUS_CARDS.map((card) => (
-                                    <label key={card.countKey} className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-3">
+                                    <label
+                                        key={card.countKey}
+                                        className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-3 py-3"
+                                    >
                                         <span className="text-sm text-slate-700">{card.label}</span>
                                         <input
                                             type="radio"
@@ -416,10 +515,18 @@ export default function OrdersV2() {
                         </div>
 
                         <div className="mt-8 grid grid-cols-2 gap-3">
-                            <button type="button" onClick={resetDrawer} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">
+                            <button
+                                type="button"
+                                onClick={resetDrawer}
+                                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
+                            >
                                 إعادة تعيين
                             </button>
-                            <button type="button" onClick={applyDrawer} className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-bold text-white">
+                            <button
+                                type="button"
+                                onClick={applyDrawer}
+                                className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-bold text-white"
+                            >
                                 عرض النتائج
                             </button>
                         </div>
