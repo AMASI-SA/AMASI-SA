@@ -74,7 +74,7 @@ function statusClass(status) {
         value.includes("مراجعة") ||
         value.includes("pending")
     ) {
-        return "border-amber-200 bg-amber-50 text-amber-800";
+        return "border-black bg-black text-white";
     }
 
     return "border-sky-200 bg-sky-50 text-sky-800";
@@ -297,9 +297,16 @@ export default function OrdersV2() {
                                         </div>
 
                                         <div className="min-w-0">
-                                            <div className="truncate text-sm font-extrabold text-slate-950 lg:text-base">
-                                                {order.customer?.name ||
-                                                    "عميل بدون اسم"}
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <div className="truncate text-sm font-extrabold text-slate-950 lg:text-base">
+                                                    {order.customer?.name ||
+                                                        "عميل بدون اسم"}
+                                                </div>
+                                                {order.is_new && (
+                                                    <span className="shrink-0 rounded-full border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-rose-600 lg:text-xs">
+                                                        جديد
+                                                    </span>
+                                                )}
                                             </div>
 
                                             <div className="num mt-0.5 text-xs font-bold text-violet-700 lg:mt-1 lg:text-sm">
