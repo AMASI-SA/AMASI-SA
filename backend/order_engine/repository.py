@@ -5,11 +5,22 @@ from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 
+_REVIEW_PARENT_VALUES = [
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
+]
+
+
 @dataclass(frozen=True)
 class OrderDiscoveryRow:
     order_number: str
     order_date: str
     salla_raw: dict[str, Any]
+    current_status: Optional[str] = None
 
 
 class OrderRepository(Protocol):
@@ -74,37 +85,13 @@ def _customized_status_expression() -> dict[str, Any]:
     }
 
 
-def _effective_status_expression() -> dict[str, Any]:
-    return {
-        "$ifNull": [
-            _customized_status_expression(),
-            {
-                "$ifNull": [
-                    "$order_status",
-                    {
-                        "$ifNull": [
-                            "$raw_by_source.salla_direct.status.name",
-                            {
-                                "$ifNull": [
-                                    "$raw_by_source.salla_direct.status.slug",
-                                    "$order_status_slug",
-                                ]
-                            },
-                        ]
-                    },
-                ]
-            },
-        ]
-    }
-
-
-def _normalized_status_expression() -> dict[str, Any]:
+def _normalized_text_expression(value: Any) -> dict[str, Any]:
     return {
         "$toLower": {
             "$trim": {
                 "input": {
                     "$replaceAll": {
-                        "input": {"$toString": _effective_status_expression()},
+                        "input": {"$toString": {"$ifNull": [value, ""]}},
                         "find": "_",
                         "replacement": " ",
                     }
@@ -112,6 +99,63 @@ def _normalized_status_expression() -> dict[str, Any]:
             }
         }
     }
+
+
+def _effective_status_expression() -> dict[str, Any]:
+    """Use customized child state only while the order remains in review.
+
+    Historical rows can retain ``customized = تم المراجعة`` after their current
+    top-level status has moved to execution, delivery or another workflow. The
+    current top-level state must win once it leaves the review parent.
+    """
+    current = "$order_status"
+    customized = _customized_status_expression()
+    current_normalized = _normalized_text_expression(current)
+    return {
+        "$let": {
+            "vars": {
+                "current": current,
+                "customized": customized,
+                "current_normalized": current_normalized,
+            },
+            "in": {
+                "$cond": [
+                    {
+                        "$and": [
+                            {"$ne": ["$$current_normalized", ""]},
+                            {"$not": [{"$in": ["$$current_normalized", _REVIEW_PARENT_VALUES]}]},
+                        ]
+                    },
+                    "$$current",
+                    {
+                        "$ifNull": [
+                            "$$customized",
+                            {
+                                "$ifNull": [
+                                    "$$current",
+                                    {
+                                        "$ifNull": [
+                                            "$raw_by_source.salla_direct.status.name",
+                                            {
+                                                "$ifNull": [
+                                                    "$raw_by_source.salla_direct.status.slug",
+                                                    "$order_status_slug",
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            },
+        }
+    }
+
+
+def _normalized_status_expression() -> dict[str, Any]:
+    return _normalized_text_expression(_effective_status_expression())
 
 
 class MongoOrderRepository:
@@ -172,6 +216,7 @@ class MongoOrderRepository:
             "_id": 0,
             "order_number": 1,
             "order_date": 1,
+            "order_status": 1,
             "raw_by_source.salla_direct": 1,
         }
         cursor = (
@@ -203,6 +248,7 @@ class MongoOrderRepository:
                 "_id": 0,
                 "order_number": 1,
                 "order_date": 1,
+                "order_status": 1,
                 "raw_by_source.salla_direct": 1,
             },
         )
@@ -220,8 +266,10 @@ class MongoOrderRepository:
         salla_raw = raw_by_source.get("salla_direct")
         if not isinstance(salla_raw, dict) or not order_number or not order_date:
             return None
+        current_status = str(row.get("order_status") or "").strip() or None
         return OrderDiscoveryRow(
             order_number=order_number,
             order_date=order_date,
             salla_raw=salla_raw,
+            current_status=current_status,
         )
