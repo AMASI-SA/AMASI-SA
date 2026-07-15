@@ -106,7 +106,12 @@ function formatOrderDate(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
-        timeZone: "Asia/Riyadh", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
+        timeZone: "Asia/Riyadh",
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
     }).format(date);
 }
 
@@ -134,9 +139,7 @@ function SelectionBox({ checked, disabled = false, onChange, label }) {
             aria-label={label}
             aria-pressed={checked}
             onClick={(event) => { event.stopPropagation(); onChange?.(); }}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 transition ${
-                checked ? "border-teal-700 bg-teal-50 text-teal-700" : "border-teal-700 bg-white text-transparent"
-            } ${disabled ? "cursor-not-allowed opacity-30" : "hover:bg-teal-50"}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 transition ${checked ? "border-teal-700 bg-teal-50 text-teal-700" : "border-teal-700 bg-white text-transparent"} ${disabled ? "cursor-not-allowed opacity-30" : "hover:bg-teal-50"}`}
         >
             <Check size={20} weight="bold" />
         </button>
@@ -155,6 +158,16 @@ function CountCard({ label, count, active, onClick, isAll = false }) {
             <div className="num mt-2 text-2xl font-extrabold text-slate-950">{Number(count || 0).toLocaleString("en-US")}</div>
         </button>
     );
+}
+
+function isRiskyTransition(fromStatus, toStatus) {
+    const from = normalizedStatus(fromStatus);
+    const to = normalizedStatus(toStatus);
+    if (!from || !to) return false;
+    const closed = ["تم التنفيذ", "تم التوصيل", "ملغي", "ملغى", "محذوف", "مسترجع"];
+    const targetIsClosed = closed.some((item) => to === normalizedStatus(item));
+    const sourceIsClosed = closed.some((item) => from === normalizedStatus(item));
+    return sourceIsClosed && !targetIsClosed;
 }
 
 export default function OrdersV2() {
@@ -217,6 +230,13 @@ export default function OrdersV2() {
     const allVisibleSelected = Boolean(activeStatus && visibleIds.length && visibleIds.every((id) => selected.has(id)));
     const selectedCount = allMatchingSelected ? Number(activeCard?.count || 0) : selected.size;
     const canSelectVisible = Boolean(activeStatus && !searchMode && orders.length);
+    const targetStatusLabel = statusCards.find((card) => card.key === targetStatus)?.label || targetStatus;
+    const selectedIdSample = useMemo(() => {
+        const source = allMatchingSelected ? visibleIds : Array.from(selected);
+        return source.slice(0, 10);
+    }, [allMatchingSelected, selected, visibleIds]);
+    const hiddenSelectedCount = Math.max(0, selectedCount - selectedIdSample.length);
+    const riskyTransition = isRiskyTransition(activeStatusLabel, targetStatusLabel);
 
     function toggleOrder(orderNumber) {
         const id = String(orderNumber);
@@ -296,9 +316,9 @@ export default function OrdersV2() {
 
             {drawerOpen && <div className="fixed inset-0 z-50 flex bg-slate-950/30"><button className="flex-1" onClick={() => setDrawerOpen(false)} /><aside className="h-full w-full max-w-sm overflow-y-auto bg-white p-5"><div className="flex justify-between"><b>فرز الطلبات حسب</b><button onClick={() => setDrawerOpen(false)}><X /></button></div><div className="mt-6 space-y-2">{statusCards.map((card) => <label key={card.key || "all"} className="flex justify-between rounded-xl border p-3"><span>{card.label}</span><input type="radio" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} /></label>)}</div><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={() => { setDraftStatus(null); setActiveStatus(null); setDrawerOpen(false); }} className="rounded-xl border p-3">إعادة تعيين</button><button onClick={() => { setActiveStatus(draftStatus); setDrawerOpen(false); }} className="rounded-xl bg-violet-700 p-3 text-white">عرض النتائج</button></div></aside></div>}
 
-            {quickEditOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b bg-teal-100 px-5 py-4"><h3 className="text-lg font-extrabold">تحرير سريع للطلبات المحددة</h3><button onClick={() => setQuickEditOpen(false)}><X /></button></div><div className="space-y-4 p-5"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><WarningCircle size={22} className="inline ml-2" />عدد الطلبات المحددة: <b>{selectedCount.toLocaleString("en-US")}</b></div><label className="block"><span className="mb-2 block text-sm font-bold">تغيير الحالة إلى</span><select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)} className="w-full rounded-xl border p-3"><option value="">اختر الحالة الجديدة</option>{statusCards.filter((card) => card.key && card.key !== activeStatus).map((card) => <option key={card.key} value={card.key}>{card.label}</option>)}</select></label><div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">هذه واجهة Preview فقط. لن يتم إرسال أي تعديل إلى سلة في هذه المرحلة.</div></div><div className="flex justify-between border-t bg-slate-50 p-5"><button onClick={() => setQuickEditOpen(false)} className="rounded-xl border px-5 py-3">إغلاق</button><button disabled={!targetStatus} onClick={() => { setQuickEditOpen(false); setPreviewOpen(true); }} className="rounded-xl bg-teal-500 px-5 py-3 font-bold text-white disabled:opacity-40">معاينة التأكيد</button></div></div></div>}
+            {quickEditOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b bg-teal-100 px-5 py-4"><h3 className="text-lg font-extrabold">تحرير سريع للطلبات المحددة</h3><button onClick={() => setQuickEditOpen(false)}><X /></button></div><div className="space-y-4 p-5"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><WarningCircle size={22} className="inline ml-2" />عدد الطلبات المحددة: <b>{selectedCount.toLocaleString("en-US")}</b></div><label className="block"><span className="mb-2 block text-sm font-bold">تغيير الحالة إلى</span><select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)} className="w-full rounded-xl border p-3"><option value="">اختر الحالة الجديدة</option>{statusCards.filter((card) => card.key && card.key !== activeStatus).map((card) => <option key={card.key} value={card.key}>{card.label}</option>)}</select></label>{riskyTransition && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800"><WarningCircle size={20} className="inline ml-2" />هذا انتقال عكسي من حالة مغلقة إلى حالة تشغيلية، وقد ترفضه سلة. سيخضع للتحقق الفعلي عند بناء محرك التعديل.</div>}<div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">هذه واجهة Preview فقط. لن يتم إرسال أي تعديل إلى سلة في هذه المرحلة.</div></div><div className="flex justify-between border-t bg-slate-50 p-5"><button onClick={() => setQuickEditOpen(false)} className="rounded-xl border px-5 py-3">إغلاق</button><button disabled={!targetStatus} onClick={() => { setQuickEditOpen(false); setPreviewOpen(true); }} className="rounded-xl bg-teal-500 px-5 py-3 font-bold text-white disabled:opacity-40">معاينة التأكيد</button></div></div></div>}
 
-            {previewOpen && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="border-b bg-teal-100 px-5 py-4 text-lg font-extrabold">معاينة تغيير حالة الطلبات</div><div className="space-y-4 p-5"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900"><WarningCircle size={24} className="inline ml-2" />سيتم لاحقًا تغيير <b>{selectedCount.toLocaleString("en-US")}</b> طلب إلى <b>{statusCards.find((card) => card.key === targetStatus)?.label || targetStatus}</b>.</div><div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-900"><b>التنفيذ غير مفعّل الآن.</b><div className="mt-1 text-sm">سيُربط لاحقًا بـ Order Mutation Engine مع Preview، سجل تدقيق، ونتيجة مستقلة لكل طلب.</div></div></div><div className="flex justify-end border-t bg-slate-50 p-5"><button onClick={() => setPreviewOpen(false)} className="rounded-xl bg-slate-800 px-5 py-3 font-bold text-white">تم</button></div></div></div>}
+            {previewOpen && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 p-4"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b bg-teal-100 px-5 py-4"><div className="text-lg font-extrabold">معاينة تغيير حالة الطلبات</div><button onClick={() => setPreviewOpen(false)}><X /></button></div><div className="space-y-4 p-5"><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border bg-slate-50 p-4"><div className="text-xs text-slate-500">الحالة الحالية</div><div className="mt-1 font-extrabold">{activeStatusLabel || "حالات متعددة"}</div></div><div className="rounded-xl border bg-teal-50 p-4"><div className="text-xs text-teal-700">الحالة الجديدة</div><div className="mt-1 font-extrabold text-teal-950">{targetStatusLabel}</div></div><div className="rounded-xl border bg-amber-50 p-4"><div className="text-xs text-amber-700">عدد الطلبات</div><div className="num mt-1 text-xl font-extrabold text-amber-950">{selectedCount.toLocaleString("en-US")}</div></div></div>{riskyTransition && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-800"><WarningCircle size={22} className="inline ml-2" />انتقال غير اعتيادي؛ التنفيذ المستقبلي لن يستمر إلا إذا وافقت سلة على كل طلب.</div>}<div className="rounded-xl border border-slate-200 p-4"><div className="mb-3 font-extrabold">عينة الطلبات المحددة</div><div className="flex flex-wrap gap-2">{selectedIdSample.map((id) => <span key={id} className="num rounded-lg bg-slate-100 px-2.5 py-1.5 text-sm">#{id}</span>)}{hiddenSelectedCount > 0 && <span className="rounded-lg bg-violet-100 px-2.5 py-1.5 text-sm font-bold text-violet-800">+{hiddenSelectedCount.toLocaleString("en-US")} طلبات أخرى</span>}</div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"><div className="mb-2 font-extrabold">سيتم مستقبلًا</div><div>✓ تغيير الحالة في سلة</div><div>✓ إعادة مزامنة الحالة</div><div>✓ تحديث سجل الأحداث</div><div>✓ تحديث صفحة الطلبات</div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><div className="mb-2 font-extrabold">لن يتم</div><div>✗ إرسال إلى قيود</div><div>✗ تعديل الفواتير</div><div>✗ تعديل المنتجات</div><div>✗ تنفيذ أي تغيير الآن</div></div></div><div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-900"><b>التنفيذ غير مفعّل الآن.</b><div className="mt-1 text-sm">سيُربط لاحقًا بـ Order Mutation Engine مع فحص صلاحية الانتقال، سجل تدقيق، ونتيجة مستقلة لكل طلب.</div></div></div><div className="flex justify-end border-t bg-slate-50 p-5"><button onClick={() => setPreviewOpen(false)} className="rounded-xl bg-slate-800 px-5 py-3 font-bold text-white">تم</button></div></div></div>}
         </div>
     );
 }
