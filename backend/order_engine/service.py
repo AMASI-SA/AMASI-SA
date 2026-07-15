@@ -6,23 +6,13 @@ Service responsibilities
 - Request discovery rows through OrderRepository.
 - Convert Salla raw payloads into canonical OrderDTO objects.
 - Skip invalid historical rows safely.
-
-The service does not know:
-
-- MongoDB collection names
-- `unified_orders`
-- Mongo query syntax
-- FastAPI
-- Salla HTTP
-- Qoyod
 """
-
 from __future__ import annotations
 
 import base64
 import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
@@ -92,6 +82,46 @@ def _decode_cursor(cursor: str) -> dict[str, str]:
     }
 
 
+def _bool_value(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y", "read", "seen"}:
+        return True
+    if text in {"false", "0", "no", "n", "unread", "new"}:
+        return False
+    return None
+
+
+def _provider_is_new(raw: dict[str, Any]) -> bool:
+    explicit_new = _bool_value(
+        raw.get("is_new")
+        if "is_new" in raw
+        else raw.get("unread")
+    )
+    if explicit_new is not None:
+        return explicit_new
+
+    for key in ("is_read", "read", "is_seen", "seen"):
+        if key not in raw:
+            continue
+        read_value = _bool_value(raw.get(key))
+        if read_value is not None:
+            return not read_value
+
+    return False
+
+
+def _map_row(raw: dict[str, Any]) -> OrderDTO:
+    dto = map_salla_order(raw)
+    return dto.model_copy(update={"is_new": _provider_is_new(raw)})
+
+
 async def list_orders(
     repository: OrderRepository,
     *,
@@ -130,7 +160,7 @@ async def list_orders(
 
     for row in rows:
         try:
-            dto = map_salla_order(row.salla_raw)
+            dto = _map_row(row.salla_raw)
         except OrderMappingError:
             skipped_invalid += 1
             continue
@@ -185,7 +215,7 @@ async def get_order(
         )
 
     try:
-        return map_salla_order(row.salla_raw)
+        return _map_row(row.salla_raw)
     except OrderMappingError as exc:
         raise OrderNotFoundError(
             f"order payload invalid: {normalized_order_number}"
