@@ -11,10 +11,12 @@ import {
     ORDER_PAGE_SIZE,
 } from "../services/orderEngine";
 
+const ORDER_REFRESH_INTERVAL_MS = 10_000;
+
 function uniqueOrders(rows) {
     const unique = new Map();
 
-    for (const order of rows) {
+    for (const order of rows || []) {
         const key = String(order?.order_number || "").trim();
 
         if (key && !unique.has(key)) {
@@ -27,6 +29,9 @@ function uniqueOrders(rows) {
 
 export function useOrders() {
     const requestIdRef = useRef(0);
+    const refreshInFlightRef = useRef(false);
+    const ordersRef = useRef([]);
+    const searchModeRef = useRef(false);
 
     const [orders, setOrders] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
@@ -36,13 +41,26 @@ export function useOrders() {
     const [error, setError] = useState("");
     const [searchMode, setSearchMode] = useState(false);
 
-    const loadFirstPage = useCallback(async () => {
+    useEffect(() => {
+        ordersRef.current = orders;
+    }, [orders]);
+
+    useEffect(() => {
+        searchModeRef.current = searchMode;
+    }, [searchMode]);
+
+    const loadFirstPage = useCallback(async ({ background = false } = {}) => {
+        if (refreshInFlightRef.current) return;
+
+        refreshInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
 
-        setInitialLoading(true);
-        setLoading(true);
-        setError("");
-        setSearchMode(false);
+        if (!background) {
+            setInitialLoading(true);
+            setLoading(true);
+            setError("");
+            setSearchMode(false);
+        }
 
         try {
             const result = await listOrders({
@@ -51,20 +69,48 @@ export function useOrders() {
 
             if (requestId !== requestIdRef.current) return;
 
-            setOrders(uniqueOrders(result.items));
-            setNextCursor(result.nextCursor);
-            setHasMore(Boolean(result.nextCursor));
+            const refreshedOrders = uniqueOrders(result.items);
+
+            if (background) {
+                setOrders((current) => {
+                    const refreshedKeys = new Set(
+                        refreshedOrders.map((order) =>
+                            String(order.order_number)
+                        )
+                    );
+                    const retainedTail = current.filter(
+                        (order) =>
+                            !refreshedKeys.has(
+                                String(order.order_number)
+                            )
+                    );
+
+                    return uniqueOrders([
+                        ...refreshedOrders,
+                        ...retainedTail,
+                    ]);
+                });
+            } else {
+                setOrders(refreshedOrders);
+                setNextCursor(result.nextCursor);
+                setHasMore(Boolean(result.nextCursor));
+            }
         } catch (loadError) {
             if (requestId !== requestIdRef.current) return;
 
-            setOrders([]);
-            setNextCursor(null);
-            setHasMore(false);
+            if (!background) {
+                setOrders([]);
+                setNextCursor(null);
+                setHasMore(false);
+            }
             setError(loadError.message);
         } finally {
             if (requestId === requestIdRef.current) {
-                setLoading(false);
-                setInitialLoading(false);
+                if (!background) {
+                    setLoading(false);
+                    setInitialLoading(false);
+                }
+                refreshInFlightRef.current = false;
             }
         }
     }, []);
@@ -79,11 +125,13 @@ export function useOrders() {
             initialLoading ||
             searchMode ||
             !hasMore ||
-            !nextCursor
+            !nextCursor ||
+            refreshInFlightRef.current
         ) {
             return;
         }
 
+        refreshInFlightRef.current = true;
         setLoading(true);
         setError("");
 
@@ -102,6 +150,7 @@ export function useOrders() {
             setError(loadError.message);
         } finally {
             setLoading(false);
+            refreshInFlightRef.current = false;
         }
     }, [
         hasMore,
@@ -119,6 +168,9 @@ export function useOrders() {
             return;
         }
 
+        if (refreshInFlightRef.current) return;
+
+        refreshInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
 
         setInitialLoading(true);
@@ -145,9 +197,75 @@ export function useOrders() {
             if (requestId === requestIdRef.current) {
                 setLoading(false);
                 setInitialLoading(false);
+                refreshInFlightRef.current = false;
             }
         }
     }, [loadFirstPage]);
+
+    const refreshVisibleOrders = useCallback(async () => {
+        if (
+            refreshInFlightRef.current ||
+            typeof document !== "undefined" && document.hidden ||
+            typeof navigator !== "undefined" && !navigator.onLine
+        ) {
+            return;
+        }
+
+        if (searchModeRef.current) {
+            const orderNumber = String(
+                ordersRef.current[0]?.order_number || ""
+            ).trim();
+
+            if (!orderNumber) return;
+
+            refreshInFlightRef.current = true;
+
+            try {
+                const order = await getOrder(orderNumber);
+                if (order) setOrders([order]);
+                setError("");
+            } catch (refreshError) {
+                setError(refreshError.message);
+            } finally {
+                refreshInFlightRef.current = false;
+            }
+            return;
+        }
+
+        await loadFirstPage({ background: true });
+    }, [loadFirstPage]);
+
+    useEffect(() => {
+        const intervalId = window.setInterval(
+            refreshVisibleOrders,
+            ORDER_REFRESH_INTERVAL_MS
+        );
+
+        const handleFocus = () => {
+            refreshVisibleOrders();
+        };
+
+        const handleVisibilityChange = () => {
+            if (!document.hidden) refreshVisibleOrders();
+        };
+
+        window.addEventListener("focus", handleFocus);
+        window.addEventListener("online", handleFocus);
+        document.addEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+        );
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", handleFocus);
+            window.removeEventListener("online", handleFocus);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange
+            );
+        };
+    }, [refreshVisibleOrders]);
 
     return {
         orders,
@@ -157,51 +275,91 @@ export function useOrders() {
         error,
         searchMode,
         loadMore,
-        reload: loadFirstPage,
+        reload: () => loadFirstPage(),
+        refresh: refreshVisibleOrders,
         searchExactOrder,
     };
 }
 
 export function useOrder(orderNumber) {
+    const requestInFlightRef = useRef(false);
+    const mountedRef = useRef(true);
+
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    useEffect(() => {
-        let cancelled = false;
+    const load = useCallback(async ({ background = false } = {}) => {
+        const normalizedOrderNumber = String(
+            orderNumber || ""
+        ).trim();
 
-        async function load() {
-            setLoading(true);
-            setError("");
-            setOrder(null);
-
-            try {
-                const result = await getOrder(orderNumber);
-
-                if (!cancelled) {
-                    setOrder(result);
-                }
-            } catch (loadError) {
-                if (!cancelled) {
-                    setError(loadError.message);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
+        if (!normalizedOrderNumber || requestInFlightRef.current) {
+            return;
         }
 
+        requestInFlightRef.current = true;
+
+        if (!background) {
+            setLoading(true);
+            setError("");
+        }
+
+        try {
+            const result = await getOrder(normalizedOrderNumber);
+
+            if (mountedRef.current) {
+                setOrder(result);
+                setError("");
+            }
+        } catch (loadError) {
+            if (mountedRef.current) {
+                setError(loadError.message);
+            }
+        } finally {
+            requestInFlightRef.current = false;
+            if (mountedRef.current && !background) {
+                setLoading(false);
+            }
+        }
+    }, [orderNumber]);
+
+    useEffect(() => {
+        mountedRef.current = true;
         load();
 
-        return () => {
-            cancelled = true;
+        const refresh = () => {
+            if (
+                !document.hidden &&
+                navigator.onLine
+            ) {
+                load({ background: true });
+            }
         };
-    }, [orderNumber]);
+
+        const intervalId = window.setInterval(
+            refresh,
+            ORDER_REFRESH_INTERVAL_MS
+        );
+
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", refresh);
+
+        return () => {
+            mountedRef.current = false;
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", refresh);
+        };
+    }, [load]);
 
     return {
         order,
         loading,
         error,
+        reload: () => load(),
+        refresh: () => load({ background: true }),
     };
 }
