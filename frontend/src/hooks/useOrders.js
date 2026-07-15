@@ -41,11 +41,18 @@ export function useOrders({ statusGroup = null } = {}) {
     useEffect(() => { searchModeRef.current = searchMode; }, [searchMode]);
 
     const loadFirstPage = useCallback(async ({ background = false } = {}) => {
-        if (refreshInFlightRef.current) return;
-        refreshInFlightRef.current = true;
+        // A foreground load (including a status-card change) must supersede any
+        // background refresh.  Otherwise the new filter can be ignored while an
+        // older request is in flight and stale rows remain visible.
+        if (background && refreshInFlightRef.current) return;
+
         const requestId = ++requestIdRef.current;
+        refreshInFlightRef.current = true;
 
         if (!background) {
+            setOrders([]);
+            setNextCursor(null);
+            setHasMore(false);
             setInitialLoading(true);
             setLoading(true);
             setError("");
@@ -128,10 +135,9 @@ export function useOrders({ statusGroup = null } = {}) {
             await loadFirstPage();
             return;
         }
-        if (refreshInFlightRef.current) return;
 
-        refreshInFlightRef.current = true;
         const requestId = ++requestIdRef.current;
+        refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
         setError("");
