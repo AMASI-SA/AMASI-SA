@@ -10,11 +10,7 @@ The repository is the only Order Engine layer allowed to know:
 - `raw_by_source.salla_direct`
 
 Service, routes and frontend must not depend on Mongo document structure.
-
-Sprint 001 uses `unified_orders` only as a temporary discovery bridge.
-Authoritative order facts still come from the preserved Salla raw payload.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,8 +27,6 @@ class OrderDiscoveryRow:
 
 
 class OrderRepository(Protocol):
-    """Storage-agnostic contract consumed by Order Engine services."""
-
     async def list_salla_orders(
         self,
         *,
@@ -40,6 +34,7 @@ class OrderRepository(Protocol):
         limit: int,
         before_order_date: Optional[str] = None,
         before_order_number: Optional[str] = None,
+        status_group: Optional[str] = None,
     ) -> list[OrderDiscoveryRow]:
         """Return newest Salla-backed discovery rows."""
 
@@ -52,14 +47,18 @@ class OrderRepository(Protocol):
         """Return one exact Salla-backed discovery row."""
 
 
+_STATUS_PATTERNS: dict[str, str] = {
+    "under_review": r"review|pending|مراجعة",
+    "processing": r"processing|in[_ ]?progress|قيد التنفيذ|جاري التنفيذ",
+    "completed": r"completed|delivered|تم التنفيذ|تم التوصيل",
+    "shipping": r"shipping|shipped|جاري التوصيل|تم الشحن",
+    "cancelled": r"cancel|ملغ|محذوف",
+    "refunded": r"refund|مسترج",
+}
+
+
 class MongoOrderRepository:
-    """Mongo implementation of the OrderRepository contract.
-
-    Read-only by design.
-
-    No insert, update, delete, replace or bulk-write methods belong here
-    during Sprint 001.
-    """
+    """Read-only Mongo implementation of the OrderRepository contract."""
 
     def __init__(self, db: Any):
         self._collection = db.unified_orders
@@ -71,20 +70,38 @@ class MongoOrderRepository:
         limit: int,
         before_order_date: Optional[str] = None,
         before_order_number: Optional[str] = None,
+        status_group: Optional[str] = None,
     ) -> list[OrderDiscoveryRow]:
         query: dict[str, Any] = {
             "user_id": str(user_id),
             "raw_by_source.salla_direct": {"$exists": True},
         }
 
+        pattern = _STATUS_PATTERNS.get(str(status_group or "").strip())
+        if pattern:
+            query["$and"] = [{
+                "$or": [
+                    {"order_status": {"$regex": pattern, "$options": "i"}},
+                    {"order_status_slug": {"$regex": pattern, "$options": "i"}},
+                    {"raw_by_source.salla_direct.status.name": {"$regex": pattern, "$options": "i"}},
+                    {"raw_by_source.salla_direct.status.slug": {"$regex": pattern, "$options": "i"}},
+                ]
+            }]
+
         if before_order_date and before_order_number:
-            query["$or"] = [
-                {"order_date": {"$lt": before_order_date}},
-                {
-                    "order_date": before_order_date,
-                    "order_number": {"$lt": before_order_number},
-                },
-            ]
+            cursor_clause = {
+                "$or": [
+                    {"order_date": {"$lt": before_order_date}},
+                    {
+                        "order_date": before_order_date,
+                        "order_number": {"$lt": before_order_number},
+                    },
+                ]
+            }
+            if "$and" in query:
+                query["$and"].append(cursor_clause)
+            else:
+                query.update(cursor_clause)
 
         projection = {
             "_id": 0,
@@ -100,12 +117,10 @@ class MongoOrderRepository:
         )
 
         rows: list[OrderDiscoveryRow] = []
-
         async for row in cursor:
             mapped = self._to_discovery_row(row)
             if mapped is not None:
                 rows.append(mapped)
-
         return rows
 
     async def get_salla_order(
@@ -127,7 +142,6 @@ class MongoOrderRepository:
                 "raw_by_source.salla_direct": 1,
             },
         )
-
         return self._to_discovery_row(row)
 
     @staticmethod
@@ -139,15 +153,12 @@ class MongoOrderRepository:
 
         order_number = str(row.get("order_number") or "").strip()
         order_date = str(row.get("order_date") or "").strip()
-
         raw_by_source = row.get("raw_by_source")
         if not isinstance(raw_by_source, dict):
             return None
-
         salla_raw = raw_by_source.get("salla_direct")
         if not isinstance(salla_raw, dict):
             return None
-
         if not order_number or not order_date:
             return None
 
