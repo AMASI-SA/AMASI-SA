@@ -18,7 +18,6 @@ See:
 - docs/PROJECT_DECISIONS.md
 - docs/ORDER_CAPABILITY_AUDIT.md
 """
-
 from __future__ import annotations
 
 import hashlib
@@ -26,6 +25,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import (
     AddressDTO,
@@ -37,6 +37,10 @@ from .models import (
     PaymentDTO,
     ShippingDTO,
 )
+
+
+BUSINESS_TIMEZONE_NAME = "Asia/Riyadh"
+BUSINESS_TIMEZONE = ZoneInfo(BUSINESS_TIMEZONE_NAME)
 
 
 class OrderMappingError(ValueError):
@@ -95,22 +99,52 @@ def _nested(data: dict[str, Any], *path: str) -> Any:
     return current
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:
+def _timezone_from_name(value: Any) -> ZoneInfo:
+    name = _text(value) or BUSINESS_TIMEZONE_NAME
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return BUSINESS_TIMEZONE
+
+
+def _parse_datetime(
+    value: Any,
+    *,
+    default_timezone: ZoneInfo = BUSINESS_TIMEZONE,
+) -> Optional[datetime]:
+    """Parse a Salla timestamp and normalize it to aware UTC.
+
+    Salla commonly returns local Riyadh wall-clock timestamps in objects such as
+    ``{"date": "2026-07-15 19:23:00", "timezone": "Asia/Riyadh"}``.
+    Treating that naive value as UTC adds three hours in the UI.  Explicit
+    offsets/Z values remain authoritative.  Naive values default to Mezan's
+    business timezone (Asia/Riyadh), then all canonical datetimes are converted
+    to UTC.
+    """
     if not value:
         return None
 
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
+        parsed = value
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=default_timezone)
+        return parsed.astimezone(timezone.utc)
 
     if isinstance(value, dict):
+        source_timezone = _timezone_from_name(
+            _first(
+                value.get("timezone"),
+                value.get("timezone_name"),
+                value.get("tz"),
+            )
+        )
         return _parse_datetime(
             _first(
                 value.get("date"),
                 value.get("datetime"),
                 value.get("value"),
-            )
+            ),
+            default_timezone=source_timezone,
         )
 
     text = str(value).strip()
@@ -142,9 +176,9 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         return None
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=default_timezone)
 
-    return parsed
+    return parsed.astimezone(timezone.utc)
 
 
 def _canonical_bank(value: Any) -> tuple[Optional[str], Optional[str]]:
@@ -980,6 +1014,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             label_url=_text(
                 _first(
                     first_shipment.get("label_url"),
+                    first_shipment.get("label"),
                     shipping_raw.get("label_url"),
                 )
             ),
@@ -1009,6 +1044,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             shipping=_number(
                 _first(
                     amounts.get("shipping_cost"),
+                    amounts.get("shipping"),
                     raw_order.get("shipping_cost"),
                 )
             ),
@@ -1028,12 +1064,15 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             total=_number(total_obj),
         ),
         items=items,
-        customer_notes=_text(
-            _first(
-                raw_order.get("customer_notes"),
-                raw_order.get("note"),
-            )
-        ),
+        customer_notes=_text(raw_order.get("customer_notes")),
         staff_notes=_text(raw_order.get("staff_notes")),
         tags=tags,
+        timeline=deepcopy(_list(raw_order.get("timeline"))),
+        engine_updated_at=_parse_datetime(
+            _first(
+                raw_order.get("updated_at"),
+                raw_order.get("fetched_at"),
+                raw_order.get("received_at"),
+            )
+        ),
     )
