@@ -1,11 +1,9 @@
 """Exact, read-only Salla status summaries for the Mezan OS orders screen.
 
-The orders screen must mirror Salla's merchant-visible workflow states. Salla may
+The orders screen mirrors Salla's merchant-visible workflow states. Salla may
 return a parent state in ``status.name`` and the actual child/custom state in
-``status.customized``. The customized state is therefore authoritative.
-
-This module intentionally contains no Qoyod classification. Accounting cards
-belong to the Qoyod area and must never slow down or break the orders screen.
+``status.customized``. ``customized`` may be a string or an object such as
+``{"id": 1, "name": "تم المراجعة"}``.
 """
 from __future__ import annotations
 
@@ -18,20 +16,53 @@ def _status_key(value: Any) -> str:
 
 
 def _status_label(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("name", "label", "title", "value", "slug"):
+            candidate = value.get(key)
+            if candidate not in (None, ""):
+                text = " ".join(str(candidate).strip().split())
+                if text:
+                    return text
+        return "غير محدد"
     text = " ".join(str(value or "").strip().split())
     return text or "غير محدد"
 
 
-def _effective_status_expression() -> dict[str, Any]:
-    """Return Salla's exact merchant-visible child status.
+def _customized_status_expression() -> dict[str, Any]:
+    customized = "$raw_by_source.salla_direct.status.customized"
+    return {
+        "$let": {
+            "vars": {"customized": customized},
+            "in": {
+                "$cond": [
+                    {"$eq": [{"$type": "$$customized"}, "object"]},
+                    {
+                        "$ifNull": [
+                            "$$customized.name",
+                            {
+                                "$ifNull": [
+                                    "$$customized.label",
+                                    {
+                                        "$ifNull": [
+                                            "$$customized.title",
+                                            "$$customized.slug",
+                                        ]
+                                    },
+                                ]
+                            },
+                        ]
+                    },
+                    "$$customized",
+                ]
+            },
+        }
+    }
 
-    Example:
-      status.name       = بإنتظار المراجعة   (parent workflow)
-      status.customized = تم المراجعة        (actual child state)
-    """
+
+def _effective_status_expression() -> dict[str, Any]:
     return {
         "$ifNull": [
-            "$raw_by_source.salla_direct.status.customized",
+            _customized_status_expression(),
             {
                 "$ifNull": [
                     "$order_status",
@@ -53,11 +84,6 @@ def _effective_status_expression() -> dict[str, Any]:
 
 
 async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]:
-    """Return all exact Salla statuses as dynamic cards.
-
-    No fixed enum is used. Custom statuses created in Salla therefore appear
-    automatically without another Mezan deployment.
-    """
     base_query = {
         "user_id": str(user_id),
         "raw_by_source.salla_direct": {"$exists": True},
@@ -93,7 +119,6 @@ async def build_order_status_diagnostic(
     user_id: str,
     sample_limit: int = 100,
 ) -> dict[str, Any]:
-    """Explain exact status sources without modifying orders."""
     base_query = {
         "user_id": str(user_id),
         "raw_by_source.salla_direct": {"$exists": True},
