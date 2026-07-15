@@ -14,6 +14,7 @@ DEFAULT_LIMIT = 15
 MAX_LIMIT = 50
 ALLOWED_STATUS_GROUPS = {
     "under_review",
+    "reviewed",
     "processing",
     "completed",
     "shipping",
@@ -152,6 +153,20 @@ def _customer_gender(raw: dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _provider_status_native(raw: dict[str, Any]) -> Optional[str]:
+    """Return the actual Salla child/custom status shown to merchants.
+
+    Salla can return a parent workflow state in ``status.name`` (for example
+    "بإنتظار المراجعة") while the actual child state is stored in
+    ``status.customized`` (for example "تم المراجعة"). The customized value
+    must therefore win for operational display and filtering.
+    """
+    status = raw.get("status")
+    if isinstance(status, dict):
+        return _text(status.get("customized") or status.get("name"))
+    return _text(status)
+
+
 def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
     for key in ("is_gift", "gift", "gift_order"):
         if key not in raw:
@@ -176,8 +191,10 @@ def _map_row(raw: dict[str, Any]) -> OrderDTO:
             "gender": _customer_gender(raw),
         }
     )
+    provider_status_native = _provider_status_native(raw)
     return dto.model_copy(
         update={
+            "status_native": provider_status_native or dto.status_native,
             "is_new": _provider_is_new(raw),
             "is_gift": _provider_is_gift(raw, dto.tags),
             "customer": customer,
