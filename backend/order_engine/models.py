@@ -15,7 +15,6 @@ See:
 - docs/PROJECT_DECISIONS.md
 - docs/ORDER_CAPABILITY_AUDIT.md
 """
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -92,7 +91,6 @@ class PaymentDTO(CanonicalDTO):
     transaction_reference: Optional[str] = None
     paid_at: Optional[datetime] = None
 
-    # Future gateway details. Never store full card data.
     card_brand: Optional[str] = None
     card_last_four: Optional[str] = Field(
         default=None,
@@ -117,12 +115,7 @@ class ShippingDTO(CanonicalDTO):
 
 
 class MoneyTotalsDTO(CanonicalDTO):
-    """Commercial order totals.
-
-    These values represent the Salla commercial order snapshot. They are not
-    an accounting calculation engine and must not replace Qoyod accounting
-    records or Mezan's future Profit Engine.
-    """
+    """Commercial order totals."""
 
     currency: str = "SAR"
     subtotal: float = 0.0
@@ -133,15 +126,7 @@ class MoneyTotalsDTO(CanonicalDTO):
 
 
 class OrderItemDTO(CanonicalDTO):
-    """Canonical item inside one specific order.
-
-    `order_item_id` is the permanent Mezan operational identity. It is not
-    interchangeable with product_id or SKU.
-
-    Future engines will attach Availability, Inventory, Preparation,
-    Supplier, Purchase Batch, Shipping, Marketing and audit projections to
-    this identity.
-    """
+    """Canonical item inside one specific order."""
 
     order_item_id: str = Field(min_length=1)
 
@@ -168,7 +153,6 @@ class OrderItemDTO(CanonicalDTO):
     weight: Optional[float] = None
     weight_unit: Optional[str] = None
 
-    # Preserve provider options and also expose normalized values.
     options_raw: list[dict[str, Any]] = Field(default_factory=list)
     options_normalized: dict[str, Any] = Field(default_factory=dict)
 
@@ -176,11 +160,8 @@ class OrderItemDTO(CanonicalDTO):
     size: Optional[str] = None
     material: Optional[str] = None
 
-    # Customer-entered personalization, engraving, gift text, uploaded
-    # image references, or other product-specific inputs.
     custom_fields: list[dict[str, Any]] = Field(default_factory=list)
 
-    # Reserved contracts for future engines. Sprint 001 does not mutate them.
     preparation_status: Optional[str] = None
     availability_status: Optional[str] = None
     fulfillment_source: Optional[
@@ -201,11 +182,11 @@ class OrderDTO(CanonicalDTO):
     order_id: str = Field(min_length=1)
     order_number: str = Field(min_length=1)
 
-    # Order lists must sort and display this field, never updated_at.
     created_at: datetime
 
     status: Optional[str] = None
     status_native: Optional[str] = None
+    is_new: bool = False
 
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
@@ -222,9 +203,6 @@ class OrderDTO(CanonicalDTO):
     staff_notes: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
 
-    # Provider events will be normalized by a later Timeline capability.
     timeline: list[dict[str, Any]] = Field(default_factory=list)
 
-    # Internal update metadata is available for diagnostics only.
-    # It must never control list ordering.
     engine_updated_at: Optional[datetime] = None
