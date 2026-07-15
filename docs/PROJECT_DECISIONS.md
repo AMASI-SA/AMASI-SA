@@ -151,11 +151,11 @@ position.
 
 ## Decision-011 — Marketing Attribution Reaches Order Item
 
-Status: Future, architecture reserved
+Status: Approved, future phase
 
 Marketing attribution must support:
 
-    Campaign → Order → Order Item
+    Campaign → Ad Group/Ad Set → Ad → Creative → Session → Order → Order Item → Profit
 
 The future engine must report per product and variant:
 
@@ -235,6 +235,179 @@ updated with implementation changes.
 
 Important future capabilities must not exist only in conversations or generic
 TODO comments.
+
+---
+
+## Decision-016 — Preserve Raw Facts for Future Intelligence
+
+Status: Approved
+
+Every supported provider integration must preserve the raw payload and its
+provenance before canonical transformation, subject to approved privacy and
+retention controls.
+
+A derived metric, summary or current UI requirement is not a valid reason to
+discard source fields that may be needed later.
+
+The system must retain separately:
+
+- Provider event/source time
+- Ingestion time
+- Transformation version
+- Raw payload or version-preserved equivalent
+- Canonical entity identifiers
+- Data-quality and confidence metadata
+
+---
+
+## Decision-017 — Mezan Is the Cross-Source Decision Layer
+
+Status: Approved
+
+No single commerce, advertising or analytics provider owns the complete
+commercial truth.
+
+- Salla owns order and checkout facts.
+- Advertising platforms own spend, delivery, campaign and creative facts.
+- GA4 and approved behavior tools own session and funnel observations.
+- Qoyod owns accounting records.
+- Mezan owns cross-source identity, profit, experiments, decisions and measured
+  outcomes.
+
+Mezan must optimize sustainable net profit rather than revenue or platform ROAS
+alone.
+
+---
+
+## Decision-018 — Customer Conversations Are Strategic Data
+
+Status: Approved, future phase
+
+WhatsApp, email, live chat and approved social-support conversations are a
+formal Voice of Customer source.
+
+The future Voice of Customer Engine must preserve raw messages and extract
+versioned, confidence-labeled signals such as:
+
+- Purchase intent
+- Questions and objections
+- Reasons for not purchasing
+- Product, shipping, payment and trust problems
+- Complaint themes and sentiment
+- Support outcome and later order outcome
+
+Conversation insights must be linkable, when legitimately identifiable, to the
+customer, order, product, session and marketing source.
+
+---
+
+## Decision-019 — AI Decisions Require an Audit Trail
+
+Status: Approved, architecture mandatory
+
+Every AI recommendation and executable action must create a Decision Log that
+records:
+
+- Observation
+- Evidence and source references
+- Confidence
+- Expected impact and risk
+- Proposed action
+- Required approval
+- Approval, rejection or modification
+- Execution result
+- Measured outcome
+- Rollback state
+
+The system must be able to explain why an action was proposed or executed.
+
+---
+
+## Decision-020 — Autonomy Must Be Progressive and Bounded
+
+Status: Approved
+
+AI autonomy advances only through explicit gates:
+
+1. Observe.
+2. Explain and recommend.
+3. Prepare actions for approval.
+4. Execute approved low-risk actions within limits.
+5. Run bounded autonomous experiments.
+6. Expand autonomy only after measured reliability.
+
+Campaign or content automation requires:
+
+- Budget and loss guards
+- Approval thresholds
+- Action allowlists
+- Cooldown periods
+- Audit logs
+- Rollback procedures
+- Emergency stop
+
+No future agent may receive uncontrolled advertising-spend or publishing
+authority.
+
+---
+
+## Decision-021 — Generated Content Is Versioned and Measured
+
+Status: Approved, future phase
+
+AI-generated product copy, images, videos, campaign copy and communication
+assets must be stored as versioned creative assets.
+
+Each asset must be traceable to:
+
+- Prompt or creative brief
+- Source product facts
+- Human approval state
+- Campaign and placement usage
+- Performance outcome
+
+Generated assets must pass brand, factual, legal and platform checks before
+publishing permissions expand.
+
+---
+
+## Decision-022 — Intelligence Must Distinguish Fact from Inference
+
+Status: Approved
+
+Provider facts, Mezan calculations and AI inferences must remain distinguishable
+in schemas and APIs.
+
+AI-generated attributes require:
+
+- Inference type
+- Model/version
+- Confidence
+- Created time
+- Evidence references
+
+Sensitive customer attributes must not be guessed from names, email addresses or
+other weak proxies and stored as facts.
+
+---
+
+## Decision-023 — Future AI Work Follows the Approved Phase Roadmap
+
+Status: Approved
+
+The binding future roadmap is:
+
+`docs/AI_COMMERCE_OPERATING_SYSTEM_ROADMAP.md`
+
+The roadmap reserves Marketing Attribution, Customer Journey, Voice of Customer,
+Conversion Optimization, Creative Intelligence, Content Generation, Campaign
+Control and Commerce Executive Agent capabilities.
+
+Reservation does not authorize premature implementation. The active project
+gate remains the current Order Engine/Order Item Engine phase until its
+acceptance criteria pass.
+
+---
 
 ## Decision-024 — Manufactured Products Are Composite Workflows
 
