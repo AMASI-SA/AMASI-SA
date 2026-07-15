@@ -264,6 +264,126 @@ def _normalize_date(v: Any) -> Optional[str]:
         return None
 
 
+def _legacy_item_image_url(item: dict, product: dict) -> str:
+    """Return the first usable Salla order-item image URL."""
+    candidates = [
+        item.get("thumbnail"),
+        item.get("product_thumbnail"),
+        item.get("image_url"),
+        item.get("image"),
+        item.get("images"),
+        product.get("main_image"),
+        product.get("thumbnail"),
+        product.get("image"),
+        product.get("images"),
+    ]
+
+    def extract(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+
+        if isinstance(value, dict):
+            for key in (
+                "url",
+                "original",
+                "medium",
+                "thumbnail",
+                "small",
+            ):
+                result = extract(value.get(key))
+                if result:
+                    return result
+            return ""
+
+        if isinstance(value, list):
+            for entry in value:
+                result = extract(entry)
+                if result:
+                    return result
+
+        return ""
+
+    for candidate in candidates:
+        result = extract(candidate)
+        if result:
+            return result
+
+    return ""
+
+
+def _legacy_option_value(value: Any) -> Any:
+    """Extract a customer-visible value while avoiding raw JSON in legacy UI."""
+    if isinstance(value, dict):
+        for key in (
+            "name",
+            "value",
+            "label",
+            "text",
+            "option_value",
+            "title",
+        ):
+            candidate = value.get(key)
+            if candidate in (None, "", [], {}):
+                continue
+
+            extracted = _legacy_option_value(candidate)
+            if extracted not in (None, "", [], {}):
+                return extracted
+
+        return None
+
+    if isinstance(value, list):
+        values = [
+            _legacy_option_value(entry)
+            for entry in value
+        ]
+        values = [
+            value
+            for value in values
+            if value not in (None, "", [], {})
+        ]
+        return values
+
+    return value
+
+
+def _legacy_item_options(item: dict) -> list[dict]:
+    """Normalize Salla options for legacy products[] consumers."""
+    result: list[dict] = []
+
+    raw_options = item.get("options") or []
+    if isinstance(raw_options, dict):
+        raw_options = [raw_options]
+
+    for option in raw_options:
+        if not isinstance(option, dict):
+            continue
+
+        name = _str(
+            option.get("name")
+            or option.get("label")
+            or option.get("key")
+            or option.get("option")
+        )
+        value = _legacy_option_value(
+            option.get("value")
+            if "value" in option
+            else option.get("selected")
+            or option.get("choice")
+            or option.get("text")
+        )
+
+        if not name or value in (None, "", [], {}):
+            continue
+
+        result.append({
+            "name": name,
+            "value": value,
+        })
+
+    return result
+
+
 def _salla_order_to_doc(salla_order: dict) -> dict:
     """Map Salla /orders payload → unified_orders document fields.
 
@@ -313,21 +433,90 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if isinstance(payment_obj, dict):
         payment_status = payment_obj.get("status") or ""
 
-    # Products
+    # Products — authoritative legacy projection from /orders/items.
     items = salla_order.get("items") or []
     products: list[dict] = []
+
     for it in items:
         if not isinstance(it, dict):
             continue
+
         prod = it.get("product") or {}
+        if not isinstance(prod, dict):
+            prod = {}
+
+        amounts_item = it.get("amounts") or {}
+        if not isinstance(amounts_item, dict):
+            amounts_item = {}
+
+        options = _legacy_item_options(it)
+
         products.append({
-            "product_id": _str(prod.get("id") or it.get("product_id")),
-            "name": _str(prod.get("name") or it.get("name")),
-            "sku": _str(prod.get("sku") or it.get("sku")),
-            "quantity": int(it.get("quantity") or 0),
-            "price": _money(it.get("amounts", {}).get("price_without_tax") or it.get("price")),
-            "total": _money(it.get("amounts", {}).get("total") or it.get("total")),
-            "image_url": _str(prod.get("main_image") or prod.get("image", {}).get("url") if isinstance(prod.get("image"), dict) else prod.get("image")),
+            "order_item_id": _str(it.get("id")),
+            "product_id": _str(
+                prod.get("id")
+                or it.get("product_id")
+            ),
+            "parent_product_id": _str(
+                prod.get("parent_id")
+                or it.get("parent_product_id")
+            ),
+            "variant_id": _str(
+                it.get("product_sku_id")
+                or it.get("variant_id")
+                or prod.get("variant_id")
+            ),
+            "name": _str(
+                prod.get("name")
+                or it.get("name")
+            ),
+            "sku": _str(
+                prod.get("sku")
+                or it.get("sku")
+            ),
+            "barcode": _str(
+                prod.get("barcode")
+                or it.get("barcode")
+                or it.get("gtin")
+                or it.get("mpn")
+            ),
+            "quantity": float(it.get("quantity") or 0),
+            "price": _money(
+                amounts_item.get("price_without_tax")
+                or amounts_item.get("price")
+                or it.get("price")
+            ),
+            "total": _money(
+                amounts_item.get("total")
+                or it.get("total")
+            ),
+            "discount": _money(
+                amounts_item.get("total_discount")
+                or amounts_item.get("discount")
+                or it.get("discount")
+            ),
+            "tax": _money(
+                amounts_item.get("tax")
+                or it.get("tax")
+            ),
+            "image_url": _legacy_item_image_url(it, prod),
+            "options": options,
+            "custom_fields": [
+                value
+                for key in (
+                    "custom_fields",
+                    "customizations",
+                    "personalization",
+                    "attachments",
+                    "files",
+                )
+                for value in (
+                    it.get(key)
+                    if isinstance(it.get(key), list)
+                    else [it.get(key)]
+                )
+                if isinstance(value, dict)
+            ],
         })
 
     order_date_raw = (salla_order.get("date") or {}).get("date") if isinstance(salla_order.get("date"), dict) else salla_order.get("date")
