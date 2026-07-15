@@ -31,38 +31,18 @@ class OrderListResponse(BaseModel):
     skipped_invalid: int = 0
 
 
-class OrderStatusCounts(BaseModel):
+class ExactStatusCard(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    all: int = 0
-    under_review: int = 0
-    reviewed: int = 0
-    processing: int = 0
-    completed: int = 0
-    shipping: int = 0
-    cancelled: int = 0
-    refunded: int = 0
-    other: int = 0
-
-
-class QoyodOrderCounts(BaseModel):
-    """Qoyod card counts may degrade independently from Salla status cards.
-
-    `None` means the expensive Qoyod classifier was unavailable or exceeded its
-    bounded timeout. It must not be represented as a factual zero.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-    from_date: str = "2026-07-01"
-    sent: Optional[int] = None
-    eligible_not_sent: Optional[int] = None
-    available: bool = True
-    error: Optional[str] = None
+    key: str
+    label: str
+    count: int = 0
 
 
 class OrderFilterSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    status_counts: OrderStatusCounts
-    qoyod: QoyodOrderCounts
+    total: int = 0
+    status_cards: list[ExactStatusCard]
+    status_counts: dict[str, int]
 
 
 def _is_owner(user: Any) -> bool:
@@ -100,6 +80,7 @@ def make_order_engine_router(
         limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
         cursor: Optional[str] = Query(default=None),
         status_group: Optional[str] = Query(default=None),
+        status_exact: Optional[str] = Query(default=None),
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
@@ -112,6 +93,7 @@ def make_order_engine_router(
                 limit=limit,
                 cursor=cursor,
                 status_group=status_group,
+                status_exact=status_exact,
             )
         except InvalidOrderCursorError as exc:
             raise HTTPException(
