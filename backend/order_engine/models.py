@@ -34,7 +34,7 @@ class CanonicalDTO(BaseModel):
 
 
 class OrderSourceDTO(CanonicalDTO):
-    """Traceability metadata without exposing raw provider payloads."""
+    """Traceability and marketing attribution without raw provider payloads."""
 
     provider: Literal["salla"] = "salla"
     source_order_id: Optional[str] = None
@@ -42,6 +42,18 @@ class OrderSourceDTO(CanonicalDTO):
     source_event: Optional[str] = None
     fetched_at: Optional[datetime] = None
     received_at: Optional[datetime] = None
+
+    # Canonical attribution fields. `source` is the normalized channel used by
+    # list/detail consumers, while UTM values preserve the provider facts that
+    # future AI and campaign analytics will need.
+    source: Optional[str] = None
+    channel: Optional[str] = None
+    platform: Optional[str] = None
+    source_native: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    device: Optional[str] = None
 
 
 class AddressDTO(CanonicalDTO):
