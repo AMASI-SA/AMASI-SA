@@ -1,6 +1,7 @@
 """Order Engine repository contracts and Mongo implementation."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -52,6 +53,20 @@ _STATUS_PATTERNS: dict[str, str] = {
     "cancelled": r"^(cancelled|canceled|deleted|ملغي|ملغى|محذوف)$",
     "refunded": r"^(refunded|returned|restored|مسترجع|تم الاسترجاع)$",
 }
+
+
+_ATTRIBUTION_FIELDS = (
+    "source",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "device",
+    "is_gift",
+    "gift",
+    "gift_order",
+    "order_type",
+    "type",
+)
 
 
 def _customized_status_expression() -> dict[str, Any]:
@@ -218,6 +233,7 @@ class MongoOrderRepository:
             "order_date": 1,
             "order_status": 1,
             "raw_by_source.salla_direct": 1,
+            **{field: 1 for field in _ATTRIBUTION_FIELDS},
         }
         cursor = (
             self._collection.find(query, projection)
@@ -250,6 +266,7 @@ class MongoOrderRepository:
                 "order_date": 1,
                 "order_status": 1,
                 "raw_by_source.salla_direct": 1,
+                **{field: 1 for field in _ATTRIBUTION_FIELDS},
             },
         )
         return self._to_discovery_row(row)
@@ -263,9 +280,20 @@ class MongoOrderRepository:
         raw_by_source = row.get("raw_by_source")
         if not isinstance(raw_by_source, dict):
             return None
-        salla_raw = raw_by_source.get("salla_direct")
-        if not isinstance(salla_raw, dict) or not order_number or not order_date:
+        raw_provider = raw_by_source.get("salla_direct")
+        if not isinstance(raw_provider, dict) or not order_number or not order_date:
             return None
+
+        # unified_orders already stores normalized attribution fields at the
+        # document root. Preserve the provider payload as the first authority,
+        # then fill only missing fields from that durable normalized snapshot.
+        salla_raw = deepcopy(raw_provider)
+        for field in _ATTRIBUTION_FIELDS:
+            if salla_raw.get(field) in (None, "", [], {}):
+                value = row.get(field)
+                if value not in (None, "", [], {}):
+                    salla_raw[field] = deepcopy(value)
+
         current_status = str(row.get("order_status") or "").strip() or None
         return OrderDiscoveryRow(
             order_number=order_number,
