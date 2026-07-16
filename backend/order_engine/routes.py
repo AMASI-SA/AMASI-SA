@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.order_commerce_enrichment import enrich_single_order_commerce
 from .address_diagnostic import build_order_address_diagnostic
+from .campaign_enrichment import enrich_order_campaigns
 from .city_enrichment import enrich_order_cities
 from .commerce_diagnostic import build_order_commerce_diagnostic
 from .filter_summary import (
@@ -118,6 +119,11 @@ def make_order_engine_router(
             orders=page.items,
         )
         enriched_items = await enrich_order_gifts(
+            db,
+            user_id=owner_id,
+            orders=enriched_items,
+        )
+        enriched_items = await enrich_order_campaigns(
             db,
             user_id=owner_id,
             orders=enriched_items,
@@ -248,6 +254,11 @@ def make_order_engine_router(
                 orders=[order],
             )
             enriched = await enrich_order_gifts(
+                db,
+                user_id=owner_id,
+                orders=enriched,
+            )
+            enriched = await enrich_order_campaigns(
                 db,
                 user_id=owner_id,
                 orders=enriched,
