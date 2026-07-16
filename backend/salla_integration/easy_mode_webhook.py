@@ -35,11 +35,12 @@ Body schema (Salla docs, doc-421413):
     }
   }
 
-Events we handle (all others = 200 OK no-op log):
+Events we handle:
   • app.store.authorize  → store tokens, mark connected
   • app.installed        → log (tokens come with .authorize, not here)
   • app.updated          → re-fetch /store/info
   • app.uninstalled      → mark not_connected (keep history)
+  • all other verified events → capture a sanitized read-only snapshot
 
 Security invariants (NON-NEGOTIABLE)
 ------------------------------------
@@ -65,6 +66,7 @@ from .service import (
     encrypt_token,
     upsert_integration,
 )
+from .webhook_event_capture import capture_unknown_event
 
 log = logging.getLogger("salla.easy_mode")
 
@@ -82,7 +84,6 @@ STRATEGY_SIGNATURE = "signature"
 STRATEGY_TOKEN     = "token"
 
 # Map event names to handler functions (registered below).
-# Anything not in this map is ack'd with 200 + a no-op log line.
 EVENT_HANDLERS: dict[str, str] = {
     "app.store.authorize": "_handle_store_authorize",
     "app.installed":       "_handle_app_installed",
@@ -357,15 +358,32 @@ async def _handle_app_uninstalled(db, event_body: dict) -> dict:
 
 # ── Event router ──────────────────────────────────────────────────────
 async def dispatch_event(db, event_body: dict) -> dict:
-    """Route a parsed (and signature-verified) webhook to its handler.
+    """Route a parsed and verified webhook to its handler.
 
-    Unknown events are ack'd 200 + logged — Salla retries on non-2xx,
-    so we MUST 200 anything we don't care about.
+    Unknown verified events are captured safely and still acknowledged with
+    HTTP 200 so Salla does not enter a retry storm. Capture is read-only with
+    respect to orders and never calls Qoyod.
     """
     event_name = (event_body.get("event") or "").strip()
     handler_name = EVENT_HANDLERS.get(event_name)
     if not handler_name:
-        log.info("easy_mode.ignored event=%r", event_name)
-        return {"ok": True, "stored": False, "reason": "event_not_handled", "event": event_name}
+        capture = await capture_unknown_event(
+            db,
+            event_body,
+            known_events=EVENT_HANDLERS.keys(),
+        )
+        log.info(
+            "easy_mode.captured_unknown event=%r created=%s hash=%s",
+            event_name,
+            capture.get("created"),
+            capture.get("event_hash_prefix"),
+        )
+        return {
+            "ok": True,
+            "stored": bool(capture.get("captured")),
+            "reason": "unknown_event_captured",
+            "event": event_name,
+            "capture": capture,
+        }
     handler = globals()[handler_name]
     return await handler(db, event_body)
