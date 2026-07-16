@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from salla_integration.auto_sync import schedule_salla_auto_sync
+from .address_diagnostic import build_order_address_diagnostic
 from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
@@ -135,6 +136,18 @@ def make_order_engine_router(
             db,
             user_id=str(owner["id"]),
             sample_limit=sample_limit,
+        )
+
+    @router.get("/diagnostics/address/{order_number}")
+    async def get_address_diagnostic(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        return await build_order_address_diagnostic(
+            db,
+            user_id=str(owner["id"]),
+            order_number=order_number,
         )
 
     @router.get("/{order_number}", response_model=OrderDTO)
