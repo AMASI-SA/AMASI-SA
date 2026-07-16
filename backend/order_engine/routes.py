@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from .address_diagnostic import build_order_address_diagnostic
 from .city_enrichment import enrich_order_cities
+from .commerce_diagnostic import build_order_commerce_diagnostic
 from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
@@ -160,6 +161,18 @@ def make_order_engine_router(
     ) -> dict[str, Any]:
         owner = _require_owner(user)
         return await build_order_address_diagnostic(
+            db,
+            user_id=str(owner["id"]),
+            order_number=str(order_number),
+        )
+
+    @router.get("/diagnostics/commerce/{order_number}")
+    async def get_commerce_diagnostic(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        return await build_order_commerce_diagnostic(
             db,
             user_id=str(owner["id"]),
             order_number=str(order_number),
