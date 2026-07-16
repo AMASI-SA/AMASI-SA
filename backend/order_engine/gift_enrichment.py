@@ -1,8 +1,8 @@
-"""Explicit gift enrichment using authoritative Salla Order Details.
+"""Explicit gift enrichment using durable Mezan fields and Salla details.
 
 This module never infers gift status from product names, customer text, notes,
-or options. It only accepts explicit provider fields/labels and updates Mezan
-storage. It performs no Qoyod calls and no Salla writes.
+or arbitrary options. It only accepts explicit provider fields/labels and updates
+Mezan storage. It performs no Qoyod calls and no Salla writes.
 """
 from __future__ import annotations
 
@@ -113,7 +113,6 @@ def extract_explicit_gift_signal(value: Any, *, path: str = "raw", depth: int = 
     if depth > 10:
         return {"is_gift": None, "path": None, "value": None}
 
-    positive: Optional[dict[str, Any]] = None
     negative: Optional[dict[str, Any]] = None
 
     if isinstance(value, list):
@@ -158,12 +157,76 @@ def extract_explicit_gift_signal(value: Any, *, path: str = "raw", depth: int = 
     return negative or {"is_gift": None, "path": None, "value": None}
 
 
+async def _stored_order_signal(db: Any, *, user_id: str, order_number: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Read explicit gift fields already normalized at the document root."""
+    row = await db.unified_orders.find_one(
+        {"user_id": str(user_id), "order_number": str(order_number)},
+        {
+            "_id": 0,
+            "is_gift": 1,
+            "gift": 1,
+            "gift_order": 1,
+            "order_type": 1,
+            "order_kind": 1,
+            "type_of_order": 1,
+            "raw_by_source.salla_direct": 1,
+        },
+    )
+    if not isinstance(row, dict):
+        return None, {}
+
+    root_signal = extract_explicit_gift_signal(
+        {
+            key: row.get(key)
+            for key in (
+                "is_gift",
+                "gift",
+                "gift_order",
+                "order_type",
+                "order_kind",
+                "type_of_order",
+            )
+            if row.get(key) not in (None, "", [], {})
+        },
+        path="unified_orders",
+    )
+    return root_signal, row
+
+
 async def enrich_single_order_gift(db: Any, *, user_id: str, order_number: str) -> dict[str, Any]:
-    """Resync one order from Salla details and persist explicit gift status."""
+    """Persist explicit gift status, preferring durable stored order fields."""
     normalized = str(order_number or "").strip()
     if not normalized:
         return {"ok": False, "error": "missing_order_number"}
 
+    # First authority: the normalized root fields already stored in unified_orders.
+    # Salla exports expose `order_type = هدية`; no API call is needed when present.
+    root_signal, row = await _stored_order_signal(
+        db,
+        user_id=str(user_id),
+        order_number=normalized,
+    )
+    if row and root_signal and root_signal.get("is_gift") is not None:
+        is_gift = bool(root_signal.get("is_gift"))
+        await db.unified_orders.update_one(
+            {"user_id": str(user_id), "order_number": normalized},
+            {"$set": {
+                "is_gift": is_gift,
+                "gift_source": "unified_orders_order_type",
+                "gift_source_path": str(root_signal.get("path") or "")[:240],
+            }},
+        )
+        return {
+            "ok": True,
+            "found": True,
+            "order_number": normalized,
+            "is_gift": is_gift,
+            "explicit_signal_found": True,
+            "source": "unified_orders",
+            "source_path": root_signal.get("path"),
+        }
+
+    # Fallback only when the durable root fields do not contain an explicit signal.
     resync = await resync_single_order(db, str(user_id), normalized)
     if not resync.get("ok") or not resync.get("found"):
         return {
@@ -175,13 +238,44 @@ async def enrich_single_order_gift(db: Any, *, user_id: str, order_number: str) 
 
     row = await db.unified_orders.find_one(
         {"user_id": str(user_id), "order_number": normalized},
-        {"_id": 0, "raw_by_source.salla_direct": 1, "is_gift": 1},
+        {
+            "_id": 0,
+            "raw_by_source.salla_direct": 1,
+            "is_gift": 1,
+            "gift": 1,
+            "gift_order": 1,
+            "order_type": 1,
+            "order_kind": 1,
+            "type_of_order": 1,
+        },
     )
-    raw_by_source = (row or {}).get("raw_by_source") or {}
-    raw = raw_by_source.get("salla_direct") if isinstance(raw_by_source, dict) else None
-    raw = raw if isinstance(raw, dict) else {}
 
-    signal = extract_explicit_gift_signal(raw)
+    # Re-check root fields because the resync mapper may have populated order_type.
+    root_signal = extract_explicit_gift_signal(
+        {
+            key: (row or {}).get(key)
+            for key in (
+                "is_gift",
+                "gift",
+                "gift_order",
+                "order_type",
+                "order_kind",
+                "type_of_order",
+            )
+            if (row or {}).get(key) not in (None, "", [], {})
+        },
+        path="unified_orders",
+    )
+    if root_signal.get("is_gift") is not None:
+        signal = root_signal
+        source = "unified_orders"
+    else:
+        raw_by_source = (row or {}).get("raw_by_source") or {}
+        raw = raw_by_source.get("salla_direct") if isinstance(raw_by_source, dict) else None
+        raw = raw if isinstance(raw, dict) else {}
+        signal = extract_explicit_gift_signal(raw)
+        source = "salla_order_details"
+
     is_gift = signal.get("is_gift")
     if is_gift is None:
         return {
@@ -190,14 +284,14 @@ async def enrich_single_order_gift(db: Any, *, user_id: str, order_number: str) 
             "order_number": normalized,
             "is_gift": None,
             "explicit_signal_found": False,
-            "message": "Salla Order Details did not expose an explicit gift field.",
+            "message": "No explicit gift field was found in stored order_type or Salla Order Details.",
         }
 
     await db.unified_orders.update_one(
         {"user_id": str(user_id), "order_number": normalized},
         {"$set": {
             "is_gift": bool(is_gift),
-            "gift_source": "salla_order_details",
+            "gift_source": source,
             "gift_source_path": str(signal.get("path") or "")[:240],
         }},
     )
@@ -207,5 +301,6 @@ async def enrich_single_order_gift(db: Any, *, user_id: str, order_number: str) 
         "order_number": normalized,
         "is_gift": bool(is_gift),
         "explicit_signal_found": True,
+        "source": source,
         "source_path": signal.get("path"),
     }
