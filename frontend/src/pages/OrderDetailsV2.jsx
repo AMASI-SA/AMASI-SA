@@ -65,16 +65,38 @@ function formatOrderDate(value) {
     }).format(date);
 }
 
-function displayValue(value) {
-    if (value === null || value === undefined || value === "") return "—";
-    if (typeof value === "object") {
-        try {
-            return JSON.stringify(value);
-        } catch {
-            return String(value);
-        }
+function isPresent(value) {
+    return value !== null && value !== undefined && value !== "";
+}
+
+function firstPresent(...values) {
+    return values.find(isPresent);
+}
+
+function readableScalar(value) {
+    if (!isPresent(value)) return "—";
+    if (Array.isArray(value)) {
+        const parts = value.map(readableScalar).filter((part) => part !== "—");
+        return parts.length ? parts.join("، ") : "—";
     }
+    if (typeof value === "object") {
+        return readableScalar(firstPresent(
+            value.name,
+            value.label,
+            value.title,
+            value.display_name,
+            value.value,
+            value.code,
+            value.slug,
+            value.id,
+        ));
+    }
+    if (typeof value === "boolean") return value ? "نعم" : "لا";
     return String(value);
+}
+
+function displayValue(value) {
+    return readableScalar(value);
 }
 
 function normalizePhone(value) {
@@ -93,8 +115,10 @@ function addressText(address) {
     if (!address) return "";
     return [
         address.formatted,
+        address.address_line,
         address.city,
         address.district,
+        address.block,
         address.street,
         address.building_number,
         address.additional_number,
@@ -111,14 +135,14 @@ function collectItemSelections(item) {
     const seen = new Set();
     const push = (label, value) => {
         const normalizedLabel = String(label || "").trim();
-        if (!normalizedLabel || value === null || value === undefined || value === "") return;
+        if (!normalizedLabel || !isPresent(value)) return;
         const shownValue = displayValue(value);
+        if (shownValue === "—") return;
         const key = `${normalizedLabel}:${shownValue}`;
         if (seen.has(key)) return;
         seen.add(key);
         rows.push({ label: normalizedLabel, value: shownValue });
     };
-
     push("اللون", item.color);
     push("المقاس", item.size);
     push("الخامة", item.material);
@@ -189,7 +213,6 @@ function CustomerCard({ customer, shipping }) {
     const active = tab === "recipient" && hasIndependentRecipient ? { ...recipient, mobile: recipientPhone } : { ...customer, mobile: buyerPhone };
     const phone = normalizePhone(active.mobile || active.phone);
     const email = String(active.email || "").trim();
-
     return (
         <SectionCard title="العميل" icon={User} testid="order-v2-customer" headerAction={
             <div className="inline-flex rounded-xl border border-teal-200 bg-white p-1 text-xs font-bold">
@@ -243,13 +266,13 @@ function PaymentCard({ payment, paymentMethod }) {
     const attachment = payment.receipt_url || payment.attachment_url || payment.proof_url;
     const paid = String(payment.status || "").toLowerCase().includes("paid") || payment.is_paid === true;
     return (
-        <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment" headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50">إصدار الفاتورة</button>}>
+        <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment">
             <div className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-4">
                     {attachment && <img src={attachment} alt="مرفق الدفع" className="h-24 w-20 rounded-lg border border-teal-200 object-cover" />}
                     <div>
                         <div className="flex items-center gap-2 text-lg font-extrabold text-slate-800">{paid && <CheckCircle size={34} className="text-emerald-400" />}{payment.status_native || payment.status || "حالة الدفع غير محددة"}</div>
-                        <div className="mt-2 text-sm text-slate-400">{payment.receiving_bank_name || paymentMethod}</div>
+                        <div className="mt-2 text-sm text-slate-400">{paymentMethod}</div>
                     </div>
                 </div>
             </div>
@@ -287,14 +310,15 @@ function InfoRow({ label, value }) {
 }
 
 function AdvancedOrderInfo({ order }) {
-    const utm = order.utm || order.marketing || order.attribution || {};
-    const source = order.source_native || order.source_name || order.source || utm.source || utm.utm_source;
-    const medium = order.utm_medium || utm.medium || utm.utm_medium;
-    const campaign = order.utm_campaign || utm.campaign || utm.utm_campaign;
-    const channel = order.channel_native || order.channel || order.order_channel;
-    const device = order.device_name || order.device || order.client_device;
-    const assignments = order.assignments || order.responsibilities || order.staff || {};
-    const operations = order.fulfillment || order.operations || order.tracking || {};
+    const sourceObject = typeof order.source === "object" && order.source ? order.source : {};
+    const attribution = firstPresent(order.utm, order.marketing, order.attribution, sourceObject.attribution, sourceObject.utm) || {};
+    const source = firstPresent(order.source_native, order.source_name, sourceObject.source_native, sourceObject.source, attribution.source, attribution.utm_source, typeof order.source === "string" ? order.source : null);
+    const medium = firstPresent(order.utm_medium, sourceObject.utm_medium, attribution.medium, attribution.utm_medium);
+    const campaign = firstPresent(order.utm_campaign, sourceObject.utm_campaign, attribution.campaign, attribution.utm_campaign);
+    const channel = firstPresent(order.channel_native, order.channel, order.order_channel, sourceObject.channel, sourceObject.source_event);
+    const device = firstPresent(order.device_name, order.device, order.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
+    const assignments = firstPresent(order.assignments, order.responsibilities, order.staff) || {};
+    const operations = firstPresent(order.fulfillment, order.operations, order.tracking) || {};
 
     return (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-advanced-info">
@@ -302,15 +326,27 @@ function AdvancedOrderInfo({ order }) {
             <div className="grid gap-5 lg:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center gap-2"><Megaphone size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">مصدر الطلب</h3></div>
-                    <InfoRow label="المصدر" value={source} /><InfoRow label="الوسيط" value={medium} /><InfoRow label="الحملة" value={campaign} /><InfoRow label="القناة" value={channel} /><InfoRow label="الجهاز" value={device} />
+                    <InfoRow label="المصدر" value={source} />
+                    <InfoRow label="الوسيط" value={medium} />
+                    <InfoRow label="الحملة" value={campaign} />
+                    <InfoRow label="القناة" value={channel} />
+                    <InfoRow label="الجهاز" value={device} />
                 </div>
                 <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center gap-2"><UsersThree size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">الموظفون والمسؤوليات</h3></div>
-                    <InfoRow label="مسؤول الطلب" value={assignments.owner || assignments.order_owner || order.assigned_to} /><InfoRow label="التجهيز" value={assignments.preparation || assignments.fulfillment} /><InfoRow label="الشحن" value={assignments.shipping} /><InfoRow label="خدمة العملاء" value={assignments.customer_service || assignments.support} /><InfoRow label="آخر محدث" value={order.updated_by || assignments.last_updated_by} />
+                    <InfoRow label="مسؤول الطلب" value={firstPresent(assignments.owner, assignments.order_owner, assignments.assigned_to, order.assigned_to)} />
+                    <InfoRow label="التجهيز" value={firstPresent(assignments.preparation, assignments.fulfillment, assignments.preparation_employee)} />
+                    <InfoRow label="الشحن" value={firstPresent(assignments.shipping, assignments.shipping_employee)} />
+                    <InfoRow label="خدمة العملاء" value={firstPresent(assignments.customer_service, assignments.support, assignments.customer_service_employee)} />
+                    <InfoRow label="آخر محدث" value={firstPresent(order.updated_by, assignments.last_updated_by, assignments.updated_by)} />
                 </div>
                 <div className="rounded-2xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center gap-2"><DeviceMobile size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">متابعة الطلب</h3></div>
-                    <InfoRow label="التجهيز" value={operations.preparation_status || operations.status} /><InfoRow label="الطباعة" value={operations.print_status} /><InfoRow label="التغليف" value={operations.packing_status} /><InfoRow label="التسليم للشركة" value={operations.handover_status} /><InfoRow label="التوصيل" value={operations.delivery_status || order.shipping?.status} />
+                    <InfoRow label="التجهيز" value={firstPresent(operations.preparation_status, operations.status, order.preparation_status)} />
+                    <InfoRow label="الطباعة" value={firstPresent(operations.print_status, order.print_status)} />
+                    <InfoRow label="التغليف" value={firstPresent(operations.packing_status, order.packing_status)} />
+                    <InfoRow label="التسليم للشركة" value={firstPresent(operations.handover_status, order.handover_status)} />
+                    <InfoRow label="التوصيل" value={firstPresent(operations.delivery_status, order.shipping?.status, order.shipment_status)} />
                 </div>
             </div>
         </section>
