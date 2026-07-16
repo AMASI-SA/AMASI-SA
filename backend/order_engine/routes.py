@@ -20,6 +20,7 @@ from .gift_db_enrichment import enrich_order_gifts
 from .gift_diagnostic import build_gift_diagnostic
 from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
+from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
 from .service import (
     DEFAULT_LIMIT,
@@ -124,6 +125,11 @@ def make_order_engine_router(
             orders=enriched_items,
         )
         enriched_items = await enrich_order_campaigns(
+            db,
+            user_id=owner_id,
+            orders=enriched_items,
+        )
+        enriched_items = await enrich_order_recipients(
             db,
             user_id=owner_id,
             orders=enriched_items,
@@ -259,6 +265,11 @@ def make_order_engine_router(
                 orders=enriched,
             )
             enriched = await enrich_order_campaigns(
+                db,
+                user_id=owner_id,
+                orders=enriched,
+            )
+            enriched = await enrich_order_recipients(
                 db,
                 user_id=owner_id,
                 orders=enriched,
