@@ -43,9 +43,6 @@ class OrderSourceDTO(CanonicalDTO):
     fetched_at: Optional[datetime] = None
     received_at: Optional[datetime] = None
 
-    # Canonical attribution fields. `source` is the normalized channel used by
-    # list/detail consumers, while UTM values preserve the provider facts that
-    # future AI and campaign analytics will need.
     source: Optional[str] = None
     channel: Optional[str] = None
     platform: Optional[str] = None
@@ -53,9 +50,6 @@ class OrderSourceDTO(CanonicalDTO):
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
-    # Mezan-resolved campaign identity. Salla sometimes sends only a campaign
-    # UUID inside utm_campaign; campaign_name is resolved from stored ad data
-    # without overwriting that original provider fact.
     campaign_id: Optional[str] = None
     campaign_name: Optional[str] = None
     device: Optional[str] = None
@@ -131,6 +125,9 @@ class ShippingDTO(CanonicalDTO):
     shipped_at: Optional[datetime] = None
     delivered_at: Optional[datetime] = None
     address: Optional[AddressDTO] = None
+    # Independent recipient selected by the buyer. Kept separate from customer
+    # so gift orders and deliveries to another person remain operationally safe.
+    recipient: Optional[dict[str, Any]] = None
 
 
 class MoneyTotalsDTO(CanonicalDTO):
