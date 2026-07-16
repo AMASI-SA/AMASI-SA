@@ -13,6 +13,7 @@ from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
 )
+from .gift_db_enrichment import enrich_order_gifts
 from .gift_diagnostic import build_gift_diagnostic
 from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
@@ -88,12 +89,13 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
-        schedule_salla_auto_sync(db, str(owner["id"]))
+        owner_id = str(owner["id"])
+        schedule_salla_auto_sync(db, owner_id)
 
         try:
             page = await list_orders(
                 repository(),
-                user_id=str(owner["id"]),
+                user_id=owner_id,
                 limit=limit,
                 cursor=cursor,
                 status_group=status_group,
@@ -110,8 +112,13 @@ def make_order_engine_router(
 
         enriched_items = await enrich_order_cities(
             db,
-            user_id=str(owner["id"]),
+            user_id=owner_id,
             orders=page.items,
+        )
+        enriched_items = await enrich_order_gifts(
+            db,
+            user_id=owner_id,
+            orders=enriched_items,
         )
         return OrderListResponse(
             items=enriched_items,
@@ -194,18 +201,24 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> OrderDTO:
         owner = _require_owner(user)
-        schedule_salla_auto_sync(db, str(owner["id"]))
+        owner_id = str(owner["id"])
+        schedule_salla_auto_sync(db, owner_id)
 
         try:
             order = await get_order(
                 repository(),
-                user_id=str(owner["id"]),
+                user_id=owner_id,
                 order_number=order_number,
             )
             enriched = await enrich_order_cities(
                 db,
-                user_id=str(owner["id"]),
+                user_id=owner_id,
                 orders=[order],
+            )
+            enriched = await enrich_order_gifts(
+                db,
+                user_id=owner_id,
+                orders=enriched,
             )
             return enriched[0]
         except OrderNotFoundError as exc:
