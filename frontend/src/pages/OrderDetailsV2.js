@@ -13,77 +13,39 @@ import { useOrder } from "../hooks/useOrders";
 import OriginalOrderDetailsV2 from "./OrderDetailsV2.jsx";
 
 const SOURCE_LABELS = {
-    ig: "إنستقرام",
-    instagram: "إنستقرام",
-    fb: "فيسبوك",
-    facebook: "فيسبوك",
-    meta: "ميتا (فيسبوك وإنستقرام)",
-    snapchat: "سناب شات",
-    snap: "سناب شات",
-    tiktok: "تيك توك",
-    google: "جوجل",
-    youtube: "يوتيوب",
-    x: "إكس (تويتر)",
-    twitter: "إكس (تويتر)",
-    linkedin: "لينكدإن",
-    whatsapp: "واتساب",
-    email: "البريد الإلكتروني",
-    sms: "رسائل نصية",
-    direct: "دخول مباشر",
-    store: "المتجر الإلكتروني",
-    referral: "إحالة",
-    organic: "بحث طبيعي",
+    ig: "إنستقرام", instagram: "إنستقرام", fb: "فيسبوك", facebook: "فيسبوك",
+    meta: "ميتا (فيسبوك وإنستقرام)", snapchat: "سناب شات", snap: "سناب شات",
+    tiktok: "تيك توك", google: "جوجل", youtube: "يوتيوب", x: "إكس (تويتر)",
+    twitter: "إكس (تويتر)", linkedin: "لينكدإن", whatsapp: "واتساب",
+    email: "البريد الإلكتروني", sms: "رسائل نصية", direct: "دخول مباشر",
+    store: "المتجر الإلكتروني", referral: "إحالة", organic: "بحث طبيعي",
 };
 
 const MEDIUM_LABELS = {
-    social: "وسائل التواصل الاجتماعي",
-    paid: "إعلان مدفوع",
-    paid_social: "إعلان مدفوع عبر وسائل التواصل",
-    cpc: "إعلان بالنقرة",
-    ppc: "إعلان بالنقرة",
-    organic: "زيارات مجانية",
-    display: "إعلانات عرض",
-    email: "بريد إلكتروني",
-    affiliate: "تسويق بالعمولة",
-    referral: "إحالة",
+    social: "وسائل التواصل الاجتماعي", paid: "إعلان مدفوع",
+    paid_social: "إعلان مدفوع عبر وسائل التواصل", cpc: "إعلان بالنقرة",
+    ppc: "إعلان بالنقرة", organic: "زيارات مجانية", display: "إعلانات عرض",
+    email: "بريد إلكتروني", affiliate: "تسويق بالعمولة", referral: "إحالة",
 };
 
-const DEVICE_LABELS = {
-    mobile: "جوال",
-    desktop: "كمبيوتر",
-    tablet: "جهاز لوحي",
-};
+const DEVICE_LABELS = { mobile: "جوال", desktop: "كمبيوتر", tablet: "جهاز لوحي" };
 
 const PAYMENT_LABELS = {
-    mada: "مدى",
-    credit_card: "البطاقة الائتمانية",
-    card: "البطاقة الائتمانية",
-    apple_pay: "Apple Pay",
-    stc_pay: "STC Pay",
-    tabby: "تابي",
-    tabby_installment: "تابي",
-    tamara: "تمارا",
-    tamara_installment: "تمارا",
-    emkan: "إمكان",
-    bank: "التحويل البنكي",
-    bank_transfer: "التحويل البنكي",
-    transfer: "التحويل البنكي",
-    cod: "الدفع عند الاستلام",
+    mada: "مدى", credit_card: "البطاقة الائتمانية", card: "البطاقة الائتمانية",
+    apple_pay: "Apple Pay", stc_pay: "STC Pay", tabby: "تابي",
+    tabby_installment: "تابي", tamara: "تمارا", tamara_installment: "تمارا",
+    emkan: "إمكان", bank: "التحويل البنكي", bank_transfer: "التحويل البنكي",
+    transfer: "التحويل البنكي", cod: "الدفع عند الاستلام",
     cash_on_delivery: "الدفع عند الاستلام",
 };
 
 const BANK_LABELS = {
-    alrajhi: "مصرف الراجحي",
-    al_rajhi: "مصرف الراجحي",
-    rajhi: "مصرف الراجحي",
-    riyadbank: "بنك الرياض",
-    alinma: "مصرف الإنماء",
-    al_inma: "مصرف الإنماء",
-    inma: "مصرف الإنماء",
-    ahli: "البنك الأهلي السعودي",
-    alahli: "البنك الأهلي السعودي",
-    snb: "البنك الأهلي السعودي",
-    ncb: "البنك الأهلي السعودي",
+    alrajhi: "مصرف الراجحي", al_rajhi: "مصرف الراجحي", rajhi: "مصرف الراجحي",
+    bank_rajhi: "مصرف الراجحي", riyadbank: "بنك الرياض", alinma: "مصرف الإنماء",
+    al_inma: "مصرف الإنماء", inma: "مصرف الإنماء", bank_inma: "مصرف الإنماء",
+    ahli: "البنك الأهلي السعودي", alahli: "البنك الأهلي السعودي",
+    snb: "البنك الأهلي السعودي", ncb: "البنك الأهلي السعودي",
+    bank_ahli: "البنك الأهلي السعودي",
 };
 
 function isPresent(value) {
@@ -97,7 +59,7 @@ function firstPresent(...values) {
 function readable(value) {
     if (!isPresent(value)) return "—";
     if (typeof value === "object") {
-        return readable(firstPresent(value.name, value.label, value.title, value.value, value.code, value.slug, value.id));
+        return readable(firstPresent(value.name, value.label, value.title, value.display_name, value.value, value.code, value.slug, value.id));
     }
     return String(value).trim() || "—";
 }
@@ -108,38 +70,102 @@ function translate(value, dictionary) {
     return dictionary[raw.toLowerCase()] || raw;
 }
 
+function looksLikeCampaignId(value) {
+    const text = readable(value);
+    if (text === "—") return false;
+    return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(text) || /^\d{12,}$/.test(text) || text.length >= 24;
+}
+
 function sourceValues(order) {
     const sourceObject = typeof order?.source === "object" && order.source ? order.source : {};
     const attribution = firstPresent(order?.utm, order?.marketing, order?.attribution, sourceObject.attribution, sourceObject.utm) || {};
-
     const source = firstPresent(
-        order?.source_native,
-        order?.source_name,
-        sourceObject.source_native,
-        sourceObject.source,
-        attribution.source,
-        attribution.utm_source,
+        order?.source_native, order?.source_name, sourceObject.source_native,
+        sourceObject.source, attribution.source, attribution.utm_source,
         typeof order?.source === "string" ? order.source : null,
     );
     const medium = firstPresent(order?.utm_medium, sourceObject.utm_medium, attribution.medium, attribution.utm_medium);
-    const campaign = firstPresent(
-        order?.utm_campaign,
+    const campaignName = firstPresent(
         order?.campaign_name,
-        sourceObject.utm_campaign,
         sourceObject.campaign_name,
         attribution.campaign_name,
+    );
+    const rawCampaign = firstPresent(
+        order?.utm_campaign,
+        sourceObject.utm_campaign,
         attribution.campaign,
         attribution.utm_campaign,
     );
+    const campaignId = firstPresent(order?.campaign_id, sourceObject.campaign_id, looksLikeCampaignId(rawCampaign) ? rawCampaign : null);
+    const campaignDisplay = readable(campaignName) !== "—"
+        ? readable(campaignName)
+        : campaignId
+            ? "اسم الحملة غير متوفر"
+            : readable(rawCampaign);
     const channel = firstPresent(order?.channel_native, order?.channel, order?.order_channel, sourceObject.channel, sourceObject.source_event);
     const device = firstPresent(order?.device_name, order?.device, order?.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
 
     return {
         المصدر: translate(source, SOURCE_LABELS),
         الوسيط: translate(medium, MEDIUM_LABELS),
-        الحملة: readable(campaign),
+        الحملة: campaignDisplay,
         القناة: translate(channel, SOURCE_LABELS),
         الجهاز: translate(device, DEVICE_LABELS),
+    };
+}
+
+function eventActor(event) {
+    return readable(firstPresent(
+        event?.actor_name, event?.actor, event?.user_name, event?.user,
+        event?.employee_name, event?.employee, event?.updated_by,
+        event?.created_by, event?.performed_by, event?.staff,
+    ));
+}
+
+function eventText(event) {
+    return [event?.type, event?.event, event?.action, event?.title, event?.status, event?.status_to, event?.new_status]
+        .map((value) => readable(value))
+        .filter((value) => value !== "—")
+        .join(" ")
+        .toLowerCase();
+}
+
+function newestMatchingEvent(events, keywords, requireActor = false) {
+    return [...events].reverse().find((event) => {
+        const text = eventText(event);
+        if (!keywords.some((keyword) => text.includes(keyword))) return false;
+        return !requireActor || eventActor(event) !== "—";
+    });
+}
+
+function staffValues(order) {
+    const assignments = firstPresent(order?.assignments, order?.responsibilities, order?.staff) || {};
+    const events = Array.isArray(order?.timeline) ? order.timeline : [];
+    const latestWithActor = [...events].reverse().find((event) => eventActor(event) !== "—");
+    const actorFor = (keywords) => eventActor(newestMatchingEvent(events, keywords, true));
+
+    return {
+        "مسؤول الطلب": readable(firstPresent(assignments.owner, assignments.order_owner, assignments.assigned_to, order?.assigned_to, actorFor(["assign", "مسؤول", "تعيين"]))),
+        التجهيز: readable(firstPresent(assignments.preparation, assignments.fulfillment, assignments.preparation_employee, actorFor(["prepar", "fulfill", "تجهيز"]))),
+        الشحن: readable(firstPresent(assignments.shipping, assignments.shipping_employee, actorFor(["ship", "شحن", "بوليصة"]))),
+        "خدمة العملاء": readable(firstPresent(assignments.customer_service, assignments.support, assignments.customer_service_employee, actorFor(["customer", "support", "عميل", "خدمة"]))),
+        "آخر محدث": eventActor(latestWithActor),
+    };
+}
+
+function trackingValues(order) {
+    const operations = firstPresent(order?.fulfillment, order?.operations, order?.tracking) || {};
+    const events = Array.isArray(order?.timeline) ? order.timeline : [];
+    const statusFor = (keywords) => {
+        const event = newestMatchingEvent(events, keywords, false);
+        return readable(firstPresent(event?.status_to, event?.new_status, event?.status, event?.title, event?.action));
+    };
+    return {
+        التجهيز: readable(firstPresent(operations.preparation_status, operations.status, order?.preparation_status, statusFor(["prepar", "fulfill", "تجهيز"]))),
+        الطباعة: readable(firstPresent(operations.print_status, order?.print_status, statusFor(["print", "طباعة"]))),
+        التغليف: readable(firstPresent(operations.packing_status, order?.packing_status, statusFor(["pack", "تغليف"]))),
+        "التسليم للشركة": readable(firstPresent(operations.handover_status, order?.handover_status, statusFor(["handover", "تسليم للشركة"]))),
+        التوصيل: readable(firstPresent(operations.delivery_status, order?.shipping?.status, order?.shipment_status, statusFor(["deliver", "توصيل"]))),
     };
 }
 
@@ -148,20 +174,14 @@ function PreparationPdfCard() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-preparation-pdf">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-violet-100 p-3 text-violet-700">
-                        <Package size={24} weight="fill" />
-                    </div>
+                    <div className="rounded-xl bg-violet-100 p-3 text-violet-700"><Package size={24} weight="fill" /></div>
                     <div>
                         <h2 className="text-lg font-extrabold text-slate-950">تجهيز وطباعة المنتجات</h2>
                         <p className="mt-1 text-sm leading-6 text-slate-500">رفع ملف طلبات سلة وتحويل المنتجات إلى بطاقات PDF جاهزة للطباعة.</p>
                     </div>
                 </div>
-                <a
-                    href="/product-preparation"
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-extrabold text-teal-800 transition hover:bg-teal-100"
-                >
-                    <FilePdf size={20} weight="fill" />
-                    فتح تجهيز المنتجات
+                <a href="/product-preparation" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-extrabold text-teal-800 transition hover:bg-teal-100">
+                    <FilePdf size={20} weight="fill" /> فتح تجهيز المنتجات
                 </a>
             </div>
         </section>
@@ -170,13 +190,9 @@ function PreparationPdfCard() {
 
 function normalizeBankName(payment) {
     const raw = readable(firstPresent(
-        payment?.receiving_bank_name,
-        payment?.destination_bank_name,
-        payment?.transfer_bank_name,
-        payment?.bank_name,
-        payment?.bank,
-        payment?.receiving_bank_code,
-        payment?.bank_code,
+        payment?.receiving_bank_name, payment?.destination_bank_name,
+        payment?.transfer_bank_name, payment?.bank_name, payment?.bank,
+        payment?.receiving_bank_code, payment?.bank_code,
     ));
     if (raw === "—") return "البنك غير محدد";
     const normalized = raw.toLowerCase().replace(/[^a-z0-9أ-ي]+/g, "_").replace(/^_+|_+$/g, "");
@@ -200,9 +216,7 @@ function PaymentSummary({ order }) {
         return (
             <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-payment-method="cod">
                 <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
-                        <Wallet size={31} weight="duotone" />
-                    </div>
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"><Wallet size={31} weight="duotone" /></div>
                     <div className="text-2xl font-medium text-slate-700">الدفع عند الاستلام</div>
                 </div>
             </div>
@@ -214,19 +228,12 @@ function PaymentSummary({ order }) {
             <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-payment-method="bank" data-receiving-bank={bankName}>
                 <div className="flex items-center gap-5">
                     {attachment ? (
-                        <a href={attachment} target="_blank" rel="noreferrer" className="shrink-0">
-                            <img src={attachment} alt="إيصال التحويل" className="h-28 w-24 rounded-none border-2 border-teal-300 object-cover" />
-                        </a>
+                        <a href={attachment} target="_blank" rel="noreferrer" className="shrink-0"><img src={attachment} alt="إيصال التحويل" className="h-28 w-24 rounded-none border-2 border-teal-300 object-cover" /></a>
                     ) : (
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-teal-200 text-teal-500">
-                            <Bank size={32} weight="duotone" />
-                        </div>
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-teal-200 text-teal-500"><Bank size={32} weight="duotone" /></div>
                     )}
                     <div>
-                        <div className="flex items-center gap-3 text-2xl font-medium text-slate-700">
-                            <CheckCircle size={46} className="text-teal-300" weight="regular" />
-                            تم تحويل المبلغ
-                        </div>
+                        <div className="flex items-center gap-3 text-2xl font-medium text-slate-700"><CheckCircle size={46} className="text-teal-300" weight="regular" /> تم تحويل المبلغ</div>
                         <div className="mt-2 text-xl text-slate-400">{bankName}</div>
                     </div>
                 </div>
@@ -248,10 +255,29 @@ function PaymentSummary({ order }) {
     );
 }
 
-/**
- * Thin compatibility wrapper.
- * Keeps the approved page intact and mounts focused enhancements only.
- */
+function applyCardValues(cardTitle, values) {
+    const advanced = document.querySelector('[data-testid="order-v2-advanced-info"]');
+    if (!advanced) return false;
+    const heading = Array.from(advanced.querySelectorAll("h3")).find((node) => node.textContent?.trim() === cardTitle);
+    const card = heading?.closest("div.rounded-2xl");
+    if (!card) return false;
+    const rows = Array.from(card.children).filter((node) => node.querySelectorAll?.("span").length >= 2);
+    rows.forEach((row) => {
+        const spans = row.querySelectorAll("span");
+        const label = spans[0]?.textContent?.trim();
+        const valueNode = spans[spans.length - 1];
+        if (!label || !valueNode || !(label in values)) return;
+        valueNode.textContent = values[label];
+        valueNode.setAttribute("title", values[label]);
+        if (label === "الحملة") {
+            valueNode.classList.remove("truncate");
+            valueNode.style.whiteSpace = "normal";
+            valueNode.style.overflowWrap = "anywhere";
+        }
+    });
+    return true;
+}
+
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
     const { order } = useOrder(orderNumber);
@@ -268,8 +294,6 @@ export default function OrderDetailsV2() {
         let observer = null;
 
         const mountEnhancements = () => {
-            let mountedSomething = false;
-
             timelineOriginal = document.querySelector('[data-testid="order-v2-timeline"]');
             if (timelineOriginal && timelineOriginal.dataset.compactTimelineReplaced !== "true") {
                 timelineReplacement = document.createElement("div");
@@ -279,7 +303,6 @@ export default function OrderDetailsV2() {
                 timelineOriginal.style.display = "none";
                 timelineOriginal.insertAdjacentElement("afterend", timelineReplacement);
                 setTimelineHost(timelineReplacement);
-                mountedSomething = true;
             }
 
             const itemsSection = document.querySelector('[data-testid="order-v2-items"]');
@@ -289,7 +312,6 @@ export default function OrderDetailsV2() {
                 preparationReplacement.setAttribute("dir", "rtl");
                 itemsSection.insertAdjacentElement("afterend", preparationReplacement);
                 setPreparationHost(preparationReplacement);
-                mountedSomething = true;
             }
 
             const paymentCard = document.querySelector('[data-testid="order-v2-payment"]');
@@ -302,14 +324,11 @@ export default function OrderDetailsV2() {
                 if (paymentOriginalBody) paymentOriginalBody.style.display = "none";
                 paymentCard.appendChild(paymentReplacement);
                 setPaymentHost(paymentReplacement);
-                mountedSomething = true;
             }
-
-            return mountedSomething;
         };
 
         mountEnhancements();
-        observer = new MutationObserver(() => mountEnhancements());
+        observer = new MutationObserver(mountEnhancements);
         observer.observe(document.body, { childList: true, subtree: true });
 
         return () => {
@@ -332,43 +351,19 @@ export default function OrderDetailsV2() {
 
     useEffect(() => {
         if (!order) return undefined;
-
-        const values = sourceValues(order);
         let observer = null;
-
-        const applyTranslations = () => {
-            const advanced = document.querySelector('[data-testid="order-v2-advanced-info"]');
-            if (!advanced) return false;
-
-            const heading = Array.from(advanced.querySelectorAll("h3")).find((node) => node.textContent?.trim() === "مصدر الطلب");
-            const card = heading?.closest("div.rounded-2xl");
-            if (!card) return false;
-
-            const rows = Array.from(card.children).filter((node) => node.querySelectorAll?.("span").length >= 2);
-            rows.forEach((row) => {
-                const spans = row.querySelectorAll("span");
-                const label = spans[0]?.textContent?.trim();
-                const valueNode = spans[spans.length - 1];
-                if (!label || !valueNode || !(label in values)) return;
-
-                valueNode.textContent = values[label];
-                valueNode.setAttribute("title", values[label]);
-                if (label === "الحملة") {
-                    valueNode.classList.remove("truncate");
-                    valueNode.style.whiteSpace = "normal";
-                    valueNode.style.overflowWrap = "anywhere";
-                }
-            });
-            return true;
+        const applyValues = () => {
+            const sourceDone = applyCardValues("مصدر الطلب", sourceValues(order));
+            const staffDone = applyCardValues("الموظفون والمسؤوليات", staffValues(order));
+            const trackingDone = applyCardValues("متابعة الطلب", trackingValues(order));
+            return sourceDone && staffDone && trackingDone;
         };
-
-        if (!applyTranslations()) {
+        if (!applyValues()) {
             observer = new MutationObserver(() => {
-                if (applyTranslations()) observer?.disconnect();
+                if (applyValues()) observer?.disconnect();
             });
             observer.observe(document.body, { childList: true, subtree: true });
         }
-
         return () => observer?.disconnect();
     }, [order]);
 
