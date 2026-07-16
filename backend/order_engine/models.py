@@ -53,6 +53,11 @@ class OrderSourceDTO(CanonicalDTO):
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
+    # Mezan-resolved campaign identity. Salla sometimes sends only a campaign
+    # UUID inside utm_campaign; campaign_name is resolved from stored ad data
+    # without overwriting that original provider fact.
+    campaign_id: Optional[str] = None
+    campaign_name: Optional[str] = None
     device: Optional[str] = None
 
 
