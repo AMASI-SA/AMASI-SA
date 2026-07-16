@@ -94,7 +94,11 @@ async def enrich_order_campaigns(
     user_id: str,
     orders: list[OrderDTO],
 ) -> list[OrderDTO]:
-    """Add campaign_id/campaign_name without replacing the original UTM fact."""
+    """Add campaign identity while preserving the original UTM provider fact.
+
+    Until Mezan has the campaign catalog/name, the visible campaign value falls
+    back to the campaign ID instead of showing an unavailable placeholder.
+    """
 
     cache: dict[str, str | None] = {}
     enriched: list[OrderDTO] = []
@@ -117,7 +121,7 @@ async def enrich_order_campaigns(
                     user_id=str(user_id),
                     campaign_id=campaign_id,
                 )
-            campaign_name = cache[campaign_id]
+            campaign_name = cache[campaign_id] or campaign_id
 
         enriched.append(
             order.model_copy(
