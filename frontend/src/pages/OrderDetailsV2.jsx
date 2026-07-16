@@ -49,7 +49,11 @@ function formatOrderDate(value) {
 function displayValue(value) {
     if (value === null || value === undefined || value === "") return "—";
     if (typeof value === "object") {
-        try { return JSON.stringify(value); } catch { return String(value); }
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
+        }
     }
     return String(value);
 }
@@ -57,32 +61,48 @@ function displayValue(value) {
 function collectItemSelections(item) {
     const rows = [];
     const seen = new Set();
+
     const push = (label, value) => {
         const normalizedLabel = String(label || "").trim();
         if (!normalizedLabel || value === null || value === undefined || value === "") return;
-        const key = `${normalizedLabel}:${displayValue(value)}`;
+
+        const shownValue = displayValue(value);
+        const key = `${normalizedLabel}:${shownValue}`;
         if (seen.has(key)) return;
+
         seen.add(key);
-        rows.push({ label: normalizedLabel, value: displayValue(value) });
+        rows.push({ label: normalizedLabel, value: shownValue });
     };
+
     push("اللون", item.color);
     push("المقاس", item.size);
     push("الخامة", item.material);
+
     for (const option of item.options || item.options_raw || []) {
-        push(option?.name || option?.label, option?.value || option?.selected || option?.text);
+        push(
+            option?.name || option?.label || option?.key,
+            option?.value || option?.selected || option?.text || option?.choice
+        );
     }
+
     for (const field of item.custom_fields || []) {
-        push(field?.name || field?.label, field?.value);
+        push(field?.name || field?.label || field?.key, field?.value || field?.text);
     }
+
     return rows;
 }
 
 function InfoCard({ icon: Icon, title, children, testid, headerExtra }) {
     return (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid={testid}>
+        <section
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            data-testid={testid}
+        >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Icon size={20} weight="fill" /></div>
+                    <div className="rounded-lg bg-violet-100 p-2 text-violet-700">
+                        <Icon size={20} weight="fill" />
+                    </div>
                     <h2 className="font-extrabold text-slate-950">{title}</h2>
                 </div>
                 {headerExtra}
@@ -96,7 +116,9 @@ function Field({ label, value }) {
     return (
         <div>
             <div className="text-xs font-bold text-slate-400">{label}</div>
-            <div className="mt-1 break-words text-sm font-bold text-slate-800">{value || "—"}</div>
+            <div className="mt-1 break-words text-sm font-bold text-slate-800">
+                {value || "—"}
+            </div>
         </div>
     );
 }
@@ -104,26 +126,83 @@ function Field({ label, value }) {
 function normalizePhone(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
+
     const digits = raw.replace(/\D/g, "");
+    if (!digits) return "";
     if (digits.startsWith("966")) return `+${digits}`;
+    if (digits.startsWith("00")) return `+${digits.slice(2)}`;
     if (digits.startsWith("0")) return `+966${digits.slice(1)}`;
+    if (digits.length === 9 && digits.startsWith("5")) return `+966${digits}`;
     return raw.startsWith("+") ? raw : `+${digits}`;
 }
 
 function addressText(address) {
     if (!address) return "";
-    return [address.formatted, address.city, address.district, address.street, address.building_number, address.postal_code]
+    return [
+        address.formatted,
+        address.city,
+        address.district,
+        address.street,
+        address.building_number,
+        address.postal_code,
+    ]
         .map((value) => String(value || "").trim())
         .filter((value, index, array) => value && array.indexOf(value) === index)
         .join("، ");
 }
 
 function ContactAction({ href, label, icon: Icon, onClick, disabled }) {
-    const className = `flex h-10 w-10 items-center justify-center rounded-full border transition ${disabled ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"}`;
+    const className = `flex h-10 w-10 items-center justify-center rounded-full border transition ${
+        disabled
+            ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-300"
+            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
+    }`;
+
     if (href && !disabled) {
-        return <a href={href} aria-label={label} title={label} className={className}><Icon size={20} /></a>;
+        return (
+            <a href={href} aria-label={label} title={label} className={className}>
+                <Icon size={20} />
+            </a>
+        );
     }
-    return <button type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label} className={className}><Icon size={20} /></button>;
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={label}
+            title={label}
+            className={className}
+        >
+            <Icon size={20} />
+        </button>
+    );
+}
+
+function CopyValueButton({ value, label = "نسخ" }) {
+    const [copied, setCopied] = useState(false);
+    const text = String(value || "").trim();
+
+    async function copyValue() {
+        if (!text) return;
+        await navigator.clipboard?.writeText(text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={copyValue}
+            disabled={!text}
+            aria-label={copied ? "تم النسخ" : label}
+            title={copied ? "تم النسخ" : label}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:text-slate-300"
+        >
+            {copied ? <CheckCircle size={18} weight="fill" /> : <Copy size={18} />}
+        </button>
+    );
 }
 
 function CustomerAvatar({ person }) {
@@ -131,7 +210,16 @@ function CustomerAvatar({ person }) {
     return (
         <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
             <User size={38} weight="fill" />
-            {avatar && <img src={avatar} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+            {avatar && (
+                <img
+                    src={avatar}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -144,17 +232,24 @@ function CustomerCard({ customer, shipping }) {
     const recipientAddress = recipient.address || shipping.address || buyerAddress;
     const buyerPhone = normalizePhone(customer.mobile);
     const recipientPhone = normalizePhone(recipient.mobile || recipient.phone);
+
     const hasIndependentRecipient = Boolean(
-        recipient.name || recipientPhone || recipient.email || recipient.notes ||
-        (recipientAddress && addressText(recipientAddress) !== addressText(buyerAddress))
+        recipient.name ||
+            recipientPhone ||
+            recipient.email ||
+            recipient.notes ||
+            (recipientAddress && addressText(recipientAddress) !== addressText(buyerAddress))
     ) && !(
         String(recipient.name || "").trim() === String(customer.name || "").trim() &&
         recipientPhone === buyerPhone &&
         addressText(recipientAddress) === addressText(buyerAddress)
     );
-    const active = tab === "recipient" && hasIndependentRecipient
-        ? { ...recipient, mobile: recipientPhone, address: recipientAddress }
-        : { ...customer, mobile: buyerPhone, address: buyerAddress };
+
+    const active =
+        tab === "recipient" && hasIndependentRecipient
+            ? { ...recipient, mobile: recipientPhone, address: recipientAddress }
+            : { ...customer, mobile: buyerPhone, address: buyerAddress };
+
     const phone = normalizePhone(active.mobile || active.phone);
     const email = String(active.email || "").trim();
 
@@ -172,8 +267,29 @@ function CustomerCard({ customer, shipping }) {
             testid="order-v2-customer"
             headerExtra={
                 <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-bold">
-                    <button type="button" onClick={() => setTab("buyer")} className={`rounded-lg px-3 py-2 ${tab === "buyer" || !hasIndependentRecipient ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`}>المشتري</button>
-                    <button type="button" disabled={!hasIndependentRecipient} onClick={() => setTab("recipient")} className={`rounded-lg px-3 py-2 ${tab === "recipient" && hasIndependentRecipient ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"} disabled:cursor-not-allowed disabled:opacity-40`}>المستلم</button>
+                    <button
+                        type="button"
+                        onClick={() => setTab("buyer")}
+                        className={`rounded-lg px-3 py-2 ${
+                            tab === "buyer" || !hasIndependentRecipient
+                                ? "bg-white text-teal-800 shadow-sm"
+                                : "text-slate-500"
+                        }`}
+                    >
+                        المشتري
+                    </button>
+                    <button
+                        type="button"
+                        disabled={!hasIndependentRecipient}
+                        onClick={() => setTab("recipient")}
+                        className={`rounded-lg px-3 py-2 ${
+                            tab === "recipient" && hasIndependentRecipient
+                                ? "bg-white text-teal-800 shadow-sm"
+                                : "text-slate-500"
+                        } disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                        المستلم
+                    </button>
                 </div>
             }
         >
@@ -182,11 +298,17 @@ function CustomerCard({ customer, shipping }) {
                     <CheckCircle size={18} weight="fill" /> المستلم هو نفس المشتري
                 </div>
             )}
+
             <div className="flex flex-col items-center text-center">
                 <CustomerAvatar person={active} />
-                <div className="mt-3 text-lg font-extrabold text-slate-900">{active.name || "عميل بدون اسم"}</div>
-                <div className="mt-1 num text-lg font-bold text-slate-600" dir="ltr">{phone || "—"}</div>
+                <div className="mt-3 text-lg font-extrabold text-slate-900">
+                    {active.name || "عميل بدون اسم"}
+                </div>
+                <div className="num mt-1 text-lg font-bold text-slate-600" dir="ltr">
+                    {phone || "—"}
+                </div>
                 {email && <div className="mt-1 break-all text-xs text-slate-400">{email}</div>}
+
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                     <ContactAction href={phone ? `tel:${phone}` : ""} disabled={!phone} label="اتصال" icon={Phone} />
                     <ContactAction href={email ? `mailto:${email}` : ""} disabled={!email} label="بريد إلكتروني" icon={EnvelopeSimple} />
@@ -195,36 +317,143 @@ function CustomerCard({ customer, shipping }) {
                     <ContactAction onClick={copyPhone} disabled={!phone} label={copied ? "تم النسخ" : "نسخ الرقم"} icon={copied ? CheckCircle : Copy} />
                 </div>
             </div>
+
             <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
-                <Field label="رقم العميل" value={active.customer_id || active.id} />
+                <Field label="الجوال مع مفتاح الدولة" value={phone} />
                 <Field label="البريد" value={email} />
                 <Field label="المدينة" value={active.address?.city} />
                 <Field label="الحي" value={active.address?.district} />
                 <Field label="الشارع" value={active.address?.street} />
                 <Field label="الرمز البريدي" value={active.address?.postal_code} />
             </div>
+
             <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400"><MapPin size={16} /> العنوان</div>
-                <div className="mt-1 text-sm font-bold leading-6 text-slate-700">{addressText(active.address) || "—"}</div>
-                {tab === "recipient" && active.notes && <div className="mt-2 text-xs text-amber-700">ملاحظات التسليم: {active.notes}</div>}
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <MapPin size={16} /> العنوان
+                </div>
+                <div className="mt-1 text-sm font-bold leading-6 text-slate-700">
+                    {addressText(active.address) || "—"}
+                </div>
+                {tab === "recipient" && active.notes && (
+                    <div className="mt-2 text-xs text-amber-700">
+                        ملاحظات التسليم: {active.notes}
+                    </div>
+                )}
             </div>
         </InfoCard>
+    );
+}
+
+function ProductCard({ item, index }) {
+    const selections = collectItemSelections(item);
+    const quantity = Number(item.quantity || 1);
+    const weight = item.weight
+        ? `${Number(item.weight).toLocaleString("en-US")} ${item.weight_unit || "كجم"}`
+        : "—";
+
+    return (
+        <article
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+            data-testid={`order-v2-item-${index}`}
+        >
+            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_110px_110px_120px_120px] lg:items-start">
+                <div className="min-w-0">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 sm:h-20 sm:w-20">
+                            {item.image_url ? (
+                                <img
+                                    src={item.image_url}
+                                    alt={item.name || "صورة المنتج"}
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <Package size={27} className="text-slate-300" />
+                            )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <h3 className="font-extrabold leading-6 text-slate-950">
+                                {item.name || "منتج بدون اسم"}
+                            </h3>
+                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                                <span>الرقم المخزني SKU:</span>
+                                <span className="num font-bold">{item.sku || "—"}</span>
+                                <CopyValueButton value={item.sku} label="نسخ SKU" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        {selections.length > 0 ? (
+                            selections.map((selection, selectionIndex) => (
+                                <div
+                                    key={`${selection.label}-${selectionIndex}`}
+                                    className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"
+                                >
+                                    <div className="min-w-0">
+                                        <span className="text-xs font-bold text-slate-400">
+                                            {selection.label}:
+                                        </span>{" "}
+                                        <span className="break-words text-sm font-bold text-slate-700">
+                                            {selection.value}
+                                        </span>
+                                    </div>
+                                    <CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} />
+                                </div>
+                            ))
+                        ) : (
+                            <div className="px-3 py-3 text-sm text-slate-400">لا توجد خيارات إضافية</div>
+                        )}
+                    </div>
+                </div>
+
+                <Field label="الكمية" value={quantity.toLocaleString("en-US")} />
+                <Field label="الوزن" value={weight} />
+                <Field label="السعر" value={formatMoney(item.unit_price)} />
+                <Field label="المجموع" value={formatMoney(item.total)} />
+            </div>
+
+            <div className="grid gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3 text-xs sm:grid-cols-3">
+                <Field label="الخصم" value={formatMoney(item.discount)} />
+                <Field label="المتغير" value={item.variant_id} />
+                <Field label="الباركود" value={item.barcode} />
+            </div>
+        </article>
     );
 }
 
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
     const { order, loading, error } = useOrder(orderNumber);
-    const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
+    const {
+        items,
+        loading: itemsLoading,
+        error: itemsError,
+        reload: reloadItems,
+    } = useOrderItems(orderNumber);
 
     const itemCount = useMemo(() => items.length, [items]);
 
-    if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
+    if (loading) {
+        return (
+            <div className="flex min-h-[60vh] items-center justify-center">
+                <SpinnerGap size={34} className="animate-spin text-violet-600" />
+            </div>
+        );
+    }
+
     if (error || !order) {
         return (
             <div className="space-y-4" dir="rtl">
-                <Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link>
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div>
+                <Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700">
+                    <ArrowRight size={18} /> العودة إلى الطلبات
+                </Link>
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800">
+                    <div className="flex items-center gap-2 font-extrabold">
+                        <WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب
+                    </div>
+                    <p className="mt-2 text-sm">{error}</p>
+                </div>
             </div>
         );
     }
@@ -240,46 +469,112 @@ export default function OrderDetailsV2() {
         <div className="space-y-5" dir="rtl" data-testid="order-details-v2-page">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> العودة إلى الطلبات الجديدة</Link>
+                    <Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700">
+                        <ArrowRight size={17} /> العودة إلى الطلبات الجديدة
+                    </Link>
                     <h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">
+                            {status}
+                        </span>
+                        <span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span>
+                    </div>
                 </div>
                 <div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total)}</div>
             </div>
 
             <div className="grid gap-5 xl:grid-cols-3">
                 <div className="space-y-5 xl:col-span-2">
-                    <InfoCard icon={Package} title={`عناصر الطلب (${itemCount.toLocaleString("en-US")})`} testid="order-v2-items">
-                        {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div>
-                            : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div>
-                            : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div>
-                            : <div className="space-y-3">{items.map((item, index) => {
-                                const selections = collectItemSelections(item);
-                                return (
-                                    <article key={item.order_item_id || index} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white sm:h-20 sm:w-20">{item.image_url ? <img src={item.image_url} alt={item.name || "صورة المنتج"} className="h-full w-full object-cover" /> : <Package size={27} className="text-slate-300" />}</div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="font-extrabold text-slate-950">{item.name || "منتج بدون اسم"}</h3><div className="num mt-1 text-[11px] text-slate-500">SKU: {item.sku || "—"}</div></div><div className="flex items-center gap-2"><span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-800">الكمية: {Number(item.quantity || 1).toLocaleString("en-US")}</span><span className="num text-sm font-extrabold text-slate-950">{formatMoney(item.total)}</span></div></div>
-                                                {selections.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{selections.map((selection, selectionIndex) => <span key={`${selection.label}-${selectionIndex}`} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"><strong>{selection.label}:</strong> {selection.value}</span>)}</div>}
-                                                <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><Field label="سعر الوحدة" value={formatMoney(item.unit_price)} /><Field label="الخصم" value={formatMoney(item.discount)} /><Field label="المتغير" value={item.variant_id} /><Field label="الباركود" value={item.barcode} /></div>
-                                            </div>
-                                        </div>
-                                    </article>
-                                );
-                            })}</div>}
+                    <InfoCard
+                        icon={Package}
+                        title={`عناصر الطلب (${itemCount.toLocaleString("en-US")})`}
+                        testid="order-v2-items"
+                    >
+                        {itemsLoading ? (
+                            <div className="flex min-h-40 items-center justify-center">
+                                <SpinnerGap size={28} className="animate-spin text-violet-600" />
+                            </div>
+                        ) : itemsError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
+                                <b>تعذّر تحميل عناصر الطلب</b>
+                                <p className="mt-2 text-sm">{itemsError}</p>
+                                <button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">
+                                    إعادة المحاولة
+                                </button>
+                            </div>
+                        ) : items.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                                لا توجد عناصر مرتبطة بهذا الطلب.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {items.map((item, index) => (
+                                    <ProductCard key={item.order_item_id || index} item={item} index={index} />
+                                ))}
+                            </div>
+                        )}
                     </InfoCard>
 
-                    <InfoCard icon={Factory} title="التجهيز وملفات الشراء" testid="order-v2-preparation"><div className="grid gap-4 md:grid-cols-2"><div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/50 p-4"><div className="font-extrabold text-violet-950">طباعة تجهيز هذا الطلب</div><p className="mt-2 text-xs leading-6 text-violet-700">سيستخدم نفس محرك PDF الخاص بصفحة تجهيز المنتجات، لكن لهذا الطلب فقط.</p><button type="button" disabled className="mt-4 inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-200 px-3 py-2 text-xs font-bold text-slate-500"><Printer size={17} /> قريبًا</button></div><div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-4"><div className="font-extrabold text-amber-950">دورة حياة عنصر الطلب</div><p className="mt-2 text-xs leading-6 text-amber-800">الموظف المسؤول، المورد، رقم ملف الشراء، تاريخ الإضافة، من أكد الجاهزية، ومن استلم بعد التجهيز.</p></div></div></InfoCard>
-                    <InfoCard icon={ClockCounterClockwise} title="سجل الطلب" testid="order-v2-timeline"><div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">سيظهر هنا تاريخ أحداث سلة، التجهيز، المورد، الاستلام، الشحن، قيود والمحاسبة.</div></InfoCard>
+                    <InfoCard icon={Factory} title="التجهيز وملفات الشراء" testid="order-v2-preparation">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/50 p-4">
+                                <div className="font-extrabold text-violet-950">طباعة تجهيز هذا الطلب</div>
+                                <p className="mt-2 text-xs leading-6 text-violet-700">
+                                    سيستخدم نفس محرك PDF الخاص بصفحة تجهيز المنتجات، لكن لهذا الطلب فقط.
+                                </p>
+                                <button type="button" disabled className="mt-4 inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-200 px-3 py-2 text-xs font-bold text-slate-500">
+                                    <Printer size={17} /> قريبًا
+                                </button>
+                            </div>
+                            <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-4">
+                                <div className="font-extrabold text-amber-950">دورة حياة عنصر الطلب</div>
+                                <p className="mt-2 text-xs leading-6 text-amber-800">
+                                    الموظف المسؤول، المورد، رقم ملف الشراء، تاريخ الإضافة، من أكد الجاهزية، ومن استلم بعد التجهيز.
+                                </p>
+                            </div>
+                        </div>
+                    </InfoCard>
+
+                    <InfoCard icon={ClockCounterClockwise} title="سجل الطلب" testid="order-v2-timeline">
+                        <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                            سيظهر هنا تاريخ أحداث سلة، التجهيز، المورد، الاستلام، الشحن، قيود والمحاسبة.
+                        </div>
+                    </InfoCard>
                 </div>
 
                 <div className="space-y-5">
                     <CustomerCard customer={customer} shipping={shipping} />
-                    <InfoCard icon={CreditCard} title="الدفع" testid="order-v2-payment"><div className="grid gap-4"><Field label="طريقة الدفع" value={paymentMethod} /><Field label="البنك المستلم" value={payment.receiving_bank_name} /><Field label="حالة الدفع" value={payment.status} /></div></InfoCard>
-                    <InfoCard icon={Truck} title="الشحن" testid="order-v2-shipping"><div className="grid gap-4"><Field label="شركة الشحن" value={shipping.company} /><Field label="طريقة الشحن" value={shipping.method} /><Field label="رقم التتبع" value={shipping.tracking_number} /><Field label="حالة الشحن" value={shipping.status} /></div></InfoCard>
-                    <InfoCard icon={UsersThree} title="المسؤوليات التشغيلية" testid="order-v2-employees"><div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4"><div className="text-sm font-extrabold text-violet-950">تُدار لكل عنصر بشكل مستقل</div><p className="mt-2 text-xs leading-6 text-violet-800">المورد، مسؤول التجهيز، مراحل التصنيع وموظف الاستلام ستظهر داخل عنصر الطلب المناسب.</p></div></InfoCard>
-                    <InfoCard icon={Calculator} title="المحاسبة والربحية" testid="order-v2-accounting"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><div className="text-sm font-extrabold text-amber-950">قسم إداري محمي</div><p className="mt-2 text-xs leading-6 text-amber-800">سيحتوي فاتورة قيود، السداد، تكلفة المنتج، الإعلان، الشحن، العمولات وصافي الربح.</p></div></InfoCard>
+                    <InfoCard icon={CreditCard} title="الدفع" testid="order-v2-payment">
+                        <div className="grid gap-4">
+                            <Field label="طريقة الدفع" value={paymentMethod} />
+                            <Field label="البنك المستلم" value={payment.receiving_bank_name} />
+                            <Field label="حالة الدفع" value={payment.status} />
+                        </div>
+                    </InfoCard>
+                    <InfoCard icon={Truck} title="الشحن" testid="order-v2-shipping">
+                        <div className="grid gap-4">
+                            <Field label="شركة الشحن" value={shipping.company} />
+                            <Field label="طريقة الشحن" value={shipping.method} />
+                            <Field label="رقم التتبع" value={shipping.tracking_number} />
+                            <Field label="حالة الشحن" value={shipping.status} />
+                        </div>
+                    </InfoCard>
+                    <InfoCard icon={UsersThree} title="المسؤوليات التشغيلية" testid="order-v2-employees">
+                        <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+                            <div className="text-sm font-extrabold text-violet-950">تُدار لكل عنصر بشكل مستقل</div>
+                            <p className="mt-2 text-xs leading-6 text-violet-800">
+                                المورد، مسؤول التجهيز، مراحل التصنيع وموظف الاستلام ستظهر داخل عنصر الطلب المناسب.
+                            </p>
+                        </div>
+                    </InfoCard>
+                    <InfoCard icon={Calculator} title="المحاسبة والربحية" testid="order-v2-accounting">
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                            <div className="text-sm font-extrabold text-amber-950">قسم إداري محمي</div>
+                            <p className="mt-2 text-xs leading-6 text-amber-800">
+                                سيحتوي فاتورة قيود، السداد، تكلفة المنتج، الإعلان، الشحن، العمولات وصافي الربح.
+                            </p>
+                        </div>
+                    </InfoCard>
                 </div>
             </div>
         </div>
