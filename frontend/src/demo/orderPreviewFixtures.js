@@ -1,3 +1,5 @@
+const PREVIEW_MODE_KEY = "mezan.preview.orders.mode";
+
 const STANDARD_STATUSES = [
   "بإنتظار الدفع",
   "بإنتظار المراجعة",
@@ -61,15 +63,46 @@ function buildItems(index) {
   });
 }
 
-export function isPreviewDemoEnvironment() {
+export function isPreviewHost() {
   if (typeof window === "undefined") return false;
   const host = String(window.location.hostname || "").toLowerCase();
-  return host.includes("preview.emergent") || host.includes(".preview.") || host.startsWith("preview-");
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.includes("preview") ||
+    host.includes("emergentagent.com")
+  );
+}
+
+export function getPreviewDemoMode() {
+  if (!isPreviewHost()) return false;
+  try {
+    const queryMode = new URLSearchParams(window.location.search).get("mock");
+    if (queryMode === "1" || queryMode === "true") return true;
+    if (queryMode === "0" || queryMode === "false") return false;
+    const stored = window.localStorage.getItem(PREVIEW_MODE_KEY);
+    if (stored === "live") return false;
+    if (stored === "mock") return true;
+  } catch (_) {
+    // Preview defaults to mock mode even when storage is unavailable.
+  }
+  return true;
+}
+
+export function setPreviewDemoMode(enabled) {
+  if (!isPreviewHost() || typeof window === "undefined") return false;
+  window.localStorage.setItem(PREVIEW_MODE_KEY, enabled ? "mock" : "live");
+  window.dispatchEvent(new CustomEvent("mezan-preview-mode-change", { detail: { enabled: Boolean(enabled) } }));
+  return true;
+}
+
+export function isPreviewDemoEnvironment() {
+  return getPreviewDemoMode();
 }
 
 export const PREVIEW_DEMO_ORDERS = STANDARD_STATUSES.flatMap((status, statusIndex) =>
-  Array.from({ length: statusIndex < 6 ? 3 : 1 }, (_, duplicateIndex) => {
-    const index = statusIndex * 3 + duplicateIndex;
+  Array.from({ length: statusIndex < 6 ? 8 : statusIndex < 16 ? 4 : 2 }, (_, duplicateIndex) => {
+    const index = statusIndex * 10 + duplicateIndex;
     const [name, gender, city, paymentMethod] = CUSTOMERS[index % CUSTOMERS.length];
     const items = buildItems(index);
     const subtotal = items.reduce((sum, item) => sum + Number(item.total || 0), 0);
@@ -84,7 +117,7 @@ export const PREVIEW_DEMO_ORDERS = STANDARD_STATUSES.flatMap((status, statusInde
       status_native: status,
       status: status,
       status_exact: statusKey(status),
-      is_new: index < 5,
+      is_new: index < 12,
       is_gift: index % 7 === 0,
       is_demo: true,
       demo_label: "بيانات تجريبية — Preview فقط",
@@ -123,6 +156,8 @@ export function listPreviewOrders({ limit = 15, cursor = null, statusExact = nul
     items,
     nextCursor: nextOffset < filtered.length ? String(nextOffset) : null,
     skippedInvalid: 0,
+    demo: true,
+    readOnly: true,
   };
 }
 
@@ -141,5 +176,7 @@ export function getPreviewOrderSummary() {
     total: PREVIEW_DEMO_ORDERS.length,
     statusCards,
     statusCounts: Object.fromEntries([["all", PREVIEW_DEMO_ORDERS.length], ...statusCards.map((card) => [card.key, card.count])]),
+    demo: true,
+    readOnly: true,
   };
 }
