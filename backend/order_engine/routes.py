@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from salla_integration.auto_sync import schedule_salla_auto_sync
-from .address_diagnostic import build_order_address_diagnostic
+from .address_diagnostic import build_address_diagnostic
+from .city_enrichment import enrich_order_cities
 from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
@@ -105,8 +106,13 @@ def make_order_engine_router(
                 },
             ) from exc
 
+        enriched_items = await enrich_order_cities(
+            db,
+            user_id=str(owner["id"]),
+            orders=page.items,
+        )
         return OrderListResponse(
-            items=page.items,
+            items=enriched_items,
             next_cursor=page.next_cursor,
             limit=limit,
             skipped_invalid=page.skipped_invalid,
@@ -144,10 +150,10 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = _require_owner(user)
-        return await build_order_address_diagnostic(
+        return await build_address_diagnostic(
             db,
             user_id=str(owner["id"]),
-            order_number=order_number,
+            order_number=str(order_number),
         )
 
     @router.get("/{order_number}", response_model=OrderDTO)
@@ -159,11 +165,17 @@ def make_order_engine_router(
         schedule_salla_auto_sync(db, str(owner["id"]))
 
         try:
-            return await get_order(
+            order = await get_order(
                 repository(),
                 user_id=str(owner["id"]),
                 order_number=order_number,
             )
+            enriched = await enrich_order_cities(
+                db,
+                user_id=str(owner["id"]),
+                orders=[order],
+            )
+            return enriched[0]
         except OrderNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
