@@ -1,8 +1,8 @@
-"""Safe capture for signed Salla webhook events that are not handled yet.
+"""Safe handling for signed Salla webhook events not handled by app lifecycle.
 
-Only call this module after the webhook signature/token has been verified.
-Unknown events are stored read-only for contract discovery. Sensitive token-like
-fields are redacted recursively before persistence.
+Only call this module after webhook signature/token verification. Every event is
+stored in sanitized form for audit. If the verified payload exposes a shipment
+ID, a read-only Shipment Details/Tracking sync is attempted.
 """
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Iterable
+
+from .shipment_webhook_sync import sync_shipment_from_verified_webhook
 
 
 _SECRET_KEYS = {
@@ -56,10 +58,10 @@ async def capture_unknown_event(
     *,
     known_events: Iterable[str],
 ) -> dict[str, Any]:
-    """Persist one verified but currently unsupported Salla event.
+    """Persist a verified event and enrich shipment data when possible.
 
-    Existing events are deduplicated by merchant + event name + sanitized body
-    fingerprint. This function never changes orders and never calls Qoyod.
+    Events are deduplicated by merchant + event name + sanitized payload hash.
+    Salla operations are read-only and this function never calls Qoyod.
     """
     event_name = str(event_body.get("event") or "").strip()
     if event_name in set(known_events):
@@ -74,6 +76,11 @@ async def capture_unknown_event(
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
 
+    # Attempt shipment enrichment before writing the audit result so the capture
+    # records the exact outcome for later diagnosis. This runs only after the
+    # caller has verified Salla's signature/token.
+    shipment_sync = await sync_shipment_from_verified_webhook(db, event_body)
+
     selector = {
         "merchant_id": merchant_id,
         "event": event_name or None,
@@ -86,12 +93,17 @@ async def capture_unknown_event(
             "first_received_at": now,
             "created_at": now,
             "verified_before_capture": True,
-            "no_order_mutation": True,
             "no_qoyod_calls": True,
         },
         "$set": {
             "last_received_at": now,
             "updated_at": now,
+            "shipment_sync": shipment_sync,
+            "order_mutation_scope": (
+                "shipping_fields_only"
+                if shipment_sync.get("order_modified")
+                else "none"
+            ),
         },
         "$inc": {"delivery_count": 1},
     }
@@ -106,7 +118,7 @@ async def capture_unknown_event(
         "event": event_name or None,
         "merchant_id": merchant_id,
         "event_hash_prefix": event_hash[:12],
-        "no_order_mutation": True,
+        "shipment_sync": shipment_sync,
         "no_qoyod_calls": True,
     }
 
