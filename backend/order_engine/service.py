@@ -127,7 +127,7 @@ def _text(value: Any) -> Optional[str]:
 
 def _named_value(value: Any) -> Optional[str]:
     if isinstance(value, dict):
-        for key in ("name", "label", "title", "value", "slug"):
+        for key in ("name", "label", "title", "value", "slug", "type"):
             text = _text(value.get(key))
             if text:
                 return text
@@ -197,21 +197,137 @@ def _provider_is_gift(raw: dict[str, Any], tags: list[str]) -> bool:
         if key not in raw:
             continue
         value = raw.get(key)
-        enabled = _bool_value(value.get("enabled") or value.get("is_gift")) if isinstance(value, dict) else _bool_value(value)
-        if enabled is not None:
-            return enabled
+        if isinstance(value, dict):
+            enabled = _bool_value(value.get("enabled") or value.get("is_gift"))
+            if enabled is not None:
+                return enabled
+            explicit_type = _named_value(value)
+            if explicit_type and _is_gift_label(explicit_type):
+                return True
+        else:
+            enabled = _bool_value(value)
+            if enabled is not None:
+                return enabled
+            if _is_gift_label(value):
+                return True
+
+    # Salla's order details UI exposes this fact as "نوع الطلب: طلب كهدية".
+    # Accept only explicit provider order-type fields; never infer from products,
+    # notes, customer names or other weak signals.
+    for key in ("order_type", "type"):
+        value = _named_value(raw.get(key))
+        if value and _is_gift_label(value):
+            return True
+
     normalized_tags = {str(tag).strip().lower() for tag in tags if str(tag).strip()}
-    return bool(normalized_tags.intersection({"gift", "هدية", "إهداء", "اهداء"}))
+    return bool(normalized_tags.intersection({"gift", "gift order", "هدية", "طلب كهدية", "إهداء", "اهداء"}))
+
+
+def _is_gift_label(value: Any) -> bool:
+    normalized = " ".join(str(value or "").replace("_", " ").strip().casefold().split())
+    return normalized in {
+        "gift",
+        "gift order",
+        "is gift",
+        "هدية",
+        "طلب هدية",
+        "طلب كهدية",
+        "إهداء",
+        "اهداء",
+    }
+
+
+def _dict_value(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _provider_marketing_source(raw: dict[str, Any]) -> dict[str, Optional[str]]:
+    source_obj = _dict_value(raw.get("source"))
+    utm_obj = _dict_value(raw.get("utm"))
+    marketing_obj = _dict_value(raw.get("marketing"))
+    attribution_obj = _dict_value(raw.get("attribution"))
+
+    utm_source = _text(
+        raw.get("utm_source")
+        or utm_obj.get("source")
+        or marketing_obj.get("utm_source")
+        or attribution_obj.get("utm_source")
+    )
+    utm_medium = _text(
+        raw.get("utm_medium")
+        or utm_obj.get("medium")
+        or marketing_obj.get("utm_medium")
+        or attribution_obj.get("utm_medium")
+    )
+    utm_campaign = _text(
+        raw.get("utm_campaign")
+        or utm_obj.get("campaign")
+        or marketing_obj.get("utm_campaign")
+        or attribution_obj.get("utm_campaign")
+    )
+
+    source_native = _text(
+        utm_source
+        or source_obj.get("source")
+        or source_obj.get("channel")
+        or source_obj.get("platform")
+        or source_obj.get("name")
+        or (raw.get("source") if isinstance(raw.get("source"), str) else None)
+        or raw.get("traffic_source")
+        or raw.get("marketing_source")
+        or raw.get("source_name")
+    )
+
+    normalized = " ".join(str(source_native or "").replace("_", " ").strip().casefold().split())
+    canonical_source: Optional[str] = None
+    platform: Optional[str] = None
+
+    if "snap" in normalized:
+        canonical_source = "snapchat"
+        platform = "snapchat"
+    elif normalized in {"ig", "insta"} or "instagram" in normalized:
+        canonical_source = "meta"
+        platform = "instagram"
+    elif normalized in {"fb"} or "facebook" in normalized:
+        canonical_source = "meta"
+        platform = "facebook"
+    elif "meta" in normalized:
+        canonical_source = "meta"
+        platform = "meta"
+    elif "tiktok" in normalized or "tik tok" in normalized:
+        canonical_source = "tiktok"
+        platform = "tiktok"
+    elif "google" in normalized or "adwords" in normalized or "gads" in normalized:
+        canonical_source = "google"
+        platform = "google"
+    elif normalized in {"direct", "direct visit", "زيارة مباشرة", "زياره مباشره", "store", "website"}:
+        canonical_source = "direct"
+        platform = "store"
+    elif normalized:
+        canonical_source = normalized
+
+    return {
+        "source": canonical_source,
+        "channel": canonical_source,
+        "platform": platform,
+        "source_native": source_native,
+        "utm_source": utm_source,
+        "utm_medium": utm_medium,
+        "utm_campaign": utm_campaign,
+        "device": _text(raw.get("device") or source_obj.get("device")),
+    }
 
 
 def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:
     dto = map_salla_order(raw)
     customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
+    source = dto.source.model_copy(update=_provider_marketing_source(raw))
     return dto.model_copy(
         update={
             "status_native": _provider_status_native(raw, current_status=current_status) or dto.status_native,
             "is_new": _provider_is_new(raw),
             "is_gift": _provider_is_gift(raw, dto.tags),
+            "source": source,
             "customer": customer,
         }
     )
