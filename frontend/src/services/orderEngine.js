@@ -1,4 +1,10 @@
 import api from "../lib/api";
+import {
+    getPreviewOrder,
+    getPreviewOrderSummary,
+    isPreviewDemoEnvironment,
+    listPreviewOrders,
+} from "../demo/orderPreviewFixtures";
 
 export const ORDER_PAGE_SIZE = 15;
 
@@ -19,6 +25,9 @@ export async function listOrders({
     statusGroup = null,
     statusExact = null,
 } = {}) {
+    if (isPreviewDemoEnvironment()) {
+        return listPreviewOrders({ limit, cursor, statusExact: statusExact || statusGroup });
+    }
     try {
         const params = { limit };
         if (cursor) params.cursor = cursor;
@@ -36,6 +45,7 @@ export async function listOrders({
 }
 
 export async function getOrderFilterSummary() {
+    if (isPreviewDemoEnvironment()) return getPreviewOrderSummary();
     try {
         const { data } = await api.get("/orders-v2/filters/summary");
         return {
@@ -51,6 +61,11 @@ export async function getOrderFilterSummary() {
 export async function getOrder(orderNumber) {
     const normalized = String(orderNumber || "").trim();
     if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    if (isPreviewDemoEnvironment()) {
+        const order = getPreviewOrder(normalized);
+        if (!order) throw new Error("لم يتم العثور على الطلب التجريبي.");
+        return order;
+    }
     try {
         const { data } = await api.get(`/orders-v2/${encodeURIComponent(normalized)}`);
         return data;
@@ -62,6 +77,9 @@ export async function getOrder(orderNumber) {
 export async function openOrderFromSalla(orderNumber) {
     const normalized = String(orderNumber || "").trim();
     if (!normalized) return null;
+    if (isPreviewDemoEnvironment()) {
+        return { ok: true, demo: true, read_only: true, no_external_calls: true };
+    }
     try {
         const { data } = await api.post(`/orders/${encodeURIComponent(normalized)}/resync`);
         return data;
