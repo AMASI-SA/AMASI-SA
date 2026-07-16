@@ -191,3 +191,9 @@ async def build_order_address_diagnostic(
             "full_address_excluded": True,
         },
     }
+
+
+# Backward-compatible alias for deployments where routes.py still imports the
+# earlier function name. Keep this until all environments are confirmed on the
+# same revision; both names execute the exact same read-only diagnostic.
+build_address_diagnostic = build_order_address_diagnostic
