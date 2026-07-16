@@ -13,6 +13,7 @@ from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
 )
+from .gift_diagnostic import build_gift_diagnostic
 from .models import OrderDTO
 from .repository import MongoOrderRepository, OrderRepository
 from .service import (
@@ -151,6 +152,18 @@ def make_order_engine_router(
     ) -> dict[str, Any]:
         owner = _require_owner(user)
         return await build_address_diagnostic(
+            db,
+            user_id=str(owner["id"]),
+            order_number=str(order_number),
+        )
+
+    @router.get("/diagnostics/gift/{order_number}")
+    async def get_order_gift_diagnostic(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        return await build_gift_diagnostic(
             db,
             user_id=str(owner["id"]),
             order_number=str(order_number),
