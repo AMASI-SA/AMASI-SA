@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from .shipment_webhook_sync import sync_shipment_from_verified_webhook
 
+
+log = logging.getLogger("salla.webhook_capture")
 
 _SECRET_KEYS = {
     "access_token",
@@ -62,6 +65,7 @@ async def capture_unknown_event(
 
     Events are deduplicated by merchant + event name + sanitized payload hash.
     Salla operations are read-only and this function never calls Qoyod.
+    Shipment sync failure never prevents acknowledging the verified webhook.
     """
     event_name = str(event_body.get("event") or "").strip()
     if event_name in set(known_events):
@@ -76,10 +80,30 @@ async def capture_unknown_event(
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
 
-    # Attempt shipment enrichment before writing the audit result so the capture
-    # records the exact outcome for later diagnosis. This runs only after the
-    # caller has verified Salla's signature/token.
-    shipment_sync = await sync_shipment_from_verified_webhook(db, event_body)
+    try:
+        shipment_sync = await sync_shipment_from_verified_webhook(db, event_body)
+    except Exception as exc:  # noqa: BLE001 — webhook must still return HTTP 200
+        log.exception("shipment_webhook.unhandled event=%s", event_name or "<none>")
+        shipment_sync = {
+            "attempted": True,
+            "synced": False,
+            "reason": "unhandled_exception",
+            "error": str(exc)[:500],
+            "no_qoyod_calls": True,
+        }
+
+    log.info(
+        "shipment_webhook.result event=%s attempted=%s synced=%s shipment_id=%s "
+        "order_ref=%s matched=%s modified=%s reason=%s",
+        event_name or "<none>",
+        shipment_sync.get("attempted"),
+        shipment_sync.get("synced"),
+        shipment_sync.get("shipment_id"),
+        shipment_sync.get("order_reference_id"),
+        shipment_sync.get("order_matched"),
+        shipment_sync.get("order_modified"),
+        shipment_sync.get("reason"),
+    )
 
     selector = {
         "merchant_id": merchant_id,
