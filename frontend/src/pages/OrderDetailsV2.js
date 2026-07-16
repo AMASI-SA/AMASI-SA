@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
+import { FilePdf, Package } from "@phosphor-icons/react";
 import CompactOrderTimeline from "../components/CompactOrderTimeline";
 import { useOrder } from "../hooks/useOrders";
 import OriginalOrderDetailsV2 from "./OrderDetailsV2.jsx";
@@ -23,6 +24,7 @@ const SOURCE_LABELS = {
     email: "البريد الإلكتروني",
     sms: "رسائل نصية",
     direct: "دخول مباشر",
+    store: "المتجر الإلكتروني",
     referral: "إحالة",
     organic: "بحث طبيعي",
 };
@@ -103,50 +105,89 @@ function sourceValues(order) {
     };
 }
 
+function PreparationPdfCard() {
+    return (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-preparation-pdf">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-violet-100 p-3 text-violet-700">
+                        <Package size={24} weight="fill" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-extrabold text-slate-950">تجهيز وطباعة المنتجات</h2>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">رفع ملف طلبات سلة وتحويل المنتجات إلى بطاقات PDF جاهزة للطباعة.</p>
+                    </div>
+                </div>
+                <a
+                    href="/product-preparation"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-extrabold text-teal-800 transition hover:bg-teal-100"
+                >
+                    <FilePdf size={20} weight="fill" />
+                    فتح تجهيز المنتجات
+                </a>
+            </div>
+        </section>
+    );
+}
+
 /**
  * Thin compatibility wrapper.
- * Keeps the approved page intact, mounts the compact timeline, and localizes
- * only the values inside the order-source card.
+ * Keeps the approved page intact, mounts the compact timeline, restores the
+ * product-preparation PDF card, and localizes only the order-source values.
  */
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
     const { order } = useOrder(orderNumber);
     const [timelineHost, setTimelineHost] = useState(null);
+    const [preparationHost, setPreparationHost] = useState(null);
 
     useEffect(() => {
-        let replacement = null;
-        let original = null;
+        let timelineReplacement = null;
+        let timelineOriginal = null;
+        let preparationReplacement = null;
         let observer = null;
 
-        const mountTimeline = () => {
-            original = document.querySelector('[data-testid="order-v2-timeline"]');
-            if (!original || original.dataset.compactTimelineReplaced === "true") return false;
+        const mountEnhancements = () => {
+            let mountedSomething = false;
 
-            replacement = document.createElement("div");
-            replacement.dataset.compactTimelineHost = "true";
-            replacement.setAttribute("dir", "rtl");
+            timelineOriginal = document.querySelector('[data-testid="order-v2-timeline"]');
+            if (timelineOriginal && timelineOriginal.dataset.compactTimelineReplaced !== "true") {
+                timelineReplacement = document.createElement("div");
+                timelineReplacement.dataset.compactTimelineHost = "true";
+                timelineReplacement.setAttribute("dir", "rtl");
+                timelineOriginal.dataset.compactTimelineReplaced = "true";
+                timelineOriginal.style.display = "none";
+                timelineOriginal.insertAdjacentElement("afterend", timelineReplacement);
+                setTimelineHost(timelineReplacement);
+                mountedSomething = true;
+            }
 
-            original.dataset.compactTimelineReplaced = "true";
-            original.style.display = "none";
-            original.insertAdjacentElement("afterend", replacement);
-            setTimelineHost(replacement);
-            return true;
+            const itemsSection = document.querySelector('[data-testid="order-v2-items"]');
+            if (itemsSection && !document.querySelector('[data-preparation-pdf-host="true"]')) {
+                preparationReplacement = document.createElement("div");
+                preparationReplacement.dataset.preparationPdfHost = "true";
+                preparationReplacement.setAttribute("dir", "rtl");
+                itemsSection.insertAdjacentElement("afterend", preparationReplacement);
+                setPreparationHost(preparationReplacement);
+                mountedSomething = true;
+            }
+
+            return mountedSomething;
         };
 
-        if (!mountTimeline()) {
-            observer = new MutationObserver(() => {
-                if (mountTimeline()) observer?.disconnect();
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-        }
+        mountEnhancements();
+        observer = new MutationObserver(() => mountEnhancements());
+        observer.observe(document.body, { childList: true, subtree: true });
 
         return () => {
             observer?.disconnect();
             setTimelineHost(null);
-            replacement?.remove();
-            if (original) {
-                original.style.display = "";
-                delete original.dataset.compactTimelineReplaced;
+            setPreparationHost(null);
+            timelineReplacement?.remove();
+            preparationReplacement?.remove();
+            if (timelineOriginal) {
+                timelineOriginal.style.display = "";
+                delete timelineOriginal.dataset.compactTimelineReplaced;
             }
         };
     }, [orderNumber]);
@@ -196,6 +237,7 @@ export default function OrderDetailsV2() {
     return (
         <>
             <OriginalOrderDetailsV2 />
+            {preparationHost ? createPortal(<PreparationPdfCard />, preparationHost) : null}
             {timelineHost && order ? createPortal(<CompactOrderTimeline order={order} />, timelineHost) : null}
         </>
     );
