@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from salla_integration.auto_sync import schedule_salla_auto_sync
+from salla_integration.order_commerce_enrichment import enrich_single_order_commerce
 from .address_diagnostic import build_order_address_diagnostic
 from .city_enrichment import enrich_order_cities
 from .commerce_diagnostic import build_order_commerce_diagnostic
@@ -189,6 +190,24 @@ def make_order_engine_router(
             user_id=str(owner["id"]),
             order_number=str(order_number),
         )
+
+    @router.post("/actions/enrich-commerce/{order_number}")
+    async def enrich_order_commerce(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        result = await enrich_single_order_commerce(
+            db,
+            user_id=str(owner["id"]),
+            order_number=str(order_number),
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=result,
+            )
+        return result
 
     @router.post("/actions/enrich-gift/{order_number}")
     async def enrich_order_gift(
