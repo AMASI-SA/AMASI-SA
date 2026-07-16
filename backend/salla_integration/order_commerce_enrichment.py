@@ -64,13 +64,15 @@ async def _fetch_collection(
     user_id: str,
     path: str,
     internal_order_id: str,
+    *,
+    parameter_name: str = "order_id",
 ) -> list[dict[str, Any]]:
     response = await call_salla(
         db,
         user_id,
         "GET",
         path,
-        params={"order_id": internal_order_id},
+        params={parameter_name: internal_order_id},
     )
     return _rows(response)
 
@@ -116,6 +118,7 @@ async def enrich_single_order_commerce(
             user_id,
             "/orders/items",
             internal_id,
+            parameter_name="order_id",
         )
 
         stage = "fetch_order_shipments"
@@ -124,6 +127,7 @@ async def enrich_single_order_commerce(
             user_id,
             "/orders/shipments",
             internal_id,
+            parameter_name="order",
         )
 
         stage = "merge_payload"
