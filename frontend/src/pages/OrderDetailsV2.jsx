@@ -2,30 +2,52 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
     ArrowRight,
+    ChartLineUp,
     ChatCircleDots,
     CheckCircle,
     ClockCounterClockwise,
     Copy,
     CreditCard,
+    DeviceMobile,
     EnvelopeSimple,
     MapPin,
+    Megaphone,
     Package,
     Phone,
     Printer,
     SpinnerGap,
     Truck,
     User,
+    UsersThree,
     WarningCircle,
     WhatsappLogo,
 } from "@phosphor-icons/react";
 import { useOrder } from "../hooks/useOrders";
 import { useOrderItems } from "../hooks/useOrderItems";
 
-function formatMoney(value) {
-    return `${Number(value || 0).toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })} ر.س`;
+const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
+
+function normalizeCurrency(value) {
+    const code = String(value || "SAR").trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(code) ? code : "SAR";
+}
+
+function formatMoney(value, currency = "SAR") {
+    const code = normalizeCurrency(currency);
+    const decimals = THREE_DECIMAL_CURRENCIES.has(code) ? 3 : 2;
+    try {
+        return new Intl.NumberFormat("ar-SA-u-nu-latn", {
+            style: "currency",
+            currency: code,
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        }).format(Number(value || 0));
+    } catch {
+        return `${Number(value || 0).toLocaleString("en-US", {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        })} ${code}`;
+    }
 }
 
 function formatOrderDate(value) {
@@ -101,10 +123,7 @@ function collectItemSelections(item) {
     push("المقاس", item.size);
     push("الخامة", item.material);
     for (const option of item.options || item.options_raw || []) {
-        push(
-            option?.name || option?.label || option?.key,
-            option?.value || option?.selected || option?.text || option?.choice
-        );
+        push(option?.name || option?.label || option?.key, option?.value || option?.selected || option?.text || option?.choice);
     }
     for (const field of item.custom_fields || []) {
         push(field?.name || field?.label || field?.key, field?.value || field?.text);
@@ -114,15 +133,10 @@ function collectItemSelections(item) {
 
 function SectionCard({ title, icon: Icon, headerAction, children, testid, className = "" }) {
     return (
-        <section
-            className={`flex min-h-[330px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
-            data-testid={testid}
-        >
+        <section className={`flex min-h-[330px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`} data-testid={testid}>
             <div className="mb-5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-violet-100 p-2 text-violet-700">
-                        <Icon size={20} weight="fill" />
-                    </div>
+                    <div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Icon size={20} weight="fill" /></div>
                     <h2 className="text-xl font-extrabold text-slate-900">{title}</h2>
                 </div>
                 {headerAction}
@@ -133,14 +147,8 @@ function SectionCard({ title, icon: Icon, headerAction, children, testid, classN
 }
 
 function CompactAction({ href, label, icon: Icon, onClick, disabled }) {
-    const className = `flex h-10 w-10 items-center justify-center rounded-full transition ${
-        disabled
-            ? "cursor-not-allowed bg-slate-100 text-slate-300"
-            : "bg-slate-100 text-slate-600 hover:bg-teal-50 hover:text-teal-700"
-    }`;
-    if (href && !disabled) {
-        return <a href={href} className={className} aria-label={label} title={label}><Icon size={20} /></a>;
-    }
+    const className = `flex h-10 w-10 items-center justify-center rounded-full transition ${disabled ? "cursor-not-allowed bg-slate-100 text-slate-300" : "bg-slate-100 text-slate-600 hover:bg-teal-50 hover:text-teal-700"}`;
+    if (href && !disabled) return <a href={href} className={className} aria-label={label} title={label}><Icon size={20} /></a>;
     return <button type="button" className={className} onClick={onClick} disabled={disabled} aria-label={label} title={label}><Icon size={20} /></button>;
 }
 
@@ -154,14 +162,7 @@ function CopyValueButton({ value, label = "نسخ" }) {
         window.setTimeout(() => setCopied(false), 1200);
     }
     return (
-        <button
-            type="button"
-            onClick={copyValue}
-            disabled={!text}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-teal-700 transition hover:bg-teal-50 disabled:text-slate-300"
-            aria-label={copied ? "تم النسخ" : label}
-            title={copied ? "تم النسخ" : label}
-        >
+        <button type="button" onClick={copyValue} disabled={!text} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-teal-700 transition hover:bg-teal-50 disabled:text-slate-300" aria-label={copied ? "تم النسخ" : label} title={copied ? "تم النسخ" : label}>
             {copied ? <CheckCircle size={18} weight="fill" /> : <Copy size={18} />}
         </button>
     );
@@ -172,14 +173,7 @@ function CustomerAvatar({ person }) {
     return (
         <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-400">
             <User size={48} weight="fill" />
-            {avatar && (
-                <img
-                    src={avatar}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={(event) => { event.currentTarget.style.display = "none"; }}
-                />
-            )}
+            {avatar && <img src={avatar} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
         </div>
     );
 }
@@ -191,33 +185,18 @@ function CustomerCard({ customer, shipping }) {
     const recipientAddress = recipient.address || shipping.address || buyerAddress;
     const buyerPhone = normalizePhone(customer.mobile || customer.phone);
     const recipientPhone = normalizePhone(recipient.mobile || recipient.phone);
-    const hasIndependentRecipient = Boolean(
-        recipient.name || recipientPhone || recipient.email || recipient.notes ||
-        (recipientAddress && addressText(recipientAddress) !== addressText(buyerAddress))
-    ) && !(
-        String(recipient.name || "").trim() === String(customer.name || "").trim() &&
-        recipientPhone === buyerPhone &&
-        addressText(recipientAddress) === addressText(buyerAddress)
-    );
-
-    const active = tab === "recipient" && hasIndependentRecipient
-        ? { ...recipient, mobile: recipientPhone }
-        : { ...customer, mobile: buyerPhone };
+    const hasIndependentRecipient = Boolean(recipient.name || recipientPhone || recipient.email || recipient.notes || (recipientAddress && addressText(recipientAddress) !== addressText(buyerAddress))) && !(String(recipient.name || "").trim() === String(customer.name || "").trim() && recipientPhone === buyerPhone && addressText(recipientAddress) === addressText(buyerAddress));
+    const active = tab === "recipient" && hasIndependentRecipient ? { ...recipient, mobile: recipientPhone } : { ...customer, mobile: buyerPhone };
     const phone = normalizePhone(active.mobile || active.phone);
     const email = String(active.email || "").trim();
 
     return (
-        <SectionCard
-            title="العميل"
-            icon={User}
-            testid="order-v2-customer"
-            headerAction={
-                <div className="inline-flex rounded-xl border border-teal-200 bg-white p-1 text-xs font-bold">
-                    <button type="button" onClick={() => setTab("buyer")} className={`rounded-lg px-3 py-2 ${tab === "buyer" || !hasIndependentRecipient ? "bg-teal-50 text-teal-800" : "text-slate-500"}`}>المشتري</button>
-                    <button type="button" disabled={!hasIndependentRecipient} onClick={() => setTab("recipient")} className={`rounded-lg px-3 py-2 ${tab === "recipient" && hasIndependentRecipient ? "bg-teal-50 text-teal-800" : "text-slate-500"} disabled:opacity-35`}>المستلم</button>
-                </div>
-            }
-        >
+        <SectionCard title="العميل" icon={User} testid="order-v2-customer" headerAction={
+            <div className="inline-flex rounded-xl border border-teal-200 bg-white p-1 text-xs font-bold">
+                <button type="button" onClick={() => setTab("buyer")} className={`rounded-lg px-3 py-2 ${tab === "buyer" || !hasIndependentRecipient ? "bg-teal-50 text-teal-800" : "text-slate-500"}`}>المشتري</button>
+                <button type="button" disabled={!hasIndependentRecipient} onClick={() => setTab("recipient")} className={`rounded-lg px-3 py-2 ${tab === "recipient" && hasIndependentRecipient ? "bg-teal-50 text-teal-800" : "text-slate-500"} disabled:opacity-35`}>المستلم</button>
+            </div>
+        }>
             <div className="flex h-full flex-col items-center justify-center text-center">
                 <CustomerAvatar person={active} />
                 <div className="mt-4 text-xl font-extrabold text-teal-900">{active.name || "عميل بدون اسم"}</div>
@@ -242,26 +221,17 @@ function ShippingCard({ shipping, customer }) {
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
     return (
-        <SectionCard
-            title="الشحن"
-            icon={Truck}
-            testid="order-v2-shipping"
-            headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50"><Printer size={18} /> طباعة البوليصة</button>}
-        >
+        <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50"><Printer size={18} /> طباعة البوليصة</button>}>
             <div className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-3">
                     {companyLogo && <img src={companyLogo} alt="" className="h-14 w-14 rounded-lg object-contain" />}
                     <div className="text-lg font-extrabold text-slate-800">{shipping.company || shipping.method || "شركة الشحن غير محددة"}</div>
                 </div>
                 <div className="mt-4 text-sm leading-7 text-slate-500">{fullAddress || "العنوان غير متوفر"}</div>
-                {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="mt-1 font-bold text-teal-700">موقع العميل على الخريطة</a>}
+                {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-bold text-teal-700"><MapPin size={17} /> موقع العميل على الخريطة</a>}
                 {shipping.delivery_estimate && <div className="mt-2 text-sm text-slate-400">{shipping.delivery_estimate}</div>}
                 <div className="mt-5 border-t border-slate-100 pt-4">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="text-slate-600">بوليصة الشحن:</span>
-                        <span className="num font-bold text-teal-800">{tracking || "—"}</span>
-                        <CopyValueButton value={tracking} label="نسخ رقم البوليصة" />
-                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">بوليصة الشحن:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم البوليصة" /></div>
                     <div className="mt-4 text-sm font-bold text-teal-800">{shipping.status || "تتبع حالة الشحنة"}</div>
                 </div>
             </div>
@@ -273,20 +243,12 @@ function PaymentCard({ payment, paymentMethod }) {
     const attachment = payment.receipt_url || payment.attachment_url || payment.proof_url;
     const paid = String(payment.status || "").toLowerCase().includes("paid") || payment.is_paid === true;
     return (
-        <SectionCard
-            title="الدفع"
-            icon={CreditCard}
-            testid="order-v2-payment"
-            headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50">إصدار الفاتورة</button>}
-        >
+        <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment" headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50">إصدار الفاتورة</button>}>
             <div className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-4">
                     {attachment && <img src={attachment} alt="مرفق الدفع" className="h-24 w-20 rounded-lg border border-teal-200 object-cover" />}
                     <div>
-                        <div className="flex items-center gap-2 text-lg font-extrabold text-slate-800">
-                            {paid && <CheckCircle size={34} className="text-emerald-400" />}
-                            {payment.status_native || payment.status || "حالة الدفع غير محددة"}
-                        </div>
+                        <div className="flex items-center gap-2 text-lg font-extrabold text-slate-800">{paid && <CheckCircle size={34} className="text-emerald-400" />}{payment.status_native || payment.status || "حالة الدفع غير محددة"}</div>
                         <div className="mt-2 text-sm text-slate-400">{payment.receiving_bank_name || paymentMethod}</div>
                     </div>
                 </div>
@@ -295,38 +257,79 @@ function PaymentCard({ payment, paymentMethod }) {
     );
 }
 
-function ProductCard({ item, index }) {
+function ProductCard({ item, index, currency }) {
     const selections = collectItemSelections(item);
     const quantity = Number(item.quantity || 1);
     const weight = item.weight ? `${Number(item.weight).toLocaleString("en-US")} ${item.weight_unit || "كجم"}` : "—";
     return (
         <article className="overflow-hidden rounded-xl border border-slate-200 bg-white" data-testid={`order-v2-item-${index}`}>
-            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_110px_110px_120px_120px] lg:items-start">
+            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_110px_110px_140px_140px] lg:items-start">
                 <div className="min-w-0">
                     <div className="flex items-start gap-3">
-                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                            {item.image_url ? <img src={item.image_url} alt={item.name || "صورة المنتج"} className="h-full w-full object-cover" /> : <Package size={27} className="text-slate-300" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <h3 className="font-extrabold leading-6 text-slate-950">{item.name || "منتج بدون اسم"}</h3>
-                            <div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><span>SKU:</span><span className="num font-bold">{item.sku || "—"}</span><CopyValueButton value={item.sku} label="نسخ SKU" /></div>
-                        </div>
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">{item.image_url ? <img src={item.image_url} alt={item.name || "صورة المنتج"} className="h-full w-full object-cover" /> : <Package size={27} className="text-slate-300" />}</div>
+                        <div className="min-w-0 flex-1"><h3 className="font-extrabold leading-6 text-slate-950">{item.name || "منتج بدون اسم"}</h3><div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><span>SKU:</span><span className="num font-bold">{item.sku || "—"}</span><CopyValueButton value={item.sku} label="نسخ SKU" /></div></div>
                     </div>
                     <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                        {selections.length > 0 ? selections.map((selection, selectionIndex) => (
-                            <div key={`${selection.label}-${selectionIndex}`} className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0">
-                                <div><span className="text-xs font-bold text-slate-400">{selection.label}:</span> <span className="break-words text-sm font-bold text-slate-700">{selection.value}</span></div>
-                                <CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} />
-                            </div>
-                        )) : <div className="px-3 py-3 text-sm text-slate-400">لا توجد خيارات إضافية</div>}
+                        {selections.length > 0 ? selections.map((selection, selectionIndex) => <div key={`${selection.label}-${selectionIndex}`} className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"><div><span className="text-xs font-bold text-slate-400">{selection.label}:</span> <span className="break-words text-sm font-bold text-slate-700">{selection.value}</span></div><CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} /></div>) : <div className="px-3 py-3 text-sm text-slate-400">لا توجد خيارات إضافية</div>}
                     </div>
                 </div>
                 <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="mt-1 font-bold">{quantity.toLocaleString("en-US")}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">الوزن</div><div className="mt-1 font-bold">{weight}</div></div>
-                <div><div className="text-xs font-bold text-slate-400">السعر</div><div className="num mt-1 font-bold">{formatMoney(item.unit_price)}</div></div>
-                <div><div className="text-xs font-bold text-slate-400">المجموع</div><div className="num mt-1 font-bold">{formatMoney(item.total)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">السعر</div><div className="num mt-1 font-bold">{formatMoney(item.unit_price, currency)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">المجموع</div><div className="num mt-1 font-bold">{formatMoney(item.total, currency)}</div></div>
             </div>
         </article>
+    );
+}
+
+function InfoRow({ label, value }) {
+    return <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-0"><span className="text-sm font-bold text-slate-400">{label}</span><span className="num max-w-[65%] break-words text-left text-sm font-bold text-slate-800">{displayValue(value)}</span></div>;
+}
+
+function AdvancedOrderInfo({ order }) {
+    const utm = order.utm || order.marketing || order.attribution || {};
+    const source = order.source_native || order.source_name || order.source || utm.source || utm.utm_source;
+    const medium = order.utm_medium || utm.medium || utm.utm_medium;
+    const campaign = order.utm_campaign || utm.campaign || utm.utm_campaign;
+    const channel = order.channel_native || order.channel || order.order_channel;
+    const device = order.device_name || order.device || order.client_device;
+    const assignments = order.assignments || order.responsibilities || order.staff || {};
+    const operations = order.fulfillment || order.operations || order.tracking || {};
+
+    return (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-advanced-info">
+            <div className="mb-5"><h2 className="text-xl font-extrabold text-slate-950">معلومات الطلب المتقدمة</h2><p className="mt-1 text-sm text-slate-500">المصدر، المسؤوليات، ومتابعة دورة تنفيذ الطلب.</p></div>
+            <div className="grid gap-5 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center gap-2"><Megaphone size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">مصدر الطلب</h3></div>
+                    <InfoRow label="المصدر" value={source} /><InfoRow label="الوسيط" value={medium} /><InfoRow label="الحملة" value={campaign} /><InfoRow label="القناة" value={channel} /><InfoRow label="الجهاز" value={device} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center gap-2"><UsersThree size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">الموظفون والمسؤوليات</h3></div>
+                    <InfoRow label="مسؤول الطلب" value={assignments.owner || assignments.order_owner || order.assigned_to} /><InfoRow label="التجهيز" value={assignments.preparation || assignments.fulfillment} /><InfoRow label="الشحن" value={assignments.shipping} /><InfoRow label="خدمة العملاء" value={assignments.customer_service || assignments.support} /><InfoRow label="آخر محدث" value={order.updated_by || assignments.last_updated_by} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center gap-2"><DeviceMobile size={21} className="text-violet-700" weight="fill" /><h3 className="font-extrabold">متابعة الطلب</h3></div>
+                    <InfoRow label="التجهيز" value={operations.preparation_status || operations.status} /><InfoRow label="الطباعة" value={operations.print_status} /><InfoRow label="التغليف" value={operations.packing_status} /><InfoRow label="التسليم للشركة" value={operations.handover_status} /><InfoRow label="التوصيل" value={operations.delivery_status || order.shipping?.status} />
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function AccountingSummary({ order, currency }) {
+    const accounting = order.accounting || order.qoyod || {};
+    const totals = order.totals || {};
+    return (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-accounting-summary">
+            <div className="mb-4 flex items-center gap-2"><ChartLineUp size={22} className="text-violet-700" weight="fill" /><h2 className="text-xl font-extrabold text-slate-950">المحاسبة والربحية</h2></div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">حالة قيود</div><div className="mt-2 font-extrabold">{accounting.status || accounting.qoyod_status || "—"}</div></div>
+                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">رقم الفاتورة</div><div className="num mt-2 font-extrabold">{accounting.invoice_number || accounting.invoice_id || "—"}</div></div>
+                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">تكلفة الطلب</div><div className="num mt-2 font-extrabold">{totals.cost !== undefined ? formatMoney(totals.cost, currency) : "—"}</div></div>
+                <div className="rounded-xl bg-slate-50 p-4"><div className="text-xs font-bold text-slate-400">الربح</div><div className="num mt-2 font-extrabold">{totals.profit !== undefined ? formatMoney(totals.profit, currency) : "—"}</div></div>
+            </div>
+        </section>
     );
 }
 
@@ -337,44 +340,32 @@ export default function OrderDetailsV2() {
     const itemCount = useMemo(() => items.length, [items]);
 
     if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
-    if (error || !order) return (
-        <div className="space-y-4" dir="rtl">
-            <Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link>
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div>
-        </div>
-    );
+    if (error || !order) return <div className="space-y-4" dir="rtl"><Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div></div>;
 
     const customer = order.customer || {};
     const payment = order.payment || {};
     const shipping = order.shipping || {};
-    const total = order.totals?.total || 0;
+    const currency = normalizeCurrency(order.currency || order.currency_code || order.totals?.currency || order.amounts?.currency);
+    const total = order.totals?.total ?? order.total ?? 0;
     const status = order.status_native || order.status || "غير محدد";
     const paymentMethod = payment.method_native || payment.method || "غير محدد";
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="order-details-v2-page">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> العودة إلى الطلبات الجديدة</Link>
-                    <h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div>
-                </div>
-                <div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total)}</div>
+                <div><Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> العودة إلى الطلبات الجديدة</Link><h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div></div>
+                <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-3">
-                <CustomerCard customer={customer} shipping={shipping} />
-                <ShippingCard shipping={shipping} customer={customer} />
-                <PaymentCard payment={payment} paymentMethod={paymentMethod} />
-            </div>
+            <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard shipping={shipping} customer={customer} /><PaymentCard payment={payment} paymentMethod={paymentMethod} /></div>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-items">
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
-                {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div>
-                    : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div>
-                    : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div>
-                    : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} />)}</div>}
+                {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} />)}</div>}
             </section>
+
+            <AdvancedOrderInfo order={order} />
+            <AccountingSummary order={order} currency={currency} />
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-timeline">
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><ClockCounterClockwise size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">سجل الطلب</h2></div>
