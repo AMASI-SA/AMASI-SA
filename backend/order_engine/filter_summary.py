@@ -20,6 +20,32 @@ _REVIEW_PARENT_VALUES = [
     "انتظار المراجعة",
 ]
 
+# Keep the operational Salla workflow visible even when a state currently has
+# zero orders. Dynamic/custom merchant states are appended after this list.
+_STANDARD_SALLA_STATUSES = [
+    "بإنتظار الدفع",
+    "بإنتظار المراجعة",
+    "تم المراجعة",
+    "بإنتظار تأكيد العميل",
+    "بإنتظار مراجعة العميل",
+    "مراجعة الملاحظات",
+    "قيد التنفيذ",
+    "مدمج",
+    "جاري التنفيذ",
+    "قيد التنفيذ لطلبات الرياض",
+    "تم التجهيز",
+    "مسند إلى مندوب التوصيل",
+    "جاري التوصيل",
+    "تم التوصيل",
+    "تم الشحن",
+    "تم التنفيذ",
+    "ملغي",
+    "محذوف",
+    "مسترجع",
+    "قيد الاسترجاع",
+    "طلب عرض سعر",
+]
+
 
 def _status_key(value: Any) -> str:
     return " ".join(str(value or "").replace("_", " ").strip().casefold().split())
@@ -146,14 +172,36 @@ async def build_order_filter_summary(db: Any, *, user_id: str) -> dict[str, Any]
         {"$sort": {"count": -1, "_id": 1}},
     ]
 
-    status_cards: list[dict[str, Any]] = []
-    status_counts: dict[str, int] = {"all": int(total)}
+    discovered: dict[str, dict[str, Any]] = {}
     async for row in db.unified_orders.aggregate(pipeline):
         label = _status_label(row.get("_id"))
         key = _status_key(label)
-        count = int(row.get("count") or 0)
+        discovered[key] = {
+            "key": key,
+            "label": label,
+            "count": int(row.get("count") or 0),
+        }
+
+    status_cards: list[dict[str, Any]] = []
+    status_counts: dict[str, int] = {"all": int(total)}
+    emitted: set[str] = set()
+
+    for label in _STANDARD_SALLA_STATUSES:
+        key = _status_key(label)
+        existing = discovered.get(key)
+        count = int(existing.get("count") or 0) if existing else 0
         status_cards.append({"key": key, "label": label, "count": count})
         status_counts[key] = count
+        emitted.add(key)
+
+    for key, card in sorted(
+        discovered.items(),
+        key=lambda item: (-int(item[1].get("count") or 0), str(item[1].get("label") or "")),
+    ):
+        if key in emitted:
+            continue
+        status_cards.append(card)
+        status_counts[key] = int(card.get("count") or 0)
 
     return {
         "total": int(total),
