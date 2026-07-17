@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
+import OrderUiEnhancements from "./OrderUiEnhancements";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -79,6 +80,7 @@ export default function Layout({ children }) {
     return (
         <div className="min-h-screen bg-background grain">
             <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+            <OrderUiEnhancements />
 
             <header
                 className="lg:hidden sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur"
