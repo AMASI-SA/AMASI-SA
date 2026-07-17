@@ -55,6 +55,27 @@ def _extract_order_number(payload: Any) -> str | None:
     return None
 
 
+def _as_utc(value: Any) -> datetime | None:
+    """Normalize Mongo/PyMongo datetimes before comparison.
+
+    PyMongo commonly returns naive UTC datetimes even when the application writes
+    timezone-aware values. Comparing those directly with an aware UTC cutoff raises
+    TypeError and previously caused HTTP 500 on the monitor endpoint.
+    """
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 async def _event_snapshot(db: Any, merchant_id: str | None) -> dict[str, dict[str, Any]]:
     match: dict[str, Any] = {}
     if merchant_id:
@@ -95,9 +116,12 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
         events: list[dict[str, Any]] = []
         for event_name, label, group in EXPECTED_EVENTS:
             row = snapshot.get(event_name)
-            last_received = row.get("last_received_at") if row else None
+            raw_last_received = row.get("last_received_at") if row else None
+            raw_first_received = row.get("first_received_at") if row else None
+            last_received = _as_utc(raw_last_received)
+            first_received = _as_utc(raw_first_received)
             observed = bool(row)
-            recent = bool(observed and isinstance(last_received, datetime) and last_received >= recent_cutoff)
+            recent = bool(observed and last_received and last_received >= recent_cutoff)
             events.append({
                 "event": event_name,
                 "label": label,
@@ -105,9 +129,9 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
                 "status": "working" if observed else "not_observed",
                 "observed": observed,
                 "recent_30d": recent,
-                "first_received_at": row.get("first_received_at") if row else None,
+                "first_received_at": first_received,
                 "last_received_at": last_received,
-                "delivery_count": int(row.get("delivery_count") or 0) if row else 0,
+                "delivery_count": _safe_int(row.get("delivery_count")) if row else 0,
                 "last_order_number": _extract_order_number(row.get("last_payload")) if row else None,
                 "shipment_sync": row.get("last_sync") if row else None,
             })
