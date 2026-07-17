@@ -1,21 +1,13 @@
-"""Salla OAuth + Merchant API integration — Phase 1 (read-only connect).
+"""Salla OAuth, Merchant API, webhook monitoring and synchronization."""
 
-This module is intentionally ISOLATED from the existing data sources
-(Make.com webhooks, manual PDF upload, manual Excel upload). It exposes
-its own router under `/api/salla/*` and writes only to the
-`salla_integrations` collection. No other code path imports from this
-module — by design — so we can pull the plug instantly if Phase 2
-(webhooks + sync) reveals any regression.
+from .routes import attach_salla_routes as _attach_core_salla_routes, ensure_salla_indexes
+from .webhook_monitor_routes import attach_salla_webhook_monitor_routes
 
-Phases
-------
-1. (this file) OAuth Authorization-Code flow + encrypted token storage
-   + auto-refresh wrapper + /store/info "test connection".
-2. (NEXT)      Programmatic webhook registration + HMAC verification +
-               POST /api/webhooks/salla/order persistence.
-3. (LATER)     Sync historical orders + Salla↔system reconciliation tool.
-"""
 
-from .routes import attach_salla_routes, ensure_salla_indexes
+def attach_salla_routes(api_router, db) -> None:
+    """Attach the existing Salla routes plus read-only webhook diagnostics."""
+    _attach_core_salla_routes(api_router, db)
+    attach_salla_webhook_monitor_routes(api_router, db)
+
 
 __all__ = ["attach_salla_routes", "ensure_salla_indexes"]
