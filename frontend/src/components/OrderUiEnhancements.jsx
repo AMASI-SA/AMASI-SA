@@ -39,21 +39,14 @@ function mountUnreadBadge(count) {
 }
 
 async function fetchUnreadOrdersCount() {
-    let cursor = null;
-    let unread = 0;
-    let pages = 0;
-
-    do {
-        const params = { limit: 50 };
-        if (cursor) params.cursor = cursor;
-        const { data } = await axios.get(`${API}/orders-v2`, { params });
-        const items = Array.isArray(data?.items) ? data.items : [];
-        unread += items.filter((order) => order?.is_new === true).length;
-        cursor = data?.next_cursor || null;
-        pages += 1;
-    } while (cursor && pages < 100);
-
-    return unread;
+    // Critical performance guard: never paginate through the complete order
+    // history from the browser. Loading thousands of orders every 30 seconds
+    // caused the Mezan and Emergent tabs to become unresponsive.
+    const { data } = await axios.get(`${API}/orders-v2`, {
+        params: { limit: 50 },
+    });
+    const items = Array.isArray(data?.items) ? data.items : [];
+    return items.filter((order) => order?.is_new === true).length;
 }
 
 function mountGiftBadge(order) {
@@ -96,7 +89,7 @@ export default function OrderUiEnhancements() {
         };
 
         refreshUnread();
-        const interval = window.setInterval(refreshUnread, 30000);
+        const interval = window.setInterval(refreshUnread, 60000);
         observer = new MutationObserver(() => mountUnreadBadge(latestCount));
         observer.observe(document.body, { childList: true, subtree: true });
 
