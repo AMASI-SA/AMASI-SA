@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
     getOrder,
     listOrders,
-    openOrderFromSalla,
     ORDER_PAGE_SIZE,
 } from "../services/orderEngine";
 
@@ -207,7 +206,6 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
 export function useOrder(orderNumber) {
     const requestInFlightRef = useRef(false);
     const mountedRef = useRef(true);
-    const openedOrderRef = useRef("");
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -221,10 +219,9 @@ export function useOrder(orderNumber) {
             setError("");
         }
         try {
-            if (!background && openedOrderRef.current !== normalized) {
-                await openOrderFromSalla(normalized);
-                openedOrderRef.current = normalized;
-            }
+            // Read the local unified order only.
+            // Opening the page must never call Salla API or overwrite richer
+            // shipping data already persisted from verified webhooks.
             const result = await getOrder(normalized);
             if (mountedRef.current) {
                 setOrder(result);
