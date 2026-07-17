@@ -3,50 +3,10 @@ import { useLocation } from "react-router-dom";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || ""}/api`;
-const UNREAD_BADGE_ATTR = "data-orders-unread-badge";
 const GIFT_BADGE_ATTR = "data-order-gift-detail-badge";
 
 function removeNode(selector) {
     document.querySelector(selector)?.remove();
-}
-
-function findOrdersLink() {
-    return document.querySelector(
-        '[data-testid="nav-mezan-os-orders"], [data-testid="nav-orders"], a[href="/orders-v2"]'
-    );
-}
-
-function mountUnreadBadge(count) {
-    const link = findOrdersLink();
-    if (!link) return false;
-
-    let badge = link.querySelector(`[${UNREAD_BADGE_ATTR}="true"]`);
-    if (!count) {
-        badge?.remove();
-        return true;
-    }
-
-    if (!badge) {
-        badge = document.createElement("span");
-        badge.setAttribute(UNREAD_BADGE_ATTR, "true");
-        badge.className = "inline-flex min-w-[22px] h-[22px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-extrabold text-white num";
-        badge.title = "طلبات غير مقروءة";
-        link.appendChild(badge);
-    }
-    badge.textContent = count > 99 ? "99+" : String(count);
-    badge.setAttribute("aria-label", `${count} طلب غير مقروء`);
-    return true;
-}
-
-async function fetchUnreadOrdersCount() {
-    // Critical performance guard: never paginate through the complete order
-    // history from the browser. Loading thousands of orders every 30 seconds
-    // caused the Mezan and Emergent tabs to become unresponsive.
-    const { data } = await axios.get(`${API}/orders-v2`, {
-        params: { limit: 50 },
-    });
-    const items = Array.isArray(data?.items) ? data.items : [];
-    return items.filter((order) => order?.is_new === true).length;
 }
 
 function mountGiftBadge(order) {
@@ -72,34 +32,6 @@ function mountGiftBadge(order) {
 
 export default function OrderUiEnhancements() {
     const location = useLocation();
-
-    useEffect(() => {
-        let active = true;
-        let observer = null;
-        let latestCount = 0;
-
-        const refreshUnread = async () => {
-            try {
-                const count = await fetchUnreadOrdersCount();
-                latestCount = count;
-                if (active) mountUnreadBadge(count);
-            } catch {
-                // Sidebar enhancements must never block navigation.
-            }
-        };
-
-        refreshUnread();
-        const interval = window.setInterval(refreshUnread, 60000);
-        observer = new MutationObserver(() => mountUnreadBadge(latestCount));
-        observer.observe(document.body, { childList: true, subtree: true });
-
-        return () => {
-            active = false;
-            window.clearInterval(interval);
-            observer?.disconnect();
-            removeNode(`[${UNREAD_BADGE_ATTR}="true"]`);
-        };
-    }, []);
 
     useEffect(() => {
         let active = true;
