@@ -10,8 +10,14 @@ function removeNode(selector) {
     document.querySelector(selector)?.remove();
 }
 
+function findOrdersLink() {
+    return document.querySelector(
+        '[data-testid="nav-mezan-os-orders"], [data-testid="nav-orders"], a[href="/orders-v2"]'
+    );
+}
+
 function mountUnreadBadge(count) {
-    const link = document.querySelector('[data-testid="nav-orders"]');
+    const link = findOrdersLink();
     if (!link) return false;
 
     let badge = link.querySelector(`[${UNREAD_BADGE_ATTR}="true"]`);
