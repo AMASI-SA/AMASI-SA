@@ -77,13 +77,17 @@ export async function getOrder(orderNumber) {
 export async function openOrderFromSalla(orderNumber) {
     const normalized = String(orderNumber || "").trim();
     if (!normalized) return null;
-    if (isPreviewDemoEnvironment()) {
-        return { ok: true, demo: true, read_only: true, no_external_calls: true };
-    }
-    try {
-        const { data } = await api.post(`/orders/${encodeURIComponent(normalized)}/resync`);
-        return data;
-    } catch (error) {
-        throw new Error(errorMessage(error, "تعذّر تحديث الطلب عند فتحه."));
-    }
+
+    // Webhooks are the source of truth for order details, customer address,
+    // and shipment data. Opening the details page must be read-only and must
+    // never trigger POST /orders/{order_number}/resync, because the Salla API
+    // response can be lighter than the verified webhook snapshot and overwrite
+    // richer local shipping fields.
+    return {
+        ok: true,
+        read_only: true,
+        source: "local_webhook_snapshot",
+        no_external_calls: true,
+        no_salla_api_calls: true,
+    };
 }
