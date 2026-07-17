@@ -33,6 +33,32 @@ def _first_text(*values: Any) -> Optional[str]:
     return None
 
 
+def _named_text(*values: Any) -> Optional[str]:
+    """Return a human-readable name and never stringify an object or numeric ID."""
+    for value in values:
+        if isinstance(value, dict):
+            candidate = _first_text(
+                value.get("name"),
+                value.get("name_ar"),
+                value.get("title"),
+                value.get("label"),
+                value.get("display_name"),
+            )
+        else:
+            candidate = _text(value)
+
+        if not candidate:
+            continue
+
+        # A numeric-only value is an ID, not a city/district/street name.
+        if candidate.replace(".", "", 1).isdigit():
+            continue
+
+        return candidate
+
+    return None
+
+
 def _merchant_values(merchant_id: Optional[str]) -> list[Any]:
     values: list[Any] = []
     text = _text(merchant_id)
@@ -181,32 +207,29 @@ def _walk_address_candidates(
 def _address_candidate_with_path(
     payload: dict[str, Any],
 ) -> tuple[dict[str, Any], Optional[str]]:
-    """Return the richest address found anywhere in the verified webhook payload."""
+    """Use Salla's documented shipping-address precedence."""
     shipping = _dict(payload.get("shipping"))
     receiver = _dict(payload.get("receiver"))
     customer = _dict(payload.get("customer"))
     shipment = _first_shipment(payload)
 
+    # Explicit deterministic precedence from Salla webhook models.
     preferred = [
-        ("payload.shipping.address", _dict(shipping.get("address"))),
-        ("payload.shipping_address", _dict(payload.get("shipping_address"))),
-        ("payload.address", _dict(payload.get("address"))),
-        ("payload.receiver.address", _dict(receiver.get("address"))),
-        ("payload.customer.address", _dict(customer.get("address"))),
-        ("payload.shipment.ship_to", _dict(shipment.get("ship_to"))),
-        ("payload.shipment.address", _dict(shipment.get("address"))),
+        ("payload.shipments[0].ship_to", _dict(shipment.get("ship_to")), 1000),
+        ("payload.shipping.address", _dict(shipping.get("address")), 900),
+        ("payload.shipment.address", _dict(shipment.get("address")), 800),
+        ("payload.shipping_address", _dict(payload.get("shipping_address")), 700),
+        ("payload.address", _dict(payload.get("address")), 600),
+        ("payload.receiver.address", _dict(receiver.get("address")), 500),
+        ("payload.customer.address", _dict(customer.get("address")), 400),
     ]
 
-    candidates: list[tuple[int, str, dict[str, Any]]] = []
+    for source_path, candidate, _priority in preferred:
+        if candidate and _address_score(candidate):
+            return candidate, source_path
 
-    for candidate_path, candidate in preferred:
-        score = _address_score(candidate)
-        if score:
-            # Preferred known paths win ties over generic recursive matches.
-            candidates.append((score + 2, candidate_path, candidate))
-
-    candidates.extend(_walk_address_candidates(payload))
-
+    # Unknown payload variants: choose the richest nested address.
+    candidates = _walk_address_candidates(payload)
     if not candidates:
         return {}, None
 
@@ -251,22 +274,15 @@ def _company_name(payload: dict[str, Any]) -> Optional[str]:
 def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
     address, source_path = _address_candidate_with_path(payload)
     if not address:
-        return {
-            "shipping_address_found": False,
-        }
+        return {"shipping_address_found": False}
 
-    city_obj = _dict(address.get("city"))
-    country_obj = _dict(address.get("country"))
-
-    city = _first_text(
-        city_obj.get("name"),
-        city_obj.get("title"),
-        address.get("city_name"),
+    city = _named_text(
         address.get("city"),
-        _dict(address.get("city_data")).get("name"),
+        address.get("city_name"),
+        address.get("city_data"),
     )
 
-    district = _first_text(
+    district = _named_text(
         address.get("district"),
         address.get("district_name"),
         address.get("neighborhood"),
@@ -274,14 +290,24 @@ def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
         address.get("block"),
     )
 
-    street = _first_text(
+    street = _named_text(
         address.get("street"),
         address.get("street_name"),
+        address.get("street_number"),
+    )
+
+    national_address = _first_text(
+        address.get("short_address"),
+        address.get("national_address"),
+        address.get("national_address_code"),
+    )
+
+    full_address = _first_text(
+        address.get("shipping_address"),
         address.get("address_line"),
         address.get("address_line1"),
-        address.get("address1"),
+        address.get("formatted"),
         address.get("description"),
-        address.get("short_address"),
     )
 
     postal_code = _first_text(
@@ -304,29 +330,17 @@ def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
         address.get("secondary_number"),
     )
 
-    country = _first_text(
-        country_obj.get("name"),
-        country_obj.get("title"),
-        address.get("country_name"),
+    country = _named_text(
         address.get("country"),
-        _dict(address.get("country_data")).get("name"),
+        address.get("country_name"),
+        address.get("country_data"),
     )
 
-    parts = [
-        city,
-        district,
-        street,
-        building_number,
-        postal_code,
-        additional_number,
-    ]
-    address_text = "، ".join(
-        part for part in parts
-        if part
-    )
+    geo = _dict(address.get("geo_coordinates"))
+    coordinates = _dict(address.get("coordinates"))
 
     result = {
-        "shipping_address": address_text or None,
+        "shipping_address": full_address,
         "shipping_address_raw": address,
         "shipping_address_source_path": source_path,
         "shipping_address_found": True,
@@ -335,6 +349,8 @@ def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "customer_city": city,
         "shipping_district": district,
         "shipping_street": street,
+        "shipping_national_address": national_address,
+        "shipping_short_address": national_address,
         "shipping_postal_code": postal_code,
         "shipping_building_number": building_number,
         "shipping_additional_number": additional_number,
@@ -342,12 +358,14 @@ def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "shipping_latitude": (
             address.get("latitude")
             or address.get("lat")
-            or _dict(address.get("coordinates")).get("lat")
+            or geo.get("lat")
+            or coordinates.get("lat")
         ),
         "shipping_longitude": (
             address.get("longitude")
             or address.get("lng")
-            or _dict(address.get("coordinates")).get("lng")
+            or geo.get("lng")
+            or coordinates.get("lng")
         ),
     }
 
@@ -387,7 +405,11 @@ async def sync_order_from_verified_webhook(
     event_body: dict[str, Any],
 ) -> dict[str, Any]:
     event_name = _text(event_body.get("event")) or ""
-    if event_name not in {"order.created", "order.updated"}:
+    if event_name not in {
+        "order.created",
+        "order.updated",
+        "order.status.updated",
+    }:
         return {"attempted": False, "reason": "not_order_snapshot_event"}
 
     merchant_id = _text(event_body.get("merchant"))
@@ -516,41 +538,20 @@ async def sync_shipment_payload_from_verified_webhook(
             "no_qoyod_calls": True,
         }
 
-    tracking = _dict(payload.get("tracking"))
-    courier = _dict(payload.get("courier"))
-    address = _dict(payload.get("ship_to")) or _dict(payload.get("address"))
     now = datetime.now(timezone.utc)
 
+    # Shipment webhook models can carry the full order snapshot.
+    # Reuse the same documented extractor used by order.created.
     update_fields: dict[str, Any] = {
-        "salla_shipment_id": shipment_id,
-        "shipping_company": _first_text(
-            payload.get("courier_name"),
-            payload.get("external_company_name"),
-            courier.get("name"),
-            courier.get("title"),
-        ),
-        "shipping_company_code": _first_text(payload.get("courier_id"), courier.get("id")),
-        "shipping_company_logo": _first_text(payload.get("courier_logo"), courier.get("logo")),
-        "shipping_method": _first_text(payload.get("type")),
-        "shipping_status": _first_text(payload.get("status")),
-        "shipment_status": _first_text(payload.get("status")),
-        "tracking_number": _first_text(
-            payload.get("tracking_number"),
-            payload.get("shipping_number"),
-            payload.get("awb"),
-            tracking.get("number"),
-        ),
-        "tracking_url": _first_text(
-            payload.get("tracking_link"),
-            payload.get("tracking_url"),
-            tracking.get("url"),
+        **_order_shipping_fields(payload),
+        "salla_shipment_id": (
+            shipment_id
+            or _order_shipping_fields(payload).get("salla_shipment_id")
         ),
         "salla_shipment_webhook_snapshot": payload,
         "salla_shipment_webhook_event": event_name,
         "salla_shipment_updated_at": now,
     }
-    if address:
-        update_fields.update(_address_fields({"address": address}))
 
     update_fields = {
         key: value for key, value in update_fields.items()

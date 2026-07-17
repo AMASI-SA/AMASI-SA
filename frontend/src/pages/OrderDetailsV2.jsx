@@ -155,6 +155,12 @@ function buildShippingView(order) {
         street: firstPresent(nestedAddress.street, nestedAddress.street_name, order.shipping_street),
         building_number: firstPresent(nestedAddress.building_number, order.shipping_building_number),
         additional_number: firstPresent(nestedAddress.additional_number, order.shipping_additional_number),
+        national_address: firstPresent(
+            nestedAddress.short_address,
+            nestedAddress.national_address,
+            order.shipping_national_address,
+            order.shipping_short_address,
+        ),
         postal_code: firstPresent(nestedAddress.postal_code, order.shipping_postal_code),
         map_url: firstPresent(nestedAddress.map_url, order.shipping_map_url),
         location_url: firstPresent(nestedAddress.location_url, order.shipping_location_url),
@@ -283,20 +289,42 @@ function CustomerCard({ customer, shipping }) {
 
 function ShippingCard({ shipping, customer }) {
     const address = shipping.address || customer.shipping_address || {};
-    const fullAddress = addressText(address);
     const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
+
+    const addressRows = [
+        ["المدينة", address.city],
+        ["الحي", address.district || address.neighborhood || address.block],
+        ["الشارع", address.street || address.street_name || address.street_number],
+        ["العنوان الوطني", address.national_address || address.short_address],
+        ["رقم المبنى", address.building_number],
+        ["الرقم الإضافي", address.additional_number],
+        ["الرمز البريدي", address.postal_code],
+    ].filter(([, value]) => isPresent(value) && String(value).trim());
+
     return (
         <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50"><Printer size={18} /> طباعة البوليصة</button>}>
             <div className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-3">
                     {companyLogo && <img src={companyLogo} alt="" className="h-14 w-14 rounded-lg object-contain" />}
-                    <div className="text-lg font-extrabold text-slate-800">{shipping.company || shipping.method || "شركة الشحن غير محددة"}</div>
+                    <div className="text-lg font-extrabold text-slate-800">{shipping.company || shipping.method || "شركة الشحن لم تصل من سلة"}</div>
                 </div>
-                <div className="mt-4 text-sm leading-7 text-slate-500">{fullAddress || "العنوان غير متوفر"}</div>
-                {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-bold text-teal-700"><MapPin size={17} /> موقع العميل على الخريطة</a>}
+
+                <div className="mt-4 space-y-2 text-sm">
+                    {addressRows.length ? addressRows.map(([label, value]) => (
+                        <div key={label} className="flex items-start justify-between gap-4">
+                            <span className="font-bold text-slate-400">{label}</span>
+                            <span className="max-w-[68%] text-left font-bold text-slate-700">{readableScalar(value)}</span>
+                        </div>
+                    )) : (
+                        <div className="text-slate-400">تفاصيل العنوان لم تصل من سلة</div>
+                    )}
+                </div>
+
+                {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 font-bold text-teal-700"><MapPin size={17} /> موقع العميل على الخريطة</a>}
                 {shipping.delivery_estimate && <div className="mt-2 text-sm text-slate-400">{shipping.delivery_estimate}</div>}
+
                 <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">بوليصة الشحن:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم البوليصة" /></div>
                     <div className="mt-4 text-sm font-bold text-teal-800">{shipping.status || "تتبع حالة الشحنة"}</div>
