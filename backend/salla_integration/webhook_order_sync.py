@@ -103,24 +103,121 @@ def _first_shipment(payload: dict[str, Any]) -> dict[str, Any]:
     return _dict(payload.get("shipment"))
 
 
-def _address_candidate(payload: dict[str, Any]) -> dict[str, Any]:
+def _address_score(address: dict[str, Any]) -> int:
+    """Prefer the richest real shipping-address object, not a city-only object."""
+    if not isinstance(address, dict) or not address:
+        return 0
+
+    score = 0
+    weighted_keys = {
+        "street": 8,
+        "street_name": 8,
+        "address_line": 8,
+        "address_line1": 8,
+        "description": 7,
+        "short_address": 7,
+        "district": 6,
+        "neighborhood": 6,
+        "block": 5,
+        "building_number": 5,
+        "building_no": 5,
+        "postal_code": 4,
+        "zip_code": 4,
+        "additional_number": 3,
+        "additional_no": 3,
+        "city": 2,
+        "country": 1,
+        "latitude": 1,
+        "longitude": 1,
+    }
+
+    for key, weight in weighted_keys.items():
+        value = address.get(key)
+        if value not in (None, "", [], {}):
+            score += weight
+
+    return score
+
+
+def _walk_address_candidates(
+    value: Any,
+    *,
+    path: str = "payload",
+    depth: int = 0,
+) -> list[tuple[int, str, dict[str, Any]]]:
+    if depth > 10:
+        return []
+
+    results: list[tuple[int, str, dict[str, Any]]] = []
+
+    if isinstance(value, dict):
+        score = _address_score(value)
+        if score:
+            results.append((score, path, dict(value)))
+
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            results.extend(
+                _walk_address_candidates(
+                    child,
+                    path=child_path,
+                    depth=depth + 1,
+                )
+            )
+
+    elif isinstance(value, list):
+        for index, child in enumerate(value[:30]):
+            results.extend(
+                _walk_address_candidates(
+                    child,
+                    path=f"{path}[{index}]",
+                    depth=depth + 1,
+                )
+            )
+
+    return results
+
+
+def _address_candidate_with_path(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], Optional[str]]:
+    """Return the richest address found anywhere in the verified webhook payload."""
     shipping = _dict(payload.get("shipping"))
     receiver = _dict(payload.get("receiver"))
+    customer = _dict(payload.get("customer"))
     shipment = _first_shipment(payload)
-    ship_to = _dict(shipment.get("ship_to"))
 
-    candidates = (
-        _dict(shipping.get("address")),
-        _dict(payload.get("shipping_address")),
-        _dict(payload.get("address")),
-        _dict(receiver.get("address")),
-        ship_to,
-        _dict(shipment.get("address")),
-    )
-    for candidate in candidates:
-        if candidate:
-            return candidate
-    return {}
+    preferred = [
+        ("payload.shipping.address", _dict(shipping.get("address"))),
+        ("payload.shipping_address", _dict(payload.get("shipping_address"))),
+        ("payload.address", _dict(payload.get("address"))),
+        ("payload.receiver.address", _dict(receiver.get("address"))),
+        ("payload.customer.address", _dict(customer.get("address"))),
+        ("payload.shipment.ship_to", _dict(shipment.get("ship_to"))),
+        ("payload.shipment.address", _dict(shipment.get("address"))),
+    ]
+
+    candidates: list[tuple[int, str, dict[str, Any]]] = []
+
+    for candidate_path, candidate in preferred:
+        score = _address_score(candidate)
+        if score:
+            # Preferred known paths win ties over generic recursive matches.
+            candidates.append((score + 2, candidate_path, candidate))
+
+    candidates.extend(_walk_address_candidates(payload))
+
+    if not candidates:
+        return {}, None
+
+    candidates.sort(key=lambda row: row[0], reverse=True)
+    _, source_path, address = candidates[0]
+    return address, source_path
+
+
+def _address_candidate(payload: dict[str, Any]) -> dict[str, Any]:
+    address, _ = _address_candidate_with_path(payload)
+    return address
 
 
 def _company_name(payload: dict[str, Any]) -> Optional[str]:
@@ -152,53 +249,113 @@ def _company_name(payload: dict[str, Any]) -> Optional[str]:
 
 
 def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
-    address = _address_candidate(payload)
+    address, source_path = _address_candidate_with_path(payload)
     if not address:
-        return {}
+        return {
+            "shipping_address_found": False,
+        }
+
+    city_obj = _dict(address.get("city"))
+    country_obj = _dict(address.get("country"))
 
     city = _first_text(
+        city_obj.get("name"),
+        city_obj.get("title"),
+        address.get("city_name"),
         address.get("city"),
         _dict(address.get("city_data")).get("name"),
-        _dict(address.get("city" )).get("name") if isinstance(address.get("city"), dict) else None,
     )
+
     district = _first_text(
         address.get("district"),
+        address.get("district_name"),
         address.get("neighborhood"),
+        address.get("neighbourhood"),
         address.get("block"),
     )
+
     street = _first_text(
         address.get("street"),
         address.get("street_name"),
         address.get("address_line"),
         address.get("address_line1"),
+        address.get("address1"),
+        address.get("description"),
         address.get("short_address"),
     )
-    postal_code = _first_text(address.get("postal_code"), address.get("zip_code"))
-    building_number = _first_text(address.get("building_number"), address.get("building_no"))
-    additional_number = _first_text(address.get("additional_number"), address.get("additional_no"))
-    country = _first_text(
-        address.get("country"),
-        _dict(address.get("country_data")).get("name"),
-        _dict(address.get("country")).get("name") if isinstance(address.get("country"), dict) else None,
+
+    postal_code = _first_text(
+        address.get("postal_code"),
+        address.get("postcode"),
+        address.get("zip_code"),
+        address.get("zip"),
     )
 
-    parts = [district, street, building_number, postal_code, additional_number, city]
-    address_text = "، ".join(part for part in parts if part)
+    building_number = _first_text(
+        address.get("building_number"),
+        address.get("building_no"),
+        address.get("building"),
+        address.get("house_number"),
+    )
+
+    additional_number = _first_text(
+        address.get("additional_number"),
+        address.get("additional_no"),
+        address.get("secondary_number"),
+    )
+
+    country = _first_text(
+        country_obj.get("name"),
+        country_obj.get("title"),
+        address.get("country_name"),
+        address.get("country"),
+        _dict(address.get("country_data")).get("name"),
+    )
+
+    parts = [
+        city,
+        district,
+        street,
+        building_number,
+        postal_code,
+        additional_number,
+    ]
+    address_text = "، ".join(
+        part for part in parts
+        if part
+    )
 
     result = {
         "shipping_address": address_text or None,
         "shipping_address_raw": address,
+        "shipping_address_source_path": source_path,
+        "shipping_address_found": True,
+        "shipping_address_keys": sorted(str(key) for key in address.keys()),
         "shipping_city": city,
+        "customer_city": city,
         "shipping_district": district,
         "shipping_street": street,
         "shipping_postal_code": postal_code,
         "shipping_building_number": building_number,
         "shipping_additional_number": additional_number,
         "shipping_country": country,
-        "shipping_latitude": address.get("latitude") or address.get("lat"),
-        "shipping_longitude": address.get("longitude") or address.get("lng"),
+        "shipping_latitude": (
+            address.get("latitude")
+            or address.get("lat")
+            or _dict(address.get("coordinates")).get("lat")
+        ),
+        "shipping_longitude": (
+            address.get("longitude")
+            or address.get("lng")
+            or _dict(address.get("coordinates")).get("lng")
+        ),
     }
-    return {key: value for key, value in result.items() if value not in (None, "", {})}
+
+    return {
+        key: value
+        for key, value in result.items()
+        if value not in (None, "", {})
+    }
 
 
 def _order_shipping_fields(payload: dict[str, Any]) -> dict[str, Any]:
