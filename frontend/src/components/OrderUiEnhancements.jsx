@@ -77,10 +77,12 @@ export default function OrderUiEnhancements() {
     useEffect(() => {
         let active = true;
         let observer = null;
+        let latestCount = 0;
 
         const refreshUnread = async () => {
             try {
                 const count = await fetchUnreadOrdersCount();
+                latestCount = count;
                 if (active) mountUnreadBadge(count);
             } catch {
                 // Sidebar enhancements must never block navigation.
@@ -89,7 +91,7 @@ export default function OrderUiEnhancements() {
 
         refreshUnread();
         const interval = window.setInterval(refreshUnread, 30000);
-        observer = new MutationObserver(() => refreshUnread());
+        observer = new MutationObserver(() => mountUnreadBadge(latestCount));
         observer.observe(document.body, { childList: true, subtree: true });
 
         return () => {
