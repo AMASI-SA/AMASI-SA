@@ -322,7 +322,13 @@ async def mark_needs_reauth(db, user_id: str, reason: str) -> None:
 
 
 # ── Auto-refresh wrapper ───────────────────────────────────────────────
-async def ensure_fresh_access_token(db, user_id: str) -> str:
+async def ensure_fresh_access_token(
+    db,
+    user_id: str,
+    *,
+    force_refresh: bool = False,
+    recover_needs_reauth: bool = False,
+) -> str:
     """Return a valid, non-expired access_token for the user. Refreshes
     automatically if the stored token has expired (or will within the
     safety margin). Raises SallaError(needs_reauth=True) if the refresh
@@ -333,11 +339,25 @@ async def ensure_fresh_access_token(db, user_id: str) -> str:
         doc = await get_integration(db, user_id)
         if not doc:
             raise SallaError("Salla store is not connected.", needs_reauth=True, status_code=404)
-        if doc.get("status") == "needs_reauth":
-            raise SallaError("Salla connection expired. Please reconnect.", needs_reauth=True, status_code=401)
+        status_needs_reauth = doc.get("status") == "needs_reauth"
+        if status_needs_reauth and not recover_needs_reauth:
+            raise SallaError(
+                "Salla connection expired. Please reconnect.",
+                needs_reauth=True,
+                status_code=401,
+            )
+
+        # A previous API 401 may have marked the integration needs_reauth even
+        # though the refresh token is still valid. In recovery mode, force one
+        # real refresh attempt instead of returning the rejected access token.
+        must_refresh = force_refresh or status_needs_reauth
 
         expires_at = _as_utc(doc.get("expires_at"))
-        if isinstance(expires_at, datetime) and expires_at > _now():
+        if (
+            not must_refresh
+            and isinstance(expires_at, datetime)
+            and expires_at > _now()
+        ):
             # Token is fresh enough → just decrypt and return.
             return decrypt_token(doc.get("access_token_encrypted") or b"")
 
@@ -373,7 +393,11 @@ async def call_salla(
     """Authenticated request to Salla Merchant API with auto-refresh
     + single retry on 401. `path` should start with '/' (e.g. '/orders')
     and is appended to SALLA_API_BASE."""
-    token = await ensure_fresh_access_token(db, user_id)
+    token = await ensure_fresh_access_token(
+        db,
+        user_id,
+        recover_needs_reauth=True,
+    )
 
     async def _do_request(tok: str) -> httpx.Response:
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
@@ -389,7 +413,12 @@ async def call_salla(
     if resp.status_code == 401:
         # Race: token just expired between our pre-check and the request.
         # Refresh once and retry.
-        token = await ensure_fresh_access_token(db, user_id)
+        token = await ensure_fresh_access_token(
+            db,
+            user_id,
+            force_refresh=True,
+            recover_needs_reauth=True,
+        )
         resp = await _do_request(token)
 
     if resp.status_code >= 400:
