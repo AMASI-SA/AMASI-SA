@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -329,56 +330,179 @@ async def ensure_fresh_access_token(
     force_refresh: bool = False,
     recover_needs_reauth: bool = False,
 ) -> str:
-    """Return a valid, non-expired access_token for the user. Refreshes
-    automatically if the stored token has expired (or will within the
-    safety margin). Raises SallaError(needs_reauth=True) if the refresh
-    token is also dead."""
+    """Return a valid access token.
+
+    Refresh tokens in Salla are single-use. The Mongo lease below protects
+    refresh across all backend workers/processes, while the asyncio lock
+    protects concurrent calls inside the same process.
+    """
     async with _lock_for(user_id):
-        # Re-fetch INSIDE the lock so a concurrent request that already
-        # refreshed our token is visible.
-        doc = await get_integration(db, user_id)
-        if not doc:
-            raise SallaError("Salla store is not connected.", needs_reauth=True, status_code=404)
-        status_needs_reauth = doc.get("status") == "needs_reauth"
-        if status_needs_reauth and not recover_needs_reauth:
+        initial_doc = await get_integration(db, user_id)
+        if not initial_doc:
             raise SallaError(
-                "Salla connection expired. Please reconnect.",
+                "Salla store is not connected.",
                 needs_reauth=True,
-                status_code=401,
+                status_code=404,
             )
 
-        # A previous API 401 may have marked the integration needs_reauth even
-        # though the refresh token is still valid. In recovery mode, force one
-        # real refresh attempt instead of returning the rejected access token.
-        must_refresh = force_refresh or status_needs_reauth
+        initial_refreshed_at = _as_utc(initial_doc.get("last_refreshed_at"))
+        lease_owner = uuid.uuid4().hex
+        lease_seconds = 45
 
-        expires_at = _as_utc(doc.get("expires_at"))
-        if (
-            not must_refresh
-            and isinstance(expires_at, datetime)
-            and expires_at > _now()
-        ):
-            # Token is fresh enough → just decrypt and return.
-            return decrypt_token(doc.get("access_token_encrypted") or b"")
+        # Acquire a distributed Mongo lease. Only one backend worker may use
+        # the single-use Salla refresh token.
+        acquired = False
+        for _ in range(120):
+            now = _now()
+            lease_until = now + timedelta(seconds=lease_seconds)
 
-        # Expired (or close to it) → refresh.
+            result = await db.salla_integrations.update_one(
+                {
+                    "user_id": user_id,
+                    "$or": [
+                        {"refresh_lock_until": {"$exists": False}},
+                        {"refresh_lock_until": None},
+                        {"refresh_lock_until": {"$lte": now}},
+                    ],
+                },
+                {
+                    "$set": {
+                        "refresh_lock_owner": lease_owner,
+                        "refresh_lock_until": lease_until,
+                    }
+                },
+            )
+
+            if result.modified_count == 1:
+                acquired = True
+                break
+
+            # Another worker is refreshing. Wait, then use the token it saved.
+            await asyncio.sleep(0.25)
+            current = await get_integration(db, user_id)
+            if not current:
+                raise SallaError(
+                    "Salla store is not connected.",
+                    needs_reauth=True,
+                    status_code=404,
+                )
+
+            current_refreshed_at = _as_utc(current.get("last_refreshed_at"))
+            refresh_completed = (
+                current.get("status") == "connected"
+                and current_refreshed_at is not None
+                and (
+                    initial_refreshed_at is None
+                    or current_refreshed_at > initial_refreshed_at
+                )
+            )
+
+            if refresh_completed:
+                return decrypt_token(
+                    current.get("access_token_encrypted") or b""
+                )
+
+        if not acquired:
+            raise SallaError(
+                "Salla token refresh is busy. Retry shortly.",
+                status_code=503,
+            )
+
         try:
-            refresh_token = decrypt_token(doc.get("refresh_token_encrypted") or b"")
-        except ValueError as e:
-            await mark_needs_reauth(db, user_id, f"refresh-token decrypt failed: {e}")
-            raise SallaError("Saved Salla credentials are corrupted.", needs_reauth=True, status_code=401)
-        if not refresh_token:
-            await mark_needs_reauth(db, user_id, "no refresh_token on file (offline_access not granted)")
-            raise SallaError("No refresh_token on file. Reconnect Salla.", needs_reauth=True, status_code=401)
+            # Re-fetch after obtaining the lease. Another worker may have
+            # completed a refresh just before this worker acquired it.
+            doc = await get_integration(db, user_id)
+            if not doc:
+                raise SallaError(
+                    "Salla store is not connected.",
+                    needs_reauth=True,
+                    status_code=404,
+                )
 
-        try:
-            new_payload = await refresh_with_token(refresh_token)
-        except SallaError as e:
-            if e.needs_reauth:
-                await mark_needs_reauth(db, user_id, str(e))
-            raise
-        await store_token_response(db, user_id, new_payload)
-        return new_payload["access_token"]
+            refreshed_at = _as_utc(doc.get("last_refreshed_at"))
+            another_worker_refreshed = (
+                refreshed_at is not None
+                and initial_refreshed_at is not None
+                and refreshed_at > initial_refreshed_at
+            )
+            if another_worker_refreshed and doc.get("status") == "connected":
+                return decrypt_token(
+                    doc.get("access_token_encrypted") or b""
+                )
+
+            status_needs_reauth = doc.get("status") == "needs_reauth"
+            if status_needs_reauth and not recover_needs_reauth:
+                raise SallaError(
+                    "Salla connection expired. Please reconnect.",
+                    needs_reauth=True,
+                    status_code=401,
+                )
+
+            must_refresh = force_refresh or status_needs_reauth
+            expires_at = _as_utc(doc.get("expires_at"))
+
+            if (
+                not must_refresh
+                and isinstance(expires_at, datetime)
+                and expires_at > _now()
+            ):
+                return decrypt_token(
+                    doc.get("access_token_encrypted") or b""
+                )
+
+            try:
+                refresh_token = decrypt_token(
+                    doc.get("refresh_token_encrypted") or b""
+                )
+            except ValueError as exc:
+                await mark_needs_reauth(
+                    db,
+                    user_id,
+                    f"refresh-token decrypt failed: {exc}",
+                )
+                raise SallaError(
+                    "Saved Salla credentials are corrupted.",
+                    needs_reauth=True,
+                    status_code=401,
+                ) from exc
+
+            if not refresh_token:
+                await mark_needs_reauth(
+                    db,
+                    user_id,
+                    "no refresh_token on file (offline_access not granted)",
+                )
+                raise SallaError(
+                    "No refresh_token on file. Reconnect Salla.",
+                    needs_reauth=True,
+                    status_code=401,
+                )
+
+            try:
+                new_payload = await refresh_with_token(refresh_token)
+            except SallaError as exc:
+                if exc.needs_reauth:
+                    await mark_needs_reauth(db, user_id, str(exc))
+                raise
+
+            # Saves both the new access token and the newly rotated,
+            # single-use refresh token before releasing the Mongo lease.
+            await store_token_response(db, user_id, new_payload)
+            return new_payload["access_token"]
+
+        finally:
+            await db.salla_integrations.update_one(
+                {
+                    "user_id": user_id,
+                    "refresh_lock_owner": lease_owner,
+                },
+                {
+                    "$unset": {
+                        "refresh_lock_owner": "",
+                        "refresh_lock_until": "",
+                    }
+                },
+            )
 
 
 async def call_salla(
