@@ -113,21 +113,65 @@ function normalizePhone(value) {
 
 function addressText(address) {
     if (!address) return "";
+    if (typeof address === "string") return address.trim();
     return [
         address.formatted,
         address.address_line,
+        address.address_line1,
+        address.description,
         address.city,
         address.district,
+        address.neighborhood,
         address.block,
         address.street,
+        address.street_name,
         address.building_number,
         address.additional_number,
         address.postal_code,
         address.short_address,
     ]
-        .map((value) => String(value || "").trim())
-        .filter((value, index, array) => value && array.indexOf(value) === index)
+        .map((value) => typeof value === "object" ? readableScalar(value) : String(value || "").trim())
+        .filter((value, index, array) => value && value !== "—" && array.indexOf(value) === index)
         .join("، ");
+}
+
+function buildShippingView(order) {
+    const nested = order.shipping && typeof order.shipping === "object" ? order.shipping : {};
+    const nestedAddress = nested.address && typeof nested.address === "object" ? nested.address : {};
+    const rawAddress = order.shipping_address_raw && typeof order.shipping_address_raw === "object"
+        ? order.shipping_address_raw
+        : {};
+
+    const address = {
+        ...rawAddress,
+        ...nestedAddress,
+        formatted: firstPresent(
+            nestedAddress.formatted,
+            nestedAddress.address_line,
+            order.shipping_address,
+        ),
+        city: firstPresent(nestedAddress.city, order.shipping_city, order.customer_city),
+        district: firstPresent(nestedAddress.district, nestedAddress.neighborhood, order.shipping_district),
+        street: firstPresent(nestedAddress.street, nestedAddress.street_name, order.shipping_street),
+        building_number: firstPresent(nestedAddress.building_number, order.shipping_building_number),
+        additional_number: firstPresent(nestedAddress.additional_number, order.shipping_additional_number),
+        postal_code: firstPresent(nestedAddress.postal_code, order.shipping_postal_code),
+        map_url: firstPresent(nestedAddress.map_url, order.shipping_map_url),
+        location_url: firstPresent(nestedAddress.location_url, order.shipping_location_url),
+    };
+
+    return {
+        ...nested,
+        company: firstPresent(nested.company, nested.company_name, order.shipping_company),
+        method: firstPresent(nested.method, order.shipping_method),
+        company_logo: firstPresent(nested.company_logo, nested.logo_url, order.shipping_company_logo),
+        tracking_number: firstPresent(nested.tracking_number, order.tracking_number),
+        shipment_number: firstPresent(nested.shipment_number, order.shipping_number),
+        waybill_number: firstPresent(nested.waybill_number, order.waybill_number),
+        status: firstPresent(nested.status, order.shipping_status, order.shipment_status),
+        tracking_url: firstPresent(nested.tracking_url, order.tracking_url),
+        address,
+    };
 }
 
 function collectItemSelections(item) {
@@ -264,17 +308,15 @@ function ShippingCard({ shipping, customer }) {
 
 function PaymentCard({ payment, paymentMethod }) {
     const attachment = payment.receipt_url || payment.attachment_url || payment.proof_url;
-    const paid = String(payment.status || "").toLowerCase().includes("paid") || payment.is_paid === true;
+    const paid = String(payment.status || "").toLowerCase().includes("paid") || String(payment.status || "").includes("مدفوع") || String(payment.status || "").includes("تم التحويل");
     return (
         <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment">
-            <div className="flex h-full flex-col justify-center">
-                <div className="flex items-center gap-4">
-                    {attachment && <img src={attachment} alt="مرفق الدفع" className="h-24 w-20 rounded-lg border border-teal-200 object-cover" />}
-                    <div>
-                        <div className="flex items-center gap-2 text-lg font-extrabold text-slate-800">{paid && <CheckCircle size={34} className="text-emerald-400" />}{payment.status_native || payment.status || "حالة الدفع غير محددة"}</div>
-                        <div className="mt-2 text-sm text-slate-400">{paymentMethod}</div>
-                    </div>
-                </div>
+            <div className="flex h-full flex-col items-center justify-center text-center">
+                <CreditCard size={50} className="text-slate-400" />
+                <div className="mt-4 text-2xl font-medium text-slate-700">{paymentMethod}</div>
+                {paid && <CheckCircle size={34} className="mt-3 text-emerald-400" weight="fill" />}
+                {attachment && <a href={attachment} target="_blank" rel="noreferrer" className="mt-4 rounded-lg border border-teal-200 px-3 py-2 text-sm font-bold text-teal-700">عرض إيصال الدفع</a>}
+                {payment.note && <div className="mt-4 text-sm leading-7 text-rose-500">{payment.note}</div>}
             </div>
         </SectionCard>
     );
@@ -282,21 +324,20 @@ function PaymentCard({ payment, paymentMethod }) {
 
 function ProductCard({ item, index, currency }) {
     const selections = collectItemSelections(item);
-    const quantity = Number(item.quantity || 1);
-    const weight = item.weight ? `${Number(item.weight).toLocaleString("en-US")} ${item.weight_unit || "كجم"}` : "—";
+    const image = String(item.image_url || "").trim();
+    const weight = isPresent(item.weight) ? `${displayValue(item.weight)} ${displayValue(item.weight_unit || "")}`.trim() : "—";
     return (
-        <article className="overflow-hidden rounded-xl border border-slate-200 bg-white" data-testid={`order-v2-item-${index}`}>
-            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_110px_110px_140px_140px] lg:items-start">
-                <div className="min-w-0">
-                    <div className="flex items-start gap-3">
-                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">{item.image_url ? <img src={item.image_url} alt={item.name || "صورة المنتج"} className="h-full w-full object-cover" /> : <Package size={27} className="text-slate-300" />}</div>
-                        <div className="min-w-0 flex-1"><h3 className="font-extrabold leading-6 text-slate-950">{item.name || "منتج بدون اسم"}</h3><div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><span>SKU:</span><span className="num font-bold">{item.sku || "—"}</span><CopyValueButton value={item.sku} label="نسخ SKU" /></div></div>
-                    </div>
-                    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                        {selections.length > 0 ? selections.map((selection, selectionIndex) => <div key={`${selection.label}-${selectionIndex}`} className="flex min-h-11 items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"><div><span className="text-xs font-bold text-slate-400">{selection.label}:</span> <span className="break-words text-sm font-bold text-slate-700">{selection.value}</span></div><CopyValueButton value={selection.value} label={`نسخ ${selection.label}`} /></div>) : <div className="px-3 py-3 text-sm text-slate-400">لا توجد خيارات إضافية</div>}
-                    </div>
+        <article className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{image ? <img src={image} alt="" className="h-full w-full object-cover" /> : <Package size={38} />}</div>
+                <div className="min-w-0 flex-1">
+                    <div className="text-lg font-extrabold text-slate-900">{item.name || `منتج ${index + 1}`}</div>
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500"><span>SKU: <b className="num text-slate-700">{item.sku || "—"}</b></span><span>الباركود: <b className="num text-slate-700">{item.barcode || "—"}</b></span></div>
+                    {selections.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{selections.map((selection) => <span key={`${selection.label}:${selection.value}`} className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">{selection.label}: {selection.value}</span>)}</div>}
                 </div>
-                <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="mt-1 font-bold">{quantity.toLocaleString("en-US")}</div></div>
+            </div>
+            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="num mt-1 font-bold">{item.quantity}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">الوزن</div><div className="mt-1 font-bold">{weight}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">السعر</div><div className="num mt-1 font-bold">{formatMoney(item.unit_price, currency)}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">المجموع</div><div className="num mt-1 font-bold">{formatMoney(item.total, currency)}</div></div>
@@ -380,7 +421,7 @@ export default function OrderDetailsV2() {
 
     const customer = order.customer || {};
     const payment = order.payment || {};
-    const shipping = order.shipping || {};
+    const shipping = buildShippingView(order);
     const currency = normalizeCurrency(order.currency || order.currency_code || order.totals?.currency || order.amounts?.currency);
     const total = order.totals?.total ?? order.total ?? 0;
     const status = order.status_native || order.status || "غير محدد";
