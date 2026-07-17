@@ -50,16 +50,78 @@ def _extract_data(response: Any) -> dict[str, Any]:
     return {}
 
 
-async def _resolve_user_id(db: Any, merchant_id: Optional[str]) -> Optional[str]:
-    query: dict[str, Any] = {"status": "connected"}
-    if merchant_id:
-        query["store_id"] = merchant_id
-    doc = await db.salla_integrations.find_one(query, {"user_id": 1})
-    if not doc and merchant_id:
-        doc = await db.salla_integrations.find_one(
-            {"status": "connected"}, {"user_id": 1}, sort=[("created_at", 1)]
+async def _resolve_user_id(
+    db: Any,
+    merchant_id: Optional[str],
+) -> tuple[Optional[str], str]:
+    """Resolve the Mezan owner of the Salla installation robustly.
+
+    Salla may deliver ``merchant`` as a JSON number while Easy Mode stores
+    ``store_id`` as a string (or vice versa in older rows). Match both shapes.
+    A connected exact-store row is preferred. We then accept an exact-store row
+    with a user_id even when its status is temporarily stale, because call_salla
+    is the authoritative token/status gate. Finally, fall back to the oldest
+    connected integration that has a user_id.
+    """
+    merchant_text = _text(merchant_id)
+    merchant_values: list[Any] = []
+    if merchant_text:
+        merchant_values.append(merchant_text)
+        if merchant_text.isdigit():
+            try:
+                merchant_values.append(int(merchant_text))
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+    projection = {"_id": 0, "user_id": 1, "store_id": 1, "status": 1}
+
+    if merchant_values:
+        exact_connected = await db.salla_integrations.find_one(
+            {
+                "store_id": {"$in": merchant_values},
+                "status": "connected",
+                "user_id": {"$exists": True, "$nin": [None, ""]},
+            },
+            projection,
         )
-    return _text((doc or {}).get("user_id"))
+        user_id = _text((exact_connected or {}).get("user_id"))
+        if user_id:
+            return user_id, "merchant_exact_connected"
+
+        exact_any_status = await db.salla_integrations.find_one(
+            {
+                "store_id": {"$in": merchant_values},
+                "user_id": {"$exists": True, "$nin": [None, ""]},
+            },
+            projection,
+            sort=[("updated_at", -1), ("created_at", 1)],
+        )
+        user_id = _text((exact_any_status or {}).get("user_id"))
+        if user_id:
+            return user_id, "merchant_exact_any_status"
+
+    connected = await db.salla_integrations.find_one(
+        {
+            "status": "connected",
+            "user_id": {"$exists": True, "$nin": [None, ""]},
+        },
+        projection,
+        sort=[("updated_at", -1), ("created_at", 1)],
+    )
+    user_id = _text((connected or {}).get("user_id"))
+    if user_id:
+        return user_id, "connected_fallback"
+
+    any_integration = await db.salla_integrations.find_one(
+        {"user_id": {"$exists": True, "$nin": [None, ""]}},
+        projection,
+        sort=[("updated_at", -1), ("created_at", 1)],
+    )
+    user_id = _text((any_integration or {}).get("user_id"))
+    if user_id:
+        return user_id, "integration_fallback"
+
+    return None, "not_found"
 
 
 async def sync_shipment_from_verified_webhook(
@@ -72,12 +134,14 @@ async def sync_shipment_from_verified_webhook(
         return {"attempted": False, "reason": "no_shipment_id"}
 
     merchant_id = _text(event_body.get("merchant"))
-    user_id = await _resolve_user_id(db, merchant_id)
+    user_id, owner_match_source = await _resolve_user_id(db, merchant_id)
     if not user_id:
         return {
             "attempted": True,
             "synced": False,
             "shipment_id": shipment_id,
+            "merchant_id": merchant_id,
+            "owner_match_source": owner_match_source,
             "reason": "connected_salla_owner_not_found",
         }
 
@@ -98,8 +162,6 @@ async def sync_shipment_from_verified_webhook(
             )
             tracking = _extract_data(tracking_response)
         except SallaError as exc:
-            # Tracking is supplementary. A shipment snapshot remains valid even
-            # when tracking is not available yet (for example status=creating).
             tracking_error = str(exc)[:300]
 
         order_id = _text(shipment.get("order_id"))
@@ -110,6 +172,7 @@ async def sync_shipment_from_verified_webhook(
             "shipment_id": shipment_id,
             "event": event_name or None,
             "merchant_id": merchant_id,
+            "owner_match_source": owner_match_source,
             "details": shipment,
             "tracking": tracking,
             "tracking_error": tracking_error,
@@ -174,13 +237,15 @@ async def sync_shipment_from_verified_webhook(
             modified = result.modified_count
 
         log.info(
-            "shipment_webhook.synced event=%s shipment_id=%s order_ref=%s matched=%s",
-            event_name, shipment_id, order_reference, matched,
+            "shipment_webhook.synced event=%s shipment_id=%s order_ref=%s matched=%s owner_source=%s",
+            event_name, shipment_id, order_reference, matched, owner_match_source,
         )
         return {
             "attempted": True,
             "synced": True,
             "shipment_id": shipment_id,
+            "merchant_id": merchant_id,
+            "owner_match_source": owner_match_source,
             "order_id": order_id,
             "order_reference_id": order_reference,
             "order_matched": bool(matched),
@@ -194,6 +259,8 @@ async def sync_shipment_from_verified_webhook(
             "attempted": True,
             "synced": False,
             "shipment_id": shipment_id,
+            "merchant_id": merchant_id,
+            "owner_match_source": owner_match_source,
             "reason": "salla_api_error",
             "error": str(exc)[:500],
             "needs_reauth": exc.needs_reauth,
@@ -205,6 +272,8 @@ async def sync_shipment_from_verified_webhook(
             "attempted": True,
             "synced": False,
             "shipment_id": shipment_id,
+            "merchant_id": merchant_id,
+            "owner_match_source": owner_match_source,
             "reason": "unexpected_error",
             "error": str(exc)[:500],
             "no_qoyod_calls": True,
