@@ -8,6 +8,7 @@
  */
 import { Link } from "react-router-dom";
 import QoyodProducts from "./QoyodProducts";
+import SallaWebhookMonitor from "./SallaWebhookMonitor";
 
 export default function IntegrationPlaceholder({
   title, subtitle, phase = "Day 4-5", icon = "🚧",
@@ -16,6 +17,10 @@ export default function IntegrationPlaceholder({
 }) {
   if (testid === "qoyod-products-placeholder") {
     return <QoyodProducts />;
+  }
+
+  if (testid === "salla-events-placeholder") {
+    return <SallaWebhookMonitor />;
   }
 
   return (
