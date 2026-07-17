@@ -1,8 +1,8 @@
-"""Safe handling for signed Salla webhook events not handled by app lifecycle.
+"""Safe handling for verified Salla business webhooks.
 
-Only call this module after webhook signature/token verification. Every event is
-stored in sanitized form for audit. If the verified payload exposes a shipment
-ID, a read-only Shipment Details/Tracking sync is attempted.
+Every event is stored in sanitized form for audit. order.created/order.updated are
+persisted directly into unified_orders, and shipment events enrich shipment fields
+from the webhook payload only. No outbound Salla API or Qoyod calls occur here.
 """
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from .shipment_webhook_sync import sync_shipment_from_verified_webhook
+from .webhook_order_sync import (
+    sync_order_from_verified_webhook,
+    sync_shipment_payload_from_verified_webhook,
+)
 
 
 log = logging.getLogger("salla.webhook_capture")
@@ -61,11 +64,10 @@ async def capture_unknown_event(
     *,
     known_events: Iterable[str],
 ) -> dict[str, Any]:
-    """Persist a verified event and enrich shipment data when possible.
+    """Persist and process a verified non-lifecycle Salla event.
 
     Events are deduplicated by merchant + event name + sanitized payload hash.
-    Salla operations are read-only and this function never calls Qoyod.
-    Shipment sync failure never prevents acknowledging the verified webhook.
+    Processing failure never prevents acknowledging the verified webhook.
     """
     event_name = str(event_body.get("event") or "").strip()
     if event_name in set(known_events):
@@ -80,29 +82,53 @@ async def capture_unknown_event(
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
 
+    order_sync: dict[str, Any] = {
+        "attempted": False,
+        "reason": "not_order_snapshot_event",
+    }
+    shipment_sync: dict[str, Any] = {
+        "attempted": False,
+        "reason": "not_shipment_event",
+    }
+
     try:
-        shipment_sync = await sync_shipment_from_verified_webhook(db, event_body)
-    except Exception as exc:  # noqa: BLE001 — webhook must still return HTTP 200
+        order_sync = await sync_order_from_verified_webhook(db, event_body)
+    except Exception as exc:  # webhook must still return HTTP 200
+        log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
+        order_sync = {
+            "attempted": True,
+            "synced": False,
+            "reason": "unhandled_exception",
+            "error": str(exc)[:500],
+            "no_salla_api_calls": True,
+            "no_qoyod_calls": True,
+        }
+
+    try:
+        shipment_sync = await sync_shipment_payload_from_verified_webhook(
+            db,
+            event_body,
+        )
+    except Exception as exc:  # webhook must still return HTTP 200
         log.exception("shipment_webhook.unhandled event=%s", event_name or "<none>")
         shipment_sync = {
             "attempted": True,
             "synced": False,
             "reason": "unhandled_exception",
             "error": str(exc)[:500],
+            "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }
 
     log.info(
-        "shipment_webhook.result event=%s attempted=%s synced=%s shipment_id=%s "
-        "order_ref=%s matched=%s modified=%s reason=%s",
+        "salla_webhook.result event=%s order_synced=%s shipment_synced=%s "
+        "order_number=%s shipment_id=%s reason=%s",
         event_name or "<none>",
-        shipment_sync.get("attempted"),
+        order_sync.get("synced"),
         shipment_sync.get("synced"),
+        order_sync.get("order_number") or shipment_sync.get("order_reference_id"),
         shipment_sync.get("shipment_id"),
-        shipment_sync.get("order_reference_id"),
-        shipment_sync.get("order_matched"),
-        shipment_sync.get("order_modified"),
-        shipment_sync.get("reason"),
+        shipment_sync.get("reason") or order_sync.get("reason"),
     )
 
     selector = {
@@ -117,14 +143,18 @@ async def capture_unknown_event(
             "first_received_at": now,
             "created_at": now,
             "verified_before_capture": True,
+            "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         },
         "$set": {
             "last_received_at": now,
             "updated_at": now,
+            "order_sync": order_sync,
             "shipment_sync": shipment_sync,
             "order_mutation_scope": (
-                "shipping_fields_only"
+                "full_order_from_webhook"
+                if order_sync.get("synced")
+                else "shipping_fields_only"
                 if shipment_sync.get("order_modified")
                 else "none"
             ),
@@ -142,7 +172,9 @@ async def capture_unknown_event(
         "event": event_name or None,
         "merchant_id": merchant_id,
         "event_hash_prefix": event_hash[:12],
+        "order_sync": order_sync,
         "shipment_sync": shipment_sync,
+        "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }
 
