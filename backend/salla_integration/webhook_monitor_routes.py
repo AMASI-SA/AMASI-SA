@@ -1,9 +1,4 @@
-"""Read-only Salla webhook delivery monitor.
-
-The monitor reports only verified events that actually reached Mezan. A missing
-record means "not observed yet", not proof that the event is disabled in Salla.
-Salla API fallback remains enabled while webhook coverage is being validated.
-"""
+"""Read-only monitor for Salla webhook events approved for this app."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -12,41 +7,35 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 
-EXPECTED_EVENTS: tuple[tuple[str, str, str], ...] = (
+# Only events approved/enabled by Salla for this application are monitored.
+APPROVED_EVENTS: tuple[tuple[str, str, str], ...] = (
     ("order.created", "إنشاء الطلب", "orders"),
     ("order.updated", "تحديث بيانات الطلب", "orders"),
     ("order.status.updated", "تحديث حالة الطلب", "orders"),
     ("order.products.updated", "تحديث منتجات الطلب", "orders"),
-    ("order.customer.updated", "تحديث بيانات مستلم الطلب", "orders"),
-    ("order.shipping.address.updated", "تحديث عنوان شحن الطلب", "orders"),
-    ("order.payment.updated", "تحديث طريقة دفع الطلب", "orders"),
     ("order.total.price.updated", "تحديث إجمالي سعر الطلب", "orders"),
-    ("order.refunded", "إرجاع مبلغ الطلب", "orders"),
     ("order.cancelled", "إلغاء الطلب", "orders"),
-    ("order.deleted", "حذف الطلب", "orders"),
-    ("order.coupon.updated", "تحديث كوبون الطلب", "orders"),
     ("order.shipment.creating", "جاري إنشاء الشحنة", "shipping"),
     ("order.shipment.created", "تم إنشاء شحنة الطلب", "shipping"),
     ("order.shipment.cancelled", "إلغاء شحنة الطلب", "shipping"),
     ("order.shipment.return.creating", "جاري إنشاء شحنة استرجاع", "shipping"),
-    ("order.shipment.return.created", "إنشاء شحنة استرجاع", "shipping"),
-    ("order.shipment.return.cancelled", "إلغاء شحنة استرجاع", "shipping"),
     ("shipment.created", "إنشاء الشحنة", "shipping"),
-    ("shipment.updated", "تحديث الشحنة", "shipping"),
-    ("shipment.cancelled", "إلغاء الشحنة", "shipping"),
 )
 
 
 def _extract_order_number(payload: Any) -> str | None:
     if not isinstance(payload, dict):
         return None
-    data = payload.get("data")
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    order = data.get("order") if isinstance(data.get("order"), dict) else {}
     candidates = [
         payload.get("order_number"),
         payload.get("reference_id"),
-        data.get("reference_id") if isinstance(data, dict) else None,
-        data.get("order_number") if isinstance(data, dict) else None,
-        data.get("id") if isinstance(data, dict) else None,
+        data.get("reference_id"),
+        data.get("order_number"),
+        order.get("reference_id"),
+        order.get("order_number"),
+        data.get("order_reference_id"),
     ]
     for value in candidates:
         text = str(value or "").strip()
@@ -56,12 +45,6 @@ def _extract_order_number(payload: Any) -> str | None:
 
 
 def _as_utc(value: Any) -> datetime | None:
-    """Normalize Mongo/PyMongo datetimes before comparison.
-
-    PyMongo commonly returns naive UTC datetimes even when the application writes
-    timezone-aware values. Comparing those directly with an aware UTC cutoff raises
-    TypeError and previously caused HTTP 500 on the monitor endpoint.
-    """
     if not isinstance(value, datetime):
         return None
     if value.tzinfo is None:
@@ -90,7 +73,8 @@ async def _event_snapshot(db: Any, merchant_id: str | None) -> dict[str, dict[st
             "first_received_at": {"$last": "$first_received_at"},
             "delivery_count": {"$sum": {"$ifNull": ["$delivery_count", 1]}},
             "last_payload": {"$first": "$payload"},
-            "last_sync": {"$first": "$shipment_sync"},
+            "last_order_sync": {"$first": "$order_sync"},
+            "last_shipment_sync": {"$first": "$shipment_sync"},
         }},
     ]
     rows = await db.salla_webhook_event_captures.aggregate(pipeline).to_list(length=200)
@@ -114,12 +98,10 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
         recent_cutoff = now - timedelta(days=30)
 
         events: list[dict[str, Any]] = []
-        for event_name, label, group in EXPECTED_EVENTS:
+        for event_name, label, group in APPROVED_EVENTS:
             row = snapshot.get(event_name)
-            raw_last_received = row.get("last_received_at") if row else None
-            raw_first_received = row.get("first_received_at") if row else None
-            last_received = _as_utc(raw_last_received)
-            first_received = _as_utc(raw_first_received)
+            last_received = _as_utc(row.get("last_received_at")) if row else None
+            first_received = _as_utc(row.get("first_received_at")) if row else None
             observed = bool(row)
             recent = bool(observed and last_received and last_received >= recent_cutoff)
             events.append({
@@ -133,7 +115,8 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
                 "last_received_at": last_received,
                 "delivery_count": _safe_int(row.get("delivery_count")) if row else 0,
                 "last_order_number": _extract_order_number(row.get("last_payload")) if row else None,
-                "shipment_sync": row.get("last_sync") if row else None,
+                "order_sync": row.get("last_order_sync") if row else None,
+                "shipment_sync": row.get("last_shipment_sync") if row else None,
             })
 
         received_count = sum(1 for item in events if item["observed"])
@@ -142,10 +125,10 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
             "merchant_id": merchant_id,
             "integration_status": (integration or {}).get("status") or "not_connected",
             "api_fallback_enabled": True,
-            "api_fallback_note": "لم يتم حذف الاعتماد على Salla API أثناء فترة التحقق من Webhooks.",
+            "api_fallback_note": "API سلة ما زال متاحًا للوظائف الأخرى، لكن الطلبات والعنوان والشحن في هذه المرحلة تُحفظ مباشرة من Webhooks المعتمدة.",
             "status_meaning": {
                 "working": "وصل الحدث فعليًا من سلة وتم توثيقه.",
-                "not_observed": "لم يصل الحدث حتى الآن؛ لا يعني بالضرورة أنه غير مفعّل.",
+                "not_observed": "الحدث معتمد لكنه لم يصل حتى الآن.",
             },
             "received_events": received_count,
             "total_monitored_events": len(events),
