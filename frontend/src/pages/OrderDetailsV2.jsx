@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
     ArrowRight,
@@ -24,6 +24,7 @@ import {
 } from "@phosphor-icons/react";
 import { useOrder } from "../hooks/useOrders";
 import { useOrderItems } from "../hooks/useOrderItems";
+import { issueShippingLabel, markOrderRead } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
@@ -336,12 +337,50 @@ function CustomerCard({ customer, shipping }) {
     );
 }
 
-function ShippingCard({ shipping, customer }) {
+function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
+    const [issuing, setIssuing] = useState(false);
+    const [issueError, setIssueError] = useState("");
+    const [issueMessage, setIssueMessage] = useState("");
+    const [issuedSnapshot, setIssuedSnapshot] = useState(null);
     const address = shipping.address || customer.shipping_address || {};
-    const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
+    const providerTracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
+    const tracking = issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number || providerTracking;
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
-    const labelUrl = shipping.label_url || shipping.label;
+    const labelUrl = issuedSnapshot?.label_url || shipping.label_url || shipping.label;
+    const shippingStatus = issuedSnapshot?.status || shipping.status;
+
+    async function issueLabel() {
+        if (issuing || labelUrl) return;
+        setIssuing(true);
+        setIssueError("");
+        setIssueMessage("");
+        const printWindow = window.open("about:blank", "_blank");
+        if (printWindow) {
+            printWindow.opener = null;
+            printWindow.document.title = "جاري إصدار بوليصة الشحن";
+        }
+        try {
+            const result = await issueShippingLabel(orderNumber);
+            setIssuedSnapshot(result);
+            setIssueMessage(result?.message || "");
+            if (result?.ready && result?.label_url) {
+                if (printWindow) {
+                    printWindow.location.replace(result.label_url);
+                } else {
+                    window.open(result.label_url, "_blank", "noopener,noreferrer");
+                }
+            } else {
+                printWindow?.close();
+            }
+            onIssued?.();
+        } catch (error) {
+            printWindow?.close();
+            setIssueError(error?.message || "تعذّر إصدار بوليصة الشحن من سلة.");
+        } finally {
+            setIssuing(false);
+        }
+    }
 
     const addressRows = [
         ["الدولة", address.country],
@@ -361,8 +400,9 @@ function ShippingCard({ shipping, customer }) {
                     <Printer size={18} /> طباعة البوليصة
                 </a>
             ) : (
-                <button type="button" disabled title="البوليصة غير متاحة من شركة الشحن حتى الآن" className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Printer size={18} /> طباعة البوليصة
+                <button type="button" onClick={issueLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60">
+                    {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
+                    {issuing ? "سلة تُصدر البوليصة..." : "إصدار البوليصة"}
                 </button>
             )
         }>
@@ -387,8 +427,10 @@ function ShippingCard({ shipping, customer }) {
                 {shipping.delivery_estimate && <div className="mt-2 text-sm text-slate-400">{shipping.delivery_estimate}</div>}
 
                 <div className="mt-5 border-t border-slate-100 pt-4">
-                    <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">بوليصة الشحن:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم البوليصة" /></div>
-                    <div className="mt-4 text-sm font-bold text-teal-800">{shipping.status || "تتبع حالة الشحنة"}</div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">رقم التتبع:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم التتبع" /></div>
+                    <div className="mt-4 text-sm font-bold text-teal-800">{shippingStatus || "تتبع حالة الشحنة"}</div>
+                    {issueMessage && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold text-amber-800">{issueMessage}</div>}
+                    {issueError && <div className="mt-3 rounded-lg bg-rose-50 p-2 text-xs font-bold text-rose-700">{issueError}</div>}
                 </div>
             </div>
         </SectionCard>
@@ -469,13 +511,17 @@ function PaymentCard({ payment, paymentMethod, orderStatus }) {
 }
 
 function ProductCard({ item, index, currency }) {
+    const [imageFailed, setImageFailed] = useState(false);
     const selections = collectItemSelections(item);
-    const image = String(item.image_url || "").trim();
+    const firstImage = Array.isArray(item.image_urls) ? item.image_urls[0] : "";
+    const image = String(
+        item.image_url || firstImage || item.thumbnail || item.product_thumbnail || ""
+    ).trim();
     const weight = isPresent(item.weight) ? `${displayValue(item.weight)} ${displayValue(item.weight_unit || "")}`.trim() : "—";
     return (
         <article className="rounded-2xl border border-slate-200 p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-start">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{image ? <img src={image} alt="" className="h-full w-full object-cover" /> : <Package size={38} />}</div>
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">{image && !imageFailed ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} /> : <Package size={38} />}</div>
                 <div className="min-w-0 flex-1">
                     <div className="text-lg font-extrabold text-slate-900">{item.name || `منتج ${index + 1}`}</div>
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500"><span>SKU: <b className="num text-slate-700">{item.sku || "—"}</b></span><span>الباركود: <b className="num text-slate-700">{item.barcode || "—"}</b></span></div>
@@ -558,9 +604,19 @@ function AccountingSummary({ order, currency }) {
 
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
-    const { order, loading, error } = useOrder(orderNumber);
+    const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
     const itemCount = useMemo(() => items.length, [items]);
+    const openedOrderNumber = String(
+        order?.order_number || orderNumber || ""
+    ).trim();
+
+    useEffect(() => {
+        if (!openedOrderNumber) return;
+        void markOrderRead(openedOrderNumber).catch(() => {
+            // Reading remains non-blocking; a failed marker must not hide the order.
+        });
+    }, [openedOrderNumber]);
 
     if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
     if (error || !order) return <div className="space-y-4" dir="rtl"><Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div></div>;
@@ -580,7 +636,12 @@ export default function OrderDetailsV2() {
                 <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard shipping={shipping} customer={customer} /><PaymentCard
+            <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard
+    shipping={shipping}
+    customer={customer}
+    orderNumber={orderNumber}
+    onIssued={reloadOrder}
+/><PaymentCard
     payment={payment}
     paymentMethod={paymentMethod}
     orderStatus={status}
