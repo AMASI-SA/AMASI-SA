@@ -36,6 +36,7 @@ CRITICAL_FIELDS = {
     "payment_checkout_url",
     "receiving_bank_name",
     "payment_receipt_url",
+    "shipping_label_url",
 }
 ZERO_VALID_FIELDS = {"paid_amount", "remaining_amount", "has_remaining_amount"}
 COLLECTION_FIELDS = {
@@ -73,6 +74,7 @@ TRACKED_FIELDS = (
     # Salla webhook shipping fields.
     # These must be tracked explicitly or upsert_order drops them.
     "shipping_company",
+    "shipping_label_url",
     "shipping_company_code",
     "shipping_company_logo",
     "shipping_method",
@@ -652,6 +654,7 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                     "order_status_slug",
                     *COLLECTION_FIELDS,
                     *PAYMENT_EVIDENCE_FIELDS,
+                    "shipping_label_url",
                 }
             )
             if fills_empty_only and not salla_authoritative_override:
