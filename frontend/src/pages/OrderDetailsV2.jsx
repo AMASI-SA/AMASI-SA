@@ -896,6 +896,7 @@ export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
     const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
+    const [returnEngineOpen, setReturnEngineOpen] = useState(false);
     const itemCount = useMemo(() => items.length, [items]);
     const openedOrderNumber = String(
         order?.order_number || orderNumber || ""
@@ -906,6 +907,10 @@ export default function OrderDetailsV2() {
         void markOrderRead(openedOrderNumber).catch(() => {
             // Reading remains non-blocking; a failed marker must not hide the order.
         });
+    }, [openedOrderNumber]);
+
+    useEffect(() => {
+        setReturnEngineOpen(false);
     }, [openedOrderNumber]);
 
     if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
@@ -944,12 +949,40 @@ export default function OrderDetailsV2() {
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
 
-            <ReturnDecisionCard
-                orderNumber={orderNumber}
-                items={items}
-                currency={currency}
-                itemsLoading={itemsLoading}
-            />
+            {!returnEngineOpen ? (
+                <section className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between" data-testid="order-v2-return-entry">
+                    <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-amber-100 p-3 text-amber-700"><ClockCounterClockwise size={24} weight="bold" /></div>
+                        <div>
+                            <h2 className="text-lg font-extrabold text-slate-950">المرتجعات والاستبدال</h2>
+                            <p className="mt-1 text-sm text-slate-500">افتح المحرك فقط عند بدء طلب مرتجع أو استبدال لهذا الطلب.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setReturnEngineOpen(true)}
+                        disabled={itemsLoading || Boolean(itemsError) || items.length === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-extrabold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                        <ClockCounterClockwise size={20} weight="bold" />
+                        إنشاء مرتجع أو استبدال
+                    </button>
+                </section>
+            ) : (
+                <div className="space-y-3" data-testid="order-v2-return-engine-open">
+                    <div className="flex justify-end">
+                        <button type="button" onClick={() => setReturnEngineOpen(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50">
+                            إغلاق وتأجيل المحرك
+                        </button>
+                    </div>
+                    <ReturnDecisionCard
+                        orderNumber={orderNumber}
+                        items={items}
+                        currency={currency}
+                        itemsLoading={itemsLoading}
+                    />
+                </div>
+            )}
 
             <AdvancedOrderInfo order={order} />
             <AccountingSummary order={order} currency={currency} />
