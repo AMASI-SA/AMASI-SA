@@ -146,6 +146,6 @@ export async function verifyShippingLabel(orderNumber) {
         );
         return data;
     } catch (error) {
-        throw new Error(errorMessage(error, "تعذّر التحقق من البوليصة الحالية في سلة."));
+        throw new Error(shippingLabelErrorMessage(error));
     }
 }
