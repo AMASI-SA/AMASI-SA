@@ -7,6 +7,7 @@ the shipment id, printable label URL, and tracking number.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 from salla_integration.service import SallaError, call_salla
@@ -76,6 +77,7 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
         label_url
         and tracking_number
         and shipment_status not in _CANCELLED
+        and shipment_status not in _PENDING
     )
     return {
         "ready": ready,
@@ -203,9 +205,6 @@ async def _shipment_rows(
         if isinstance(listed, list)
         else []
     )
-    if not rows and isinstance(embedded, list):
-        rows = [dict(row) for row in embedded if isinstance(row, dict)]
-
     async def enrich(row: dict[str, Any]) -> dict[str, Any]:
         shipment_id = _text(row.get("id"))
         if not shipment_id:
@@ -262,6 +261,14 @@ def _address_payload(value: Any, *, include_type: bool) -> dict[str, Any]:
     for key in keys:
         if source.get(key) not in (None, "", [], {}):
             payload[key] = source.get(key)
+    if "geo_coordinates" not in payload:
+        latitude = source.get("latitude")
+        longitude = source.get("longitude")
+        if latitude is not None and longitude is not None:
+            payload["geo_coordinates"] = {
+                "lat": latitude,
+                "lng": longitude,
+            }
     for key in ("country", "city"):
         normalized = _location(source.get(key))
         if normalized in (None, ""):
@@ -414,6 +421,114 @@ async def _poll_shipment(
         if isinstance(details, dict):
             latest = details
     return latest
+
+
+async def _persist_verified_snapshot(
+    db: Any,
+    user_id: str,
+    order_number: str,
+    snapshot: dict[str, Any],
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    set_fields: dict[str, Any] = {
+        "shipping_status": snapshot.get("status") or "pending",
+        "shipment_status": snapshot.get("status") or "pending",
+        "shipping_verified_at": now,
+        "shipping_verified_source": "salla",
+    }
+    for field in (
+        "shipment_id", "shipping_number", "tracking_number",
+        "tracking_url", "label_url",
+    ):
+        value = snapshot.get(field)
+        if value not in (None, ""):
+            target = {
+                "shipment_id": "salla_shipment_id",
+                "label_url": "shipping_label_url",
+            }.get(field, field)
+            set_fields[target] = value
+
+    update: dict[str, Any] = {"$set": set_fields}
+    if not snapshot.get("ready"):
+        update["$unset"] = {
+            "shipping_label_url": "",
+            "tracking_number": "",
+            "tracking_url": "",
+            "shipping_number": "",
+        }
+    await db.unified_orders.update_one(
+        {"user_id": str(user_id), "order_number": str(order_number)},
+        update,
+    )
+
+
+async def refresh_shipping_label(
+    db: Any,
+    user_id: str,
+    order_number: str,
+) -> dict[str, Any]:
+    """Verify the current Salla shipment without creating a new shipment."""
+    normalized = _text(order_number)
+    if not normalized:
+        raise ShippingLabelError(
+            "order_number_required",
+            "رقم الطلب مطلوب.",
+            status_code=400,
+        )
+
+    try:
+        internal_id, order = await _resolve_order(
+            db, user_id, normalized
+        )
+        rows = await _shipment_rows(
+            db,
+            user_id,
+            internal_id,
+            order.get("shipments"),
+        )
+    except SallaError as exc:
+        if exc.status_code == 403:
+            raise ShippingLabelError(
+                "shipping_scope_required",
+                "صلاحية قراءة الشحن غير مفعلة في ربط سلة.",
+                status_code=403,
+            ) from exc
+        raise ShippingLabelError(
+            "salla_shipping_unavailable",
+            "تعذّر التحقق من البوليصة الحالية في سلة.",
+            status_code=502,
+        ) from exc
+
+    active = _active_outbound(rows)
+    current = active[0] if active else {}
+    for row in active:
+        if _snapshot(row)["ready"]:
+            current = row
+            break
+
+    snapshot = _snapshot(current)
+    try:
+        await resync_single_order(db, user_id, normalized)
+    finally:
+        # Root shipping fields are a legacy compatibility layer. Explicitly
+        # clear them when Salla says the current shipment has no active AWB.
+        await _persist_verified_snapshot(
+            db,
+            user_id,
+            normalized,
+            snapshot,
+        )
+
+    return {
+        "ok": True,
+        "source": "salla",
+        **snapshot,
+        "message": (
+            "تم التحقق من سلة والبوليصة الحالية جاهزة."
+            if snapshot["ready"]
+            else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة ومسحت الرقم القديم."
+        ),
+    }
 
 
 async def issue_shipping_label(
