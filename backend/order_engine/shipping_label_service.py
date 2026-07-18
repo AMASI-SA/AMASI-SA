@@ -7,8 +7,13 @@ the shipment id, printable label URL, and tracking number.
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import datetime, timezone
 from typing import Any
+
+from reportlab.graphics import renderSVG
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.shapes import Drawing
 
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
@@ -16,6 +21,7 @@ from salla_integration.sync import resync_single_order
 
 _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
 _PENDING = {"pending", "creating", "processing"}
+_COMPLETED_STATUS_NAME = "تم التنفيذ"
 
 
 class ShippingLabelError(RuntimeError):
@@ -33,6 +39,145 @@ def _status(value: Any) -> str:
     if isinstance(value, dict):
         value = value.get("slug") or value.get("name") or value.get("status")
     return _text(value).lower().replace("-", "_").replace(" ", "_")
+
+
+def _order_is_completed(order: dict[str, Any]) -> bool:
+    """Accept Salla's original ``completed`` status or its Arabic custom child."""
+    status = order.get("status")
+    if _status(status) == "completed":
+        return True
+    if not isinstance(status, dict):
+        return _text(status) == _COMPLETED_STATUS_NAME
+
+    candidates = [status]
+    for key in ("original", "customized", "parent"):
+        child = status.get(key)
+        if isinstance(child, dict):
+            candidates.append(child)
+    for candidate in candidates:
+        if _status(candidate) == "completed":
+            return True
+        if _text(candidate.get("name")) == _COMPLETED_STATUS_NAME:
+            return True
+    return False
+
+
+def _walk_dicts(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_dicts(child)
+
+
+def _completed_custom_status_id(response: Any) -> Any:
+    """Resolve the store's custom ``تم التنفيذ`` id without hard-coding it."""
+    for row in _walk_dicts(response):
+        if _text(row.get("name")) != _COMPLETED_STATUS_NAME:
+            continue
+        status_id = row.get("id") or row.get("status_id")
+        if status_id not in (None, ""):
+            return int(status_id) if _text(status_id).isdigit() else status_id
+    return None
+
+
+async def _ensure_order_completed(
+    db: Any,
+    user_id: str,
+    internal_order_id: str,
+    order: dict[str, Any],
+) -> tuple[dict[str, Any], bool]:
+    """Move the Salla order to completed and verify it before shipment work."""
+    if _order_is_completed(order):
+        return order, False
+
+    custom_status_id = None
+    try:
+        statuses = await call_salla(db, user_id, "GET", "/orders/statuses")
+        custom_status_id = _completed_custom_status_id(statuses)
+    except SallaError:
+        # Status discovery is optional; Salla also accepts the original slug.
+        pass
+
+    payload = (
+        {"status_id": custom_status_id}
+        if custom_status_id is not None
+        else {"slug": "completed"}
+    )
+    try:
+        await call_salla(
+            db,
+            user_id,
+            "POST",
+            f"/orders/{internal_order_id}/status",
+            json=payload,
+        )
+    except SallaError as exc:
+        # Some stores expose the original status with the same Arabic name.
+        # If its id is not accepted as a custom sub-status, use the documented
+        # original slug instead.
+        if custom_status_id is not None and exc.status_code in {400, 404, 422}:
+            try:
+                await call_salla(
+                    db,
+                    user_id,
+                    "POST",
+                    f"/orders/{internal_order_id}/status",
+                    json={"slug": "completed"},
+                )
+            except SallaError as fallback_exc:
+                exc = fallback_exc
+            else:
+                exc = None
+        if exc is not None:
+            if exc.status_code == 403:
+                raise ShippingLabelError(
+                    "orders_scope_required",
+                    "صلاحية orders.read_write غير مفعلة؛ لم نحاول إصدار البوليصة.",
+                    status_code=403,
+                ) from exc
+            if exc.status_code in {400, 409, 422}:
+                raise ShippingLabelError(
+                    "order_status_transition_rejected",
+                    "رفضت سلة تغيير حالة الطلب إلى تم التنفيذ؛ لم نحاول إصدار البوليصة.",
+                    status_code=409,
+                ) from exc
+            raise ShippingLabelError(
+                "order_status_update_failed",
+                "تعذّر تغيير حالة الطلب في سلة إلى تم التنفيذ؛ لم نحاول إصدار البوليصة.",
+                status_code=502,
+            ) from exc
+
+    latest = order
+    try:
+        for attempt in range(6):
+            if attempt:
+                await asyncio.sleep(0.5)
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                f"/orders/{internal_order_id}",
+            )
+            candidate = response.get("data") if isinstance(response, dict) else None
+            if isinstance(candidate, dict):
+                latest = candidate
+            if _order_is_completed(latest):
+                return latest, True
+    except SallaError as exc:
+        raise ShippingLabelError(
+            "order_status_verification_failed",
+            "تم إرسال تغيير الحالة، لكن تعذّر تأكيد «تم التنفيذ» من سلة؛ لم نحاول إصدار البوليصة.",
+            status_code=502,
+        ) from exc
+
+    raise ShippingLabelError(
+        "order_status_not_completed",
+        "لم تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ»؛ لم نحاول إصدار البوليصة.",
+        status_code=409,
+    )
 
 
 def _url(value: Any) -> str:
@@ -118,6 +263,124 @@ def _active_outbound(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return numeric, _text(row.get("created_at"))
 
     return sorted(active, key=sort_key, reverse=True)
+
+
+def _is_store_courier(row: dict[str, Any]) -> bool:
+    """Salla's merchant courier has app_id=0 and no external AWB service."""
+    meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+    app_id = meta.get("app_id")
+    courier_name = _text(row.get("courier_name") or row.get("company"))
+    return app_id in {0, "0"} or "مندوب" in courier_name
+
+
+def _money(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        amount = value.get("amount")
+        currency = _text(value.get("currency")) or "SAR"
+    else:
+        amount = value
+        currency = "SAR"
+    return {"amount": amount, "currency": currency}
+
+
+def _qr_data_uri(value: str) -> str:
+    qr = QrCodeWidget(value)
+    x1, y1, x2, y2 = qr.getBounds()
+    source_width = x2 - x1
+    source_height = y2 - y1
+    size = 180
+    scale = min(size / source_width, size / source_height)
+    drawing = Drawing(
+        size,
+        size,
+        transform=[scale, 0, 0, scale, -x1 * scale, -y1 * scale],
+    )
+    drawing.add(qr)
+    svg = renderSVG.drawToString(drawing).encode("utf-8")
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode("ascii")
+
+
+def _order_date(order: dict[str, Any]) -> str:
+    value = order.get("date") or order.get("created_at")
+    if isinstance(value, dict):
+        value = value.get("date") or value.get("value")
+    return _text(value).split(" ", 1)[0]
+
+
+def _store_courier_print_data(
+    order_number: str,
+    order: dict[str, Any],
+    shipment: dict[str, Any],
+    store: dict[str, Any],
+) -> dict[str, Any]:
+    ship_to = shipment.get("ship_to")
+    ship_to = ship_to if isinstance(ship_to, dict) else {}
+    customer = order.get("customer")
+    customer = customer if isinstance(customer, dict) else {}
+    packages = shipment.get("packages")
+    packages = packages if isinstance(packages, list) else []
+    address = {
+        key: ship_to.get(key)
+        for key in (
+            "country", "city", "block", "street_number", "short_address",
+            "building_number", "additional_number", "postal_code",
+            "address_line", "address_line_two",
+        )
+        if ship_to.get(key) not in (None, "", [], {})
+    }
+    amounts = order.get("amounts")
+    amounts = amounts if isinstance(amounts, dict) else {}
+    total = shipment.get("total") or amounts.get("total") or order.get("total")
+    payment_actions = order.get("payment_actions")
+    payment_actions = payment_actions if isinstance(payment_actions, dict) else {}
+    remaining_action = payment_actions.get("remaining_action")
+    remaining_action = (
+        remaining_action if isinstance(remaining_action, dict) else {}
+    )
+    remaining = remaining_action.get("remaining_amount") or {
+        "amount": 0,
+        "currency": _money(total).get("currency") or "SAR",
+    }
+    ship_from = shipment.get("ship_from")
+    ship_from = ship_from if isinstance(ship_from, dict) else {}
+    return {
+        "order_number": order_number,
+        "barcode_value": order_number,
+        "qr_code": _qr_data_uri(order_number),
+        "order_date": _order_date(order),
+        "courier_name": _text(shipment.get("courier_name")) or "مندوب المتجر",
+        "store_name": _text(store.get("name"))
+        or _text(ship_from.get("name"))
+        or "المتجر",
+        "store_logo": _url(store.get("avatar") or store.get("logo")) or None,
+        "store_phone": _text(ship_from.get("phone")) or None,
+        "customer_name": _text(ship_to.get("name"))
+        or _text(customer.get("full_name"))
+        or _text(customer.get("name")),
+        "customer_phone": _text(ship_to.get("phone"))
+        or _text(customer.get("mobile")),
+        "address": address,
+        "total": _money(total),
+        "remaining_amount": _money(remaining),
+        "items": [
+            {
+                "name": _text(row.get("name")),
+                "quantity": row.get("quantity") or 1,
+                "sku": _text(row.get("sku")) or None,
+            }
+            for row in packages
+            if isinstance(row, dict) and _text(row.get("name"))
+        ],
+    }
+
+
+async def _store_identity(db: Any, user_id: str) -> dict[str, Any]:
+    try:
+        response = await call_salla(db, user_id, "GET", "/store/info")
+    except SallaError:
+        return {}
+    data = response.get("data") if isinstance(response, dict) else None
+    return data if isinstance(data, dict) else {}
 
 
 async def _resolve_order(
@@ -548,6 +811,12 @@ async def issue_shipping_label(
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        order, order_status_changed = await _ensure_order_completed(
+            db,
+            user_id,
+            internal_id,
+            order,
+        )
         rows = await _shipment_rows(
             db,
             user_id,
@@ -568,11 +837,47 @@ async def issue_shipping_label(
         ) from exc
 
     active = _active_outbound(rows)
+    if active and _is_store_courier(active[0]):
+        source = active[0]
+        store = await _store_identity(db, user_id)
+        print_data = _store_courier_print_data(
+            normalized,
+            order,
+            source,
+            store,
+        )
+        await resync_single_order(db, user_id, normalized)
+        return {
+            "ok": True,
+            "source": "mezan",
+            "ready": True,
+            "label_type": "store_courier",
+            "shipment_id": _text(source.get("id")) or None,
+            "status": "store_courier",
+            "label_url": None,
+            "tracking_number": None,
+            "shipping_number": None,
+            "order_status_completed": True,
+            "order_status_changed": order_status_changed,
+            "print_data": print_data,
+            "message": (
+                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
+                if order_status_changed
+                else "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب."
+            ),
+        }
+
     for row in active:
         snapshot = _snapshot(row)
         if snapshot["ready"]:
             await resync_single_order(db, user_id, normalized)
-            return {"ok": True, "source": "salla", **snapshot}
+            return {
+                "ok": True,
+                "source": "salla",
+                "order_status_completed": True,
+                "order_status_changed": order_status_changed,
+                **snapshot,
+            }
 
     if not active:
         raise ShippingLabelError(
@@ -592,10 +897,18 @@ async def issue_shipping_label(
         snapshot = _snapshot(polled)
         if snapshot["ready"]:
             await resync_single_order(db, user_id, normalized)
-            return {"ok": True, "source": "salla", **snapshot}
+            return {
+                "ok": True,
+                "source": "salla",
+                "order_status_completed": True,
+                "order_status_changed": order_status_changed,
+                **snapshot,
+            }
         return {
             "ok": True,
             "source": "salla",
+            "order_status_completed": True,
+            "order_status_changed": order_status_changed,
             **snapshot,
             "message": "سلة ما زالت تُصدر البوليصة؛ لم تُفتح الطباعة بعد.",
         }
@@ -643,10 +956,16 @@ async def issue_shipping_label(
     return {
         "ok": True,
         "source": "salla",
+        "order_status_completed": True,
+        "order_status_changed": order_status_changed,
         **snapshot,
         "message": (
-            "تم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
+            "تم تحويل الطلب إلى تم التنفيذ، ثم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
+            if snapshot["ready"] and order_status_changed
+            else "تم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
             if snapshot["ready"]
+            else "تم تحويل الطلب إلى تم التنفيذ، ثم قبلت سلة الإصدار وما زالت تُنشئ البوليصة."
+            if order_status_changed
             else "قبلت سلة الإصدار وما زالت تُنشئ البوليصة؛ لم تُفتح الطباعة بعد."
         ),
     }
