@@ -58,6 +58,33 @@ def _text(value: Any) -> Optional[str]:
     return text or None
 
 
+def _media_url(value: Any, *, _depth: int = 0) -> Optional[str]:
+    """Extract the first printable URL from Salla media/label shapes."""
+    if value in (None, "") or _depth > 8:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, dict):
+        for key in (
+            "url",
+            "pdf",
+            "label_url",
+            "download_url",
+            "original",
+            "src",
+        ):
+            result = _media_url(value.get(key), _depth=_depth + 1)
+            if result:
+                return result
+        return None
+    if isinstance(value, (list, tuple)):
+        for candidate in value:
+            result = _media_url(candidate, _depth=_depth + 1)
+            if result:
+                return result
+    return None
+
+
 def _number(value: Any, default: float = 0.0) -> float:
     if value is None or value == "":
         return default
@@ -927,6 +954,13 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
 
     shipments = _list(raw_order.get("shipments"))
     first_shipment = _dict(shipments[0]) if shipments else {}
+    shipping_label_url = (
+        _media_url(first_shipment.get("label_url"))
+        or _media_url(first_shipment.get("label"))
+        or _media_url(first_shipment.get("awb_url"))
+        or _media_url(first_shipment.get("waybill_url"))
+        or _media_url(raw_order.get("shipping_label_url"))
+    )
 
     courier = _dict(
         _first(
@@ -1101,12 +1135,10 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     shipping_raw.get("tracking_link"),
                 )
             ),
-            label_url=_text(
-                _first(
-                    first_shipment.get("label_url"),
-                    first_shipment.get("label"),
-                    shipping_raw.get("label_url"),
-                )
+            label_url=(
+                shipping_label_url
+                or _media_url(shipping_raw.get("label_url"))
+                or _media_url(shipping_raw.get("label"))
             ),
             shipped_at=_parse_datetime(
                 _first(
