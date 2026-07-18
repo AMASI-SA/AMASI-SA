@@ -388,13 +388,9 @@ function PaymentCard({ payment, paymentMethod, orderStatus }) {
         payment.attachment_url ||
         payment.proof_url;
 
-    const normalizedOrderStatus = String(orderStatus || "")
-        .trim()
-        .toLowerCase();
-
     // الشرط الوحيد: حالة الطلب بانتظار الدفع.
     const waitingForPayment =
-        normalizedOrderStatus === "بانتظار الدفع";
+        String(orderStatus || "").trim() === "بانتظار الدفع";
 
     return (
         <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment">
