@@ -239,14 +239,36 @@ function PaymentSummary({ order }) {
 
     if (waitingForPayment) {
         return (
-            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-order-status="بانتظار الدفع">
-                <div className="flex items-center gap-4">
+            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-order-status="بانتظار الدفع" data-collection-status="unpaid">
+                <div className="mb-4 flex items-center gap-4">
                     <WarningCircle size={48} className="shrink-0 text-rose-500" weight="fill" />
                     <div>
                         <div className="text-2xl font-bold text-rose-600">بانتظار الدفع</div>
                         <div className="mt-2 text-sm font-medium text-rose-500">{methodLabel}</div>
                     </div>
                 </div>
+                <div className="space-y-3 border-y border-rose-100 py-4 text-base">
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-slate-500">المبلغ المدفوع</span>
+                        <span className="num font-extrabold text-slate-800">{formatCollectionMoney(paidAmount, collectionCurrency)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-slate-500">المبلغ المطلوب</span>
+                        <span className="num text-xl font-extrabold text-rose-600">{formatCollectionMoney(remainingAmount, collectionCurrency)}</span>
+                    </div>
+                </div>
+                {checkoutUrl ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => navigator.clipboard?.writeText(checkoutUrl)} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-50">
+                            <Copy size={18} /> نسخ رابط الدفع
+                        </button>
+                        <a href={checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-rose-700">
+                            <ArrowSquareOut size={18} /> فتح رابط الدفع
+                        </a>
+                    </div>
+                ) : (
+                    <div className="mt-4 text-sm font-bold text-slate-400">رابط الدفع غير متاح من سلة.</div>
+                )}
             </div>
         );
     }
