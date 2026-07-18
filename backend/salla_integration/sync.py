@@ -433,6 +433,43 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if isinstance(payment_obj, dict):
         payment_status = payment_obj.get("status") or ""
 
+    # Salla collection facts. Keep these separate from order status: an order
+    # can be under review while still having a positive remaining balance.
+    payment_actions = salla_order.get("payment_actions") or {}
+    if not isinstance(payment_actions, dict):
+        payment_actions = {}
+    remaining_action = payment_actions.get("remaining_action") or {}
+    refund_action = payment_actions.get("refund_action") or {}
+    if not isinstance(remaining_action, dict):
+        remaining_action = {}
+    if not isinstance(refund_action, dict):
+        refund_action = {}
+
+    paid_amount = _money(
+        remaining_action.get("paid_amount")
+        or refund_action.get("paid_amount")
+        or salla_order.get("paid_amount")
+    )
+    remaining_amount = _money(
+        remaining_action.get("remaining_amount")
+        or salla_order.get("remaining_amount")
+    )
+    has_remaining_amount = bool(
+        remaining_action.get("has_remaining_amount")
+        or remaining_amount > 0
+    )
+    checkout_url = _str(
+        remaining_action.get("checkout_url")
+        or salla_order.get("checkout_url")
+    )
+
+    if remaining_amount > 0:
+        payment_collection_status = "partial" if paid_amount > 0 else "unpaid"
+    elif paid_amount > 0:
+        payment_collection_status = "paid"
+    else:
+        payment_collection_status = "unknown"
+
     # Products — authoritative legacy projection from /orders/items.
     items = salla_order.get("items") or []
     products: list[dict] = []
@@ -531,6 +568,11 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "order_status": _str(order_status),
         "order_status_slug": _str(order_status_slug),
         "payment_status": _str(payment_status),
+        "paid_amount": paid_amount,
+        "remaining_amount": remaining_amount,
+        "has_remaining_amount": has_remaining_amount,
+        "payment_collection_status": payment_collection_status,
+        "payment_checkout_url": checkout_url,
         "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
         "payment_method": _str(payment_method),
