@@ -450,8 +450,9 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
 
     payment_status = ""
     payment_obj = salla_order.get("payment") or {}
-    if isinstance(payment_obj, dict):
-        payment_status = payment_obj.get("status") or ""
+    if not isinstance(payment_obj, dict):
+        payment_obj = {}
+    payment_status = payment_obj.get("status") or ""
 
     # Salla collection facts. Keep these separate from order status: an order
     # can be under review while still having a positive remaining balance.
