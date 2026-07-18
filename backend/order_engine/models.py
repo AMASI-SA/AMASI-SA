@@ -106,6 +106,7 @@ class PaymentDTO(CanonicalDTO):
         Literal["bank_rajhi", "bank_inma", "bank_ahli"]
     ] = None
     receiving_bank_name: Optional[str] = None
+    receipt_url: Optional[str] = None
 
     transaction_reference: Optional[str] = None
     paid_at: Optional[datetime] = None
