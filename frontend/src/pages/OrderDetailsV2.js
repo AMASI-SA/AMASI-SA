@@ -213,7 +213,11 @@ function PaymentSummary({ order }) {
     const bankName = normalizeBankName(payment);
     const attachment = firstPresent(payment.receipt_url, payment.attachment_url, payment.proof_url, payment.transfer_receipt_url);
     const orderStatus = order?.status_native || order?.status;
-    const waitingForPayment = String(orderStatus || "").trim() === "بانتظار الدفع";
+    const normalizedOrderStatus = String(orderStatus || "")
+        .trim()
+        .replace(/[إأآٱ]/g, "ا")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "");
+    const waitingForPayment = normalizedOrderStatus === "بانتظار الدفع";
 
     if (waitingForPayment) {
         return (
