@@ -222,7 +222,8 @@ function buildShippingView(order) {
         shipment_number: firstPresent(nested.shipment_number, order.shipping_number),
         waybill_number: firstPresent(nested.waybill_number, order.waybill_number),
         status: firstPresent(nested.status, order.shipping_status, order.shipment_status),
-        tracking_url: firstPresent(nested.tracking_url, order.tracking_url),
+        tracking_url: firstPresent(nested.tracking_url, nested.tracking_link, order.tracking_url),
+        label_url: firstPresent(nested.label_url, nested.label, order.shipping_label_url),
         address,
     };
 }
@@ -339,6 +340,7 @@ function ShippingCard({ shipping, customer }) {
     const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
+    const labelUrl = shipping.label_url || shipping.label;
 
     const addressRows = [
         ["الدولة", address.country],
@@ -352,7 +354,17 @@ function ShippingCard({ shipping, customer }) {
     ].filter(([, value]) => isPresent(value) && String(value).trim());
 
     return (
-        <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={<button type="button" disabled className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50"><Printer size={18} /> طباعة البوليصة</button>}>
+        <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={
+            labelUrl ? (
+                <a href={labelUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100">
+                    <Printer size={18} /> طباعة البوليصة
+                </a>
+            ) : (
+                <button type="button" disabled title="البوليصة غير متاحة من شركة الشحن حتى الآن" className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Printer size={18} /> طباعة البوليصة
+                </button>
+            )
+        }>
             <div className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-3">
                     {companyLogo && <img src={companyLogo} alt="" className="h-14 w-14 rounded-lg object-contain" />}
