@@ -863,38 +863,44 @@ async def _fetch_salla_shipment_details(
     internal_order_id: str,
     embedded_shipments: Any,
 ) -> list[dict]:
-    """Return the richest available shipment rows, including printable AWB."""
-    rows = [
+    """Return Salla's current shipment rows, including printable AWB data.
+
+    The shipments endpoint is authoritative.  Embedded order shipments are
+    only a fallback when listing fails, because they may retain a label that
+    Salla later cancelled.
+    """
+    embedded_rows = [
         dict(row)
         for row in (embedded_shipments or [])
         if isinstance(row, dict)
     ]
+    rows: list[dict] = []
 
-    if not rows:
-        try:
-            response = await call_salla(
-                db,
-                user_id,
-                "GET",
-                "/shipments",
-                params={
-                    "order_id": internal_order_id,
-                    "per_page": 50,
-                },
-            )
-            listed = response.get("data") if isinstance(response, dict) else None
-            if isinstance(listed, list):
-                rows = [
-                    dict(row)
-                    for row in listed
-                    if isinstance(row, dict)
-                ]
-        except SallaError as exc:
-            logger.warning(
-                "Could not list Salla shipments for order %s: %s",
-                internal_order_id,
-                exc,
-            )
+    try:
+        response = await call_salla(
+            db,
+            user_id,
+            "GET",
+            "/shipments",
+            params={
+                "order_id": internal_order_id,
+                "per_page": 50,
+            },
+        )
+        listed = response.get("data") if isinstance(response, dict) else None
+        if isinstance(listed, list):
+            rows = [
+                dict(row)
+                for row in listed
+                if isinstance(row, dict)
+            ]
+    except SallaError as exc:
+        logger.warning(
+            "Could not list Salla shipments for order %s: %s",
+            internal_order_id,
+            exc,
+        )
+        rows = embedded_rows
 
     async def enrich(row: dict) -> dict:
         shipment_id = _str(row.get("id"))
@@ -920,11 +926,18 @@ async def _fetch_salla_shipment_details(
         if not isinstance(details, dict):
             return row
 
-        # Shipment Details is authoritative, but never erase a useful list
-        # value when the detailed response contains null/empty placeholders.
         merged = dict(row)
+        authoritative_clearable = {
+            "label",
+            "label_url",
+            "shipping_number",
+            "tracking_number",
+            "tracking_link",
+            "tracking_url",
+            "status",
+        }
         for key, value in details.items():
-            if value not in (None, "", [], {}):
+            if key in authoritative_clearable or value not in (None, "", [], {}):
                 merged[key] = value
         return merged
 
@@ -932,7 +945,6 @@ async def _fetch_salla_shipment_details(
         return []
 
     return list(await asyncio.gather(*(enrich(row) for row in rows)))
-
 
 async def _fetch_salla_order_details(
     db,
@@ -1013,8 +1025,9 @@ async def _fetch_salla_order_details(
 
     enriched_details = dict(details)
     enriched_details["items"] = items
-    if shipments:
-        enriched_details["shipments"] = shipments
+    # Preserve an authoritative empty list so cancelled labels cannot survive
+    # from an embedded historical shipment snapshot.
+    enriched_details["shipments"] = shipments
 
     return enriched_details
 
