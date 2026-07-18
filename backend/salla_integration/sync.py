@@ -431,10 +431,23 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         payment_method = payment_method.get("name") or payment_method.get("code") or ""
 
     shipping_company = ""
+    first_shipment: dict = {}
     shipment = salla_order.get("shipments") or []
     if shipment and isinstance(shipment, list):
-        first = shipment[0] or {}
-        shipping_company = (first.get("courier") or {}).get("name") or first.get("courier_name") or ""
+        first_shipment = shipment[0] or {}
+        if not isinstance(first_shipment, dict):
+            first_shipment = {}
+        shipping_company = (
+            (first_shipment.get("courier") or {}).get("name")
+            or first_shipment.get("courier_name")
+            or ""
+        )
+    shipping_label_url = _media_url(
+        first_shipment.get("label_url")
+        or first_shipment.get("label")
+        or first_shipment.get("awb_url")
+        or first_shipment.get("waybill_url")
+    )
     if not shipping_company:
         shipping = salla_order.get("shipping") or {}
         if isinstance(shipping, dict):
@@ -619,6 +632,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
         "payment_method": _str(payment_method),
         "shipping_company": _str(shipping_company),
+        "shipping_label_url": shipping_label_url,
         "shipping_cost": _money(shipping_obj),
         "subtotal": _money(subtotal_obj),
         "discount": _money(discount_obj),
@@ -843,6 +857,83 @@ async def _fetch_salla_order_items(
     ]
 
 
+async def _fetch_salla_shipment_details(
+    db,
+    user_id: str,
+    internal_order_id: str,
+    embedded_shipments: Any,
+) -> list[dict]:
+    """Return the richest available shipment rows, including printable AWB."""
+    rows = [
+        dict(row)
+        for row in (embedded_shipments or [])
+        if isinstance(row, dict)
+    ]
+
+    if not rows:
+        try:
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                "/shipments",
+                params={
+                    "order_id": internal_order_id,
+                    "per_page": 50,
+                },
+            )
+            listed = response.get("data") if isinstance(response, dict) else None
+            if isinstance(listed, list):
+                rows = [
+                    dict(row)
+                    for row in listed
+                    if isinstance(row, dict)
+                ]
+        except SallaError as exc:
+            logger.warning(
+                "Could not list Salla shipments for order %s: %s",
+                internal_order_id,
+                exc,
+            )
+
+    async def enrich(row: dict) -> dict:
+        shipment_id = _str(row.get("id"))
+        if not shipment_id:
+            return row
+
+        try:
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                f"/shipments/{shipment_id}",
+            )
+        except SallaError as exc:
+            logger.warning(
+                "Could not fetch Salla shipment %s details: %s",
+                shipment_id,
+                exc,
+            )
+            return row
+
+        details = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(details, dict):
+            return row
+
+        # Shipment Details is authoritative, but never erase a useful list
+        # value when the detailed response contains null/empty placeholders.
+        merged = dict(row)
+        for key, value in details.items():
+            if value not in (None, "", [], {}):
+                merged[key] = value
+        return merged
+
+    if not rows:
+        return []
+
+    return list(await asyncio.gather(*(enrich(row) for row in rows)))
+
+
 async def _fetch_salla_order_details(
     db,
     user_id: str,
@@ -906,14 +997,24 @@ async def _fetch_salla_order_details(
             f"expected={order_number} actual={actual_reference}"
         )
 
-    items = await _fetch_salla_order_items(
-        db,
-        user_id,
-        internal_id,
+    items, shipments = await asyncio.gather(
+        _fetch_salla_order_items(
+            db,
+            user_id,
+            internal_id,
+        ),
+        _fetch_salla_shipment_details(
+            db,
+            user_id,
+            internal_id,
+            details.get("shipments"),
+        ),
     )
 
     enriched_details = dict(details)
     enriched_details["items"] = items
+    if shipments:
+        enriched_details["shipments"] = shipments
 
     return enriched_details
 
