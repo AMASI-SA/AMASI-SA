@@ -96,6 +96,11 @@ class PaymentDTO(CanonicalDTO):
     method: Optional[str] = None
     method_native: Optional[str] = None
     status: Optional[str] = None
+    paid_amount: float = 0.0
+    remaining_amount: float = 0.0
+    has_remaining_amount: bool = False
+    collection_status: Optional[Literal["unknown", "unpaid", "partial", "paid"]] = None
+    checkout_url: Optional[str] = None
 
     receiving_bank_code: Optional[
         Literal["bank_rajhi", "bank_inma", "bank_ahli"]
