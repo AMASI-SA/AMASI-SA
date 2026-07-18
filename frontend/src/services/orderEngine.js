@@ -91,3 +91,31 @@ export async function openOrderFromSalla(orderNumber) {
         no_salla_api_calls: true,
     };
 }
+
+
+export async function markOrderRead(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+    if (!normalized || isPreviewDemoEnvironment()) return { ok: true, read: true };
+    try {
+        const { data } = await api.post(`/orders-v2/${encodeURIComponent(normalized)}/read`);
+        return data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر تحديث حالة قراءة الطلب."));
+    }
+}
+
+export async function issueShippingLabel(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+    if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    if (isPreviewDemoEnvironment()) {
+        throw new Error("إصدار البوليصة غير متاح في المعاينة التجريبية.");
+    }
+    try {
+        const { data } = await api.post(
+            `/orders-v2/${encodeURIComponent(normalized)}/shipping-label`,
+        );
+        return data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر إصدار بوليصة الشحن من سلة."));
+    }
+}
