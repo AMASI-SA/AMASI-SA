@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
 import {
+    ArrowSquareOut,
     Bank,
     CheckCircle,
+    Copy,
     FilePdf,
     Package,
     Wallet,
@@ -200,6 +202,15 @@ function normalizeBankName(payment) {
     return BANK_LABELS[normalized] || raw;
 }
 
+function formatCollectionMoney(value, currency = "SAR") {
+    return new Intl.NumberFormat("ar-SA-u-nu-latn", {
+        style: "currency",
+        currency: currency || "SAR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number(value || 0));
+}
+
 function PaymentSummary({ order }) {
     const payment = order?.payment || {};
     const methodRaw = readable(firstPresent(payment.method_native, payment.method, order?.payment_method));
@@ -218,6 +229,13 @@ function PaymentSummary({ order }) {
         .replace(/[إأآٱ]/g, "ا")
         .replace(/[\u200B-\u200D\uFEFF]/g, "");
     const waitingForPayment = normalizedOrderStatus === "بانتظار الدفع";
+    const paidAmount = Number(firstPresent(payment.paid_amount, order?.paid_amount, 0) || 0);
+    const remainingAmount = Number(firstPresent(payment.remaining_amount, order?.remaining_amount, 0) || 0);
+    const hasRemainingAmount = payment.has_remaining_amount === true
+        || order?.has_remaining_amount === true
+        || remainingAmount > 0;
+    const checkoutUrl = String(firstPresent(payment.checkout_url, order?.payment_checkout_url, "") || "").trim();
+    const collectionCurrency = order?.totals?.currency || order?.currency || "SAR";
 
     if (waitingForPayment) {
         return (
@@ -229,6 +247,42 @@ function PaymentSummary({ order }) {
                         <div className="mt-2 text-sm font-medium text-rose-500">{methodLabel}</div>
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    if (hasRemainingAmount && remainingAmount > 0) {
+        return (
+            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-collection-status={paidAmount > 0 ? "partial" : "unpaid"}>
+                <div className="mb-4 flex items-center gap-3">
+                    <WarningCircle size={42} className="shrink-0 text-amber-500" weight="fill" />
+                    <div>
+                        <div className="text-xl font-extrabold text-amber-700">متبقي على العميل</div>
+                        <div className="mt-1 text-sm font-bold text-slate-500">{methodLabel}</div>
+                    </div>
+                </div>
+                <div className="space-y-3 border-y border-slate-100 py-4 text-base">
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-slate-500">المبلغ المدفوع</span>
+                        <span className="num font-extrabold text-slate-800">{formatCollectionMoney(paidAmount, collectionCurrency)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                        <span className="font-bold text-slate-500">المبلغ المتبقي</span>
+                        <span className="num text-xl font-extrabold text-amber-600">{formatCollectionMoney(remainingAmount, collectionCurrency)}</span>
+                    </div>
+                </div>
+                {checkoutUrl ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => navigator.clipboard?.writeText(checkoutUrl)} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-sm font-bold text-teal-700 transition hover:bg-teal-50">
+                            <Copy size={18} /> نسخ رابط الدفع
+                        </button>
+                        <a href={checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-teal-700">
+                            <ArrowSquareOut size={18} /> فتح رابط الدفع
+                        </a>
+                    </div>
+                ) : (
+                    <div className="mt-4 text-sm font-bold text-slate-400">رابط تحصيل المتبقي غير متاح من سلة.</div>
+                )}
             </div>
         );
     }
