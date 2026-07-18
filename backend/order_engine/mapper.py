@@ -263,6 +263,7 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
 
     country = _dict(data.get("country"))
     city = _dict(data.get("city"))
+    district = _dict(data.get("district"))
 
     address = AddressDTO(
         country=_text(_first(country.get("name"), data.get("country"))),
@@ -276,14 +277,17 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
         city=_text(_first(city.get("name"), data.get("city"))),
         district=_text(
             _first(
-                data.get("district"),
+                district.get("name"),
+                data.get("district_name"),
                 data.get("neighborhood"),
+                data.get("block"),
             )
         ),
         street=_text(
             _first(
                 data.get("street"),
                 data.get("street_name"),
+                data.get("street_number"),
                 data.get("address_line"),
             )
         ),
@@ -305,6 +309,8 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
                 data.get("formatted"),
                 data.get("formatted_address"),
                 data.get("description"),
+                data.get("address_line_two"),
+                data.get("address_line"),
                 data.get("address"),
             )
         ),
@@ -858,6 +864,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     )
 
     shipping_address_raw = _first(
+        first_shipment.get("ship_to"),
         first_shipment.get("shipping_address"),
         first_shipment.get("address"),
         shipping_raw.get("address"),
@@ -1002,13 +1009,18 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                 _first(
                     first_shipment.get("tracking_number"),
                     first_shipment.get("tracking_id"),
+                    first_shipment.get("shipping_number"),
+                    first_shipment.get("reference"),
                     shipping_raw.get("tracking_number"),
+                    shipping_raw.get("shipping_number"),
                 )
             ),
             tracking_url=_text(
                 _first(
                     first_shipment.get("tracking_url"),
+                    first_shipment.get("tracking_link"),
                     shipping_raw.get("tracking_url"),
+                    shipping_raw.get("tracking_link"),
                 )
             ),
             label_url=_text(
