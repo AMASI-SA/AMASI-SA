@@ -137,13 +137,26 @@ class ShippingDTO(CanonicalDTO):
     recipient: Optional[dict[str, Any]] = None
 
 
+class OrderDiscountDTO(CanonicalDTO):
+    """One source-reported order discount, including its customer label."""
+
+    title: Optional[str] = None
+    code: Optional[str] = None
+    type: Optional[str] = None
+    amount: float = 0.0
+    discounted_shipping: float = 0.0
+
+
 class MoneyTotalsDTO(CanonicalDTO):
     """Commercial order totals."""
 
     currency: str = "SAR"
     subtotal: float = 0.0
+    options: float = 0.0
     shipping: float = 0.0
     discount: float = 0.0
+    discounts: list[OrderDiscountDTO] = Field(default_factory=list)
+    tax_percent: Optional[float] = None
     tax_reported_by_source: float = 0.0
     total: float = 0.0
 
@@ -222,6 +235,8 @@ class OrderDTO(CanonicalDTO):
     shipping: ShippingDTO = Field(default_factory=ShippingDTO)
     totals: MoneyTotalsDTO = Field(default_factory=MoneyTotalsDTO)
     items: list[OrderItemDTO] = Field(default_factory=list)
+    total_weight: Optional[float] = None
+    total_weight_unit: Optional[str] = None
 
     customer_notes: Optional[str] = None
     staff_notes: Optional[str] = None
