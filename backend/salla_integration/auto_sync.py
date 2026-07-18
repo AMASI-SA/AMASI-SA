@@ -128,6 +128,22 @@ async def _sync_light_order(db, user_id: str, light_order: dict) -> bool:
     if not order_number or not internal_id:
         return False
 
+    # Webhooks are the primary source for existing orders. The light Orders API
+    # is only a discovery fallback for an order that Mezan has not received yet.
+    # Never replace a webhook-backed order with a reduced format=light snapshot.
+    existing = await db.unified_orders.find_one(
+        {
+            "user_id": str(user_id),
+            "order_number": order_number,
+        },
+        {
+            "_id": 0,
+            "order_number": 1,
+        },
+    )
+    if existing:
+        return True
+
     items = await _fetch_salla_order_items(db, user_id, internal_id)
     raw = dict(light_order)
     raw["items"] = items
