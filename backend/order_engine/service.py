@@ -107,6 +107,9 @@ def _bool_value(value: Any) -> Optional[bool]:
 
 
 def _provider_is_new(raw: dict[str, Any]) -> bool:
+    # A Mezan-local read marker always wins.  It never changes Salla status.
+    if raw.get("mezan_read_at"):
+        return False
     explicit_new = _bool_value(raw.get("is_new") if "is_new" in raw else raw.get("unread"))
     if explicit_new is not None:
         return explicit_new
