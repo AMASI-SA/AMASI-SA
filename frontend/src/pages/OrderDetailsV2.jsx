@@ -23,7 +23,8 @@ import {
     WhatsappLogo,
 } from "@phosphor-icons/react";
 import { useOrder } from "../hooks/useOrders";
-import { useOrderItems } from "../hooks/useOrderItems";\nimport ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
+import { useOrderItems } from "../hooks/useOrderItems";
+import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -590,7 +591,14 @@ export default function OrderDetailsV2() {
                 {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} />)}</div>}
             </section>
 
-            <ReturnDecisionCard\n                orderNumber={orderNumber}\n                items={items}\n                currency={currency}\n                itemsLoading={itemsLoading}\n            />\n\n            <AdvancedOrderInfo order={order} />
+            <ReturnDecisionCard
+                orderNumber={orderNumber}
+                items={items}
+                currency={currency}
+                itemsLoading={itemsLoading}
+            />
+
+            <AdvancedOrderInfo order={order} />
             <AccountingSummary order={order} currency={currency} />
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-timeline">
