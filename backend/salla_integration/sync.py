@@ -242,6 +242,26 @@ def _money(v: Any, *, _depth: int = 0) -> float:
         return 0.0
 
 
+def _media_url(v: Any, *, _depth: int = 0) -> str:
+    """Extract a stable URL from Salla media fields without losing raw data."""
+    if v in (None, "") or _depth > 8:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, dict):
+        for key in ("url", "original", "src", "full", "medium", "thumbnail"):
+            result = _media_url(v.get(key), _depth=_depth + 1)
+            if result:
+                return result
+        return ""
+    if isinstance(v, (list, tuple)):
+        for candidate in v:
+            result = _media_url(candidate, _depth=_depth + 1)
+            if result:
+                return result
+    return ""
+
+
 def _normalize_date(v: Any) -> Optional[str]:
     """Salla ISO with TZ → YYYY-MM-DD."""
     if not v:
@@ -463,6 +483,25 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         or salla_order.get("checkout_url")
     )
 
+    # Bank-transfer evidence is supplied by Salla on the order itself:
+    # bank.bank_name identifies the merchant receiving account, while
+    # receipt_image is the customer's uploaded proof of transfer.
+    bank = salla_order.get("bank") or {}
+    if not isinstance(bank, dict):
+        bank = {}
+    receiving_bank_name = _str(
+        bank.get("bank_name")
+        or bank.get("name")
+        or salla_order.get("receiving_bank_name")
+        or salla_order.get("bank_name")
+    )
+    payment_receipt_url = _media_url(
+        salla_order.get("receipt_image")
+        or salla_order.get("payment_receipt_url")
+        or payment_obj.get("receipt_url")
+        or payment_obj.get("receipt_image")
+    )
+
     if remaining_amount > 0:
         payment_collection_status = "partial" if paid_amount > 0 else "unpaid"
     elif paid_amount > 0:
@@ -573,6 +612,8 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "has_remaining_amount": has_remaining_amount,
         "payment_collection_status": payment_collection_status,
         "payment_checkout_url": checkout_url,
+        "receiving_bank_name": receiving_bank_name,
+        "payment_receipt_url": payment_receipt_url,
         "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
         "payment_method": _str(payment_method),
