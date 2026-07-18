@@ -245,6 +245,26 @@ def test_receiving_bank_mapping(
     assert order.payment.receiving_bank_code == expected
 
 
+def test_maps_salla_bank_account_and_receipt_evidence(
+    salla_order_payload,
+):
+    salla_order_payload["payment_method"] = "bank"
+    salla_order_payload["bank"] = {
+        "bank_name": "مصرف الراجحي",
+    }
+    salla_order_payload["receipt_image"] = (
+        "https://cdn.salla.sa/example/transfer-receipt.jpg"
+    )
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.payment.receiving_bank_code == "bank_rajhi"
+    assert order.payment.receiving_bank_name == "مصرف الراجحي"
+    assert order.payment.receipt_url == (
+        "https://cdn.salla.sa/example/transfer-receipt.jpg"
+    )
+
+
 def test_maps_partial_collection_without_marking_fully_paid(
     salla_order_payload,
 ):
