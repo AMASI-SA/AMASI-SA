@@ -34,6 +34,8 @@ CRITICAL_FIELDS = {
     "has_remaining_amount",
     "payment_collection_status",
     "payment_checkout_url",
+    "receiving_bank_name",
+    "payment_receipt_url",
 }
 ZERO_VALID_FIELDS = {"paid_amount", "remaining_amount", "has_remaining_amount"}
 COLLECTION_FIELDS = {
@@ -42,6 +44,10 @@ COLLECTION_FIELDS = {
     "has_remaining_amount",
     "payment_collection_status",
     "payment_checkout_url",
+}
+PAYMENT_EVIDENCE_FIELDS = {
+    "receiving_bank_name",
+    "payment_receipt_url",
 }
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
@@ -58,6 +64,8 @@ TRACKED_FIELDS = (
     "has_remaining_amount",
     "payment_collection_status",
     "payment_checkout_url",
+    "receiving_bank_name",
+    "payment_receipt_url",
     "customer_name",
     "customer_mobile",
     "payment_method",
@@ -643,6 +651,7 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                     "order_status",
                     "order_status_slug",
                     *COLLECTION_FIELDS,
+                    *PAYMENT_EVIDENCE_FIELDS,
                 }
             )
             if fills_empty_only and not salla_authoritative_override:
