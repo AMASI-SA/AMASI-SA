@@ -835,10 +835,16 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         )
     )
 
+    bank_raw = _dict(raw_order.get("bank"))
     bank_candidate = _first(
+        raw_order.get("receiving_bank_name"),
         raw_order.get("receiving_bank"),
         raw_order.get("bank_name"),
+        bank_raw.get("bank_name"),
+        bank_raw.get("name"),
+        payment_raw.get("receiving_bank_name"),
         payment_raw.get("receiving_bank"),
+        payment_raw.get("bank_name"),
         payment_raw.get("bank"),
         payment_method_obj.get("name"),
         payment_method_obj.get("label"),
@@ -890,6 +896,17 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             raw_order.get("payment_checkout_url"),
             payment_raw.get("checkout_url"),
             remaining_action.get("checkout_url"),
+        )
+    )
+    receipt_url = _text(
+        _first(
+            raw_order.get("payment_receipt_url"),
+            raw_order.get("receipt_image"),
+            payment_raw.get("receipt_url"),
+            payment_raw.get("receipt_image"),
+            payment_raw.get("attachment_url"),
+            payment_raw.get("proof_url"),
+            payment_raw.get("transfer_receipt_url"),
         )
     )
 
@@ -1012,6 +1029,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             checkout_url=checkout_url,
             receiving_bank_code=receiving_bank_code,
             receiving_bank_name=receiving_bank_name,
+            receipt_url=receipt_url,
             transaction_reference=_text(
                 _first(
                     payment_raw.get("reference"),
