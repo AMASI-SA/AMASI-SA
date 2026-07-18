@@ -10,6 +10,7 @@ import {
     CreditCard,
     DeviceMobile,
     EnvelopeSimple,
+    FileText,
     MapPin,
     Megaphone,
     Package,
@@ -143,6 +144,16 @@ function formatMoney(value, currency = "SAR") {
             maximumFractionDigits: decimals,
         })} ${code}`;
     }
+}
+
+function formatWeight(value, unit = "kg") {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return "—";
+    const normalizedUnit = String(unit || "kg").trim().toLowerCase();
+    const label = normalizedUnit === "g" ? "جم" : normalizedUnit === "kg" ? "كجم" : unit;
+    return `${new Intl.NumberFormat("ar-SA-u-nu-latn", {
+        maximumFractionDigits: 3,
+    }).format(amount)} ${label}`;
 }
 
 function formatOrderDate(value) {
@@ -724,6 +735,81 @@ function ProductCard({ item, index, currency }) {
     );
 }
 
+function OrderSummaryCard({ order, items, currency }) {
+    const totals = order.totals || {};
+    const subtotal = Number(totals.subtotal || 0);
+    const options = Number(totals.options || 0);
+    const shipping = Number(totals.shipping || 0);
+    const tax = Number(totals.tax_reported_by_source || 0);
+    const total = Number(totals.total || 0);
+    const discounts = Array.isArray(totals.discounts) && totals.discounts.length
+        ? totals.discounts
+        : Number(totals.discount || 0) > 0
+            ? [{ title: "الخصم", amount: Number(totals.discount) }]
+            : [];
+    const fallbackWeight = (items || []).reduce((sum, item) => {
+        const weight = Number(item?.weight);
+        const quantity = Number(item?.quantity || 1);
+        return Number.isFinite(weight) ? sum + (weight * quantity) : sum;
+    }, 0);
+    const totalWeight = isPresent(order.total_weight)
+        ? Number(order.total_weight)
+        : fallbackWeight || null;
+    const weightUnit = order.total_weight_unit
+        || items?.find((item) => item?.weight_unit)?.weight_unit
+        || "kg";
+    const taxPercent = isPresent(totals.tax_percent)
+        ? Number(totals.tax_percent).toFixed(2)
+        : null;
+
+    function SummaryRow({ label, children, tone = "normal" }) {
+        const toneClass = tone === "discount"
+            ? "text-rose-600"
+            : tone === "positive" ? "text-slate-800" : "text-slate-700";
+        return (
+            <div className="flex min-h-14 items-center justify-between gap-5 border-t border-slate-100 px-5 py-3 first:border-t-0">
+                <span className="font-bold text-slate-600">{label}</span>
+                <span className={`num text-left font-bold ${toneClass}`} dir="ltr">{children}</span>
+            </div>
+        );
+    }
+
+    return (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="order-v2-summary">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                <FileText size={22} className="text-violet-700" />
+                <h2 className="text-lg font-extrabold text-slate-950">ملخص الطلب</h2>
+            </div>
+            <div>
+                <SummaryRow label="مجموع السلة">{formatMoney(subtotal, currency)}</SummaryRow>
+                {discounts.map((discount, index) => {
+                    const label = discount?.title
+                        || (discount?.code ? `كوبون خصم ${discount.code}` : "الخصم");
+                    return (
+                        <SummaryRow key={`${label}-${index}`} label={label} tone="discount">
+                            - {formatMoney(Math.abs(Number(discount?.amount || 0)), currency)}
+                        </SummaryRow>
+                    );
+                })}
+                <SummaryRow label="خيارات الطلب">{formatMoney(options, currency)}</SummaryRow>
+                <SummaryRow label="تكلفة الشحن" tone="positive">
+                    {shipping === 0 ? "مجاني" : `+ ${formatMoney(shipping, currency)}`}
+                </SummaryRow>
+                <SummaryRow label={`الضريبة${taxPercent !== null ? ` (${taxPercent}%)` : ""}`} tone="positive">
+                    {tax === 0 ? formatMoney(0, currency) : `+ ${formatMoney(tax, currency)}`}
+                </SummaryRow>
+            </div>
+            <div className="grid min-h-20 grid-cols-3 items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+                <div className="font-extrabold text-slate-700">إجمالي الطلب</div>
+                <div className="text-center font-extrabold text-teal-800">
+                    {totalWeight !== null ? formatWeight(totalWeight, weightUnit) : "—"}
+                </div>
+                <div className="num text-left text-lg font-extrabold text-teal-800" dir="ltr">{formatMoney(total, currency)}</div>
+            </div>
+        </section>
+    );
+}
+
 function InfoRow({ label, value }) {
     return <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-0"><span className="text-sm font-bold text-slate-400">{label}</span><span className="num max-w-[65%] break-words text-left text-sm font-bold text-slate-800">{displayValue(value)}</span></div>;
 }
@@ -837,6 +923,8 @@ export default function OrderDetailsV2() {
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
                 {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} />)}</div>}
             </section>
+
+            <OrderSummaryCard order={order} items={items} currency={currency} />
 
             <ReturnDecisionCard
                 orderNumber={orderNumber}
