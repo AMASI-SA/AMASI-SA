@@ -33,6 +33,95 @@ import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
+function escapePrintHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function storeCourierLabelHtml(data = {}) {
+    const address = data.address || {};
+    const addressLine = address.address_line_two || address.address_line || [
+        address.street_number,
+        address.block,
+        address.city,
+        address.country,
+    ].filter(Boolean).join("، ");
+    const shortAddress = address.short_address || "—";
+    const remaining = data.remaining_amount || {};
+    const remainingText = `${remaining.amount ?? 0} ${remaining.currency || "SAR"}`;
+    const logo = data.store_logo
+        ? `<img class="logo" src="${escapePrintHtml(data.store_logo)}" alt="شعار المتجر" />`
+        : "";
+
+    return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <title>بوليصة مندوب المتجر - ${escapePrintHtml(data.order_number)}</title>
+    <style>
+        @page { size: A6 portrait; margin: 0; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; background: #fff; color: #111; font-family: Tahoma, Arial, sans-serif; }
+        .sheet { width: 100mm; min-height: 148mm; margin: 0 auto; padding: 6mm 5mm; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 5mm; }
+        .brand { min-width: 36mm; text-align: center; font-weight: 700; font-size: 13pt; }
+        .logo { display: block; max-width: 31mm; max-height: 21mm; margin: 0 auto 2mm; object-fit: contain; }
+        .meta { direction: rtl; text-align: right; font-size: 11pt; line-height: 1.9; }
+        .meta b, .customer b { font-weight: 700; }
+        .divider { border-top: 0.55mm solid #111; margin: 5mm 0 4mm; }
+        h1 { margin: 0 0 3mm; text-align: center; font-size: 15pt; }
+        .customer { border: 0.4mm solid #555; border-radius: 4mm; padding: 4mm; font-size: 11pt; line-height: 1.8; }
+        .row { margin-bottom: 1.5mm; overflow-wrap: anywhere; }
+        .remaining { margin-top: 3mm; font-size: 11pt; }
+        .qr { display: block; width: 36mm; height: 36mm; margin: 4mm auto 1mm; image-rendering: pixelated; }
+        .barcode-value { direction: ltr; text-align: center; font: 700 13pt Arial, sans-serif; letter-spacing: 0.7mm; }
+        .caption { text-align: center; color: #444; font-size: 8pt; margin-top: 1mm; }
+        @media screen { body { background: #e5e7eb; } .sheet { background: #fff; box-shadow: 0 2mm 8mm #999; } }
+    </style>
+</head>
+<body>
+    <main class="sheet">
+        <section class="header">
+            <div class="brand">${logo}<div>${escapePrintHtml(data.store_name || "المتجر")}</div><div dir="ltr">${escapePrintHtml(data.store_phone || "")}</div></div>
+            <div class="meta">
+                <div><b>التاريخ:</b> <span dir="ltr">${escapePrintHtml(data.order_date || "—")}</span></div>
+                <div><b>رقم الطلب:</b> <span dir="ltr">${escapePrintHtml(data.order_number || "—")}</span></div>
+                <div><b>التوصيل:</b> ${escapePrintHtml(data.courier_name || "مندوب المتجر")}</div>
+            </div>
+        </section>
+        <div class="divider"></div>
+        <h1>معلومات العميل</h1>
+        <section class="customer">
+            <div class="row"><b>الاسم:</b> ${escapePrintHtml(data.customer_name || "—")}</div>
+            <div class="row"><b>الهاتف:</b> <span dir="ltr">${escapePrintHtml(data.customer_phone || "—")}</span></div>
+            <div class="row"><b>العنوان:</b> ${escapePrintHtml(addressLine || "—")}</div>
+            <div class="row"><b>العنوان الوطني:</b> <span dir="ltr">${escapePrintHtml(shortAddress)}</span></div>
+        </section>
+        <div class="remaining"><b>المبلغ المتبقي:</b> <span dir="ltr">${escapePrintHtml(remainingText)}</span></div>
+        <img class="qr" src="${escapePrintHtml(data.qr_code || "")}" alt="رمز رقم الطلب" />
+        <div class="barcode-value">${escapePrintHtml(data.barcode_value || data.order_number || "")}</div>
+        <div class="caption">عند مسح الرمز يظهر رقم الطلب فقط</div>
+    </main>
+</body>
+</html>`;
+}
+
+function printStoreCourierLabel(printWindow, data) {
+    if (!printWindow || !data?.qr_code) return false;
+    printWindow.document.open();
+    printWindow.document.write(storeCourierLabelHtml(data));
+    printWindow.document.close();
+    window.setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+    }, 700);
+    return true;
+}
+
 function normalizeCurrency(value) {
     const code = String(value || "SAR").trim().toUpperCase();
     return /^[A-Z]{3}$/.test(code) ? code : "SAR";
@@ -362,16 +451,22 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
         localLabelUrl && providerTracking && !localStatusBlocksPrinting
     );
     const hasVerifiedSnapshot = issuedSnapshot !== null;
-    const verifiedReady = Boolean(
+    const verifiedStoreLabel = Boolean(
+        issuedSnapshot?.ready
+        && issuedSnapshot?.label_type === "store_courier"
+        && issuedSnapshot?.print_data?.qr_code
+    );
+    const verifiedSallaLabel = Boolean(
         issuedSnapshot?.ready
         && issuedSnapshot?.label_url
         && (issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number)
     );
     const labelUrl = hasVerifiedSnapshot
-        ? (verifiedReady ? issuedSnapshot.label_url : "")
+        ? (verifiedSallaLabel ? issuedSnapshot.label_url : "")
         : (localReady ? localLabelUrl : "");
+    const hasPrintableLabel = Boolean(labelUrl || verifiedStoreLabel);
     const tracking = hasVerifiedSnapshot
-        ? (verifiedReady
+        ? (verifiedSallaLabel
             ? (issuedSnapshot.tracking_number || issuedSnapshot.shipping_number)
             : "")
         : (localReady ? providerTracking : "");
@@ -380,9 +475,14 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     const shippingStatus = hasVerifiedSnapshot
         ? issuedSnapshot?.status
         : shipping.status;
+    const shippingStatusLabel = {
+        store_courier: "بوليصة مندوب المتجر جاهزة",
+        failed: "فشل إصدار البوليصة — أعد المحاولة",
+        verification_failed: "تعذّر التحقق من البوليصة",
+    }[shippingStatus] || shippingStatus || "تتبع حالة الشحنة";
 
     async function issueLabel() {
-        if (issuing || labelUrl) return;
+        if (issuing || hasPrintableLabel) return;
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
@@ -395,7 +495,13 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
             const result = await issueShippingLabel(orderNumber);
             setIssuedSnapshot(result);
             setIssueMessage(result?.message || "");
-            if (result?.ready && result?.label_url) {
+            if (result?.label_type === "store_courier" && result?.ready) {
+                if (!printStoreCourierLabel(printWindow, result?.print_data)) {
+                    printWindow?.close();
+                    setIssuedSnapshot({ ready: false, status: "failed" });
+                    setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
+                }
+            } else if (result?.ready && result?.label_url) {
                 if (printWindow) {
                     printWindow.location.replace(result.label_url);
                 } else {
@@ -407,6 +513,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
             onIssued?.();
         } catch (error) {
             printWindow?.close();
+            setIssuedSnapshot({ ready: false, status: "failed" });
             setIssueError(error?.message || "تعذّر إصدار بوليصة الشحن من سلة.");
         } finally {
             setIssuing(false);
@@ -414,7 +521,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     }
 
     async function printCurrentLabel() {
-        if (issuing || !labelUrl) return;
+        if (issuing || !hasPrintableLabel) return;
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
@@ -424,6 +531,13 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
             printWindow.document.title = "جاري التحقق من بوليصة الشحن";
         }
         try {
+            if (verifiedStoreLabel) {
+                if (!printStoreCourierLabel(printWindow, issuedSnapshot?.print_data)) {
+                    printWindow?.close();
+                    setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
+                }
+                return;
+            }
             const result = await verifyShippingLabel(orderNumber);
             setIssuedSnapshot(result);
             setIssueMessage(result?.message || "");
@@ -464,15 +578,17 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
 
     return (
         <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={
-            labelUrl ? (
+            hasPrintableLabel ? (
                 <button type="button" onClick={printCurrentLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
-                    {issuing ? "التحقق من سلة..." : "طباعة البوليصة"}
+                    {issuing
+                        ? "تجهيز الطباعة..."
+                        : verifiedStoreLabel ? "طباعة بوليصة المتجر" : "طباعة البوليصة"}
                 </button>
             ) : (
                 <button type="button" onClick={issueLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
-                    {issuing ? "سلة تُصدر البوليصة..." : "إصدار البوليصة"}
+                    {issuing ? "جاري تجهيز البوليصة..." : "إصدار البوليصة"}
                 </button>
             )
         }>
@@ -498,7 +614,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
 
                 <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">رقم التتبع:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم التتبع" /></div>
-                    <div className="mt-4 text-sm font-bold text-teal-800">{shippingStatus || "تتبع حالة الشحنة"}</div>
+                    <div className="mt-4 text-sm font-bold text-teal-800">{shippingStatusLabel}</div>
                     {issueMessage && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold text-amber-800">{issueMessage}</div>}
                     {issueError && <div className="mt-3 rounded-lg bg-rose-50 p-2 text-xs font-bold text-rose-700">{issueError}</div>}
                 </div>
