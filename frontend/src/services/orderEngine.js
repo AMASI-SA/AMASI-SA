@@ -119,3 +119,20 @@ export async function issueShippingLabel(orderNumber) {
         throw new Error(errorMessage(error, "تعذّر إصدار بوليصة الشحن من سلة."));
     }
 }
+
+
+export async function verifyShippingLabel(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+    if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    if (isPreviewDemoEnvironment()) {
+        return { ok: true, ready: false, source: "preview" };
+    }
+    try {
+        const { data } = await api.post(
+            `/orders-v2/${encodeURIComponent(normalized)}/shipping-label/refresh`,
+        );
+        return data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر التحقق من البوليصة الحالية في سلة."));
+    }
+}
