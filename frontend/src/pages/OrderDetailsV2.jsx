@@ -458,10 +458,12 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
         "pending", "creating", "processing", "cancelled",
         "canceled", "void", "deleted",
     ]).has(localStatusKey);
+    const localStatusIsCancelled = new Set([
+        "cancelled", "canceled", "void", "deleted",
+    ]).has(localStatusKey);
     const localReady = Boolean(
         localLabelUrl && providerTracking && !localStatusBlocksPrinting
     );
-    const hasVerifiedSnapshot = issuedSnapshot !== null;
     const verifiedStoreLabel = Boolean(
         issuedSnapshot?.ready
         && issuedSnapshot?.label_type === "store_courier"
@@ -472,22 +474,24 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
         && issuedSnapshot?.label_url
         && (issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number)
     );
-    const labelUrl = hasVerifiedSnapshot
-        ? (verifiedSallaLabel ? issuedSnapshot.label_url : "")
+    const labelUrl = verifiedSallaLabel
+        ? issuedSnapshot.label_url
         : (localReady ? localLabelUrl : "");
     const hasPrintableLabel = Boolean(labelUrl || verifiedStoreLabel);
-    const tracking = hasVerifiedSnapshot
-        ? (verifiedSallaLabel
-            ? (issuedSnapshot.tracking_number || issuedSnapshot.shipping_number)
-            : "")
-        : (localReady ? providerTracking : "");
+    const snapshotTracking = issuedSnapshot?.tracking_number
+        || issuedSnapshot?.shipping_number;
+    const localTracking = providerTracking && !localStatusIsCancelled
+        ? providerTracking
+        : "";
+    const tracking = snapshotTracking || localTracking;
+    const awaitingLabel = Boolean(tracking && !hasPrintableLabel);
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
-    const shippingStatus = hasVerifiedSnapshot
-        ? issuedSnapshot?.status
-        : shipping.status;
+    const shippingStatus = issuedSnapshot?.status || shipping.status;
     const shippingStatusLabel = {
         store_courier: "بوليصة مندوب المتجر جاهزة",
+        created: "تم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز",
+        label_pending: "تم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز",
         failed: "فشل إصدار البوليصة — أعد المحاولة",
         verification_failed: "تعذّر التحقق من البوليصة",
     }[shippingStatus] || shippingStatus || "تتبع حالة الشحنة";
@@ -524,8 +528,8 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
             onIssued?.();
         } catch (error) {
             printWindow?.close();
-            setIssuedSnapshot({ ready: false, status: "failed" });
             setIssueError(error?.message || "تعذّر إصدار بوليصة الشحن من سلة.");
+            onIssued?.();
         } finally {
             setIssuing(false);
         }
@@ -569,8 +573,8 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
         } catch (error) {
             printWindow?.close();
             // Fail closed: an unverified cached URL must never be printed.
-            setIssuedSnapshot({ ready: false, status: "verification_failed" });
             setIssueError(error?.message || "تعذّر التحقق من البوليصة الحالية في سلة.");
+            onIssued?.();
         } finally {
             setIssuing(false);
         }
@@ -599,7 +603,9 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
             ) : (
                 <button type="button" onClick={issueLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
-                    {issuing ? "جاري تجهيز البوليصة..." : "إصدار البوليصة"}
+                    {issuing
+                        ? "جاري التحقق من البوليصة..."
+                        : awaitingLabel ? "تحديث البوليصة" : "إصدار البوليصة"}
                 </button>
             )
         }>
