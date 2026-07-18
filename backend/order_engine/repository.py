@@ -66,6 +66,7 @@ _ATTRIBUTION_FIELDS = (
     "gift_order",
     "order_type",
     "type",
+    "mezan_read_at",
 )
 
 
