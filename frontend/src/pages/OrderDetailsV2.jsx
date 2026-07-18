@@ -441,7 +441,7 @@ function CustomerCard({ customer, shipping }) {
     );
 }
 
-function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
+function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting = false }) {
     const [issuing, setIssuing] = useState(false);
     const [issueError, setIssueError] = useState("");
     const [issueMessage, setIssueMessage] = useState("");
@@ -497,7 +497,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     }[shippingStatus] || shippingStatus || "تتبع حالة الشحنة";
 
     async function issueLabel() {
-        if (issuing || hasPrintableLabel) return;
+        if (!allowPrinting || issuing || hasPrintableLabel) return;
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
@@ -536,7 +536,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     }
 
     async function printCurrentLabel() {
-        if (issuing || !hasPrintableLabel) return;
+        if (!allowPrinting || issuing || !hasPrintableLabel) return;
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
@@ -593,7 +593,12 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
 
     return (
         <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={
-            hasPrintableLabel ? (
+            !allowPrinting ? (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800" data-testid="order-v2-shipping-print-deferred">
+                    <Printer size={18} />
+                    الطباعة بعد اكتمال التجهيز
+                </div>
+            ) : hasPrintableLabel ? (
                 <button type="button" onClick={printCurrentLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
                     {issuing
@@ -632,6 +637,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
                 <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-slate-600">رقم التتبع:</span><span className="num font-bold text-teal-800">{tracking || "—"}</span><CopyValueButton value={tracking} label="نسخ رقم التتبع" /></div>
                     <div className="mt-4 text-sm font-bold text-teal-800">{shippingStatusLabel}</div>
+                    {!allowPrinting && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold leading-6 text-amber-800">إصدار وطباعة البوليصة مؤجلان إلى الخطوة الأخيرة بعد تأكيد تجهيز جميع قطع الطلب.</div>}
                     {issueMessage && <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold text-amber-800">{issueMessage}</div>}
                     {issueError && <div className="mt-3 rounded-lg bg-rose-50 p-2 text-xs font-bold text-rose-700">{issueError}</div>}
                 </div>
