@@ -61,6 +61,7 @@ _DEFAULT_SCOPES_FALLBACK = (
     "offline_access "
     "settings.read "
     "orders.read_write "
+    "shipping.read_write "
     "webhooks.read_write"
 )
 DEFAULT_SCOPES = (os.environ.get("SALLA_OAUTH_SCOPES") or _DEFAULT_SCOPES_FALLBACK).strip()
