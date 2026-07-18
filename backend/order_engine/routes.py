@@ -22,7 +22,11 @@ from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
-from .shipping_label_service import ShippingLabelError, issue_shipping_label
+from .shipping_label_service import (
+    ShippingLabelError,
+    issue_shipping_label,
+    refresh_shipping_label,
+)
 from .service import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
@@ -278,6 +282,28 @@ def make_order_engine_router(
             "read_at": read_at,
             "source": "mezan_local",
         }
+
+    @router.post("/{order_number}/shipping-label/refresh")
+    async def refresh_order_shipping_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        try:
+            return await refresh_shipping_label(
+                db,
+                str(owner["id"]),
+                str(order_number),
+            )
+        except ShippingLabelError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "order_number": str(order_number),
+                },
+            ) from exc
 
     @router.post("/{order_number}/shipping-label")
     async def create_order_shipping_label(
