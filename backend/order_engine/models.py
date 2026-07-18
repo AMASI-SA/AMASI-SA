@@ -66,6 +66,7 @@ class AddressDTO(CanonicalDTO):
     postal_code: Optional[str] = None
     building_number: Optional[str] = None
     additional_number: Optional[str] = None
+    short_address: Optional[str] = None
     formatted: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
