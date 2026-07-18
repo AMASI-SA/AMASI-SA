@@ -219,9 +219,9 @@ export function useOrder(orderNumber) {
             setError("");
         }
         try {
-            // Read the local unified order only.
-            // Opening the page must never call Salla API or overwrite richer
-            // shipping data already persisted from verified webhooks.
+            // Read the local unified order only. Opening or refreshing this page
+            // must never call Salla API, because a lighter API snapshot can
+            // overwrite richer shipping fields already saved from webhooks.
             const result = await getOrder(normalized);
             if (mountedRef.current) {
                 setOrder(result);
