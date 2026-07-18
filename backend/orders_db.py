@@ -50,6 +50,20 @@ PAYMENT_EVIDENCE_FIELDS = {
     "receiving_bank_name",
     "payment_receipt_url",
 }
+SHIPPING_CLEARABLE_FIELDS = {
+    "shipping_label_url",
+    "tracking_number",
+    "tracking_url",
+}
+SHIPPING_WITHOUT_ACTIVE_LABEL = {
+    "pending",
+    "creating",
+    "processing",
+    "cancelled",
+    "canceled",
+    "void",
+    "deleted",
+}
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
 TRACKED_FIELDS = (
@@ -638,7 +652,21 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                 f in ZERO_VALID_FIELDS and old_val is not None
             )
             if new_empty:
-                continue  # never overwrite with empty
+                shipping_status = str(
+                    incoming.get("shipment_status")
+                    or incoming.get("shipping_status")
+                    or ""
+                ).strip().lower().replace("-", "_").replace(" ", "_")
+                if (
+                    source == "salla_direct"
+                    and f in SHIPPING_CLEARABLE_FIELDS
+                    and shipping_status in SHIPPING_WITHOUT_ACTIVE_LABEL
+                ):
+                    # Empty is authoritative after Salla cancels or resets an
+                    # AWB. Keeping the old value would print a void label.
+                    merged[f] = None
+                    field_sources[f] = source
+                continue
             if old_empty:
                 merged[f] = new_val
                 field_sources[f] = source
