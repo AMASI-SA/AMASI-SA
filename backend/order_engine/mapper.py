@@ -845,6 +845,54 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     )
     receiving_bank_code, receiving_bank_name = _canonical_bank(bank_candidate)
 
+    payment_actions = _dict(raw_order.get("payment_actions"))
+    remaining_action = _dict(payment_actions.get("remaining_action"))
+    refund_action = _dict(payment_actions.get("refund_action"))
+
+    paid_amount = _number(
+        _first(
+            raw_order.get("paid_amount"),
+            payment_raw.get("paid_amount"),
+            remaining_action.get("paid_amount"),
+            refund_action.get("paid_amount"),
+        )
+    )
+    remaining_amount = _number(
+        _first(
+            raw_order.get("remaining_amount"),
+            payment_raw.get("remaining_amount"),
+            remaining_action.get("remaining_amount"),
+        )
+    )
+    has_remaining_amount = bool(
+        _first(
+            raw_order.get("has_remaining_amount"),
+            payment_raw.get("has_remaining_amount"),
+            remaining_action.get("has_remaining_amount"),
+            remaining_amount > 0,
+        )
+    )
+    collection_status = _text(
+        _first(
+            raw_order.get("payment_collection_status"),
+            payment_raw.get("collection_status"),
+        )
+    )
+    if collection_status not in {"unknown", "unpaid", "partial", "paid"}:
+        if remaining_amount > 0:
+            collection_status = "partial" if paid_amount > 0 else "unpaid"
+        elif paid_amount > 0:
+            collection_status = "paid"
+        else:
+            collection_status = "unknown"
+    checkout_url = _text(
+        _first(
+            raw_order.get("payment_checkout_url"),
+            payment_raw.get("checkout_url"),
+            remaining_action.get("checkout_url"),
+        )
+    )
+
     amounts = _dict(raw_order.get("amounts"))
     total_obj = _first(
         amounts.get("total"),
@@ -957,6 +1005,11 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             method=method,
             method_native=method_native,
             status=_text(payment_raw.get("status")),
+            paid_amount=paid_amount,
+            remaining_amount=remaining_amount,
+            has_remaining_amount=has_remaining_amount,
+            collection_status=collection_status,
+            checkout_url=checkout_url,
             receiving_bank_code=receiving_bank_code,
             receiving_bank_name=receiving_bank_name,
             transaction_reference=_text(
