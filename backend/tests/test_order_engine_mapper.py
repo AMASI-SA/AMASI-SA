@@ -245,6 +245,38 @@ def test_receiving_bank_mapping(
     assert order.payment.receiving_bank_code == expected
 
 
+def test_maps_partial_collection_without_marking_fully_paid(
+    salla_order_payload,
+):
+    salla_order_payload["payment_method"] = "mada"
+    salla_order_payload["payment_actions"] = {
+        "refund_action": {
+            "paid_amount": {"amount": 129.60, "currency": "SAR"},
+        },
+        "remaining_action": {
+            "has_remaining_amount": True,
+            "paid_amount": {"amount": 129.60, "currency": "SAR"},
+            "remaining_amount": {"amount": 1.08, "currency": "SAR"},
+            "checkout_url": "https://example.test/pay-remaining",
+        },
+    }
+    salla_order_payload["amounts"]["total"] = {
+        "amount": 130.68,
+        "currency": "SAR",
+    }
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.payment.paid_amount == pytest.approx(129.60)
+    assert order.payment.remaining_amount == pytest.approx(1.08)
+    assert order.payment.has_remaining_amount is True
+    assert order.payment.collection_status == "partial"
+    assert order.payment.checkout_url == "https://example.test/pay-remaining"
+    assert order.payment.paid_amount + order.payment.remaining_amount == pytest.approx(
+        order.totals.total
+    )
+
+
 def test_missing_creation_date_is_rejected(salla_order_payload):
     salla_order_payload.pop("date")
 
