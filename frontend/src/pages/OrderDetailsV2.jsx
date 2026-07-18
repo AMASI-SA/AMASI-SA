@@ -24,7 +24,11 @@ import {
 } from "@phosphor-icons/react";
 import { useOrder } from "../hooks/useOrders";
 import { useOrderItems } from "../hooks/useOrderItems";
-import { issueShippingLabel, markOrderRead } from "../services/orderEngine";
+import {
+    issueShippingLabel,
+    markOrderRead,
+    verifyShippingLabel,
+} from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
@@ -344,11 +348,38 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     const [issuedSnapshot, setIssuedSnapshot] = useState(null);
     const address = shipping.address || customer.shipping_address || {};
     const providerTracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
-    const tracking = issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number || providerTracking;
+    const localLabelUrl = shipping.label_url || shipping.label;
+    const localStatusKey = String(shipping.status || "")
+        .trim()
+        .toLowerCase()
+        .replaceAll("-", "_")
+        .replaceAll(" ", "_");
+    const localStatusBlocksPrinting = new Set([
+        "pending", "creating", "processing", "cancelled",
+        "canceled", "void", "deleted",
+    ]).has(localStatusKey);
+    const localReady = Boolean(
+        localLabelUrl && providerTracking && !localStatusBlocksPrinting
+    );
+    const hasVerifiedSnapshot = issuedSnapshot !== null;
+    const verifiedReady = Boolean(
+        issuedSnapshot?.ready
+        && issuedSnapshot?.label_url
+        && (issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number)
+    );
+    const labelUrl = hasVerifiedSnapshot
+        ? (verifiedReady ? issuedSnapshot.label_url : "")
+        : (localReady ? localLabelUrl : "");
+    const tracking = hasVerifiedSnapshot
+        ? (verifiedReady
+            ? (issuedSnapshot.tracking_number || issuedSnapshot.shipping_number)
+            : "")
+        : (localReady ? providerTracking : "");
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
-    const labelUrl = issuedSnapshot?.label_url || shipping.label_url || shipping.label;
-    const shippingStatus = issuedSnapshot?.status || shipping.status;
+    const shippingStatus = hasVerifiedSnapshot
+        ? issuedSnapshot?.status
+        : shipping.status;
 
     async function issueLabel() {
         if (issuing || labelUrl) return;
@@ -382,6 +413,44 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
         }
     }
 
+    async function printCurrentLabel() {
+        if (issuing || !labelUrl) return;
+        setIssuing(true);
+        setIssueError("");
+        setIssueMessage("");
+        const printWindow = window.open("about:blank", "_blank");
+        if (printWindow) {
+            printWindow.opener = null;
+            printWindow.document.title = "جاري التحقق من بوليصة الشحن";
+        }
+        try {
+            const result = await verifyShippingLabel(orderNumber);
+            setIssuedSnapshot(result);
+            setIssueMessage(result?.message || "");
+            if (
+                result?.ready
+                && result?.label_url
+                && (result?.tracking_number || result?.shipping_number)
+            ) {
+                if (printWindow) {
+                    printWindow.location.replace(result.label_url);
+                } else {
+                    window.open(result.label_url, "_blank", "noopener,noreferrer");
+                }
+            } else {
+                printWindow?.close();
+            }
+            onIssued?.();
+        } catch (error) {
+            printWindow?.close();
+            // Fail closed: an unverified cached URL must never be printed.
+            setIssuedSnapshot({ ready: false, status: "verification_failed" });
+            setIssueError(error?.message || "تعذّر التحقق من البوليصة الحالية في سلة.");
+        } finally {
+            setIssuing(false);
+        }
+    }
+
     const addressRows = [
         ["الدولة", address.country],
         ["المدينة", address.city],
@@ -396,9 +465,10 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued }) {
     return (
         <SectionCard title="الشحن" icon={Truck} testid="order-v2-shipping" headerAction={
             labelUrl ? (
-                <a href={labelUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100">
-                    <Printer size={18} /> طباعة البوليصة
-                </a>
+                <button type="button" onClick={printCurrentLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60">
+                    {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
+                    {issuing ? "التحقق من سلة..." : "طباعة البوليصة"}
+                </button>
             ) : (
                 <button type="button" onClick={issueLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
