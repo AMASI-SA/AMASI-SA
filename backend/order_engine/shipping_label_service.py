@@ -185,7 +185,10 @@ def _url(value: Any) -> str:
         candidate = value.strip()
         return candidate if candidate.startswith(("https://", "http://")) else ""
     if isinstance(value, dict):
-        for key in ("url", "download_url", "label_url", "original", "pdf"):
+        for key in (
+            "url", "download_url", "label_url", "original", "pdf",
+            "pdf_label", "pdf_url",
+        ):
             candidate = _url(value.get(key))
             if candidate:
                 return candidate
@@ -213,6 +216,8 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
     label_url = _url(
         row.get("label_url")
         or row.get("label")
+        or row.get("pdf_label")
+        or row.get("pdf_url")
         or row.get("awb")
         or row.get("documents")
     )
@@ -472,6 +477,12 @@ async def _shipment_rows(
         shipment_id = _text(row.get("id"))
         if not shipment_id:
             return row
+        merged = dict(row)
+        clearable = {
+            "label", "label_url", "pdf_label", "pdf_url",
+            "shipping_number", "tracking_number",
+            "tracking_link", "tracking_url", "status",
+        }
         try:
             response = await call_salla(
                 db,
@@ -480,19 +491,38 @@ async def _shipment_rows(
                 f"/shipments/{shipment_id}",
             )
         except SallaError:
-            return row
+            response = None
         details = response.get("data") if isinstance(response, dict) else None
-        if not isinstance(details, dict):
-            return row
-        merged = dict(row)
-        # These fields are authoritative even when null after cancellation.
-        clearable = {
-            "label", "label_url", "shipping_number", "tracking_number",
-            "tracking_link", "tracking_url", "status",
-        }
-        for key, value in details.items():
-            if key in clearable or value not in (None, "", [], {}):
-                merged[key] = value
+        if isinstance(details, dict):
+            # These fields are authoritative even when null after cancellation.
+            for key, value in details.items():
+                if key in clearable or value not in (None, "", [], {}):
+                    merged[key] = value
+
+        # Some couriers publish the PDF only through the documented tracking
+        # endpoint while the shipment details response still has ``label=null``.
+        if not _snapshot(merged)["ready"]:
+            try:
+                tracking_response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/shipments/{shipment_id}/tracking",
+                )
+            except SallaError:
+                tracking_response = None
+            tracking_details = (
+                tracking_response.get("data")
+                if isinstance(tracking_response, dict)
+                else None
+            )
+            if isinstance(tracking_details, dict):
+                nested = tracking_details.get("shipment")
+                if isinstance(nested, dict):
+                    tracking_details = {**tracking_details, **nested}
+                for key, value in tracking_details.items():
+                    if key in clearable or value not in (None, "", [], {}):
+                        merged[key] = value
         return merged
 
     if not rows:
@@ -679,10 +709,87 @@ async def _poll_shipment(
                 f"/shipments/{shipment_id}",
             )
         except SallaError:
-            continue
+            response = None
         details = response.get("data") if isinstance(response, dict) else None
         if isinstance(details, dict):
             latest = details
+        if not _snapshot(latest)["ready"] and shipment_id:
+            try:
+                tracking_response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/shipments/{shipment_id}/tracking",
+                )
+            except SallaError:
+                continue
+            tracking_details = (
+                tracking_response.get("data")
+                if isinstance(tracking_response, dict)
+                else None
+            )
+            if isinstance(tracking_details, dict):
+                nested = tracking_details.get("shipment")
+                if isinstance(nested, dict):
+                    tracking_details = {**tracking_details, **nested}
+                latest = {**latest, **tracking_details}
+    return latest
+
+
+async def _best_effort_resync(
+    db: Any,
+    user_id: str,
+    order_number: str,
+) -> None:
+    """Refresh the order cache without invalidating a verified AWB result."""
+    try:
+        await resync_single_order(db, user_id, order_number)
+    except Exception:
+        # The shipping response is authoritative for this action. A transient
+        # order-resync/Cloudflare failure must not turn a created AWB into a
+        # false printing failure in the UI.
+        return
+
+
+async def _recover_created_shipment(
+    db: Any,
+    user_id: str,
+    internal_order_id: str,
+    source: dict[str, Any],
+) -> dict[str, Any]:
+    """Recover when Salla times out after accepting shipment creation."""
+    shipment_id = _text(source.get("id"))
+    latest = await _poll_shipment(
+        db,
+        user_id,
+        shipment_id,
+        source,
+        attempts=6,
+    )
+    if _tracking(latest) or _snapshot(latest)["ready"]:
+        return latest
+
+    # ``overwrite_exists_pending`` can replace the pending shipment with a new
+    # id, so finish with a fresh list lookup before reporting a real failure.
+    for attempt in range(4):
+        if attempt:
+            await asyncio.sleep(1)
+        try:
+            active = _active_outbound(
+                await _shipment_rows(
+                    db,
+                    user_id,
+                    internal_order_id,
+                    None,
+                )
+            )
+        except SallaError:
+            continue
+        for row in active:
+            if _snapshot(row)["ready"]:
+                return row
+        if active and _tracking(active[0]):
+            latest = active[0]
     return latest
 
 
@@ -691,6 +798,8 @@ async def _persist_verified_snapshot(
     user_id: str,
     order_number: str,
     snapshot: dict[str, Any],
+    *,
+    clear_missing: bool = False,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     set_fields: dict[str, Any] = {
@@ -712,7 +821,7 @@ async def _persist_verified_snapshot(
             set_fields[target] = value
 
     update: dict[str, Any] = {"$set": set_fields}
-    if not snapshot.get("ready"):
+    if clear_missing:
         update["$unset"] = {
             "shipping_label_url": "",
             "tracking_number": "",
@@ -770,17 +879,17 @@ async def refresh_shipping_label(
             break
 
     snapshot = _snapshot(current)
-    try:
-        await resync_single_order(db, user_id, normalized)
-    finally:
-        # Root shipping fields are a legacy compatibility layer. Explicitly
-        # clear them when Salla says the current shipment has no active AWB.
-        await _persist_verified_snapshot(
-            db,
-            user_id,
-            normalized,
-            snapshot,
-        )
+    await _best_effort_resync(db, user_id, normalized)
+    # Root shipping fields are a legacy compatibility layer. Clear them only
+    # when Salla authoritatively returns no active outbound shipment. A created
+    # shipment with a number but a delayed PDF must keep its number visible.
+    await _persist_verified_snapshot(
+        db,
+        user_id,
+        normalized,
+        snapshot,
+        clear_missing=not bool(active),
+    )
 
     return {
         "ok": True,
@@ -789,6 +898,8 @@ async def refresh_shipping_label(
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
             if snapshot["ready"]
+            else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ أعد التحقق بعد لحظات."
+            if snapshot.get("tracking_number") or snapshot.get("shipping_number")
             else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة ومسحت الرقم القديم."
         ),
     }
@@ -846,7 +957,7 @@ async def issue_shipping_label(
             source,
             store,
         )
-        await resync_single_order(db, user_id, normalized)
+        await _best_effort_resync(db, user_id, normalized)
         return {
             "ok": True,
             "source": "mezan",
@@ -870,7 +981,13 @@ async def issue_shipping_label(
     for row in active:
         snapshot = _snapshot(row)
         if snapshot["ready"]:
-            await resync_single_order(db, user_id, normalized)
+            await _best_effort_resync(db, user_id, normalized)
+            await _persist_verified_snapshot(
+                db,
+                user_id,
+                normalized,
+                snapshot,
+            )
             return {
                 "ok": True,
                 "source": "salla",
@@ -886,7 +1003,7 @@ async def issue_shipping_label(
         )
 
     source = active[0]
-    if _status(source.get("status")) == "creating":
+    if _status(source.get("status")) == "creating" or _tracking(source):
         polled = await _poll_shipment(
             db,
             user_id,
@@ -895,22 +1012,26 @@ async def issue_shipping_label(
             attempts=8,
         )
         snapshot = _snapshot(polled)
-        if snapshot["ready"]:
-            await resync_single_order(db, user_id, normalized)
-            return {
-                "ok": True,
-                "source": "salla",
-                "order_status_completed": True,
-                "order_status_changed": order_status_changed,
-                **snapshot,
-            }
+        await _best_effort_resync(db, user_id, normalized)
+        await _persist_verified_snapshot(
+            db,
+            user_id,
+            normalized,
+            snapshot,
+        )
         return {
             "ok": True,
             "source": "salla",
             "order_status_completed": True,
             "order_status_changed": order_status_changed,
             **snapshot,
-            "message": "سلة ما زالت تُصدر البوليصة؛ لم تُفتح الطباعة بعد.",
+            "message": (
+                "تم التحقق من سلة والبوليصة جاهزة للطباعة."
+                if snapshot["ready"]
+                else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ لم تُفتح الطباعة بعد."
+                if snapshot.get("tracking_number") or snapshot.get("shipping_number")
+                else "سلة ما زالت تُصدر البوليصة؛ لم تُفتح الطباعة بعد."
+            ),
         }
 
     payload = _create_payload(internal_id, order, source)
@@ -929,19 +1050,60 @@ async def issue_shipping_label(
                 "صلاحية shipping.read_write غير مفعلة؛ أعد ربط سلة ثم جرّب.",
                 status_code=403,
             ) from exc
+        status_code = int(exc.status_code or 0)
+        if status_code in {408, 429} or status_code >= 500:
+            recovered = await _recover_created_shipment(
+                db,
+                user_id,
+                internal_id,
+                source,
+            )
+            recovered_snapshot = _snapshot(recovered)
+            if (
+                recovered_snapshot["ready"]
+                or recovered_snapshot.get("tracking_number")
+                or recovered_snapshot.get("shipping_number")
+            ):
+                await _best_effort_resync(db, user_id, normalized)
+                await _persist_verified_snapshot(
+                    db,
+                    user_id,
+                    normalized,
+                    recovered_snapshot,
+                )
+                return {
+                    "ok": True,
+                    "source": "salla",
+                    "recovered_after_timeout": True,
+                    "order_status_completed": True,
+                    "order_status_changed": order_status_changed,
+                    **recovered_snapshot,
+                    "message": (
+                        "تم إصدار الشحنة رغم تأخر استجابة سلة، وتم استرداد البوليصة وهي جاهزة للطباعة."
+                        if recovered_snapshot["ready"]
+                        else "تم إصدار رقم الشحنة رغم تأخر استجابة سلة، ورابط البوليصة ما زال قيد التجهيز؛ لم تُفتح الطباعة بعد."
+                    ),
+                }
         raise ShippingLabelError(
             "salla_label_creation_failed",
-            "رفضت سلة إصدار البوليصة؛ لم يتم تسجيلها كمطبوعة في ميزان.",
+            "لم تؤكد سلة إصدار البوليصة، ولم يظهر رقم شحنة جديد بعد إعادة التحقق.",
             status_code=502,
         ) from exc
 
     created = response.get("data") if isinstance(response, dict) else None
     if not isinstance(created, dict):
-        raise ShippingLabelError(
-            "salla_label_response_invalid",
-            "أعادت سلة استجابة إصدار غير مكتملة.",
-            status_code=502,
+        created = await _recover_created_shipment(
+            db,
+            user_id,
+            internal_id,
+            source,
         )
+        if not (_tracking(created) or _snapshot(created)["ready"]):
+            raise ShippingLabelError(
+                "salla_label_response_invalid",
+                "أعادت سلة استجابة إصدار غير مكتملة، ولم يظهر رقم شحنة بعد إعادة التحقق.",
+                status_code=502,
+            )
 
     shipment_id = _text(created.get("id") or source.get("id"))
     latest = await _poll_shipment(
@@ -951,7 +1113,13 @@ async def issue_shipping_label(
         created,
     )
     snapshot = _snapshot(latest)
-    await resync_single_order(db, user_id, normalized)
+    await _best_effort_resync(db, user_id, normalized)
+    await _persist_verified_snapshot(
+        db,
+        user_id,
+        normalized,
+        snapshot,
+    )
 
     return {
         "ok": True,
@@ -965,7 +1133,11 @@ async def issue_shipping_label(
             else "تم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
             if snapshot["ready"]
             else "تم تحويل الطلب إلى تم التنفيذ، ثم قبلت سلة الإصدار وما زالت تُنشئ البوليصة."
-            if order_status_changed
+            if order_status_changed and not (
+                snapshot.get("tracking_number") or snapshot.get("shipping_number")
+            )
+            else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ لم تُفتح الطباعة بعد."
+            if snapshot.get("tracking_number") or snapshot.get("shipping_number")
             else "قبلت سلة الإصدار وما زالت تُنشئ البوليصة؛ لم تُفتح الطباعة بعد."
         ),
     }
