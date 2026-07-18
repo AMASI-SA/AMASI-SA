@@ -7,6 +7,7 @@ import {
     FilePdf,
     Package,
     Wallet,
+    WarningCircle,
 } from "@phosphor-icons/react";
 import CompactOrderTimeline from "../components/CompactOrderTimeline";
 import { useOrder } from "../hooks/useOrders";
@@ -211,6 +212,22 @@ function PaymentSummary({ order }) {
     const isBank = ["bank", "bank_transfer", "transfer"].includes(methodKey);
     const bankName = normalizeBankName(payment);
     const attachment = firstPresent(payment.receipt_url, payment.attachment_url, payment.proof_url, payment.transfer_receipt_url);
+    const orderStatus = order?.status_native || order?.status;
+    const waitingForPayment = String(orderStatus || "").trim() === "بانتظار الدفع";
+
+    if (waitingForPayment) {
+        return (
+            <div className="flex h-full min-h-[240px] flex-col justify-center" data-testid="order-v2-payment-summary" data-order-status="بانتظار الدفع">
+                <div className="flex items-center gap-4">
+                    <WarningCircle size={48} className="shrink-0 text-rose-500" weight="fill" />
+                    <div>
+                        <div className="text-2xl font-bold text-rose-600">بانتظار الدفع</div>
+                        <div className="mt-2 text-sm font-medium text-rose-500">{methodLabel}</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (isCod) {
         return (
