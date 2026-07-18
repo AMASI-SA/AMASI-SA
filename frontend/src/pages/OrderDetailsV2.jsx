@@ -721,6 +721,16 @@ function ProductCard({ item, index, currency }) {
         item.image_url || firstImage || item.thumbnail || item.product_thumbnail || ""
     ).trim();
     const weight = isPresent(item.weight) ? `${displayValue(item.weight)} ${displayValue(item.weight_unit || "")}`.trim() : "—";
+    const quantity = Number(item.quantity || 1);
+    const unitPrice = Number(item.unit_price || 0);
+    const discount = Number(item.discount || 0);
+    const itemTotal = Number(item.total || 0);
+    const explicitTax = Number(item.tax_reported_by_source);
+    const beforeTaxAfterDiscount = Math.max((unitPrice * quantity) - discount, 0);
+    const derivedTax = Math.max(itemTotal - beforeTaxAfterDiscount, 0);
+    const itemTax = Number.isFinite(explicitTax) && explicitTax > 0
+        ? explicitTax
+        : derivedTax;
     return (
         <article className="rounded-2xl border border-slate-200 p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-start">
@@ -731,11 +741,13 @@ function ProductCard({ item, index, currency }) {
                     {selections.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{selections.map((selection) => <span key={`${selection.label}:${selection.value}`} className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">{selection.label}: {selection.value}</span>)}</div>}
                 </div>
             </div>
-            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div><div className="text-xs font-bold text-slate-400">الكمية</div><div className="num mt-1 font-bold">{item.quantity}</div></div>
                 <div><div className="text-xs font-bold text-slate-400">الوزن</div><div className="mt-1 font-bold">{weight}</div></div>
-                <div><div className="text-xs font-bold text-slate-400">السعر</div><div className="num mt-1 font-bold">{formatMoney(item.unit_price, currency)}</div></div>
-                <div><div className="text-xs font-bold text-slate-400">المجموع</div><div className="num mt-1 font-bold">{formatMoney(item.total, currency)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">سعر الوحدة قبل الضريبة</div><div className="num mt-1 font-bold">{formatMoney(unitPrice, currency)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">خصم المنتج</div><div className="num mt-1 font-bold text-rose-600">{discount > 0 ? `- ${formatMoney(discount, currency)}` : formatMoney(0, currency)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">ضريبة المنتج</div><div className="num mt-1 font-bold text-slate-700">{itemTax > 0 ? `+ ${formatMoney(itemTax, currency)}` : formatMoney(0, currency)}</div></div>
+                <div><div className="text-xs font-bold text-slate-400">إجمالي المنتج شامل الضريبة</div><div className="num mt-1 font-extrabold text-teal-800">{formatMoney(itemTotal, currency)}</div></div>
             </div>
         </article>
     );
