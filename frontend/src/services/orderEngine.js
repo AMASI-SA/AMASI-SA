@@ -19,6 +19,19 @@ function errorMessage(error, fallback) {
     return error?.message || fallback;
 }
 
+function shippingLabelErrorMessage(error) {
+    const fallback = "تعذّر إصدار بوليصة الشحن من سلة.";
+    const message = errorMessage(error, fallback);
+    const status = Number(error?.response?.status || 0);
+    if (
+        status >= 500
+        || /cloudflare|origin web server|invalid or incomplete response|network error|timeout|\b520\b/i.test(message)
+    ) {
+        return "تعذّر الاتصال بسلة أثناء تجهيز البوليصة. لم تُطبع الشحنة؛ حاول مرة أخرى.";
+    }
+    return message;
+}
+
 export async function listOrders({
     limit = ORDER_PAGE_SIZE,
     cursor = null,
@@ -116,7 +129,7 @@ export async function issueShippingLabel(orderNumber) {
         );
         return data;
     } catch (error) {
-        throw new Error(errorMessage(error, "تعذّر إصدار بوليصة الشحن من سلة."));
+        throw new Error(shippingLabelErrorMessage(error));
     }
 }
 
