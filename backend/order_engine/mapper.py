@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
@@ -31,6 +32,7 @@ from .models import (
     AddressDTO,
     CustomerDTO,
     MoneyTotalsDTO,
+    OrderDiscountDTO,
     OrderDTO,
     OrderItemDTO,
     OrderSourceDTO,
@@ -124,6 +126,124 @@ def _nested(data: dict[str, Any], *path: str) -> Any:
         current = current.get(key)
 
     return current
+
+
+def _localized_number(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value or "").translate(
+        str.maketrans("٠١٢٣٤٥٦٧٨٩٫", "0123456789.")
+    )
+    text = text.replace("٬", "").replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    return float(match.group(0)) if match else default
+
+
+def _discount_rows(
+    raw_order: dict[str, Any],
+    amounts: dict[str, Any],
+) -> list[OrderDiscountDTO]:
+    candidates = raw_order.get("discounts")
+    if not isinstance(candidates, list):
+        candidates = amounts.get("discounts")
+    rows = candidates if isinstance(candidates, list) else []
+    discounts: list[OrderDiscountDTO] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        amount = abs(_number(_first(
+            row.get("discount"),
+            row.get("amount"),
+            row.get("value"),
+        )))
+        if amount <= 0:
+            continue
+        discounts.append(OrderDiscountDTO(
+            title=_text(_first(row.get("title"), row.get("name"), row.get("label"))),
+            code=_text(row.get("code")),
+            type=_text(row.get("type")),
+            amount=amount,
+            discounted_shipping=abs(_number(row.get("discounted_shipping"))),
+        ))
+
+    if not discounts:
+        fallback = abs(_number(_first(
+            amounts.get("discount"),
+            raw_order.get("discount"),
+        )))
+        if fallback > 0:
+            discounts.append(OrderDiscountDTO(title="الخصم", amount=fallback))
+    return discounts
+
+
+def _selected_option_price(value: Any) -> float:
+    if isinstance(value, list):
+        return sum(_selected_option_price(entry) for entry in value)
+    if not isinstance(value, dict):
+        return 0.0
+    if value.get("price") not in (None, "", [], {}):
+        return _number(value.get("price"))
+    for key in ("values", "selected", "choice", "value"):
+        if value.get(key) not in (None, "", [], {}):
+            return _selected_option_price(value.get(key))
+    return 0.0
+
+
+def _order_options_total(
+    raw_order: dict[str, Any],
+    amounts: dict[str, Any],
+    item_rows: list[Any],
+) -> float:
+    direct = _first(
+        amounts.get("options"),
+        amounts.get("options_total"),
+        amounts.get("order_options"),
+        raw_order.get("options_total"),
+        raw_order.get("order_options_total"),
+    )
+    if direct is not None:
+        return _number(direct)
+
+    total = 0.0
+    for item in item_rows:
+        if not isinstance(item, dict):
+            continue
+        quantity = max(_number(item.get("quantity"), 1.0), 0.0)
+        options = _first(
+            item.get("options"),
+            item.get("choices"),
+            item.get("attributes"),
+        )
+        entries = options if isinstance(options, list) else [options]
+        for option in entries:
+            if isinstance(option, dict):
+                selected = _first(
+                    option.get("values"),
+                    option.get("selected"),
+                    option.get("choice"),
+                    option.get("value"),
+                )
+                total += _selected_option_price(selected) * quantity
+    return total
+
+
+def _weight_parts(value: Any) -> tuple[Optional[float], Optional[str]]:
+    if value in (None, "", [], {}):
+        return None, None
+    if isinstance(value, dict):
+        amount = _number(_first(value.get("value"), value.get("amount"), value.get("weight")))
+        unit = _text(_first(value.get("units"), value.get("unit")))
+    else:
+        amount = _localized_number(value)
+        unit = _text(value)
+    normalized_unit = str(unit or "").strip().casefold()
+    if any(token in normalized_unit for token in ("kg", "كجم", "كيلو")):
+        normalized_unit = "kg"
+    elif normalized_unit in {"g", "gm", "gram", "جرام", "غرام"}:
+        normalized_unit = "g"
+    else:
+        normalized_unit = normalized_unit or "kg"
+    return amount, normalized_unit
 
 
 def _timezone_from_name(value: Any) -> ZoneInfo:
@@ -989,6 +1109,18 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         for index, item in enumerate(item_rows)
         if isinstance(item, dict)
     ]
+    discounts = _discount_rows(raw_order, amounts)
+    options_total = _order_options_total(raw_order, amounts, item_rows)
+    tax_obj = _dict(amounts.get("tax"))
+    tax_percent_source = _first(
+        tax_obj.get("percent"),
+        amounts.get("tax_percent"),
+        raw_order.get("tax_percent"),
+    )
+    total_weight, total_weight_unit = _weight_parts(_first(
+        first_shipment.get("total_weight"),
+        raw_order.get("total_weight"),
+    ))
 
     tags: list[str] = []
     for tag in _list(raw_order.get("tags")):
@@ -1163,6 +1295,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     raw_order.get("subtotal"),
                 )
             ),
+            options=options_total,
             shipping=_number(
                 _first(
                     amounts.get("shipping_cost"),
@@ -1170,12 +1303,12 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     raw_order.get("shipping_cost"),
                 )
             ),
-            discount=_number(
-                _first(
-                    amounts.get("discounts"),
-                    amounts.get("discount"),
-                    raw_order.get("discount"),
-                )
+            discount=sum(row.amount for row in discounts),
+            discounts=discounts,
+            tax_percent=(
+                _number(tax_percent_source)
+                if tax_percent_source not in (None, "")
+                else None
             ),
             tax_reported_by_source=_number(
                 _first(
@@ -1186,6 +1319,8 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             total=_number(total_obj),
         ),
         items=items,
+        total_weight=total_weight,
+        total_weight_unit=total_weight_unit,
         customer_notes=_text(raw_order.get("customer_notes")),
         staff_notes=_text(raw_order.get("staff_notes")),
         tags=tags,
