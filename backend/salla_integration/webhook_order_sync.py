@@ -553,14 +553,55 @@ async def sync_shipment_payload_from_verified_webhook(
         "salla_shipment_updated_at": now,
     }
 
+    is_return_shipment = (
+        "return" in event_name.lower()
+        or _text(payload.get("type")) in {"return", "return_shipment", "reverse"}
+    )
+    is_cancelled = (
+        event_name.lower().endswith(".cancelled")
+        or _text(payload.get("status")) in {"cancelled", "canceled"}
+    )
+
+    if not is_return_shipment:
+        shipment_snapshot = dict(payload)
+        if is_cancelled:
+            shipment_snapshot["status"] = "cancelled"
+            for key in (
+                "label", "label_url", "shipping_number", "tracking_number",
+                "tracking_link", "tracking_url",
+            ):
+                shipment_snapshot.pop(key, None)
+            update_fields["shipping_status"] = "cancelled"
+            update_fields["shipment_status"] = "cancelled"
+        # Keep the canonical raw snapshot aligned with shipment webhooks.
+        # Order Engine reads this snapshot, not the legacy root fields.
+        update_fields[
+            "raw_by_source.salla_direct.shipments"
+        ] = [shipment_snapshot]
+
     update_fields = {
         key: value for key, value in update_fields.items()
         if value not in (None, "", {})
     }
 
+    mongo_update: dict[str, Any] = {"$set": update_fields}
+    if is_cancelled and not is_return_shipment:
+        mongo_update["$unset"] = {
+            "shipping_label_url": "",
+            "tracking_number": "",
+            "tracking_url": "",
+            "shipping_number": "",
+            "raw_by_source.salla_direct.shipping.label": "",
+            "raw_by_source.salla_direct.shipping.label_url": "",
+            "raw_by_source.salla_direct.shipping.tracking_number": "",
+            "raw_by_source.salla_direct.shipping.shipping_number": "",
+            "raw_by_source.salla_direct.shipping.tracking_link": "",
+            "raw_by_source.salla_direct.shipping.tracking_url": "",
+        }
+
     result = await db.unified_orders.update_one(
         {"user_id": user_id, "$or": selectors},
-        {"$set": update_fields},
+        mongo_update,
     )
     return {
         "attempted": True,
@@ -572,7 +613,7 @@ async def sync_shipment_payload_from_verified_webhook(
         "order_modified": bool(result.modified_count),
         "reason": "synced_from_webhook" if result.matched_count else "order_not_found",
         "shipping_company_from_webhook": bool(update_fields.get("shipping_company")),
-        "address_from_webhook": bool(address),
+        "address_from_webhook": bool(_address_candidate(payload)),
         "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }
