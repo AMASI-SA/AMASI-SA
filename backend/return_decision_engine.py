@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pymongo import ReturnDocument
 
 
 ReturnReason = Literal[
@@ -126,6 +127,13 @@ class ReturnDecisionInput(BaseModel):
     notes: Optional[str] = None
     idempotency_key: Optional[str] = Field(default=None, max_length=160)
 
+    @model_validator(mode="after")
+    def validate_unique_items(self) -> "ReturnDecisionInput":
+        item_ids = [clean_text(item.order_item_id) for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("duplicate_return_item")
+        return self
+
 
 class DecisionOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -203,6 +211,13 @@ class ReturnInspection(BaseModel):
     expected_version: int = Field(ge=1)
     items: list[InspectionItem] = Field(min_length=1)
     employee_note: str = Field(min_length=3, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_unique_items(self) -> "ReturnInspection":
+        item_ids = [clean_text(item.order_item_id) for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("duplicate_inspection_item")
+        return self
 
 
 def _default_refund_amount(data: ReturnDecisionInput) -> float:
@@ -581,15 +596,54 @@ async def create_return_case(
 ) -> dict[str, Any]:
     await ensure_return_indexes(db)
     order_number = clean_text(order_number)
-    order_exists = await db.unified_orders.find_one(
+    order = await db.unified_orders.find_one(
         {
             "user_id": {"$in": [user_id, "main"]},
             "order_number": order_number,
         },
-        {"_id": 1},
     )
-    if not order_exists:
+    if not order:
         raise LookupError("order_not_found")
+
+    # The request selects Mezan's immutable order-item identities. Never use
+    # Salla return-shipment packages for this validation because Salla may
+    # repeat all lines of the original order in a partial-return AWB.
+    from order_item_engine.mapper import map_order_item_identities
+    from order_engine.mapper import map_salla_order
+
+    raw_by_source = order.get("raw_by_source") or {}
+    raw_salla_order = (
+        raw_by_source.get("salla_direct")
+        if isinstance(raw_by_source, dict)
+        else None
+    )
+    if not isinstance(raw_salla_order, dict):
+        raise ValueError("canonical_order_snapshot_missing")
+    canonical_order = map_salla_order(raw_salla_order)
+    canonical_items = {
+        item.order_item_id: item
+        for item in map_order_item_identities(canonical_order)
+    }
+    for selected_item in request.items:
+        canonical_item = canonical_items.get(selected_item.order_item_id)
+        if canonical_item is None:
+            raise ValueError("return_item_not_in_order")
+        ordered_quantity = int(canonical_item.quantity)
+        if selected_item.quantity_return > ordered_quantity:
+            raise ValueError("return_quantity_exceeds_ordered")
+
+        # Client-provided commercial values are never allowed to replace the
+        # historical order snapshot used by accounting and future AI.
+        selected_item.quantity_ordered = ordered_quantity
+        selected_item.product_id = canonical_item.product_id
+        selected_item.sku = canonical_item.sku
+        selected_item.name = canonical_item.name
+        selected_item.unit_sale_amount = canonical_item.unit_price
+        selected_item.unit_tax_amount = (
+            canonical_item.tax_reported_by_source / ordered_quantity
+            if ordered_quantity
+            else 0.0
+        )
 
     if request.idempotency_key:
         existing = await db.return_cases.find_one(
@@ -735,7 +789,7 @@ async def approve_return_case(
                 }
             },
         },
-        return_document=True,
+        return_document=ReturnDocument.AFTER,
     )
     if not result:
         raise RuntimeError("version_conflict")
@@ -771,6 +825,9 @@ async def inspect_return_case(
         )
         for item in existing.get("selected_items") or []
     }
+    inspection_item_ids = {item.order_item_id for item in request.items}
+    if inspection_item_ids != set(selected_quantities):
+        raise ValueError("inspection_items_mismatch")
     for item in request.items:
         maximum = selected_quantities.get(item.order_item_id)
         if maximum is None:
@@ -838,7 +895,7 @@ async def inspect_return_case(
                 }
             },
         },
-        return_document=True,
+        return_document=ReturnDocument.AFTER,
     )
     if not result:
         raise RuntimeError("version_conflict")
