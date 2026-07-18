@@ -245,6 +245,22 @@ def test_receiving_bank_mapping(
     assert order.payment.receiving_bank_code == expected
 
 
+def test_maps_printable_salla_shipment_label(
+    salla_order_payload,
+):
+    salla_order_payload["shipments"][0]["label"] = [
+        {
+            "url": "https://cdn.salla.sa/example/shipping-label.pdf",
+        }
+    ]
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.shipping.label_url == (
+        "https://cdn.salla.sa/example/shipping-label.pdf"
+    )
+
+
 def test_maps_salla_bank_account_and_receipt_evidence(
     salla_order_payload,
 ):
