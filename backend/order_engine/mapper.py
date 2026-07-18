@@ -304,6 +304,13 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
             )
         ),
         additional_number=_text(data.get("additional_number")),
+        short_address=_text(
+            _first(
+                data.get("short_address"),
+                data.get("national_address"),
+                data.get("national_address_code"),
+            )
+        ),
         formatted=_text(
             _first(
                 data.get("formatted"),
