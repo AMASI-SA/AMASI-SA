@@ -150,18 +150,65 @@ function buildShippingView(order) {
             nestedAddress.address_line,
             order.shipping_address,
         ),
-        city: firstPresent(nestedAddress.city, order.shipping_city, order.customer_city),
-        district: firstPresent(nestedAddress.district, nestedAddress.neighborhood, order.shipping_district),
-        street: firstPresent(nestedAddress.street, nestedAddress.street_name, order.shipping_street),
-        building_number: firstPresent(nestedAddress.building_number, order.shipping_building_number),
-        additional_number: firstPresent(nestedAddress.additional_number, order.shipping_additional_number),
+        country: firstPresent(
+            nestedAddress.country,
+            nestedAddress.country_name,
+            rawAddress.country,
+            rawAddress.country_name,
+            order.shipping_country,
+        ),
+        city: firstPresent(
+            nestedAddress.city,
+            rawAddress.city,
+            rawAddress.city_name,
+            order.shipping_city,
+            order.customer_city,
+        ),
+        district: firstPresent(
+            nestedAddress.district,
+            nestedAddress.neighborhood,
+            nestedAddress.block,
+            rawAddress.district,
+            rawAddress.neighborhood,
+            rawAddress.block,
+            order.shipping_district,
+        ),
+        street: firstPresent(
+            nestedAddress.street,
+            nestedAddress.street_name,
+            nestedAddress.street_number,
+            rawAddress.street,
+            rawAddress.street_name,
+            rawAddress.street_number,
+            order.shipping_street,
+        ),
+        building_number: firstPresent(
+            nestedAddress.building_number,
+            rawAddress.building_number,
+            rawAddress.building_no,
+            order.shipping_building_number,
+        ),
+        additional_number: firstPresent(
+            nestedAddress.additional_number,
+            rawAddress.additional_number,
+            rawAddress.additional_no,
+            order.shipping_additional_number,
+        ),
         national_address: firstPresent(
             nestedAddress.short_address,
             nestedAddress.national_address,
+            rawAddress.short_address,
+            rawAddress.national_address,
+            rawAddress.national_address_code,
             order.shipping_national_address,
             order.shipping_short_address,
         ),
-        postal_code: firstPresent(nestedAddress.postal_code, order.shipping_postal_code),
+        postal_code: firstPresent(
+            nestedAddress.postal_code,
+            rawAddress.postal_code,
+            rawAddress.zip_code,
+            order.shipping_postal_code,
+        ),
         map_url: firstPresent(nestedAddress.map_url, order.shipping_map_url),
         location_url: firstPresent(nestedAddress.location_url, order.shipping_location_url),
     };
@@ -294,6 +341,7 @@ function ShippingCard({ shipping, customer }) {
     const companyLogo = shipping.company_logo || shipping.logo_url;
 
     const addressRows = [
+        ["الدولة", address.country],
         ["المدينة", address.city],
         ["الحي", address.district || address.neighborhood || address.block],
         ["الشارع", address.street || address.street_name || address.street_number],
@@ -336,15 +384,97 @@ function ShippingCard({ shipping, customer }) {
 
 function PaymentCard({ payment, paymentMethod }) {
     const attachment = payment.receipt_url || payment.attachment_url || payment.proof_url;
-    const paid = String(payment.status || "").toLowerCase().includes("paid") || String(payment.status || "").includes("مدفوع") || String(payment.status || "").includes("تم التحويل");
+
+    const paymentFacts = [
+        payment.status,
+        payment.state,
+        paymentMethod,
+        payment.method,
+    ]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+
+    const combinedPaymentState = paymentFacts.join(" ");
+
+    // Pending/unpaid states must always override any stale paid label.
+    const pending = [
+        "waiting",
+        "pending",
+        "unpaid",
+        "awaiting",
+        "بانتظار",
+        "انتظار",
+        "لم يتم الدفع",
+        "غير مدفوع",
+        "failed",
+        "فشل",
+    ].some((token) => combinedPaymentState.includes(token));
+
+    const paid = !pending && [
+        "paid",
+        "completed",
+        "success",
+        "تم الدفع",
+        "تم التحويل",
+        "مدفوع",
+    ].some((token) => combinedPaymentState.includes(token));
+
+    const shownPaymentMethod =
+        paymentMethod ||
+        payment.method ||
+        payment.status ||
+        "طريقة الدفع غير محددة";
+
     return (
         <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment">
             <div className="flex h-full flex-col items-center justify-center text-center">
-                <CreditCard size={50} className="text-slate-400" />
-                <div className="mt-4 text-2xl font-medium text-slate-700">{paymentMethod}</div>
-                {paid && <CheckCircle size={34} className="mt-3 text-emerald-400" weight="fill" />}
-                {attachment && <a href={attachment} target="_blank" rel="noreferrer" className="mt-4 rounded-lg border border-teal-200 px-3 py-2 text-sm font-bold text-teal-700">عرض إيصال الدفع</a>}
-                {payment.note && <div className="mt-4 text-sm leading-7 text-rose-500">{payment.note}</div>}
+                <CreditCard
+                    size={50}
+                    className={pending ? "text-rose-400" : paid ? "text-emerald-400" : "text-slate-400"}
+                />
+
+                <div
+                    className={`mt-4 text-2xl font-medium ${
+                        pending
+                            ? "text-rose-500"
+                            : paid
+                                ? "text-emerald-700"
+                                : "text-slate-700"
+                    }`}
+                >
+                    {shownPaymentMethod}
+                </div>
+
+                {paid && (
+                    <CheckCircle
+                        size={34}
+                        className="mt-3 text-emerald-400"
+                        weight="fill"
+                    />
+                )}
+
+                {pending && (
+                    <div className="mt-3 rounded-lg bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">
+                        لم يتم الدفع بعد
+                    </div>
+                )}
+
+                {attachment && (
+                    <a
+                        href={attachment}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 rounded-lg border border-teal-200 px-3 py-2 text-sm font-bold text-teal-700"
+                    >
+                        عرض إيصال الدفع
+                    </a>
+                )}
+
+                {payment.note && (
+                    <div className="mt-4 text-sm leading-7 text-rose-500">
+                        {payment.note}
+                    </div>
+                )}
             </div>
         </SectionCard>
     );
