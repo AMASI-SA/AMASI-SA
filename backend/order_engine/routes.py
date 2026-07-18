@@ -1,12 +1,12 @@
 """Read-only HTTP routes for the Mezan Order Engine."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
-from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.order_commerce_enrichment import enrich_single_order_commerce
 from .address_diagnostic import build_order_address_diagnostic
 from .campaign_enrichment import enrich_order_campaigns
@@ -22,6 +22,7 @@ from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
+from .shipping_label_service import ShippingLabelError, issue_shipping_label
 from .service import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
@@ -94,7 +95,6 @@ def make_order_engine_router(
     ) -> OrderListResponse:
         owner = _require_owner(user)
         owner_id = str(owner["id"])
-        schedule_salla_auto_sync(db, owner_id)
 
         try:
             page = await list_orders(
@@ -239,6 +239,68 @@ def make_order_engine_router(
             )
         return result
 
+    @router.post("/{order_number}/read")
+    async def mark_order_read(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        owner_id = str(owner["id"])
+        normalized = str(order_number or "").strip()
+        if not normalized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "order_number_required"},
+            )
+
+        read_at = datetime.now(timezone.utc).isoformat()
+        result = await db.unified_orders.update_one(
+            {"user_id": owner_id, "order_number": normalized},
+            {
+                "$set": {
+                    "mezan_read_at": read_at,
+                    "mezan_read_by": owner_id,
+                }
+            },
+        )
+        if not result.matched_count:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "order_not_found",
+                    "order_number": normalized,
+                },
+            )
+        return {
+            "ok": True,
+            "order_number": normalized,
+            "read": True,
+            "read_at": read_at,
+            "source": "mezan_local",
+        }
+
+    @router.post("/{order_number}/shipping-label")
+    async def create_order_shipping_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        try:
+            return await issue_shipping_label(
+                db,
+                str(owner["id"]),
+                str(order_number),
+            )
+        except ShippingLabelError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "order_number": str(order_number),
+                },
+            ) from exc
+
     @router.get("/{order_number}", response_model=OrderDTO)
     async def get_order_row(
         order_number: str,
@@ -246,7 +308,6 @@ def make_order_engine_router(
     ) -> OrderDTO:
         owner = _require_owner(user)
         owner_id = str(owner["id"])
-        schedule_salla_auto_sync(db, owner_id)
 
         try:
             order = await get_order(
