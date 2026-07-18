@@ -382,70 +382,49 @@ function ShippingCard({ shipping, customer }) {
     );
 }
 
-function PaymentCard({ payment, paymentMethod }) {
-    const attachment = payment.receipt_url || payment.attachment_url || payment.proof_url;
+function PaymentCard({ payment, paymentMethod, orderStatus }) {
+    const attachment =
+        payment.receipt_url ||
+        payment.attachment_url ||
+        payment.proof_url;
 
-    const paymentFacts = [
-        payment.status,
-        payment.state,
-        paymentMethod,
-        payment.method,
-    ]
-        .map((value) => String(value || "").trim().toLowerCase())
-        .filter(Boolean);
+    const normalizedOrderStatus = String(orderStatus || "")
+        .trim()
+        .toLowerCase();
 
-    const combinedPaymentState = paymentFacts.join(" ");
-
-    // Pending/unpaid states must always override any stale paid label.
-    const pending = [
-        "waiting",
-        "pending",
-        "unpaid",
-        "awaiting",
-        "بانتظار",
-        "انتظار",
-        "لم يتم الدفع",
-        "غير مدفوع",
-        "failed",
-        "فشل",
-    ].some((token) => combinedPaymentState.includes(token));
-
-    const paid = !pending && [
-        "paid",
-        "completed",
-        "success",
-        "تم الدفع",
-        "تم التحويل",
-        "مدفوع",
-    ].some((token) => combinedPaymentState.includes(token));
-
-    const shownPaymentMethod =
-        paymentMethod ||
-        payment.method ||
-        payment.status ||
-        "طريقة الدفع غير محددة";
+    // الشرط الوحيد: حالة الطلب بانتظار الدفع.
+    const waitingForPayment =
+        normalizedOrderStatus === "بانتظار الدفع";
 
     return (
         <SectionCard title="الدفع" icon={CreditCard} testid="order-v2-payment">
             <div className="flex h-full flex-col items-center justify-center text-center">
                 <CreditCard
                     size={50}
-                    className={pending ? "text-rose-400" : paid ? "text-emerald-400" : "text-slate-400"}
+                    className={
+                        waitingForPayment
+                            ? "text-rose-500"
+                            : "text-slate-400"
+                    }
                 />
 
                 <div
                     className={`mt-4 text-2xl font-medium ${
-                        pending
-                            ? "text-rose-500"
-                            : paid
-                                ? "text-emerald-700"
-                                : "text-slate-700"
+                        waitingForPayment
+                            ? "text-rose-600"
+                            : "text-slate-700"
                     }`}
                 >
-                    {shownPaymentMethod}
+                    {paymentMethod || "طريقة الدفع غير محددة"}
                 </div>
 
-                {paid && (
+                {waitingForPayment ? (
+                    <WarningCircle
+                        size={34}
+                        className="mt-3 text-rose-500"
+                        weight="fill"
+                    />
+                ) : (
                     <CheckCircle
                         size={34}
                         className="mt-3 text-emerald-400"
@@ -453,9 +432,9 @@ function PaymentCard({ payment, paymentMethod }) {
                     />
                 )}
 
-                {pending && (
+                {waitingForPayment && (
                     <div className="mt-3 rounded-lg bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600">
-                        لم يتم الدفع بعد
+                        بانتظار الدفع
                     </div>
                 )}
 
@@ -592,7 +571,11 @@ export default function OrderDetailsV2() {
                 <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard shipping={shipping} customer={customer} /><PaymentCard payment={payment} paymentMethod={paymentMethod} /></div>
+            <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard shipping={shipping} customer={customer} /><PaymentCard
+    payment={payment}
+    paymentMethod={paymentMethod}
+    orderStatus={status}
+/></div>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-items">
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
