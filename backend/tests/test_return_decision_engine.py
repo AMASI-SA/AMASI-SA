@@ -42,6 +42,14 @@ def test_return_quantity_cannot_exceed_original_quantity():
         item(quantity_ordered=2, quantity_return=3)
 
 
+def test_same_order_item_cannot_be_selected_twice():
+    with pytest.raises(ValidationError, match="duplicate_return_item"):
+        ReturnDecisionInput(
+            reason_code="customer_changed_mind",
+            items=[item(), item(quantity_return=2)],
+        )
+
+
 def test_recommends_customer_keep_item_when_retrieval_is_uneconomic():
     report = build_return_decision_report(
         ReturnDecisionInput(
