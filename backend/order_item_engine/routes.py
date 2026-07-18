@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
+from order_engine.product_image_enrichment import enrich_order_item_images
 from order_engine.repository import MongoOrderRepository
 
 from .models import OrderItemIdentityDTO
@@ -132,8 +133,13 @@ def make_order_item_engine_router(
                 },
             ) from exc
 
-        return OrderItemListResponse(
+        enriched_items = await enrich_order_item_images(
+            db,
+            user_id=str(owner["id"]),
             items=page.items,
+        )
+        return OrderItemListResponse(
+            items=enriched_items,
             next_cursor=page.next_cursor,
             limit=limit,
             source_order_count=page.source_order_count,
@@ -152,9 +158,14 @@ def make_order_item_engine_router(
         owner = _require_owner(user)
 
         try:
-            return await service().get_items_for_order(
+            items = await service().get_items_for_order(
                 user_id=str(owner["id"]),
                 order_number=order_number,
+            )
+            return await enrich_order_item_images(
+                db,
+                user_id=str(owner["id"]),
+                items=items,
             )
         except InvalidOrderItemRequestError as exc:
             raise HTTPException(
@@ -178,11 +189,17 @@ def make_order_item_engine_router(
         owner = _require_owner(user)
 
         try:
-            return await service().get_item(
+            item = await service().get_item(
                 user_id=str(owner["id"]),
                 order_number=order_number,
                 order_item_id=order_item_id,
             )
+            enriched = await enrich_order_item_images(
+                db,
+                user_id=str(owner["id"]),
+                items=[item],
+            )
+            return enriched[0]
         except InvalidOrderItemRequestError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
