@@ -25,7 +25,24 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
-CRITICAL_FIELDS = {"total_amount", "order_status", "payment_status"}
+CRITICAL_FIELDS = {
+    "total_amount",
+    "order_status",
+    "payment_status",
+    "paid_amount",
+    "remaining_amount",
+    "has_remaining_amount",
+    "payment_collection_status",
+    "payment_checkout_url",
+}
+ZERO_VALID_FIELDS = {"paid_amount", "remaining_amount", "has_remaining_amount"}
+COLLECTION_FIELDS = {
+    "paid_amount",
+    "remaining_amount",
+    "has_remaining_amount",
+    "payment_collection_status",
+    "payment_checkout_url",
+}
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
 TRACKED_FIELDS = (
@@ -36,6 +53,11 @@ TRACKED_FIELDS = (
     "order_status",
     "order_status_slug",
     "payment_status",
+    "paid_amount",
+    "remaining_amount",
+    "has_remaining_amount",
+    "payment_collection_status",
+    "payment_checkout_url",
     "customer_name",
     "customer_mobile",
     "payment_method",
@@ -599,8 +621,12 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         for f in TRACKED_FIELDS:
             new_val = incoming.get(f)
             old_val = merged.get(f)
-            new_empty = _is_empty(new_val)
-            old_empty = _is_empty(old_val)
+            new_empty = _is_empty(new_val) and not (
+                f in ZERO_VALID_FIELDS and new_val is not None
+            )
+            old_empty = _is_empty(old_val) and not (
+                f in ZERO_VALID_FIELDS and old_val is not None
+            )
             if new_empty:
                 continue  # never overwrite with empty
             if old_empty:
@@ -611,14 +637,18 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
             # the two authoritative order-status fields. Salla is the source
             # of truth for the current order lifecycle state, while products,
             # totals, customer and payment data remain protected.
-            salla_status_override = (
+            salla_authoritative_override = (
                 source == "salla_direct"
-                and f in {"order_status", "order_status_slug"}
+                and f in {
+                    "order_status",
+                    "order_status_slug",
+                    *COLLECTION_FIELDS,
+                }
             )
-            if fills_empty_only and not salla_status_override:
+            if fills_empty_only and not salla_authoritative_override:
                 continue
             if (
-                f in CRITICAL_FIELDS or salla_status_override
+                f in CRITICAL_FIELDS or salla_authoritative_override
             ) and new_val != old_val:
                 merged[f] = new_val
                 field_sources[f] = source
@@ -657,6 +687,39 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         if new_tags:
             merged["tags"] = sorted(set((merged.get("tags") or []) + new_tags))
             field_sources["tags"] = source
+
+    # Append an auditable collection snapshot only when Salla supplied
+    # collection facts and the canonical values changed.
+    if any(incoming.get(key) is not None for key in COLLECTION_FIELDS):
+        collection_snapshot = {
+            "at": now,
+            "source": source,
+            "paid_amount": merged.get("paid_amount"),
+            "remaining_amount": merged.get("remaining_amount"),
+            "has_remaining_amount": merged.get("has_remaining_amount"),
+            "status": merged.get("payment_collection_status"),
+        }
+        collection_history = list(merged.get("payment_collection_history") or [])
+        comparable = {
+            key: collection_snapshot.get(key)
+            for key in (
+                "paid_amount",
+                "remaining_amount",
+                "has_remaining_amount",
+                "status",
+            )
+        }
+        last_comparable = (
+            {
+                key: collection_history[-1].get(key)
+                for key in comparable
+            }
+            if collection_history
+            else None
+        )
+        if comparable != last_comparable:
+            collection_history.append(collection_snapshot)
+            merged["payment_collection_history"] = collection_history[-100:]
 
     merged["field_sources"] = field_sources
     merged["updated_at"] = now
