@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ArrowLeft, CheckCircle, Clipboard, FloppyDisk, MagnifyingGlass,
-    SpinnerGap, WarningCircle, WhatsappLogo, X,
+    ArrowLeft, CheckCircle, Clipboard, Eye, EyeSlash, FloppyDisk,
+    MagnifyingGlass, SpinnerGap, WarningCircle, WhatsappLogo, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -49,6 +49,8 @@ function Field({ label, value, dir }) {
 function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [preparationNote, setPreparationNote] = useState(item.preparation_note || "");
     const [internalNote, setInternalNote] = useState(item.internal_note || "");
+    const [showPreparationNote, setShowPreparationNote] = useState(false);
+    const [showInternalNote, setShowInternalNote] = useState(false);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
@@ -129,24 +131,55 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                     </div>
                 </div>
             </div>
-            <div className="grid gap-3 border-t bg-slate-50/70 p-4 sm:grid-cols-2">
-                <label className="block">
-                    <span className="mb-1 block text-sm font-extrabold text-slate-700">تعليمات التجهيز — تُطبع مع القطعة</span>
-                    <textarea value={preparationNote} onChange={(event) => setPreparationNote(event.target.value)} maxLength={1200} className="min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-teal-500" placeholder="مثال: اعتماد الصورة الفضية، مع تغليف الورد…" />
-                </label>
-                <label className="block">
-                    <span className="mb-1 block text-sm font-extrabold text-slate-700">ملاحظة داخلية — لا تُطبع</span>
-                    <textarea value={internalNote} onChange={(event) => setInternalNote(event.target.value)} maxLength={2000} className="min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-violet-500" placeholder="ملاحظة للموظفين فقط" />
-                </label>
-                <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => save({ preparation_note: preparationNote.trim() || null, internal_note: internalNote.trim() || null }, "تم حفظ ملاحظات المنتج.")}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-end"
-                >
-                    {busy ? <SpinnerGap className="animate-spin" /> : <FloppyDisk />}
-                    حفظ ملاحظات المنتج
-                </button>
+            <div className="border-t bg-slate-50/70 p-4">
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        aria-expanded={showPreparationNote}
+                        onClick={() => setShowPreparationNote((visible) => !visible)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 text-xs font-extrabold text-teal-800 hover:bg-teal-50"
+                    >
+                        {showPreparationNote ? <EyeSlash size={15} /> : <Eye size={15} />}
+                        تعليمات التجهيز
+                        {item.preparation_note && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px]">محفوظ</span>}
+                    </button>
+                    <button
+                        type="button"
+                        aria-expanded={showInternalNote}
+                        onClick={() => setShowInternalNote((visible) => !visible)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-extrabold text-violet-800 hover:bg-violet-50"
+                    >
+                        {showInternalNote ? <EyeSlash size={15} /> : <Eye size={15} />}
+                        ملاحظة داخلية
+                        {item.internal_note && <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px]">محفوظ</span>}
+                    </button>
+                </div>
+
+                {(showPreparationNote || showInternalNote) && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {showPreparationNote && (
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-extrabold text-slate-700">تعليمات التجهيز — تُطبع مع القطعة</span>
+                                <textarea value={preparationNote} onChange={(event) => setPreparationNote(event.target.value)} maxLength={1200} className="min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-teal-500" placeholder="مثال: اعتماد الصورة الفضية، مع تغليف الورد…" />
+                            </label>
+                        )}
+                        {showInternalNote && (
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-extrabold text-slate-700">ملاحظة داخلية — لا تُطبع</span>
+                                <textarea value={internalNote} onChange={(event) => setInternalNote(event.target.value)} maxLength={2000} className="min-h-24 w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-violet-500" placeholder="ملاحظة للموظفين فقط" />
+                            </label>
+                        )}
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => save({ preparation_note: preparationNote.trim() || null, internal_note: internalNote.trim() || null }, "تم حفظ ملاحظات المنتج.")}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-end"
+                        >
+                            {busy ? <SpinnerGap className="animate-spin" /> : <FloppyDisk />}
+                            حفظ الملاحظات
+                        </button>
+                    </div>
+                )}
             </div>
         </article>
     );

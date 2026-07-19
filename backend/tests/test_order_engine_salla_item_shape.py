@@ -78,3 +78,50 @@ def test_salla_order_item_nested_options_are_human_readable():
     assert item.options_raw[0]["value"] == "ذهبي"
     assert item.options_raw[1]["value"] == "سارة"
     assert item.color == "ذهبي"
+
+
+def test_salla_order_item_values_shape_preserves_personalization():
+    """Salla uses `values` (plural) for real customizable order items."""
+    raw = {
+        "id": 604952191,
+        "reference_id": "273106396",
+        "date": "2026-07-19T14:38:01+03:00",
+        "amounts": {"total": {"amount": 350, "currency": "SAR"}},
+        "items": [{
+            "id": 1471692337,
+            "product_id": 1008190362,
+            "sku": "AMS11889",
+            "name": "قلادة روز بالاسم مطلي ذهب",
+            "quantity": 1,
+            "options": [
+                {
+                    "name": "الاسم",
+                    "values": {"name": "الاسم", "value": "امل"},
+                },
+                {
+                    "name": "لون حفر الاسم",
+                    "values": [{"name": "ابيض", "value": ""}],
+                },
+                {
+                    "name": "هل تريد اضافه كرت اهداء",
+                    "values": [{"name": "نعم", "value": ""}],
+                },
+                {
+                    "name": "الكتابه على الكرت",
+                    "values": {"name": "الكتابه على الكرت", "value": "رسالة خاصة"},
+                },
+            ],
+        }],
+    }
+
+    item = map_salla_order(raw).items[0]
+
+    assert item.options_normalized == {
+        "الاسم": "امل",
+        "لون حفر الاسم": "ابيض",
+        "هل تريد اضافه كرت اهداء": "نعم",
+        "الكتابه على الكرت": "رسالة خاصة",
+    }
+    assert [option["value"] for option in item.options_raw] == [
+        "امل", "ابيض", "نعم", "رسالة خاصة",
+    ]

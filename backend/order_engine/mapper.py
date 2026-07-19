@@ -492,8 +492,8 @@ def _display_option_value(value: Any) -> Any:
     """
     if isinstance(value, dict):
         for key in (
-            "name",
             "value",
+            "name",
             "label",
             "text",
             "option_value",
@@ -547,11 +547,19 @@ def _normalise_options(
             option.get("key"),
             option.get("option"),
         )
-        raw_value = _first(
-            option.get("value"),
-            option.get("selected"),
-            option.get("choice"),
-            option.get("text"),
+        raw_value = next(
+            (
+                candidate
+                for candidate in (
+                    option.get("value"),
+                    option.get("values"),
+                    option.get("selected"),
+                    option.get("choice"),
+                    option.get("text"),
+                )
+                if candidate not in (None, "", [], {})
+            ),
+            None,
         )
         value = _display_option_value(raw_value)
 

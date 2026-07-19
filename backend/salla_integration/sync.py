@@ -335,8 +335,8 @@ def _legacy_option_value(value: Any) -> Any:
     """Extract a customer-visible value while avoiding raw JSON in legacy UI."""
     if isinstance(value, dict):
         for key in (
-            "name",
             "value",
+            "name",
             "label",
             "text",
             "option_value",
@@ -385,13 +385,21 @@ def _legacy_item_options(item: dict) -> list[dict]:
             or option.get("key")
             or option.get("option")
         )
-        value = _legacy_option_value(
-            option.get("value")
-            if "value" in option
-            else option.get("selected")
-            or option.get("choice")
-            or option.get("text")
+        raw_value = next(
+            (
+                candidate
+                for candidate in (
+                    option.get("value"),
+                    option.get("values"),
+                    option.get("selected"),
+                    option.get("choice"),
+                    option.get("text"),
+                )
+                if candidate not in (None, "", [], {})
+            ),
+            None,
         )
+        value = _legacy_option_value(raw_value)
 
         if not name or value in (None, "", [], {}):
             continue
@@ -1432,6 +1440,9 @@ async def run_products_sync(db, user_id: str) -> dict:
                     "status": (prod.get("status") or "").lower(),
                     "price": _money((prod.get("price") or {}).get("amount") if isinstance(prod.get("price"), dict) else prod.get("price")),
                     "main_image": prod.get("main_image") or "",
+                    "thumbnail": prod.get("thumbnail") or "",
+                    "images": prod.get("images") if isinstance(prod.get("images"), list) else [],
+                    "gallery_refreshed_at": _now(),
                     "url": prod.get("url") or "",
                     "updated_at": _now(),
                 }

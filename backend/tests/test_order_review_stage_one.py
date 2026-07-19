@@ -1,7 +1,11 @@
 """Stage-one review invariants: image learning, RBAC and status lookup."""
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from order_engine.mapper import map_salla_order
 from order_item_engine.models import (
     OrderItemIdentityDTO,
     OrderItemOptionDTO,
@@ -10,6 +14,7 @@ from order_item_engine.models import (
 from order_review_routes import (
     _can_review,
     _merchant_user_id,
+    _review_item_identities,
     _reviewed_status_id,
     build_image_preference_identity,
 )
@@ -52,6 +57,28 @@ def test_image_preference_separates_color_and_product():
     assert silver[1] != other_product[1]
 
 
+def test_image_preference_keeps_visual_color_even_when_label_mentions_name():
+    white = item().model_copy(update={
+        "options": [
+            OrderItemOptionDTO(name="الاسم", value="أحمد"),
+            OrderItemOptionDTO(name="لون حفر الاسم", value="أبيض"),
+        ],
+    })
+    black = white.model_copy(update={
+        "options": [
+            OrderItemOptionDTO(name="الاسم", value="سارة"),
+            OrderItemOptionDTO(name="لون حفر الاسم", value="أسود"),
+        ],
+    })
+
+    white_identity = build_image_preference_identity(white)
+    black_identity = build_image_preference_identity(black)
+
+    assert "الاسم" not in white_identity[2]
+    assert white_identity[2]["لون حفر الاسم"] == "أبيض"
+    assert white_identity[1] != black_identity[1]
+
+
 def test_only_order_managers_can_review():
     assert _can_review({"id": "1", "role": "owner"})
     assert _can_review({"id": "2", "role": "operations", "created_by": "1"})
@@ -73,3 +100,105 @@ def test_salla_reviewed_status_id_accepts_both_arabic_names():
         ]
     }
     assert _reviewed_status_id(response) == 22
+
+
+class _GalleryCursor:
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    def limit(self, _limit):
+        return self
+
+    def __aiter__(self):
+        self._iterator = iter(self.rows)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iterator)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
+class _GalleryCollection:
+    def __init__(self):
+        self.rows = []
+
+    def find(self, _query, _projection=None):
+        return _GalleryCursor(self.rows)
+
+    async def update_one(self, selector, update, upsert=False):
+        row = next(
+            (
+                existing for existing in self.rows
+                if all(existing.get(key) == value for key, value in selector.items())
+            ),
+            None,
+        )
+        if row is None:
+            if not upsert:
+                return None
+            row = dict(selector)
+            row.update(update.get("$setOnInsert") or {})
+            self.rows.append(row)
+        row.update(update.get("$set") or {})
+        return None
+
+
+class _GalleryDB:
+    def __init__(self):
+        self.salla_products = _GalleryCollection()
+        self.products = _GalleryCollection()
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+
+@pytest.mark.asyncio
+async def test_review_refreshes_and_caches_the_complete_product_gallery():
+    db = _GalleryDB()
+    order = map_salla_order({
+        "id": 604952191,
+        "reference_id": "273106396",
+        "date": "2026-07-19T14:38:01+03:00",
+        "amounts": {"total": {"amount": 350, "currency": "SAR"}},
+        "items": [{
+            "id": 1471692337,
+            "product_id": 1008190362,
+            "sku": "AMS11889",
+            "name": "قلادة روز بالاسم مطلي ذهب",
+            "quantity": 1,
+            "thumbnail": "https://example.test/order-thumbnail.jpg",
+        }],
+    })
+    product_response = {
+        "data": {
+            "id": 1008190362,
+            "sku": "AMS11889",
+            "name": "قلادة روز بالاسم مطلي ذهب",
+            "main_image": "https://example.test/main.jpg",
+            "images": [
+                {"url": "https://example.test/silver.jpg"},
+                {"url": "https://example.test/gold.jpg"},
+                {"url": "https://example.test/close-up.jpg"},
+            ],
+        },
+    }
+
+    with patch("order_review_routes.call_salla", new=AsyncMock(return_value=product_response)) as fetch:
+        items = await _review_item_identities(db, "owner-1", order)
+
+    assert items[0].image_urls == [
+        "https://example.test/order-thumbnail.jpg",
+        "https://example.test/main.jpg",
+        "https://example.test/silver.jpg",
+        "https://example.test/gold.jpg",
+        "https://example.test/close-up.jpg",
+    ]
+    fetch.assert_awaited_once()
+
+    with patch("order_review_routes.call_salla", new=AsyncMock()) as second_fetch:
+        cached_items = await _review_item_identities(db, "owner-1", order)
+
+    assert cached_items[0].image_urls == items[0].image_urls
+    second_fetch.assert_not_awaited()

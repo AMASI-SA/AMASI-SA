@@ -31,6 +31,10 @@ _PERSONAL_OPTION_HINTS = (
     "اسم", "نقش", "كتابة", "رسالة", "اهداء", "إهداء", "تهنئة", "رقم الجوال",
     "name", "engraving", "inscription", "message", "gift message", "phone",
 )
+_VISUAL_OPTION_PREFIXES = (
+    "لون", "اللون", "مقاس", "المقاس", "خامة", "الخامة", "مادة", "المادة",
+    "color", "colour", "size", "material",
+)
 
 
 def _now() -> str:
@@ -47,6 +51,8 @@ def _normalized(value: Any) -> str:
 
 def _is_personal_option(name: str) -> bool:
     normalized = _normalized(name)
+    if any(normalized.startswith(prefix.casefold()) for prefix in _VISUAL_OPTION_PREFIXES):
+        return False
     return any(hint.casefold() in normalized for hint in _PERSONAL_OPTION_HINTS)
 
 
@@ -219,9 +225,102 @@ def _item_view(item: Any, saved: Optional[dict[str, Any]], preference: Optional[
     }
 
 
+async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> list[Any]:
+    """Build review items and refresh incomplete galleries once from Salla.
+
+    Normal order reads remain local. The review stage is the one place where
+    seeing every catalogue image is operationally required, so a product with
+    a one-image cache is refreshed and the full gallery is persisted locally.
+    """
+    identities = await enrich_order_item_images(
+        db, user_id=user_id, items=map_order_item_identities(order)
+    )
+    candidates = {
+        (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
+        for item in identities
+        if _text(getattr(item, "product_id", None)) or _text(getattr(item, "sku", None))
+    }
+    product_ids = [product_id for product_id, _ in candidates if product_id]
+    skus = [sku for _, sku in candidates if sku]
+    clauses = []
+    if product_ids:
+        clauses.append({"product_id": {"$in": product_ids}})
+    if skus:
+        clauses.append({"sku": {"$in": skus}})
+    fresh_product_ids: set[str] = set()
+    fresh_skus: set[str] = set()
+    if clauses:
+        cursor = db.salla_products.find(
+            {"user_id": user_id, "$or": clauses},
+            {"_id": 0, "product_id": 1, "sku": 1, "gallery_refreshed_at": 1},
+        )
+        async for cached in cursor:
+            if not _text(cached.get("gallery_refreshed_at")):
+                continue
+            fresh_product_ids.add(_text(cached.get("product_id")))
+            fresh_skus.add(_text(cached.get("sku")))
+
+    targets = {
+        (product_id, sku)
+        for product_id, sku in candidates
+        if not (
+            (product_id and product_id in fresh_product_ids)
+            or (sku and sku in fresh_skus)
+        )
+    }
+    refreshed = False
+    for product_id, sku in sorted(targets):
+        try:
+            if product_id:
+                response = await call_salla(db, user_id, "GET", f"/products/{product_id}")
+                product = response.get("data") if isinstance(response, dict) else None
+            else:
+                response = await call_salla(
+                    db, user_id, "GET", "/products",
+                    params={"keyword": sku, "per_page": 10},
+                )
+                rows = response.get("data") if isinstance(response, dict) else []
+                product = next(
+                    (
+                        row for row in rows
+                        if isinstance(row, dict) and _normalized(row.get("sku")) == _normalized(sku)
+                    ),
+                    None,
+                )
+        except SallaError:
+            continue
+
+        if not isinstance(product, dict):
+            continue
+        images = product.get("images") if isinstance(product.get("images"), list) else []
+        cached_product_id = _text(product.get("id")) or product_id
+        if not cached_product_id or not (
+            images or product.get("main_image") or product.get("thumbnail")
+        ):
+            continue
+        await db.salla_products.update_one(
+            {"user_id": user_id, "product_id": cached_product_id},
+            {"$set": {
+                "user_id": user_id,
+                "product_id": cached_product_id,
+                "name": _text(product.get("name")),
+                "sku": _text(product.get("sku")) or sku,
+                "main_image": product.get("main_image") or "",
+                "thumbnail": product.get("thumbnail") or "",
+                "images": images,
+                "gallery_refreshed_at": _now(),
+            }, "$setOnInsert": {"created_at": _now()}},
+            upsert=True,
+        )
+        refreshed = True
+
+    if refreshed:
+        identities = await enrich_order_item_images(db, user_id=user_id, items=identities)
+    return identities
+
+
 async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
-    identities = map_order_item_identities(order)
-    identities = await enrich_order_item_images(db, user_id=user_id, items=identities)
+    identities = await _review_item_identities(db, user_id, order)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
@@ -312,9 +411,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        identities = await enrich_order_item_images(
-            db, user_id=user_id, items=map_order_item_identities(order)
-        )
+        identities = await _review_item_identities(db, user_id, order)
         target = next((item for item in identities if item.order_item_id == order_item_id), None)
         if target is None:
             raise HTTPException(status_code=404, detail={"code": "order_item_not_found"})
@@ -409,7 +506,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        identities = await enrich_order_item_images(db, user_id=user_id, items=map_order_item_identities(order))
+        identities = await _review_item_identities(db, user_id, order)
         if not identities:
             raise HTTPException(status_code=409, detail={"code": "order_has_no_items", "message": "لا يمكن اعتماد طلب بلا منتجات."})
         workflow = await db[WORKFLOWS].find_one(

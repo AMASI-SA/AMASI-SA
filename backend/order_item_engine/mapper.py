@@ -62,12 +62,41 @@ def _option_name(option: dict[str, Any]) -> Optional[str]:
 
 
 def _option_value(option: dict[str, Any]) -> Any:
-    return _first(
-        option.get("value"),
-        option.get("selected"),
-        option.get("choice"),
-        option.get("text"),
+    value = next(
+        (
+            candidate
+            for candidate in (
+                option.get("value"),
+                option.get("values"),
+                option.get("selected"),
+                option.get("choice"),
+                option.get("text"),
+            )
+            if candidate not in (None, "", [], {})
+        ),
+        None,
     )
+    if isinstance(value, dict):
+        return _first(
+            value.get("value"),
+            value.get("name"),
+            value.get("label"),
+            value.get("text"),
+        )
+    if isinstance(value, list):
+        visible = []
+        for entry in value:
+            if isinstance(entry, dict):
+                entry = _first(
+                    entry.get("value"),
+                    entry.get("name"),
+                    entry.get("label"),
+                    entry.get("text"),
+                )
+            if entry not in (None, "", [], {}):
+                visible.append(str(entry))
+        return " / ".join(visible) if visible else None
+    return value
 
 
 def _map_options(

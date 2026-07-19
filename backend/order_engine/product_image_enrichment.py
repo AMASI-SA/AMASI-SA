@@ -1,7 +1,7 @@
-"""Fill missing order-item images from Mezan's local product caches.
+"""Complete order-item image galleries from Mezan's local product caches.
 
 This enrichment never calls Salla.  It keeps order/detail reads local while
-recovering catalogue images by product id, parent product id, or SKU.
+recovering all catalogue images by product id, parent product id, or SKU.
 """
 from __future__ import annotations
 
@@ -36,15 +36,26 @@ def _url(value: Any) -> str:
     return ""
 
 
-def _document_image(document: dict[str, Any]) -> str:
+def _document_images(document: dict[str, Any]) -> list[str]:
+    images: list[str] = []
     for key in (
         "main_image", "image_url", "image", "thumbnail",
         "product_thumbnail", "images", "media",
     ):
-        candidate = _url(document.get(key))
-        if candidate:
-            return candidate
-    return ""
+        value = document.get(key)
+        entries = value if isinstance(value, list) else [value]
+        for entry in entries:
+            candidate = _url(entry)
+            if candidate and candidate not in images:
+                images.append(candidate)
+    return images
+
+
+def _merge_images(target: list[str], candidates: list[str]) -> None:
+    for candidate in candidates:
+        normalized = _text(candidate)
+        if normalized and normalized.startswith(("https://", "http://")) and normalized not in target:
+            target.append(normalized)
 
 
 async def enrich_order_item_images(
@@ -53,16 +64,9 @@ async def enrich_order_item_images(
     user_id: str,
     items: list[Any],
 ) -> list[Any]:
-    missing = [
-        item for item in items
-        if not _text(getattr(item, "image_url", None))
-    ]
-    if not missing:
-        return items
-
     product_ids = {
         value
-        for item in missing
+        for item in items
         for value in (
             _text(getattr(item, "product_id", None)),
             _text(getattr(item, "parent_product_id", None)),
@@ -71,7 +75,7 @@ async def enrich_order_item_images(
     }
     skus = {
         _text(getattr(item, "sku", None))
-        for item in missing
+        for item in items
         if _text(getattr(item, "sku", None))
     }
     clauses = []
@@ -99,11 +103,11 @@ async def enrich_order_item_images(
             if isinstance(document, dict)
         ])
 
-    by_product_id: dict[str, str] = {}
-    by_sku: dict[str, str] = {}
+    by_product_id: dict[str, list[str]] = {}
+    by_sku: dict[str, list[str]] = {}
     for document in documents:
-        image = _document_image(document)
-        if not image:
+        images = _document_images(document)
+        if not images:
             continue
         for key in (
             document.get("product_id"),
@@ -112,28 +116,25 @@ async def enrich_order_item_images(
         ):
             normalized = _text(key)
             if normalized:
-                by_product_id.setdefault(normalized, image)
+                _merge_images(by_product_id.setdefault(normalized, []), images)
         sku = _text(document.get("sku"))
         if sku:
-            by_sku.setdefault(sku, image)
+            _merge_images(by_sku.setdefault(sku, []), images)
 
     enriched = []
     for item in items:
         existing = _text(getattr(item, "image_url", None))
-        image = existing
-        if not image:
-            for key in (
-                getattr(item, "product_id", None),
-                getattr(item, "parent_product_id", None),
-            ):
-                image = by_product_id.get(_text(key), "")
-                if image:
-                    break
-        if not image:
-            image = by_sku.get(_text(getattr(item, "sku", None)), "")
-        if image and not existing:
-            current_urls = list(getattr(item, "image_urls", None) or [])
-            urls = [image, *[url for url in current_urls if url != image]]
+        urls: list[str] = []
+        _merge_images(urls, [existing, *(getattr(item, "image_urls", None) or [])])
+        for key in (
+            getattr(item, "product_id", None),
+            getattr(item, "parent_product_id", None),
+        ):
+            _merge_images(urls, by_product_id.get(_text(key), []))
+        _merge_images(urls, by_sku.get(_text(getattr(item, "sku", None)), []))
+
+        image = existing or (urls[0] if urls else "")
+        if image != existing or urls != list(getattr(item, "image_urls", None) or []):
             item = item.model_copy(
                 update={"image_url": image, "image_urls": urls}
             )
