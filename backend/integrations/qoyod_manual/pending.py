@@ -418,6 +418,11 @@ async def list_pending_orders(
             "payment_method":  (canon.get("payment_method")
                                 or canon.get("payment_method_native")),
             "payment_method_native": canon.get("payment_method_native"),
+            # Bank-transfer methods arrive from Salla with the generic
+            # key `bank`; the actual receiving bank is a separate field.
+            # Keep both values so the operator can verify the same bank
+            # that send.py will use for Qoyod account routing.
+            "receiving_bank_name": canon.get("receiving_bank_name"),
             "salla_status":    (canon.get("order_status_native")
                                 or canon.get("order_status")),
             "customer_name":   ((canon.get("customer") or {}).get("name")),
