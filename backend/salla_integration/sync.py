@@ -53,6 +53,76 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _store_bank_id(order: dict) -> str:
+    """Return Salla's merchant receiving-bank id from an order payload."""
+    payment = order.get("payment") or {}
+    payment = payment if isinstance(payment, dict) else {}
+    bank = order.get("bank") or {}
+    bank = bank if isinstance(bank, dict) else {}
+    return _str(
+        payment.get("store_bank_id")
+        or order.get("store_bank_id")
+        or bank.get("id")
+    )
+
+
+async def _enrich_order_receiving_bank(db, user_id: str, order: dict) -> dict:
+    """Resolve ``payment.store_bank_id`` once at the ingestion boundary.
+
+    The unified order is the durable source for Order Details and Qoyod.
+    Downstream pages must not call Salla or maintain their own bank lookup.
+    """
+    bank_id = _store_bank_id(order)
+    if not bank_id:
+        return order
+
+    bank = order.get("bank") or {}
+    bank = bank if isinstance(bank, dict) else {}
+    if bank.get("bank_name") or bank.get("name"):
+        return order
+
+    cached = await db.salla_payment_banks.find_one(
+        {"user_id": str(user_id), "salla_bank_id": bank_id},
+        {"_id": 0, "bank_name": 1, "account_name": 1},
+    )
+    details = cached if isinstance(cached, dict) else None
+
+    if not details or not details.get("bank_name"):
+        try:
+            response = await call_salla(
+                db, user_id, "GET", f"/payment/banks/{bank_id}")
+            payload = response.get("data") if isinstance(response, dict) else None
+            if isinstance(payload, dict) and payload.get("bank_name"):
+                details = payload
+                await db.salla_payment_banks.update_one(
+                    {"user_id": str(user_id), "salla_bank_id": bank_id},
+                    {"$set": {
+                        "bank_name": _str(payload.get("bank_name")),
+                        "account_name": _str(payload.get("account_name")),
+                        "updated_at": _now(),
+                    }},
+                    upsert=True,
+                )
+        except SallaError as exc:
+            logger.warning(
+                "Could not resolve Salla receiving bank %s for order %s: %s",
+                bank_id, order.get("reference_id"), exc,
+            )
+
+    if not details or not details.get("bank_name"):
+        return order
+
+    enriched = dict(order)
+    enriched["bank"] = {
+        **bank,
+        "id": bank_id,
+        "bank_name": _str(details.get("bank_name")),
+        "account_name": _str(details.get("account_name")),
+    }
+    enriched["receiving_bank_name"] = _str(details.get("bank_name"))
+    return enriched
+
+
 async def _refresh_plan_b_status_snapshot(
     db,
     user_id: str,
@@ -662,6 +732,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "payment_collection_status": payment_collection_status,
         "payment_checkout_url": checkout_url,
         "receiving_bank_name": receiving_bank_name,
+        "receiving_bank_id": _store_bank_id(salla_order),
         "payment_receipt_url": payment_receipt_url,
         "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
@@ -780,6 +851,8 @@ async def run_orders_sync(
 
             for raw in data:
                 try:
+                    raw = await _enrich_order_receiving_bank(
+                        db, user_id, raw)
                     doc = _salla_order_to_doc(raw)
                     if not doc.get("order_number"):
                         skipped += 1
@@ -1059,6 +1132,8 @@ async def _fetch_salla_order_details(
     )
 
     enriched_details = dict(details)
+    enriched_details = await _enrich_order_receiving_bank(
+        db, user_id, enriched_details)
     enriched_details["items"] = items
     # Preserve an authoritative empty list so cancelled labels cannot survive
     # from an embedded historical shipment snapshot.
