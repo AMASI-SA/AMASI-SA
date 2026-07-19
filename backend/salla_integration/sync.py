@@ -113,6 +113,15 @@ async def _refresh_plan_b_status_snapshot(
         "order_status_native": status_native,
         "metadata": metadata,
     })
+    # A status resync must carry the current payment evidence too.  Without
+    # this, the newest Plan-B snapshot can shadow the richer unified order
+    # and reduce a named bank transfer back to the generic value `bank`.
+    for canonical_key in (
+        "payment_method", "receiving_bank_name", "payment_receipt_url",
+    ):
+        value = order_doc.get(canonical_key)
+        if value not in (None, ""):
+            canonical[canonical_key] = value
 
     connector_key = "salla_direct_status_resync"
     idempotency_key = (
@@ -430,8 +439,9 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     tax_obj = amounts.get("tax") or {}
     subtotal_obj = amounts.get("sub_total") or amounts.get("subtotal") or {}
 
+    payment_method_obj = salla_order.get("payment_method") or {}
     payment_method = (
-        salla_order.get("payment_method")
+        payment_method_obj
         or (salla_order.get("payment") or {}).get("method")
         or ""
     )
@@ -511,11 +521,28 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     bank = salla_order.get("bank") or {}
     if not isinstance(bank, dict):
         bank = {}
+    # Keep this aligned with Order Details' bank discovery.  Depending on
+    # the Salla order shape, the actual receiving bank may be exposed on
+    # the root order, the bank/payment objects, or the payment-method
+    # object's human-readable name rather than in the generic code `bank`.
+    payment_method_bank = payment_method_obj if isinstance(
+        payment_method_obj, dict) else {}
     receiving_bank_name = _str(
         bank.get("bank_name")
         or bank.get("name")
         or salla_order.get("receiving_bank_name")
+        or salla_order.get("receiving_bank")
         or salla_order.get("bank_name")
+        or payment_obj.get("receiving_bank_name")
+        or payment_obj.get("receiving_bank")
+        or payment_obj.get("bank_name")
+        or payment_obj.get("bank")
+        or payment_method_bank.get("receiving_bank_name")
+        or payment_method_bank.get("receiving_bank")
+        or payment_method_bank.get("bank_name")
+        or payment_method_bank.get("bank")
+        or payment_method_bank.get("name")
+        or payment_method_bank.get("label")
     )
     payment_receipt_url = _media_url(
         salla_order.get("receipt_image")
