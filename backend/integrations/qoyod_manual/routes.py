@@ -112,6 +112,21 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                           "value.")),
         user=Depends(current_user),
     ):
+        # An exact order-number search is also an explicit request to see
+        # Salla's current state. Refresh that single order first so a
+        # completed -> under_review -> completed recurrence is visible even
+        # if the repeated completed webhook was previously deduplicated.
+        exact_order = str(search or "").strip()
+        if exact_order.isdigit():
+            try:
+                from salla_integration.sync import resync_single_order
+                await resync_single_order(db, _TENANT, exact_order)
+            except Exception:
+                # Listing remains available from local evidence when Salla
+                # is temporarily unavailable; resync diagnostics live in the
+                # standard order-resync endpoint.
+                logger.exception(
+                    "Plan-B exact-search resync failed order=%s", exact_order)
         return await list_pending_orders(
             db, user_id=_TENANT, days=days, limit=limit,
             search=search, status=status)
