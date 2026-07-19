@@ -195,8 +195,13 @@ async def validate_settings_for_setup(db, *, user_id: str) -> dict:
         "payment_method_mapping":
             _ensure_iter(settings.get("payment_method_mapping")),
     }
+    # Generic bank transfers are deliberately not configurable.  Each
+    # order must resolve to one of the approved receiving-bank accounts;
+    # unresolved orders are refused safely by the send path.
+    generic_bank_keys = {"bank", "bank_transfer", "wire_transfer"}
     missing = sorted(
         k for k in used_keys
+        if k not in generic_bank_keys
         if not resolve_payment_account(settings_for_lookup, k)
     )
     mapped_keys = sorted(used_keys - set(missing))
