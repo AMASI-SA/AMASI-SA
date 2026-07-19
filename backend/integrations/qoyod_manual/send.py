@@ -1600,19 +1600,30 @@ async def _run_all_steps(
             {"response": created_inv})
     invoice_number = inv_node.get("number") or inv_node.get("reference_no")
 
-    # Persist immediately after POST /invoices succeeds. Any later
-    # timeout/error must never allow a duplicate invoice on retry.
-    await db.integration_inbox.update_one(
-        {"id": row.get("id")},
-        {"$set": {
-            "manual_qoyod_invoice_id": str(invoice_id),
-            "manual_qoyod_invoice_number": (
-                str(invoice_number) if invoice_number else None
-            ),
-            "manual_send_last_status": "invoice_created",
-            "manual_send_at": datetime.now(timezone.utc),
-        }},
-    )
+    # Persist immediately after POST /invoices succeeds.  Qoyod is now
+    # authoritative, so a transient local DB write failure must not turn
+    # the successful external operation into an HTTP 500.  The Qoyod-side
+    # reference lookup remains the duplicate safety net on any retry.
+    local_persistence_warnings: list[str] = []
+    try:
+        await db.integration_inbox.update_one(
+            {"id": row.get("id")},
+            {"$set": {
+                "manual_qoyod_invoice_id": str(invoice_id),
+                "manual_qoyod_invoice_number": (
+                    str(invoice_number) if invoice_number else None
+                ),
+                "manual_send_last_status": "invoice_created",
+                "manual_send_at": datetime.now(timezone.utc),
+            }},
+        )
+    except Exception as exc:  # noqa: BLE001
+        local_persistence_warnings.append("initial_invoice_marker")
+        logger.exception(
+            "invoice succeeded in Qoyod but initial marker write failed "
+            "order=%s invoice=%s: %s",
+            order_number, invoice_id, exc,
+        )
 
     # Qoyod actual-total gate:
     # Never trust the local simulation after POST /invoices. Read the total
@@ -1676,7 +1687,6 @@ async def _run_all_steps(
         # so the pending list drops the order, then finalise the lock.  A
         # transient Mongo failure is logged for reconciliation, but the API
         # still returns the authoritative Qoyod success below.
-        local_persistence_warnings: list[str] = []
         try:
             await db.integration_inbox.update_one(
                 {"id": row.get("id")},
