@@ -854,9 +854,11 @@ export default function QoyodManualSend() {
                           {formatMoney(o.total_amount, o.currency)}
                         </td>
                         <td className="px-3 py-2 text-slate-600">
-                          {o.payment_method_native ||
-                            o.payment_method ||
-                            "—"}
+                          {o.receiving_bank_name
+                            ? `تحويل بنكي — ${o.receiving_bank_name}`
+                            : (o.payment_method_native ||
+                              o.payment_method ||
+                              "—")}
                         </td>
                         <td className="px-3 py-2">
                           <span className="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs text-sky-800">
