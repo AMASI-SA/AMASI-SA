@@ -47,6 +47,53 @@ APPROVED_RECEIVING_BANK_ACCOUNTS: dict[str, str] = {
 }
 
 
+def extract_receiving_bank_name(*sources) -> Optional[str]:
+    """Extract the receiving bank using the same multi-field strategy as
+    Order Details.
+
+    Salla has exposed this value at root level, inside ``bank``, and inside
+    ``payment`` across different payloads.  Only a recognised merchant bank
+    is returned; the generic payment value ``bank`` is never mistaken for a
+    bank name.
+    """
+    candidates = []
+    direct_keys = (
+        "receiving_bank_name", "destination_bank_name",
+        "transfer_bank_name", "bank_name", "receiving_bank",
+        "target_bank_name", "target_bank",
+    )
+
+    def collect(value, depth=0):
+        if not isinstance(value, dict) or depth > 4:
+            return
+        for key in direct_keys:
+            candidate = value.get(key)
+            if isinstance(candidate, dict):
+                candidate = candidate.get("bank_name") or candidate.get(
+                    "name") or candidate.get("label")
+            if candidate not in (None, ""):
+                candidates.append(str(candidate).strip())
+        plain_bank = value.get("bank")
+        if isinstance(plain_bank, str) and plain_bank.strip():
+            candidates.append(plain_bank.strip())
+        for nested_key in ("payment", "bank", "data", "order"):
+            nested = value.get(nested_key)
+            if isinstance(nested, dict):
+                # A Salla `bank` object commonly uses plain `name`.
+                if nested_key == "bank":
+                    candidate = nested.get("bank_name") or nested.get("name")
+                    if candidate not in (None, ""):
+                        candidates.append(str(candidate).strip())
+                collect(nested, depth + 1)
+
+    for source in sources:
+        collect(source)
+    for candidate in candidates:
+        if receiving_bank_key(None, candidate):
+            return candidate
+    return None
+
+
 def receiving_bank_key(
     payment_method: Optional[str], receiving_bank_name: Optional[str],
 ) -> Optional[str]:
