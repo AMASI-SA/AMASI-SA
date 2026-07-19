@@ -46,6 +46,39 @@ function Field({ label, value, dir }) {
     );
 }
 
+function normalizedSpecName(value) {
+    return String(value || "")
+        .trim()
+        .toLocaleLowerCase("ar")
+        .replace(/[ـ:：\s_-]+/g, " ");
+}
+
+function canonicalSpecName(value) {
+    const normalized = normalizedSpecName(value);
+    if (["لون", "اللون", "لون المنتج", "اللون المنتج"].includes(normalized)) return "color";
+    if (["مقاس", "المقاس", "مقاس المنتج", "المقاس المنتج"].includes(normalized)) return "size";
+    return normalized;
+}
+
+function uniqueProductSpecs(item) {
+    const specs = [];
+    const seen = new Set();
+    const add = (name, value) => {
+        const cleanName = String(name || "").trim();
+        const cleanValue = String(value ?? "").trim();
+        if (!cleanName || !cleanValue) return;
+        const key = canonicalSpecName(cleanName);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        specs.push({ name: cleanName, value: cleanValue, key });
+    };
+
+    (Array.isArray(item.options) ? item.options : []).forEach((option) => add(option?.name, option?.value));
+    add("اللون", item.color);
+    add("المقاس", item.size);
+    return specs;
+}
+
 function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [preparationNote, setPreparationNote] = useState(item.preparation_note || "");
     const [internalNote, setInternalNote] = useState(item.internal_note || "");
@@ -74,7 +107,8 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
         }
     };
 
-    const options = Array.isArray(item.options) ? item.options : [];
+    const specs = uniqueProductSpecs(item);
+    const gallery = Array.from(new Set((item.gallery || []).filter(Boolean)));
     return (
         <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="grid gap-4 p-4 sm:grid-cols-[150px_minmax(0,1fr)]">
@@ -86,33 +120,17 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                             <div className="flex h-full items-center justify-center text-sm text-slate-400">لا توجد صورة</div>
                         )}
                     </div>
-                    <div className="mt-2 text-center text-[11px] font-bold text-teal-700">
-                        {item.selected_image_source === "learned_preference"
-                            ? "صورة محفوظة لنفس الخيارات"
-                            : item.selected_image_source === "manual" ? "اختيار الموظف" : "الصورة الافتراضية"}
-                    </div>
                 </div>
                 <div className="min-w-0">
                     <h3 className="text-lg font-extrabold text-slate-900">{item.name}</h3>
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
                         <span>SKU: <b dir="ltr">{item.sku || "—"}</b></span>
                         <span>الكمية: <b>{item.quantity}</b></span>
-                        {item.color && <span>اللون: <b>{item.color}</b></span>}
-                        {item.size && <span>المقاس: <b>{item.size}</b></span>}
                     </div>
-                    {options.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {options.map((option, index) => (
-                                <span key={`${option.name}-${index}`} className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-800">
-                                    {option.name}: {String(option.value ?? "")}
-                                </span>
-                            ))}
-                        </div>
-                    )}
+                    {gallery.length > 0 && (
                     <div className="mt-4">
-                        <div className="mb-2 text-sm font-extrabold text-slate-700">اختر صورة التجهيز المطابقة</div>
                         <div className="flex gap-2 overflow-x-auto pb-2">
-                            {(item.gallery || []).map((url, index) => {
+                            {gallery.map((url, index) => {
                                 const selected = url === item.selected_image_url;
                                 return (
                                     <button
@@ -129,7 +147,23 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                             })}
                         </div>
                     </div>
+                    )}
                 </div>
+            </div>
+            <div className="border-t border-slate-100 px-4 py-3">
+                <div className="mb-2 text-sm font-extrabold text-slate-700">مواصفات المنتج</div>
+                {specs.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        {specs.map((spec) => (
+                            <div key={spec.key} className="flex min-w-0 items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 text-sm">
+                                <span className="shrink-0 font-bold text-violet-700">{spec.name}:</span>
+                                <span className="min-w-0 break-words font-extrabold text-slate-900">{spec.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-sm text-slate-400">لا توجد مواصفات إضافية</div>
+                )}
             </div>
             <div className="border-t bg-slate-50/70 p-4">
                 <div className="flex flex-wrap gap-2">
