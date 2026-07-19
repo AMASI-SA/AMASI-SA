@@ -805,8 +805,37 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
                      "idempotency_key": idem_key},
                     {"_id": 0, "id": 1, "trace_id": 1, "pipeline_stage": 1,
                      "received_at": 1, "salla_order_id": 1,
+                     "canonical_payload.order_status": 1,
                      "stage_history": {"$slice": -1}},
                 )
+                # The same status can be reached again after an order moved
+                # away from it (completed -> under_review -> completed).
+                # The idempotency key intentionally collides, so do not run
+                # the accounting pipeline again; only refresh the event's
+                # recency.  Plan-B then sees the real current status while
+                # invoice idempotency remains fully protected.
+                incoming_status = _extract_status_slug(data)
+                existing_status = str(
+                    ((existing or {}).get("canonical_payload") or {})
+                    .get("order_status") or ""
+                ).strip().lower()
+                recurrence_refreshed = bool(
+                    (existing or {}).get("id")
+                    and incoming_status
+                    and incoming_status == existing_status
+                )
+                if recurrence_refreshed:
+                    await db.integration_inbox.update_one(
+                        {"id": existing["id"]},
+                        {
+                            "$set": {
+                                "received_at": now,
+                                "updated_at": now,
+                                "last_duplicate_received_at": now,
+                            },
+                            "$inc": {"duplicate_receive_count": 1},
+                        },
+                    )
                 _audit_state["skipped_reason"] = "duplicate_idempotency_key"
                 _audit_state["target_inbox_row_id"] = (existing or {}).get("id")
                 _audit_state["pipeline_stage_after"] = (existing or {}).get("pipeline_stage")
@@ -818,6 +847,7 @@ def attach_webhook_routes(router: APIRouter, db) -> None:
                     "pipeline_stage": (existing or {}).get("pipeline_stage"),
                     "salla_order_id": (existing or {}).get("salla_order_id"),
                     "received_at": (existing or {}).get("received_at"),
+                    "status_recurrence_refreshed": recurrence_refreshed,
                 }
 
             _audit_state["target_inbox_row_id"] = row_id
