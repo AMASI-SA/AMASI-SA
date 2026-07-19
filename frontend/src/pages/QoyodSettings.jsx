@@ -47,6 +47,18 @@ const INVOICE_DATE_OPTIONS = [
   { value: "created_at",   label: "تاريخ الإنشاء (created_at)" },
 ];
 
+// Receiving-bank rows approved by the merchant.  They are always visible
+// in the Qoyod payment mapping table so routing is explicit and auditable;
+// the generic bank_transfer row is not used as a substitute for them.
+const RECEIVING_BANK_MAPPING_ROWS = [
+  { salla_method: "bank_rajhi", qoyod_account_id: "94",
+    posting_mode: "paid_receipt", label_ar: "بنك الراجحي" },
+  { salla_method: "bank_ahli", qoyod_account_id: "95",
+    posting_mode: "paid_receipt", label_ar: "البنك الأهلي" },
+  { salla_method: "bank_inma", qoyod_account_id: "8",
+    posting_mode: "paid_receipt", label_ar: "بنك الإنماء" },
+];
+
 // ─── Building blocks ────────────────────────────────────────────────
 function Section({ title, subtitle, children, tone = "default" }) {
   const toneCls = tone === "danger"
@@ -368,7 +380,8 @@ function PaymentMethodMappingTable({
   const isBankTransferKey = (k) => {
     const norm = String(k || "").trim().toLowerCase().replace(/\s+/g, "_");
     return norm === "bank_transfer" || norm === "bank"
-        || norm === "wire_transfer" || norm === "تحويل_بنكي";
+        || norm === "wire_transfer" || norm === "تحويل_بنكي"
+        || ["bank_rajhi", "bank_ahli", "bank_inma"].includes(norm);
   };
   const POSTING_MODE_OPTIONS = [
     { value: "paid_receipt", label: "مدفوع — ينشئ سند قبض" },
@@ -392,6 +405,9 @@ function PaymentMethodMappingTable({
     return m;
   }, [used]);
   const labelFor = (key) => {
+    const bankRow = RECEIVING_BANK_MAPPING_ROWS.find(
+      (row) => row.salla_method === key);
+    if (bankRow) return bankRow.label_ar;
     const fromCat = (catalogue || []).find((c) => c.key === key);
     if (fromCat) return fromCat.label_ar;
     const fromUsed = usedByKey.get(key);
@@ -403,6 +419,9 @@ function PaymentMethodMappingTable({
   // every CANONICAL key already present in mapping (so editing doesn't drop them).
   const mappingByKey = useMemo(() => {
     const m = new Map();
+    for (const row of RECEIVING_BANK_MAPPING_ROWS) {
+      m.set(row.salla_method, row);
+    }
     for (const row of mapping || []) {
       const k = (row.salla_method || "").toLowerCase();
       if (k) m.set(k, row);
@@ -412,6 +431,9 @@ function PaymentMethodMappingTable({
 
   const visibleKeys = useMemo(() => {
     const out = new Set();
+    for (const row of RECEIVING_BANK_MAPPING_ROWS) {
+      out.add(row.salla_method);
+    }
     for (const u of used || []) if (u.key) out.add(u.key);
     for (const k of mappingByKey.keys()) out.add(k);
     return [...out].sort();
@@ -1072,7 +1094,14 @@ export default function QoyodSettings() {
         return codDirect.has(n) || codAliases.has(n);
       };
       const validModes = ["paid_receipt", "credit_invoice_only", "disabled"];
-      const pmm = (settings.payment_method_mapping || [])
+      const configuredMapping = [...(settings.payment_method_mapping || [])];
+      for (const requiredBankRow of RECEIVING_BANK_MAPPING_ROWS) {
+        const exists = configuredMapping.some(
+          (row) => String(row.salla_method || "").trim().toLowerCase()
+            === requiredBankRow.salla_method);
+        if (!exists) configuredMapping.push({ ...requiredBankRow });
+      }
+      const pmm = configuredMapping
         .filter((r) => (r.salla_method || "").trim())
         .map((r) => {
           const sm = (r.salla_method || "").trim().toLowerCase();
