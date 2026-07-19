@@ -18,6 +18,7 @@ even live-mode runs keep an auditable trail.
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
 
 from integrations.qoyod.payment_methods import resolve_payment_account
@@ -289,6 +290,7 @@ def build_invoice_payload(
         }
 
     lines = []
+    shipping_line_index: Optional[int] = None
     line_diagnostics: list[dict] = []
     for it in dto_dict.get("items", []):
         pid = _to_int_or_none(res_by_sku.get(it.get("sku")))
@@ -361,6 +363,7 @@ def build_invoice_payload(
                 "discount_type": "amount",
                 "tax_percent":   tax_percent,
             })
+            shipping_line_index = len(lines) - 1
             line_diagnostics.append({
                 "sku":         "_SHIPPING_",
                 "salla_total": shipping_target_gross,
@@ -424,6 +427,81 @@ def build_invoice_payload(
                 "fallback_used": False,
             })
 
+    # Align قيود's header total to Salla down to the halala after ALL
+    # invoice lines are complete. No synthetic line is created: shipping
+    # is adjusted when present, otherwise the final product is adjusted.
+    def _dec(value: Any) -> Decimal:
+        try:
+            return Decimal(str(value if value is not None else 0))
+        except Exception:
+            return Decimal("0")
+
+    def _q2(value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    def _q4(value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+    def _header_total(candidate_lines: list[dict]) -> Decimal:
+        net = sum(
+            (_q2(_dec(line.get("unit_price"))
+                 * _dec(line.get("quantity"))
+                 - _dec(line.get("discount")))
+             for line in candidate_lines),
+            Decimal("0"),
+        )
+        vat = _q2(net * _dec(tax_percent) / Decimal("100"))
+        return _q2(net + vat)
+
+    target_total = _q2(_dec(dto_dict.get("total_amount")))
+    total_before_alignment = _header_total(lines)
+    alignment_applied = False
+    alignment_line_index: Optional[int] = None
+    alignment_amount = Decimal("0")
+
+    if lines and total_before_alignment != target_total:
+        preferred_index = (shipping_line_index
+                           if shipping_line_index is not None
+                           else len(dto_dict.get("items") or []) - 1)
+        preferred_index = max(0, min(preferred_index, len(lines) - 1))
+        original = dict(lines[preferred_index])
+        original_discount = _dec(original.get("discount"))
+
+        for cents in range(-100, 101):
+            new_discount = _q2(
+                original_discount + Decimal(cents) / Decimal("100"))
+            if new_discount < 0:
+                continue
+            candidate = {**original, "discount": float(new_discount)}
+            trial = list(lines)
+            trial[preferred_index] = candidate
+            if _header_total(trial) == target_total:
+                lines[preferred_index] = candidate
+                alignment_applied = True
+                alignment_line_index = preferred_index
+                alignment_amount = new_discount - original_discount
+                break
+
+        if not alignment_applied:
+            original_unit = _dec(original.get("unit_price"))
+            qty = _dec(original.get("quantity")) or Decimal("1")
+            for mills in range(-10000, 10001):
+                new_unit = _q4(
+                    original_unit + Decimal(mills) / Decimal("10000"))
+                if new_unit < 0:
+                    continue
+                candidate = {**original, "unit_price": float(new_unit)}
+                trial = list(lines)
+                trial[preferred_index] = candidate
+                if _header_total(trial) == target_total:
+                    lines[preferred_index] = candidate
+                    alignment_applied = True
+                    alignment_line_index = preferred_index
+                    alignment_amount = (new_unit - original_unit) * qty
+                    break
+
+    total_after_alignment = _header_total(lines)
+
     invoice: dict = {
         "contact_id":     _to_int_or_none(qoyod_customer_id),
         "issue_date":     invoice_date.date().isoformat() if invoice_date else None,
@@ -475,8 +553,7 @@ def build_invoice_payload(
     # IMPORTANT: kept OUTSIDE `invoice` so Qoyod never receives it.
     # The pipeline lifts this into `qoyod_payloads.invoice_diagnostics`.
     salla_total = round(_f(dto_dict.get("total_amount")), 2)
-    expected_qoyod_total = round(
-        sum(d["computed_qoyod_gross"] for d in line_diagnostics), 2)
+    expected_qoyod_total = float(total_after_alignment)
     # Detect Salla's effective tax rate (informational only).
     salla_net_sum = sum(_f(it.get("total")) - _f(it.get("tax_amount"))
                        for it in dto_dict.get("items", []))
@@ -493,6 +570,18 @@ def build_invoice_payload(
         "salla_tax_percent_detected": salla_tax_percent_detected,
         "qoyod_tax_percent_used":     tax_percent,
         "line_diagnostics":           line_diagnostics,
+        "halala_alignment": {
+            "applied": alignment_applied,
+            "target_line": ("shipping" if alignment_line_index is not None
+                            and alignment_line_index == shipping_line_index
+                            else "last_product"),
+            "line_index": alignment_line_index,
+            "adjustment_amount": float(alignment_amount),
+            "total_before": float(total_before_alignment),
+            "total_after": float(total_after_alignment),
+            "target_total": float(target_total),
+            "exact_match": total_after_alignment == target_total,
+        },
         # Iter-293.1 — Order-level extra charge breadcrumbs.
         # AUDIT INVARIANTS:
         #   • `inferred_from_delta` is ALWAYS False — the code never
