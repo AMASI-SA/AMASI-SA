@@ -32,6 +32,7 @@ from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod.payment_methods import (
     resolve_payment_account,
+    resolve_receiving_bank_account,
     is_cod_family,
 )
 from integrations.qoyod.unsent_orders import _is_real
@@ -1217,6 +1218,7 @@ async def manual_send_one(
     salla_total = _q2(canon.get("total_amount"))
     payment_method = (canon.get("payment_method")
                        or canon.get("payment_method_native"))
+    receiving_bank_name = canon.get("receiving_bank_name")
 
     # ── Guard G0 — refuse zero-total sends (2026-02) ──────────────
     # Symptom: Tabby/Make (or a stripped Salla status refresh) posts
@@ -1276,10 +1278,36 @@ async def manual_send_one(
     qoyod_account_id = None
 
     if not is_cod:
-        qoyod_account_id_raw = resolve_payment_account(
-            settings,
-            payment_method,
-        )
+        payment_key = str(payment_method or "").strip().lower()
+        is_bank_transfer = payment_key in {
+            "bank_transfer", "bank", "wire_transfer",
+            "bank_rajhi", "bank_ahli", "bank_inma",
+        }
+        receiving_bank_key = None
+        if is_bank_transfer:
+            receiving_bank_key, qoyod_account_id_raw = (
+                resolve_receiving_bank_account(
+                    settings, payment_method, receiving_bank_name,
+                )
+            )
+            if not receiving_bank_key:
+                raise ManualSendRefused(
+                    "receiving_bank_missing",
+                    "طلب التحويل البنكي لا يحتوي اسم بنك مستلم معروف — "
+                    "لن يُسجل السداد في حساب بنكي عام.",
+                    {
+                        "payment_method": payment_method,
+                        "receiving_bank_name": receiving_bank_name,
+                        "supported_banks": [
+                            "الراجحي", "الأهلي", "الإنماء",
+                        ],
+                    },
+                )
+        else:
+            qoyod_account_id_raw = resolve_payment_account(
+                settings,
+                payment_method,
+            )
         qoyod_account_id = _to_int(qoyod_account_id_raw)
 
         if qoyod_account_id is None:
@@ -1289,6 +1317,8 @@ async def manual_send_one(
                 "اربطها من إعدادات قيود → طرق الدفع",
                 {
                     "payment_method": payment_method,
+                    "receiving_bank_name": receiving_bank_name,
+                    "receiving_bank_key": receiving_bank_key,
                     "resolved_raw": qoyod_account_id_raw,
                 },
             )
