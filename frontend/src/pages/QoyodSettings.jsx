@@ -383,6 +383,12 @@ function PaymentMethodMappingTable({
         || norm === "wire_transfer" || norm === "تحويل_بنكي"
         || ["bank_rajhi", "bank_ahli", "bank_inma"].includes(norm);
   };
+  const isSpecificReceivingBankKey = (k) => {
+    const norm = String(k || "").trim().toLowerCase().replace(/\s+/g, "_");
+    return ["bank_rajhi", "bank_ahli", "bank_inma"].includes(norm);
+  };
+  const isGenericBankTransferKey = (k) =>
+    isBankTransferKey(k) && !isSpecificReceivingBankKey(k);
   const POSTING_MODE_OPTIONS = [
     { value: "paid_receipt", label: "مدفوع — ينشئ سند قبض" },
     { value: "credit_invoice_only", label: "آجل — فاتورة فقط (بدون سند)" },
@@ -530,6 +536,8 @@ function PaymentMethodMappingTable({
                 const mode = effectiveMode(key, row);
                 const codLock = isCodKey(key);
                 const bankTransferRow = isBankTransferKey(key);
+                const specificBankRow = isSpecificReceivingBankKey(key);
+                const genericBankRow = isGenericBankTransferKey(key);
                 const usedRow = usedByKey.get(key);
                 const isUsed = !!usedRow;
                 const resolvedViaAlias =
@@ -545,7 +553,8 @@ function PaymentMethodMappingTable({
                   <tr key={key}
                       className={`${missing ? "bg-rose-50/40"
                                  : codLock ? "bg-amber-50/40"
-                                 : bankTransferRow ? "bg-orange-50/40"
+                                 : specificBankRow ? "bg-emerald-50/30"
+                                 : genericBankRow ? "bg-orange-50/40"
                                  : resolvedViaAlias ? "bg-sky-50/40" : ""}`}
                       data-testid={`pm-row-${key}`}>
                     <td className="px-3 py-2 align-middle">
@@ -578,13 +587,22 @@ function PaymentMethodMappingTable({
                             عبر {labelFor(usedRow.matched_key)}
                           </span>
                         )}
-                        {bankTransferRow && (
+                        {genericBankRow && (
                           <span
                             title="حالياً مربوط بحساب عام مؤقت — لا يعتبر جاهزاً للزكاة والضريبة حتى يتم Iter-294 (Routing حسب البنك المستلم)"
                             className="mr-2 inline-block px-1.5 py-0.5 rounded
                                        bg-orange-100 text-orange-900 font-extrabold"
                             data-testid={`pm-bank-warn-${key}`}>
                             Legacy — يحتاج Routing حسب البنك
+                          </span>
+                        )}
+                        {specificBankRow && (
+                          <span
+                            title="حساب قيود محدد حسب البنك المستلم في طلب سلة"
+                            className="mr-2 inline-block px-1.5 py-0.5 rounded
+                                       bg-emerald-100 text-emerald-900 font-extrabold"
+                            data-testid={`pm-bank-routed-${key}`}>
+                            ✓ Routing مباشر حسب البنك
                           </span>
                         )}
                       </div>
@@ -614,7 +632,7 @@ function PaymentMethodMappingTable({
                           🔒 COD لا يحتاج حساب قبض — مرحّل كفاتورة آجلة فقط
                         </div>
                       )}
-                      {bankTransferRow && (
+                      {genericBankRow && (
                         <div className="text-[10px] text-orange-800 font-bold mt-1"
                              data-testid={`pm-bank-no-credit-${key}`}>
                           🔒 التحويل البنكي يجب أن يكون مدفوع — حسب البنك المستلم (Iter-294).
@@ -674,7 +692,7 @@ function PaymentMethodMappingTable({
                       )}
                     </td>
                     <td className="px-2 py-2 align-middle">
-                      {!isUsed && (
+                      {!isUsed && !specificBankRow && (
                         <button
                           type="button"
                           onClick={() => removeRow(key)}
