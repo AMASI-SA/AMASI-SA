@@ -252,10 +252,19 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     if clauses:
         cursor = db.salla_products.find(
             {"user_id": user_id, "$or": clauses},
-            {"_id": 0, "product_id": 1, "sku": 1, "gallery_refreshed_at": 1},
+            {
+                "_id": 0, "product_id": 1, "sku": 1,
+                "gallery_refreshed_at": 1, "images": 1,
+            },
         )
         async for cached in cursor:
             if not _text(cached.get("gallery_refreshed_at")):
+                continue
+            # A previous partial sync may have marked a one-image gallery as
+            # complete. Stage one needs the full catalogue gallery so the
+            # reviewer can choose the image matching the customer's options.
+            cached_images = cached.get("images") if isinstance(cached.get("images"), list) else []
+            if len(cached_images) <= 1:
                 continue
             fresh_product_ids.add(_text(cached.get("product_id")))
             fresh_skus.add(_text(cached.get("sku")))
