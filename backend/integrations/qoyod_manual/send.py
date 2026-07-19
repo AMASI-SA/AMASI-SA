@@ -33,7 +33,6 @@ from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod.payment_methods import (
     resolve_payment_account,
     resolve_receiving_bank_account,
-    extract_receiving_bank_name,
     is_cod_family,
 )
 from integrations.qoyod.unsent_orders import _is_real
@@ -1219,23 +1218,20 @@ async def manual_send_one(
     salla_total = _q2(canon.get("total_amount"))
     payment_method = (canon.get("payment_method")
                        or canon.get("payment_method_native"))
-    receiving_bank_name = extract_receiving_bank_name(
-        canon, row.get("raw_payload"), row.get("adapted_payload"))
-    if not receiving_bank_name:
-        # Salla status webhooks often expose only the generic method `bank`.
-        # The direct order sync stores the actual merchant receiving bank in
-        # unified_orders. Resolve it before account routing so bank transfers
-        # are never posted to a generic or guessed account.
-        unified_bank = await db.unified_orders.find_one(
-            {
-                "user_id": {"$in": [user_id, "main"]},
-                "order_number": str(order_number),
-            },
-            {"_id": 0, "receiving_bank_name": 1,
-             "payment": 1, "bank": 1},
-            sort=[("updated_at", -1)],
-        )
-        receiving_bank_name = extract_receiving_bank_name(unified_bank)
+    # Bank routing reads the same unified order used by New Orders and Order
+    # Details.  No Salla call and no second raw-payload interpretation here.
+    unified_bank = await db.unified_orders.find_one(
+        {
+            "user_id": {"$in": [user_id, "main"]},
+            "order_number": str(order_number),
+        },
+        {"_id": 0, "receiving_bank_name": 1},
+        sort=[("updated_at", -1)],
+    )
+    receiving_bank_name = (
+        str((unified_bank or {}).get("receiving_bank_name") or "").strip()
+        or None
+    )
 
     # ── Guard G0 — refuse zero-total sends (2026-02) ──────────────
     # Symptom: Tabby/Make (or a stripped Salla status refresh) posts
