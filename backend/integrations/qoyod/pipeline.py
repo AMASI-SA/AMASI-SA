@@ -1804,14 +1804,16 @@ async def process_customer_resolved_row(
     # — the diagnostics MUST NOT be sent to Qoyod. Pop and keep for
     # auditing + the math guard below.
     invoice_diagnostics = invoice_payload.pop("_diagnostics", None) or {}
-    # Math guard: if our reverse-engineered discount math doesn't land
-    # within 0.10 SAR of Salla's total, refuse to POST. Accounting
+    # Math guard: after the builder's shipping/last-product halala
+    # alignment, require an EXACT match to Salla before POST. Accounting
     # correctness > resilience here — a wrong invoice is worse than a
     # missing one (operator can manually retry once the math is right).
     if (not settings.get("dry_run_mode", False)
             and invoice_diagnostics.get("pricing_mode") == "match_salla_total"):
         diff = abs(float(invoice_diagnostics.get("difference") or 0.0))
-        if diff > 0.10:
+        alignment = invoice_diagnostics.get("halala_alignment") or {}
+        exact_match = bool(alignment.get("exact_match", diff <= 0.005))
+        if not exact_match:
             # ── Iter-293.1 — Refine the error code so operators see a
             # specific actionable diagnostic instead of a generic
             # "mismatch". Three cases, ordered by specificity:
@@ -1880,7 +1882,8 @@ async def process_customer_resolved_row(
                     "message": (f"منع الإرسال (Iter-290e): الفرق بين إجمالي قيود "
                                 f"المتوقع ({invoice_diagnostics.get('expected_qoyod_total')}) "
                                 f"وإجمالي سلة ({invoice_diagnostics.get('salla_total')}) "
-                                f"= {diff:.2f} SAR > 0.10. لن تُنشأ فاتورة بمبلغ "
+                                f"= {diff:.2f} SAR. التطابق المطلوب 0.00؛ "
+                                "لن تُنشأ فاتورة بمبلغ "
                                 f"غير مطابق للمبلغ المدفوع."),
                     "diagnostics": invoice_diagnostics,
                 }
