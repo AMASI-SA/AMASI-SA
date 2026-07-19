@@ -240,6 +240,18 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
         for item in identities
         if _text(getattr(item, "product_id", None)) or _text(getattr(item, "sku", None))
     }
+    incomplete_candidates = {
+        (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
+        for item in identities
+        if len({
+            _text(url)
+            for url in [
+                getattr(item, "image_url", None),
+                *(getattr(item, "image_urls", None) or []),
+            ]
+            if _text(url)
+        }) <= 1
+    }
     product_ids = [product_id for product_id, _ in candidates if product_id]
     skus = [sku for _, sku in candidates if sku]
     clauses = []
@@ -272,18 +284,23 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     targets = {
         (product_id, sku)
         for product_id, sku in candidates
-        if not (
+        if (product_id, sku) in incomplete_candidates or not (
             (product_id and product_id in fresh_product_ids)
             or (sku and sku in fresh_skus)
         )
     }
     refreshed = False
     for product_id, sku in sorted(targets):
+        product = None
         try:
             if product_id:
                 response = await call_salla(db, user_id, "GET", f"/products/{product_id}")
                 product = response.get("data") if isinstance(response, dict) else None
-            else:
+            # Some Salla product-detail responses can be partial. Search by
+            # exact SKU as a fallback because the listing response includes
+            # the complete `images` array used in the merchant catalogue.
+            detail_images = product.get("images") if isinstance(product, dict) and isinstance(product.get("images"), list) else []
+            if sku and len(detail_images) <= 1:
                 response = await call_salla(
                     db, user_id, "GET", "/products",
                     params={"keyword": sku, "per_page": 10},
@@ -297,7 +314,24 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
                     None,
                 )
         except SallaError:
-            continue
+            # If fetching by id failed, still try the SKU listing endpoint.
+            if not sku:
+                continue
+            try:
+                response = await call_salla(
+                    db, user_id, "GET", "/products",
+                    params={"keyword": sku, "per_page": 10},
+                )
+                rows = response.get("data") if isinstance(response, dict) else []
+                product = next(
+                    (
+                        row for row in rows
+                        if isinstance(row, dict) and _normalized(row.get("sku")) == _normalized(sku)
+                    ),
+                    None,
+                )
+            except SallaError:
+                continue
 
         if not isinstance(product, dict):
             continue
