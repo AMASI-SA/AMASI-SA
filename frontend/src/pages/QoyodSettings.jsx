@@ -59,6 +59,14 @@ const RECEIVING_BANK_MAPPING_ROWS = [
     posting_mode: "paid_receipt", label_ar: "بنك الإنماء" },
 ];
 
+const GENERIC_BANK_TRANSFER_KEYS = new Set([
+  "bank", "bank_transfer", "wire_transfer", "تحويل_بنكي",
+]);
+
+const isGenericBankTransferMappingKey = (key) =>
+  GENERIC_BANK_TRANSFER_KEYS.has(
+    String(key || "").trim().toLowerCase().replace(/\s+/g, "_"));
+
 // ─── Building blocks ────────────────────────────────────────────────
 function Section({ title, subtitle, children, tone = "default" }) {
   const toneCls = tone === "danger"
@@ -387,8 +395,7 @@ function PaymentMethodMappingTable({
     const norm = String(k || "").trim().toLowerCase().replace(/\s+/g, "_");
     return ["bank_rajhi", "bank_ahli", "bank_inma"].includes(norm);
   };
-  const isGenericBankTransferKey = (k) =>
-    isBankTransferKey(k) && !isSpecificReceivingBankKey(k);
+  const isGenericBankTransferKey = isGenericBankTransferMappingKey;
   const POSTING_MODE_OPTIONS = [
     { value: "paid_receipt", label: "مدفوع — ينشئ سند قبض" },
     { value: "credit_invoice_only", label: "آجل — فاتورة فقط (بدون سند)" },
@@ -430,7 +437,9 @@ function PaymentMethodMappingTable({
     }
     for (const row of mapping || []) {
       const k = (row.salla_method || "").toLowerCase();
-      if (k) m.set(k, row);
+      // Generic bank transfer is not a configurable destination.  Routing
+      // is allowed only after the actual receiving bank is identified.
+      if (k && !isGenericBankTransferKey(k)) m.set(k, row);
     }
     return m;
   }, [mapping]);
@@ -440,13 +449,16 @@ function PaymentMethodMappingTable({
     for (const row of RECEIVING_BANK_MAPPING_ROWS) {
       out.add(row.salla_method);
     }
-    for (const u of used || []) if (u.key) out.add(u.key);
+    for (const u of used || []) {
+      if (u.key && !isGenericBankTransferKey(u.key)) out.add(u.key);
+    }
     for (const k of mappingByKey.keys()) out.add(k);
     return [...out].sort();
   }, [used, mappingByKey]);
 
   const allCatalogueKeys = (catalogue || []).map((c) => c.key);
-  const addableKeys = allCatalogueKeys.filter((k) => !visibleKeys.includes(k));
+  const addableKeys = allCatalogueKeys.filter(
+    (k) => !visibleKeys.includes(k) && !isGenericBankTransferKey(k));
   const [selectedAddKey, setSelectedAddKey] = useState("");
 
   // Iter-293 — Update account_id OR posting_mode on a row. For COD
@@ -1112,7 +1124,13 @@ export default function QoyodSettings() {
         return codDirect.has(n) || codAliases.has(n);
       };
       const validModes = ["paid_receipt", "credit_invoice_only", "disabled"];
-      const configuredMapping = [...(settings.payment_method_mapping || [])];
+      const genericBankKeys = new Set([
+        "bank", "bank_transfer", "wire_transfer", "تحويل_بنكي",
+      ]);
+      const configuredMapping = (settings.payment_method_mapping || [])
+        .filter((row) => !genericBankKeys.has(
+          String(row.salla_method || "").trim().toLowerCase()
+            .replace(/\s+/g, "_")));
       for (const requiredBankRow of RECEIVING_BANK_MAPPING_ROWS) {
         const exists = configuredMapping.some(
           (row) => String(row.salla_method || "").trim().toLowerCase()
@@ -1281,11 +1299,18 @@ export default function QoyodSettings() {
     const mappingByKey = new Map(
       (settings.payment_method_mapping || [])
         .map((r) => [(r.salla_method || "").toLowerCase(), r]));
+    const genericBankKeys = new Set([
+      "bank", "bank_transfer", "wire_transfer", "تحويل_بنكي",
+    ]);
     const missing = (pmUsed || [])
       .filter((u) => u.key)
       .filter((u) => {
         // COD family: never a blocker.
         if (isCodKeyVal(u.key)) return false;
+        // Generic bank is resolved per order from the actual receiving
+        // bank.  It must not have (or require) a catch-all Qoyod account.
+        if (genericBankKeys.has(String(u.key).trim().toLowerCase()
+          .replace(/\s+/g, "_"))) return false;
         const row = mappingByKey.get(u.key);
         const mode = row?.posting_mode || "paid_receipt";
         // Non-paid_receipt modes don't need an account.
