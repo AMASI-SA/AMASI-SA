@@ -511,6 +511,17 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         ):
             from integrations.qoyod.payment_methods import coerce_cod_rows
             try:
+                # There is no catch-all transfer account anymore.  Persist
+                # only bank-specific destinations so an unknown bank can
+                # never be posted accidentally to an arbitrary account.
+                generic_bank_keys = {
+                    "bank", "bank_transfer", "wire_transfer", "تحويل_بنكي",
+                }
+                update["payment_method_mapping"] = [
+                    row for row in update["payment_method_mapping"]
+                    if str(row.get("salla_method") or "").strip().lower()
+                    .replace(" ", "_") not in generic_bank_keys
+                ]
                 update["payment_method_mapping"] = coerce_cod_rows(
                     update["payment_method_mapping"])
             except ValueError as ve:
