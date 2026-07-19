@@ -36,6 +36,71 @@ from __future__ import annotations
 from typing import Optional
 
 
+# Merchant-approved Qoyod receiving-bank accounts (2026-07-19).
+# These are deliberately bank-specific: a transfer with no recognised
+# receiving bank must be refused instead of falling back to the generic
+# bank_transfer account and posting cash to the wrong bank.
+APPROVED_RECEIVING_BANK_ACCOUNTS: dict[str, str] = {
+    "bank_rajhi": "94",
+    "bank_ahli": "95",
+    "bank_inma": "8",
+}
+
+
+def receiving_bank_key(
+    payment_method: Optional[str], receiving_bank_name: Optional[str],
+) -> Optional[str]:
+    """Resolve the specific receiving bank for a Salla transfer.
+
+    Prefer a bank-specific canonical payment method when present, then
+    inspect Salla's separate ``receiving_bank_name`` field.  Returns None
+    for generic/unknown bank transfers so callers can refuse safely.
+    """
+    method_key = _norm(payment_method)
+    if method_key in APPROVED_RECEIVING_BANK_ACCOUNTS:
+        return method_key
+
+    raw = _norm(receiving_bank_name)
+    if not raw:
+        return None
+    compact = raw.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    aliases = {
+        "bank_rajhi": ("الراجحي", "مصرف_الراجحي", "بنك_الراجحي",
+                       "rajhi", "al_rajhi"),
+        "bank_ahli": ("الاهلي", "البنك_الاهلي", "بنك_الاهلي",
+                      "ahli", "ncb", "saudi_national_bank"),
+        "bank_inma": ("الانماء", "بنك_الانماء", "مصرف_الانماء",
+                      "alinma", "al_inma", "inma"),
+    }
+    for key, names in aliases.items():
+        if any(name in compact for name in names):
+            return key
+    return None
+
+
+def resolve_receiving_bank_account(
+    settings: dict, payment_method: Optional[str],
+    receiving_bank_name: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Return ``(bank_key, Qoyod account_id)`` for bank transfers.
+
+    An explicit bank-specific row in ``payment_method_mapping`` wins.
+    Otherwise the merchant-approved account table above is used.  The
+    generic ``bank_transfer`` mapping is intentionally never consulted.
+    """
+    key = receiving_bank_key(payment_method, receiving_bank_name)
+    if not key:
+        return None, None
+
+    for row in settings.get("payment_method_mapping") or []:
+        if _norm(row.get("salla_method")) != key:
+            continue
+        account_id = str(row.get("qoyod_account_id") or "").strip()
+        if account_id:
+            return key, account_id
+    return key, APPROVED_RECEIVING_BANK_ACCOUNTS[key]
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Alias table — variant → base provider
 # ─────────────────────────────────────────────────────────────────────
