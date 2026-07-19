@@ -1639,36 +1639,65 @@ async def _run_all_steps(
             unpaid_status="unpaid",
         )
 
-        await _finalize_lock(
-            db,
-            order_number=order_number,
-            user_id=user_id,
-            lock_id=lock_id,
-            status="succeeded",
-            invoice_id=str(invoice_id),
-        )
+        # Qoyod has already accepted the invoice at this point.  Local
+        # bookkeeping must never turn that external success into an HTTP
+        # 500 (which used to make the UI say "فشل الإرسال" even though the
+        # COD invoice was visible in Qoyod).  Persist the inbox marker first
+        # so the pending list drops the order, then finalise the lock.  A
+        # transient Mongo failure is logged for reconciliation, but the API
+        # still returns the authoritative Qoyod success below.
+        local_persistence_warnings: list[str] = []
+        try:
+            await db.integration_inbox.update_one(
+                {"id": row.get("id")},
+                {
+                    "$set": {
+                        "manual_qoyod_invoice_id": str(invoice_id),
+                        "manual_qoyod_invoice_number": (
+                            str(invoice_number)
+                            if invoice_number else None
+                        ),
+                        "qoyod_invoice_id": str(invoice_id),
+                        "qoyod_invoice_number": (
+                            str(invoice_number)
+                            if invoice_number else None
+                        ),
+                        "qoyod_invoice_source": "manual_plan_b",
+                        "manual_send_last_status":
+                            "succeeded_invoice_only",
+                        "manual_send_at":
+                            datetime.now(timezone.utc),
+                        "manual_send_mode": "invoice_only",
+                    },
+                    "$unset": {
+                        "manual_qoyod_payment_id": "",
+                    },
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            local_persistence_warnings.append("integration_inbox")
+            logger.exception(
+                "COD invoice succeeded in Qoyod but inbox marker write "
+                "failed order=%s invoice=%s: %s",
+                order_number, invoice_id, exc,
+            )
 
-        await db.integration_inbox.update_one(
-            {"id": row.get("id")},
-            {
-                "$set": {
-                    "qoyod_invoice_id": str(invoice_id),
-                    "qoyod_invoice_number": (
-                        str(invoice_number)
-                        if invoice_number else None
-                    ),
-                    "qoyod_invoice_source": "manual_plan_b",
-                    "manual_send_last_status":
-                        "succeeded_invoice_only",
-                    "manual_send_at":
-                        datetime.now(timezone.utc),
-                    "manual_send_mode": "invoice_only",
-                },
-                "$unset": {
-                    "manual_qoyod_payment_id": "",
-                },
-            },
-        )
+        try:
+            await _finalize_lock(
+                db,
+                order_number=order_number,
+                user_id=user_id,
+                lock_id=lock_id,
+                status="succeeded",
+                invoice_id=str(invoice_id),
+            )
+        except Exception as exc:  # noqa: BLE001
+            local_persistence_warnings.append("manual_send_lock")
+            logger.exception(
+                "COD invoice succeeded in Qoyod but lock finalisation "
+                "failed order=%s invoice=%s: %s",
+                order_number, invoice_id, exc,
+            )
 
         logger.info(
             "plan-b-manual-send COD invoice-only "
@@ -1694,6 +1723,7 @@ async def _run_all_steps(
             "qoyod_account_id": None,
             "invoice_only": True,
             "payment_method": payment_method,
+            "local_persistence_warnings": local_persistence_warnings,
             "steps": steps_trace + [{
                 "step": "invoice_only_complete",
                 "reason": "cash_on_delivery",
