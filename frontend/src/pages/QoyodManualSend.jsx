@@ -40,11 +40,14 @@ function TotalsBreakdown({ detail }) {
   const items = b.items || [];
   const ship = b.shipping;
   const cod = b.cod_fee;
+  const exactMatch = Math.abs(Number(detail?.difference || 0)) < 0.005;
   return (
     <div
       dir="rtl"
       data-testid="totals-mismatch-breakdown"
-      className="mt-3 rounded-lg border border-red-200 bg-white p-3 text-xs text-slate-700"
+      className={`mt-3 rounded-lg border bg-white p-3 text-xs text-slate-700 ${
+        exactMatch ? "border-emerald-200" : "border-red-200"
+      }`}
     >
       <div className="mb-2 font-semibold text-slate-900">
         تفاصيل حساب الإجمالي (RCA)
@@ -142,7 +145,7 @@ function TotalsBreakdown({ detail }) {
           </tbody>
         </table>
       </div>
-      {b.rounding_adjustment && (
+      {b.rounding_adjustment && (!exactMatch || b.rounding_adjustment.applied) && (
         <div
           className={`mt-2 rounded border p-2 ${
             b.rounding_adjustment.applied
@@ -198,9 +201,13 @@ function TotalsBreakdown({ detail }) {
           </div>
           {ship.included ? (
             <div>
-              مبلغ سلة:{" "}
+              قيمة الشحن قبل الضريبة من سلة:{" "}
               <span dir="ltr" className="font-mono">
                 {fmt(ship.salla_declared_amount)}
+              </span>{" "}
+              · حصة الشحن من إجمالي سلة:{" "}
+              <span dir="ltr" className="font-mono">
+                {fmt(ship.salla_declared_gross ?? ship.salla_declared_amount)}
               </span>{" "}
               · إجمالي قيود:{" "}
               <span dir="ltr" className="font-mono">
@@ -671,7 +678,7 @@ export default function QoyodManualSend() {
               <div className="mb-2 text-sm">
                 {diagnoseResult.data.within_tolerance ? (
                   <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">
-                    ✅ ضمن حد التسامح (0.01 ريال) — الإرسال سيمر
+                    ✅ تطابق كامل (0.00 ريال) — الإرسال سيمر
                   </span>
                 ) : (
                   <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">
