@@ -58,6 +58,7 @@ import OrdersDiagnostics from "./pages/OrdersDiagnostics";
 import Orders from "./pages/Orders";
 import OrdersV2 from "./pages/OrdersV2";
 import OrderDetailsV2 from "./pages/OrderDetailsV2";
+import OrderReview from "./pages/OrderReview";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
@@ -269,6 +270,10 @@ function AppRoutes() {
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
+            />
+            <Route
+                path="/order-review"
+                element={<ProtectedRoute><Layout><OrderReview /></Layout></ProtectedRoute>}
             />
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />

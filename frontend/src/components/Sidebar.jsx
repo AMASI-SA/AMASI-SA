@@ -196,6 +196,7 @@ const SECTIONS = [
         label: "إدارة التشغيل",
         icon: GearSix,
         items: [
+            { to: "/order-review", label: "بانتظار المراجعة", icon: MagnifyingGlass, testid: "nav-order-review" },
             { to: "/operational-reports", label: "التقارير التشغيلية", icon: Wallet, testid: "nav-operational-reports" },
             { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
             { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
