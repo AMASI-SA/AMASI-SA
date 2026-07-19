@@ -22,6 +22,7 @@ from integrations.qoyod.eligible_orders import (
     _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.payment_methods import extract_receiving_bank_name
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
@@ -272,6 +273,7 @@ async def list_pending_orders(
         "manual_qoyod_invoice_id",
         "qoyod_invoice_id",
         "raw_payload",
+        "adapted_payload",
         "canonical_payload",
     ]
 
@@ -402,6 +404,24 @@ async def list_pending_orders(
             continue
 
         canon = row.get("canonical_payload") or {}
+        unified = None
+        receiving_bank_name = extract_receiving_bank_name(
+            canon, row.get("raw_payload"), row.get("adapted_payload"))
+        if not receiving_bank_name:
+            # Status webhooks commonly carry only payment_method=`bank`.
+            # The authoritative order snapshot populated by Salla sync keeps
+            # the receiving bank separately; use it for display and for the
+            # operator's routing verification.
+            unified = await db.unified_orders.find_one(
+                {
+                    "user_id": {"$in": [user_id, "main"]},
+                    "order_number": order_number,
+                },
+                {"_id": 0, "receiving_bank_name": 1,
+                 "payment": 1, "bank": 1},
+                sort=[("updated_at", -1)],
+            )
+            receiving_bank_name = extract_receiving_bank_name(unified)
         received = row.get("received_at")
         safe_total = await _resolve_safe_total(
             order_number, canon.get("total_amount"))
@@ -422,7 +442,7 @@ async def list_pending_orders(
             # key `bank`; the actual receiving bank is a separate field.
             # Keep both values so the operator can verify the same bank
             # that send.py will use for Qoyod account routing.
-            "receiving_bank_name": canon.get("receiving_bank_name"),
+            "receiving_bank_name": receiving_bank_name,
             "salla_status":    (canon.get("order_status_native")
                                 or canon.get("order_status")),
             "customer_name":   ((canon.get("customer") or {}).get("name")),
