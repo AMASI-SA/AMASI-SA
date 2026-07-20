@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -30,6 +31,15 @@ SALLA_AUTHORIZE_URL = f"{SALLA_AUTH_BASE}/oauth2/auth"
 # avoid the narrow window where the token has *just* expired and any
 # in-flight request will get 401.
 EXPIRY_SAFETY_MARGIN_SEC = 120
+
+# Do not wait for the last seconds of a 14-day access token.  A small
+# background maintenance pass refreshes connected stores one day early, so a
+# temporarily quiet store does not discover an expired token in the middle of
+# an order/shipping workflow.
+PROACTIVE_REFRESH_BEFORE_SEC = 24 * 60 * 60
+TOKEN_MAINTENANCE_INTERVAL_SEC = 6 * 60 * 60
+
+log = logging.getLogger("salla.oauth")
 
 # Required scopes — official Salla format per docs.salla.dev.
 #
@@ -83,6 +93,7 @@ class SallaError(Exception):
 # we never need to garbage-collect because the key set is bounded by
 # the user count, and a stale lock is harmless (it just gets re-acquired).
 _REFRESH_LOCKS: dict[str, asyncio.Lock] = {}
+_REVISION_NOT_PROVIDED = object()
 
 
 def _lock_for(user_id: str) -> asyncio.Lock:
@@ -293,6 +304,11 @@ async def store_token_response(
         "status": "connected",
         "last_error": None,
         "last_error_at": None,
+        # A revision changes whenever Salla authorizes or refreshes tokens.
+        # It is deliberately opaque; refresh code uses it as a compare-and-
+        # swap guard so a delayed refresh response can never overwrite a newer
+        # app.store.authorize/app.updated token.
+        "token_revision": uuid.uuid4().hex,
     }
     # Refresh tokens may ROTATE on each use → store the new one if Salla
     # returned a fresh one. If absent, keep whatever's already in DB.
@@ -311,9 +327,23 @@ async def store_token_response(
     return update
 
 
-async def mark_needs_reauth(db, user_id: str, reason: str) -> None:
-    await db.salla_integrations.update_one(
-        {"user_id": user_id},
+async def mark_needs_reauth(
+    db,
+    user_id: str,
+    reason: str,
+    *,
+    expected_revision: Any = _REVISION_NOT_PROVIDED,
+) -> bool:
+    query: dict[str, Any] = {"user_id": user_id}
+    if expected_revision is None:
+        query["$or"] = [
+            {"token_revision": {"$exists": False}},
+            {"token_revision": None},
+        ]
+    elif expected_revision is not _REVISION_NOT_PROVIDED:
+        query["token_revision"] = expected_revision
+    result = await db.salla_integrations.update_one(
+        query,
         {"$set": {
             "status": "needs_reauth",
             "last_error": (reason or "")[:500],
@@ -321,6 +351,74 @@ async def mark_needs_reauth(db, user_id: str, reason: str) -> None:
             "updated_at": _now(),
         }},
     )
+    # A false value means a newer authorization won the race and was
+    # intentionally left connected.
+    return result.modified_count == 1
+
+
+def _decrypt_access(doc: dict) -> str:
+    try:
+        return decrypt_token(doc.get("access_token_encrypted") or b"")
+    except ValueError as exc:
+        raise SallaError(
+            "Saved Salla access token is corrupted.",
+            needs_reauth=True,
+            status_code=401,
+        ) from exc
+
+
+def _revision_changed(initial: Optional[str], current: Optional[str]) -> bool:
+    # Legacy rows have no revision.  The first successful refresh/authorize
+    # adds one, which is therefore also a detectable change.
+    return current is not None and current != initial
+
+
+def _is_scope_401(response: httpx.Response) -> bool:
+    """Return True when Salla's 401 means a missing app permission.
+
+    Salla uses 401 both for an invalid token *and* for a valid token that lacks
+    the endpoint scope.  Refreshing on the latter is harmful: it needlessly
+    rotates a single-use refresh token and the second 401 used to mark the
+    whole integration as disconnected.
+    """
+    if response.status_code != 401:
+        return False
+    fragments: list[str] = []
+    try:
+        body = response.json()
+        fragments.append(str(body))
+        if isinstance(body, dict):
+            error = body.get("error")
+            if isinstance(error, dict):
+                fragments.extend(str(v) for v in error.values())
+            fragments.extend(str(v) for v in body.values())
+    except Exception:
+        pass
+    fragments.append(response.text or "")
+    haystack = " ".join(fragments).lower()
+    return any(marker in haystack for marker in (
+        "scope",
+        "permission",
+        "not allowed",
+        "access to one of those",
+        "صلاحية",
+        "الصلاحيات",
+    ))
+
+
+def _scope_error_message(response: httpx.Response, path: str) -> str:
+    detail = ""
+    try:
+        body = response.json()
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict):
+            detail = str(error.get("message") or error.get("code") or "")
+        elif isinstance(body, dict):
+            detail = str(body.get("message") or body.get("error_description") or "")
+    except Exception:
+        detail = response.text[:240]
+    suffix = f": {detail}" if detail else ""
+    return f"Salla permission is missing for {path}{suffix}"
 
 
 # ── Auto-refresh wrapper ───────────────────────────────────────────────
@@ -330,6 +428,8 @@ async def ensure_fresh_access_token(
     *,
     force_refresh: bool = False,
     recover_needs_reauth: bool = False,
+    rejected_access_token: Optional[str] = None,
+    minimum_validity_sec: int = 0,
 ) -> str:
     """Return a valid access token.
 
@@ -346,7 +446,24 @@ async def ensure_fresh_access_token(
                 status_code=404,
             )
 
-        initial_refreshed_at = _as_utc(initial_doc.get("last_refreshed_at"))
+        initial_revision = initial_doc.get("token_revision")
+        initial_access = _decrypt_access(initial_doc)
+        initial_expires_at = _as_utc(initial_doc.get("expires_at"))
+
+        # Fast path: most calls never touch the distributed lease.  If the
+        # caller's rejected token is already different from the DB token,
+        # another request refreshed it while this request was in flight.
+        if rejected_access_token and initial_access != rejected_access_token:
+            return initial_access
+        if (
+            not force_refresh
+            and initial_doc.get("status") == "connected"
+            and isinstance(initial_expires_at, datetime)
+            and initial_expires_at
+            > _now() + timedelta(seconds=max(0, int(minimum_validity_sec or 0)))
+        ):
+            return initial_access
+
         lease_owner = uuid.uuid4().hex
         lease_seconds = 45
 
@@ -388,20 +505,16 @@ async def ensure_fresh_access_token(
                     status_code=404,
                 )
 
-            current_refreshed_at = _as_utc(current.get("last_refreshed_at"))
             refresh_completed = (
                 current.get("status") == "connected"
-                and current_refreshed_at is not None
-                and (
-                    initial_refreshed_at is None
-                    or current_refreshed_at > initial_refreshed_at
+                and _revision_changed(
+                    initial_revision,
+                    current.get("token_revision"),
                 )
             )
 
             if refresh_completed:
-                return decrypt_token(
-                    current.get("access_token_encrypted") or b""
-                )
+                return _decrypt_access(current)
 
         if not acquired:
             raise SallaError(
@@ -420,16 +533,18 @@ async def ensure_fresh_access_token(
                     status_code=404,
                 )
 
-            refreshed_at = _as_utc(doc.get("last_refreshed_at"))
             another_worker_refreshed = (
-                refreshed_at is not None
-                and initial_refreshed_at is not None
-                and refreshed_at > initial_refreshed_at
+                _revision_changed(
+                    initial_revision,
+                    doc.get("token_revision"),
+                )
             )
             if another_worker_refreshed and doc.get("status") == "connected":
-                return decrypt_token(
-                    doc.get("access_token_encrypted") or b""
-                )
+                return _decrypt_access(doc)
+
+            current_access = _decrypt_access(doc)
+            if rejected_access_token and current_access != rejected_access_token:
+                return current_access
 
             status_needs_reauth = doc.get("status") == "needs_reauth"
             if status_needs_reauth and not recover_needs_reauth:
@@ -445,11 +560,10 @@ async def ensure_fresh_access_token(
             if (
                 not must_refresh
                 and isinstance(expires_at, datetime)
-                and expires_at > _now()
+                and expires_at
+                > _now() + timedelta(seconds=max(0, int(minimum_validity_sec or 0)))
             ):
-                return decrypt_token(
-                    doc.get("access_token_encrypted") or b""
-                )
+                return current_access
 
             try:
                 refresh_token = decrypt_token(
@@ -460,6 +574,7 @@ async def ensure_fresh_access_token(
                     db,
                     user_id,
                     f"refresh-token decrypt failed: {exc}",
+                    expected_revision=doc.get("token_revision"),
                 )
                 raise SallaError(
                     "Saved Salla credentials are corrupted.",
@@ -472,6 +587,7 @@ async def ensure_fresh_access_token(
                     db,
                     user_id,
                     "no refresh_token on file (offline_access not granted)",
+                    expected_revision=doc.get("token_revision"),
                 )
                 raise SallaError(
                     "No refresh_token on file. Reconnect Salla.",
@@ -483,13 +599,84 @@ async def ensure_fresh_access_token(
                 new_payload = await refresh_with_token(refresh_token)
             except SallaError as exc:
                 if exc.needs_reauth:
-                    await mark_needs_reauth(db, user_id, str(exc))
+                    await mark_needs_reauth(
+                        db,
+                        user_id,
+                        str(exc),
+                        expected_revision=doc.get("token_revision"),
+                    )
                 raise
 
-            # Saves both the new access token and the newly rotated,
-            # single-use refresh token before releasing the Mongo lease.
-            await store_token_response(db, user_id, new_payload)
-            return new_payload["access_token"]
+            # Salla refresh tokens rotate and are single-use.  A refresh
+            # response without the replacement token cannot be safely reused.
+            if not new_payload.get("refresh_token"):
+                await mark_needs_reauth(
+                    db,
+                    user_id,
+                    "Salla refresh response omitted the rotated refresh_token",
+                    expected_revision=doc.get("token_revision"),
+                )
+                raise SallaError(
+                    "Salla refresh response did not include refresh_token.",
+                    needs_reauth=True,
+                    status_code=502,
+                )
+
+            access = new_payload.get("access_token")
+            if not access:
+                raise SallaError(
+                    "Salla refresh response missing access_token",
+                    status_code=502,
+                )
+
+            update = {
+                "access_token_encrypted": encrypt_token(access),
+                "refresh_token_encrypted": encrypt_token(
+                    new_payload["refresh_token"]
+                ),
+                "scope": new_payload.get("scope") or doc.get("scope") or DEFAULT_SCOPES,
+                "token_type": new_payload.get("token_type", "Bearer"),
+                "expires_at": _expires_at(int(new_payload.get("expires_in") or 0)),
+                "expires_in_seconds": int(new_payload.get("expires_in") or 0),
+                "last_refreshed_at": _now(),
+                "status": "connected",
+                "last_error": None,
+                "last_error_at": None,
+                "token_revision": uuid.uuid4().hex,
+                "updated_at": _now(),
+            }
+            revision_query: dict[str, Any]
+            if doc.get("token_revision") is None:
+                revision_query = {
+                    "$or": [
+                        {"token_revision": {"$exists": False}},
+                        {"token_revision": None},
+                    ]
+                }
+            else:
+                revision_query = {"token_revision": doc["token_revision"]}
+
+            # Compare-and-swap: if app.store.authorize/app.updated delivered
+            # newer credentials while the HTTP refresh was in flight, do not
+            # overwrite them with this now-stale response.
+            result = await db.salla_integrations.update_one(
+                {
+                    "user_id": user_id,
+                    "refresh_lock_owner": lease_owner,
+                    **revision_query,
+                },
+                {"$set": update},
+            )
+            if result.modified_count == 1:
+                return access
+
+            latest = await get_integration(db, user_id)
+            if latest and latest.get("status") == "connected":
+                return _decrypt_access(latest)
+            raise SallaError(
+                "Salla credentials changed during refresh. Retry shortly.",
+                status_code=503,
+            )
 
         finally:
             await db.salla_integrations.update_one(
@@ -534,8 +721,54 @@ async def call_salla(
                 json=json,
             )
 
+    async def _access_token_is_still_valid(tok: str) -> Optional[bool]:
+        """Probe a low-risk endpoint to classify an ambiguous Salla 401.
+
+        Salla may return 401 for a valid token that lacks one endpoint's
+        permission.  Only a 401 from /store/info proves the token itself is
+        rejected.  Network/server errors remain inconclusive and must never
+        disconnect the merchant integration.
+        """
+        if path.rstrip("/") == "/store/info":
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                probe = await client.get(
+                    f"{SALLA_API_BASE}/store/info",
+                    headers={"Authorization": f"Bearer {tok}"},
+                )
+        except (httpx.TimeoutException, httpx.NetworkError):
+            return None
+        if 200 <= probe.status_code < 300:
+            return True
+        if probe.status_code == 401:
+            return False
+        return None
+
     resp = await _do_request(token)
     if resp.status_code == 401:
+        if _is_scope_401(resp):
+            raise SallaError(
+                _scope_error_message(resp, path),
+                needs_reauth=False,
+                status_code=403,
+            )
+        # Do not rotate Salla's single-use refresh token merely because one
+        # endpoint returned an ambiguous 401.  First prove whether the access
+        # token itself is rejected using the low-risk store-info endpoint.
+        first_probe = await _access_token_is_still_valid(token)
+        if first_probe is True:
+            raise SallaError(
+                _scope_error_message(resp, path),
+                needs_reauth=False,
+                status_code=403,
+            )
+        if first_probe is None:
+            raise SallaError(
+                "Could not verify the Salla token because Salla is temporarily unavailable. Retry shortly.",
+                needs_reauth=False,
+                status_code=503,
+            )
         # Race: token just expired between our pre-check and the request.
         # Refresh once and retry.
         token = await ensure_fresh_access_token(
@@ -543,18 +776,116 @@ async def call_salla(
             user_id,
             force_refresh=True,
             recover_needs_reauth=True,
+            rejected_access_token=token,
         )
         resp = await _do_request(token)
 
     if resp.status_code >= 400:
         if resp.status_code == 401:
-            await mark_needs_reauth(db, user_id, "Salla API 401 even after refresh")
+            if _is_scope_401(resp):
+                raise SallaError(
+                    _scope_error_message(resp, path),
+                    needs_reauth=False,
+                    status_code=403,
+                )
+            latest = await get_integration(db, user_id)
+            latest_access = _decrypt_access(latest) if latest else ""
+            if latest_access and latest_access != token:
+                resp = await _do_request(latest_access)
+                if resp.status_code < 400:
+                    return resp.json()
+                if _is_scope_401(resp):
+                    raise SallaError(
+                        _scope_error_message(resp, path),
+                        needs_reauth=False,
+                        status_code=403,
+                    )
+                token = latest_access
+
+            # A valid token plus a 401 on this specific endpoint means a
+            # missing/awaiting scope (for example products.read), not an
+            # expired OAuth session.  Keep orders, Qoyod and all other Salla
+            # workflows connected.
+            probe_result = await _access_token_is_still_valid(token)
+            if probe_result is True:
+                raise SallaError(
+                    _scope_error_message(resp, path),
+                    needs_reauth=False,
+                    status_code=403,
+                )
+            if probe_result is None:
+                raise SallaError(
+                    "Could not verify the Salla token because Salla is temporarily unavailable. Retry shortly.",
+                    needs_reauth=False,
+                    status_code=503,
+                )
+            await mark_needs_reauth(
+                db,
+                user_id,
+                "Salla API 401 even after safe refresh",
+                expected_revision=(latest or {}).get("token_revision"),
+            )
             raise SallaError("Salla rejected our token. Reconnect.", needs_reauth=True, status_code=401)
         raise SallaError(
             f"Salla {method} {path} → {resp.status_code}: {resp.text[:200]}",
             status_code=resp.status_code,
         )
     return resp.json()
+
+
+async def refresh_expiring_integrations_once(db) -> dict[str, int]:
+    """Refresh connected stores before their access tokens expire.
+
+    Safe to run in every application worker: `ensure_fresh_access_token`
+    serializes the actual single-use refresh through Mongo and all other
+    workers observe the new token revision.
+    """
+    stats = {"checked": 0, "refreshed": 0, "failed": 0}
+    cutoff = _now() + timedelta(seconds=PROACTIVE_REFRESH_BEFORE_SEC)
+    cursor = db.salla_integrations.find(
+        {
+            "status": "connected",
+            "expires_at": {"$lte": cutoff},
+        },
+        {"_id": 0, "user_id": 1, "token_revision": 1},
+    )
+    async for row in cursor:
+        user_id = str(row.get("user_id") or "").strip()
+        if not user_id:
+            continue
+        stats["checked"] += 1
+        before = row.get("token_revision")
+        try:
+            await ensure_fresh_access_token(
+                db,
+                user_id,
+                recover_needs_reauth=False,
+                minimum_validity_sec=PROACTIVE_REFRESH_BEFORE_SEC,
+            )
+            current = await get_integration(db, user_id)
+            if current and current.get("token_revision") != before:
+                stats["refreshed"] += 1
+        except Exception as exc:  # noqa: BLE001 — one store must not stop loop
+            stats["failed"] += 1
+            log.warning(
+                "salla.oauth.proactive_refresh_failed user_id=%s error=%s",
+                user_id,
+                str(exc)[:300],
+            )
+    return stats
+
+
+async def salla_token_maintenance_loop(db) -> None:
+    """Long-running, non-blocking OAuth maintenance task."""
+    # Let indexes/config caches finish warming before the first pass.
+    await asyncio.sleep(60)
+    while True:
+        try:
+            stats = await refresh_expiring_integrations_once(db)
+            log.info("salla.oauth.maintenance %s", stats)
+        except Exception as exc:  # noqa: BLE001 — retry next interval
+            log.exception("salla.oauth.maintenance_failed: %s", exc)
+        await asyncio.sleep(TOKEN_MAINTENANCE_INTERVAL_SEC)
 
 
 # ── Public-facing serializer ───────────────────────────────────────────
@@ -570,6 +901,11 @@ def integration_to_public(doc: Optional[dict]) -> dict:
     last_refresh = _as_utc(doc.get("last_refreshed_at"))
     last_err_at = _as_utc(doc.get("last_error_at"))
     created_at = _as_utc(doc.get("created_at"))
+    scope_text = str(doc.get("scope") or "")
+    automatic_refresh_ready = bool(
+        doc.get("refresh_token_encrypted")
+        and "offline_access" in scope_text.split()
+    )
     return {
         "connected": doc.get("status") == "connected",
         "configured": is_configured(),
@@ -580,6 +916,8 @@ def integration_to_public(doc: Optional[dict]) -> dict:
         "store_plan": doc.get("store_plan"),
         "store_status": doc.get("store_status"),
         "scope": doc.get("scope"),
+        "automatic_refresh_ready": automatic_refresh_ready,
+        "automatic_refresh_before_seconds": PROACTIVE_REFRESH_BEFORE_SEC,
         "expires_at": expires_at.isoformat() if expires_at else None,
         "last_refreshed_at": last_refresh.isoformat() if last_refresh else None,
         "last_error": doc.get("last_error"),

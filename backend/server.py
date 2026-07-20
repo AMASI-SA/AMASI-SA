@@ -4715,6 +4715,14 @@ async def on_startup():
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
+    # OAuth access tokens last 14 days and Salla refresh tokens rotate on
+    # every use.  Refresh connected stores one day early in a background
+    # loop; the Mongo lease in salla_integration.service makes this safe even
+    # when the deployment runs multiple backend workers.
+    from salla_integration.service import salla_token_maintenance_loop
+    app.state.salla_token_maintenance_task = _asyncio.create_task(
+        salla_token_maintenance_loop(db)
+    )
     await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
@@ -4889,4 +4897,13 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    maintenance_task = getattr(
+        app.state, "salla_token_maintenance_task", None
+    )
+    if maintenance_task is not None:
+        maintenance_task.cancel()
+        try:
+            await maintenance_task
+        except _asyncio.CancelledError:
+            pass
     client.close()

@@ -56,6 +56,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import uuid
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -290,6 +291,9 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
         "status": "connected",
         "last_error": None,
         "last_error_at": None,
+        # Prevent an older in-flight refresh response from overwriting this
+        # fresh authorization payload.
+        "token_revision": uuid.uuid4().hex,
         # Easy-Mode-specific provenance (so /status can show how this
         # install was created — useful when both Custom + Easy Mode
         # exist).

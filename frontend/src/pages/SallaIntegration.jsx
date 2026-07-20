@@ -540,6 +540,11 @@ export default function SallaIntegration() {
                         </div>
                     </div>
                     <div className="p-5 space-y-1">
+                        {status?.automatic_refresh_ready && (
+                            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800" data-testid="salla-auto-refresh-ready">
+                                التجديد التلقائي جاهز — يُجدَّد التوكن قبل انتهاء صلاحيته بيوم دون إيقاف ميزان.
+                            </div>
+                        )}
                         <InfoRow icon={Storefront} label="اسم المتجر" value={liveStoreInfo?.name || status?.store_name} testid="salla-info-name" />
                         <InfoRow icon={Globe} label="النطاق" value={liveStoreInfo?.domain || status?.store_domain} testid="salla-info-domain" mono />
                         <InfoRow icon={Hash} label="رقم المتجر" value={liveStoreInfo?.id || status?.store_id} testid="salla-info-id" mono />
