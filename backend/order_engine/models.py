@@ -158,6 +158,11 @@ class MoneyTotalsDTO(CanonicalDTO):
     # Never derive this value from ``total - items`` because that difference
     # can also contain shipping, options, discounts or another source charge.
     cod_fee: float = 0.0
+    # Gross contribution of the COD fee to the order total after source tax.
+    # Qoyod consumes this value, while ``cod_fee`` remains the amount displayed
+    # by Salla before tax in the order summary.
+    cod_fee_total: float = 0.0
+    cod_fee_tax: float = 0.0
     cod_fee_source: Optional[str] = None
     discount: float = 0.0
     discounts: list[OrderDiscountDTO] = Field(default_factory=list)

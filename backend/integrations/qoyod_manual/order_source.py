@@ -33,7 +33,11 @@ async def get_order_payment_facts(
             "payment_method_native": order.payment.method_native,
             "receiving_bank_code": order.payment.receiving_bank_code,
             "receiving_bank_name": order.payment.receiving_bank_name,
-            "cod_fee_amount": order.totals.cod_fee,
+            # Qoyod needs the fee's gross contribution so its invoice closes
+            # to Salla's final total.  Keep the pre-tax value for audit/UI.
+            "cod_fee_amount": order.totals.cod_fee_total,
+            "cod_fee_net_amount": order.totals.cod_fee,
+            "cod_fee_tax_amount": order.totals.cod_fee_tax,
             "cod_fee_source": order.totals.cod_fee_source,
         }
 
@@ -43,5 +47,7 @@ async def get_order_payment_facts(
         "receiving_bank_code": None,
         "receiving_bank_name": None,
         "cod_fee_amount": 0.0,
+        "cod_fee_net_amount": 0.0,
+        "cod_fee_tax_amount": 0.0,
         "cod_fee_source": None,
     }

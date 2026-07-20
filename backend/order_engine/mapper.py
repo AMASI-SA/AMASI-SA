@@ -25,6 +25,7 @@ import json
 import re
 from copy import deepcopy
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -176,24 +177,16 @@ def _discount_rows(
     return discounts
 
 
-def _selected_option_price(value: Any) -> float:
-    if isinstance(value, list):
-        return sum(_selected_option_price(entry) for entry in value)
-    if not isinstance(value, dict):
-        return 0.0
-    if value.get("price") not in (None, "", [], {}):
-        return _number(value.get("price"))
-    for key in ("values", "selected", "choice", "value"):
-        if value.get(key) not in (None, "", [], {}):
-            return _selected_option_price(value.get(key))
-    return 0.0
-
-
 def _order_options_total(
     raw_order: dict[str, Any],
     amounts: dict[str, Any],
-    item_rows: list[Any],
 ) -> float:
+    """Return only Salla's explicit order-level options amount.
+
+    Product choice prices are already included in the product/subtotal values.
+    Summing them here would count the same amount twice and would not match the
+    ``خيارات الطلب`` row in Salla's order summary.
+    """
     direct = _first(
         amounts.get("options"),
         amounts.get("options_total"),
@@ -203,28 +196,7 @@ def _order_options_total(
     )
     if direct is not None:
         return _number(direct)
-
-    total = 0.0
-    for item in item_rows:
-        if not isinstance(item, dict):
-            continue
-        quantity = max(_number(item.get("quantity"), 1.0), 0.0)
-        options = _first(
-            item.get("options"),
-            item.get("choices"),
-            item.get("attributes"),
-        )
-        entries = options if isinstance(options, list) else [options]
-        for option in entries:
-            if isinstance(option, dict):
-                selected = _first(
-                    option.get("values"),
-                    option.get("selected"),
-                    option.get("choice"),
-                    option.get("value"),
-                )
-                total += _selected_option_price(selected) * quantity
-    return total
+    return 0.0
 
 
 def _explicit_cod_fee(
@@ -233,17 +205,25 @@ def _explicit_cod_fee(
 ) -> tuple[float, Optional[str]]:
     """Return only a source-reported COD fee and its audit path.
 
-    Salla has used three aliases for this order-level amount.  A positive
-    value is accepted only when one of those explicit fields exists; the
+    Salla exposes this order-level amount under ``amounts`` in full order
+    details and under ``payment`` in some stored/webhook shapes.  A positive
+    value is accepted only when an explicit source field exists; the
     order-total residual is deliberately not used as a fallback.
     """
+    payment = _dict(raw_order.get("payment"))
     candidates = (
         ("amounts.cash_on_delivery", amounts.get("cash_on_delivery")),
+        ("payment.cash_on_delivery", payment.get("cash_on_delivery")),
         ("amounts.cod_fee", amounts.get("cod_fee")),
+        ("payment.cod_fee", payment.get("cod_fee")),
         ("amounts.payment_fee", amounts.get("payment_fee")),
+        ("payment.payment_fee", payment.get("payment_fee")),
+        ("amounts.cash_on_delivery_cost", amounts.get("cash_on_delivery_cost")),
+        ("payment.cash_on_delivery_cost", payment.get("cash_on_delivery_cost")),
         ("cash_on_delivery", raw_order.get("cash_on_delivery")),
         ("cod_fee", raw_order.get("cod_fee")),
         ("payment_fee", raw_order.get("payment_fee")),
+        ("cash_on_delivery_cost", raw_order.get("cash_on_delivery_cost")),
     )
     for source, value in candidates:
         if value in (None, "", [], {}):
@@ -252,6 +232,35 @@ def _explicit_cod_fee(
         if amount > 0:
             return amount, source
     return 0.0, None
+
+
+def _money_round(value: Any) -> float:
+    """Round a source monetary value to halalah using decimal arithmetic."""
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return 0.0
+    return float(decimal_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _cod_fee_with_tax(cod_fee: float, tax_percent: Optional[float]) -> tuple[float, float]:
+    """Return (gross fee, fee tax) from Salla's pre-tax COD commission.
+
+    Salla reports ``amounts.cash_on_delivery`` alongside the order tax and
+    adds both to the final total.  This calculation uses the tax percentage
+    reported by that same order; it never derives the fee from a residual.
+    """
+    fee = _money_round(cod_fee)
+    if fee <= 0:
+        return 0.0, 0.0
+    try:
+        percent = Decimal(str(tax_percent)) if tax_percent is not None else Decimal("0")
+    except (InvalidOperation, TypeError, ValueError):
+        percent = Decimal("0")
+    if percent <= 0:
+        return fee, 0.0
+    gross = _money_round(Decimal(str(fee)) * (Decimal("1") + percent / Decimal("100")))
+    return gross, _money_round(Decimal(str(gross)) - Decimal(str(fee)))
 
 
 def _weight_parts(value: Any) -> tuple[Optional[float], Optional[str]]:
@@ -1145,14 +1154,20 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         if isinstance(item, dict)
     ]
     discounts = _discount_rows(raw_order, amounts)
-    options_total = _order_options_total(raw_order, amounts, item_rows)
-    cod_fee, cod_fee_source = _explicit_cod_fee(raw_order, amounts)
+    options_total = _order_options_total(raw_order, amounts)
     tax_obj = _dict(amounts.get("tax"))
     tax_percent_source = _first(
         tax_obj.get("percent"),
         amounts.get("tax_percent"),
         raw_order.get("tax_percent"),
     )
+    source_tax_percent = (
+        _number(tax_percent_source)
+        if tax_percent_source not in (None, "")
+        else None
+    )
+    cod_fee, cod_fee_source = _explicit_cod_fee(raw_order, amounts)
+    cod_fee_total, cod_fee_tax = _cod_fee_with_tax(cod_fee, source_tax_percent)
     total_weight, total_weight_unit = _weight_parts(_first(
         first_shipment.get("total_weight"),
         raw_order.get("total_weight"),
@@ -1340,13 +1355,13 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                 )
             ),
             cod_fee=cod_fee,
+            cod_fee_total=cod_fee_total,
+            cod_fee_tax=cod_fee_tax,
             cod_fee_source=cod_fee_source,
             discount=sum(row.amount for row in discounts),
             discounts=discounts,
             tax_percent=(
-                _number(tax_percent_source)
-                if tax_percent_source not in (None, "")
-                else None
+                source_tax_percent
             ),
             tax_reported_by_source=_number(
                 _first(

@@ -764,6 +764,7 @@ function OrderSummaryCard({ order, items, currency }) {
     const subtotal = Number(totals.subtotal || 0);
     const options = Number(totals.options || 0);
     const shipping = Number(totals.shipping || 0);
+    const codFee = Number(totals.cod_fee || 0);
     const tax = Number(totals.tax_reported_by_source || 0);
     const total = Number(totals.total || 0);
     const discounts = Array.isArray(totals.discounts) && totals.discounts.length
@@ -819,6 +820,11 @@ function OrderSummaryCard({ order, items, currency }) {
                 <SummaryRow label="تكلفة الشحن" tone="positive">
                     {shipping === 0 ? "مجاني" : `+ ${formatMoney(shipping, currency)}`}
                 </SummaryRow>
+                {codFee > 0 && (
+                    <SummaryRow label="عمولة الدفع عند الاستلام" tone="positive">
+                        + {formatMoney(codFee, currency)}
+                    </SummaryRow>
+                )}
                 <SummaryRow label={`الضريبة${taxPercent !== null ? ` (${taxPercent}%)` : ""}`} tone="positive">
                     {tax === 0 ? formatMoney(0, currency) : `+ ${formatMoney(tax, currency)}`}
                 </SummaryRow>

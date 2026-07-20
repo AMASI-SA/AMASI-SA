@@ -10,10 +10,11 @@ from integrations.qoyod_manual.send import (
 from order_engine.mapper import map_salla_order
 
 
-def _salla_order(*, amounts_extra: dict | None = None, total: float = 315.88) -> dict:
+def _salla_order(*, amounts_extra: dict | None = None, total: float = 315.88,
+                 payment: dict | None = None) -> dict:
     amounts = {
         "sub_total": {"amount": 268.59, "currency": "SAR"},
-        "tax": {"amount": 40.29, "currency": "SAR"},
+        "tax": {"percent": 8, "amount": {"amount": 23.40, "currency": "SAR"}},
         "shipping": {"amount": 0, "currency": "SAR"},
         "total": {"amount": total, "currency": "SAR"},
     }
@@ -24,6 +25,7 @@ def _salla_order(*, amounts_extra: dict | None = None, total: float = 315.88) ->
         "date": "2026-07-20T12:00:00+03:00",
         "status": "completed",
         "payment_method": "cod",
+        "payment": payment or {},
         "amounts": amounts,
         "items": [
             {
@@ -60,11 +62,40 @@ def _salla_order(*, amounts_extra: dict | None = None, total: float = 315.88) ->
 )
 def test_orders_v2_preserves_explicit_cod_fee(field: str, expected_source: str):
     order = map_salla_order(
-        _salla_order(amounts_extra={field: {"amount": 7.0, "currency": "SAR"}})
+        _salla_order(amounts_extra={field: {"amount": 6.48, "currency": "SAR"}})
     )
 
-    assert order.totals.cod_fee == 7.0
+    assert order.totals.cod_fee == 6.48
+    assert order.totals.cod_fee_tax == 0.52
+    assert order.totals.cod_fee_total == 7.0
     assert order.totals.cod_fee_source == expected_source
+
+
+def test_orders_v2_reads_cod_fee_from_nested_payment_shape():
+    order = map_salla_order(
+        _salla_order(payment={
+            "cash_on_delivery": {"amount": 6.48, "currency": "SAR"},
+        })
+    )
+
+    assert order.totals.cod_fee == 6.48
+    assert order.totals.cod_fee_tax == 0.52
+    assert order.totals.cod_fee_total == 7.0
+    assert order.totals.cod_fee_source == "payment.cash_on_delivery"
+
+
+def test_orders_v2_does_not_double_count_product_choice_price_as_order_options():
+    raw_order = _salla_order()
+    raw_order["items"][0]["options"] = [
+        {
+            "name": "الاسم",
+            "values": [{"name": "أحمد", "price": {"amount": 15}}],
+        }
+    ]
+
+    order = map_salla_order(raw_order)
+
+    assert order.totals.options == 0.0
 
 
 def test_orders_v2_never_infers_cod_fee_from_total_residual():
