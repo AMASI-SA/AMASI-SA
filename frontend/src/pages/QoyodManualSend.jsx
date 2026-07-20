@@ -3,6 +3,14 @@ import api from "../lib/api";
 
 const BASE = "/integrations/qoyod/manual";
 
+const AUTO_CANARY_ORDERS = [
+  "273274882",
+  "271235259",
+  "272982420",
+  "272809621",
+];
+const AUTO_CANARY_CONFIRMATION = "تشغيل تجربة الأربعة";
+
 const STATUS_TABS = [
   { key: "completed",   label: "تم التنفيذ",   icon: "✅" },
   { key: "in_delivery", label: "جاري التوصيل", icon: "🚚" },
@@ -41,6 +49,50 @@ function TotalsBreakdown({ detail }) {
   const ship = b.shipping;
   const cod = b.cod_fee;
   const exactMatch = Math.abs(Number(detail?.difference || 0)) < 0.005;
+  const handleAutoCanary = async () => {
+    const confirmed = window.confirm(
+      "سيتم تشغيل إرسال آلي متسلسل على أربعة طلبات فقط:\n\n" +
+        AUTO_CANARY_ORDERS.join("\n") +
+        "\n\nيتوقف الاختبار عند أول خطأ حقيقي، ولا يكرر أي فاتورة موجودة. " +
+        "الدفع عند الاستلام يُنشئ فاتورة فقط بدون سند. هل تريد المتابعة؟"
+    );
+    if (!confirmed) return;
+
+    setCanarySending(true);
+    setCanaryResult(null);
+    try {
+      const res = await api.post(`${BASE}/auto-canary`, {
+        confirmation: AUTO_CANARY_CONFIRMATION,
+      });
+      setCanaryResult(res.data);
+      const completed = new Set(
+        (res.data?.results || [])
+          .filter((row) => row.ok)
+          .map((row) => row.order_number)
+      );
+      setRows((prev) => prev.filter((row) => !completed.has(row.order_number)));
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      setCanaryResult({
+        ok: false,
+        status: "request_failed",
+        sent_count: 0,
+        already_sent_count: 0,
+        invoice_only_count: 0,
+        failed_count: 1,
+        remaining_count: AUTO_CANARY_ORDERS.length,
+        results: [{
+          order_number: "—",
+          outcome: "failed",
+          code: detail?.code || "http_error",
+          message: detail?.message || extractDetail(e),
+        }],
+      });
+    } finally {
+      setCanarySending(false);
+    }
+  };
+
   return (
     <div
       dir="rtl"
@@ -378,6 +430,87 @@ function ResultBanner({ result, onDismiss }) {
   );
 }
 
+function CanaryResultBanner({ result, onDismiss }) {
+  if (!result) return null;
+  return (
+    <div
+      dir="rtl"
+      data-testid="qoyod-auto-canary-result"
+      className={`rounded-xl border p-4 ${
+        result.ok
+          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+          : "border-red-300 bg-red-50 text-red-900"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="font-semibold">
+            {result.ok
+              ? "✅ اكتملت تجربة الإرسال الآلي المغلقة"
+              : "🛑 توقفت التجربة عند أول خطأ لحماية بقية الطلبات"}
+          </div>
+          <div className="mt-1 text-xs opacity-80">
+            أُرسل الآن: {result.sent_count ?? 0} · موجود مسبقًا: {result.already_sent_count ?? 0}
+            {" · "}فواتير بدون سند (COD): {result.invoice_only_count ?? 0}
+            {" · "}فشل: {result.failed_count ?? 0}
+          </div>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-current/20 bg-white/70">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-current/20">
+                  <th className="px-3 py-2 text-right">الطلب</th>
+                  <th className="px-3 py-2 text-right">النتيجة</th>
+                  <th className="px-3 py-2 text-right">فاتورة قيود</th>
+                  <th className="px-3 py-2 text-right">السداد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(result.results || []).map((row) => (
+                  <tr key={row.order_number} className="border-b border-current/10 last:border-0">
+                    <td dir="ltr" className="px-3 py-2 font-mono text-right">
+                      {row.order_number}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.outcome === "sent"
+                        ? "تم الإرسال"
+                        : row.outcome === "already_sent"
+                          ? "موجود مسبقًا — لم يُكرر"
+                          : `${row.code || "failed"} — ${row.message || "توقف"}`}
+                    </td>
+                    <td dir="ltr" className="px-3 py-2 font-mono text-right">
+                      {row.invoice_number || row.invoice_id || "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.invoice_only
+                        ? "بدون سند (COD)"
+                        : row.payment_id || row.outcome === "already_sent"
+                          ? row.payment_id || "موجود مسبقًا"
+                          : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {result.remaining_count > 0 && (
+            <div className="mt-2 text-sm font-medium">
+              لم تُلمس الطلبات المتبقية: {result.remaining_count}
+            </div>
+          )}
+          {result.run_id && (
+            <div dir="ltr" className="mt-2 text-left font-mono text-[11px] opacity-60">
+              {result.run_id}
+            </div>
+          )}
+        </div>
+        <button type="button" onClick={onDismiss} className="text-slate-500 hover:text-slate-800">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function QoyodManualSend() {
   const PAGE_SIZE = 15;
   const [health, setHealth] = useState(null);
@@ -395,6 +528,8 @@ export default function QoyodManualSend() {
   const [diagnoseFor, setDiagnoseFor] = useState(null);
   const [diagnoseResult, setDiagnoseResult] = useState(null);
   const [diagnoseLoading, setDiagnoseLoading] = useState(false);
+  const [canarySending, setCanarySending] = useState(false);
+  const [canaryResult, setCanaryResult] = useState(null);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -505,11 +640,12 @@ export default function QoyodManualSend() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            إرسال يدوي إلى قيود (خطة B)
+            إرسال إلى قيود (خطة B)
           </h1>
           <p className="mt-1 text-sm text-slate-500 max-w-2xl">
             طلبات مكتملة (تم التنفيذ) بتاريخ ≥ {floorDate || "2026-07-01"} ولم
-            تُرسل إلى قيود بعد. الإرسال يدوي طلب بطلب — لا إرسال تلقائي.
+            تُرسل إلى قيود بعد. الإرسال اليدوي مستمر، وتجربة الإرسال الآلي
+            الأولى مقيدة بأربعة طلبات فقط.
           </p>
           <p className="mt-1 text-xs text-slate-400 max-w-2xl">
             ملاحظة: عمود &quot;تاريخ الطلب في سلة&quot; أدناه للعرض فقط. تاريخ
@@ -651,6 +787,44 @@ export default function QoyodManualSend() {
           </div>
         )}
       </div>
+
+      {statusTab === "completed" && (
+        <div
+          data-testid="qoyod-auto-canary-panel"
+          className="rounded-xl border border-violet-300 bg-violet-50 p-4 text-violet-950"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold">🧪 تجربة الإرسال الآلي المغلقة</div>
+              <div className="mt-1 text-xs text-violet-800">
+                أربعة طلبات محددة فقط؛ الطلب الملغي 273187928 مستبعد. التنفيذ
+                متسلسل ويتوقف عند أول خطأ.
+              </div>
+              <div dir="ltr" className="mt-2 font-mono text-xs text-violet-700">
+                {AUTO_CANARY_ORDERS.join(" · ")}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoCanary}
+              disabled={canarySending || !health?.legacy_pipeline_frozen}
+              data-testid="qoyod-auto-canary-btn"
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+                canarySending || !health?.legacy_pipeline_frozen
+                  ? "cursor-not-allowed bg-slate-300 text-slate-600"
+                  : "bg-violet-700 text-white hover:bg-violet-800"
+              }`}
+            >
+              {canarySending ? "جارٍ الاختبار…" : "تشغيل الاختبار الآلي للأربعة"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <CanaryResultBanner
+        result={canaryResult}
+        onDismiss={() => setCanaryResult(null)}
+      />
 
       <ResultBanner result={result} onDismiss={() => setResult(null)} />
 
