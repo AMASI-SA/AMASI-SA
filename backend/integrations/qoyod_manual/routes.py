@@ -417,7 +417,11 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         network call. Returns the full breakdown so an operator can
         see where the pennies leaked."""
         return await diagnose_totals(
-            db, user_id=_TENANT, order_number=str(order_number))
+            db,
+            user_id=_TENANT,
+            orders_user_id=str(user["id"]),
+            order_number=str(order_number),
+        )
 
     @router.post("/repair-recon-markers")
     async def repair_recon_markers(user=Depends(current_user)):

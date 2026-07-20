@@ -11,14 +11,16 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from integrations.qoyod_manual.pending import _salla_order_created_date
+from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
     _build_invoice_payload, _q2, _riyadh_today_iso,
-    ManualSendRefused,
+    _overlay_order_engine_facts, ManualSendRefused,
 )
 
 
 async def diagnose_totals(db, *, user_id: str,
-                          order_number: str) -> dict:
+                          order_number: str,
+                          orders_user_id: Optional[str] = None) -> dict:
     """Compute the same breakdown the guard would surface.
 
     Returns a JSON-safe dict with the full RCA. Never raises for
@@ -36,6 +38,12 @@ async def diagnose_totals(db, *, user_id: str,
         return {"ok": False, "code": "order_not_found",
                 "message": f"لم يُعثر على الطلب {order_number} في الاستلام"}
     canon = row.get("canonical_payload") or {}
+    payment_facts = await get_order_payment_facts(
+        db,
+        user_id=orders_user_id or user_id,
+        order_number=str(order_number),
+    )
+    canon = _overlay_order_engine_facts(canon, payment_facts)
     if not canon.get("items"):
         return {"ok": False, "code": "no_items",
                 "message": "لا توجد بنود لهذا الطلب في الحمولة الأساسية"}

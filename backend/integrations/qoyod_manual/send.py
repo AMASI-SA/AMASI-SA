@@ -98,8 +98,8 @@ def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
 
     The inbox canonical payload predates the unified Order Engine and can omit
     explicit order-level COD fees.  The fee is copied only when the engine has
-    a positive value with a source path, so this helper can never invent a fee
-    from an unexplained total difference.
+    positively classified it as explicit (or retained its audit source), so
+    this helper can never invent a fee from an unexplained total difference.
     """
     result = dict(canon or {})
     payment_method = (
@@ -109,9 +109,14 @@ def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
         return result
     cod_fee = _q2(facts.get("cod_fee_amount"))
     cod_fee_source = facts.get("cod_fee_source")
-    if cod_fee > 0 and cod_fee_source:
+    cod_fee_is_explicit = bool(
+        facts.get("cod_fee_is_explicit") or cod_fee_source
+    )
+    if cod_fee > 0 and cod_fee_is_explicit:
         result["cod_fee_amount"] = cod_fee
-        result["cod_fee_source_path"] = str(cod_fee_source)
+        result["cod_fee_source_path"] = str(
+            cod_fee_source or "order_engine.totals.cod_fee_total"
+        )
         result["cod_fee_source_type"] = "order_engine_explicit_source"
     return result
 

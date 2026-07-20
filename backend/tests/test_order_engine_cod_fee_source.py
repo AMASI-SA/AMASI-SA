@@ -154,7 +154,7 @@ def test_cod_fee_reaches_qoyod_as_explicit_separate_line():
     assert payload["invoice"]["line_items"][-1]["product_id"] == 700
 
 
-def test_overlay_refuses_to_invent_fee_without_explicit_source():
+def test_overlay_accepts_trusted_order_engine_fee_without_legacy_audit_path():
     canon = {"cod_fee_amount": 0.0}
     enriched = _overlay_order_engine_facts(
         canon,
@@ -162,6 +162,25 @@ def test_overlay_refuses_to_invent_fee_without_explicit_source():
             "payment_method": "cod",
             "cod_fee_amount": 7.0,
             "cod_fee_source": None,
+            "cod_fee_is_explicit": True,
+        },
+    )
+
+    assert enriched["cod_fee_amount"] == 7.0
+    assert enriched["cod_fee_source_path"] == (
+        "order_engine.totals.cod_fee_total"
+    )
+
+
+def test_overlay_refuses_untrusted_fee_without_source_or_explicit_flag():
+    canon = {"cod_fee_amount": 0.0}
+    enriched = _overlay_order_engine_facts(
+        canon,
+        {
+            "payment_method": "cod",
+            "cod_fee_amount": 7.0,
+            "cod_fee_source": None,
+            "cod_fee_is_explicit": False,
         },
     )
 
