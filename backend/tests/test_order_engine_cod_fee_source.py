@@ -7,6 +7,7 @@ from integrations.qoyod_manual.send import (
     _build_invoice_payload,
     _overlay_order_engine_facts,
 )
+from integrations.qoyod_manual.order_source import _cod_fee_gross
 from order_engine.mapper import map_salla_order
 
 
@@ -170,6 +171,33 @@ def test_overlay_accepts_trusted_order_engine_fee_without_legacy_audit_path():
     assert enriched["cod_fee_source_path"] == (
         "order_engine.totals.cod_fee_total"
     )
+
+
+def test_legacy_orders_v2_cod_fee_rebuilds_gross_from_tax_percent():
+    assert _cod_fee_gross(
+        net_amount=6.48,
+        gross_amount=0,
+        tax_amount=0,
+        tax_percent=8,
+    ) == 7.0
+
+
+def test_legacy_orders_v2_cod_fee_prefers_stored_tax_amount():
+    assert _cod_fee_gross(
+        net_amount=6.48,
+        gross_amount=0,
+        tax_amount=0.52,
+        tax_percent=15,
+    ) == 7.0
+
+
+def test_cod_fee_gross_never_infers_from_order_total_residual():
+    assert _cod_fee_gross(
+        net_amount=0,
+        gross_amount=0,
+        tax_amount=0,
+        tax_percent=8,
+    ) == 0.0
 
 
 def test_overlay_refuses_untrusted_fee_without_source_or_explicit_flag():
