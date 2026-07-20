@@ -59,6 +59,20 @@ def _now() -> datetime:
 
 async def _one_round(db, *, user_id: str, batch_limit: int) -> dict:
     """Process one batch from each pending bucket. Returns counts."""
+    # The production Plan-B sender is isolated from this historical path.
+    # When the legacy pipeline is frozen this worker must remain a hard no-op,
+    # even though the connector master switch is enabled for Plan B.
+    settings = await db.qoyod_settings.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "legacy_pipeline_frozen": 1},
+    ) or {}
+    if settings.get("legacy_pipeline_frozen"):
+        return {
+            "status": "legacy_pipeline_frozen",
+            "processed": 0,
+            "at": _now().isoformat(),
+        }
+
     # ── Step 0a: Backfill Gate (user directive 2026-02-27) ──────────
     # Default `backfill_mode="now_forward_only"`: pre-activation rows
     # in NORMALIZED / CUSTOMER_RESOLVED / PRODUCT_RESOLVED are SKIPPED

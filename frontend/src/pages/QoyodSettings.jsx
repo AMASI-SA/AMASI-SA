@@ -1218,7 +1218,12 @@ export default function QoyodSettings() {
       }
       await loadAll();
     } catch (e) {
-      toast.error(e.response?.data?.detail || "فشل الحفظ");
+      const detail = e.response?.data?.detail;
+      const firstIssue = Array.isArray(detail?.issues)
+        ? detail.issues[0]?.message : null;
+      toast.error(firstIssue || detail?.message
+        || (typeof detail === "string" ? detail : null)
+        || "فشل الحفظ");
     } finally { setSaving(false); }
   };
 
@@ -1465,7 +1470,14 @@ export default function QoyodSettings() {
         <ToggleRow label="إرسال تلقائي عند تنفيذ الطلب"
           hint="بدون هذا، يلزم الضغط يدوياً على زر الإرسال لكل طلب."
           checked={settings.auto_send}
-          onChange={(v) => patch({ auto_send: v })}
+          onChange={(v) => patch(v ? {
+            auto_send: true,
+            // The live automatic path is deliberately narrower than the
+            // manual fallback: exact Salla "تم التنفيذ", once only.
+            invoice_trigger_statuses: ["completed"],
+            trigger_once_only: true,
+            auto_receipt: true,
+          } : { auto_send: false })}
           testid="toggle-auto-send" />
         <ToggleRow label="إنشاء سند قبض تلقائياً بعد الفاتورة"
           hint="إن أوقفته، تُنشأ الفاتورة فقط ويُترك السند للمراجعة اليدوية."
@@ -1477,6 +1489,46 @@ export default function QoyodSettings() {
           checked={!!settings.dry_run_mode}
           onChange={(v) => patch({ dry_run_mode: v })}
           testid="toggle-dry-run-mode" />
+
+        {(() => {
+          const automatic = settings.plan_b_auto_send_status || {};
+          const liveRequested = !!settings.enabled
+            && !!settings.auto_send
+            && !settings.dry_run_mode;
+          const armed = !!automatic.armed;
+          const lastError = automatic.last_error;
+          if (armed) {
+            return (
+              <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-emerald-900"
+                   data-testid="plan-b-auto-send-armed">
+                <div className="font-bold text-sm">✅ الإرسال التلقائي الجديد يعمل</div>
+                <div className="text-xs mt-1">
+                  يفحص الحالة الحالية مباشرة من سلة ثم يرسل طلبات «تم التنفيذ»
+                  فقط كل 15 ثانية مع منع التكرار. الدفع عند الاستلام يُنشئ
+                  فاتورة بلا سند، وأول خطأ حقيقي يوقف التشغيل تلقائياً.
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className={`mt-3 rounded-xl border p-3 text-sm ${
+              lastError
+                ? "border-rose-300 bg-rose-50 text-rose-900"
+                : "border-amber-300 bg-amber-50 text-amber-900"
+            }`} data-testid="plan-b-auto-send-disarmed">
+              <div className="font-bold">
+                {lastError ? "⛔ توقف الإرسال التلقائي بأمان" : "⏸️ الإرسال التلقائي غير مفعل"}
+              </div>
+              <div className="text-xs mt-1">
+                {lastError
+                  ? (lastError.message || "راجع الخطأ ثم احفظ الإعدادات لتشغيله من جديد.")
+                  : liveRequested
+                    ? "اضغط «حفظ الإعدادات النهائية» لتشغيل العامل الجديد."
+                    : "فعّل التكامل والإرسال التلقائي، وأوقف Dry Run، ثم احفظ."}
+              </div>
+            </div>
+          );
+        })()}
       </Section>
 
       {/* 5) Core IDs — Iter-290i: name-first pickers backed by

@@ -4642,6 +4642,19 @@ async def on_startup():
     except Exception as e:
         logger.exception("iter-262: qoyod pipeline worker failed to start: %s", e)
 
+    # Validated Plan-B automatic sender. Starting the task on every deploy is
+    # safe: it is a no-op until the existing Qoyod settings switches arm it
+    # after the closed canary succeeds.
+    try:
+        from integrations.qoyod_manual.auto_send import (
+            start_worker as _qoyod_plan_b_auto_start,
+        )
+        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
+        logger.info("Plan-B Qoyod automatic sender started")
+    except Exception as e:
+        logger.exception(
+            "Plan-B Qoyod automatic sender failed to start: %s", e)
+
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
     if _bf:

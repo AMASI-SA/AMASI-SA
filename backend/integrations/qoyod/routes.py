@@ -474,6 +474,10 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             "configured":  bool(fp),
             "fingerprint": fp,
         }
+        # The existing settings page is the control plane for the validated
+        # Plan-B automatic sender. Never expose the stored Orders owner id.
+        from integrations.qoyod_manual.auto_send import status_snapshot
+        payload["plan_b_auto_send_status"] = status_snapshot(payload)
         return payload
 
     # ── GET /settings ────────────────────────────────────────────────
@@ -540,6 +544,56 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                   "user_id":    tenant,
                   "updated_at": _now()}
         valid = QoyodSettings(**merged).model_dump(mode="json")
+        # Saving the existing master switches is the only activation path for
+        # the validated Plan-B sender. It reuses the proven manual engine; the
+        # legacy pipeline remains frozen. Disabling either switch or enabling
+        # Dry Run disarms it immediately.
+        from integrations.qoyod_manual.auto_send import (
+            activation_issues,
+            is_live_requested,
+        )
+        if is_live_requested(valid):
+            canary = await db.qoyod_manual_canary_runs.find_one(
+                {"status": "succeeded"},
+                {"_id": 0, "run_id": 1, "finished_at": 1},
+                sort=[("finished_at", -1)],
+            )
+            key = await get_api_key(db, tenant)
+            issues = activation_issues(
+                valid,
+                credentials_configured=bool(key),
+                canary_succeeded=bool(canary),
+            )
+            if issues:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "plan_b_auto_send_not_ready",
+                        "message": "تعذر تفعيل الإرسال التلقائي بأمان",
+                        "issues": issues,
+                    },
+                )
+            valid["plan_b_auto_send_armed_at"] = (
+                valid.get("plan_b_auto_send_armed_at")
+                or _now().isoformat()
+            )
+            valid["plan_b_auto_send_orders_user_id"] = str(user["id"])
+            valid["plan_b_auto_send_actor"] = str(
+                (user or {}).get("email") or user["id"]
+            )
+            valid["plan_b_auto_send_canary_run_id"] = canary.get("run_id")
+            valid["plan_b_auto_send_disabled_reason"] = None
+            valid["plan_b_auto_send_last_error"] = None
+        else:
+            valid["plan_b_auto_send_armed_at"] = None
+            valid["plan_b_auto_send_disabled_at"] = _now().isoformat()
+            if not valid.get("enabled"):
+                disabled_reason = "connector_disabled"
+            elif not valid.get("auto_send"):
+                disabled_reason = "operator_disabled"
+            else:
+                disabled_reason = "dry_run_enabled"
+            valid["plan_b_auto_send_disabled_reason"] = disabled_reason
         # `created_at` is set by $setOnInsert only — pulling it out of
         # $set avoids the Mongo "conflict at path" write error when the
         # document is being upserted for the first time.
@@ -567,7 +621,13 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tenant = _tenant_id(user)
         # Force-disable to avoid sync attempts with no key.
         await db.qoyod_settings.update_one(
-            {"user_id": tenant}, {"$set": {"enabled": False}})
+            {"user_id": tenant}, {"$set": {
+                "enabled": False,
+                "auto_send": False,
+                "plan_b_auto_send_armed_at": None,
+                "plan_b_auto_send_disabled_at": _now(),
+                "plan_b_auto_send_disabled_reason": "credentials_removed",
+            }})
         ok = await delete_api_key(db, tenant)
         return {"ok": ok}
 

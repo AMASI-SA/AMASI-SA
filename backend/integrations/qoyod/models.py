@@ -547,3 +547,20 @@ async def ensure_qoyod_indexes(db) -> None:
          ("received_at", pymongo.DESCENDING)],
         name="qoyod_webhook_events_event_type",
     )
+
+    # --- validated Plan-B automatic sender ---
+    # Retain durable audit history for reconciliation and future analytics.
+    # The short worker lease itself is uniquely keyed by Mongo's `_id`.
+    await db.qoyod_manual_auto_runs.create_index(
+        [("run_id", pymongo.ASCENDING)],
+        unique=True, name="qoyod_manual_auto_runs_run_unique",
+    )
+    await db.qoyod_manual_auto_runs.create_index(
+        [("started_at", pymongo.DESCENDING)],
+        name="qoyod_manual_auto_runs_started",
+    )
+    await db.qoyod_manual_auto_runs.create_index(
+        [("status", pymongo.ASCENDING),
+         ("finished_at", pymongo.DESCENDING)],
+        name="qoyod_manual_auto_runs_status_finished",
+    )
