@@ -154,6 +154,11 @@ class MoneyTotalsDTO(CanonicalDTO):
     subtotal: float = 0.0
     options: float = 0.0
     shipping: float = 0.0
+    # Explicit order-level fee reported by Salla for cash-on-delivery.
+    # Never derive this value from ``total - items`` because that difference
+    # can also contain shipping, options, discounts or another source charge.
+    cod_fee: float = 0.0
+    cod_fee_source: Optional[str] = None
     discount: float = 0.0
     discounts: list[OrderDiscountDTO] = Field(default_factory=list)
     tax_percent: Optional[float] = None

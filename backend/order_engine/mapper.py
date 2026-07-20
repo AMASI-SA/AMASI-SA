@@ -227,6 +227,33 @@ def _order_options_total(
     return total
 
 
+def _explicit_cod_fee(
+    raw_order: dict[str, Any],
+    amounts: dict[str, Any],
+) -> tuple[float, Optional[str]]:
+    """Return only a source-reported COD fee and its audit path.
+
+    Salla has used three aliases for this order-level amount.  A positive
+    value is accepted only when one of those explicit fields exists; the
+    order-total residual is deliberately not used as a fallback.
+    """
+    candidates = (
+        ("amounts.cash_on_delivery", amounts.get("cash_on_delivery")),
+        ("amounts.cod_fee", amounts.get("cod_fee")),
+        ("amounts.payment_fee", amounts.get("payment_fee")),
+        ("cash_on_delivery", raw_order.get("cash_on_delivery")),
+        ("cod_fee", raw_order.get("cod_fee")),
+        ("payment_fee", raw_order.get("payment_fee")),
+    )
+    for source, value in candidates:
+        if value in (None, "", [], {}):
+            continue
+        amount = _number(value)
+        if amount > 0:
+            return amount, source
+    return 0.0, None
+
+
 def _weight_parts(value: Any) -> tuple[Optional[float], Optional[str]]:
     if value in (None, "", [], {}):
         return None, None
@@ -1119,6 +1146,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     ]
     discounts = _discount_rows(raw_order, amounts)
     options_total = _order_options_total(raw_order, amounts, item_rows)
+    cod_fee, cod_fee_source = _explicit_cod_fee(raw_order, amounts)
     tax_obj = _dict(amounts.get("tax"))
     tax_percent_source = _first(
         tax_obj.get("percent"),
@@ -1311,6 +1339,8 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     raw_order.get("shipping_cost"),
                 )
             ),
+            cod_fee=cod_fee,
+            cod_fee_source=cod_fee_source,
             discount=sum(row.amount for row in discounts),
             discounts=discounts,
             tax_percent=(

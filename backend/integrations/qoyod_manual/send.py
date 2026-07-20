@@ -93,6 +93,29 @@ def _q2(v: Any) -> float:
     return float(d.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
 
 
+def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
+    """Overlay trusted Orders V2 facts without mutating the inbox snapshot.
+
+    The inbox canonical payload predates the unified Order Engine and can omit
+    explicit order-level COD fees.  The fee is copied only when the engine has
+    a positive value with a source path, so this helper can never invent a fee
+    from an unexplained total difference.
+    """
+    result = dict(canon or {})
+    payment_method = (
+        facts.get("payment_method") or facts.get("payment_method_native")
+    )
+    if not is_cod_family(payment_method):
+        return result
+    cod_fee = _q2(facts.get("cod_fee_amount"))
+    cod_fee_source = facts.get("cod_fee_source")
+    if cod_fee > 0 and cod_fee_source:
+        result["cod_fee_amount"] = cod_fee
+        result["cod_fee_source_path"] = str(cod_fee_source)
+        result["cod_fee_source_type"] = "order_engine_explicit_source"
+    return result
+
+
 def _extract_qoyod_invoice_total(payload: Any) -> Optional[float]:
     """Extract the persisted invoice total from a Qoyod response.
 
@@ -632,6 +655,11 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
         breakdown_items.append(row)
         expected_total_dec += Decimal(str(gross))
 
+    # Read the explicit COD fee before deriving shipping's share of the order.
+    # Otherwise an order containing both shipping and COD would let shipping
+    # absorb the COD amount and then add the COD line a second time.
+    cod_fee = _q2(canon.get("cod_fee_amount"))
+
     # Shipping line (optional — only if configured AND non-zero).
     shipping_amount = _q2(canon.get("shipping_amount"))
     shipping_breakdown: Optional[dict] = None
@@ -639,7 +667,9 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
         ship_pid = _to_int(settings.get("default_shipping_product_id"))
         items_gross_sum = sum(_f(it.get("total"))
                                for it in canon.get("items") or [])
-        ship_target_gross = _f(canon.get("total_amount")) - items_gross_sum
+        ship_target_gross = (
+            _f(canon.get("total_amount")) - items_gross_sum - cod_fee
+        )
         if ship_pid is not None and ship_target_gross > 0:
             ship_target_net = ship_target_gross / tax_factor
             ship_unit_raw = shipping_amount
@@ -690,7 +720,6 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
             }
 
     # COD fee line (optional).
-    cod_fee = _q2(canon.get("cod_fee_amount"))
     cod_breakdown: Optional[dict] = None
     if cod_fee > 0:
         cod_pid = _to_int(settings.get("default_cod_fee_product_id"))
@@ -1217,7 +1246,6 @@ async def manual_send_one(
     #      below — the only real source of truth).
 
     canon = row.get("canonical_payload") or {}
-    salla_total = _q2(canon.get("total_amount"))
     # Reuse the exact mapper behind New Orders / Order Details. This keeps
     # aliases such as "مصرف الإنماء" and "بنك الإنماء" in one place.
     payment_facts = await get_order_payment_facts(
@@ -1230,6 +1258,11 @@ async def manual_send_one(
         or canon.get("payment_method_native")
     )
     receiving_bank_name = payment_facts.get("receiving_bank_name")
+    canon = _overlay_order_engine_facts(canon, payment_facts)
+    salla_total = _q2(canon.get("total_amount"))
+    # The inbox snapshot may carry the generic/old payment alias.  Orders V2
+    # is authoritative for the current payment method.
+    is_cod = is_cod_family(payment_method)
 
     # ── Guard G0 — refuse zero-total sends (2026-02) ──────────────
     # Symptom: Tabby/Make (or a stripped Salla status refresh) posts

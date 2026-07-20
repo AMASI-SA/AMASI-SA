@@ -1,7 +1,7 @@
 """Read Qoyod order facts through the same engine as the New Orders page."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
@@ -12,8 +12,8 @@ async def get_order_payment_facts(
     *,
     user_id: str,
     order_number: str,
-) -> dict[str, Optional[str]]:
-    """Return the normalized payment facts displayed by Order Details."""
+) -> dict[str, Any]:
+    """Return Qoyod facts from the same normalized order used by Orders V2."""
     repository = MongoOrderRepository(db)
     tenant_ids = [str(user_id)]
     if str(user_id) != "main":
@@ -33,6 +33,8 @@ async def get_order_payment_facts(
             "payment_method_native": order.payment.method_native,
             "receiving_bank_code": order.payment.receiving_bank_code,
             "receiving_bank_name": order.payment.receiving_bank_name,
+            "cod_fee_amount": order.totals.cod_fee,
+            "cod_fee_source": order.totals.cod_fee_source,
         }
 
     return {
@@ -40,4 +42,6 @@ async def get_order_payment_facts(
         "payment_method_native": None,
         "receiving_bank_code": None,
         "receiving_bank_name": None,
+        "cod_fee_amount": 0.0,
+        "cod_fee_source": None,
     }
