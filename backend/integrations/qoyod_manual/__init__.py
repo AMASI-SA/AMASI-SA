@@ -13,7 +13,8 @@ Contract (immutable):
     • Only 4 guards:
         1. No duplicate invoice for the same order_number
            (atomic idempotency lock).
-        2. Exact amount parity: Salla total == Qoyod-expected total (0.00 diff).
+        2. Amount parity within one halalah (inclusive):
+           abs(Salla total - Qoyod expected total) <= 0.01 SAR.
         3. No DRY/PREVIEW ids ever accepted or emitted.
         4. Payment method must be mapped to a Qoyod account
            (via existing `qoyod_settings.payment_method_mapping`).
@@ -21,8 +22,9 @@ Contract (immutable):
     • Old rows are NEVER auto-sent — they only appear on the page.
 
 Small rounding residuals are absorbed into existing positive product lines
-through the package-local item-line LRM installer. No synthetic adjustment
-product is added to the invoice.
+through the package-local item-line LRM installer when representable. A
+remaining difference of exactly one halalah is allowed by the public guard.
+No synthetic adjustment product is added to the invoice.
 """
 
 

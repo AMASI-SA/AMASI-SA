@@ -249,11 +249,20 @@ def install(send_module) -> None:
         breakdown["difference"] = send_module._q2(
             expected_total - salla_total)
 
-        # Exact parity is mandatory. Raising here prevents the existing
-        # <=0.01 guard from accidentally allowing a one-halalah mismatch.
+        # Item-line LRM is best-effort. The Plan-B amount contract allows a
+        # residual of exactly one halalah in either direction.
+        if send_module._within_amount_tolerance(
+                breakdown["difference"]):
+            breakdown["rounding_distribution"][
+                "accepted_within_tolerance"] = True
+            breakdown["rounding_distribution"][
+                "tolerance_sar"] = float(send_module._AMOUNT_TOLERANCE)
+            breakdown["expected_qoyod_total"] = expected_total
+            return payload, expected_total, breakdown
+
         raise send_module.ManualSendRefused(
             "totals_mismatch",
-            f"فرق المبلغ {abs(breakdown['difference'])} ريال — يجب أن يكون 0.00 قبل الإرسال",
+            f"فرق المبلغ {abs(breakdown['difference'])} ريال أكبر من 0.01 — أُوقف الإرسال",
             {
                 "salla_total": salla_total,
                 "expected_qoyod_total": expected_total,

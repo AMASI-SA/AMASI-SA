@@ -48,7 +48,8 @@ function TotalsBreakdown({ detail }) {
   const items = b.items || [];
   const ship = b.shipping;
   const cod = b.cod_fee;
-  const exactMatch = Math.abs(Number(detail?.difference || 0)) < 0.005;
+  const difference = Math.abs(Number(detail?.difference || 0));
+  const withinTolerance = difference <= 0.01;
 
 
   return (
@@ -56,7 +57,7 @@ function TotalsBreakdown({ detail }) {
       dir="rtl"
       data-testid="totals-mismatch-breakdown"
       className={`mt-3 rounded-lg border bg-white p-3 text-xs text-slate-700 ${
-        exactMatch ? "border-emerald-200" : "border-red-200"
+        withinTolerance ? "border-emerald-200" : "border-red-200"
       }`}
     >
       <div className="mb-2 font-semibold text-slate-900">
@@ -155,7 +156,8 @@ function TotalsBreakdown({ detail }) {
           </tbody>
         </table>
       </div>
-      {b.rounding_adjustment && (!exactMatch || b.rounding_adjustment.applied) && (
+      {b.rounding_adjustment &&
+        (b.rounding_adjustment.applied || !withinTolerance) && (
         <div
           className={`mt-2 rounded border p-2 ${
             b.rounding_adjustment.applied
@@ -854,7 +856,7 @@ export default function QoyodManualSend() {
               <div className="mb-2 text-sm">
                 {diagnoseResult.data.within_tolerance ? (
                   <span className="rounded bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800">
-                    ✅ تطابق كامل (0.00 ريال) — الإرسال سيمر
+                    ✅ ضمن حد التسامح (حتى 0.01 ريال) — الإرسال سيمر
                   </span>
                 ) : (
                   <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">

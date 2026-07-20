@@ -74,6 +74,7 @@ def _riyadh_today_iso() -> str:
 # invoice total) — never to the raw Salla total — so the payment
 # closes the invoice perfectly.
 _TWO_PLACES = Decimal("0.01")
+_AMOUNT_TOLERANCE = Decimal("0.01")
 
 
 def _q2(v: Any) -> float:
@@ -91,6 +92,18 @@ def _q2(v: Any) -> float:
     except Exception:
         return 0.0
     return float(d.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+
+
+def _within_amount_tolerance(value: Any) -> bool:
+    """Return True when a rounded money difference is at most one halalah."""
+    if value is None:
+        return False
+    try:
+        difference = Decimal(str(value)).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+    except Exception:
+        return False
+    return difference.is_finite() and abs(difference) <= _AMOUNT_TOLERANCE
 
 
 def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
@@ -175,7 +188,7 @@ def _validate_qoyod_actual_total(
     expected = _q2(salla_total)
     difference = _q2(actual - expected)
 
-    if abs(difference) > 0.01:
+    if not _within_amount_tolerance(difference):
         raise ManualSendRefused(
             "qoyod_actual_total_mismatch",
             "إجمالي قيود الفعلي يختلف عن إجمالي سلة بأكثر من 0.01 ريال — "
@@ -1609,7 +1622,7 @@ async def _run_all_steps(
         line_resolutions=line_resolutions, settings=settings,
         send_date_iso=send_date_iso)
     diff = _q2(expected_total - salla_total)
-    if abs(diff) > 0.01:
+    if not _within_amount_tolerance(diff):
         # If the ONLY reason we still exceed tolerance is that the
         # rounding-adjustment product wasn't configured, surface a
         # dedicated code so the operator knows the ONE-LINE fix.

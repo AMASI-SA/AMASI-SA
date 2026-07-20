@@ -387,9 +387,23 @@ def install(send_module) -> None:
         breakdown["difference"] = send_module._q2(
             expected_total - salla_total)
 
+        # Item-line LRM is best-effort. The public Plan-B contract allows a
+        # difference of exactly one halalah in either direction, so an
+        # unrepresentable ±0.01 residual must continue to the normal send
+        # guard instead of being rejected here by the stricter legacy
+        # exact-parity rule.
+        if send_module._within_amount_tolerance(
+                breakdown["difference"]):
+            breakdown["rounding_distribution"][
+                "accepted_within_tolerance"] = True
+            breakdown["rounding_distribution"][
+                "tolerance_sar"] = float(send_module._AMOUNT_TOLERANCE)
+            breakdown["expected_qoyod_total"] = expected_total
+            return payload, expected_total, breakdown
+
         raise send_module.ManualSendRefused(
             "totals_mismatch",
-            f"فرق المبلغ {abs(breakdown['difference'])} ريال — يجب أن يكون 0.00 قبل الإرسال",
+            f"فرق المبلغ {abs(breakdown['difference'])} ريال أكبر من 0.01 — أُوقف الإرسال",
             {
                 "salla_total": salla_total,
                 "expected_qoyod_total": expected_total,

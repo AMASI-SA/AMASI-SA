@@ -14,7 +14,8 @@ from integrations.qoyod_manual.pending import _salla_order_created_date
 from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
     _build_invoice_payload, _q2, _riyadh_today_iso,
-    _overlay_order_engine_facts, ManualSendRefused,
+    _overlay_order_engine_facts, _within_amount_tolerance,
+    ManualSendRefused,
 )
 
 
@@ -86,9 +87,11 @@ async def diagnose_totals(db, *, user_id: str,
                 or breakdown.get("rounding_distribution")
                 or {}
             )
+            within_tolerance = _within_amount_tolerance(difference)
             return {
                 "ok": True,
-                "diagnosis_status": "blocked",
+                "diagnosis_status": (
+                    "pass" if within_tolerance else "blocked"),
                 "code": exc.code,
                 "message": exc.message,
                 "order_number": str(order_number),
@@ -96,8 +99,8 @@ async def diagnose_totals(db, *, user_id: str,
                 "salla_total": salla_total,
                 "expected_qoyod_total": expected_total,
                 "difference": difference,
-                "within_tolerance": False,
-                "tolerance_sar": 0.0,
+                "within_tolerance": within_tolerance,
+                "tolerance_sar": 0.01,
                 "difference_source_hint": breakdown.get(
                     "difference_source_hint"),
                 "rounding_distribution": distribution,
@@ -134,7 +137,7 @@ async def diagnose_totals(db, *, user_id: str,
 
     salla_total = _q2(canon.get("total_amount"))
     diff = _q2(expected_total - salla_total)
-    would_pass = diff == 0.0
+    would_pass = _within_amount_tolerance(diff)
     return {
         "ok":                 True,
         "diagnosis_status":   "pass" if would_pass else "blocked",
@@ -144,7 +147,7 @@ async def diagnose_totals(db, *, user_id: str,
         "expected_qoyod_total": expected_total,
         "difference":         diff,
         "within_tolerance":   would_pass,
-        "tolerance_sar":      0.0,
+        "tolerance_sar":      0.01,
         "difference_source_hint": breakdown.get("difference_source_hint"),
         "rounding_distribution": breakdown.get("rounding_distribution") or {},
         "reason": (breakdown.get("rounding_distribution") or {}).get("reason"),

@@ -4,6 +4,7 @@ from integrations.qoyod_manual.send import (
     ManualSendRefused,
     _extract_qoyod_invoice_total,
     _validate_qoyod_actual_total,
+    _within_amount_tolerance,
 )
 
 
@@ -94,3 +95,13 @@ def test_missing_actual_total_blocks_payment():
         )
 
     assert exc.value.code == "qoyod_actual_total_missing"
+
+
+@pytest.mark.parametrize("difference", [0, 0.01, -0.01, "0.010"])
+def test_public_amount_tolerance_includes_one_halalah(difference):
+    assert _within_amount_tolerance(difference) is True
+
+
+@pytest.mark.parametrize("difference", [0.02, -0.02, None, "invalid"])
+def test_public_amount_tolerance_blocks_larger_or_invalid_values(difference):
+    assert _within_amount_tolerance(difference) is False

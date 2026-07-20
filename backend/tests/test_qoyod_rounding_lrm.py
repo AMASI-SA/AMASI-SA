@@ -171,3 +171,46 @@ def test_missing_shipping_product_is_not_hidden_by_lrm():
     assert exc.value.code == "totals_mismatch"
     assert exc.value.extra["rounding_distribution"]["reason"] == (
         "shipping_configuration_gap")
+
+
+def test_unrepresentable_negative_one_halalah_is_accepted():
+    """Regression for order 273317793: 12.00 Salla vs 11.99 Qoyod.
+
+    The only product is free, so item-line LRM cannot absorb the remaining
+    halalah.  The inclusive public tolerance must still allow the invoice.
+    """
+    canon = {
+        "order_number": "273317793",
+        "order_id": "273317793",
+        "currency": "SAR",
+        "total_amount": 12.00,
+        "shipping_amount": 4.63,
+        "cod_fee_amount": 0.0,
+        "items": [
+            {
+                "sku": "AMS11839",
+                "name": "Free promotional product",
+                "quantity": 1,
+                "unit_price": 0.0,
+                "total": 0.0,
+            },
+        ],
+    }
+
+    _payload, expected, breakdown = _build_invoice_payload(
+        canon=canon,
+        contact_id=1,
+        line_resolutions={"AMS11839": 1},
+        settings={
+            "qoyod_tax_percent": 15,
+            "default_shipping_product_id": 2,
+        },
+        send_date_iso="2026-07-21",
+    )
+
+    assert expected == 11.99
+    assert breakdown["difference"] == -0.01
+    distribution = breakdown["rounding_distribution"]
+    assert distribution["applied"] is False
+    assert distribution["accepted_within_tolerance"] is True
+    assert distribution["tolerance_sar"] == 0.01
