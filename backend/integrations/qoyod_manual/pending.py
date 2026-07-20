@@ -215,7 +215,8 @@ async def _sent_in_any_local_record(
 
 
 async def list_pending_orders(
-    db, *, user_id: str, days: int = 60, limit: int = 500,
+    db, *, user_id: str, orders_user_id: Optional[str] = None,
+    days: int = 60, limit: int = 500,
     search: Optional[str] = None,
     status: str = "completed",
 ) -> dict:
@@ -406,7 +407,8 @@ async def list_pending_orders(
         canon = row.get("canonical_payload") or {}
         # Use the exact normalized payment object displayed by Order Details.
         payment_facts = await get_order_payment_facts(
-            db, user_id=user_id, order_number=order_number,
+            db, user_id=orders_user_id or user_id,
+            order_number=order_number,
         )
         receiving_bank_name = payment_facts.get("receiving_bank_name")
         received = row.get("received_at")
