@@ -1716,18 +1716,32 @@ async def _run_all_steps(
             if actual_total is not None
             else expected_total
         )
-        await _upsert_local_qoyod_invoice(
-            db,
-            user_id=user_id,
-            invoice_id=invoice_id,
-            invoice_number=invoice_number,
-            order_number=order_number,
-            canon=canon,
-            expected_total=cod_total,
-            send_date_iso=send_date_iso,
-            paid=False,
-            unpaid_status="unpaid",
-        )
+        # The external invoice already exists at this point.  A local
+        # projection failure must therefore be treated as a reconciliation
+        # warning, never as a failed send: returning HTTP 500 here encourages
+        # an operator retry even though Qoyod accepted the COD invoice.
+        try:
+            await _upsert_local_qoyod_invoice(
+                db,
+                user_id=user_id,
+                invoice_id=invoice_id,
+                invoice_number=invoice_number,
+                order_number=order_number,
+                canon=canon,
+                expected_total=cod_total,
+                send_date_iso=send_date_iso,
+                paid=False,
+                unpaid_status="unpaid",
+            )
+        except Exception as exc:  # noqa: BLE001
+            local_persistence_warnings.append("qoyod_invoices")
+            logger.exception(
+                "COD invoice succeeded in Qoyod but local invoice "
+                "projection failed order=%s invoice=%s: %s",
+                order_number,
+                invoice_id,
+                exc,
+            )
 
         # Qoyod has already accepted the invoice at this point.  Local
         # bookkeeping must never turn that external success into an HTTP
