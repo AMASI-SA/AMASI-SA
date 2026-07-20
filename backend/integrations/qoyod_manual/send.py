@@ -1116,7 +1116,8 @@ async def _retry_payment_only(
 
 # ─── Main entrypoint ─────────────────────────────────────────────────
 async def manual_send_one(
-    db, *, user_id: str, order_number: str, actor: str = "manual-ui",
+    db, *, user_id: str, order_number: str,
+    orders_user_id: Optional[str] = None, actor: str = "manual-ui",
 ) -> dict:
     """Push a single Salla order to Qoyod using the 4-step manual path.
 
@@ -1220,7 +1221,8 @@ async def manual_send_one(
     # Reuse the exact mapper behind New Orders / Order Details. This keeps
     # aliases such as "مصرف الإنماء" and "بنك الإنماء" in one place.
     payment_facts = await get_order_payment_facts(
-        db, user_id=user_id, order_number=str(order_number),
+        db, user_id=orders_user_id or user_id,
+        order_number=str(order_number),
     )
     payment_method = (
         payment_facts.get("payment_method")
