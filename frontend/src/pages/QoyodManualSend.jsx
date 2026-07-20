@@ -49,49 +49,7 @@ function TotalsBreakdown({ detail }) {
   const ship = b.shipping;
   const cod = b.cod_fee;
   const exactMatch = Math.abs(Number(detail?.difference || 0)) < 0.005;
-  const handleAutoCanary = async () => {
-    const confirmed = window.confirm(
-      "سيتم تشغيل إرسال آلي متسلسل على أربعة طلبات فقط:\n\n" +
-        AUTO_CANARY_ORDERS.join("\n") +
-        "\n\nيتوقف الاختبار عند أول خطأ حقيقي، ولا يكرر أي فاتورة موجودة. " +
-        "الدفع عند الاستلام يُنشئ فاتورة فقط بدون سند. هل تريد المتابعة؟"
-    );
-    if (!confirmed) return;
 
-    setCanarySending(true);
-    setCanaryResult(null);
-    try {
-      const res = await api.post(`${BASE}/auto-canary`, {
-        confirmation: AUTO_CANARY_CONFIRMATION,
-      });
-      setCanaryResult(res.data);
-      const completed = new Set(
-        (res.data?.results || [])
-          .filter((row) => row.ok)
-          .map((row) => row.order_number)
-      );
-      setRows((prev) => prev.filter((row) => !completed.has(row.order_number)));
-    } catch (e) {
-      const detail = e?.response?.data?.detail;
-      setCanaryResult({
-        ok: false,
-        status: "request_failed",
-        sent_count: 0,
-        already_sent_count: 0,
-        invoice_only_count: 0,
-        failed_count: 1,
-        remaining_count: AUTO_CANARY_ORDERS.length,
-        results: [{
-          order_number: "—",
-          outcome: "failed",
-          code: detail?.code || "http_error",
-          message: detail?.message || extractDetail(e),
-        }],
-      });
-    } finally {
-      setCanarySending(false);
-    }
-  };
 
   return (
     <div
@@ -631,6 +589,50 @@ export default function QoyodManualSend() {
     }
   };
 
+
+  const handleAutoCanary = async () => {
+    const confirmed = window.confirm(
+      "سيتم تشغيل إرسال آلي متسلسل على أربعة طلبات فقط:\n\n" +
+        AUTO_CANARY_ORDERS.join("\n") +
+        "\n\nيتوقف الاختبار عند أول خطأ حقيقي، ولا يكرر أي فاتورة موجودة. " +
+        "الدفع عند الاستلام يُنشئ فاتورة فقط بدون سند. هل تريد المتابعة؟"
+    );
+    if (!confirmed) return;
+
+    setCanarySending(true);
+    setCanaryResult(null);
+    try {
+      const res = await api.post(`${BASE}/auto-canary`, {
+        confirmation: AUTO_CANARY_CONFIRMATION,
+      });
+      setCanaryResult(res.data);
+      const completed = new Set(
+        (res.data?.results || [])
+          .filter((row) => row.ok)
+          .map((row) => row.order_number)
+      );
+      setRows((prev) => prev.filter((row) => !completed.has(row.order_number)));
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      setCanaryResult({
+        ok: false,
+        status: "request_failed",
+        sent_count: 0,
+        already_sent_count: 0,
+        invoice_only_count: 0,
+        failed_count: 1,
+        remaining_count: AUTO_CANARY_ORDERS.length,
+        results: [{
+          order_number: "—",
+          outcome: "failed",
+          code: detail?.code || "http_error",
+          message: detail?.message || extractDetail(e),
+        }],
+      });
+    } finally {
+      setCanarySending(false);
+    }
+  };
   return (
     <div
       className="space-y-6"
