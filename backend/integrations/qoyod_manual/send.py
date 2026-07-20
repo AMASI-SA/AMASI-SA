@@ -42,6 +42,7 @@ from integrations.qoyod_manual.client import (
 from integrations.qoyod_manual.pending import (
     _matches_status, _salla_order_created_date, SUPPORTED_STATUSES,
 )
+from integrations.qoyod_manual.order_source import get_order_payment_facts
 
 logger = logging.getLogger(__name__)
 
@@ -1216,22 +1217,17 @@ async def manual_send_one(
 
     canon = row.get("canonical_payload") or {}
     salla_total = _q2(canon.get("total_amount"))
-    payment_method = (canon.get("payment_method")
-                       or canon.get("payment_method_native"))
-    # Bank routing reads the same unified order used by New Orders and Order
-    # Details.  No Salla call and no second raw-payload interpretation here.
-    unified_bank = await db.unified_orders.find_one(
-        {
-            "user_id": {"$in": [user_id, "main"]},
-            "order_number": str(order_number),
-        },
-        {"_id": 0, "receiving_bank_name": 1},
-        sort=[("updated_at", -1)],
+    # Reuse the exact mapper behind New Orders / Order Details. This keeps
+    # aliases such as "مصرف الإنماء" and "بنك الإنماء" in one place.
+    payment_facts = await get_order_payment_facts(
+        db, user_id=user_id, order_number=str(order_number),
     )
-    receiving_bank_name = (
-        str((unified_bank or {}).get("receiving_bank_name") or "").strip()
-        or None
+    payment_method = (
+        payment_facts.get("payment_method")
+        or canon.get("payment_method")
+        or canon.get("payment_method_native")
     )
+    receiving_bank_name = payment_facts.get("receiving_bank_name")
 
     # ── Guard G0 — refuse zero-total sends (2026-02) ──────────────
     # Symptom: Tabby/Make (or a stripped Salla status refresh) posts
