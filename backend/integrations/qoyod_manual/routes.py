@@ -120,7 +120,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         if exact_order.isdigit():
             try:
                 from salla_integration.sync import resync_single_order
-                await resync_single_order(db, _TENANT, exact_order)
+                await resync_single_order(db, str(user["id"]), exact_order)
             except Exception:
                 # Listing remains available from local evidence when Salla
                 # is temporarily unavailable; resync diagnostics live in the
@@ -128,7 +128,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 logger.exception(
                     "Plan-B exact-search resync failed order=%s", exact_order)
         return await list_pending_orders(
-            db, user_id=_TENANT, days=days, limit=limit,
+            db, user_id=_TENANT, orders_user_id=str(user["id"]),
+            days=days, limit=limit,
             search=search, status=status)
 
     # ── Diagnostic-only endpoint (temporary, opt-in) ──────────────
@@ -188,7 +189,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             pass
         try:
             result = await manual_send_one(
-                db, user_id=_TENANT, order_number=str(order_number),
+                db, user_id=_TENANT, orders_user_id=str(user["id"]),
+                order_number=str(order_number),
                 actor=actor)
             return result
         except ManualSendRefused as exc:
