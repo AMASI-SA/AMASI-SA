@@ -22,6 +22,7 @@ from integrations.qoyod.eligible_orders import (
     _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod_manual.order_source import get_order_payment_facts
 
 _FLOOR_DATE: date = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
@@ -403,20 +404,11 @@ async def list_pending_orders(
             continue
 
         canon = row.get("canonical_payload") or {}
-        # The New Orders engine is the single source of commerce facts.
-        # Qoyod never calls Salla or reinterprets raw webhook variants here.
-        unified = await db.unified_orders.find_one(
-            {
-                "user_id": {"$in": [user_id, "main"]},
-                "order_number": order_number,
-            },
-            {"_id": 0, "receiving_bank_name": 1},
-            sort=[("updated_at", -1)],
+        # Use the exact normalized payment object displayed by Order Details.
+        payment_facts = await get_order_payment_facts(
+            db, user_id=user_id, order_number=order_number,
         )
-        receiving_bank_name = (
-            str((unified or {}).get("receiving_bank_name") or "").strip()
-            or None
-        )
+        receiving_bank_name = payment_facts.get("receiving_bank_name")
         received = row.get("received_at")
         safe_total = await _resolve_safe_total(
             order_number, canon.get("total_amount"))
@@ -430,9 +422,13 @@ async def list_pending_orders(
                                 else received),
             "total_amount":    safe_total,
             "currency":        canon.get("currency") or "SAR",
-            "payment_method":  (canon.get("payment_method")
+            "payment_method":  (payment_facts.get("payment_method")
+                                or canon.get("payment_method")
                                 or canon.get("payment_method_native")),
-            "payment_method_native": canon.get("payment_method_native"),
+            "payment_method_native": (
+                payment_facts.get("payment_method_native")
+                or canon.get("payment_method_native")
+            ),
             # Bank-transfer methods arrive from Salla with the generic
             # key `bank`; the actual receiving bank is a separate field.
             # Keep both values so the operator can verify the same bank
