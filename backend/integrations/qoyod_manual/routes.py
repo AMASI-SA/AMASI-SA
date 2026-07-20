@@ -3,6 +3,7 @@
 Endpoints (all mounted under /api/integrations/qoyod/manual):
     GET  /pending-orders            List orders eligible for manual push.
     POST /send/{order_number}       Push ONE order end-to-end.
+    POST /auto-canary               Run the closed four-order canary.
     GET  /status/{order_number}     Latest manual-send lock row.
     GET  /health                    Frozen-flag + module presence probe.
     POST /freeze-legacy-pipeline    Toggle legacy_pipeline_frozen on/off.
@@ -13,6 +14,7 @@ dependency as the rest of the qoyod router).
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -32,6 +34,11 @@ from integrations.qoyod_manual.audit_sent_count import (
 )
 from integrations.qoyod_manual.pending_exclusion_diagnose import (
     diagnose_pending_exclusion,
+)
+from integrations.qoyod_manual.canary_batch import (
+    CANARY_CONFIRMATION,
+    CANARY_ORDER_NUMBERS,
+    execute_canary_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +72,12 @@ class PendingExclusionDiagPayload(BaseModel):
     # diagnostic analyses THAT trace instead of the newest one. Used
     # to prove `not_newest_trace` exclusion.
     trace_ids_by_order: dict[str, str] = {}
+
+
+class CanaryBatchPayload(BaseModel):
+    """Explicit confirmation for the closed four-order auto-send canary."""
+    model_config = ConfigDict(extra="forbid")
+    confirmation: str
 
 
 def _now() -> datetime:
@@ -285,6 +298,123 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                                            "يُحذَف من الكود بعد إصلاح "
                                            "السبب الجذري."),
                 })
+
+    @router.post("/auto-canary")
+    async def auto_canary(
+        payload: CanaryBatchPayload,
+        user=Depends(current_user),
+    ):
+        """Run the first automatic-send test on a closed four-order list.
+
+        The orders are deliberately compiled into the backend.  The caller
+        cannot add a fifth order or substitute another number.  Calls are
+        sequential and the batch stops on the first real refusal; duplicate
+        guards count as safe completion on a retry.
+        """
+        if payload.confirmation != CANARY_CONFIRMATION:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "canary_confirmation_required",
+                    "message": "عبارة تأكيد تجربة الإرسال الآلي غير صحيحة",
+                },
+            )
+
+        settings = await db.qoyod_settings.find_one(
+            {"user_id": _TENANT},
+            {"_id": 0, "legacy_pipeline_frozen": 1},
+        ) or {}
+        if not settings.get("legacy_pipeline_frozen"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "legacy_pipeline_not_frozen",
+                    "message": (
+                        "يجب تجميد المسار القديم قبل تشغيل تجربة "
+                        "الإرسال الآلي"
+                    ),
+                },
+            )
+
+        username = str(
+            (user or {}).get("email") or (user or {}).get("id") or "unknown"
+        )
+        actor = f"auto-canary:{username}"
+        run_id = f"qoyod-canary-{uuid.uuid4().hex[:12]}"
+        started_at = _now()
+        audit_doc = {
+            "run_id": run_id,
+            "canary_key": "qoyod-auto-send-canary-v1",
+            "status": "in_progress",
+            "order_numbers": list(CANARY_ORDER_NUMBERS),
+            "actor": actor,
+            "started_at": started_at,
+        }
+        # The audit row must exist before the first external mutation.
+        await db.qoyod_manual_canary_runs.insert_one(audit_doc)
+
+        async def _send(order_number: str) -> dict:
+            return await manual_send_one(
+                db,
+                user_id=_TENANT,
+                orders_user_id=str(user["id"]),
+                order_number=order_number,
+                actor=actor,
+            )
+
+        try:
+            result = await execute_canary_batch(_send)
+        except Exception as exc:  # noqa: BLE001
+            error_reference = uuid.uuid4().hex[:8]
+            logger.exception(
+                "qoyod auto canary unhandled run=%s ref=%s",
+                run_id,
+                error_reference,
+            )
+            await db.qoyod_manual_canary_runs.update_one(
+                {"run_id": run_id},
+                {"$set": {
+                    "status": "failed_unhandled",
+                    "finished_at": _now(),
+                    "error_reference": error_reference,
+                    "exception_type": type(exc).__name__,
+                }},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "canary_unhandled_error",
+                    "message": "توقفت تجربة الإرسال الآلي بأمان",
+                    "error_reference": error_reference,
+                },
+            )
+
+        finished_at = _now()
+        result.update({
+            "run_id": run_id,
+            "actor": actor,
+            "started_at": started_at.isoformat(),
+            "finished_at": finished_at.isoformat(),
+        })
+        await db.qoyod_manual_canary_runs.update_one(
+            {"run_id": run_id},
+            {"$set": {
+                "status": result["status"],
+                "finished_at": finished_at,
+                "result": result,
+            }},
+        )
+        logger.warning(
+            "qoyod auto canary finished run=%s status=%s sent=%s "
+            "already=%s failed=%s actor=%s",
+            run_id,
+            result["status"],
+            result["sent_count"],
+            result["already_sent_count"],
+            result["failed_count"],
+            actor,
+        )
+        return result
 
     @router.get("/status/{order_number}")
     async def send_status(order_number: str,
