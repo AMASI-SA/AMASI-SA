@@ -210,6 +210,10 @@ def make_mezan_mcp_router(
         window_seconds=60,
     )
 
+    async def resolve_principal(request: Request) -> Principal:
+        """Keep FastAPI's dependency signature stable for injected authenticators."""
+        return await auth_dependency(request)
+
     @router.get("/.well-known/oauth-protected-resource", include_in_schema=False)
     async def oauth_resource_metadata() -> JSONResponse:
         return JSONResponse(
@@ -232,14 +236,14 @@ def make_mezan_mcp_router(
         )
 
     @router.get("/api/ai/mcp", include_in_schema=False)
-    async def mcp_get(_principal: Principal = Depends(auth_dependency)) -> Response:
+    async def mcp_get(_principal: Principal = Depends(resolve_principal)) -> Response:
         return Response(
             status_code=405,
             headers={**MCP_RESPONSE_HEADERS, "Allow": "POST, OPTIONS"},
         )
 
     @router.delete("/api/ai/mcp", include_in_schema=False)
-    async def mcp_delete(_principal: Principal = Depends(auth_dependency)) -> Response:
+    async def mcp_delete(_principal: Principal = Depends(resolve_principal)) -> Response:
         return Response(
             status_code=405,
             headers={**MCP_RESPONSE_HEADERS, "Allow": "POST, OPTIONS"},
@@ -248,7 +252,7 @@ def make_mezan_mcp_router(
     @router.post("/api/ai/mcp", include_in_schema=False)
     async def mcp_post(
         request: Request,
-        principal: Principal = Depends(auth_dependency),
+        principal: Principal = Depends(resolve_principal),
     ) -> Response:
         await limiter.check(principal.subject)
         content_length = request.headers.get("content-length")
