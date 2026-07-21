@@ -8,6 +8,7 @@ on:
       - "backend/tests/test_mezan_mcp_gateway.py"
       - "backend/server.py"
       - "docs/integrations/mezan-mcp-gateway.md"
+      - "scripts/verify_mezan_mcp_gateway.py"
       - ".github/workflows/mezan-mcp-gateway-tests.yml"
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - "backend/tests/test_mezan_mcp_gateway.py"
       - "backend/server.py"
       - "docs/integrations/mezan-mcp-gateway.md"
+      - "scripts/verify_mezan_mcp_gateway.py"
       - ".github/workflows/mezan-mcp-gateway-tests.yml"
 
 permissions:
@@ -52,7 +54,10 @@ jobs:
           backend/mezan_mcp/services.py
           backend/mezan_mcp/gateway.py
           backend/server.py
+          scripts/verify_mezan_mcp_gateway.py
       - name: Run MCP security and transport tests
         env:
           PYTHONPATH: backend
         run: python -m pytest -q backend/tests/test_mezan_mcp_gateway.py
+      - name: Check Preview verifier entrypoint
+        run: python scripts/verify_mezan_mcp_gateway.py --help

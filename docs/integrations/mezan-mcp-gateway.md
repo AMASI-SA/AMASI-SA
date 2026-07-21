@@ -65,6 +65,25 @@ Production uses `https://mezansalla.com/api/ai/mcp`; Preview must use its own
 HTTPS hostname. Preview and Production must keep their existing separate
 databases.
 
+## OAuth provider contract
+
+Configure a separate OAuth resource/API for Preview before Production. The
+provider may be Auth0, Okta, Cognito, or another OAuth 2.1 implementation, but
+it must publish its discovery document, support Authorization Code with PKCE
+S256, accept the MCP `resource` parameter, and issue an audience-restricted
+token with only `mezan:read` plus the configured tenant claim. If the provider
+requires namespaced custom claims, set `MEZAN_MCP_TENANT_CLAIM` to that exact
+claim name.
+
+The provider/client choice must use one of ChatGPT's supported registration
+methods: CIMD, DCR, or a predefined OAuth client. Store any predefined client
+secret only in the relevant platform secret manager. Do not place it in Mezan,
+GitHub, ChatGPT messages, command arguments, or logs.
+
+Preview and Production use distinct resource identifiers and OAuth clients.
+Do not reuse a Preview token against Production, and do not promote until the
+Preview resource metadata reports its exact HTTPS endpoint.
+
 ## Release gates
 
 Deploy the branch to Preview first and do not promote it until all checks pass:
@@ -79,6 +98,23 @@ Deploy the branch to Preview first and do not promote it until all checks pass:
 7. Qoyod reconciliation reads local records and performs no Qoyod network call.
 8. Security tests prove Mongo/Salla/Qoyod mutation paths are unavailable.
 9. Existing Qoyod send behavior and financial data are unchanged.
+
+Run the repository verifier from a trusted Preview runner. Put the short-lived
+access token in an environment secret; the verifier never prints it or any
+tool payload:
+
+```bash
+export MEZAN_MCP_BEARER_TOKEN='set-in-the-runner-secret-manager'
+python scripts/verify_mezan_mcp_gateway.py \
+  https://PREVIEW_HOST/api/ai/mcp \
+  --order-number SAFE_TEST_ORDER_NUMBER
+```
+
+The verifier checks public protected-resource metadata, the unauthenticated
+OAuth challenge, MCP initialization, the exact eight read-only tools,
+`mezan_health`, and—when an order number is provided—the order view, Salla
+comparison, trace, and local-only Qoyod reconciliation. It reports pass/fail
+only and deliberately does not print returned order data.
 
 Only after explicit approval should the same build and OAuth configuration be
 promoted to Production. Run discovery and `mezan_health` again after promotion.

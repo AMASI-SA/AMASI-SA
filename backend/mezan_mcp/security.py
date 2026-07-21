@@ -281,15 +281,16 @@ def resource_metadata_url() -> str:
 
 def protected_resource_metadata() -> dict[str, Any]:
     issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").rstrip("/")
+    resource = _oauth_https_url("resource", resource_url())
     data: dict[str, Any] = {
-        "resource": resource_url(),
+        "resource": resource,
         "scopes_supported": [
             os.environ.get("MEZAN_MCP_REQUIRED_SCOPE", REQUIRED_SCOPE_DEFAULT)
         ],
         "bearer_methods_supported": ["header"],
     }
     if issuer:
-        data["authorization_servers"] = [issuer]
+        data["authorization_servers"] = [_oauth_https_url("issuer", issuer)]
     return data
 
 
@@ -305,7 +306,24 @@ def _oauth_config() -> tuple[str, str, str, str, str]:
         raise OAuthConfigError(
             "MCP OAuth resource server is not configured; set issuer, audience and JWKS URL"
         )
+    issuer = _oauth_https_url("issuer", issuer)
+    audience = _oauth_https_url("audience", audience)
+    jwks_url = _oauth_https_url("JWKS URL", jwks_url)
     return issuer, audience, jwks_url, required_scope, tenant_claim
+
+
+def _oauth_https_url(label: str, value: str) -> str:
+    """Fail closed when OAuth metadata points outside a canonical HTTPS URL."""
+    try:
+        validated = validate_public_https_url(value)
+    except ValueError as exc:
+        raise OAuthConfigError(f"MCP OAuth {label} must be a public HTTPS URL") from exc
+    parsed = urlparse(validated)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise OAuthConfigError(
+            f"MCP OAuth {label} must not contain credentials, a query, or a fragment"
+        )
+    return validated.rstrip("/")
 
 
 def _scopes(claims: Mapping[str, Any]) -> frozenset[str]:

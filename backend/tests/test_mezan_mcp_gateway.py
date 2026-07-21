@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 
 from mezan_mcp.gateway import TOOL_DESCRIPTORS, make_mezan_mcp_router
 from mezan_mcp.security import (
+    OAuthConfigError,
     Principal,
     ReadOnlyDatabase,
     ReadOnlyHttpClient,
@@ -19,6 +20,7 @@ from mezan_mcp.security import (
     audit_tool_call,
     sanitize_output,
 )
+from mezan_mcp import security as mcp_security
 from mezan_mcp.services import MezanReadOnlyTools, safe_order
 
 
@@ -110,6 +112,25 @@ def test_phase_one_exposes_exactly_eight_read_only_tools() -> None:
         assert tool["annotations"]["destructiveHint"] is False
         assert tool["annotations"]["idempotentHint"] is True
         assert tool["securitySchemes"][0]["type"] == "oauth2"
+        assert not any(
+            forbidden in tool["name"]
+            for forbidden in ("create", "send", "retry", "replay", "update", "delete")
+        )
+
+
+def test_oauth_configuration_rejects_non_https_endpoints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", "http://identity.example")
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_AUDIENCE", "https://preview.example/api/ai/mcp")
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_JWKS_URL", "https://identity.example/jwks.json")
+    with pytest.raises(OAuthConfigError):
+        mcp_security._oauth_config()
+
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", "https://identity.example")
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_JWKS_URL", "https://identity.example/jwks.json?token=bad")
+    with pytest.raises(OAuthConfigError):
+        mcp_security._oauth_config()
 
 
 def test_production_database_facade_blocks_mutations_and_unknown_collections() -> None:
@@ -303,6 +324,9 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
         transport=ASGITransport(app=app), base_url="https://preview.mezansalla.com"
     ) as client:
         metadata = await client.get("/.well-known/oauth-protected-resource")
+        path_metadata = await client.get(
+            "/.well-known/oauth-protected-resource/api/ai/mcp"
+        )
         get_response = await client.get("/api/ai/mcp")
         delete_response = await client.delete("/api/ai/mcp")
         options_response = await client.options("/api/ai/mcp")
@@ -312,6 +336,8 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
     assert metadata.headers["x-content-type-options"] == "nosniff"
     assert metadata.json()["resource"] == "https://preview.mezansalla.com/api/ai/mcp"
     assert metadata.json()["authorization_servers"] == ["https://identity.example"]
+    assert path_metadata.status_code == 200
+    assert path_metadata.json() == metadata.json()
     assert get_response.status_code == 405
     assert delete_response.status_code == 405
     assert options_response.status_code == 204
