@@ -72,6 +72,7 @@ from order_engine.routes import make_order_engine_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_routes import make_order_review_router
 from return_decision_routes import make_return_decision_router
+from mezan_mcp import make_mezan_mcp_router
 from settlement_cycle import attach_settlement_cycle_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
@@ -4237,6 +4238,7 @@ api.include_router(make_repair_audit_router(db, current_user))
 api.include_router(make_account_drift_detail_router(db, current_user))
 api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 
+app.include_router(make_mezan_mcp_router(db))
 app.include_router(api)
 
 # CORS

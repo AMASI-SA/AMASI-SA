@@ -1,0 +1,63 @@
+name: Mezan MCP Gateway security tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/mezan_mcp/**"
+      - "backend/tests/test_mezan_mcp_gateway.py"
+      - "backend/server.py"
+      - "docs/integrations/mezan-mcp-gateway.md"
+      - "scripts/verify_mezan_mcp_gateway.py"
+      - ".github/workflows/mezan-mcp-gateway-tests.yml"
+  push:
+    branches:
+      - main
+      - "agent/mezan-mcp-gateway"
+    paths:
+      - "backend/mezan_mcp/**"
+      - "backend/tests/test_mezan_mcp_gateway.py"
+      - "backend/server.py"
+      - "docs/integrations/mezan-mcp-gateway.md"
+      - "scripts/verify_mezan_mcp_gateway.py"
+      - ".github/workflows/mezan-mcp-gateway-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install
+          pytest==9.0.3
+          pytest-asyncio
+          fastapi==0.110.1
+          httpx==0.28.1
+          PyJWT==2.13.0
+          cryptography==48.0.0
+          openpyxl==3.1.5
+      - name: Compile gateway and application entrypoint
+        run: >-
+          python -m py_compile
+          backend/mezan_mcp/__init__.py
+          backend/mezan_mcp/security.py
+          backend/mezan_mcp/services.py
+          backend/mezan_mcp/gateway.py
+          backend/server.py
+          scripts/verify_mezan_mcp_gateway.py
+      - name: Run MCP security and transport tests
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests/test_mezan_mcp_gateway.py
+      - name: Check Preview verifier entrypoint
+        run: python scripts/verify_mezan_mcp_gateway.py --help
