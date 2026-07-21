@@ -1,0 +1,93 @@
+# Mezan MCP Gateway
+
+`Mezan MCP Gateway` is a private, tool-only MCP resource server for interactive
+ChatGPT diagnostics. It does not use `OPENAI_API_KEY`, run an autonomous agent,
+or change the existing Mezan, Salla, or Qoyod write paths.
+
+## Endpoint and protocol
+
+- Streamable HTTP endpoint: `/api/ai/mcp`
+- Production URL after Preview acceptance: `https://mezansalla.com/api/ai/mcp`
+- Protected-resource metadata:
+  `/.well-known/oauth-protected-resource`
+- Transport methods: `POST` and `OPTIONS` only. `GET` and `DELETE` return 405.
+- All phase-one tools declare `readOnlyHint=true`.
+
+## Phase-one tools
+
+- `mezan_health`
+- `mezan_get_system_status`
+- `mezan_get_order`
+- `mezan_compare_order_with_salla`
+- `mezan_get_error_trace`
+- `mezan_list_recent_failures`
+- `mezan_qoyod_reconciliation`
+- `mezan_get_database_schema`
+
+## Security boundary
+
+- OAuth 2.1 bearer tokens are validated using an external identity provider.
+  Mezan browser-session tokens and static API keys are not accepted.
+- The identity provider must support Authorization Code with PKCE S256 and
+  issue an audience-restricted access token containing the `mezan:read` scope
+  and a tenant claim.
+- Mongo access is through an allowlisted read-only facade. Mutation methods
+  throw before reaching Motor. Arbitrary SQL/Mongo queries are not exposed.
+- Salla comparisons use one direct HTTPS `GET`. The gateway never refreshes or
+  persists a Salla token and never calls a Salla mutation endpoint.
+- Qoyod reconciliation reads local Mezan collections only. It does not create a
+  Qoyod HTTP client or call create, send, retry, replay, update, or delete.
+- Customer phone, email, address, coordinates, tokens, credentials, database
+  URLs, and sensitive keys are removed from tool output and error text.
+- Audit logs contain request id, tool, outcome, duration, and hashed identities;
+  they never contain tool arguments, raw tenant ids, or OAuth subjects.
+- A process-local rate limiter is enforced. Production must also enforce a
+  shared rate limit at the reverse proxy/WAF when running multiple workers.
+
+## Required secret configuration
+
+Configure these values in the deployment secret manager. Never commit them or
+paste them into ChatGPT:
+
+```text
+MEZAN_MCP_OAUTH_ISSUER
+MEZAN_MCP_OAUTH_AUDIENCE
+MEZAN_MCP_OAUTH_JWKS_URL
+MEZAN_MCP_REQUIRED_SCOPE=mezan:read
+MEZAN_MCP_TENANT_CLAIM=mezan_tenant_id
+MEZAN_MCP_PUBLIC_BASE_URL
+MEZAN_MCP_RESOURCE_URL
+MEZAN_MCP_RATE_LIMIT_PER_MINUTE=60
+```
+
+The audience and resource must be the exact environment endpoint. For example,
+Production uses `https://mezansalla.com/api/ai/mcp`; Preview must use its own
+HTTPS hostname. Preview and Production must keep their existing separate
+databases.
+
+## Release gates
+
+Deploy the branch to Preview first and do not promote it until all checks pass:
+
+1. Protected-resource metadata advertises the correct Preview resource and
+   authorization server.
+2. ChatGPT completes OAuth and discovers exactly eight tools.
+3. `mezan_health` succeeds.
+4. One Production-safe order view contains no unnecessary customer PII.
+5. The same order can be compared with Salla through GET-only access.
+6. A sanitized trace and recent failures can be read.
+7. Qoyod reconciliation reads local records and performs no Qoyod network call.
+8. Security tests prove Mongo/Salla/Qoyod mutation paths are unavailable.
+9. Existing Qoyod send behavior and financial data are unchanged.
+
+Only after explicit approval should the same build and OAuth configuration be
+promoted to Production. Run discovery and `mezan_health` again after promotion.
+Rollback is the normal application rollback to the previous build; this change
+has no migration or stored-data rollback.
+
+## ChatGPT connection
+
+Create a private tool-only app using the environment MCP URL. Configure OAuth
+with the same external identity provider and request only `mezan:read`. GitHub
+access remains a separate ChatGPT connection; no GitHub secret belongs in this
+gateway.
