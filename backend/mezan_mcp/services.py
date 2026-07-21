@@ -8,8 +8,7 @@ from typing import Any, Mapping, Optional
 from urllib.parse import quote
 
 import httpx
-
-from salla_integration.crypto import decrypt_token
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from .security import (
     ReadOnlyDatabase,
@@ -20,6 +19,25 @@ from .security import (
 
 
 SALLA_API_BASE = "https://api.salla.dev/admin/v2"
+
+
+def _decrypt_salla_access_token(ciphertext: Any) -> str:
+    """Decrypt the existing Salla token without importing Salla write routes."""
+    if not ciphertext:
+        return ""
+    primary = os.environ.get("SALLA_TOKEN_ENC_KEY", "").strip()
+    if not primary:
+        raise RuntimeError("Salla token encryption key is unavailable")
+    keys = [Fernet(primary.encode("utf-8"))]
+    rotation = os.environ.get("SALLA_TOKEN_ENC_KEY_OLD", "").strip()
+    if rotation:
+        keys.append(Fernet(rotation.encode("utf-8")))
+    if isinstance(ciphertext, str):
+        ciphertext = ciphertext.encode("utf-8")
+    try:
+        return MultiFernet(keys).decrypt(bytes(ciphertext)).decode("utf-8")
+    except (InvalidToken, TypeError, ValueError) as exc:
+        raise RuntimeError("Stored Salla read credential cannot be decrypted") from exc
 
 
 def _number(value: Any) -> float:
@@ -257,7 +275,9 @@ async def _read_salla_order(
     if not integration or integration.get("status") != "connected":
         raise RuntimeError("Salla read connection is unavailable for this tenant")
     try:
-        access_token = decrypt_token(integration.get("access_token_encrypted") or b"")
+        access_token = _decrypt_salla_access_token(
+            integration.get("access_token_encrypted") or b""
+        )
     except Exception as exc:
         raise RuntimeError("Stored Salla read credential cannot be used") from exc
     if not access_token:
