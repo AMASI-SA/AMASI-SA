@@ -276,11 +276,15 @@ def resource_url() -> str:
 
 
 def resource_metadata_url() -> str:
-    return f"{public_base_url()}/.well-known/oauth-protected-resource"
+    value = (
+        os.environ.get("MEZAN_MCP_METADATA_URL")
+        or f"{public_base_url()}/.well-known/oauth-protected-resource"
+    )
+    return _oauth_https_url("resource metadata URL", value)
 
 
 def protected_resource_metadata() -> dict[str, Any]:
-    issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").rstrip("/")
+    issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").strip()
     resource = _oauth_https_url("resource", resource_url())
     data: dict[str, Any] = {
         "resource": resource,
@@ -290,15 +294,17 @@ def protected_resource_metadata() -> dict[str, Any]:
         "bearer_methods_supported": ["header"],
     }
     if issuer:
-        data["authorization_servers"] = [_oauth_https_url("issuer", issuer)]
+        data["authorization_servers"] = [
+            _oauth_https_url("issuer", issuer, preserve_trailing_slash=True)
+        ]
     return data
 
 
 def _oauth_config() -> tuple[str, str, str, str, str]:
-    issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").rstrip("/")
+    issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").strip()
     audience = os.environ.get("MEZAN_MCP_OAUTH_AUDIENCE") or resource_url()
     jwks_url = os.environ.get("MEZAN_MCP_OAUTH_JWKS_URL") or (
-        f"{issuer}/.well-known/jwks.json" if issuer else ""
+        f"{issuer.rstrip('/')}/.well-known/jwks.json" if issuer else ""
     )
     required_scope = os.environ.get("MEZAN_MCP_REQUIRED_SCOPE", REQUIRED_SCOPE_DEFAULT)
     tenant_claim = os.environ.get("MEZAN_MCP_TENANT_CLAIM", TENANT_CLAIM_DEFAULT)
@@ -306,13 +312,20 @@ def _oauth_config() -> tuple[str, str, str, str, str]:
         raise OAuthConfigError(
             "MCP OAuth resource server is not configured; set issuer, audience and JWKS URL"
         )
-    issuer = _oauth_https_url("issuer", issuer)
+    # OAuth issuer comparison is exact. Auth0 issuers normally end with a
+    # slash, so preserving the configured value avoids rejecting valid JWTs.
+    issuer = _oauth_https_url("issuer", issuer, preserve_trailing_slash=True)
     audience = _oauth_https_url("audience", audience)
     jwks_url = _oauth_https_url("JWKS URL", jwks_url)
     return issuer, audience, jwks_url, required_scope, tenant_claim
 
 
-def _oauth_https_url(label: str, value: str) -> str:
+def _oauth_https_url(
+    label: str,
+    value: str,
+    *,
+    preserve_trailing_slash: bool = False,
+) -> str:
     """Fail closed when OAuth metadata points outside a canonical HTTPS URL."""
     try:
         validated = validate_public_https_url(value)
@@ -323,7 +336,7 @@ def _oauth_https_url(label: str, value: str) -> str:
         raise OAuthConfigError(
             f"MCP OAuth {label} must not contain credentials, a query, or a fragment"
         )
-    return validated.rstrip("/")
+    return validated if preserve_trailing_slash else validated.rstrip("/")
 
 
 def _scopes(claims: Mapping[str, Any]) -> frozenset[str]:

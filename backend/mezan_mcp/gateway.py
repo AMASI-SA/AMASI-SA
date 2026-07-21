@@ -215,14 +215,16 @@ def make_mezan_mcp_router(
         return await auth_dependency(request)
 
     @router.get("/.well-known/oauth-protected-resource", include_in_schema=False)
+    @router.get(
+        "/.well-known/oauth-protected-resource/api/ai/mcp",
+        include_in_schema=False,
+    )
+    @router.get("/api/.well-known/oauth-protected-resource", include_in_schema=False)
+    @router.get(
+        "/api/.well-known/oauth-protected-resource/api/ai/mcp",
+        include_in_schema=False,
+    )
     async def oauth_resource_metadata() -> JSONResponse:
-        return JSONResponse(
-            protected_resource_metadata(),
-            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
-        )
-
-    @router.get("/.well-known/oauth-protected-resource/api/ai/mcp", include_in_schema=False)
-    async def oauth_resource_metadata_path() -> JSONResponse:
         return JSONResponse(
             protected_resource_metadata(),
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},

@@ -128,9 +128,33 @@ def test_oauth_configuration_rejects_non_https_endpoints(
         mcp_security._oauth_config()
 
     monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", "https://identity.example")
-    monkeypatch.setenv("MEZAN_MCP_OAUTH_JWKS_URL", "https://identity.example/jwks.json?token=bad")
+    monkeypatch.setenv(
+        "MEZAN_MCP_OAUTH_JWKS_URL",
+        "https://identity.example/jwks.json?token=bad",
+    )
     with pytest.raises(OAuthConfigError):
         mcp_security._oauth_config()
+
+
+def test_oauth_configuration_preserves_exact_auth0_issuer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    issuer = "https://mezan.eu.auth0.com/"
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", issuer)
+    monkeypatch.setenv(
+        "MEZAN_MCP_OAUTH_AUDIENCE", "https://mezansalla.com/api/ai/mcp"
+    )
+    monkeypatch.delenv("MEZAN_MCP_OAUTH_JWKS_URL", raising=False)
+
+    configured_issuer, _audience, jwks_url, _scope, _tenant_claim = (
+        mcp_security._oauth_config()
+    )
+
+    assert configured_issuer == issuer
+    assert jwks_url == "https://mezan.eu.auth0.com/.well-known/jwks.json"
+    assert mcp_security.protected_resource_metadata()["authorization_servers"] == [
+        issuer
+    ]
 
 
 def test_production_database_facade_blocks_mutations_and_unknown_collections() -> None:
@@ -318,7 +342,11 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MEZAN_MCP_PUBLIC_BASE_URL", "https://preview.mezansalla.com")
-    monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", "https://identity.example")
+    monkeypatch.setenv(
+        "MEZAN_MCP_METADATA_URL",
+        "https://preview.mezansalla.com/api/.well-known/oauth-protected-resource",
+    )
+    monkeypatch.setenv("MEZAN_MCP_OAUTH_ISSUER", "https://identity.example/")
     app = make_app(FakeDatabase())
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="https://preview.mezansalla.com"
@@ -326,6 +354,12 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
         metadata = await client.get("/.well-known/oauth-protected-resource")
         path_metadata = await client.get(
             "/.well-known/oauth-protected-resource/api/ai/mcp"
+        )
+        api_metadata = await client.get(
+            "/api/.well-known/oauth-protected-resource"
+        )
+        api_path_metadata = await client.get(
+            "/api/.well-known/oauth-protected-resource/api/ai/mcp"
         )
         get_response = await client.get("/api/ai/mcp")
         delete_response = await client.delete("/api/ai/mcp")
@@ -335,9 +369,13 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
     assert metadata.headers["cache-control"] == "no-store"
     assert metadata.headers["x-content-type-options"] == "nosniff"
     assert metadata.json()["resource"] == "https://preview.mezansalla.com/api/ai/mcp"
-    assert metadata.json()["authorization_servers"] == ["https://identity.example"]
+    assert metadata.json()["authorization_servers"] == ["https://identity.example/"]
     assert path_metadata.status_code == 200
     assert path_metadata.json() == metadata.json()
+    assert api_metadata.status_code == 200
+    assert api_metadata.json() == metadata.json()
+    assert api_path_metadata.status_code == 200
+    assert api_path_metadata.json() == metadata.json()
     assert get_response.status_code == 405
     assert delete_response.status_code == 405
     assert options_response.status_code == 204
@@ -386,7 +424,13 @@ async def test_order_read_is_tenant_isolated() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_requires_oauth_when_no_test_auth_is_injected() -> None:
+async def test_mcp_requires_oauth_when_no_test_auth_is_injected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_url = (
+        "https://preview.example/api/.well-known/oauth-protected-resource"
+    )
+    monkeypatch.setenv("MEZAN_MCP_METADATA_URL", metadata_url)
     app = FastAPI()
     app.include_router(make_mezan_mcp_router(FakeDatabase()))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://preview.example") as client:
@@ -395,7 +439,9 @@ async def test_mcp_requires_oauth_when_no_test_auth_is_injected() -> None:
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
     assert response.status_code == 401
-    assert "resource_metadata=" in response.headers["www-authenticate"]
+    assert f'resource_metadata="{metadata_url}"' in response.headers[
+        "www-authenticate"
+    ]
 
 
 @pytest.mark.asyncio

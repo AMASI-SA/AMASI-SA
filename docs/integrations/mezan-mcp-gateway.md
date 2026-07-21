@@ -7,9 +7,11 @@ or change the existing Mezan, Salla, or Qoyod write paths.
 ## Endpoint and protocol
 
 - Streamable HTTP endpoint: `/api/ai/mcp`
-- Production URL after Preview acceptance: `https://mezansalla.com/api/ai/mcp`
+- Production URL: `https://mezansalla.com/api/ai/mcp`
 - Protected-resource metadata:
   `/.well-known/oauth-protected-resource`
+- Ingress-safe metadata alias:
+  `/api/.well-known/oauth-protected-resource`
 - Transport methods: `POST` and `OPTIONS` only. `GET` and `DELETE` return 405.
 - All phase-one tools declare `readOnlyHint=true`.
 
@@ -57,18 +59,29 @@ MEZAN_MCP_REQUIRED_SCOPE=mezan:read
 MEZAN_MCP_TENANT_CLAIM=mezan_tenant_id
 MEZAN_MCP_PUBLIC_BASE_URL
 MEZAN_MCP_RESOURCE_URL
+MEZAN_MCP_METADATA_URL
 MEZAN_MCP_RATE_LIMIT_PER_MINUTE=60
 ```
 
-The audience and resource must be the exact environment endpoint. For example,
-Production uses `https://mezansalla.com/api/ai/mcp`; Preview must use its own
-HTTPS hostname. Preview and Production must keep their existing separate
-databases.
+Production uses these non-secret endpoint values:
+
+```text
+MEZAN_MCP_PUBLIC_BASE_URL=https://mezansalla.com
+MEZAN_MCP_RESOURCE_URL=https://mezansalla.com/api/ai/mcp
+MEZAN_MCP_OAUTH_AUDIENCE=https://mezansalla.com/api/ai/mcp
+MEZAN_MCP_METADATA_URL=https://mezansalla.com/api/.well-known/oauth-protected-resource
+```
+
+The audience and resource must be exact. Copy the Auth0 issuer exactly as it
+appears in its discovery document, including its trailing slash. The tenant
+claim value must identify the same store/tenant used by Mezan's database
+filters. A namespaced claim such as `https://mezansalla.com/tenant_id` is
+recommended when the identity provider requires it.
 
 ## OAuth provider contract
 
-Configure a separate OAuth resource/API for Preview before Production. The
-provider may be Auth0, Okta, Cognito, or another OAuth 2.1 implementation, but
+Configure a separate OAuth resource/API for Production. The provider may be
+Auth0, Okta, Cognito, or another OAuth 2.1 implementation, but
 it must publish its discovery document, support Authorization Code with PKCE
 S256, accept the MCP `resource` parameter, and issue an audience-restricted
 token with only `mezan:read` plus the configured tenant claim. If the provider
@@ -80,15 +93,17 @@ methods: CIMD, DCR, or a predefined OAuth client. Store any predefined client
 secret only in the relevant platform secret manager. Do not place it in Mezan,
 GitHub, ChatGPT messages, command arguments, or logs.
 
-Preview and Production use distinct resource identifiers and OAuth clients.
-Do not reuse a Preview token against Production, and do not promote until the
-Preview resource metadata reports its exact HTTPS endpoint.
+Preview can validate transport, metadata JSON, static security tests, and the
+unauthenticated 401 challenge without Production data or Production OAuth
+credentials. Final OAuth, tenant isolation, and data checks must run against
+Production after explicit authorization; never connect Preview to the
+Production database merely to complete these checks.
 
 ## Release gates
 
-Deploy the branch to Preview first and do not promote it until all checks pass:
+Before enabling the private ChatGPT connection in Production, verify:
 
-1. Protected-resource metadata advertises the correct Preview resource and
+1. Protected-resource metadata advertises the correct Production resource and
    authorization server.
 2. ChatGPT completes OAuth and discovers exactly eight tools.
 3. `mezan_health` succeeds.
@@ -99,14 +114,14 @@ Deploy the branch to Preview first and do not promote it until all checks pass:
 8. Security tests prove Mongo/Salla/Qoyod mutation paths are unavailable.
 9. Existing Qoyod send behavior and financial data are unchanged.
 
-Run the repository verifier from a trusted Preview runner. Put the short-lived
+Run the repository verifier from a trusted Production runner. Put the short-lived
 access token in an environment secret; the verifier never prints it or any
 tool payload:
 
 ```bash
 export MEZAN_MCP_BEARER_TOKEN='set-in-the-runner-secret-manager'
 python scripts/verify_mezan_mcp_gateway.py \
-  https://PREVIEW_HOST/api/ai/mcp \
+  https://mezansalla.com/api/ai/mcp \
   --order-number SAFE_TEST_ORDER_NUMBER
 ```
 
@@ -116,10 +131,9 @@ OAuth challenge, MCP initialization, the exact eight read-only tools,
 comparison, trace, and local-only Qoyod reconciliation. It reports pass/fail
 only and deliberately does not print returned order data.
 
-Only after explicit approval should the same build and OAuth configuration be
-promoted to Production. Run discovery and `mezan_health` again after promotion.
-Rollback is the normal application rollback to the previous build; this change
-has no migration or stored-data rollback.
+Enable the ChatGPT connection only after these gates pass. Rollback is the
+normal application rollback to the previous build; this change has no database
+migration or stored-data rollback.
 
 ## ChatGPT connection
 

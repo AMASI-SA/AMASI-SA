@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Verify a deployed Mezan MCP Preview without printing tokens or tool data."""
+"""Verify a deployed Mezan MCP gateway without printing tokens or tool data."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import ssl
 import sys
 import urllib.error
@@ -58,8 +59,8 @@ def _request_json(
     body = None if payload is None else json.dumps(payload).encode("utf-8")
     headers = {
         "Accept": "application/json, text/event-stream",
-        "User-Agent": "mezan-mcp-preview-verifier/1.0",
-        "X-Request-ID": f"preview-check-{uuid.uuid4()}",
+        "User-Agent": "mezan-mcp-deployment-verifier/1.0",
+        "X-Request-ID": f"deployment-check-{uuid.uuid4()}",
     }
     if payload is not None:
         headers["Content-Type"] = "application/json"
@@ -143,8 +144,31 @@ def _call_tool(
 def verify(endpoint: str, token: str, order_number: str = "") -> None:
     endpoint = _canonical_endpoint(endpoint)
     parsed = urllib.parse.urlparse(endpoint)
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-    metadata_url = f"{origin}/.well-known/oauth-protected-resource/api/ai/mcp"
+
+    unauth_status, unauth_headers, _body = _request_json(
+        endpoint,
+        method="POST",
+        payload={"jsonrpc": "2.0", "id": 0, "method": "tools/list", "params": {}},
+    )
+    challenge = unauth_headers.get("www-authenticate", "")
+    if unauth_status != 401 or "resource_metadata=" not in challenge:
+        raise VerificationError("Unauthenticated MCP request did not return OAuth discovery challenge")
+    print("PASS OAuth challenge")
+
+    match = re.search(r'resource_metadata="([^"]+)"', challenge)
+    if not match:
+        raise VerificationError("OAuth challenge omitted the quoted metadata URL")
+    metadata_url = match.group(1)
+    metadata_parsed = urllib.parse.urlparse(metadata_url)
+    if (
+        metadata_parsed.scheme != "https"
+        or metadata_parsed.netloc != parsed.netloc
+        or metadata_parsed.username
+        or metadata_parsed.password
+        or metadata_parsed.query
+        or metadata_parsed.fragment
+    ):
+        raise VerificationError("OAuth challenge advertised an unsafe metadata URL")
 
     status, _headers, metadata = _request_json(metadata_url)
     if status != 200:
@@ -157,19 +181,9 @@ def verify(endpoint: str, token: str, order_number: str = "") -> None:
         raise VerificationError("Protected-resource metadata must request only mezan:read")
     print("PASS protected-resource metadata")
 
-    unauth_status, unauth_headers, _body = _request_json(
-        endpoint,
-        method="POST",
-        payload={"jsonrpc": "2.0", "id": 0, "method": "tools/list", "params": {}},
-    )
-    challenge = unauth_headers.get("www-authenticate", "")
-    if unauth_status != 401 or "resource_metadata=" not in challenge:
-        raise VerificationError("Unauthenticated MCP request did not return OAuth discovery challenge")
-    print("PASS OAuth challenge")
-
     if not token:
         raise VerificationError(
-            "Set MEZAN_MCP_BEARER_TOKEN in the secure Preview runner; never pass it on the command line"
+            "Set MEZAN_MCP_BEARER_TOKEN in the secure deployment runner; never pass it on the command line"
         )
 
     initialized = _rpc(endpoint, token, 1, "initialize")
@@ -210,9 +224,9 @@ def verify(endpoint: str, token: str, order_number: str = "") -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Verify the deployed read-only Mezan MCP Preview."
+        description="Verify a deployed read-only Mezan MCP gateway."
     )
-    parser.add_argument("endpoint", help="Preview HTTPS URL ending in /api/ai/mcp")
+    parser.add_argument("endpoint", help="Deployment HTTPS URL ending in /api/ai/mcp")
     parser.add_argument(
         "--order-number",
         default="",
@@ -228,7 +242,7 @@ def main() -> int:
     except VerificationError as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
-    print("PASS Mezan MCP Preview acceptance checks completed")
+    print("PASS Mezan MCP deployment acceptance checks completed")
     return 0
 
 
