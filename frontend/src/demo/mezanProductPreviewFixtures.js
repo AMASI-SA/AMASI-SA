@@ -124,7 +124,6 @@ export const MEZAN_COST_RESOURCES_FIXTURES = [
         unit: "piece",
         unit_cost: null,
         track_inventory: true,
-        inventory: { on_hand: null, reserved: 0 },
         source: "manual_mezan_catalog",
     },
     {
@@ -135,7 +134,6 @@ export const MEZAN_COST_RESOURCES_FIXTURES = [
         unit: "piece",
         unit_cost: null,
         track_inventory: true,
-        inventory: { on_hand: null, reserved: 0 },
         source: "manual_mezan_catalog",
     },
     {
@@ -146,7 +144,6 @@ export const MEZAN_COST_RESOURCES_FIXTURES = [
         unit: "piece",
         unit_cost: null,
         track_inventory: true,
-        inventory: { on_hand: null, reserved: 0 },
         source: "manual_mezan_catalog",
     },
     {
@@ -157,7 +154,6 @@ export const MEZAN_COST_RESOURCES_FIXTURES = [
         unit: "piece",
         unit_cost: null,
         track_inventory: true,
-        inventory: { on_hand: null, reserved: 0 },
         source: "manual_mezan_catalog",
     },
     {
@@ -231,38 +227,129 @@ export const MEZAN_PRODUCT_RECIPE_FIXTURES = [
         ],
         configuration_policy: {
             normalized_text: "NFKC_TRIM",
-            attachment_affects_ready_stock_key: false,
-            attachment_note: "الصورة محفوظة مع الطلب، ولا تدخل في مفتاح المخزون الجاهز في هذه المعاينة.",
+            attachment_affects_ready_stock_key: true,
+            attachment_note: "الملف نفسه لا يُحفظ في Fixture؛ تدخل بصمته فقط في مفتاح المطابقة لمنع تسليم صورة مختلفة.",
         },
     },
 ];
 
-export const MEZAN_READY_CONFIGURATION_STOCK_FIXTURES = [
+/*
+ * Inventory is derived from posted movements. Quantities are never edited on
+ * the product, option, resource, or balance row directly.
+ */
+export const MEZAN_STORAGE_LOCATION_FIXTURES = [
     {
-        id: "ready-ams10026-silver-demo-name",
-        product_id: "salla-reference-ams10026",
-        configuration: {
-            option_values: { color: "silver" },
-            custom_values: { customer_name: { raw: "اسم تجريبي", normalized: "اسم تجريبي" } },
-        },
-        configuration_key: "AMS10026|color=silver|name=اسم تجريبي",
-        quantity_on_hand: 50,
-        quantity_reserved: 0,
-        source: "owner_example",
+        id: "location-main-c01-r01-b01",
+        name: "فضي عام",
+        warehouse_code: "01",
+        column_code: "01",
+        row_code: "01",
+        bin_code: "01",
+        active: true,
     },
     {
-        id: "ready-ams10026-gold-demo-name",
-        product_id: "salla-reference-ams10026",
-        configuration: {
-            option_values: { color: "gold" },
-            custom_values: { customer_name: { raw: "اسم تجريبي", normalized: "اسم تجريبي" } },
-        },
-        configuration_key: "AMS10026|color=gold|name=اسم تجريبي",
-        quantity_on_hand: 0,
-        quantity_reserved: 0,
-        source: "owner_example",
+        id: "location-main-c01-r01-b02",
+        name: "ذهبي عام",
+        warehouse_code: "01",
+        column_code: "01",
+        row_code: "01",
+        bin_code: "02",
+        active: true,
+    },
+    {
+        id: "location-main-c02-r01-b01",
+        name: "منتجات مخصصة جاهزة",
+        warehouse_code: "01",
+        column_code: "02",
+        row_code: "01",
+        bin_code: "01",
+        active: true,
+    },
+    {
+        id: "location-returns-c01-r01-b01",
+        name: "مرتجعات معتمدة",
+        warehouse_code: "02",
+        column_code: "01",
+        row_code: "01",
+        bin_code: "01",
+        active: true,
     },
 ];
+
+export const MEZAN_INVENTORY_CONFIGURATION_FIXTURES = [
+    {
+        id: "config-ams10026-base-silver",
+        product_id: "salla-reference-ams10026",
+        sku: "AMS10026",
+        stage: "base_ready",
+        label: "وحدة جاهزة قبل تخصيص الاسم — فضي",
+        option_values: { color: "silver" },
+        custom_values: {},
+        configuration_key: "AMS10026|stage=base_ready|color=silver",
+    },
+    {
+        id: "config-ams10026-base-gold",
+        product_id: "salla-reference-ams10026",
+        sku: "AMS10026",
+        stage: "base_ready",
+        label: "وحدة جاهزة قبل تخصيص الاسم — ذهبي",
+        option_values: { color: "gold" },
+        custom_values: {},
+        configuration_key: "AMS10026|stage=base_ready|color=gold",
+    },
+    {
+        id: "config-ams10026-personalized-silver-demo",
+        product_id: "salla-reference-ams10026",
+        sku: "AMS10026",
+        stage: "personalized_ready",
+        label: "وحدة مخصصة جاهزة — فضي — اسم تجريبي",
+        option_values: { color: "silver" },
+        custom_values: {
+            customer_name: { raw: "اسم تجريبي", normalized: "اسم تجريبي" },
+            customer_image: { fingerprint: "IMG-PREVIEW-001" },
+        },
+        configuration_key: "AMS10026|stage=personalized_ready|color=silver|name=اسم تجريبي|image=IMG-PREVIEW-001",
+    },
+];
+
+export const MEZAN_INVENTORY_MOVEMENT_FIXTURES = [
+    {
+        id: "movement-purchase-silver-001",
+        type: "purchase_receipt",
+        status: "posted",
+        idempotency_key: "purchase:PI-PREVIEW-SILVER-001:receipt:1",
+        occurred_at: "2026-07-22T08:00:00Z",
+        reference: { type: "purchase_invoice", id: "PI-PREVIEW-SILVER-001" },
+        lines: [{
+            role: "receive",
+            configuration_id: "config-ams10026-base-silver",
+            location_id: "location-main-c01-r01-b01",
+            condition: "sellable",
+            lot_id: "lot-purchase-silver-001",
+            delta_units: 50,
+            unit_cost_halalas: null,
+        }],
+    },
+    {
+        id: "movement-purchase-gold-001",
+        type: "purchase_receipt",
+        status: "posted",
+        idempotency_key: "purchase:PI-PREVIEW-GOLD-001:receipt:1",
+        occurred_at: "2026-07-22T08:05:00Z",
+        reference: { type: "purchase_invoice", id: "PI-PREVIEW-GOLD-001" },
+        lines: [{
+            role: "receive",
+            configuration_id: "config-ams10026-base-gold",
+            location_id: "location-main-c01-r01-b02",
+            condition: "sellable",
+            lot_id: "lot-purchase-gold-001",
+            delta_units: 100,
+            unit_cost_halalas: null,
+        }],
+    },
+];
+
+export const MEZAN_INVENTORY_RESERVATION_FIXTURES = [];
 
 export const MEZAN_ORDER_LINE_PREVIEW_FIXTURES = [
     {
