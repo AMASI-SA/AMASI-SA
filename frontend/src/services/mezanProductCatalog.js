@@ -10,6 +10,38 @@ import {
     MEZAN_STORAGE_LOCATION_FIXTURES,
 } from "../demo/mezanProductPreviewFixtures";
 
+export const MEZAN_PRODUCT_PAGE_POLICY = Object.freeze({
+    page_id: "products-v2",
+    mode: "read_only_aggregate",
+    writes_enabled: false,
+    operational_sources: [
+        {
+            id: "components",
+            title: "المكونات والتكاليف",
+            page: "صفحة المكونات",
+            description: "إضافة المكوّن، تكلفة الوحدة، والكمية المخزنية تتم في صفحة المكونات المستقلة.",
+        },
+        {
+            id: "purchase_invoices",
+            title: "شراء المخزون",
+            page: "صفحة فواتير المشتريات",
+            description: "الاستلام والتكلفة والدفعة وموقع التخزين تأتي من فاتورة الشراء وقت اعتمادها.",
+        },
+        {
+            id: "production_orders",
+            title: "التخصيص والتصنيع",
+            page: "صفحة أوامر الإنتاج",
+            description: "استهلاك المخزون العام وإنشاء مخزون مطابق للمواصفات يتم في أمر إنتاج مستقل.",
+        },
+        {
+            id: "returns",
+            title: "المرتجعات",
+            page: "صفحة المرتجعات",
+            description: "المراجعة والموافقة وإرجاع القطعة إلى موقعها المخزني تتم في صفحة المرتجعات.",
+        },
+    ],
+});
+
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
 }
@@ -33,6 +65,7 @@ export async function getMezanProductWorkspace() {
         inventory_reservations: MEZAN_INVENTORY_RESERVATION_FIXTURES,
         order_examples: MEZAN_ORDER_LINE_PREVIEW_FIXTURES,
         meta: MEZAN_PRODUCT_PREVIEW_META,
+        page_policy: MEZAN_PRODUCT_PAGE_POLICY,
     });
 }
 
