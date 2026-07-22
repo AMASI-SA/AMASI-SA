@@ -13,6 +13,62 @@ export function buildConfigurationKey({ sku, color, customerName }) {
     ].join("|");
 }
 
+function optionRuleMatches(rule, optionKey, valueKey) {
+    return rule?.when?.option_key === optionKey && rule?.when?.value_key === valueKey;
+}
+
+export function getOptionRuleSummary(recipe, optionKey, valueKey) {
+    const rules = (recipe?.option_rules || []).filter((rule) => (
+        optionRuleMatches(rule, optionKey, valueKey)
+    ));
+    const effects = rules.flatMap((rule) => rule.effects || []);
+    return {
+        fixed_cost_delta: effects.reduce((sum, effect) => (
+            effect.type === "fixed_cost_delta" ? sum + Number(effect.amount || 0) : sum
+        ), 0),
+        resource_ids: [...new Set(effects
+            .filter((effect) => effect.type === "add_component" && effect.resource_id)
+            .map((effect) => effect.resource_id))],
+    };
+}
+
+export function setOptionFixedCostDelta(recipe, optionKey, valueKey, rawAmount) {
+    const amount = Math.max(0, Number(rawAmount || 0));
+    const rules = recipe?.option_rules || [];
+    const matching = rules.filter((rule) => optionRuleMatches(rule, optionKey, valueKey));
+    const remaining = rules.filter((rule) => !optionRuleMatches(rule, optionKey, valueKey));
+    const baseRule = matching[0] || {
+        id: `${optionKey}-${valueKey}-rule`,
+        when: { option_key: optionKey, value_key: valueKey },
+        effects: [],
+    };
+
+    const nonFixedEffects = matching
+        .flatMap((rule) => rule.effects || [])
+        .filter((effect) => effect.type !== "fixed_cost_delta");
+    const deduplicatedEffects = nonFixedEffects.filter((effect, index, all) => (
+        all.findIndex((candidate) => (
+            candidate.type === effect.type
+            && candidate.resource_id === effect.resource_id
+            && Number(candidate.quantity || 0) === Number(effect.quantity || 0)
+        )) === index
+    ));
+    const fixedEffect = amount > 0 ? [{
+        type: "fixed_cost_delta",
+        amount,
+        label: `فرق تكلفة داخلي لخيار ${valueKey}`,
+        source: "employee_preview",
+    }] : [];
+
+    return {
+        ...recipe,
+        option_rules: [
+            ...remaining,
+            { ...baseRule, effects: [...deduplicatedEffects, ...fixedEffect] },
+        ],
+    };
+}
+
 function resourceMap(resources) {
     return new Map((resources || []).map((resource) => [resource.id, resource]));
 }
@@ -89,32 +145,5 @@ export function calculateConfigurationCost({ recipe, resources, selections }) {
         known_total: knownTotal,
         missing_lines: missingLines,
         complete: missingLines.length === 0,
-    };
-}
-
-export function matchReadyConfigurationStock({ readyStock, productId, sku, color, customerName }) {
-    const configurationKey = buildConfigurationKey({ sku, color, customerName });
-    const record = (readyStock || []).find((entry) => (
-        entry.product_id === productId && entry.configuration_key === configurationKey
-    ));
-    if (!record) {
-        return {
-            matched: false,
-            configuration_key: configurationKey,
-            quantity_on_hand: 0,
-            quantity_reserved: 0,
-            quantity_available: 0,
-            record: null,
-        };
-    }
-    const onHand = Number(record.quantity_on_hand || 0);
-    const reserved = Number(record.quantity_reserved || 0);
-    return {
-        matched: true,
-        configuration_key: configurationKey,
-        quantity_on_hand: onHand,
-        quantity_reserved: reserved,
-        quantity_available: Math.max(0, onHand - reserved),
-        record,
     };
 }
