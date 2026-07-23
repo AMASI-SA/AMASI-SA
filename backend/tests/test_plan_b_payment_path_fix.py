@@ -199,6 +199,142 @@ async def test_qoyod_invoices_written_only_after_payment(db):
     assert inv["source"] == "plan_b_send"
 
 
+@pytest.mark.asyncio
+async def test_one_halalah_higher_qoyod_total_stays_partially_paid(db):
+    """A +0.01 Qoyod rounding difference must not be paid by Mezan.
+
+    The payment records only what Salla collected, leaving Qoyod to
+    report the honest 0.01 remaining balance and partial status.
+    """
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="P101", total=115.0))
+
+    captured = {}
+
+    def _create_invoice(payload, *, idem):
+        return {
+            "invoice": {
+                "id": 602,
+                "number": "INV-602",
+                "total": 115.01,
+            }
+        }
+
+    def _create_payment(payload, *, idem):
+        captured["payment"] = payload
+        return {"invoice_payment": {"id": 9002}}
+
+    with _patches(create_invoice=_create_invoice,
+                  create_payment=_create_payment):
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="P101")
+
+    assert captured["payment"]["invoice_payment"]["amount"] == 115.0
+    assert result["payment_amount"] == 115.0
+
+    inv = await db.qoyod_invoices.find_one(
+        {"user_id": TENANT, "qoyod_invoice_id": "602"})
+    assert inv["total"] == 115.01
+    assert inv["paid_amount"] == 115.0
+    assert inv["remaining"] == 0.01
+    assert inv["status"] == "partial"
+
+    row = await db.integration_inbox.find_one(
+        {"salla_order_number": "P101"})
+    assert row["manual_qoyod_payment_id"] == "9002"
+
+
+@pytest.mark.asyncio
+async def test_one_halalah_lower_qoyod_total_is_not_overpaid(db):
+    """When Qoyod is lower by 0.01, pay its total and close normally."""
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(order_number="P102", total=115.0))
+
+    captured = {}
+
+    def _create_invoice(payload, *, idem):
+        return {
+            "invoice": {
+                "id": 603,
+                "number": "INV-603",
+                "total": 114.99,
+            }
+        }
+
+    def _create_payment(payload, *, idem):
+        captured["payment"] = payload
+        return {"invoice_payment": {"id": 9003}}
+
+    with _patches(create_invoice=_create_invoice,
+                  create_payment=_create_payment):
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="P102")
+
+    assert captured["payment"]["invoice_payment"]["amount"] == 114.99
+    assert result["payment_amount"] == 114.99
+
+    inv = await db.qoyod_invoices.find_one(
+        {"user_id": TENANT, "qoyod_invoice_id": "603"})
+    assert inv["total"] == 114.99
+    assert inv["paid_amount"] == 114.99
+    assert inv["remaining"] == 0.0
+    assert inv["status"] == "paid"
+
+
+@pytest.mark.asyncio
+async def test_retry_keeps_one_halalah_qoyod_balance_partial(db):
+    """Payment-only retry follows the same Salla-collected amount rule."""
+    await _seed(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(
+            order_number="P103",
+            total=115.0,
+            with_manual_id="604",
+            with_manual_inv_number="INV-604",
+        )
+    )
+
+    captured = {}
+
+    async def _get_invoice(_invoice_id):
+        return {
+            "invoice": {
+                "id": 604,
+                "number": "INV-604",
+                "total": 115.01,
+            }
+        }
+
+    async def _create_payment(payload, *, idem):
+        captured["payment"] = payload
+        return {"invoice_payment": {"id": 9004}}
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient.get_invoice",
+        new=AsyncMock(side_effect=_get_invoice),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=AsyncMock(side_effect=_create_payment),
+    ):
+        result = await manual_send_one(
+            db, user_id=TENANT, order_number="P103")
+
+    assert result["retry_payment_only"] is True
+    assert result["payment_amount"] == 115.0
+    assert result["difference"] == 0.01
+    assert captured["payment"]["invoice_payment"]["amount"] == 115.0
+
+    inv = await db.qoyod_invoices.find_one(
+        {"user_id": TENANT, "qoyod_invoice_id": "604"})
+    assert inv["total"] == 115.01
+    assert inv["paid_amount"] == 115.0
+    assert inv["remaining"] == 0.01
+    assert inv["status"] == "partial"
+
+
 # ─────────────────────────────────────────────────────────────────────
 # F3 — payment failure writes PARTIAL state, not paid
 # ─────────────────────────────────────────────────────────────────────
