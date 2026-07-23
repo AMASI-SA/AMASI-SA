@@ -3,6 +3,7 @@ import pytest
 from integrations.qoyod_manual.send import (
     ManualSendRefused,
     _extract_qoyod_invoice_total,
+    _resolve_payment_amount,
     _validate_qoyod_actual_total,
     _within_amount_tolerance,
 )
@@ -61,6 +62,25 @@ def test_exact_actual_parity_is_allowed():
     )
 
     assert result == 311.23
+
+
+@pytest.mark.parametrize(
+    ("qoyod_total", "salla_total", "expected_payment"),
+    [
+        (311.23, 311.23, 311.23),
+        (311.24, 311.23, 311.23),
+        (311.22, 311.23, 311.22),
+    ],
+)
+def test_payment_never_exceeds_salla_collection_or_qoyod_invoice(
+    qoyod_total,
+    salla_total,
+    expected_payment,
+):
+    assert _resolve_payment_amount(
+        qoyod_total=qoyod_total,
+        salla_collected_total=salla_total,
+    ) == expected_payment
 
 
 @pytest.mark.parametrize(
