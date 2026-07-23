@@ -59,6 +59,7 @@ import Orders from "./pages/Orders";
 import OrdersV2 from "./pages/OrdersV2";
 import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
+import MezanComponents from "./pages/MezanComponents";
 import OrderReview from "./pages/OrderReview";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
@@ -278,6 +279,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><MezanProducts /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/components-v2"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><MezanComponents /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
