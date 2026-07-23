@@ -69,10 +69,9 @@ def _riyadh_today_iso() -> str:
 # eliminates 0.001-cent drifts that made قيود show "دفعت جزئياً"
 # with a residual of 0.01 SAR.
 #
-# The `payment_amount` sent in step-4 is set to the SUM of the
-# post-quantisation line grosses (i.e. the exact قيود-computed
-# invoice total) — never to the raw Salla total — so the payment
-# closes the invoice perfectly.
+# The `payment_amount` sent in step-4 never exceeds the amount collected
+# by Salla or the Qoyod invoice total. A +0.01 Qoyod rounding residual is
+# intentionally left outstanding and appears as partially paid.
 _TWO_PLACES = Decimal("0.01")
 _AMOUNT_TOLERANCE = Decimal("0.01")
 
@@ -205,6 +204,18 @@ def _validate_qoyod_actual_total(
         )
 
     return actual
+
+
+def _resolve_payment_amount(
+    *, qoyod_total: float, salla_collected_total: float,
+) -> float:
+    """Pay no more than Salla collected and never overpay the invoice.
+
+    When Qoyod's server-side rounding makes the invoice one halalah
+    higher than Salla, the one-halalah balance is intentionally left
+    outstanding so Qoyod reports the invoice as partially paid.
+    """
+    return min(_q2(qoyod_total), _q2(salla_collected_total))
 
 
 class ManualSendRefused(Exception):
@@ -967,11 +978,7 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
 def _build_payment_payload(*, invoice_id: int, amount: float,
                            account_id: int, reference: str,
                            send_date_iso: str) -> dict:
-    """The payment `amount` MUST already equal the قيود-computed
-    invoice total (post-quantisation). The caller passes
-    `expected_total` (returned by `_build_invoice_payload`) — never
-    the raw Salla total — so قيود closes the invoice to zero and
-    reports status=Paid.
+    """Build a Qoyod payment with the caller-resolved collected amount.
 
     `date` is the Asia/Riyadh send-date, matching the invoice."""
     return {
@@ -993,6 +1000,7 @@ async def _upsert_local_qoyod_invoice(
     canon: dict, expected_total: float,
     send_date_iso: str, paid: bool,
     unpaid_status: str = "partial",
+    posted_payment_amount: Optional[float] = None,
 ) -> None:
     """Upsert the local `qoyod_invoices` ledger row for a Plan-B invoice.
 
@@ -1002,13 +1010,25 @@ async def _upsert_local_qoyod_invoice(
         invoice POST but before the payment POST. When the payment
         failed, the ledger lied and reconciliation broke.
       • Called EXACTLY ONCE per pipeline outcome:
-          - Payment succeeded → paid=True  (remaining=0)
+          - Payment succeeded → paid=True; the posted amount determines
+            whether the invoice is paid or partially paid.
           - Payment failed    → paid=False (remaining=expected_total)
       • Wrapped in a try/except that swallows DB errors — the قيود
         side is the source of truth. A local write-through failure
         must not surface as an HTTP 500 to the operator.
     """
     total = round(float(expected_total), 2)
+    if posted_payment_amount is not None:
+        paid_amount = min(total, max(0.0, _q2(posted_payment_amount)))
+    else:
+        paid_amount = total if paid else 0.0
+    remaining = _q2(total - paid_amount)
+    if paid and remaining <= 0.0:
+        invoice_status = "paid"
+    elif paid_amount > 0.0:
+        invoice_status = "partial"
+    else:
+        invoice_status = unpaid_status
     upsert_doc = {
         "user_id":            user_id,
         "qoyod_invoice_id":   str(invoice_id),
@@ -1019,9 +1039,9 @@ async def _upsert_local_qoyod_invoice(
         "customer_name":      (canon.get("customer") or {}).get("name"),
         "issue_date":         send_date_iso,
         "total":              total,
-        "paid_amount":        total if paid else 0.0,
-        "remaining":          0.0 if paid else total,
-        "status":             "paid" if paid else unpaid_status,
+        "paid_amount":        paid_amount,
+        "remaining":          remaining,
+        "status":             invoice_status,
         "source":             "plan_b_send",
         "last_sync_at":       datetime.now(timezone.utc),
     }
@@ -1085,8 +1105,12 @@ async def _retry_payment_only(
     )
 
     expected_total = actual_total
+    payment_amount = _resolve_payment_amount(
+        qoyod_total=actual_total,
+        salla_collected_total=salla_total,
+    )
     payment_payload = _build_payment_payload(
-        invoice_id=existing_invoice_id, amount=actual_total,
+        invoice_id=existing_invoice_id, amount=payment_amount,
         account_id=qoyod_account_id, reference=order_number,
         send_date_iso=send_date_iso)
     idem_pay = f"pay-retry-{order_number}"
@@ -1120,7 +1144,8 @@ async def _retry_payment_only(
         invoice_number=existing_invoice_number,
         order_number=order_number, canon=canon,
         expected_total=expected_total,
-        send_date_iso=send_date_iso, paid=True)
+        send_date_iso=send_date_iso, paid=True,
+        posted_payment_amount=payment_amount)
     await _finalize_lock(
         db, order_number=order_number, user_id=user_id,
         lock_id=lock_id, status="succeeded",
@@ -1151,8 +1176,8 @@ async def _retry_payment_only(
         "send_date":         send_date_iso,
         "salla_total":       _q2(canon.get("total_amount")),
         "expected_total":    expected_total,
-        "payment_amount":    expected_total,
-        "difference":        0.0,
+        "payment_amount":    payment_amount,
+        "difference":        _q2(actual_total - salla_total),
         "qoyod_account_id":  qoyod_account_id,
         "retry_payment_only": True,
         "steps": [{"step": "invoice_payment_retry_only",
@@ -1849,18 +1874,22 @@ async def _run_all_steps(
 
     # ── 4.5) Paid-method actual-total gate ────────────────────────
     # Accept exact parity or a one-halalah Qoyod rounding difference.
-    # The payment amount below uses Qoyod's persisted actual total so
-    # the invoice closes to a zero balance.
     actual_total = _validate_qoyod_actual_total(
         actual_total=actual_total,
         salla_total=salla_total,
         invoice_id=invoice_id,
     )
+    payment_amount = _resolve_payment_amount(
+        qoyod_total=actual_total,
+        salla_collected_total=salla_total,
+    )
 
     # ── 5) POST invoice payment ────────────────────────────────────
-    # Pay the Qoyod-persisted total, never the local simulation.
+    # Record only what Salla collected. If Qoyod rounded the invoice
+    # one halalah higher, Qoyod must retain that 0.01 balance and report
+    # the invoice as partially paid.
     payment_payload = _build_payment_payload(
-        invoice_id=invoice_id, amount=actual_total,
+        invoice_id=invoice_id, amount=payment_amount,
         account_id=qoyod_account_id, reference=order_number,
         send_date_iso=send_date_iso)
     idem_pay = f"pay-{order_number}"
@@ -1877,7 +1906,7 @@ async def _run_all_steps(
         await _upsert_local_qoyod_invoice(
             db, user_id=user_id, invoice_id=invoice_id,
             invoice_number=invoice_number, order_number=order_number,
-            canon=canon, expected_total=expected_total,
+            canon=canon, expected_total=actual_total,
             send_date_iso=send_date_iso, paid=False)
         await _finalize_lock(
             db, order_number=order_number, user_id=user_id,
@@ -1905,8 +1934,9 @@ async def _run_all_steps(
     await _upsert_local_qoyod_invoice(
         db, user_id=user_id, invoice_id=invoice_id,
         invoice_number=invoice_number, order_number=order_number,
-        canon=canon, expected_total=expected_total,
-        send_date_iso=send_date_iso, paid=True)
+        canon=canon, expected_total=actual_total,
+        send_date_iso=send_date_iso, paid=True,
+        posted_payment_amount=payment_amount)
 
     # ── 6) Success ─────────────────────────────────────────────────
     await _finalize_lock(
@@ -1938,8 +1968,8 @@ async def _run_all_steps(
         "send_date":     send_date_iso,
         "salla_total":   salla_total,
         "expected_total": expected_total,
-        "payment_amount": expected_total,
-        "difference":    diff,
+        "payment_amount": payment_amount,
+        "difference":    _q2(actual_total - salla_total),
         "qoyod_account_id": qoyod_account_id,
         "steps":         steps_trace,
     }
