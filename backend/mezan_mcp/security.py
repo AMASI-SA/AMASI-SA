@@ -300,6 +300,37 @@ def protected_resource_metadata() -> dict[str, Any]:
     return data
 
 
+def oauth_challenge(
+    *,
+    error: str | None = None,
+    error_description: str | None = None,
+) -> str:
+    """Build one safe RFC 9728 bearer challenge for HTTP or MCP tool metadata."""
+
+    def quoted(value: Any) -> str:
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\r", "")
+            .replace("\n", "")
+        )
+
+    parts = [
+        f'resource_metadata="{quoted(resource_metadata_url())}"',
+        (
+            'scope="'
+            f'{quoted(os.environ.get("MEZAN_MCP_REQUIRED_SCOPE", REQUIRED_SCOPE_DEFAULT))}'
+            '"'
+        ),
+    ]
+    if error:
+        parts.append(f'error="{quoted(error)}"')
+    if error_description:
+        parts.append(f'error_description="{quoted(error_description)}"')
+    return "Bearer " + ", ".join(parts)
+
+
 def _oauth_config() -> tuple[str, str, str, str, str]:
     issuer = (os.environ.get("MEZAN_MCP_OAUTH_ISSUER") or "").strip()
     audience = os.environ.get("MEZAN_MCP_OAUTH_AUDIENCE") or resource_url()
@@ -384,9 +415,9 @@ def _unauthorized(detail: str = "OAuth bearer token required") -> HTTPException:
         status_code=401,
         detail=detail,
         headers={
-            "WWW-Authenticate": (
-                f'Bearer resource_metadata="{resource_metadata_url()}", '
-                f'scope="{os.environ.get("MEZAN_MCP_REQUIRED_SCOPE", REQUIRED_SCOPE_DEFAULT)}"'
+            "WWW-Authenticate": oauth_challenge(
+                error="invalid_token",
+                error_description=detail,
             ),
             "Cache-Control": "no-store",
             "Pragma": "no-cache",

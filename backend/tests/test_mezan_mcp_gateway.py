@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from mezan_mcp.gateway import TOOL_DESCRIPTORS, make_mezan_mcp_router
@@ -22,6 +22,10 @@ from mezan_mcp.security import (
 )
 from mezan_mcp import security as mcp_security
 from mezan_mcp.services import MezanReadOnlyTools, safe_order
+from scripts import verify_mezan_mcp_gateway as deployment_verifier
+
+
+AUTH_HEADERS = {"Authorization": "Bearer test-token"}
 
 
 class FakeCursor:
@@ -112,6 +116,12 @@ def test_phase_one_exposes_exactly_eight_read_only_tools() -> None:
         assert tool["annotations"]["destructiveHint"] is False
         assert tool["annotations"]["idempotentHint"] is True
         assert tool["securitySchemes"][0]["type"] == "oauth2"
+        assert tool["securitySchemes"][0]["scopes"] == ["mezan:read"]
+        assert tool["_meta"]["securitySchemes"] == tool["securitySchemes"]
+        assert tool["outputSchema"] == {
+            "type": "object",
+            "additionalProperties": True,
+        }
         assert not any(
             forbidden in tool["name"]
             for forbidden in ("create", "send", "retry", "replay", "update", "delete")
@@ -323,6 +333,7 @@ async def test_mcp_initialize_discovery_and_health() -> None:
 
         health = await client.post(
             "/api/ai/mcp",
+            headers=AUTH_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": 3,
@@ -335,6 +346,64 @@ async def test_mcp_initialize_discovery_and_health() -> None:
         assert payload["structuredContent"]["access"] == "read-only"
         assert payload["structuredContent"]["qoyod_network_access"] is False
         assert db.command_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_public_discovery_never_authenticates_or_reads_the_database() -> None:
+    db = FakeDatabase()
+    auth_calls = 0
+
+    async def authentication_must_not_run(_request: Any) -> Principal:
+        nonlocal auth_calls
+        auth_calls += 1
+        raise AssertionError("Public MCP discovery must not authenticate")
+
+    app = FastAPI()
+    app.include_router(
+        make_mezan_mcp_router(db, auth_dependency=authentication_must_not_run)
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="https://preview.example"
+    ) as client:
+        initialize = await client.post(
+            "/api/ai/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        )
+        discovered = await client.post(
+            "/api/ai/mcp",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+        )
+        ping = await client.post(
+            "/api/ai/mcp",
+            json={"jsonrpc": "2.0", "id": 3, "method": "ping", "params": {}},
+        )
+        initialized = await client.post(
+            "/api/ai/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {},
+            },
+        )
+
+    assert initialize.status_code == 200
+    assert len(discovered.json()["result"]["tools"]) == 8
+    assert ping.status_code == 200
+    assert initialized.status_code == 202
+    assert auth_calls == 0
+    assert db.command_calls == 0
+    assert sum(
+        collection.reads
+        for collection in (
+            db.unified_orders,
+            db.salla_integrations,
+            db.salla_sync_logs,
+            db.integration_inbox,
+            db.qoyod_invoices,
+            db.import_jobs,
+            db.webhook_parse_failures,
+        )
+    ) == 0
 
 
 @pytest.mark.asyncio
@@ -366,6 +435,7 @@ async def test_mcp_transport_is_post_only_and_metadata_is_public(
         options_response = await client.options("/api/ai/mcp")
 
     assert metadata.status_code == 200
+    assert metadata.headers["content-type"].startswith("application/json")
     assert metadata.headers["cache-control"] == "no-store"
     assert metadata.headers["x-content-type-options"] == "nosniff"
     assert metadata.json()["resource"] == "https://preview.mezansalla.com/api/ai/mcp"
@@ -395,6 +465,7 @@ async def test_mcp_rejects_oversized_requests_and_invalid_tool_arguments() -> No
         )
         invalid = await client.post(
             "/api/ai/mcp",
+            headers=AUTH_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": 9,
@@ -424,37 +495,218 @@ async def test_order_read_is_tenant_isolated() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_requires_oauth_when_no_test_auth_is_injected(
+async def test_tools_call_returns_chatgpt_oauth_challenge_before_any_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     metadata_url = (
         "https://preview.example/api/.well-known/oauth-protected-resource"
     )
     monkeypatch.setenv("MEZAN_MCP_METADATA_URL", metadata_url)
+    db = FakeDatabase()
     app = FastAPI()
-    app.include_router(make_mezan_mcp_router(FakeDatabase()))
+    app.include_router(make_mezan_mcp_router(db))
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://preview.example") as client:
-        response = await client.post(
+        discovered = await client.post(
             "/api/ai/mcp",
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
+        response = await client.post(
+            "/api/ai/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "mezan_health", "arguments": {}},
+            },
+        )
+        protected_order = await client.post(
+            "/api/ai/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "mezan_get_order",
+                    "arguments": {"order_number": "safe-test-order"},
+                },
+            },
+        )
+
+    assert discovered.status_code == 200
+    assert len(discovered.json()["result"]["tools"]) == 8
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["isError"] is True
+    assert "structuredContent" not in result
+    challenges = result["_meta"]["mcp/www_authenticate"]
+    assert len(challenges) == 1
+    assert f'resource_metadata="{metadata_url}"' in challenges[0]
+    assert 'scope="mezan:read"' in challenges[0]
+    assert 'error="invalid_token"' in challenges[0]
+    assert 'error_description="' in challenges[0]
+    assert protected_order.status_code == 200
+    assert protected_order.json()["result"]["isError"] is True
+    assert db.command_calls == 0
+    collections = (
+        db.unified_orders,
+        db.salla_integrations,
+        db.salla_sync_logs,
+        db.integration_inbox,
+        db.qoyod_invoices,
+        db.import_jobs,
+        db.webhook_parse_failures,
+    )
+    assert sum(collection.reads for collection in collections) == 0
+
+
+@pytest.mark.asyncio
+async def test_supplied_invalid_token_remains_http_401() -> None:
+    db = FakeDatabase()
+
+    async def reject_invalid_token(_request: Any) -> Principal:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired OAuth bearer token",
+            headers={
+                "WWW-Authenticate": (
+                    'Bearer resource_metadata="https://preview.example/'
+                    '.well-known/oauth-protected-resource", '
+                    'scope="mezan:read"'
+                )
+            },
+        )
+
+    app = FastAPI()
+    app.include_router(
+        make_mezan_mcp_router(db, auth_dependency=reject_invalid_token)
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="https://preview.example"
+    ) as client:
+        response = await client.post(
+            "/api/ai/mcp",
+            headers={"Authorization": "Bearer expired-token"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "mezan_health", "arguments": {}},
+            },
+        )
+
     assert response.status_code == 401
-    assert f'resource_metadata="{metadata_url}"' in response.headers[
-        "www-authenticate"
-    ]
+    assert "resource_metadata=" in response.headers["www-authenticate"]
+    assert db.command_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_oauth_configuration_failure_is_not_disguised_as_login_prompt() -> None:
+    db = FakeDatabase()
+
+    async def oauth_unavailable(_request: Any) -> Principal:
+        raise HTTPException(status_code=503, detail="OAuth configuration unavailable")
+
+    app = FastAPI()
+    app.include_router(
+        make_mezan_mcp_router(db, auth_dependency=oauth_unavailable)
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="https://preview.example"
+    ) as client:
+        response = await client.post(
+            "/api/ai/mcp",
+            headers=AUTH_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "mezan_health", "arguments": {}},
+            },
+        )
+
+    assert response.status_code == 503
+    assert "mcp/www_authenticate" not in response.text
+    assert db.command_calls == 0
 
 
 @pytest.mark.asyncio
 async def test_mcp_rate_limit_is_enforced() -> None:
-    app = make_app(FakeDatabase(), limit=1)
+    db = FakeDatabase()
+    app = make_app(db, limit=1)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://preview.example") as client:
         first = await client.post(
             "/api/ai/mcp",
-            json={"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}},
+            headers=AUTH_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "mezan_health", "arguments": {}},
+            },
         )
         second = await client.post(
             "/api/ai/mcp",
-            json={"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}},
+            headers=AUTH_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "mezan_health", "arguments": {}},
+            },
         )
     assert first.status_code == 200
     assert second.status_code == 429
+    assert db.command_calls == 1
+
+
+def test_deployment_verifier_requires_dcr_public_clients_and_pkce_s256(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    issuer = "https://identity.example/"
+    discovery = {
+        "issuer": issuer,
+        "authorization_endpoint": "https://identity.example/authorize",
+        "token_endpoint": "https://identity.example/oauth/token",
+        "registration_endpoint": "https://identity.example/oidc/register",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none"],
+    }
+
+    def fake_request(
+        url: str,
+        **_kwargs: Any,
+    ) -> tuple[int, dict[str, str], dict[str, Any]]:
+        assert url == "https://identity.example/.well-known/openid-configuration"
+        return 200, {"content-type": "application/json"}, discovery
+
+    monkeypatch.setattr(deployment_verifier, "_request_json", fake_request)
+    deployment_verifier._verify_authorization_server_contract(issuer)
+
+
+def test_deployment_verifier_rejects_incomplete_pkce_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        deployment_verifier,
+        "_authorization_server_metadata",
+        lambda _issuer: {
+            "issuer": "https://identity.example/",
+            "authorization_endpoint": "https://identity.example/authorize",
+            "token_endpoint": "https://identity.example/oauth/token",
+            "registration_endpoint": "https://identity.example/oidc/register",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "code_challenge_methods_supported": ["plain"],
+            "token_endpoint_auth_methods_supported": ["none"],
+        },
+    )
+
+    with pytest.raises(
+        deployment_verifier.VerificationError,
+        match="PKCE S256",
+    ):
+        deployment_verifier._verify_authorization_server_contract(
+            "https://identity.example/"
+        )
