@@ -54,6 +54,11 @@ _LAST_ROUND: dict[str, Any] = {}
 # and other possibly systemic failures must continue to stop the worker.
 _PER_ORDER_MANUAL_REVIEW_CODES = frozenset({
     "qoyod_actual_total_mismatch",
+    "qoyod_payload_precision_unsupported",
+    "qoyod_preflight_total_mismatch",
+    "qoyod_preflight_payload_invalid",
+    "totals_mismatch",
+    "rounding_adjustment_product_missing",
 })
 
 
@@ -275,6 +280,52 @@ async def _trip_circuit_breaker(
     )
 
 
+async def _open_quarantined_order_numbers(
+    db, order_numbers: list[str],
+) -> set[str]:
+    if not order_numbers:
+        return set()
+    result: set[str] = set()
+    cursor = db.qoyod_manual_auto_quarantines.find(
+        {
+            "user_id": _TENANT,
+            "order_number": {"$in": order_numbers},
+            "status": "open",
+        },
+        {"_id": 0, "order_number": 1},
+    )
+    async for row in cursor:
+        result.add(str(row.get("order_number") or ""))
+    return result
+
+
+async def _quarantine_order(
+    db, *, order_number: str, exc: ManualSendRefused, run_id: str,
+) -> None:
+    """Persist an order-local refusal without disabling the worker."""
+    now = _now()
+    await db.qoyod_manual_auto_quarantines.update_one(
+        {"_id": f"{_TENANT}:{order_number}"},
+        {
+            "$set": {
+                "user_id": _TENANT,
+                "order_number": order_number,
+                "status": "open",
+                "code": exc.code,
+                "message": exc.message,
+                "detail": exc.extra,
+                "run_id": run_id,
+                "last_seen_at": now,
+            },
+            "$setOnInsert": {
+                "first_seen_at": now,
+            },
+            "$inc": {"attempt_count": 1},
+        },
+        upsert=True,
+    )
+
+
 async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
@@ -313,10 +364,19 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             limit=max(25, batch_limit * 5),
             status="completed",
         )
-        candidates = [
+        eligible_candidates = [
             row for row in (pending.get("orders") or [])
             if str(row.get("salla_status") or "").strip()
             in {"تم التنفيذ", "completed"}
+        ]
+        quarantined = await _open_quarantined_order_numbers(
+            db,
+            [str(row.get("order_number") or "")
+             for row in eligible_candidates],
+        )
+        candidates = [
+            row for row in eligible_candidates
+            if str(row.get("order_number") or "") not in quarantined
         ][:max(1, int(batch_limit))]
 
         if not candidates:
@@ -387,6 +447,12 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     })
                     continue
                 if exc.code in _PER_ORDER_MANUAL_REVIEW_CODES:
+                    await _quarantine_order(
+                        db,
+                        order_number=order_number,
+                        exc=exc,
+                        run_id=run_id,
+                    )
                     results.append({
                         "order_number": order_number,
                         "outcome": "manual_review",
