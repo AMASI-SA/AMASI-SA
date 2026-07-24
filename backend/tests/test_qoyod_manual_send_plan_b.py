@@ -22,11 +22,67 @@ import pytest
 from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
+    _preflight_qoyod_invoice_payload,
 )
 from integrations.qoyod.worker import _one_round
 
 
 TENANT = "main"
+
+
+def _invoice_payload(*, discount=0, unit_price=100, tax_percent=15):
+    return {
+        "invoice": {
+            "line_items": [{
+                "quantity": 1,
+                "unit_price": unit_price,
+                "discount": discount,
+                "tax_percent": tax_percent,
+            }],
+        },
+    }
+
+
+def test_qoyod_preflight_applies_qoyod_rounding_before_write():
+    payload = {"invoice": {"line_items": [
+        {
+            "quantity": 1,
+            "unit_price": 100,
+            "discount": 24.169,
+            "tax_percent": 15,
+        }
+        for _ in range(3)
+    ]}}
+
+    with pytest.raises(ManualSendRefused) as exc:
+        _preflight_qoyod_invoice_payload(
+            payload,
+            salla_total=261.63,
+        )
+
+    assert exc.value.code == "qoyod_preflight_total_mismatch"
+    assert exc.value.extra["qoyod_write_performed"] is False
+
+
+def test_qoyod_preflight_rejects_more_than_one_halalah_difference():
+    with pytest.raises(ManualSendRefused) as exc:
+        _preflight_qoyod_invoice_payload(
+            _invoice_payload(discount=0, unit_price=100, tax_percent=0),
+            salla_total=100.02,
+        )
+
+    assert exc.value.code == "qoyod_preflight_total_mismatch"
+    assert exc.value.extra["difference"] == -0.02
+    assert exc.value.extra["qoyod_write_performed"] is False
+
+
+def test_qoyod_preflight_keeps_one_halalah_tolerance():
+    result = _preflight_qoyod_invoice_payload(
+        _invoice_payload(discount=0, unit_price=100, tax_percent=0),
+        salla_total=100.01,
+    )
+
+    assert result["difference"] == -0.01
 
 
 @pytest.fixture

@@ -105,6 +105,141 @@ def _within_amount_tolerance(value: Any) -> bool:
     return difference.is_finite() and abs(difference) <= _AMOUNT_TOLERANCE
 
 
+def _strict_decimal(value: Any, *, field: str) -> Decimal:
+    """Parse a Qoyod payload number without silently coercing bad input."""
+    try:
+        result = Decimal(str(value))
+    except Exception as exc:
+        raise ManualSendRefused(
+            "qoyod_preflight_payload_invalid",
+            "تعذّر التحقق من قيم فاتورة قيود قبل الإرسال.",
+            {"field": field, "value": value},
+        ) from exc
+    if not result.is_finite() or result < 0:
+        raise ManualSendRefused(
+            "qoyod_preflight_payload_invalid",
+            "تحتوي فاتورة قيود على قيمة غير صالحة قبل الإرسال.",
+            {"field": field, "value": value},
+        )
+    return result
+
+
+def _preflight_qoyod_invoice_payload(
+    payload: dict, *, salla_total: float,
+) -> dict:
+    """Fail before any Qoyod write when its documented rounding will drift.
+
+    Qoyod accepts monetary values at two decimal places.  Sending the
+    three-decimal LRM adjustments used by older Mezan builds lets Qoyod round
+    them differently and leaves an invoice without a receipt.  This guard
+    validates the *actual outgoing payload*, rounds its monetary inputs to
+    Qoyod's supported two decimals, and reproduces Qoyod's document-level
+    subtotal/tax rounding before a customer, product, or invoice is created.
+    """
+    invoice = payload.get("invoice") if isinstance(payload, dict) else None
+    lines = invoice.get("line_items") if isinstance(invoice, dict) else None
+    if not isinstance(lines, list) or not lines:
+        raise ManualSendRefused(
+            "qoyod_preflight_payload_invalid",
+            "لا تحتوي فاتورة قيود على بنود قابلة للتحقق قبل الإرسال.",
+        )
+
+    subtotal_raw = Decimal("0")
+    tax_raw = Decimal("0")
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "يوجد بند غير صالح في فاتورة قيود قبل الإرسال.",
+                {"line_index": index},
+            )
+        quantity = _strict_decimal(
+            line.get("quantity"), field=f"line_items[{index}].quantity")
+        if quantity <= 0:
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "كمية بند الفاتورة يجب أن تكون أكبر من صفر.",
+                {"line_index": index, "quantity": line.get("quantity")},
+            )
+        unit_price = _strict_decimal(
+            line.get("unit_price"),
+            field=f"line_items[{index}].unit_price",
+        )
+        discount = _strict_decimal(
+            line.get("discount") or 0,
+            field=f"line_items[{index}].discount",
+        )
+        tax_percent = _strict_decimal(
+            line.get("tax_percent") or 0,
+            field=f"line_items[{index}].tax_percent",
+        )
+        line_net = (
+            quantity
+            * unit_price.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+            - discount.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+        )
+        if line_net < 0:
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "خصم بند الفاتورة أكبر من قيمته.",
+                {"line_index": index},
+            )
+        subtotal_raw += line_net
+        tax_raw += line_net * tax_percent / Decimal("100")
+
+    subtotal = subtotal_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    tax = tax_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    predicted_total = (subtotal + tax).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP)
+    expected = Decimal(str(_q2(salla_total)))
+    difference = (predicted_total - expected).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP)
+    if abs(difference) > _AMOUNT_TOLERANCE:
+        raise ManualSendRefused(
+            "qoyod_preflight_total_mismatch",
+            "إجمالي قيود المتوقع يختلف عن إجمالي سلة بأكثر من 0.01 "
+            "ريال؛ عُزل الطلب قبل إنشاء الفاتورة.",
+            {
+                "salla_total": float(expected),
+                "qoyod_predicted_total": float(predicted_total),
+                "difference": float(difference),
+                "allowed_tolerance": 0.01,
+                "requires_manual_review": True,
+                "qoyod_write_performed": False,
+            },
+        )
+    return {
+        "salla_total": float(expected),
+        "qoyod_predicted_total": float(predicted_total),
+        "difference": float(difference),
+    }
+
+
+def _preflight_qoyod_invoice(
+    *, canon: dict, settings: dict, salla_total: float,
+) -> dict:
+    """Build and validate the invoice before creating any Qoyod resource."""
+    line_resolutions: dict[str, int] = {}
+    for index, item in enumerate(canon.get("items") or [], start=1):
+        sku = str((item or {}).get("sku") or "").strip()
+        if not sku:
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "يوجد منتج بلا SKU؛ عُزل الطلب قبل الإرسال إلى قيود.",
+                {"item_index": index - 1},
+            )
+        line_resolutions.setdefault(sku, index)
+    payload, _, _ = _build_invoice_payload(
+        canon=canon,
+        contact_id=1,
+        line_resolutions=line_resolutions,
+        settings=settings,
+        send_date_iso=_riyadh_today_iso(),
+    )
+    return _preflight_qoyod_invoice_payload(
+        payload, salla_total=salla_total)
+
+
 def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
     """Overlay trusted Orders V2 facts without mutating the inbox snapshot.
 
@@ -1409,6 +1544,17 @@ async def manual_send_one(
                     "resolved_raw": qoyod_account_id_raw,
                 },
             )
+
+    # ── Guard G2a — Qoyod rounding preflight before ANY write ─────
+    # Existing Plan-B invoices use the payment-only recovery path and must
+    # not be rebuilt. New sends are simulated using the exact outgoing
+    # payload before credentials/client/locks/customer/product mutations.
+    if not manual_inv_id_existing:
+        _preflight_qoyod_invoice(
+            canon=canon,
+            settings=settings,
+            salla_total=salla_total,
+        )
 
     # ── Load Qoyod credentials ─────────────────────────────────────
     api_key = await get_api_key(db, user_id)
