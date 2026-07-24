@@ -174,6 +174,10 @@ class _FakeDB:
     def __init__(self, inbox=None, invoices=None):
         self.integration_inbox = _FakeColl(inbox or [])
         self.qoyod_invoices = _FakeColl(invoices or [])
+        # The production repository checks the canonical order store
+        # before falling back to integration_inbox. These fixtures
+        # intentionally exercise the fallback path.
+        self.unified_orders = _FakeColl([])
 
 
 def _run(coro):
