@@ -133,3 +133,153 @@ async def test_circuit_breaker_disables_automatic_sending():
     assert persisted["plan_b_auto_send_armed_at"] is None
     assert persisted["plan_b_auto_send_disabled_reason"] == "circuit_breaker"
     assert persisted["plan_b_auto_send_last_error"]["run_id"] == "run-1"
+
+
+class _AutoRunsCollection:
+    def __init__(self):
+        self.inserted = []
+        self.updated = []
+
+    async def insert_one(self, document):
+        self.inserted.append(document)
+
+    async def update_one(self, selector, update):
+        self.updated.append((selector, update))
+        return _UpdateResult()
+
+
+class _RunDb:
+    def __init__(self):
+        self.qoyod_manual_auto_runs = _AutoRunsCollection()
+
+
+def _candidate(order_number):
+    return {
+        "order_number": order_number,
+        "salla_status": "تم التنفيذ",
+    }
+
+
+async def _prepare_run(monkeypatch, *, candidates, send_one, trip_breaker):
+    async def fake_settings(db):
+        return _ready_settings()
+
+    async def fake_acquire(db):
+        return "lease-test"
+
+    async def fake_release(db, owner):
+        assert owner == "lease-test"
+
+    async def fake_pending(db, **kwargs):
+        assert kwargs["status"] == "completed"
+        return {"ok": True, "orders": candidates}
+
+    async def fake_refresh(db, *, orders_user_id, order_number):
+        assert orders_user_id == "orders-user"
+        return True, {
+            "ok": True,
+            "found": True,
+            "plan_b_status_snapshot": {"status_native": "تم التنفيذ"},
+        }
+
+    monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
+    monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
+    monkeypatch.setattr(auto_send, "_release_lease", fake_release)
+    monkeypatch.setattr(auto_send, "list_pending_orders", fake_pending)
+    monkeypatch.setattr(
+        auto_send, "_refresh_and_verify_salla_status", fake_refresh
+    )
+    monkeypatch.setattr(auto_send, "manual_send_one", send_one)
+    monkeypatch.setattr(auto_send, "_trip_circuit_breaker", trip_breaker)
+
+
+@pytest.mark.asyncio
+async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
+    monkeypatch,
+):
+    calls = []
+    breaker_calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        assert user_id == "main"
+        assert orders_user_id == "orders-user"
+        assert actor.startswith("auto-plan-b:qoyod-auto-")
+        if order_number == "273811870":
+            raise ManualSendRefused(
+                "qoyod_actual_total_mismatch",
+                "إجمالي قيود الفعلي يختلف عن إجمالي سلة",
+                {
+                    "invoice_id": 900,
+                    "difference": 0.02,
+                    "payment_created": False,
+                    "requires_manual_review": True,
+                },
+            )
+        return {
+            "invoice_only": False,
+            "invoice_id": 901,
+            "payment_id": 902,
+        }
+
+    async def fake_trip(db, **kwargs):
+        breaker_calls.append(kwargs)
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("273811870"), _candidate("273811871")],
+        send_one=fake_send,
+        trip_breaker=fake_trip,
+    )
+
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["273811870", "273811871"]
+    assert breaker_calls == []
+    assert result["ok"] is True
+    assert result["status"] == "succeeded"
+    assert result["sent_count"] == 1
+    assert result["manual_review_count"] == 1
+    assert result["results"][0]["outcome"] == "manual_review"
+    assert result["results"][0]["detail"]["invoice_id"] == 900
+    assert result["results"][1]["outcome"] == "sent"
+    assert db.qoyod_manual_auto_runs.updated[0][1]["$set"]["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_systemic_error_still_trips_breaker_and_stops_batch(monkeypatch):
+    calls = []
+    breaker_calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        raise ManualSendRefused(
+            "qoyod_http_error",
+            "تعذر الاتصال بقيود",
+            {"status_code": 503},
+        )
+
+    async def fake_trip(db, **kwargs):
+        breaker_calls.append(kwargs)
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("273811870"), _candidate("273811871")],
+        send_one=fake_send,
+        trip_breaker=fake_trip,
+    )
+
+    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+
+    assert calls == ["273811870"]
+    assert len(breaker_calls) == 1
+    assert breaker_calls[0]["code"] == "qoyod_http_error"
+    assert result["ok"] is False
+    assert result["status"] == "stopped_on_error"
+    assert result["sent_count"] == 0
+    assert result["manual_review_count"] == 0
