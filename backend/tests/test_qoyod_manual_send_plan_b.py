@@ -246,7 +246,8 @@ async def test_send_happy_path_creates_invoice_and_payment(db):
     async def _create_invoice(payload, *, idem):
         calls["invoice"] += 1
         return {"invoice": {"id": 501, "number": "INV-501",
-                             "reference": payload["invoice"]["reference"]}}
+                             "reference": payload["invoice"]["reference"],
+                             "total": 115.0}}
 
     async def _create_payment(payload, *, idem):
         calls["payment"] += 1
@@ -465,7 +466,8 @@ async def test_send_quantises_and_uses_riyadh_send_date(db):
     async def _create_invoice(payload, *, idem):
         captured["invoice_payload"] = payload
         return {"invoice": {"id": 601, "number": "INV-601",
-                             "reference": payload["invoice"]["reference"]}}
+                             "reference": payload["invoice"]["reference"],
+                             "total": 137.63}}
 
     async def _create_payment(payload, *, idem):
         captured["payment_payload"] = payload
