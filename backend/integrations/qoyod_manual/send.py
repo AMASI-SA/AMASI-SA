@@ -1493,6 +1493,7 @@ async def manual_send_one(
             lock_id=lock_id, salla_total=salla_total,
             qoyod_account_id=qoyod_account_id,
             is_cod=is_cod,
+            payment_method=payment_method,
         )
     except ManualSendRefused as exc:
         await _finalize_lock(
@@ -1518,6 +1519,7 @@ async def _run_all_steps(
     db, *, client: ManualQoyodClient, row: dict, canon: dict,
     settings: dict, user_id: str, order_number: str, lock_id: str,
     salla_total: float, qoyod_account_id: int, is_cod: bool,
+    payment_method: Optional[str],
 ) -> dict:
     steps_trace: list[dict] = []
 
