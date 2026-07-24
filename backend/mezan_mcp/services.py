@@ -236,14 +236,125 @@ async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
     return rows
 
 
+def _canonical_inbox_order(
+    row: Mapping[str, Any],
+    *,
+    requested_order_number: str,
+) -> Optional[dict[str, Any]]:
+    """Build the safe order source shape from a normalized inbox row.
+
+    Qoyod/Salla webhook orders are normalized into
+    ``integration_inbox.canonical_payload`` and are not necessarily copied to
+    ``unified_orders``.  Keep the conversion explicit so customer/address
+    fields from the canonical DTO never become part of the MCP order view.
+    """
+    canonical = row.get("canonical_payload")
+    if not isinstance(canonical, Mapping):
+        return None
+
+    identities = {
+        str(value).strip()
+        for value in (
+            row.get("salla_order_number"),
+            row.get("salla_order_id"),
+            canonical.get("order_number"),
+            canonical.get("order_id"),
+            canonical.get("source_order_id"),
+        )
+        if value not in (None, "")
+    }
+    if requested_order_number not in identities:
+        return None
+
+    return {
+        "order_number": str(
+            canonical.get("order_number")
+            or canonical.get("order_id")
+            or row.get("salla_order_number")
+            or requested_order_number
+        ),
+        "salla_order_id": (
+            canonical.get("source_order_id")
+            or row.get("salla_order_id")
+            or canonical.get("order_id")
+        ),
+        "order_date": canonical.get("order_date"),
+        "order_status": canonical.get("order_status"),
+        "order_status_native": canonical.get("order_status_native"),
+        "payment_method": canonical.get("payment_method"),
+        "currency": canonical.get("currency") or "SAR",
+        "subtotal": canonical.get("subtotal"),
+        "discount": canonical.get("discount_amount"),
+        "shipping_cost": canonical.get("shipping_amount"),
+        "tax": canonical.get("tax_amount"),
+        "total_amount": canonical.get("total_amount"),
+        "items": canonical.get("items") or [],
+        "data_source": "integration_inbox",
+    }
+
+
 async def _find_order(db: ReadOnlyDatabase, tenant_id: str, order_number: str) -> dict[str, Any]:
+    normalized_order_number = str(order_number).strip()
     order = await db.unified_orders.find_one(
-        {"user_id": tenant_id, "order_number": str(order_number).strip()},
+        {"user_id": tenant_id, "order_number": normalized_order_number},
         {"_id": 0},
     )
-    if not order:
-        raise LookupError("Order was not found for the authenticated tenant")
-    return order
+    if order:
+        return order
+
+    # Orders received by the Qoyod/Salla webhook live in integration_inbox
+    # even when no unified_orders projection exists. Read the newest
+    # normalized copy only; this path remains behind the tenant filter and the
+    # production ReadOnlyDatabase facade.
+    cursor = db.integration_inbox.find(
+        {
+            "user_id": tenant_id,
+            "canonical_payload.order_id": {"$exists": True},
+            "$or": [
+                {"salla_order_number": normalized_order_number},
+                {"salla_order_id": normalized_order_number},
+                {"canonical_payload.order_number": normalized_order_number},
+                {"canonical_payload.order_id": normalized_order_number},
+                {"canonical_payload.source_order_id": normalized_order_number},
+            ],
+        },
+        {
+            "_id": 0,
+            "user_id": 1,
+            "received_at": 1,
+            "salla_order_id": 1,
+            "salla_order_number": 1,
+            "canonical_payload.order_id": 1,
+            "canonical_payload.source_order_id": 1,
+            "canonical_payload.order_number": 1,
+            "canonical_payload.order_status": 1,
+            "canonical_payload.order_status_native": 1,
+            "canonical_payload.order_date": 1,
+            "canonical_payload.currency": 1,
+            "canonical_payload.subtotal": 1,
+            "canonical_payload.tax_amount": 1,
+            "canonical_payload.shipping_amount": 1,
+            "canonical_payload.discount_amount": 1,
+            "canonical_payload.total_amount": 1,
+            "canonical_payload.payment_method": 1,
+            "canonical_payload.items": 1,
+        },
+    )
+    if hasattr(cursor, "sort"):
+        cursor = cursor.sort("received_at", -1)
+    for row in await _to_list(cursor, 25):
+        # Defence in depth for tests/adapters that do not implement Mongo's
+        # query filter themselves.
+        if str(row.get("user_id") or "").strip() != tenant_id:
+            continue
+        candidate = _canonical_inbox_order(
+            row,
+            requested_order_number=normalized_order_number,
+        )
+        if candidate:
+            return candidate
+
+    raise LookupError("Order was not found for the authenticated tenant")
 
 
 def _salla_order_id(order: Mapping[str, Any]) -> Optional[str]:
