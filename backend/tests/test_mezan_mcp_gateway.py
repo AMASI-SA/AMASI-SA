@@ -36,6 +36,21 @@ class FakeCursor:
         self.rows = self.rows[:value]
         return self
 
+    def sort(self, key: str, direction: int) -> "FakeCursor":
+        def nested(row: dict[str, Any]) -> Any:
+            value: Any = row
+            for part in key.split("."):
+                if not isinstance(value, dict):
+                    return None
+                value = value.get(part)
+            return value
+
+        self.rows.sort(
+            key=lambda row: str(nested(row) or ""),
+            reverse=direction < 0,
+        )
+        return self
+
     async def to_list(self, value: int) -> list[dict[str, Any]]:
         return self.rows[:value]
 
@@ -492,6 +507,163 @@ async def test_order_read_is_tenant_isolated() -> None:
     tools = MezanReadOnlyTools(db)
     with pytest.raises(LookupError):
         await tools.mezan_get_order("tenant-1", {"order_number": "9001"})
+
+
+@pytest.mark.asyncio
+async def test_order_read_falls_back_to_latest_normalized_inbox_order() -> None:
+    db = FakeDatabase()
+    db.integration_inbox.rows = [
+        {
+            "user_id": "tenant-1",
+            "received_at": "2026-07-22T10:00:00Z",
+            "salla_order_number": "273317504",
+            "canonical_payload": None,
+            "raw_payload": {
+                "customer": {
+                    "name": "must never be returned",
+                    "phone": "+966500000000",
+                }
+            },
+        },
+        {
+            "user_id": "tenant-1",
+            "received_at": "2026-07-20T10:00:00Z",
+            "salla_order_number": "273317504",
+            "canonical_payload": {
+                "order_id": "273317504",
+                "order_number": "273317504",
+                "order_status": "completed",
+                "order_status_native": "تم التنفيذ",
+                "order_date": "2026-07-20T09:00:00Z",
+                "currency": "SAR",
+                "subtotal": 310.0,
+                "discount_amount": 59.68,
+                "shipping_amount": 24.07,
+                "tax_amount": 21.96,
+                "total_amount": 296.33,
+                "payment_method": "credit_card",
+                "customer": {
+                    "name": "private customer",
+                    "phone": "+966500000000",
+                    "email": "private@example.com",
+                },
+                "items": [
+                    {
+                        "sku": "AMS11889",
+                        "name": "قلادة روز بالاسم",
+                        "quantity": 1,
+                        "unit_price": 100,
+                        "total": 87.20,
+                    }
+                ],
+            },
+        },
+        {
+            "user_id": "tenant-1",
+            "received_at": "2026-07-21T18:15:13Z",
+            "salla_order_number": "273317504",
+            "canonical_payload": {
+                "order_id": "273317504",
+                "source_order_id": "salla-internal-1",
+                "order_number": "273317504",
+                "order_status": "completed",
+                "order_status_native": "تم التنفيذ",
+                "order_date": "2026-07-21T18:00:00Z",
+                "currency": "SAR",
+                "subtotal": 310.0,
+                "discount_amount": 59.68,
+                "shipping_amount": 24.07,
+                "tax_amount": 21.96,
+                "total_amount": 296.35,
+                "payment_method": "credit_card",
+                "items": [
+                    {
+                        "sku": "AMS11889",
+                        "name": "قلادة روز بالاسم",
+                        "quantity": 1,
+                        "unit_price": 100,
+                        "total": 87.21,
+                    }
+                ],
+            },
+        },
+    ]
+
+    result = await MezanReadOnlyTools(db).mezan_get_order(
+        "tenant-1", {"order_number": "273317504"}
+    )
+
+    assert result["order_number"] == "273317504"
+    assert result["status"] == "تم التنفيذ"
+    assert result["total_amount"] == 296.35
+    assert result["discount"] == 59.68
+    assert result["shipping_cost"] == 24.07
+    assert result["tax"] == 21.96
+    assert result["source"] == "integration_inbox"
+    assert result["items"][0]["sku"] == "AMS11889"
+    assert "customer" not in result
+    assert "phone" not in str(result)
+    assert "email" not in str(result)
+    assert db.integration_inbox.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_order_read_prefers_unified_order_without_reading_inbox() -> None:
+    db = FakeDatabase()
+    db.unified_orders.rows = [
+        {
+            "user_id": "tenant-1",
+            "order_number": "273317504",
+            "order_status": "completed",
+            "total_amount": 296.35,
+            "data_source": "unified_orders",
+        }
+    ]
+    db.integration_inbox.rows = [
+        {
+            "user_id": "tenant-1",
+            "received_at": "2026-07-22T10:00:00Z",
+            "salla_order_number": "273317504",
+            "canonical_payload": {
+                "order_id": "273317504",
+                "total_amount": 999.99,
+            },
+        }
+    ]
+
+    result = await MezanReadOnlyTools(db).mezan_get_order(
+        "tenant-1", {"order_number": "273317504"}
+    )
+
+    assert result["total_amount"] == 296.35
+    assert result["source"] == "unified_orders"
+    assert db.integration_inbox.reads == 0
+
+
+@pytest.mark.asyncio
+async def test_order_inbox_fallback_remains_tenant_isolated() -> None:
+    db = FakeDatabase()
+    db.integration_inbox.rows = [
+        {
+            "user_id": "tenant-2",
+            "received_at": "2026-07-21T18:15:13Z",
+            "salla_order_number": "273317504",
+            "canonical_payload": {
+                "order_id": "273317504",
+                "order_number": "273317504",
+                "order_status": "completed",
+                "order_status_native": "تم التنفيذ",
+                "total_amount": 296.35,
+                "items": [],
+            },
+        }
+    ]
+
+    with pytest.raises(LookupError):
+        await MezanReadOnlyTools(db).mezan_get_order(
+            "tenant-1", {"order_number": "273317504"}
+        )
+    assert db.integration_inbox.writes == 0
 
 
 @pytest.mark.asyncio
