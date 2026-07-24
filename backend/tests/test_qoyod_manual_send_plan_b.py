@@ -313,6 +313,80 @@ async def test_send_happy_path_creates_invoice_and_payment(db):
 
 
 # ────────────────────────────────────────────────────────────────────
+# T5b — COD invoice-only success must return cleanly to auto-send.
+#
+# Regression for order 273714881: Qoyod accepted the invoice and the
+# send lock was finalised as succeeded, but the success response then
+# referenced an out-of-scope `payment_method`.  That late NameError made
+# auto-send trip its circuit breaker even though the external write had
+# already succeeded.
+# ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_cod_invoice_only_success_returns_without_late_exception(db):
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(
+            order_number="273714881",
+            total=133.73,
+            sku="SKU-COD",
+            payment_method="cash_on_delivery",
+        )
+    )
+
+    payment_post = AsyncMock()
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_invoice_by_reference",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_customers_by_phone",
+        new=AsyncMock(return_value=[{"id": 33}]),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_product_by_sku",
+        new=AsyncMock(return_value={"id": 77, "sku": "SKU-COD"}),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice",
+        new=AsyncMock(
+            return_value={
+                "invoice": {
+                    "id": 865,
+                    "number": "INV-865",
+                    "reference": "273714881",
+                    "total": 133.73,
+                }
+            }
+        ),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=payment_post,
+    ):
+        result = await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="273714881",
+            actor="auto-plan-b:test",
+        )
+
+    assert result["ok"] is True
+    assert result["invoice_id"] == 865
+    assert result["payment_id"] is None
+    assert result["invoice_only"] is True
+    assert result["payment_method"] == "cash_on_delivery"
+    payment_post.assert_not_awaited()
+
+    lock = await db.qoyod_manual_send_locks.find_one(
+        {"order_number": "273714881"}
+    )
+    assert lock["status"] == "succeeded"
+
+
+# ────────────────────────────────────────────────────────────────────
 # T6 — legacy pipeline frozen kill-switch
 # ────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
