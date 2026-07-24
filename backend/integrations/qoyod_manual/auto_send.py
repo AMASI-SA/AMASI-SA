@@ -16,7 +16,10 @@ Safety properties:
 * the manual sender's per-order lock and Qoyod reference lookup provide the
   duplicate barrier;
 * COD keeps the manual sender invariant (invoice only, never a receipt);
-* the first real error trips a circuit breaker by turning ``auto_send`` off;
+* an order-specific total mismatch is isolated for manual review while later
+  orders continue;
+* infrastructure and unknown errors still trip the circuit breaker by turning
+  ``auto_send`` off;
 * every mutating run is written to ``qoyod_manual_auto_runs`` before the first
   external request.
 """
@@ -42,6 +45,16 @@ _WORKER_TASK: Optional[asyncio.Task] = None
 _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
+
+# This refusal is emitted only after send.py has persisted the real Qoyod
+# invoice id and before it creates a payment.  The persisted invoice marker is
+# the duplicate barrier on later scans, while the full outstanding balance in
+# Qoyod leaves the order available for an operator to review and pay manually.
+# Keep this allow-list deliberately narrow: authentication, network, unknown,
+# and other possibly systemic failures must continue to stop the worker.
+_PER_ORDER_MANUAL_REVIEW_CODES = frozenset({
+    "qoyod_actual_total_mismatch",
+})
 
 
 def _now() -> datetime:
@@ -373,6 +386,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         "code": exc.code,
                     })
                     continue
+                if exc.code in _PER_ORDER_MANUAL_REVIEW_CODES:
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "manual_review",
+                        "code": exc.code,
+                        "message": exc.message,
+                        "detail": exc.extra,
+                    })
+                    continue
                 results.append({
                     "order_number": order_number,
                     "outcome": "failed",
@@ -409,12 +431,16 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         finished_at = _now()
         sent_count = sum(r["outcome"] == "sent" for r in results)
         already_count = sum(r["outcome"] == "already_sent" for r in results)
+        manual_review_count = sum(
+            r["outcome"] == "manual_review" for r in results
+        )
         result = {
             "ok": not stopped,
             "status": "stopped_on_error" if stopped else "succeeded",
             "run_id": run_id,
             "sent_count": sent_count,
             "already_sent_count": already_count,
+            "manual_review_count": manual_review_count,
             "results": results,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
