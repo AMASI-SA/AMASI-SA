@@ -173,7 +173,13 @@ async def test_qoyod_invoices_written_only_after_payment(db):
         _inbox_row(order_number="P100", total=115.0))
 
     def _create_invoice(payload, *, idem):
-        return {"invoice": {"id": 601, "number": "INV-601"}}
+        return {
+            "invoice": {
+                "id": 601,
+                "number": "INV-601",
+                "total": 115.0,
+            }
+        }
 
     def _create_payment(payload, *, idem):
         # By this point qoyod_invoices should NOT yet have a row.
@@ -351,7 +357,13 @@ async def test_payment_failure_writes_partial_state(db):
         _inbox_row(order_number="P200", total=260.0))
 
     def _create_invoice(payload, *, idem):
-        return {"invoice": {"id": 701, "number": "INV-701"}}
+        return {
+            "invoice": {
+                "id": 701,
+                "number": "INV-701",
+                "total": 260.0,
+            }
+        }
 
     async def _fail_payment(payload, *, idem):
         raise ManualQoyodError(
@@ -430,6 +442,15 @@ async def test_already_sent_requires_both_markers(db):
          patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_product", new=m_create_product), \
          patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "get_invoice",
+               new=AsyncMock(return_value={
+                   "invoice": {
+                       "id": 801,
+                       "number": "INV-801",
+                       "total": 115.0,
+                   }
+               })), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_invoice_payment",
                new=AsyncMock(side_effect=_pay)):
         result = await manual_send_one(
@@ -501,6 +522,15 @@ async def test_retry_payment_only_does_not_hit_invoice_endpoint(db):
     with patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "find_invoice_by_reference", new=m_find_inv), \
          patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "get_invoice",
+               new=AsyncMock(return_value={
+                   "invoice": {
+                       "id": 1001,
+                       "number": "INV-1001",
+                       "total": 115.0,
+                   }
+               })), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_invoice_payment",
                new=AsyncMock(side_effect=_pay)):
         result = await manual_send_one(
@@ -535,6 +565,15 @@ async def test_retry_payment_only_second_failure_stays_partial(db):
             request_body=payload)
 
     with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "get_invoice",
+               new=AsyncMock(return_value={
+                   "invoice": {
+                       "id": 1101,
+                       "number": "INV-1101",
+                       "total": 260.0,
+                   }
+               })), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_invoice_payment",
                new=AsyncMock(side_effect=_fail_payment)):
         with pytest.raises(ManualSendRefused) as exc:
@@ -585,6 +624,15 @@ async def test_acquire_lock_ignores_succeeded_without_payment_marker(db):
         return {"invoice_payment": {"id": 11001}}
 
     with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "get_invoice",
+               new=AsyncMock(return_value={
+                   "invoice": {
+                       "id": 1201,
+                       "number": "INV-1201",
+                       "total": 260.0,
+                   }
+               })), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_invoice_payment",
                new=AsyncMock(side_effect=_pay)):
         result = await manual_send_one(
@@ -655,6 +703,15 @@ async def test_acquire_lock_survives_naive_started_at(db):
         return {"invoice_payment": {"id": 22001}}
 
     with patch("integrations.qoyod_manual.client.ManualQoyodClient."
+               "get_invoice",
+               new=AsyncMock(return_value={
+                   "invoice": {
+                       "id": 1401,
+                       "number": "INV-1401",
+                       "total": 260.0,
+                   }
+               })), \
+         patch("integrations.qoyod_manual.client.ManualQoyodClient."
                "create_invoice_payment",
                new=AsyncMock(side_effect=_pay)):
         # Must NOT raise TypeError. Must dispatch to retry-payment-only.
