@@ -148,9 +148,51 @@ class _AutoRunsCollection:
         return _UpdateResult()
 
 
+class _AsyncCursor:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def __aiter__(self):
+        self._iterator = iter(self._rows)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iterator)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
+class _QuarantinesCollection:
+    def __init__(self):
+        self.rows = {}
+        self.updated = []
+
+    def find(self, selector, projection):
+        wanted = set(selector["order_number"]["$in"])
+        rows = [
+            row for row in self.rows.values()
+            if row["user_id"] == selector["user_id"]
+            and row["order_number"] in wanted
+            and row["status"] == selector["status"]
+        ]
+        return _AsyncCursor(rows)
+
+    async def update_one(self, selector, update, upsert=False):
+        self.updated.append((selector, update, upsert))
+        row = self.rows.setdefault(selector["_id"], {"_id": selector["_id"]})
+        for key, value in update.get("$setOnInsert", {}).items():
+            row.setdefault(key, value)
+        row.update(update.get("$set", {}))
+        for key, value in update.get("$inc", {}).items():
+            row[key] = row.get(key, 0) + value
+        return _UpdateResult()
+
+
 class _RunDb:
     def __init__(self):
         self.qoyod_manual_auto_runs = _AutoRunsCollection()
+        self.qoyod_manual_auto_quarantines = _QuarantinesCollection()
 
 
 def _candidate(order_number):
@@ -247,6 +289,92 @@ async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
     assert result["results"][0]["detail"]["invoice_id"] == 900
     assert result["results"][1]["outcome"] == "sent"
     assert db.qoyod_manual_auto_runs.updated[0][1]["$set"]["status"] == "succeeded"
+    quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
+    assert quarantine["status"] == "open"
+    assert quarantine["code"] == "qoyod_actual_total_mismatch"
+    assert quarantine["attempt_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_preflight_mismatch_is_quarantined_before_later_order_sends(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        if order_number == "273809026":
+            raise ManualSendRefused(
+                "qoyod_preflight_total_mismatch",
+                "عُزل الطلب قبل إنشاء الفاتورة.",
+                {
+                    "difference": 0.02,
+                    "qoyod_write_performed": False,
+                    "requires_manual_review": True,
+                },
+            )
+        return {"invoice_id": 901, "payment_id": 902}
+
+    async def fake_trip(db, **kwargs):
+        raise AssertionError("order-local mismatch must not trip breaker")
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("273809026"), _candidate("273809027")],
+        send_one=fake_send,
+        trip_breaker=fake_trip,
+    )
+
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["273809026", "273809027"]
+    assert result["status"] == "succeeded"
+    assert result["sent_count"] == 1
+    assert result["manual_review_count"] == 1
+    quarantine = db.qoyod_manual_auto_quarantines.rows["main:273809026"]
+    assert quarantine["code"] == "qoyod_preflight_total_mismatch"
+    assert quarantine["detail"]["qoyod_write_performed"] is False
+
+
+@pytest.mark.asyncio
+async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        return {"invoice_id": 901, "payment_id": 902}
+
+    async def fake_trip(db, **kwargs):
+        raise AssertionError("breaker must not run")
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[
+            _candidate("273809026"),
+            _candidate("273809027"),
+        ],
+        send_one=fake_send,
+        trip_breaker=fake_trip,
+    )
+    db = _RunDb()
+    db.qoyod_manual_auto_quarantines.rows["main:273809026"] = {
+        "_id": "main:273809026",
+        "user_id": "main",
+        "order_number": "273809026",
+        "status": "open",
+    }
+
+    result = await auto_send.run_once(db, batch_limit=1)
+
+    assert calls == ["273809027"]
+    assert result["sent_count"] == 1
 
 
 @pytest.mark.asyncio
