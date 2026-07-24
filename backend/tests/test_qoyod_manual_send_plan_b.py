@@ -246,7 +246,8 @@ async def test_send_happy_path_creates_invoice_and_payment(db):
     async def _create_invoice(payload, *, idem):
         calls["invoice"] += 1
         return {"invoice": {"id": 501, "number": "INV-501",
-                             "reference": payload["invoice"]["reference"]}}
+                             "reference": payload["invoice"]["reference"],
+                             "total": 115.0}}
 
     async def _create_payment(payload, *, idem):
         calls["payment"] += 1
@@ -310,6 +311,80 @@ async def test_send_happy_path_creates_invoice_and_payment(db):
     with pytest.raises(ManualSendRefused) as exc:
         await manual_send_one(db, user_id=TENANT, order_number="A200")
     assert exc.value.code == "already_sent"
+
+
+# ────────────────────────────────────────────────────────────────────
+# T5b — COD invoice-only success must return cleanly to auto-send.
+#
+# Regression for order 273714881: Qoyod accepted the invoice and the
+# send lock was finalised as succeeded, but the success response then
+# referenced an out-of-scope `payment_method`.  That late NameError made
+# auto-send trip its circuit breaker even though the external write had
+# already succeeded.
+# ────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_cod_invoice_only_success_returns_without_late_exception(db):
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    await db.integration_inbox.insert_one(
+        _inbox_row(
+            order_number="273714881",
+            total=133.73,
+            sku="SKU-COD",
+            payment_method="cash_on_delivery",
+        )
+    )
+
+    payment_post = AsyncMock()
+
+    with patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_invoice_by_reference",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_customers_by_phone",
+        new=AsyncMock(return_value=[{"id": 33}]),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "find_product_by_sku",
+        new=AsyncMock(return_value={"id": 77, "sku": "SKU-COD"}),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice",
+        new=AsyncMock(
+            return_value={
+                "invoice": {
+                    "id": 865,
+                    "number": "INV-865",
+                    "reference": "273714881",
+                    "total": 133.73,
+                }
+            }
+        ),
+    ), patch(
+        "integrations.qoyod_manual.client.ManualQoyodClient."
+        "create_invoice_payment",
+        new=payment_post,
+    ):
+        result = await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="273714881",
+            actor="auto-plan-b:test",
+        )
+
+    assert result["ok"] is True
+    assert result["invoice_id"] == 865
+    assert result["payment_id"] is None
+    assert result["invoice_only"] is True
+    assert result["payment_method"] == "cash_on_delivery"
+    payment_post.assert_not_awaited()
+
+    lock = await db.qoyod_manual_send_locks.find_one(
+        {"order_number": "273714881"}
+    )
+    assert lock["status"] == "succeeded"
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -391,7 +466,8 @@ async def test_send_quantises_and_uses_riyadh_send_date(db):
     async def _create_invoice(payload, *, idem):
         captured["invoice_payload"] = payload
         return {"invoice": {"id": 601, "number": "INV-601",
-                             "reference": payload["invoice"]["reference"]}}
+                             "reference": payload["invoice"]["reference"],
+                             "total": 137.63}}
 
     async def _create_payment(payload, *, idem):
         captured["payment_payload"] = payload

@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
       - name: Install focused test dependencies
         run: |
-          python -m pip install -q pytest pytest-asyncio mongomock-motor motor==3.3.1 pymongo==4.5.0 fastapi==0.110.1 python-dotenv cryptography python-jose passlib bcrypt httpx requests openpyxl
+          python -m pip install -q pytest pytest-asyncio mongomock-motor motor==3.3.1 pymongo==4.5.0 fastapi==0.110.1 python-dotenv cryptography python-jose passlib bcrypt httpx requests openpyxl reportlab==4.5.1
       - name: Compile changed modules
         run: |
           python -m py_compile \
