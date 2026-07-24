@@ -7,7 +7,7 @@ import time
 import uuid
 from typing import Any, Awaitable, Callable, Mapping
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 
 from .security import (
@@ -15,6 +15,7 @@ from .security import (
     SubjectRateLimiter,
     audit_tool_call,
     authenticate_request,
+    oauth_challenge,
     protected_resource_metadata,
     sanitize_output,
 )
@@ -57,6 +58,10 @@ def _tool(
             "properties": dict(properties or {}),
             "required": required or [],
             "additionalProperties": False,
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
         },
         "annotations": {
             "readOnlyHint": True,
@@ -165,6 +170,29 @@ def _tool_result(payload: Mapping[str, Any], *, is_error: bool = False) -> dict[
     }
 
 
+def _authentication_tool_result() -> dict[str, Any]:
+    """Prompt ChatGPT to start OAuth without exposing protected tool data."""
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": "Authentication is required to call this read-only Mezan tool.",
+            }
+        ],
+        "isError": True,
+        "_meta": {
+            "mcp/www_authenticate": [
+                oauth_challenge(
+                    error="invalid_token",
+                    error_description=(
+                        "Authenticate with OAuth and grant the mezan:read scope."
+                    ),
+                )
+            ]
+        },
+    }
+
+
 def _validate_tool_arguments(name: str, arguments: Mapping[str, Any]) -> None:
     descriptor = next((tool for tool in TOOL_DESCRIPTORS if tool["name"] == name), None)
     if descriptor is None:
@@ -211,7 +239,7 @@ def make_mezan_mcp_router(
     )
 
     async def resolve_principal(request: Request) -> Principal:
-        """Keep FastAPI's dependency signature stable for injected authenticators."""
+        """Keep the injected authenticator interface stable."""
         return await auth_dependency(request)
 
     @router.get("/.well-known/oauth-protected-resource", include_in_schema=False)
@@ -252,11 +280,7 @@ def make_mezan_mcp_router(
         )
 
     @router.post("/api/ai/mcp", include_in_schema=False)
-    async def mcp_post(
-        request: Request,
-        principal: Principal = Depends(resolve_principal),
-    ) -> Response:
-        await limiter.check(principal.subject)
+    async def mcp_post(request: Request) -> Response:
         content_length = request.headers.get("content-length")
         if content_length:
             try:
@@ -311,6 +335,13 @@ def make_mezan_mcp_router(
             return _jsonrpc_result(request_id, {"tools": TOOL_DESCRIPTORS})
         if method != "tools/call":
             return _jsonrpc_error(request_id, -32601, "Method not found")
+
+        authorization = request.headers.get("authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            return _jsonrpc_result(request_id, _authentication_tool_result())
+        principal = await resolve_principal(request)
+        await limiter.check(principal.subject)
 
         tool_name = str(params.get("name") or "")
         arguments = params.get("arguments") or {}

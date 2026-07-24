@@ -12,7 +12,15 @@ or change the existing Mezan, Salla, or Qoyod write paths.
   `/.well-known/oauth-protected-resource`
 - Ingress-safe metadata alias:
   `/api/.well-known/oauth-protected-resource`
-- Transport methods: `POST` and `OPTIONS` only. `GET` and `DELETE` return 405.
+- Transport methods: `POST` and `OPTIONS` only. Authenticated `GET` and
+  `DELETE` return 405; unauthenticated requests retain the HTTP OAuth challenge.
+- `initialize`, `notifications/initialized`, `ping`, and `tools/list` are
+  public so ChatGPT can inspect the tool catalog before login. They do not
+  touch Mongo, Salla, or Qoyod.
+- Every `tools/call` authenticates first. With no bearer token it returns an
+  MCP tool error containing `_meta["mcp/www_authenticate"]`. A supplied but
+  invalid or expired token receives HTTP 401. No tool service or database read
+  runs before those checks.
 - All phase-one tools declare `readOnlyHint=true`.
 
 ## Phase-one tools
@@ -30,6 +38,9 @@ or change the existing Mezan, Salla, or Qoyod write paths.
 
 - OAuth 2.1 bearer tokens are validated using an external identity provider.
   Mezan browser-session tokens and static API keys are not accepted.
+- Public discovery exposes only the eight tool names, descriptions, schemas,
+  and read-only annotations. It never exposes Mezan data. Tool execution
+  requires the exact `mezan:read` scope and configured tenant claim.
 - The identity provider must support Authorization Code with PKCE S256 and
   issue an audience-restricted access token containing the `mezan:read` scope
   and a tenant claim.
@@ -43,8 +54,9 @@ or change the existing Mezan, Salla, or Qoyod write paths.
   URLs, and sensitive keys are removed from tool output and error text.
 - Audit logs contain request id, tool, outcome, duration, and hashed identities;
   they never contain tool arguments, raw tenant ids, or OAuth subjects.
-- A process-local rate limiter is enforced. Production must also enforce a
-  shared rate limit at the reverse proxy/WAF when running multiple workers.
+- A process-local rate limiter is enforced for authenticated tool execution.
+  Production must also enforce a shared rate limit at the reverse proxy/WAF,
+  including public discovery, when running multiple workers.
 
 ## Required secret configuration
 
@@ -78,6 +90,26 @@ claim value must identify the same store/tenant used by Mezan's database
 filters. A namespaced claim such as `https://mezansalla.com/tenant_id` is
 recommended when the identity provider requires it.
 
+### Split frontend/backend ingress requirement
+
+The FastAPI router serves both the canonical root metadata path and its `/api`
+alias. Mezan's deployment gateway routes `/api/*` to FastAPI and all other
+paths to the React frontend, so the release configuration must add this
+explicit backend rule before the general frontend fallback:
+
+```text
+/.well-known/oauth-protected-resource*
+  -> Mezan FastAPI backend (preserve the original path)
+```
+
+Without that edge rule, React returns `index.html` even though the FastAPI
+route and its tests are correct. Do not solve this with a hard-coded frontend
+file: Preview and Production have different OAuth metadata. Keep advertising
+the standards-compliant `/api` alias until the edge rule is deployed and the
+root verifier passes. The release verifier requires the canonical root path to
+return the same JSON before enabling the ChatGPT app; switching
+`MEZAN_MCP_METADATA_URL` to the root path afterward is optional.
+
 ## OAuth provider contract
 
 Configure a separate OAuth resource/API for Production. The provider may be
@@ -93,26 +125,37 @@ methods: CIMD, DCR, or a predefined OAuth client. Store any predefined client
 secret only in the relevant platform secret manager. Do not place it in Mezan,
 GitHub, ChatGPT messages, command arguments, or logs.
 
-Preview can validate transport, metadata JSON, static security tests, and the
-unauthenticated 401 challenge without Production data or Production OAuth
-credentials. Final OAuth, tenant isolation, and data checks must run against
-Production after explicit authorization; never connect Preview to the
-Production database merely to complete these checks.
+For DCR, publish a registration endpoint, allow public clients with
+`token_endpoint_auth_method=none`, and require Authorization Code with PKCE
+`S256`. The authorization request's `resource` and the access token's audience
+must both equal `https://mezansalla.com/api/ai/mcp`. Offline access may be
+granted for refresh tokens, but it does not broaden the `mezan:read` scope.
+
+Preview can validate transport, metadata JSON, static security tests, public
+discovery, and the tool-level OAuth challenge without Production data or
+Production OAuth credentials. Final OAuth, tenant isolation, and data checks
+must run against Production after explicit authorization; never connect
+Preview to the Production database merely to complete these checks.
 
 ## Release gates
 
 Before enabling the private ChatGPT connection in Production, verify:
 
-1. Protected-resource metadata advertises the correct Production resource and
-   authorization server.
-2. ChatGPT completes OAuth and discovers exactly eight tools.
-3. `mezan_health` succeeds.
-4. One Production-safe order view contains no unnecessary customer PII.
-5. The same order can be compared with Salla through GET-only access.
-6. A sanitized trace and recent failures can be read.
-7. Qoyod reconciliation reads local records and performs no Qoyod network call.
-8. Security tests prove Mongo/Salla/Qoyod mutation paths are unavailable.
-9. Existing Qoyod send behavior and financial data are unchanged.
+1. The canonical root metadata URL, `/api` alias, and advertised metadata URL
+   return the same JSON with the correct Production resource and authorization
+   server.
+2. Authorization-server discovery advertises DCR, Authorization Code, public
+   clients, and PKCE `S256`.
+3. ChatGPT discovers exactly eight tools before OAuth.
+4. An unauthenticated `tools/call` returns the MCP OAuth challenge and performs
+   no database read.
+5. ChatGPT completes OAuth and `mezan_health` succeeds.
+6. One Production-safe order view contains no unnecessary customer PII.
+7. The same order can be compared with Salla through GET-only access.
+8. A sanitized trace and recent failures can be read.
+9. Qoyod reconciliation reads local records and performs no Qoyod network call.
+10. Security tests prove Mongo/Salla/Qoyod mutation paths are unavailable.
+11. Existing Qoyod send behavior and financial data are unchanged.
 
 Run the repository verifier from a trusted Production runner. Put the short-lived
 access token in an environment secret; the verifier never prints it or any
@@ -125,11 +168,11 @@ python scripts/verify_mezan_mcp_gateway.py \
   --order-number SAFE_TEST_ORDER_NUMBER
 ```
 
-The verifier checks public protected-resource metadata, the unauthenticated
-OAuth challenge, MCP initialization, the exact eight read-only tools,
-`mezan_health`, and—when an order number is provided—the order view, Salla
-comparison, trace, and local-only Qoyod reconciliation. It reports pass/fail
-only and deliberately does not print returned order data.
+The verifier checks public initialization and the exact eight-tool catalog,
+the tool-level OAuth challenge, all protected-resource metadata paths, DCR and
+PKCE discovery, `mezan_health`, and—when an order number is provided—the order
+view, Salla comparison, trace, and local-only Qoyod reconciliation. It reports
+pass/fail only and deliberately does not print returned order data.
 
 Enable the ChatGPT connection only after these gates pass. Rollback is the
 normal application rollback to the previous build; this change has no database
