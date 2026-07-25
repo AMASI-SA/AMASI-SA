@@ -27,7 +27,7 @@ const emptyCabinet = {
     length: 4,
     width: 6,
     purpose: "temporary_staging",
-    max_items_per_bin: "",
+    max_items_per_location: "",
 };
 
 function Field({ label, children }) {
@@ -95,17 +95,20 @@ export default function WarehouseLocations() {
         }
     };
 
+    const buildCabinetPayload = () => ({
+        ...cabinetForm,
+        warehouse_id: selectedId,
+        length: Number(cabinetForm.length),
+        width: Number(cabinetForm.width),
+        max_items_per_location: cabinetForm.max_items_per_location
+            ? Number(cabinetForm.max_items_per_location)
+            : null,
+    });
+
     const previewCabinet = async () => {
         if (!selectedId) return toast.warning("اختر مستودعًا أولًا");
         try {
-            const payload = {
-                ...cabinetForm,
-                warehouse_id: selectedId,
-                length: Number(cabinetForm.length),
-                width: Number(cabinetForm.width),
-                max_items_per_bin: cabinetForm.max_items_per_bin ? Number(cabinetForm.max_items_per_bin) : null,
-            };
-            const res = await api.post("/warehouse-locations/cabinets/preview", payload);
+            const res = await api.post("/warehouse-locations/cabinets/preview", buildCabinetPayload());
             setPreview(res.data);
         } catch (err) {
             toast.error(err?.response?.data?.detail?.message || "تعذر معاينة الدولاب");
@@ -117,14 +120,7 @@ export default function WarehouseLocations() {
         if (!selectedId) return toast.warning("اختر مستودعًا أولًا");
         setLoading(true);
         try {
-            const payload = {
-                ...cabinetForm,
-                warehouse_id: selectedId,
-                length: Number(cabinetForm.length),
-                width: Number(cabinetForm.width),
-                max_items_per_bin: cabinetForm.max_items_per_bin ? Number(cabinetForm.max_items_per_bin) : null,
-            };
-            await api.post("/warehouse-locations/cabinets/generate", payload);
+            await api.post("/warehouse-locations/cabinets/generate", buildCabinetPayload());
             toast.success("تم إنشاء الدولاب والخانات");
             setCabinetForm(emptyCabinet);
             setPreview(null);
@@ -176,7 +172,7 @@ export default function WarehouseLocations() {
                                 {PURPOSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                             </select>
                         </Field>
-                        <Field label="سعة الخانة (اختياري)"><Input type="number" min="1" value={cabinetForm.max_items_per_bin} onChange={(e) => setCabinetForm({ ...cabinetForm, max_items_per_bin: e.target.value })} /></Field>
+                        <Field label="سعة الخانة (اختياري)"><Input type="number" min="1" value={cabinetForm.max_items_per_location} onChange={(e) => setCabinetForm({ ...cabinetForm, max_items_per_location: e.target.value })} /></Field>
                     </div>
                     <div className="mt-4 flex gap-2">
                         <button type="button" onClick={previewCabinet} className="rounded-lg border px-4 py-2 text-sm font-bold">معاينة</button>
