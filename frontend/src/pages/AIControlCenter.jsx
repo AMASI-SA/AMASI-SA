@@ -122,6 +122,9 @@ export default function AIControlCenter() {
     const [tab, setTab] = useState("readiness");
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState({});
+    const [aiQuestion, setAiQuestion] = useState("حلّل حالة ميزان وحدد أهم مشكلة والخطوة التالية.");
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiResult, setAiResult] = useState(null);
 
     const load = async () => {
         setLoading(true);
@@ -193,13 +196,56 @@ export default function AIControlCenter() {
 
     const overall = model.gates.some((gate) => gate.status === BLOCK) ? BLOCK : model.gates.some((gate) => gate.status === WARN) ? WARN : OK;
 
+    const runAiAnalysis = async () => {
+        setAiLoading(true);
+        try {
+            const context = {
+                period: { from_date: fromDate, to_date: toDate },
+                readiness: statusLabel(overall),
+                metrics: {
+                    api_orders: Number(data.orders?.data?.total || model.orders.length || 0),
+                    dashboard_orders: Number(model.dashboardSummary.total_orders || 0),
+                    total_sales: Number(model.dashboardSummary.total_sales || 0),
+                    ad_spend: Number(model.dashboardSummary.daily_ads_total || model.adsBreakdown.total_amount || 0),
+                    qoyod_failed: Number(model.qoyodStats?.stats?.failed || model.qoyodStats?.failed || 0),
+                    duplicate_orders: model.duplicates.length,
+                    missing_critical_fields: model.missingOrders.length,
+                },
+                gates: model.gates.map((gate) => ({
+                    title: gate.title,
+                    status: statusLabel(gate.status),
+                    evidence: gate.text,
+                })),
+                coverage: model.coverage.map((row) => ({
+                    field: row.label,
+                    present: row.present,
+                    total: row.total,
+                    percent: Number(row.pct.toFixed(1)),
+                    status: statusLabel(row.status),
+                })),
+                errors: Object.entries(data)
+                    .filter(([, result]) => !result?.ok)
+                    .map(([source, result]) => ({ source, message: result?.error || "فشل المصدر" })),
+                anomalies: model.duplicates.map(([order, count]) => ({ type: "duplicate_order", order, count })),
+                recommendations: model.recommendations,
+            };
+            const response = await api.post("/ai/analyze", { question: aiQuestion, context });
+            setAiResult(response.data?.analysis || null);
+            toast.success("اكتمل التحليل بالقراءة فقط");
+        } catch (error) {
+            toast.error(error?.response?.data?.detail || "تعذر تشغيل محلل ميزان");
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6" dir="rtl" data-testid="ai-control-center">
             <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
                     <div className="inline-flex bg-slate-900 text-white rounded-full px-3 py-1 text-xs font-bold mb-3">🧠 AI Preflight · قراءة فقط</div>
                     <h1 className="text-3xl font-extrabold">مركز الذكاء والتحقق</h1>
-                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">هذه الصفحة تجهز ميزان للذكاء الاصطناعي: تفحص اكتمال البيانات، تكشف الفروقات الأولية، وتحوّل النواقص إلى أوامر واضحة للمطور قبل ربط OpenAI فعلياً.</p>
+                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">تفحص الصفحة اكتمال البيانات وتكشف الفروقات، ثم يقرأ محلل ميزان النتائج ويشرح السبب والخطوة التالية دون تعديل أو إرسال أي بيانات.</p>
                 </div>
                 <div className="rounded-xl border bg-white p-3 flex flex-wrap items-end gap-3">
                     <label className="text-xs font-bold text-slate-600">من<input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="block mt-1 border rounded-lg px-3 py-2 text-sm" /></label>
@@ -212,6 +258,14 @@ export default function AIControlCenter() {
                 <h2 className="text-xl font-extrabold">حكم الجاهزية العام: {statusLabel(overall)}</h2>
                 <p className="text-sm mt-1 leading-6">إذا ظهرت بوابة ⛔ فالقرار المرتبط بها ممنوع حتى يكتمل مصدر البيانات أو يتم إصلاح الفرق.</p>
             </div>
+
+            <AIAnalyst
+                question={aiQuestion}
+                setQuestion={setAiQuestion}
+                loading={aiLoading}
+                result={aiResult}
+                onAnalyze={runAiAnalysis}
+            />
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <Kpi title="طلبات API" value={fmtInt(data.orders?.data?.total || model.orders.length)} />
@@ -233,6 +287,77 @@ export default function AIControlCenter() {
             {tab === "errors" && <Errors data={data} model={model} />}
             {tab === "contract" && <Contract />}
         </div>
+    );
+}
+
+function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
+    const severityTone = {
+        ok: "bg-emerald-50 border-emerald-200 text-emerald-900",
+        info: "bg-blue-50 border-blue-200 text-blue-900",
+        warning: "bg-amber-50 border-amber-200 text-amber-900",
+        critical: "bg-red-50 border-red-200 text-red-900",
+    };
+    return (
+        <section className="rounded-xl border-2 border-violet-200 bg-white p-5" data-testid="mezan-ai-analyst">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <h2 className="text-xl font-extrabold">✨ محلل ميزان</h2>
+                    <p className="text-sm text-slate-600 mt-1">OpenAI · قراءة وتحليل فقط · لا يملك أدوات تعديل أو إرسال إلى قيود</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-bold">🔒 قراءة فقط</span>
+            </div>
+            <div className="mt-4 flex flex-col md:flex-row gap-3">
+                <textarea
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    maxLength={500}
+                    rows={2}
+                    className="flex-1 rounded-lg border px-3 py-2 text-sm leading-6"
+                    placeholder="مثال: لماذا توقفت مزامنة قيود؟ وما أول شيء أراجعه؟"
+                />
+                <button
+                    type="button"
+                    onClick={onAnalyze}
+                    disabled={loading || question.trim().length < 3}
+                    className="rounded-lg bg-violet-700 text-white px-5 py-2 font-bold disabled:opacity-50"
+                >
+                    {loading ? "جارٍ التحليل…" : "حلّل الآن"}
+                </button>
+            </div>
+            {result && (
+                <div className={`mt-5 rounded-xl border p-4 ${severityTone[result.severity] || severityTone.info}`}>
+                    <div className="flex justify-between gap-2 flex-wrap">
+                        <h3 className="font-extrabold">{result.summary}</h3>
+                        <span className="text-xs font-bold">{result.safe_to_act ? "✅ الدليل كافٍ" : "⛔ يحتاج تحقق قبل الإجراء"}</span>
+                    </div>
+                    {!!result.findings?.length && (
+                        <div className="mt-4 space-y-3">
+                            {result.findings.map((finding, index) => (
+                                <div key={`${finding.title}-${index}`} className="rounded-lg bg-white/70 border p-3">
+                                    <div className="font-bold">{finding.title}</div>
+                                    <p className="text-sm mt-1"><strong>الدليل:</strong> {finding.evidence}</p>
+                                    <p className="text-sm mt-1"><strong>الأثر:</strong> {finding.impact}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {!!result.next_actions?.length && (
+                        <div className="mt-4">
+                            <h4 className="font-extrabold mb-2">الخطوات المقترحة</h4>
+                            <ol className="space-y-2">
+                                {result.next_actions.map((item, index) => (
+                                    <li key={`${item.priority}-${index}`} className="text-sm rounded-lg bg-white/70 border p-3">
+                                        <strong>{item.priority} — {item.action}</strong>
+                                        <div className="mt-1">التحقق: {item.verification}</div>
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+                    {!!result.limitations?.length && <p className="text-xs mt-4">حدود التحليل: {result.limitations.join(" · ")}</p>}
+                </div>
+            )}
+        </section>
     );
 }
 
