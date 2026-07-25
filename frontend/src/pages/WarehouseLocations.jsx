@@ -20,6 +20,19 @@ const FALLBACK_CATALOG = {
     ],
 };
 
+const CODE39 = {
+    "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw", "3": "wnwwnnnnn",
+    "4": "nnnwwnnnw", "5": "wnnwwnnnn", "6": "nnwwwnnnn", "7": "nnnwnnwnw",
+    "8": "wnnwnnwnn", "9": "nnwwnnwnn", A: "wnnnnwnnw", B: "nnwnnwnnw",
+    C: "wnwnnwnnn", D: "nnnnwwnnw", E: "wnnnwwnnn", F: "nnwnwwnnn",
+    G: "nnnnnwwnw", H: "wnnnnwwnn", I: "nnwnnwwnn", J: "nnnnwwwnn",
+    K: "wnnnnnnww", L: "nnwnnnnww", M: "wnwnnnnwn", N: "nnnnwnnww",
+    O: "wnnnwnnwn", P: "nnwnwnnwn", Q: "nnnnnnwww", R: "wnnnnnwwn",
+    S: "nnwnnnwwn", T: "nnnnwnwwn", U: "wwnnnnnnw", V: "nwwnnnnnw",
+    W: "wwwnnnnnn", X: "nwnnwnnnw", Y: "wwnnwnnnn", Z: "nwwnwnnnn",
+    "-": "nwnnnnwnw", ".": "wwnnnnwnn", " ": "nwwnnnwnn", "*": "nwnnwnwnn",
+};
+
 const emptyWarehouse = {
     name: "",
     country: "السعودية",
@@ -53,6 +66,105 @@ function Input(props) {
 
 function Select(props) {
     return <select {...props} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand" />;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function code39Svg(rawValue) {
+    const value = `*${String(rawValue || "").toUpperCase()}*`;
+    const narrow = 2;
+    const wide = 6;
+    const gap = 2;
+    const height = 84;
+    let x = 10;
+    const bars = [];
+    for (const char of value) {
+        const pattern = CODE39[char];
+        if (!pattern) continue;
+        pattern.split("").forEach((unit, index) => {
+            const width = unit === "w" ? wide : narrow;
+            if (index % 2 === 0) bars.push(`<rect x="${x}" y="4" width="${width}" height="${height}" />`);
+            x += width;
+        });
+        x += gap;
+    }
+    return `<svg class="barcode" viewBox="0 0 ${x + 10} 96" role="img" aria-label="باركود ${escapeHtml(rawValue)}" xmlns="http://www.w3.org/2000/svg"><g fill="#000">${bars.join("")}</g></svg>`;
+}
+
+function printablePage({ eyebrow, value, subtitle, code, barcode = false }) {
+    return `
+        <section class="print-page">
+            <div class="brand">MEZAN OS</div>
+            <div class="eyebrow">${escapeHtml(eyebrow)}</div>
+            <div class="big-value">${escapeHtml(value)}</div>
+            ${subtitle ? `<div class="subtitle">${escapeHtml(subtitle)}</div>` : ""}
+            ${barcode && code ? code39Svg(code) : ""}
+            ${code ? `<div class="code">${escapeHtml(code)}</div>` : ""}
+        </section>
+    `;
+}
+
+function printCabinetPack(warehouse, cabinet) {
+    if (!warehouse || !cabinet) return;
+    const cabinetNumber = cabinet.cabinet_number || cabinet.code;
+    const total = Number(cabinet.total_locations || 0);
+    const width = Number(cabinet.width || 0);
+    const warehouseLabel = `${warehouse.name} — ${warehouse.city} — مستودع رقم ${warehouse.warehouse_number}`;
+
+    const cover = printablePage({
+        eyebrow: "رقم الدولاب",
+        value: cabinetNumber,
+        subtitle: warehouseLabel,
+        code: `${warehouse.code}-${cabinetNumber}`,
+    });
+    const columnPages = Array.from({ length: width }, (_, index) => printablePage({
+        eyebrow: `الدولاب رقم ${cabinetNumber}`,
+        value: `عمود ${index + 1}`,
+        subtitle: warehouseLabel,
+        code: `${warehouse.code}-${cabinetNumber}-C${String(index + 1).padStart(2, "0")}`,
+    })).join("");
+    const locationPages = Array.from({ length: total }, (_, index) => {
+        const locationNumber = String(index + 1).padStart(3, "0");
+        const locationCode = `${warehouse.code}-${cabinetNumber}-${locationNumber}`;
+        return printablePage({
+            eyebrow: `الدولاب رقم ${cabinetNumber} — رقم الخانة`,
+            value: locationNumber,
+            subtitle: "امسح هذا الباركود قبل وضع أي منتج في الخانة",
+            code: locationCode,
+            barcode: true,
+        });
+    }).join("");
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+        toast.error("اسمح بفتح النوافذ المنبثقة لطباعة ملف الدولاب");
+        return;
+    }
+    printWindow.document.write(`<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8" />
+<title>دولاب ${escapeHtml(cabinetNumber)} — ${escapeHtml(warehouse.name)}</title>
+<style>
+@page { size: A4 portrait; margin: 0; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, Tahoma, sans-serif; color: #0f172a; background: white; }
+.print-page { position: relative; width: 210mm; height: 297mm; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18mm; text-align: center; border: 8mm solid #0f766e; }
+.print-page:last-child { page-break-after: auto; }
+.brand { position: absolute; top: 14mm; font-size: 20pt; font-weight: 900; letter-spacing: 2px; color: #0f766e; }
+.eyebrow { font-size: 26pt; font-weight: 800; margin-bottom: 8mm; }
+.big-value { font-size: 96pt; line-height: 1; font-weight: 900; direction: ltr; }
+.subtitle { margin-top: 10mm; font-size: 18pt; font-weight: 700; max-width: 170mm; }
+.code { margin-top: 6mm; font: 900 22pt monospace; direction: ltr; letter-spacing: 1px; }
+.barcode { width: 165mm; height: 34mm; margin-top: 12mm; }
+@media screen { body { background: #e2e8f0; } .print-page { margin: 10px auto; background: white; box-shadow: 0 4px 18px rgba(15,23,42,.18); } }
+</style></head><body>${cover}${columnPages}${locationPages}<script>window.onload=()=>window.print();</script></body></html>`);
+    printWindow.document.close();
 }
 
 export default function WarehouseLocations() {
@@ -239,8 +351,14 @@ export default function WarehouseLocations() {
                     <div className="grid gap-4 lg:grid-cols-2">
                         {detail.cabinets.map((cabinet) => (
                             <div key={cabinet.id} className="rounded-xl border p-4">
-                                <div className="flex items-center justify-between"><h3 className="font-extrabold">{cabinet.name} — رقم {cabinet.cabinet_number || cabinet.code}</h3><span className="text-xs font-bold text-slate-500 num">{cabinet.total_locations} خانة</span></div>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="font-extrabold">{cabinet.name} — رقم {cabinet.cabinet_number || cabinet.code}</h3>
+                                    <span className="text-xs font-bold text-slate-500 num">{cabinet.total_locations} خانة</span>
+                                </div>
                                 <p className="mt-1 text-xs text-slate-500 num">{cabinet.length} × {cabinet.width}</p>
+                                <button type="button" onClick={() => printCabinetPack(selected, cabinet)} className="mt-3 rounded-lg border border-teal-700 px-3 py-2 text-xs font-extrabold text-teal-800 hover:bg-teal-50">
+                                    طباعة ملف الدولاب والباركودات
+                                </button>
                                 <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(cabinet.width || 1, 12)}, minmax(0, 1fr))` }}>
                                     {Array.from({ length: Math.min(cabinet.total_locations || 0, 120) }, (_, i) => <div key={i} className="flex aspect-square items-center justify-center rounded border bg-emerald-50 text-[10px] font-bold text-emerald-700 num">{String(i + 1).padStart(3, "0")}</div>)}
                                 </div>
