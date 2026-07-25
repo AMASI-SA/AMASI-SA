@@ -8,6 +8,7 @@ import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import WarehouseLocations from "../pages/WarehouseLocations";
+import WarehouseRoomsPanel from "./WarehouseRoomsPanel";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -101,7 +102,12 @@ export default function Layout({ children }) {
     const location = useLocation();
     const isWarehouseV2 = location.pathname === "/components-v2"
         && new URLSearchParams(location.search).get("workspace") === "warehouse";
-    const pageContent = isWarehouseV2 ? <WarehouseLocations /> : children;
+    const pageContent = isWarehouseV2 ? (
+        <div className="space-y-8">
+            <WarehouseLocations />
+            <WarehouseRoomsPanel />
+        </div>
+    ) : children;
 
     useEffect(() => { setMobileOpen(false); }, [location.pathname, location.search]);
     useEffect(() => {
