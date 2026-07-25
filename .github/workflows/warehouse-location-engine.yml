@@ -4,9 +4,14 @@ on:
   pull_request:
     paths:
       - "backend/warehouse_location_routes.py"
+      - "backend/warehouse_location_v2_routes.py"
+      - "backend/warehouse_room_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_warehouse_location_routes.py"
       - "frontend/src/pages/WarehouseLocations.jsx"
+      - "frontend/src/pages/WarehouseControlTower.jsx"
+      - "frontend/src/components/WarehouseRoomsPanel.jsx"
+      - "frontend/src/components/Layout.jsx"
       - "frontend/src/pages/OperationsDashboard.jsx"
       - ".github/workflows/warehouse-location-engine.yml"
   workflow_dispatch:
