@@ -36,6 +36,18 @@ from .models import (
 _original_make_order_engine_router = _routes.make_order_engine_router
 
 
+def _route_keys(route):
+    """Return unique (path, method) keys for an APIRoute.
+
+    FastAPI legitimately supports GET and POST on the same path.  Comparing
+    paths alone silently dropped later methods, which caused GET warehouse
+    endpoints to return 405 while POST remained registered.
+    """
+    path = getattr(route, "path", None)
+    methods = getattr(route, "methods", None) or {None}
+    return {(path, method) for method in methods}
+
+
 def make_order_engine_router(*args, **kwargs):
     """Build Order Engine plus independent Mezan OS operations engines."""
     router = _original_make_order_engine_router(*args, **kwargs)
@@ -51,12 +63,16 @@ def make_order_engine_router(*args, **kwargs):
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
     ]
-    existing_paths = {getattr(route, "path", None) for route in router.routes}
+    existing_keys = set()
+    for route in router.routes:
+        existing_keys.update(_route_keys(route))
+
     for child_router in child_routers:
         for route in child_router.routes:
-            if getattr(route, "path", None) not in existing_paths:
+            route_keys = _route_keys(route)
+            if route_keys.isdisjoint(existing_keys):
                 router.routes.append(route)
-                existing_paths.add(getattr(route, "path", None))
+                existing_keys.update(route_keys)
     return router
 
 
