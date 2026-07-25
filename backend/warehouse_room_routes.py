@@ -1,7 +1,9 @@
-"""Optional room/section layer for Mezan OS V2 warehouse buildings.
+"""Dynamic branch sections for Mezan OS V2.
 
-A building may contain cabinets directly, rooms only, or both. Existing
-warehouse and cabinet records remain valid; room_id is additive and optional.
+A branch may contain cabinets directly and/or any number of dynamic sections.
+Each section owns a set of capabilities instead of one fixed room type, so the
+same section may combine storage, assembly, engraving and a production line.
+Existing room records remain readable and compatible.
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -30,35 +32,96 @@ from warehouse_location_routes import (
 ROOMS = "warehouse_rooms"
 COUNTERS = "warehouse_location_counters"
 
-RoomType = Literal[
-    "storage",
-    "installation_engraving",
-    "shipping_labeling",
+SectionCapability = Literal[
+    "cabinets",
+    "workstations",
+    "assembly",
+    "engraving",
     "packing",
-    "returns",
-    "raw_materials",
-    "ready_to_ship",
-    "worker_housing",
+    "shipping_labeling",
+    "quality_control",
+    "waiting_areas",
+    "equipment",
+    "production_line",
     "office",
-    "other",
+    "worker_housing",
+    "returns",
 ]
+
+CAPABILITY_LABELS = {
+    "cabinets": "دواليب وخانات",
+    "workstations": "محطات عمل",
+    "assembly": "تركيب",
+    "engraving": "نحت ونقش",
+    "packing": "تغليف",
+    "shipping_labeling": "شحن وعنونة",
+    "quality_control": "فحص جودة",
+    "waiting_areas": "مناطق انتظار",
+    "equipment": "أجهزة ومعدات",
+    "production_line": "خط إنتاج",
+    "office": "إدارة ومكاتب",
+    "worker_housing": "سكن عمال",
+    "returns": "مرتجعات",
+}
+
+LEGACY_TYPE_CAPABILITIES = {
+    "storage": ["cabinets"],
+    "installation_engraving": ["cabinets", "workstations", "assembly", "engraving", "quality_control"],
+    "shipping_labeling": ["cabinets", "workstations", "packing", "shipping_labeling", "waiting_areas"],
+    "packing": ["cabinets", "workstations", "packing"],
+    "returns": ["cabinets", "returns", "quality_control"],
+    "raw_materials": ["cabinets"],
+    "ready_to_ship": ["cabinets", "waiting_areas", "shipping_labeling"],
+    "worker_housing": ["worker_housing"],
+    "office": ["office"],
+    "other": [],
+}
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class RoomCreate(BaseModel):
+def _normalize_capabilities(values: list[str] | None) -> list[str]:
+    allowed = set(CAPABILITY_LABELS)
+    return sorted({str(value).strip() for value in (values or []) if str(value).strip() in allowed})
+
+
+def _hydrate_section(row: dict[str, Any]) -> dict[str, Any]:
+    capabilities = row.get("capabilities")
+    if capabilities is None:
+        capabilities = LEGACY_TYPE_CAPABILITIES.get(str(row.get("room_type") or "other"), [])
+    row["capabilities"] = _normalize_capabilities(capabilities)
+    row["allows_cabinets"] = "cabinets" in row["capabilities"]
+    row["section_number"] = int(row.get("section_number") or row.get("room_number") or 0)
+    row["room_number"] = row["section_number"]  # compatibility with current frontend/data
+    row["entity_type"] = "section"
+    return row
+
+
+class SectionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     warehouse_id: str = Field(min_length=1, max_length=80)
-    name: str = Field(min_length=1, max_length=120)
-    room_type: RoomType = "storage"
-    allows_cabinets: bool = True
+    name: str | None = Field(default=None, max_length=120)
+    capabilities: list[SectionCapability] = Field(default_factory=list)
     notes: str | None = Field(default=None, max_length=500)
 
+    @field_validator("capabilities")
+    @classmethod
+    def unique_capabilities(cls, value: list[SectionCapability]) -> list[SectionCapability]:
+        return list(dict.fromkeys(value))
 
-class RoomCabinetCreate(BaseModel):
+
+class SectionBulkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    warehouse_id: str = Field(min_length=1, max_length=80)
+    count: int = Field(ge=1, le=50)
+    default_capabilities: list[SectionCapability] = Field(default_factory=list)
+
+
+class SectionCabinetCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cabinet_name: str | None = Field(default=None, max_length=120)
@@ -78,10 +141,21 @@ async def _next_number(db: Any, key: str) -> int:
     return int(row["value"])
 
 
-async def ensure_room_indexes(db: Any) -> None:
+async def _get_branch(db: Any, *, warehouse_id: str, user_id: str) -> dict[str, Any]:
+    branch = await db[WAREHOUSES].find_one(
+        {"id": warehouse_id, "user_id": user_id, "status": "active"},
+        {"_id": 0},
+    )
+    if not branch:
+        raise HTTPException(status_code=404, detail={"code": "branch_not_found"})
+    return branch
+
+
+async def ensure_section_indexes(db: Any) -> None:
     await db[ROOMS].create_index(
         [("user_id", 1), ("warehouse_id", 1), ("room_number", 1)],
         unique=True,
+        name="uq_branch_section_number",
     )
     await db[CABINETS].create_index(
         [("user_id", 1), ("warehouse_id", 1), ("room_id", 1), ("cabinet_number", 1)],
@@ -91,101 +165,153 @@ async def ensure_room_indexes(db: Any) -> None:
     )
 
 
+async def _create_section_doc(
+    db: Any,
+    *,
+    branch: dict[str, Any],
+    user_id: str,
+    actor_id: str,
+    name: str | None,
+    capabilities: list[str],
+    notes: str | None = None,
+) -> dict[str, Any]:
+    number = await _next_number(db, f"section:{user_id}:{branch['id']}")
+    now = _now()
+    normalized = _normalize_capabilities(capabilities)
+    section = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "warehouse_id": branch["id"],
+        "warehouse_code": branch.get("code"),
+        "room_number": number,
+        "section_number": number,
+        "code": f"S{number:02d}",
+        "name": (_text(name) or f"قسم {number}"),
+        "capabilities": normalized,
+        "allows_cabinets": "cabinets" in normalized,
+        "room_type": "dynamic",
+        "notes": _text(notes) or None,
+        "status": "active",
+        "created_at": now,
+        "updated_at": now,
+        "created_by": actor_id,
+        "entity_type": "section",
+    }
+    await db[ROOMS].insert_one(section)
+    section.pop("_id", None)
+    return section
+
+
 def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
-    router = APIRouter(prefix="/warehouse-locations-v2", tags=["Mezan OS V2 Warehouse Rooms"])
+    router = APIRouter(prefix="/warehouse-locations-v2", tags=["Mezan OS V2 Branch Sections"])
 
-    @router.post("/rooms", status_code=status.HTTP_201_CREATED)
-    async def create_room(payload: RoomCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_manager(user)
-        user_id = _merchant_user_id(actor)
-        warehouse = await db[WAREHOUSES].find_one(
-            {"id": payload.warehouse_id, "user_id": user_id, "status": "active"},
-            {"_id": 0},
-        )
-        if not warehouse:
-            raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
-
-        await ensure_room_indexes(db)
-        number = await _next_number(db, f"room:{user_id}:{payload.warehouse_id}")
-        now = _now()
-        room = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "warehouse_id": payload.warehouse_id,
-            "warehouse_code": warehouse.get("code"),
-            "room_number": number,
-            "code": f"R{number:02d}",
-            "name": payload.name.strip(),
-            "room_type": payload.room_type,
-            "allows_cabinets": payload.allows_cabinets,
-            "notes": _text(payload.notes) or None,
-            "status": "active",
-            "created_at": now,
-            "updated_at": now,
-            "created_by": _text(actor.get("id")),
+    @router.get("/section-capabilities")
+    async def section_capabilities(user: dict = Depends(current_user)) -> dict[str, Any]:
+        _require_manager(user)
+        return {
+            "items": [{"value": value, "label": label} for value, label in CAPABILITY_LABELS.items()],
+            "recommended": {
+                "storage": ["cabinets"],
+                "assembly": ["cabinets", "workstations", "assembly", "quality_control"],
+                "engraving": ["cabinets", "workstations", "engraving", "quality_control"],
+                "shipping": ["cabinets", "workstations", "packing", "shipping_labeling", "waiting_areas"],
+                "production": ["cabinets", "workstations", "equipment", "production_line", "quality_control"],
+                "administration": ["office", "cabinets"],
+            },
         }
-        try:
-            await db[ROOMS].insert_one(room)
-        except DuplicateKeyError as exc:
-            raise HTTPException(status_code=409, detail={"code": "room_number_conflict"}) from exc
-        room.pop("_id", None)
-        return room
 
-    @router.get("/warehouses/{warehouse_id}/rooms")
-    async def list_rooms(warehouse_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    @router.post("/sections", status_code=status.HTTP_201_CREATED)
+    @router.post("/rooms", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+    async def create_section(payload: SectionCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
-        rooms = await db[ROOMS].find(
+        branch = await _get_branch(db, warehouse_id=payload.warehouse_id, user_id=user_id)
+        await ensure_section_indexes(db)
+        try:
+            return await _create_section_doc(
+                db,
+                branch=branch,
+                user_id=user_id,
+                actor_id=_text(actor.get("id")),
+                name=payload.name,
+                capabilities=list(payload.capabilities),
+                notes=payload.notes,
+            )
+        except DuplicateKeyError as exc:
+            raise HTTPException(status_code=409, detail={"code": "section_number_conflict"}) from exc
+
+    @router.post("/sections/bulk", status_code=status.HTTP_201_CREATED)
+    async def create_sections_bulk(payload: SectionBulkCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        branch = await _get_branch(db, warehouse_id=payload.warehouse_id, user_id=user_id)
+        await ensure_section_indexes(db)
+        created = []
+        for _ in range(payload.count):
+            created.append(await _create_section_doc(
+                db,
+                branch=branch,
+                user_id=user_id,
+                actor_id=_text(actor.get("id")),
+                name=None,
+                capabilities=list(payload.default_capabilities),
+            ))
+        return {"items": created, "created_count": len(created)}
+
+    @router.get("/warehouses/{warehouse_id}/sections")
+    @router.get("/warehouses/{warehouse_id}/rooms", include_in_schema=False)
+    async def list_sections(warehouse_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        rows = await db[ROOMS].find(
             {"warehouse_id": warehouse_id, "user_id": user_id, "status": "active"},
             {"_id": 0},
         ).sort("room_number", 1).to_list(length=500)
-        room_ids = [room["id"] for room in rooms]
+        sections = [_hydrate_section(row) for row in rows]
+        section_ids = [section["id"] for section in sections]
         cabinets = []
-        if room_ids:
+        if section_ids:
             cabinets = await db[CABINETS].find(
-                {"user_id": user_id, "room_id": {"$in": room_ids}, "status": "active"},
+                {"user_id": user_id, "room_id": {"$in": section_ids}, "status": "active"},
                 {"_id": 0},
             ).sort([("room_id", 1), ("cabinet_number", 1)]).to_list(length=2000)
-        grouped = {room_id: [] for room_id in room_ids}
+        grouped = {section_id: [] for section_id in section_ids}
         for cabinet in cabinets:
             grouped.setdefault(cabinet.get("room_id"), []).append(cabinet)
-        for room in rooms:
-            room["cabinets"] = grouped.get(room["id"], [])
-            room["cabinet_count"] = len(room["cabinets"])
-        return {"items": rooms, "total": len(rooms)}
+        for section in sections:
+            section["cabinets"] = grouped.get(section["id"], [])
+            section["cabinet_count"] = len(section["cabinets"])
+        return {"items": sections, "total": len(sections)}
 
-    @router.post("/rooms/{room_id}/cabinets", status_code=status.HTTP_201_CREATED)
-    async def create_room_cabinet(
-        room_id: str,
-        payload: RoomCabinetCreate,
+    @router.post("/sections/{section_id}/cabinets", status_code=status.HTTP_201_CREATED)
+    @router.post("/rooms/{section_id}/cabinets", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+    async def create_section_cabinet(
+        section_id: str,
+        payload: SectionCabinetCreate,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
-        await ensure_room_indexes(db)
-        room = await db[ROOMS].find_one(
-            {"id": room_id, "user_id": user_id, "status": "active"},
+        await ensure_section_indexes(db)
+        raw_section = await db[ROOMS].find_one(
+            {"id": section_id, "user_id": user_id, "status": "active"},
             {"_id": 0},
         )
-        if not room:
-            raise HTTPException(status_code=404, detail={"code": "room_not_found"})
-        if not room.get("allows_cabinets", True):
+        if not raw_section:
+            raise HTTPException(status_code=404, detail={"code": "section_not_found"})
+        section = _hydrate_section(raw_section)
+        if "cabinets" not in section["capabilities"]:
             raise HTTPException(
                 status_code=409,
-                detail={"code": "room_does_not_allow_cabinets", "message": "هذه الغرفة تشغيلية ولا تسمح بإضافة دواليب."},
+                detail={"code": "section_missing_cabinet_capability", "message": "فعّل قدرة الدواليب والخانات لهذا القسم أولًا."},
             )
-        warehouse = await db[WAREHOUSES].find_one(
-            {"id": room["warehouse_id"], "user_id": user_id, "status": "active"},
-            {"_id": 0},
-        )
-        if not warehouse:
-            raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
+        branch = await _get_branch(db, warehouse_id=section["warehouse_id"], user_id=user_id)
 
-        number = await _next_number(db, f"room-cabinet:{user_id}:{room_id}")
-        room_code = room.get("code") or f"R{int(room.get('room_number') or 0):02d}"
-        cabinet_code = f"{room_code}-C{number:02d}"
+        number = await _next_number(db, f"section-cabinet:{user_id}:{section_id}")
+        section_code = section.get("code") or f"S{int(section.get('section_number') or 0):02d}"
+        cabinet_code = f"{section_code}-C{number:02d}"
         generated_payload = CabinetGenerate(
-            warehouse_id=room["warehouse_id"],
+            warehouse_id=section["warehouse_id"],
             cabinet_code=cabinet_code,
             cabinet_name=payload.cabinet_name,
             length=payload.length,
@@ -193,17 +319,20 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
             purpose=payload.purpose,
             max_items_per_location=payload.max_items_per_location,
         )
-        generated = generate_location_rows(generated_payload, warehouse_code=warehouse["code"])
+        generated = generate_location_rows(generated_payload, warehouse_code=branch["code"])
         cabinet_id = str(uuid.uuid4())
         now = _now()
         cabinet = {
             "id": cabinet_id,
             "user_id": user_id,
-            "warehouse_id": room["warehouse_id"],
-            "warehouse_code": warehouse["code"],
-            "room_id": room_id,
-            "room_number": room.get("room_number"),
-            "room_code": room_code,
+            "warehouse_id": section["warehouse_id"],
+            "warehouse_code": branch["code"],
+            "room_id": section_id,
+            "section_id": section_id,
+            "room_number": section["section_number"],
+            "section_number": section["section_number"],
+            "room_code": section_code,
+            "section_code": section_code,
             "code": cabinet_code,
             "cabinet_number": number,
             "name": (payload.cabinet_name or f"دولاب {number}").strip(),
@@ -222,11 +351,14 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
                 **row,
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
-                "warehouse_id": room["warehouse_id"],
-                "warehouse_code": warehouse["code"],
-                "room_id": room_id,
-                "room_number": room.get("room_number"),
-                "room_code": room_code,
+                "warehouse_id": section["warehouse_id"],
+                "warehouse_code": branch["code"],
+                "room_id": section_id,
+                "section_id": section_id,
+                "room_number": section["section_number"],
+                "section_number": section["section_number"],
+                "room_code": section_code,
+                "section_code": section_code,
                 "cabinet_id": cabinet_id,
                 "cabinet_code": cabinet_code,
                 "barcode_value": barcode_value,
@@ -242,14 +374,14 @@ def make_warehouse_room_router(db: Any, current_user: Callable[..., Any]) -> API
         except DuplicateKeyError as exc:
             await db[CABINETS].delete_one({"id": cabinet_id, "user_id": user_id})
             await db[LOCATIONS].delete_many({"cabinet_id": cabinet_id, "user_id": user_id})
-            raise HTTPException(status_code=409, detail={"code": "room_cabinet_number_conflict"}) from exc
+            raise HTTPException(status_code=409, detail={"code": "section_cabinet_number_conflict"}) from exc
 
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()),
             "user_id": user_id,
-            "event_type": "room_cabinet_generated",
-            "warehouse_id": room["warehouse_id"],
-            "room_id": room_id,
+            "event_type": "section_cabinet_generated",
+            "warehouse_id": section["warehouse_id"],
+            "section_id": section_id,
             "cabinet_id": cabinet_id,
             "locations_created": len(locations),
             "actor_id": _text(actor.get("id")),
