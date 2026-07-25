@@ -12,10 +12,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
-    Briefcase, Receipt, HandCoins, Truck, Users, ArrowRight,
+    Briefcase, Receipt, HandCoins, Truck, Users, ArrowRight, Warehouse,
 } from "@phosphor-icons/react";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
+import WarehouseLocations from "./WarehouseLocations";
 
 
 const fmt = (v) =>
@@ -48,7 +49,34 @@ function KPI({ title, value, sub, tone = "slate", Icon, link, linkLabel, testid 
 }
 
 
+function WorkspaceTabs({ active, onChange }) {
+    return (
+        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2" data-testid="operations-workspace-tabs">
+            <button
+                type="button"
+                onClick={() => onChange("summary")}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${active === "summary" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                data-testid="operations-summary-tab"
+            >
+                <Briefcase size={18} weight="duotone" />
+                ملخص العمليات
+            </button>
+            <button
+                type="button"
+                onClick={() => onChange("warehouse")}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${active === "warehouse" ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                data-testid="operations-warehouse-tab"
+            >
+                <Warehouse size={18} weight="duotone" />
+                المستودعات والدواليب
+            </button>
+        </div>
+    );
+}
+
+
 export default function OperationsDashboard() {
+    const [workspace, setWorkspace] = useState("summary");
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -84,7 +112,6 @@ export default function OperationsDashboard() {
             .filter((l) => l.status !== "paid")
             .reduce((acc, l) => acc + Number(l.remaining_amount || 0), 0);
 
-        // Advances: positive remaining = employee still owes us.
         const adv_outstanding = data.advances.reduce(
             (acc, l) => acc + Math.max(0, Number(l.remaining_amount || 0)),
             0,
@@ -104,16 +131,29 @@ export default function OperationsDashboard() {
         };
     }, [data]);
 
+    if (workspace === "warehouse") {
+        return (
+            <div dir="rtl" className="space-y-5" data-testid="operations-warehouse-workspace">
+                <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+                <WarehouseLocations />
+            </div>
+        );
+    }
+
     if (loading || !k) {
         return (
-            <div dir="rtl" className="p-10 text-center text-slate-500" data-testid="ops-loading">
-                جاري التحميل…
+            <div dir="rtl" className="space-y-5">
+                <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+                <div className="p-10 text-center text-slate-500" data-testid="ops-loading">
+                    جاري التحميل…
+                </div>
             </div>
         );
     }
 
     return (
         <div dir="rtl" data-testid="operations-dashboard-page" className="space-y-6">
+            <WorkspaceTabs active={workspace} onChange={setWorkspace} />
             <div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 flex items-center gap-2">
                     <Briefcase size={28} weight="duotone" className="text-violet-700" />
@@ -125,7 +165,6 @@ export default function OperationsDashboard() {
                 </p>
             </div>
 
-            {/* Purchase Invoices */}
             <section>
                 <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <Receipt size={18} weight="duotone" className="text-slate-500" />
@@ -142,7 +181,6 @@ export default function OperationsDashboard() {
                 </div>
             </section>
 
-            {/* Advances */}
             <section>
                 <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <HandCoins size={18} weight="duotone" className="text-slate-500" />
@@ -163,12 +201,12 @@ export default function OperationsDashboard() {
                 </div>
             </section>
 
-            {/* Receivables */}
             <section>
                 <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <Truck size={18} weight="duotone" className="text-slate-500" />
                     الذمم المدينة والتحصيلات
-                </h2>                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <KPI title="إجمالي الذمم" value={k.recv_invoiced}
                         sub={`${data.receivables.length} ذمة`}
                         Icon={Truck}
@@ -185,7 +223,6 @@ export default function OperationsDashboard() {
                 </div>
             </section>
 
-            {/* Iter-138 — Salary accrual (unified source of truth) */}
             <section data-testid="ops-salary-accrual-section">
                 <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <Users size={18} weight="duotone" className="text-slate-500" />
