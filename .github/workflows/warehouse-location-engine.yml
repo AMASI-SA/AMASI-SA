@@ -17,7 +17,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/warehouse_location_routes.py'
+              - 'backend/warehouse_location_v2_routes.py'
+              - 'backend/warehouse_room_routes.py'
+              - 'backend/order_engine/__init__.py'
+              - 'backend/tests/test_warehouse_location_routes.py'
+            frontend:
+              - 'frontend/src/pages/WarehouseLocations.jsx'
+              - 'frontend/src/pages/WarehouseControlTower.jsx'
+              - 'frontend/src/components/WarehouseRoomsPanel.jsx'
+              - 'frontend/src/components/Layout.jsx'
+              - 'frontend/src/pages/OperationsDashboard.jsx'
+              - '.github/workflows/warehouse-location-engine.yml'
+
   backend-unit:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,6 +61,8 @@ jobs:
         run: python -m pytest tests/test_warehouse_location_routes.py -q
 
   frontend-build:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
