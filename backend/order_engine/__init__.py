@@ -5,7 +5,6 @@ workspaces and engines.
 
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
-
 from .mapper import OrderMappingError, map_salla_order
 from .repository import (
     MongoOrderRepository,
@@ -45,10 +44,12 @@ def make_order_engine_router(*args, **kwargs):
 
     from warehouse_location_routes import make_warehouse_location_router
     from warehouse_location_v2_routes import make_warehouse_location_v2_router
+    from warehouse_room_routes import make_warehouse_room_router
 
     child_routers = [
         make_warehouse_location_router(db, current_user),
         make_warehouse_location_v2_router(db, current_user),
+        make_warehouse_room_router(db, current_user),
     ]
     existing_paths = {getattr(route, "path", None) for route in router.routes}
     for child_router in child_routers:
