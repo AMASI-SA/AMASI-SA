@@ -38,26 +38,24 @@ _original_make_order_engine_router = _routes.make_order_engine_router
 
 
 def make_order_engine_router(*args, **kwargs):
-    """Build the Order Engine router and register independent operations engines.
-
-    The main server imports ``make_order_engine_router`` directly from
-    ``order_engine.routes``.  Replacing the symbol on that module here keeps
-    registration isolated from the very large ``server.py`` while preserving
-    the public API paths. Warehouse routes retain their own
-    ``/warehouse-locations`` prefix and are exposed under the server's
-    existing ``/api`` router.
-    """
+    """Build Order Engine plus independent Mezan OS operations engines."""
     router = _original_make_order_engine_router(*args, **kwargs)
     db = args[0] if args else kwargs["db"]
     current_user = args[1] if len(args) > 1 else kwargs["current_user"]
 
     from warehouse_location_routes import make_warehouse_location_router
+    from warehouse_location_v2_routes import make_warehouse_location_v2_router
 
-    warehouse_router = make_warehouse_location_router(db, current_user)
+    child_routers = [
+        make_warehouse_location_router(db, current_user),
+        make_warehouse_location_v2_router(db, current_user),
+    ]
     existing_paths = {getattr(route, "path", None) for route in router.routes}
-    for route in warehouse_router.routes:
-        if getattr(route, "path", None) not in existing_paths:
-            router.routes.append(route)
+    for child_router in child_routers:
+        for route in child_router.routes:
+            if getattr(route, "path", None) not in existing_paths:
+                router.routes.append(route)
+                existing_paths.add(getattr(route, "path", None))
     return router
 
 
