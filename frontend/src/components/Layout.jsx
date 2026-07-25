@@ -7,8 +7,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
-import WarehouseLocations from "../pages/WarehouseLocations";
-import WarehouseRoomsPanel from "./WarehouseRoomsPanel";
+import WarehouseControlTower from "../pages/WarehouseControlTower";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -37,7 +36,7 @@ const V2_LINKS = [
     { to: "/orders-v2", label: "الطلبات", Icon: Package },
     { to: "/products-v2", label: "المنتجات", Icon: Package },
     { to: "/components-v2", label: "المكونات", Icon: Cube },
-    { to: "/components-v2?workspace=warehouse", label: "المستودعات", Icon: Warehouse },
+    { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن", Icon: Warehouse },
 ];
 
 function MezanV2Navigation({ location }) {
@@ -91,7 +90,7 @@ function WarehouseSidebarLink({ location, onNavigate }) {
             className={`flex items-center gap-2.5 ps-4 pe-3 py-2 rounded-lg text-[13.5px] transition-colors ${active ? "bg-brand text-white font-semibold" : "text-foreground hover:bg-accent hover:text-brand"}`}
         >
             <Warehouse size={17} weight="duotone" />
-            <span className="truncate flex-1">المستودعات</span>
+            <span className="truncate flex-1">الفروع والمخازن</span>
         </NavLink>,
         target,
     );
@@ -102,12 +101,7 @@ export default function Layout({ children }) {
     const location = useLocation();
     const isWarehouseV2 = location.pathname === "/components-v2"
         && new URLSearchParams(location.search).get("workspace") === "warehouse";
-    const pageContent = isWarehouseV2 ? (
-        <div className="space-y-8">
-            <WarehouseLocations />
-            <WarehouseRoomsPanel />
-        </div>
-    ) : children;
+    const pageContent = isWarehouseV2 ? <WarehouseControlTower /> : children;
 
     useEffect(() => { setMobileOpen(false); }, [location.pathname, location.search]);
     useEffect(() => {
