@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from ai_analysis_routes import make_ai_analysis_router
 from financial_pages_inventory_data import INVENTORY, summary
 
 
@@ -48,4 +49,5 @@ def make_financial_pages_inventory_router(current_user):
             "row_count": len(rows),
         }
 
+    router.include_router(make_ai_analysis_router(current_user))
     return router
