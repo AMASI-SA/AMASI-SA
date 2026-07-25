@@ -65,6 +65,18 @@ class CabinetCreateV2(BaseModel):
     max_items_per_location: int | None = Field(default=None, ge=1, le=100000)
 
 
+class LocationPlacementV2(BaseModel):
+    """A physical placement is valid only after scanning the target location."""
+
+    model_config = ConfigDict(extra="forbid")
+    scanned_barcode: str = Field(min_length=1, max_length=120)
+    product_id: str = Field(min_length=1, max_length=120)
+    product_name: str | None = Field(default=None, max_length=240)
+    sku: str | None = Field(default=None, max_length=120)
+    quantity: int = Field(ge=1, le=100000)
+    order_number: str | None = Field(default=None, max_length=80)
+
+
 async def _next_number(db: Any, *, key: str) -> int:
     row = await db[COUNTERS].find_one_and_update(
         {"key": key},
@@ -87,6 +99,9 @@ async def ensure_v2_indexes(db: Any) -> None:
         [("user_id", 1), ("warehouse_id", 1), ("cabinet_number", 1)],
         unique=True,
         sparse=True,
+    )
+    await db[LOCATIONS].create_index(
+        [("user_id", 1), ("barcode_value", 1)], unique=True, sparse=True
     )
 
 
@@ -165,13 +180,17 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
             "total_locations": len(generated), "status": "active", "created_at": now,
             "created_by": _text(actor.get("id")),
         }
-        locations = [{
-            **row, "id": str(uuid.uuid4()), "user_id": user_id,
-            "warehouse_id": payload.warehouse_id, "warehouse_code": warehouse["code"],
-            "cabinet_id": cabinet_id, "cabinet_code": cabinet_code,
-            "qr_value": f"MEZAN-LOCATION:{row['code']}", "occupancy": None,
-            "created_at": now, "updated_at": now,
-        } for row in generated]
+        locations = []
+        for row in generated:
+            barcode_value = row["code"]
+            locations.append({
+                **row, "id": str(uuid.uuid4()), "user_id": user_id,
+                "warehouse_id": payload.warehouse_id, "warehouse_code": warehouse["code"],
+                "cabinet_id": cabinet_id, "cabinet_code": cabinet_code,
+                "barcode_value": barcode_value, "barcode_symbology": "CODE39",
+                "qr_value": f"MEZAN-LOCATION:{barcode_value}", "occupancy": None,
+                "created_at": now, "updated_at": now,
+            })
         try:
             await db[CABINETS].insert_one(cabinet)
             await db[LOCATIONS].insert_many(locations, ordered=True)
@@ -186,5 +205,103 @@ def make_warehouse_location_v2_router(db: Any, current_user: Callable[..., Any])
         })
         cabinet.pop("_id", None)
         return {"cabinet": cabinet, "locations_created": len(locations)}
+
+    @router.get("/locations/scan/{barcode}")
+    async def scan_location(barcode: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        normalized = _text(barcode).upper()
+        location = await db[LOCATIONS].find_one(
+            {"user_id": user_id, "barcode_value": normalized}, {"_id": 0}
+        )
+        if not location:
+            raise HTTPException(status_code=404, detail={"code": "location_barcode_not_found"})
+        return {"ok": True, "scan_verified": True, "location": location}
+
+    @router.post("/locations/{location_id}/place", status_code=201)
+    async def place_product(
+        location_id: str,
+        payload: LocationPlacementV2,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        location = await db[LOCATIONS].find_one(
+            {"id": location_id, "user_id": user_id}, {"_id": 0}
+        )
+        if not location:
+            raise HTTPException(status_code=404, detail={"code": "location_not_found"})
+        expected_barcode = _text(location.get("barcode_value") or location.get("code")).upper()
+        scanned_barcode = _text(payload.scanned_barcode).upper()
+        if scanned_barcode != expected_barcode:
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()), "user_id": user_id,
+                "event_type": "placement_scan_rejected", "location_id": location_id,
+                "expected_barcode": expected_barcode, "scanned_barcode": scanned_barcode,
+                "product_id": payload.product_id, "actor_id": _text(actor.get("id")),
+                "occurred_at": _now(),
+            })
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "location_barcode_mismatch",
+                    "message": "الباركود المصوّر لا يطابق الخانة المطلوبة؛ لم يتم وضع المنتج.",
+                    "expected_location_code": expected_barcode,
+                },
+            )
+        if location.get("state") == "disabled":
+            raise HTTPException(status_code=409, detail={"code": "location_disabled"})
+
+        occupancy = location.get("occupancy") or {"items": [], "total_quantity": 0}
+        items = list(occupancy.get("items") or [])
+        existing = next((item for item in items if item.get("product_id") == payload.product_id), None)
+        if existing:
+            existing["quantity"] = int(existing.get("quantity") or 0) + payload.quantity
+            existing["updated_at"] = _now()
+        else:
+            items.append({
+                "product_id": payload.product_id,
+                "product_name": payload.product_name,
+                "sku": payload.sku,
+                "quantity": payload.quantity,
+                "order_number": payload.order_number,
+                "placed_at": _now(),
+                "placed_by": _text(actor.get("id")),
+            })
+        total_quantity = sum(int(item.get("quantity") or 0) for item in items)
+        max_items = location.get("max_items")
+        if max_items is not None and total_quantity > int(max_items):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "location_capacity_exceeded", "max_items": int(max_items)},
+            )
+        now = _now()
+        next_occupancy = {"items": items, "total_quantity": total_quantity}
+        await db[LOCATIONS].update_one(
+            {"id": location_id, "user_id": user_id},
+            {"$set": {
+                "occupancy": next_occupancy,
+                "state": "occupied",
+                "last_verified_scan": scanned_barcode,
+                "last_scan_verified_at": now,
+                "updated_at": now,
+            }},
+        )
+        await db[EVENTS].insert_one({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "event_type": "product_placed_after_scan", "location_id": location_id,
+            "location_code": expected_barcode, "scan_verified": True,
+            "product_id": payload.product_id, "quantity": payload.quantity,
+            "order_number": payload.order_number, "actor_id": _text(actor.get("id")),
+            "occurred_at": now,
+        })
+        return {
+            "ok": True,
+            "scan_verified": True,
+            "location_id": location_id,
+            "location_code": expected_barcode,
+            "state": "occupied",
+            "occupancy": next_occupancy,
+        }
 
     return router
