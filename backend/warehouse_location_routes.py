@@ -1,7 +1,8 @@
 """Warehouse Location Engine — Sprint 2.1.
 
-Creates deterministic warehouse/cabinet/bin locations from a compact structure
-and keeps occupied locations immutable. All records are tenant-scoped.
+A merchant creates a warehouse once with its geographic address, then creates
+any number of cabinets under it. Each cabinet is entered as length × width;
+Mezan generates numbered locations and stable QR payloads automatically.
 """
 from __future__ import annotations
 
@@ -86,8 +87,14 @@ def _merchant_user_id(user: dict[str, Any]) -> str:
 
 class WarehouseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=120)
     code: str = Field(min_length=1, max_length=20)
+    country: str = Field(min_length=1, max_length=80)
+    city: str = Field(min_length=1, max_length=80)
+    district: str = Field(min_length=1, max_length=120)
+    street: str = Field(min_length=1, max_length=180)
+    warehouse_number: str = Field(min_length=1, max_length=40)
     is_primary: bool = False
 
     @field_validator("code")
@@ -101,14 +108,14 @@ class WarehouseCreate(BaseModel):
 
 class CabinetGenerate(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     warehouse_id: str = Field(min_length=1, max_length=80)
     cabinet_code: str = Field(min_length=1, max_length=20)
     cabinet_name: str | None = Field(default=None, max_length=120)
-    columns: int = Field(ge=1, le=100)
-    rows: int = Field(ge=1, le=100)
-    bins_per_row: int = Field(ge=1, le=100)
+    length: int = Field(ge=1, le=100, description="Vertical grid size")
+    width: int = Field(ge=1, le=100, description="Horizontal grid size")
     purpose: LocationPurpose = "temporary_staging"
-    max_items_per_bin: int | None = Field(default=None, ge=1, le=100000)
+    max_items_per_location: int | None = Field(default=None, ge=1, le=100000)
 
     @field_validator("cabinet_code")
     @classmethod
@@ -119,29 +126,33 @@ class CabinetGenerate(BaseModel):
         return value
 
 
-def location_code(cabinet_code: str, column: int, row: int, bin_number: int) -> str:
-    """Stable human-readable code, e.g. A05-C01-R03-B04."""
-    return f"{_normalized_code(cabinet_code)}-C{column:02d}-R{row:02d}-B{bin_number:02d}"
+def location_code(warehouse_code: str, cabinet_code: str, number: int) -> str:
+    """Stable compact code, e.g. WH01-A05-024."""
+    return f"{_normalized_code(warehouse_code)}-{_normalized_code(cabinet_code)}-{number:03d}"
 
 
-def generate_location_rows(payload: CabinetGenerate) -> list[dict[str, Any]]:
-    total = payload.columns * payload.rows * payload.bins_per_row
+def generate_location_rows(payload: CabinetGenerate, *, warehouse_code: str = "WH") -> list[dict[str, Any]]:
+    total = payload.length * payload.width
     if total > 5000:
         raise ValueError("cabinet_location_limit_exceeded")
-    rows: list[dict[str, Any]] = []
-    for column in range(1, payload.columns + 1):
-        for row in range(1, payload.rows + 1):
-            for bin_number in range(1, payload.bins_per_row + 1):
-                rows.append({
-                    "code": location_code(payload.cabinet_code, column, row, bin_number),
-                    "column": column,
-                    "row": row,
-                    "bin": bin_number,
-                    "purpose": payload.purpose,
-                    "state": "empty",
-                    "max_items": payload.max_items_per_bin,
-                })
-    return rows
+
+    locations: list[dict[str, Any]] = []
+    number = 0
+    for row in range(1, payload.length + 1):
+        for column in range(1, payload.width + 1):
+            number += 1
+            locations.append({
+                "code": location_code(warehouse_code, payload.cabinet_code, number),
+                "number": number,
+                "row": row,
+                "column": column,
+                "grid_y": row,
+                "grid_x": column,
+                "purpose": payload.purpose,
+                "state": "empty",
+                "max_items": payload.max_items_per_location,
+            })
+    return locations
 
 
 async def ensure_warehouse_location_indexes(db: Any) -> None:
@@ -149,6 +160,7 @@ async def ensure_warehouse_location_indexes(db: Any) -> None:
     await db[CABINETS].create_index([("user_id", 1), ("warehouse_id", 1), ("code", 1)], unique=True)
     await db[LOCATIONS].create_index([("user_id", 1), ("code", 1)], unique=True)
     await db[LOCATIONS].create_index([("user_id", 1), ("warehouse_id", 1), ("state", 1)])
+    await db[LOCATIONS].create_index([("user_id", 1), ("cabinet_id", 1), ("number", 1)], unique=True)
     await db[EVENTS].create_index([("user_id", 1), ("occurred_at", -1)])
 
 
@@ -167,6 +179,15 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
             "user_id": user_id,
             "name": payload.name.strip(),
             "code": payload.code,
+            "country": payload.country.strip(),
+            "city": payload.city.strip(),
+            "district": payload.district.strip(),
+            "street": payload.street.strip(),
+            "warehouse_number": payload.warehouse_number.strip(),
+            "address_label": " > ".join([
+                payload.country.strip(), payload.city.strip(), payload.district.strip(),
+                payload.street.strip(), payload.warehouse_number.strip(),
+            ]),
             "is_primary": payload.is_primary,
             "status": "active",
             "created_at": now,
@@ -175,7 +196,9 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         }
         try:
             if payload.is_primary:
-                await db[WAREHOUSES].update_many({"user_id": user_id}, {"$set": {"is_primary": False, "updated_at": now}})
+                await db[WAREHOUSES].update_many(
+                    {"user_id": user_id}, {"$set": {"is_primary": False, "updated_at": now}}
+                )
             await db[WAREHOUSES].insert_one(doc)
         except DuplicateKeyError as exc:
             raise HTTPException(status_code=409, detail={"code": "warehouse_code_exists"}) from exc
@@ -186,17 +209,41 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
     async def list_warehouses(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_manager(user)
         user_id = _merchant_user_id(actor)
-        rows = await db[WAREHOUSES].find({"user_id": user_id}, {"_id": 0}).sort("created_at", 1).to_list(length=500)
+        rows = await db[WAREHOUSES].find(
+            {"user_id": user_id}, {"_id": 0}
+        ).sort("created_at", 1).to_list(length=500)
         return {"items": rows, "total": len(rows)}
+
+    @router.get("/warehouses/{warehouse_id}")
+    async def get_warehouse(warehouse_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        warehouse = await db[WAREHOUSES].find_one(
+            {"id": warehouse_id, "user_id": user_id}, {"_id": 0}
+        )
+        if not warehouse:
+            raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
+        cabinets = await db[CABINETS].find(
+            {"warehouse_id": warehouse_id, "user_id": user_id}, {"_id": 0}
+        ).sort("created_at", 1).to_list(length=1000)
+        return {"warehouse": warehouse, "cabinets": cabinets, "cabinet_count": len(cabinets)}
 
     @router.post("/cabinets/preview")
     async def preview_cabinet(payload: CabinetGenerate, user: dict = Depends(current_user)) -> dict[str, Any]:
-        _require_manager(user)
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        warehouse = await db[WAREHOUSES].find_one(
+            {"id": payload.warehouse_id, "user_id": user_id, "status": "active"}, {"_id": 0}
+        )
+        if not warehouse:
+            raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
         try:
-            rows = generate_location_rows(payload)
+            rows = generate_location_rows(payload, warehouse_code=warehouse["code"])
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"code": str(exc), "max_locations": 5000}) from exc
         return {
+            "length": payload.length,
+            "width": payload.width,
             "total_locations": len(rows),
             "first_code": rows[0]["code"],
             "last_code": rows[-1]["code"],
@@ -214,7 +261,7 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         if not warehouse:
             raise HTTPException(status_code=404, detail={"code": "warehouse_not_found"})
         try:
-            generated = generate_location_rows(payload)
+            generated = generate_location_rows(payload, warehouse_code=warehouse["code"])
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"code": str(exc), "max_locations": 5000}) from exc
 
@@ -224,11 +271,11 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
             "id": cabinet_id,
             "user_id": user_id,
             "warehouse_id": payload.warehouse_id,
+            "warehouse_code": warehouse["code"],
             "code": payload.cabinet_code,
             "name": (payload.cabinet_name or payload.cabinet_code).strip(),
-            "columns": payload.columns,
-            "rows": payload.rows,
-            "bins_per_row": payload.bins_per_row,
+            "length": payload.length,
+            "width": payload.width,
             "purpose": payload.purpose,
             "total_locations": len(generated),
             "status": "active",
@@ -240,6 +287,7 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
             "id": str(uuid.uuid4()),
             "user_id": user_id,
             "warehouse_id": payload.warehouse_id,
+            "warehouse_code": warehouse["code"],
             "cabinet_id": cabinet_id,
             "cabinet_code": payload.cabinet_code,
             "qr_value": f"MEZAN-LOCATION:{row['code']}",
@@ -263,6 +311,18 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         cabinet.pop("_id", None)
         return {"cabinet": cabinet, "locations_created": len(locations)}
 
+    @router.get("/cabinets")
+    async def list_cabinets(
+        warehouse_id: str = Query(min_length=1),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_manager(user)
+        user_id = _merchant_user_id(actor)
+        items = await db[CABINETS].find(
+            {"user_id": user_id, "warehouse_id": warehouse_id}, {"_id": 0}
+        ).sort("created_at", 1).to_list(length=1000)
+        return {"items": items, "total": len(items)}
+
     @router.get("/locations")
     async def list_locations(
         warehouse_id: str | None = None,
@@ -280,13 +340,18 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
             query["cabinet_id"] = cabinet_id
         if state_filter:
             query["state"] = state_filter
-        items = await db[LOCATIONS].find(query, {"_id": 0}).sort([("cabinet_code", 1), ("column", 1), ("row", 1), ("bin", 1)]).to_list(length=limit)
-        totals_pipeline = [
+        items = await db[LOCATIONS].find(query, {"_id": 0}).sort(
+            [("warehouse_code", 1), ("cabinet_code", 1), ("number", 1)]
+        ).to_list(length=limit)
+        grouped = await db[LOCATIONS].aggregate([
             {"$match": query},
             {"$group": {"_id": "$state", "count": {"$sum": 1}}},
-        ]
-        grouped = await db[LOCATIONS].aggregate(totals_pipeline).to_list(length=20)
-        return {"items": items, "returned": len(items), "counts_by_state": {row["_id"]: row["count"] for row in grouped}}
+        ]).to_list(length=20)
+        return {
+            "items": items,
+            "returned": len(items),
+            "counts_by_state": {row["_id"]: row["count"] for row in grouped},
+        }
 
     @router.post("/locations/{location_id}/disable")
     async def disable_location(location_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -296,7 +361,10 @@ def make_warehouse_location_router(db: Any, current_user: Callable[..., Any]) ->
         if not location:
             raise HTTPException(status_code=404, detail={"code": "location_not_found"})
         if location.get("state") != "empty" or location.get("occupancy"):
-            raise HTTPException(status_code=409, detail={"code": "occupied_location_cannot_be_disabled", "message": "يجب تفريغ الخانة قبل تعطيلها."})
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "occupied_location_cannot_be_disabled", "message": "يجب تفريغ الخانة قبل تعطيلها."},
+            )
         now = _now()
         await db[LOCATIONS].update_one(
             {"id": location_id, "user_id": user_id, "state": "empty"},
