@@ -6,6 +6,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
+import WarehouseLocations from "../pages/WarehouseLocations";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -61,10 +62,13 @@ function GlobalOrderSearch({ compact = false }) {
 export default function Layout({ children }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const location = useLocation();
+    const isWarehouseV2 = location.pathname === "/components-v2"
+        && new URLSearchParams(location.search).get("workspace") === "warehouse";
+    const pageContent = isWarehouseV2 ? <WarehouseLocations /> : children;
 
     useEffect(() => {
         setMobileOpen(false);
-    }, [location.pathname]);
+    }, [location.pathname, location.search]);
 
     useEffect(() => {
         if (mobileOpen) {
@@ -129,7 +133,7 @@ export default function Layout({ children }) {
                     <GlobalOrderSearch />
                 </div>
                 <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
-                    {children}
+                    {pageContent}
                 </div>
             </main>
             <Toaster richColors position="top-center" />
