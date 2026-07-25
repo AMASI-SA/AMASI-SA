@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, NavLink } from "react-router-dom";
 import { List, MagnifyingGlass, Package, Cube, Warehouse } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
@@ -58,6 +59,43 @@ function MezanV2Navigation({ location }) {
     );
 }
 
+function WarehouseSidebarLink({ location, onNavigate }) {
+    const [target, setTarget] = useState(null);
+
+    useEffect(() => {
+        let frame;
+        const locate = () => {
+            const componentsLink = document.querySelector('[data-testid="nav-mezan-os-components"]');
+            if (componentsLink?.parentElement) {
+                setTarget(componentsLink.parentElement);
+                return;
+            }
+            frame = window.requestAnimationFrame(locate);
+        };
+        locate();
+        return () => {
+            if (frame) window.cancelAnimationFrame(frame);
+        };
+    }, []);
+
+    if (!target) return null;
+    const active = location.pathname === "/components-v2"
+        && new URLSearchParams(location.search).get("workspace") === "warehouse";
+
+    return createPortal(
+        <NavLink
+            to="/components-v2?workspace=warehouse"
+            onClick={onNavigate}
+            data-testid="nav-mezan-os-warehouses"
+            className={`flex items-center gap-2.5 ps-4 pe-3 py-2 rounded-lg text-[13.5px] transition-colors ${active ? "bg-brand text-white font-semibold" : "text-foreground hover:bg-accent hover:text-brand"}`}
+        >
+            <Warehouse size={17} weight="duotone" />
+            <span className="truncate flex-1">المستودعات</span>
+        </NavLink>,
+        target,
+    );
+}
+
 export default function Layout({ children }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const location = useLocation();
@@ -74,6 +112,7 @@ export default function Layout({ children }) {
     return (
         <div className="min-h-screen bg-background grain">
             <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+            <WarehouseSidebarLink location={location} onNavigate={() => setMobileOpen(false)} />
             <OrderUiEnhancements />
 
             <header className="lg:hidden sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur" data-testid="mobile-header">
