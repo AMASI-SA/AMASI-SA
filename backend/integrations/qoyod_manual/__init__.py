@@ -40,3 +40,17 @@ def _install_exact_rounding() -> None:
 
 _install_exact_rounding()
 del _install_exact_rounding
+
+
+# Install only after send.py has fully initialized. The implementation lives at
+# backend top-level so its unit tests do not import this package bootstrap.
+def _install_auto_send_payment_freshness() -> None:
+    from qoyod_auto_payment_freshness import (
+        install_auto_send_payment_freshness_patch,
+    )
+
+    install_auto_send_payment_freshness_patch()
+
+
+_install_auto_send_payment_freshness()
+del _install_auto_send_payment_freshness

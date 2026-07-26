@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - "backend/order_engine/__init__.py"
+      - "backend/integrations/qoyod_manual/__init__.py"
+      - "backend/qoyod_auto_payment_freshness.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
+      - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
       - ".github/workflows/qoyod-payment-freshness.yml"
   workflow_dispatch:
 
@@ -19,14 +22,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install targeted dependencies
+        run: python -m pip install -q pytest openpyxl
       - name: Verify latest-payment invariants
         run: |
           python - <<'PY'
           from pathlib import Path
           bootstrap = Path('order_engine/__init__.py').read_text(encoding='utf-8')
+          plan_b_package = Path('integrations/qoyod_manual/__init__.py').read_text(encoding='utf-8')
           orders = Path('orders_db.py').read_text(encoding='utf-8')
           assert '_orders_db.CRITICAL_FIELDS.add("payment_method")' in bootstrap
+          assert 'install_auto_send_payment_freshness_patch()' in plan_b_package
           for field in ('"payment_method"', '"payment_status"', '"paid_amount"', '"remaining_amount"', '"payment_collection_status"'):
               assert field in orders
           print('LATEST_PAYMENT_POLICY_OK')
           PY
+      - name: Run authoritative payment refresh tests
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_qoyod_auto_send_authoritative_payment.py tests/test_qoyod_auto_send_latest_payment.py -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
+          status=$?
+          cat /tmp/qoyod-payment-freshness.log
+          exit $status
+      - name: Upload payment freshness test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qoyod-payment-freshness-log
+          path: /tmp/qoyod-payment-freshness.log
+          if-no-files-found: ignore
