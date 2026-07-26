@@ -18,6 +18,7 @@ on:
       - "backend/tests/test_product_v2_full_details.py"
       - "backend/tests/test_product_v2_source_authority.py"
       - "backend/tests/test_product_v2_catalog_rank.py"
+      - "backend/tests/test_product_v2_live_salla_order_contract.py"
       - "frontend/src/pages/MezanProducts.jsx"
       - "frontend/src/pages/MezanProductsWorkspace.jsx"
       - "frontend/src/services/mezanProductsV2.js"
@@ -49,6 +50,7 @@ jobs:
             tests/test_product_v2_full_details.py \
             tests/test_product_v2_source_authority.py \
             tests/test_product_v2_catalog_rank.py \
+            tests/test_product_v2_live_salla_order_contract.py \
             -q --tb=short > /tmp/products-v2-pytest.log 2>&1
           status=$?
           cat /tmp/products-v2-pytest.log
