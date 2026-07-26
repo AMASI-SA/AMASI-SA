@@ -36,4 +36,17 @@ jobs:
           print('LATEST_PAYMENT_POLICY_OK')
           PY
       - name: Run authoritative payment refresh tests
-        run: python -m pytest tests/test_qoyod_auto_send_authoritative_payment.py tests/test_qoyod_auto_send_latest_payment.py -q
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_qoyod_auto_send_authoritative_payment.py tests/test_qoyod_auto_send_latest_payment.py -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
+          status=$?
+          cat /tmp/qoyod-payment-freshness.log
+          exit $status
+      - name: Upload payment freshness test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qoyod-payment-freshness-log
+          path: /tmp/qoyod-payment-freshness.log
+          if-no-files-found: ignore
