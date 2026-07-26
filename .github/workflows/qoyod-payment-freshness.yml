@@ -5,8 +5,8 @@ on:
     paths:
       - "backend/order_engine/__init__.py"
       - "backend/integrations/qoyod_manual/__init__.py"
-      - "backend/integrations/qoyod_manual/per_order_isolation.py"
       - "backend/qoyod_auto_payment_freshness.py"
+      - "backend/qoyod_auto_per_order_isolation.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
       - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
       - "backend/tests/test_qoyod_auto_send_per_order_isolation.py"
