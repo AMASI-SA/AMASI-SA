@@ -39,7 +39,7 @@ _original_make_order_engine_router = _routes.make_order_engine_router
 def _route_keys(route):
     """Return unique (path, method) keys for an APIRoute.
 
-    FastAPI legitimately supports GET and POST on the same path.  Comparing
+    FastAPI legitimately supports GET and POST on the same path. Comparing
     paths alone silently dropped later methods, which caused GET warehouse
     endpoints to return 405 while POST remained registered.
     """
@@ -57,11 +57,13 @@ def make_order_engine_router(*args, **kwargs):
     from warehouse_location_routes import make_warehouse_location_router
     from warehouse_location_v2_routes import make_warehouse_location_v2_router
     from warehouse_room_routes import make_warehouse_room_router
+    from warehouse_reset_routes import make_warehouse_reset_router
 
     child_routers = [
         make_warehouse_location_router(db, current_user),
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
+        make_warehouse_reset_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:
