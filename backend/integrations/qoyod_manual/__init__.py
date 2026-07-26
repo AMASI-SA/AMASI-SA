@@ -29,9 +29,6 @@ No synthetic adjustment product is added to the invoice.
 
 
 def _install_exact_rounding() -> None:
-    # Importing the package occurs before routes import symbols from send.py.
-    # Install once here so manual send and diagnostic routes use the same
-    # exact-parity builder without touching the frozen legacy pipeline.
     from integrations.qoyod_manual import send as _send
     from integrations.qoyod_manual.rounding_lrm_dynamic import install
 
@@ -42,8 +39,6 @@ _install_exact_rounding()
 del _install_exact_rounding
 
 
-# Install only after send.py has fully initialized. The implementation lives at
-# backend top-level so its unit tests do not import this package bootstrap.
 def _install_auto_send_payment_freshness() -> None:
     from qoyod_auto_payment_freshness import (
         install_auto_send_payment_freshness_patch,
@@ -54,3 +49,13 @@ def _install_auto_send_payment_freshness() -> None:
 
 _install_auto_send_payment_freshness()
 del _install_auto_send_payment_freshness
+
+
+def _install_per_order_failure_isolation() -> None:
+    from qoyod_auto_per_order_isolation import install_per_order_isolation
+
+    install_per_order_isolation()
+
+
+_install_per_order_failure_isolation()
+del _install_per_order_failure_isolation
