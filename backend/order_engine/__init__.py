@@ -5,6 +5,20 @@ workspaces and engines.
 
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
+
+# Payment-method freshness policy
+# -------------------------------
+# Orders commonly start as ``pending_payment`` and later move to a real method
+# such as Tamara, Tabby, card, or bank transfer.  Qoyod automatic send performs
+# an authoritative Salla resync immediately before posting, so the unified-order
+# merge must let the newest payment method replace the value captured when the
+# order was first created.  Keep this policy next to Order Engine bootstrap so
+# every consumer (Orders V2, manual sender, and Plan-B automatic sender) sees the
+# same latest payment fact.
+import orders_db as _orders_db
+
+_orders_db.CRITICAL_FIELDS.add("payment_method")
+
 from .mapper import OrderMappingError, map_salla_order
 from .repository import (
     MongoOrderRepository,
