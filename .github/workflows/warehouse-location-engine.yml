@@ -6,10 +6,13 @@ on:
       - "backend/warehouse_location_routes.py"
       - "backend/warehouse_location_v2_routes.py"
       - "backend/warehouse_room_routes.py"
+      - "backend/warehouse_reset_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_warehouse_location_routes.py"
+      - "backend/tests/test_warehouse_reset_routes.py"
       - "frontend/src/pages/WarehouseLocations.jsx"
       - "frontend/src/pages/WarehouseControlTower.jsx"
+      - "frontend/src/pages/WarehouseHierarchyWorkspace.jsx"
       - "frontend/src/components/WarehouseRoomsPanel.jsx"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/pages/OperationsDashboard.jsx"
@@ -32,11 +35,14 @@ jobs:
               - 'backend/warehouse_location_routes.py'
               - 'backend/warehouse_location_v2_routes.py'
               - 'backend/warehouse_room_routes.py'
+              - 'backend/warehouse_reset_routes.py'
               - 'backend/order_engine/__init__.py'
               - 'backend/tests/test_warehouse_location_routes.py'
+              - 'backend/tests/test_warehouse_reset_routes.py'
             frontend:
               - 'frontend/src/pages/WarehouseLocations.jsx'
               - 'frontend/src/pages/WarehouseControlTower.jsx'
+              - 'frontend/src/pages/WarehouseHierarchyWorkspace.jsx'
               - 'frontend/src/components/WarehouseRoomsPanel.jsx'
               - 'frontend/src/components/Layout.jsx'
               - 'frontend/src/pages/OperationsDashboard.jsx'
@@ -58,7 +64,7 @@ jobs:
       - name: Install targeted test dependencies
         run: python -m pip install fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 pytest==9.0.3
       - name: Run warehouse unit tests
-        run: python -m pytest tests/test_warehouse_location_routes.py -q
+        run: python -m pytest tests/test_warehouse_location_routes.py tests/test_warehouse_reset_routes.py -q
 
   frontend-build:
     needs: changes
