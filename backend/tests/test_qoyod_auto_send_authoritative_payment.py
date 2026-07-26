@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
-from integrations.qoyod_manual.payment_freshness_hotfix import (
-    sync_authoritative_payment_to_inbox,
-)
+from qoyod_auto_payment_freshness import sync_authoritative_payment_to_inbox
 
 
 class _Result:
