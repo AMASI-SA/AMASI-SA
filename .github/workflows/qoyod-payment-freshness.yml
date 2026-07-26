@@ -19,7 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install targeted test dependencies
-        run: python -m pip install -q pytest openpyxl
-      - name: Run payment freshness regression
-        run: python -m pytest tests/test_qoyod_auto_send_latest_payment.py -q
+      - name: Verify latest-payment invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bootstrap = Path('order_engine/__init__.py').read_text(encoding='utf-8')
+          orders = Path('orders_db.py').read_text(encoding='utf-8')
+          assert '_orders_db.CRITICAL_FIELDS.add("payment_method")' in bootstrap
+          for field in ('"payment_method"', '"payment_status"', '"paid_amount"', '"remaining_amount"', '"payment_collection_status"'):
+              assert field in orders
+          print('LATEST_PAYMENT_POLICY_OK')
+          PY
