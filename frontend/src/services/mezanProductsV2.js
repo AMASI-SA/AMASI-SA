@@ -38,6 +38,21 @@ export async function getProductV2(productId) {
     return response.data;
 }
 
+export async function refreshProductV2Details(productId) {
+    const response = await api.post(`/products-v2/${encodeURIComponent(productId)}/refresh-details`);
+    return response.data;
+}
+
+export async function getProductV2Costs(productId) {
+    const response = await api.get(`/products-v2/${encodeURIComponent(productId)}/costs`);
+    return response.data;
+}
+
+export async function saveProductV2Costs(productId, payload) {
+    const response = await api.put(`/products-v2/${encodeURIComponent(productId)}/costs`, payload);
+    return response.data;
+}
+
 export async function previewMissingSkus({ prefix = "AMS", width = 5, limit = 20 } = {}) {
     const response = await api.get("/products-v2/workspace/sku/preview", {
         params: { prefix, width, limit },
