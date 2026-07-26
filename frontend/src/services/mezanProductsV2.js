@@ -8,6 +8,21 @@ export async function listProductsV2({ page = 1, perPage = 30, query = "", statu
     return response.data;
 }
 
+export async function listWorkspaceProducts({
+    page = 1,
+    perPage = 30,
+    query = "",
+    status = "",
+    sort = "newest",
+    missingSku = false,
+} = {}) {
+    const params = { page, per_page: perPage, sort, missing_sku: missingSku };
+    if (query.trim()) params.q = query.trim();
+    if (status) params.status = status;
+    const response = await api.get("/products-v2/workspace/products", { params });
+    return response.data;
+}
+
 export async function getProductsV2Summary() {
     const response = await api.get("/products-v2/summary");
     return response.data;
@@ -20,5 +35,22 @@ export async function syncProductsV2() {
 
 export async function getProductV2(productId) {
     const response = await api.get(`/products-v2/${encodeURIComponent(productId)}`);
+    return response.data;
+}
+
+export async function previewMissingSkus({ prefix = "AMS", width = 5, limit = 20 } = {}) {
+    const response = await api.get("/products-v2/workspace/sku/preview", {
+        params: { prefix, width, limit },
+    });
+    return response.data;
+}
+
+export async function applyMissingSkus({ prefix = "AMS", width = 5, limit = 50, confirmation }) {
+    const response = await api.post("/products-v2/workspace/sku/apply", {
+        prefix,
+        width,
+        limit,
+        confirmation,
+    });
     return response.data;
 }
