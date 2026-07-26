@@ -24,9 +24,22 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install targeted dependencies
-        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl
+        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl cryptography
       - name: Run Products V2 unit tests
-        run: python -m pytest tests/test_product_v2_routes.py -q
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_product_v2_routes.py -q --tb=short > /tmp/products-v2-pytest.log 2>&1
+          status=$?
+          cat /tmp/products-v2-pytest.log
+          exit $status
+      - name: Upload Products V2 test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: products-v2-pytest-log
+          path: /tmp/products-v2-pytest.log
+          if-no-files-found: ignore
 
   frontend-build:
     runs-on: ubuntu-latest
