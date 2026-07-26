@@ -5,7 +5,7 @@ on:
     paths:
       - "backend/order_engine/__init__.py"
       - "backend/integrations/qoyod_manual/__init__.py"
-      - "backend/integrations/qoyod_manual/payment_freshness_hotfix.py"
+      - "backend/qoyod_auto_payment_freshness.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
       - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
       - ".github/workflows/qoyod-payment-freshness.yml"
@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install targeted dependencies
-        run: python -m pip install -q pytest pymongo openpyxl fastapi==0.110.1 pydantic==2.13.4 httpx cryptography
+        run: python -m pip install -q pytest openpyxl
       - name: Verify latest-payment invariants
         run: |
           python - <<'PY'
