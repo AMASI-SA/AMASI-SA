@@ -24,7 +24,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install targeted dependencies
-        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest
+        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl
       - name: Run Products V2 unit tests
         run: python -m pytest tests/test_product_v2_routes.py -q
 
