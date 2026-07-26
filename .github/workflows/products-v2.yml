@@ -5,10 +5,13 @@ on:
     paths:
       - "backend/product_v2_routes.py"
       - "backend/product_v2_sync_hotfix.py"
+      - "backend/product_v2_workspace_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_product_v2_routes.py"
       - "backend/tests/test_product_v2_sync_hotfix.py"
+      - "backend/tests/test_product_v2_workspace_routes.py"
       - "frontend/src/pages/MezanProducts.jsx"
+      - "frontend/src/pages/MezanProductsWorkspace.jsx"
       - "frontend/src/services/mezanProductsV2.js"
       - ".github/workflows/products-v2.yml"
   workflow_dispatch:
@@ -31,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -m pytest tests/test_product_v2_routes.py tests/test_product_v2_sync_hotfix.py -q --tb=short > /tmp/products-v2-pytest.log 2>&1
+          python -m pytest tests/test_product_v2_routes.py tests/test_product_v2_sync_hotfix.py tests/test_product_v2_workspace_routes.py -q --tb=short > /tmp/products-v2-pytest.log 2>&1
           status=$?
           cat /tmp/products-v2-pytest.log
           exit $status
