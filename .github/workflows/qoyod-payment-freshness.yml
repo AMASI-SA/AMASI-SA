@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install targeted dependencies
-        run: python -m pip install -q pytest pymongo
+        run: python -m pip install -q pytest pymongo openpyxl fastapi==0.110.1 pydantic==2.13.4 httpx cryptography
       - name: Verify latest-payment invariants
         run: |
           python - <<'PY'
