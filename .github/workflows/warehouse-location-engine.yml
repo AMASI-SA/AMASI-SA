@@ -62,9 +62,15 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install targeted test dependencies
-        run: python -m pip install fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 pytest==9.0.3
+        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 pytest==9.0.3
       - name: Run warehouse unit tests
-        run: python -m pytest tests/test_warehouse_location_routes.py tests/test_warehouse_reset_routes.py -q
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_warehouse_location_routes.py tests/test_warehouse_reset_routes.py -q --tb=short > /tmp/warehouse-pytest.log 2>&1
+          status=$?
+          cat /tmp/warehouse-pytest.log
+          exit $status
 
   frontend-build:
     needs: changes
