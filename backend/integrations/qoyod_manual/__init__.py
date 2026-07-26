@@ -40,3 +40,17 @@ def _install_exact_rounding() -> None:
 
 _install_exact_rounding()
 del _install_exact_rounding
+
+
+# Install only after send.py has fully initialized. Doing this from Order Engine
+# bootstrap creates a circular import because send -> pending -> order_engine.
+def _install_auto_send_payment_freshness() -> None:
+    from integrations.qoyod_manual.payment_freshness_hotfix import (
+        install_auto_send_payment_freshness_patch,
+    )
+
+    install_auto_send_payment_freshness_patch()
+
+
+_install_auto_send_payment_freshness()
+del _install_auto_send_payment_freshness
