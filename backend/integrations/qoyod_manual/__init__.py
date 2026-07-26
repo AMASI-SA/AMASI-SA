@@ -54,3 +54,17 @@ def _install_auto_send_payment_freshness() -> None:
 
 _install_auto_send_payment_freshness()
 del _install_auto_send_payment_freshness
+
+
+# A malformed or incomplete order is quarantined by order number. It must never
+# disable automatic sending for unrelated healthy orders.
+def _install_per_order_failure_isolation() -> None:
+    from integrations.qoyod_manual.per_order_isolation import (
+        install_per_order_isolation,
+    )
+
+    install_per_order_isolation()
+
+
+_install_per_order_failure_isolation()
+del _install_per_order_failure_isolation
