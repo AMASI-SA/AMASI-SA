@@ -58,12 +58,14 @@ def make_order_engine_router(*args, **kwargs):
     from warehouse_location_v2_routes import make_warehouse_location_v2_router
     from warehouse_room_routes import make_warehouse_room_router
     from warehouse_reset_routes import make_warehouse_reset_router
+    from product_v2_routes import make_product_v2_router
 
     child_routers = [
         make_warehouse_location_router(db, current_user),
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
         make_warehouse_reset_router(db, current_user),
+        make_product_v2_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:
