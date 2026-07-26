@@ -1,0 +1,1 @@
+Newest Product V2 ordering is sourced from the live Salla /products response order. Lower salla_catalog_rank means newer in Salla.
