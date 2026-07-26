@@ -2,17 +2,16 @@
 
 This package owns the canonical order contract used by future Mezan
 workspaces and engines.
-
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
 # Payment-method freshness policy
 # -------------------------------
 # Orders commonly start as ``pending_payment`` and later move to a real method
-# such as Tamara, Tabby, card, or bank transfer.  Qoyod automatic send performs
+# such as Tamara, Tabby, card, or bank transfer. Qoyod automatic send performs
 # an authoritative Salla resync immediately before posting, so the unified-order
 # merge must let the newest payment method replace the value captured when the
-# order was first created.  Keep this policy next to Order Engine bootstrap so
+# order was first created. Keep this policy next to Order Engine bootstrap so
 # every consumer (Orders V2, manual sender, and Plan-B automatic sender) sees the
 # same latest payment fact.
 import orders_db as _orders_db
@@ -72,7 +71,15 @@ def make_order_engine_router(*args, **kwargs):
     from warehouse_location_v2_routes import make_warehouse_location_v2_router
     from warehouse_room_routes import make_warehouse_room_router
     from warehouse_reset_routes import make_warehouse_reset_router
-    from product_v2_routes import make_product_v2_router
+
+    # Product V2 sync hotfix: Salla returns only its default 15 products when
+    # ``format=light`` is sent. Patch the module global before building the
+    # router so POST /products-v2/sync uses the proven full-catalog request.
+    import product_v2_routes as _product_v2_routes
+    from product_v2_sync_hotfix import run_product_v2_sync_fixed
+
+    _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
+    make_product_v2_router = _product_v2_routes.make_product_v2_router
 
     child_routers = [
         make_warehouse_location_router(db, current_user),
