@@ -19,16 +19,6 @@ import orders_db as _orders_db
 
 _orders_db.CRITICAL_FIELDS.add("payment_method")
 
-# Plan-B automatic sends must copy the Salla-resynced payment/status facts from
-# unified_orders into the exact legacy inbox row consumed by manual_send_one.
-# This closes the stale creation-snapshot gap for orders that began as
-# pending-payment and were later paid through Tamara/Tabby/card.
-from integrations.qoyod_manual.payment_freshness_hotfix import (
-    install_auto_send_payment_freshness_patch,
-)
-
-install_auto_send_payment_freshness_patch()
-
 from .mapper import OrderMappingError, map_salla_order
 from .repository import (
     MongoOrderRepository,
