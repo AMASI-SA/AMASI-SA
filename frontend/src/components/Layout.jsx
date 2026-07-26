@@ -7,7 +7,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
-import WarehouseControlTower from "../pages/WarehouseControlTower";
+import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -101,7 +101,7 @@ export default function Layout({ children }) {
     const location = useLocation();
     const isWarehouseV2 = location.pathname === "/components-v2"
         && new URLSearchParams(location.search).get("workspace") === "warehouse";
-    const pageContent = isWarehouseV2 ? <WarehouseControlTower /> : children;
+    const pageContent = isWarehouseV2 ? <WarehouseHierarchyWorkspace /> : children;
 
     useEffect(() => { setMobileOpen(false); }, [location.pathname, location.search]);
     useEffect(() => {
