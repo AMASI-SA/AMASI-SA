@@ -1,5 +1,5 @@
 """Regression coverage for Plan-B per-order failure isolation."""
-from integrations.qoyod_manual.per_order_isolation import ORDER_LOCAL_FAILURE_CODES
+from qoyod_auto_per_order_isolation import ORDER_LOCAL_FAILURE_CODES
 
 
 def test_payment_and_order_data_failures_are_order_local():
