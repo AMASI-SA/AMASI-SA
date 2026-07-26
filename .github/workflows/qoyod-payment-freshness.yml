@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "backend/order_engine/__init__.py"
+      - "backend/integrations/qoyod_manual/__init__.py"
       - "backend/integrations/qoyod_manual/payment_freshness_hotfix.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
       - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
@@ -28,9 +29,10 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           bootstrap = Path('order_engine/__init__.py').read_text(encoding='utf-8')
+          plan_b_package = Path('integrations/qoyod_manual/__init__.py').read_text(encoding='utf-8')
           orders = Path('orders_db.py').read_text(encoding='utf-8')
           assert '_orders_db.CRITICAL_FIELDS.add("payment_method")' in bootstrap
-          assert 'install_auto_send_payment_freshness_patch()' in bootstrap
+          assert 'install_auto_send_payment_freshness_patch()' in plan_b_package
           for field in ('"payment_method"', '"payment_status"', '"paid_amount"', '"remaining_amount"', '"payment_collection_status"'):
               assert field in orders
           print('LATEST_PAYMENT_POLICY_OK')
