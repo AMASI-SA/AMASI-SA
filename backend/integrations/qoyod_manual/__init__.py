@@ -59,3 +59,15 @@ def _install_per_order_failure_isolation() -> None:
 
 _install_per_order_failure_isolation()
 del _install_per_order_failure_isolation
+
+
+def _install_manual_list_current_status() -> None:
+    from qoyod_manual_current_status import (
+        install_manual_list_current_status_patch,
+    )
+
+    install_manual_list_current_status_patch()
+
+
+_install_manual_list_current_status()
+del _install_manual_list_current_status

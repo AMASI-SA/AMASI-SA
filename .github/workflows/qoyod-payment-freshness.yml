@@ -7,9 +7,11 @@ on:
       - "backend/integrations/qoyod_manual/__init__.py"
       - "backend/qoyod_auto_payment_freshness.py"
       - "backend/qoyod_auto_per_order_isolation.py"
+      - "backend/qoyod_manual_current_status.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
       - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
       - "backend/tests/test_qoyod_auto_send_per_order_isolation.py"
+      - "backend/tests/test_qoyod_manual_current_status.py"
       - ".github/workflows/qoyod-payment-freshness.yml"
   workflow_dispatch:
 
@@ -36,11 +38,12 @@ jobs:
           assert '_orders_db.CRITICAL_FIELDS.add("payment_method")' in bootstrap
           assert 'install_auto_send_payment_freshness_patch()' in plan_b_package
           assert 'install_per_order_isolation()' in plan_b_package
+          assert 'install_manual_list_current_status_patch()' in plan_b_package
           for field in ('"payment_method"', '"payment_status"', '"paid_amount"', '"remaining_amount"', '"payment_collection_status"'):
               assert field in orders
           print('LATEST_PAYMENT_POLICY_OK')
           PY
-      - name: Run payment freshness and isolation tests
+      - name: Run payment freshness and status authority tests
         shell: bash
         run: |
           set +e
@@ -48,6 +51,7 @@ jobs:
             tests/test_qoyod_auto_send_authoritative_payment.py \
             tests/test_qoyod_auto_send_latest_payment.py \
             tests/test_qoyod_auto_send_per_order_isolation.py \
+            tests/test_qoyod_manual_current_status.py \
             -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
           status=$?
           cat /tmp/qoyod-payment-freshness.log
