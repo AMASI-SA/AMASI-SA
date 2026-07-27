@@ -55,6 +55,7 @@ jobs:
           python -m pytest \
             tests/test_product_v2_routes.py \
             tests/test_product_v2_sync_hotfix.py \
+            tests/test_product_v2_recent_sync_contract.py \
             tests/test_product_v2_workspace_routes.py \
             tests/test_product_v2_full_details.py \
             tests/test_product_v2_source_authority.py \
