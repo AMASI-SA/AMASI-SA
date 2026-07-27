@@ -39,7 +39,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install targeted dependencies
-        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl cryptography
+        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl cryptography reportlab
       - name: Run Products V2 unit tests
         shell: bash
         run: |
