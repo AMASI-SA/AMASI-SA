@@ -46,6 +46,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_source_authority import install_product_source_authority
     from product_field_cost_support import install_product_field_cost_support
     from product_sale_schedule_support import install_product_sale_schedule_support
+    from product_category_publish_support import install_product_category_publish_support
     from product_category_variant_support import (
         install_product_category_variant_support,
         make_product_category_catalog_router,
@@ -64,6 +65,7 @@ def make_order_engine_router(*args, **kwargs):
     install_product_source_authority()
     install_product_field_cost_support()
     install_product_sale_schedule_support()
+    install_product_category_publish_support()
     install_product_category_variant_support()
     make_product_v2_router = _product_v2_routes.make_product_v2_router
 
