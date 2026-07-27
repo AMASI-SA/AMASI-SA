@@ -72,13 +72,16 @@ def make_order_engine_router(*args, **kwargs):
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
         make_warehouse_reset_router(db, current_user),
-        make_product_v2_router(db, current_user),
+        # Static Products V2 routes must be registered before
+        # /products-v2/{product_id}; otherwise FastAPI interprets
+        # "category-catalog" as a product id and the selector stays empty.
+        make_product_category_catalog_router(db, current_user),
         make_product_v2_recent_sync_router(db, current_user),
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
-        make_product_v2_details_router(db, current_user),
-        make_product_category_catalog_router(db, current_user),
         make_product_control_center_router(db, current_user),
+        make_product_v2_router(db, current_user),
+        make_product_v2_details_router(db, current_user),
         # This GET route must be registered before the older workspace route.
         # It exposes the current cost consistently for legacy and new rows so
         # the component edit modal is always pre-filled.
