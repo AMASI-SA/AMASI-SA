@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
     deleteProductOptionCost,
     getProductOptionCosts,
+    refreshProductV2Details,
     saveProductOptionCost,
 } from "../../services/mezanProductsV2";
 
@@ -37,22 +38,28 @@ function customFieldSubjects(customFields) {
         type: field.type || "text",
         required: field.required,
         isCustomField: true,
-        values: [{
-            id: field.cost_value_id || "filled",
-            name: "عند تعبئة الحقل",
-        }],
+        values: [{ id: field.cost_value_id || "filled", name: "عند تعبئة الحقل" }],
     }));
 }
 
 export default function ProductOptionCostEditor({ productId, options = [], customFields = [] }) {
     const [data, setData] = useState({ bindings: [], resources: [] });
+    const [detailFields, setDetailFields] = useState(customFields || []);
     const [editing, setEditing] = useState(null);
     const [busy, setBusy] = useState(false);
 
     async function load() {
         if (!productId) return;
-        try { setData(await getProductOptionCosts(productId)); }
-        catch (error) { toast.error(error?.response?.data?.detail?.message || "تعذر تحميل تكاليف الخيارات"); }
+        try {
+            const [costResult, detailResult] = await Promise.all([
+                getProductOptionCosts(productId),
+                refreshProductV2Details(productId),
+            ]);
+            setData(costResult);
+            setDetailFields(detailResult?.product?.custom_fields || customFields || []);
+        } catch (error) {
+            toast.error(error?.response?.data?.detail?.message || "تعذر تحميل تكاليف الخيارات والحقول");
+        }
     }
 
     useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,8 +71,8 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
     }, [data.bindings]);
 
     const subjects = useMemo(
-        () => [...(options || []), ...customFieldSubjects(customFields)],
-        [customFields, options],
+        () => [...(options || []), ...customFieldSubjects(detailFields)],
+        [detailFields, options],
     );
 
     function openEditor(option, value) {
@@ -90,9 +97,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                 direct_amount: editing.mode === "direct" ? editing.direct_amount : null,
                 quantity: editing.quantity,
             });
-            toast.success(editing.option.isCustomField
-                ? "تم حفظ تكلفة تعبئة الحقل"
-                : "تم حفظ التكلفة الإضافية لهذا الخيار");
+            toast.success(editing.option.isCustomField ? "تم حفظ تكلفة تعبئة الحقل" : "تم حفظ التكلفة الإضافية لهذا الخيار");
             setEditing(null);
             await load();
         } catch (error) {
@@ -157,9 +162,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                     <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
                         <h3 className="text-lg font-black">{editing.option.name}: {editing.value.name}</h3>
                         <p className="mt-1 text-xs text-slate-500">
-                            {editing.option.isCustomField
-                                ? "تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة في هذا الحقل."
-                                : "تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة."}
+                            {editing.option.isCustomField ? "تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة في هذا الحقل." : "تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة."}
                         </p>
                         <div className="mt-5 grid grid-cols-2 gap-2">
                             <button onClick={() => setEditing((row) => ({ ...row, mode: "resource" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مكوّن مشترك</button>
