@@ -1,7 +1,6 @@
-from types import SimpleNamespace
-
 from product_field_cost_support import (
     _field_value_is_filled,
+    _option_is_fill_based,
     normalize_custom_fields,
     readable_variant_label,
 )
@@ -43,3 +42,10 @@ def test_text_field_cost_applies_only_for_non_empty_submission():
     assert _field_value_is_filled("   ") is False
     assert _field_value_is_filled(None) is False
     assert _field_value_is_filled(["اختيار"]) is True
+
+
+def test_text_option_without_values_is_fill_based():
+    assert _option_is_fill_based({"id": "name", "type": "text", "values": []}) is True
+    assert _option_is_fill_based({"id": "notes", "type": "textarea"}) is True
+    assert _option_is_fill_based({"id": "color", "type": "select", "values": []}) is False
+    assert _option_is_fill_based({"id": "name", "type": "text", "values": [{"id": "x"}]}) is False
