@@ -11,17 +11,16 @@ on:
       - "backend/product_v2_source_authority.py"
       - "backend/product_v2_catalog_rank.py"
       - "backend/product_v2_details_routes.py"
+      - "backend/product_option_cost_routes.py"
       - "backend/order_engine/__init__.py"
-      - "backend/tests/test_product_v2_routes.py"
-      - "backend/tests/test_product_v2_sync_hotfix.py"
-      - "backend/tests/test_product_v2_workspace_routes.py"
-      - "backend/tests/test_product_v2_full_details.py"
-      - "backend/tests/test_product_v2_source_authority.py"
-      - "backend/tests/test_product_v2_catalog_rank.py"
-      - "backend/tests/test_product_v2_live_salla_order_contract.py"
+      - "backend/tests/test_product_v2_*.py"
+      - "backend/tests/test_product_option_shared_cost_engine.py"
       - "frontend/src/pages/MezanProducts.jsx"
       - "frontend/src/pages/MezanProductsWorkspace.jsx"
+      - "frontend/src/pages/MezanComponents.jsx"
+      - "frontend/src/components/products/ProductOptionCostEditor.jsx"
       - "frontend/src/services/mezanProductsV2.js"
+      - "frontend/src/services/mezanComponentCatalog.js"
       - ".github/workflows/products-v2.yml"
   workflow_dispatch:
 
@@ -51,6 +50,7 @@ jobs:
             tests/test_product_v2_source_authority.py \
             tests/test_product_v2_catalog_rank.py \
             tests/test_product_v2_live_salla_order_contract.py \
+            tests/test_product_option_shared_cost_engine.py \
             -q --tb=short > /tmp/products-v2-pytest.log 2>&1
           status=$?
           cat /tmp/products-v2-pytest.log
