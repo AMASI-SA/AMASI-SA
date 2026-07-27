@@ -53,6 +53,33 @@ export async function saveProductV2Costs(productId, payload) {
     return response.data;
 }
 
+export async function getProductOptionCosts(productId) {
+    const response = await api.get(`/products-v2/${encodeURIComponent(productId)}/option-costs`);
+    return response.data;
+}
+
+export async function saveProductOptionCost(productId, optionId, valueId, payload) {
+    const response = await api.put(
+        `/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`,
+        payload,
+    );
+    return response.data;
+}
+
+export async function deleteProductOptionCost(productId, optionId, valueId) {
+    const response = await api.delete(
+        `/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`,
+    );
+    return response.data;
+}
+
+export async function calculateProductCost(productId, selectedOptions) {
+    const response = await api.post(`/products-v2/${encodeURIComponent(productId)}/calculate-cost`, {
+        selected_options: selectedOptions,
+    });
+    return response.data;
+}
+
 export async function previewMissingSkus({ prefix = "AMS", width = 5, limit = 20 } = {}) {
     const response = await api.get("/products-v2/workspace/sku/preview", {
         params: { prefix, width, limit },
