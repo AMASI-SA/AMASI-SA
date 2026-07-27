@@ -143,6 +143,11 @@ def install_product_field_cost_support() -> None:
                     continue
                 label, selections = readable_variant_label(variant, options)
                 variant["display_name"] = label
+                # Existing Product V2 table renders ``name`` first. Replace only
+                # missing/numeric provider names so real explicit names survive.
+                existing_name = _text(variant.get("name"))
+                if not existing_name or existing_name.isdigit() or existing_name == _text(variant.get("id")):
+                    variant["name"] = label
                 if selections:
                     variant["selections"] = selections
             return patch
