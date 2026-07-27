@@ -1,1 +1,1 @@
-export { default } from "./MezanProductsWorkspace";
+export { default } from "./MezanProductsAutoSync";
