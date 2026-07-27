@@ -13,6 +13,7 @@ on:
       - "backend/product_v2_catalog_rank.py"
       - "backend/product_v2_details_routes.py"
       - "backend/product_category_variant_support.py"
+      - "backend/product_category_publish_support.py"
       - "backend/product_option_cost_routes.py"
       - "backend/product_field_cost_support.py"
       - "backend/product_sale_schedule.py"
@@ -24,6 +25,7 @@ on:
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_product_v2_*.py"
       - "backend/tests/test_product_category_variant_support.py"
+      - "backend/tests/test_product_category_publish_support.py"
       - "backend/tests/test_product_field_cost_support.py"
       - "backend/tests/test_product_sale_schedule.py"
       - "backend/tests/test_product_control_center_policy.py"
@@ -72,6 +74,7 @@ jobs:
             tests/test_product_v2_catalog_rank.py \
             tests/test_product_v2_live_salla_order_contract.py \
             tests/test_product_category_variant_support.py \
+            tests/test_product_category_publish_support.py \
             tests/test_product_field_cost_support.py \
             tests/test_product_sale_schedule.py \
             tests/test_product_control_center_policy.py \
