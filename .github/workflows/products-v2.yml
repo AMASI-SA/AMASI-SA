@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/product_v2_routes.py"
       - "backend/product_v2_sync_hotfix.py"
+      - "backend/product_v2_recent_sync_routes.py"
       - "backend/product_v2_workspace_routes.py"
       - "backend/product_v2_creation_order_routes.py"
       - "backend/product_v2_creation_order_hotfix.py"
@@ -23,6 +24,7 @@ on:
       - "backend/tests/test_component_edit_policy.py"
       - "backend/tests/test_order_option_cost_snapshots.py"
       - "frontend/src/pages/MezanProducts.jsx"
+      - "frontend/src/pages/MezanProductsAutoSync.jsx"
       - "frontend/src/pages/MezanProductsWorkspace.jsx"
       - "frontend/src/pages/MezanComponents.jsx"
       - "frontend/src/pages/MezanComponentsProduction.jsx"
