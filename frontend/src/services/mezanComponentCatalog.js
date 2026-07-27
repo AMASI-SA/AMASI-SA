@@ -41,10 +41,33 @@ export async function addMezanComponentPreview(component) {
             kind: component.kind,
             unit: component.unit || (component.kind === "stock_component" ? "piece" : "job"),
             track_inventory: component.kind === "stock_component",
+            unit_cost: component.unit_cost,
+            description: component.description || "",
         });
         return {
             ok: true,
             resource: response.data.resource,
+            component_workspace: await getMezanComponentWorkspace(),
+        };
+    } catch (error) {
+        return { ok: false, code: error?.response?.data?.detail?.code || "invalid_component" };
+    }
+}
+
+export async function updateMezanComponent(componentId, component) {
+    try {
+        const response = await api.put(`/components-v2/${encodeURIComponent(componentId)}`, {
+            code: component.code,
+            name: component.name,
+            kind: component.kind,
+            unit: component.unit || (component.kind === "stock_component" ? "piece" : "job"),
+            unit_cost: component.unit_cost,
+            description: component.description || "",
+        });
+        return {
+            ok: true,
+            resource: response.data.resource,
+            impacted_bindings: response.data.impacted_bindings || 0,
             component_workspace: await getMezanComponentWorkspace(),
         };
     } catch (error) {
