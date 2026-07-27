@@ -1,7 +1,7 @@
 """Governed Product Control Center for Mezan OS.
 
 This module owns product-content drafts, approvals, publishing, verification and
-rollback.  Mezan cost collections are deliberately excluded from every payload.
+rollback. Mezan cost collections are deliberately excluded from every payload.
 """
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from salla_integration.service import SallaError, call_salla
 DRAFTS = "mezan_product_change_drafts_v2"
 REVISIONS = "mezan_product_change_revisions_v2"
 POLICIES = "mezan_product_ai_policies_v2"
+ACTIVE_DRAFT_STATUSES = ["draft", "approved"]
 
-# Cost and accounting facts are Mezan-owned and can never be changed here.
 PROTECTED_FIELDS = {
     "base_cost", "variant_costs", "cost_price", "cost_price_from_salla",
     "unit_cost", "initial_unit_cost", "component_costs", "option_costs",
@@ -120,6 +120,23 @@ async def ensure_indexes(db: Any) -> None:
     )
 
 
+async def supersede_active_drafts(db: Any, *, user_id: str, salla_id: str, keep_id: str | None = None, now: datetime | None = None) -> None:
+    timestamp = now or _now()
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "salla_product_id": salla_id,
+        "status": {"$in": ACTIVE_DRAFT_STATUSES},
+    }
+    if keep_id:
+        query["id"] = {"$ne": keep_id}
+    await db[DRAFTS].update_many(query, {"$set": {
+        "status": "superseded",
+        "superseded_at": timestamp,
+        "updated_at": timestamp,
+        "superseded_by": keep_id,
+    }})
+
+
 def make_product_control_center_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/products-v2", tags=["Product Control Center"])
 
@@ -130,7 +147,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         product = await _product(db, user_id, product_id)
         salla_id = str(product["salla_product_id"])
         draft = await db[DRAFTS].find_one(
-            {"user_id": user_id, "salla_product_id": salla_id, "status": {"$in": ["draft", "approved"]}},
+            {"user_id": user_id, "salla_product_id": salla_id, "status": {"$in": ACTIVE_DRAFT_STATUSES}},
             {"_id": 0}, sort=[("updated_at", -1)],
         )
         policy = await db[POLICIES].find_one({"user_id": user_id}, {"_id": 0}) or {
@@ -157,10 +174,13 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         if not patch:
             raise HTTPException(status_code=422, detail={"code": "empty_product_change"})
         now = _now()
+        salla_id = str(product["salla_product_id"])
+        draft_id = uuid.uuid4().hex
+        await supersede_active_drafts(db, user_id=user_id, salla_id=salla_id, keep_id=draft_id, now=now)
         row = {
-            "id": uuid.uuid4().hex,
+            "id": draft_id,
             "user_id": user_id,
-            "salla_product_id": str(product["salla_product_id"]),
+            "salla_product_id": salla_id,
             "mezan_product_id": product.get("mezan_product_id"),
             "status": "draft",
             "source": _text(payload.get("source")) or "human",
@@ -184,6 +204,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         )
         if not result:
             raise HTTPException(status_code=404, detail={"code": "draft_not_found"})
+        await supersede_active_drafts(db, user_id=user_id, salla_id=str(product["salla_product_id"]), keep_id=draft_id)
         return {"ok": True, "draft": _serialize(result)}
 
     @router.post("/{product_id}/control-center/draft/{draft_id}/publish")
@@ -194,6 +215,12 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         draft = await db[DRAFTS].find_one({"id": draft_id, "user_id": user_id, "salla_product_id": salla_id}, {"_id": 0})
         if not draft or draft.get("status") != "approved":
             raise HTTPException(status_code=409, detail={"code": "draft_not_approved"})
+        newest = await db[DRAFTS].find_one(
+            {"user_id": user_id, "salla_product_id": salla_id, "status": {"$in": ACTIVE_DRAFT_STATUSES}},
+            {"_id": 0}, sort=[("updated_at", -1)],
+        )
+        if newest and newest.get("id") != draft_id:
+            raise HTTPException(status_code=409, detail={"code": "draft_superseded", "newest_draft_id": newest.get("id")})
         if payload.get("confirmation") != "نشر التعديل إلى سلة":
             raise HTTPException(status_code=409, detail={"code": "publish_confirmation_required"})
         patch = _clean_patch(draft.get("changes") or {})
@@ -219,7 +246,10 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "created_at": now,
         }
         await db[REVISIONS].insert_one(revision)
-        await db[DRAFTS].update_one({"id": draft_id, "user_id": user_id}, {"$set": {"status": "published", "published_at": now, "updated_at": now, "revision_id": revision["id"]}})
+        await db[DRAFTS].update_one({"id": draft_id, "user_id": user_id}, {"$set": {
+            "status": "published", "published_at": now, "updated_at": now, "revision_id": revision["id"],
+        }})
+        await supersede_active_drafts(db, user_id=user_id, salla_id=salla_id, keep_id=draft_id, now=now)
         await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**patch, "updated_at": now, "last_control_center_publish_at": now}})
         return {"ok": True, "revision": _serialize(revision), "cost_engine_preserved": True}
 
