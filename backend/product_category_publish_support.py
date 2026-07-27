@@ -58,7 +58,6 @@ def install_product_category_publish_support() -> None:
             payload = original_payload(patch)
             if "categories" in payload:
                 payload["categories"] = normalize_category_ids(payload["categories"])
-            # Status is published separately after the general product update.
             if "status" in patch:
                 payload["__mezan_status"] = patch["status"]
             payload.pop("status", None)
@@ -74,9 +73,15 @@ def install_product_category_publish_support() -> None:
     async def wrapped_call(db: Any, user_id: str, method: str, path: str, **kwargs: Any) -> Any:
         json_payload = kwargs.get("json")
         status_value = None
-        if method.upper() == "PUT" and path.startswith("/products/") and isinstance(json_payload, dict):
+        is_product_update = method.upper() == "PUT" and path.startswith("/products/") and isinstance(json_payload, dict)
+        if is_product_update:
             status_value = json_payload.pop("__mezan_status", None)
-        response = await original_call(db, user_id, method, path, **kwargs)
+
+        if is_product_update and not json_payload:
+            response: Any = {"skipped": True, "reason": "status_only"}
+        else:
+            response = await original_call(db, user_id, method, path, **kwargs)
+
         if status_value is not None:
             salla_status = normalize_salla_status(status_value)
             status_response = await original_call(db, user_id, "POST", f"{path}/status", json={"status": salla_status})
