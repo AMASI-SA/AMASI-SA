@@ -135,7 +135,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     const [original, setOriginal] = useState(EMPTY);
     const [reason, setReason] = useState("");
     const [busy, setBusy] = useState(false);
-    const [tab, setTab] = useState("edit");
+    const [tab, setTab] = useState("history");
     const [categories, setCategories] = useState([]);
     const [categoriesLoading, setCategoriesLoading] = useState(false);
 
@@ -154,7 +154,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     }
 
     useEffect(() => {
-        setTab("edit");
+        setTab("history");
         load();
     }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
