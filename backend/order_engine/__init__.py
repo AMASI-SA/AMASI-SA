@@ -6,45 +6,19 @@ It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
 # Payment-method freshness policy
-# -------------------------------
-# Orders commonly start as ``pending_payment`` and later move to a real method
-# such as Tamara, Tabby, card, or bank transfer. Qoyod automatic send performs
-# an authoritative Salla resync immediately before posting, so the unified-order
-# merge must let the newest payment method replace the value captured when the
-# order was first created. Keep this policy next to Order Engine bootstrap so
-# every consumer (Orders V2, manual sender, and Plan-B automatic sender) sees the
-# same latest payment fact.
 import orders_db as _orders_db
 
 _orders_db.CRITICAL_FIELDS.add("payment_method")
 
 from .mapper import OrderMappingError, map_salla_order
-from .repository import (
-    MongoOrderRepository,
-    OrderDiscoveryRow,
-    OrderRepository,
-)
+from .repository import MongoOrderRepository, OrderDiscoveryRow, OrderRepository
 from . import routes as _routes
 from .routes import OrderListResponse
-from .service import (
-    InvalidOrderCursorError,
-    OrderNotFoundError,
-    OrderPage,
-    get_order,
-    list_orders,
-)
-
+from .service import InvalidOrderCursorError, OrderNotFoundError, OrderPage, get_order, list_orders
 from .models import (
-    AddressDTO,
-    CustomerDTO,
-    MoneyTotalsDTO,
-    OrderDTO,
-    OrderItemDTO,
-    OrderSourceDTO,
-    PaymentDTO,
-    ShippingDTO,
+    AddressDTO, CustomerDTO, MoneyTotalsDTO, OrderDTO, OrderItemDTO,
+    OrderSourceDTO, PaymentDTO, ShippingDTO,
 )
-
 
 _original_make_order_engine_router = _routes.make_order_engine_router
 
@@ -75,6 +49,7 @@ def make_order_engine_router(*args, **kwargs):
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
+    from product_control_center_routes import make_product_control_center_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -94,6 +69,7 @@ def make_order_engine_router(*args, **kwargs):
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
         make_product_v2_details_router(db, current_user),
+        make_product_control_center_router(db, current_user),
         make_component_edit_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
@@ -113,26 +89,11 @@ def make_order_engine_router(*args, **kwargs):
 
 _routes.make_order_engine_router = make_order_engine_router
 
-
 __all__ = [
-    "AddressDTO",
-    "CustomerDTO",
-    "MoneyTotalsDTO",
-    "OrderDTO",
-    "OrderItemDTO",
-    "OrderSourceDTO",
-    "PaymentDTO",
-    "ShippingDTO",
-    "OrderMappingError",
-    "map_salla_order",
-    "InvalidOrderCursorError",
-    "OrderNotFoundError",
-    "OrderPage",
-    "get_order",
-    "list_orders",
-    "MongoOrderRepository",
-    "OrderDiscoveryRow",
-    "OrderRepository",
-    "OrderListResponse",
+    "AddressDTO", "CustomerDTO", "MoneyTotalsDTO", "OrderDTO", "OrderItemDTO",
+    "OrderSourceDTO", "PaymentDTO", "ShippingDTO", "OrderMappingError",
+    "map_salla_order", "InvalidOrderCursorError", "OrderNotFoundError",
+    "OrderPage", "get_order", "list_orders", "MongoOrderRepository",
+    "OrderDiscoveryRow", "OrderRepository", "OrderListResponse",
     "make_order_engine_router",
 ]
