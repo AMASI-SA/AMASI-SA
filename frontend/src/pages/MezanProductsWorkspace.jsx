@@ -14,6 +14,21 @@ import {
 } from "../services/mezanProductsV2";
 
 const STATUS_FILTERS = [["", "كل المنتجات"], ["active", "منتجات للبيع"], ["inactive", "منتجات مخفية"], ["out_of_stock", "منتجات نفدت"]];
+const SELECTED_PRODUCT_KEY = "mezan.products-v2.selected-product";
+
+function initialSelectedProduct() {
+    if (typeof window === "undefined") return "";
+    const fromUrl = new URLSearchParams(window.location.search).get("product");
+    return fromUrl || window.localStorage.getItem(SELECTED_PRODUCT_KEY) || "";
+}
+
+function rememberSelectedProduct(id) {
+    if (typeof window === "undefined" || !id) return;
+    window.localStorage.setItem(SELECTED_PRODUCT_KEY, id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("product", id);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
 
 function money(value) {
     if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "—";
@@ -51,7 +66,7 @@ export default function MezanProductsWorkspace() {
     const [items, setItems] = useState([]);
     const [summary, setSummary] = useState(null);
     const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 1 });
-    const [selectedId, setSelectedId] = useState("");
+    const [selectedId, setSelectedId] = useState(initialSelectedProduct);
     const [selected, setSelected] = useState(null);
     const [costs, setCosts] = useState({ base_cost: "", variant_costs: {}, notes: "" });
     const [query, setQuery] = useState("");
@@ -66,7 +81,7 @@ export default function MezanProductsWorkspace() {
     const [skuPreview, setSkuPreview] = useState(null);
     const [skuBusy, setSkuBusy] = useState(false);
     const [error, setError] = useState("");
-    const [mobileView, setMobileView] = useState("list");
+    const [mobileView, setMobileView] = useState(() => initialSelectedProduct() ? "detail" : "list");
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
     const load = useCallback(async ({ page = 1, search = appliedQuery } = {}) => {
@@ -80,7 +95,11 @@ export default function MezanProductsWorkspace() {
             setItems(nextItems);
             setPagination(listResult.pagination || { page: 1, total: 0, total_pages: 1 });
             setSummary(summaryResult || null);
-            if (!selectedId && nextItems[0]) setSelectedId(nextItems[0].mezan_product_id || nextItems[0].id);
+            if (!selectedId && nextItems[0]) {
+                const firstId = nextItems[0].mezan_product_id || nextItems[0].id;
+                setSelectedId(firstId);
+                rememberSelectedProduct(firstId);
+            }
         } catch (err) {
             const detail = err?.response?.data?.detail;
             setError((typeof detail === "string" ? detail : detail?.message) || err?.message || "تعذّر تحميل المنتجات.");
@@ -100,6 +119,7 @@ export default function MezanProductsWorkspace() {
 
     useEffect(() => { load({ page: 1 }); }, [status, sort, missingSku]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => { loadSelected(); }, [loadSelected]);
+    useEffect(() => { if (selectedId) rememberSelectedProduct(selectedId); }, [selectedId]);
 
     const media = selected?.images || [];
     const options = selected?.options || [];
@@ -109,7 +129,7 @@ export default function MezanProductsWorkspace() {
 
     async function syncNow() {
         setSyncing(true);
-        try { const result = await syncProductsV2(); toast.success(`تمت المزامنة: ${result.seen_products || 0} منتج`); await load({ page: 1 }); }
+        try { const result = await syncProductsV2(); toast.success(`تمت المزامنة: ${result.seen_products || 0} منتج`); await load({ page: pagination.page || 1 }); }
         catch { toast.error("تعذرت المزامنة"); }
         finally { setSyncing(false); }
     }
@@ -124,12 +144,13 @@ export default function MezanProductsWorkspace() {
 
     async function applySkuBatch() {
         setSkuBusy(true);
-        try { const result = await applyMissingSkus({ prefix: "AMS", width: 5, limit: 50, confirmation: "تحديث SKU في سلة" }); toast.success(`تم تحديث ${result.succeeded || 0} منتج`); setSkuPreview(null); await load({ page: 1 }); }
+        try { const result = await applyMissingSkus({ prefix: "AMS", width: 5, limit: 50, confirmation: "تحديث SKU في سلة" }); toast.success(`تم تحديث ${result.succeeded || 0} منتج`); setSkuPreview(null); await load({ page: pagination.page || 1 }); }
         finally { setSkuBusy(false); }
     }
 
     function selectProduct(id) {
         setSelectedId(id);
+        rememberSelectedProduct(id);
         setMobileView("detail");
         window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
     }

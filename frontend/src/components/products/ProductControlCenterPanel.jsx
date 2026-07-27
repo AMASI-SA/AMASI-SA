@@ -41,8 +41,17 @@ function hydrate(product) {
         seo_title: seo.title || "",
         seo_description: seo.description || "",
         keywords: (seo.keywords || []).join(", "),
-        slug: seo.slug || "",
+        slug: seo.slug || product?.slug || "",
     };
+}
+
+function mergeDraft(product = {}, changes = {}) {
+    const merged = { ...product, ...changes };
+    const baseSeo = product?.seo && typeof product.seo === "object" ? product.seo : {};
+    const draftSeo = changes?.seo && typeof changes.seo === "object" ? changes.seo : {};
+    merged.seo = { ...baseSeo, ...draftSeo };
+    if (Object.prototype.hasOwnProperty.call(changes, "description")) merged.description_html = changes.description;
+    return merged;
 }
 
 function buildChanges(form, original) {
@@ -125,8 +134,12 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         try {
             const result = await getProductControlCenter(productId);
             setState(result);
-            const next = hydrate(result.product || product);
-            setForm(next); setOriginal(next);
+            const currentProduct = result.product || product || {};
+            const current = hydrate(currentProduct);
+            const visible = hydrate(mergeDraft(currentProduct, result.draft?.changes || {}));
+            setOriginal(current);
+            setForm(visible);
+            setReason(result.draft?.reason || "");
         } catch (error) { toast.error(error?.response?.data?.detail?.message || "تعذر تحميل مركز التحكم بالمنتج"); }
     }
 
@@ -145,8 +158,11 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     async function saveDraft() {
         if (!Object.keys(changes).length) return toast.info("لا توجد تغييرات لحفظها");
         setBusy(true);
-        try { const result = await saveProductControlDraft(productId, { changes, source: "human", reason: reason.trim() || "تعديل من Product Control Center" }); setState((current) => ({ ...current, draft: result.draft })); toast.success("تم حفظ المسودة دون تعديل سلة"); }
-        catch (error) { toast.error(error?.response?.data?.detail?.code || "تعذر حفظ المسودة"); }
+        try {
+            const result = await saveProductControlDraft(productId, { changes, source: "human", reason: reason.trim() || "تعديل من Product Control Center" });
+            setState((current) => ({ ...current, draft: result.draft }));
+            toast.success("تم حفظ المسودة وإبقاء قيمها ظاهرة");
+        } catch (error) { toast.error(error?.response?.data?.detail?.code || "تعذر حفظ المسودة"); }
         finally { setBusy(false); }
     }
     async function approve() { if (!draft) return; setBusy(true); try { const result = await approveProductControlDraft(productId, draft.id); setState((current) => ({ ...current, draft: result.draft })); toast.success("تم اعتماد المسودة"); } finally { setBusy(false); } }
@@ -158,6 +174,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         <div className="flex justify-between border-b bg-violet-50 p-4"><div><h2 className="font-black"><Sparkle className="ml-1 inline text-violet-700" />Product Control Center</h2><p className="text-xs text-slate-500">تعديل محكوم مع مسودة واعتماد. تكاليف ميزان مستقلة.</p></div><div className="flex gap-2"><button onClick={() => setTab("edit")} className={`rounded-lg px-3 py-2 text-xs font-black ${tab === "edit" ? "bg-violet-700 text-white" : "border"}`}>تحرير</button><button onClick={() => setTab("history")} className={`rounded-lg px-3 py-2 text-xs font-black ${tab === "history" ? "bg-violet-700 text-white" : "border"}`}><ClockCounterClockwise className="inline" /> السجل</button></div></div>
         {tab === "edit" ? <div className="space-y-5 p-4">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><ShieldCheck className="ml-1 inline" />الحقول المحمية: {protectedFields.slice(0, 6).join("، ")}…</div>
+            {draft && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold text-violet-900">القيم الظاهرة الآن هي قيم المسودة {draft.status === "approved" ? "المعتمدة" : "المحفوظة"}، وليست بيانات سلة القديمة.</div>}
             {notice && <div className={`rounded-xl border p-3 text-xs font-bold ${notice.tone === "rose" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"}`}><WarningCircle className="ml-1 inline" />{notice.text}</div>}
             <div className="grid gap-4 md:grid-cols-2">
                 {field("name", "اسم المنتج")}{field("status", "حالة المنتج", <select value={form.status} onChange={(e) => setForm((r) => ({ ...r, status: e.target.value }))} className="mt-1 w-full rounded-xl border p-3"><option value="active">نشط</option><option value="inactive">مخفي</option><option value="out_of_stock">نفد</option></select>)}
@@ -168,7 +185,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
             </div>
             {field("short_description", "الوصف المختصر", <textarea rows={3} value={form.short_description} onChange={(e) => setForm((r) => ({ ...r, short_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
             {field("seo_description", "وصف SEO", <textarea rows={3} value={form.seo_description} onChange={(e) => setForm((r) => ({ ...r, seo_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
-            <label className="block text-xs font-black text-slate-600">وصف المنتج<VisualHtmlEditor value={form.description} onChange={(description) => setForm((r) => ({ ...r, description }))} /></label>
+            <label className="block text-xs font-black text-slate-600">وصف المنتج<VisualHtmlEditor resetKey={productId} value={form.description} onChange={(description) => setForm((r) => ({ ...r, description }))} /></label>
             <label className="block text-xs font-black text-slate-600">سبب التعديل<input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
             {Object.keys(changes).length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><b>معاينة التغييرات قبل الحفظ</b><ChangeDiff before={original} after={changes} /></div>}
             <div className="flex flex-wrap justify-end gap-2"><button disabled={busy || !Object.keys(changes).length} onClick={saveDraft} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white"><FloppyDisk className="inline" /> حفظ مسودة</button>{draft?.status === "draft" && <button onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white"><PaperPlaneTilt className="inline" /> نشر إلى سلة</button>}</div>
