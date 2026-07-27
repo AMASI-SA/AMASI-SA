@@ -35,6 +35,7 @@ on:
       - "frontend/src/pages/MezanComponentsProduction.jsx"
       - "frontend/src/components/products/ProductControlCenter.jsx"
       - "frontend/src/components/products/ProductControlCenterPanel.jsx"
+      - "frontend/src/components/products/VisualHtmlEditor.jsx"
       - "frontend/src/components/products/ProductOptionCostEditor.jsx"
       - "frontend/src/services/mezanProductsV2.js"
       - "frontend/src/services/mezanComponentCatalog.js"
