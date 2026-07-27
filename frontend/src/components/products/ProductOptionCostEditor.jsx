@@ -13,7 +13,38 @@ function money(value) {
     return `${Number(value).toFixed(2)} ر.س`;
 }
 
-export default function ProductOptionCostEditor({ productId, options = [] }) {
+function fieldTypeLabel(type) {
+    const value = String(type || "text").toLowerCase();
+    const labels = {
+        text: "حقل نصي قصير",
+        textarea: "حقل نصي طويل",
+        long_text: "حقل نصي طويل",
+        number: "رقم",
+        select: "قائمة اختيار",
+        radio: "اختيار واحد",
+        checkbox: "اختيارات متعددة",
+        date: "تاريخ",
+        time: "وقت",
+        file: "رفع ملف",
+    };
+    return labels[value] || value;
+}
+
+function customFieldSubjects(customFields) {
+    return (customFields || []).map((field) => ({
+        id: field.cost_subject_id || `field:${field.id}`,
+        name: field.name,
+        type: field.type || "text",
+        required: field.required,
+        isCustomField: true,
+        values: [{
+            id: field.cost_value_id || "filled",
+            name: "عند تعبئة الحقل",
+        }],
+    }));
+}
+
+export default function ProductOptionCostEditor({ productId, options = [], customFields = [] }) {
     const [data, setData] = useState({ bindings: [], resources: [] });
     const [editing, setEditing] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -31,6 +62,11 @@ export default function ProductOptionCostEditor({ productId, options = [] }) {
         for (const row of data.bindings || []) map.set(`${row.option_id}:${row.value_id}`, row);
         return map;
     }, [data.bindings]);
+
+    const subjects = useMemo(
+        () => [...(options || []), ...customFieldSubjects(customFields)],
+        [customFields, options],
+    );
 
     function openEditor(option, value) {
         const current = bindings.get(`${option.id}:${value.id}`);
@@ -54,11 +90,13 @@ export default function ProductOptionCostEditor({ productId, options = [] }) {
                 direct_amount: editing.mode === "direct" ? editing.direct_amount : null,
                 quantity: editing.quantity,
             });
-            toast.success("تم حفظ التكلفة الإضافية لهذا الخيار");
+            toast.success(editing.option.isCustomField
+                ? "تم حفظ تكلفة تعبئة الحقل"
+                : "تم حفظ التكلفة الإضافية لهذا الخيار");
             setEditing(null);
             await load();
         } catch (error) {
-            toast.error(error?.response?.data?.detail?.code || "تعذر حفظ تكلفة الخيار");
+            toast.error(error?.response?.data?.detail?.code || "تعذر حفظ التكلفة");
         } finally { setBusy(false); }
     }
 
@@ -66,7 +104,7 @@ export default function ProductOptionCostEditor({ productId, options = [] }) {
         setBusy(true);
         try {
             await deleteProductOptionCost(productId, option.id, value.id);
-            toast.success("تم حذف تكلفة الخيار");
+            toast.success("تم حذف التكلفة الإضافية");
             setEditing(null);
             await load();
         } finally { setBusy(false); }
@@ -75,16 +113,22 @@ export default function ProductOptionCostEditor({ productId, options = [] }) {
     return (
         <section className="rounded-2xl border border-slate-200 p-4">
             <div className="mb-4">
-                <h2 className="font-black">تكاليف خيارات المنتج</h2>
+                <h2 className="font-black">تكاليف الخيارات والحقول</h2>
                 <p className="mt-1 text-xs leading-6 text-slate-500">
-                    تكلفة المنتج الأساسية تُحتسب دائمًا. تكلفة الخيار تُضاف فقط عندما يختار العميل هذه القيمة في الطلب.
+                    تكلفة المنتج الأساسية تُحتسب دائمًا. تكلفة قيمة الخيار تُضاف عند اختيارها، وتكلفة الحقل النصي تُضاف فقط عندما يعبئه العميل.
                 </p>
             </div>
-            {!options.length ? <p className="text-sm text-slate-400">لا توجد خيارات في المنتج.</p> : (
+            {!subjects.length ? <p className="text-sm text-slate-400">لا توجد خيارات أو حقول مخصصة في المنتج.</p> : (
                 <div className="space-y-4">
-                    {options.map((option) => (
+                    {subjects.map((option) => (
                         <div key={option.id} className="rounded-xl border border-slate-200 p-3">
-                            <div className="mb-3 font-black">{option.name}</div>
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                                <div className="font-black">{option.name}</div>
+                                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                                    {option.isCustomField ? fieldTypeLabel(option.type) : `خيار ${fieldTypeLabel(option.type || "select")}`}
+                                </span>
+                                {option.required && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-700">إلزامي</span>}
+                            </div>
                             <div className="space-y-2">
                                 {(option.values || []).map((value) => {
                                     const binding = bindings.get(`${option.id}:${value.id}`);
@@ -112,14 +156,18 @@ export default function ProductOptionCostEditor({ productId, options = [] }) {
                 <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4" dir="rtl">
                     <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
                         <h3 className="text-lg font-black">{editing.option.name}: {editing.value.name}</h3>
-                        <p className="mt-1 text-xs text-slate-500">تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة.</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                            {editing.option.isCustomField
+                                ? "تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة في هذا الحقل."
+                                : "تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة."}
+                        </p>
                         <div className="mt-5 grid grid-cols-2 gap-2">
                             <button onClick={() => setEditing((row) => ({ ...row, mode: "resource" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "resource" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مكوّن مشترك</button>
                             <button onClick={() => setEditing((row) => ({ ...row, mode: "direct" }))} className={`rounded-xl border p-3 text-sm font-bold ${editing.mode === "direct" ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}>مبلغ مباشر</button>
                         </div>
                         {editing.mode === "resource" ? (
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(event) => setEditing((row) => ({ ...row, resource_id: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900">{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id}>{resource.name} — {money(resource.unit_cost)}</option>)}</select></label>
+                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(event) => setEditing((row) => ({ ...row, resource_id: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id}>{resource.name} — {money(resource.unit_cost)}</option>)}</select></label>
                                 <label className="text-xs font-bold text-slate-500">الكمية<input type="number" min="0.0001" step="0.01" value={editing.quantity} onChange={(event) => setEditing((row) => ({ ...row, quantity: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>
                             </div>
                         ) : (
