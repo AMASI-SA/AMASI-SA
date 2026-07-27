@@ -46,6 +46,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_source_authority import install_product_source_authority
     from product_field_cost_support import install_product_field_cost_support
     from product_v2_recent_sync_routes import make_product_v2_recent_sync_router
+    from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
@@ -70,6 +71,10 @@ def make_order_engine_router(*args, **kwargs):
         make_product_v2_workspace_router(db, current_user),
         make_product_v2_details_router(db, current_user),
         make_product_control_center_router(db, current_user),
+        # This GET route must be registered before the older workspace route.
+        # It exposes the current cost consistently for legacy and new rows so
+        # the component edit modal is always pre-filled.
+        make_component_workspace_cost_compat_router(db, current_user),
         make_component_edit_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
