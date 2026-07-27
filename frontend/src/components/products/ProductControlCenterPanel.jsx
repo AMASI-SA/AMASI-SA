@@ -98,13 +98,23 @@ function CategoryPicker({ value, items, loading, onChange }) {
         const next = selected.includes(key) ? selected.filter((row) => row !== key) : [...selected, key];
         onChange(next.join(","));
     }
-    return <div className="relative">
+    return <div
+        className="relative"
+        tabIndex={-1}
+        onMouseLeave={() => setOpen(false)}
+        onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        }}
+        onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(false);
+        }}
+    >
         <div className="text-xs font-black text-slate-600">تصنيفات سلة</div>
-        <button type="button" onClick={() => setOpen((row) => !row)} className="mt-1 min-h-12 w-full rounded-xl border bg-white p-3 text-right text-sm">
+        <button type="button" aria-expanded={open} onClick={() => setOpen((row) => !row)} className="mt-1 min-h-12 w-full rounded-xl border bg-white p-3 text-right text-sm">
             {!selected.length ? "اختر التصنيفات…" : selected.map((id) => byId[id]?.path || byId[id]?.name || `تصنيف ${id}`).join("، ")}
         </button>
         {open && <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border bg-white shadow-2xl">
-            <label className="flex items-center gap-2 border-b p-3"><MagnifyingGlass className="text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث باسم التصنيف…" className="min-w-0 flex-1 outline-none" /></label>
+            <label className="flex items-center gap-2 border-b p-3"><MagnifyingGlass className="text-slate-400" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث باسم التصنيف…" className="min-w-0 flex-1 outline-none" /></label>
             <div className="max-h-72 overflow-auto p-2">
                 {loading ? <div className="p-6 text-center"><SpinnerGap className="inline animate-spin" /></div> : visible.map((row) => <label key={row.id} className="flex cursor-pointer items-center gap-3 rounded-xl p-3 hover:bg-slate-50"><input type="checkbox" checked={selected.includes(String(row.id))} onChange={() => toggle(row.id)} /><span><b>{row.name}</b><small className="block text-slate-400">{row.path}</small></span></label>)}
                 {!loading && !visible.length && <div className="p-5 text-center text-sm text-slate-400">لا توجد نتيجة.</div>}
