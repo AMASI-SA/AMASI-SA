@@ -5,9 +5,13 @@ function run(command, value = null) {
     document.execCommand(command, false, value);
 }
 
-export default function VisualHtmlEditor({ value = "", onChange }) {
+export default function VisualHtmlEditor({ value = "", onChange, resetKey = "" }) {
     const [mode, setMode] = useState("visual");
     const editorRef = useRef(null);
+
+    useEffect(() => {
+        setMode("visual");
+    }, [resetKey]);
 
     useEffect(() => {
         if (mode !== "visual" || !editorRef.current) return;
