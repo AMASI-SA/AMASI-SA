@@ -1,5 +1,22 @@
 import api from "../lib/api";
 
+let recentSyncPromise = null;
+let recentSyncAt = 0;
+const RECENT_SYNC_TTL_MS = 45_000;
+
+export async function syncRecentProductsV2({ force = false } = {}) {
+    const now = Date.now();
+    if (!force && now - recentSyncAt < RECENT_SYNC_TTL_MS) return null;
+    if (recentSyncPromise) return recentSyncPromise;
+    recentSyncPromise = api.post("/products-v2/sync-recent")
+        .then((response) => {
+            recentSyncAt = Date.now();
+            return response.data;
+        })
+        .finally(() => { recentSyncPromise = null; });
+    return recentSyncPromise;
+}
+
 export async function listProductsV2({ page = 1, perPage = 30, query = "", status = "" } = {}) {
     const params = { page, per_page: perPage };
     if (query.trim()) params.q = query.trim();
@@ -16,6 +33,9 @@ export async function listWorkspaceProducts({
     sort = "newest",
     missingSku = false,
 } = {}) {
+    if (page === 1 && sort === "newest" && !query.trim()) {
+        try { await syncRecentProductsV2(); } catch { /* listing remains available if Salla is temporarily unavailable */ }
+    }
     const params = { page, per_page: perPage, sort, missing_sku: missingSku };
     if (query.trim()) params.q = query.trim();
     if (status) params.status = status;
@@ -30,6 +50,7 @@ export async function getProductsV2Summary() {
 
 export async function syncProductsV2() {
     const response = await api.post("/products-v2/sync");
+    recentSyncAt = Date.now();
     return response.data;
 }
 
