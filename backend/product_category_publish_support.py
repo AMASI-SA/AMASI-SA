@@ -58,8 +58,9 @@ def install_product_category_publish_support() -> None:
             payload = original_payload(patch)
             if "categories" in payload:
                 payload["categories"] = normalize_category_ids(payload["categories"])
-            # Status is never valid in the general Update Product payload for our
-            # Mezan values. It is published through Salla's dedicated endpoint.
+            # Status is published separately after the general product update.
+            if "status" in patch:
+                payload["__mezan_status"] = patch["status"]
             payload.pop("status", None)
             return payload
 
@@ -74,8 +75,6 @@ def install_product_category_publish_support() -> None:
         json_payload = kwargs.get("json")
         status_value = None
         if method.upper() == "PUT" and path.startswith("/products/") and isinstance(json_payload, dict):
-            # The approved draft remains available in the publishing coroutine;
-            # attach the status through a private adapter field when present.
             status_value = json_payload.pop("__mezan_status", None)
         response = await original_call(db, user_id, method, path, **kwargs)
         if status_value is not None:
