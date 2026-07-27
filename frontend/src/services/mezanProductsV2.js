@@ -41,6 +41,7 @@ export async function getProductOptionCosts(productId) { return (await api.get(`
 export async function saveProductOptionCost(productId, optionId, valueId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`, payload)).data; }
 export async function deleteProductOptionCost(productId, optionId, valueId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`)).data; }
 export async function calculateProductCost(productId, selectedOptions) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/calculate-cost`, { selected_options: selectedOptions })).data; }
+export async function getSallaCategoryCatalog() { return (await api.get("/products-v2/category-catalog")).data; }
 
 export async function previewMissingSkus({ prefix = "AMS", width = 5, limit = 20 } = {}) {
     return (await api.get("/products-v2/workspace/sku/preview", { params: { prefix, width, limit } })).data;
