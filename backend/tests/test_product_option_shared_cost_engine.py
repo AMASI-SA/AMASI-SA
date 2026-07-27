@@ -13,11 +13,12 @@ def test_option_cost_route_contract_is_conditional_and_shared():
     assert 'impacted = await db[BINDINGS].count_documents' in source
 
 
-def test_product_workspace_renders_option_cost_editor():
+def test_product_workspace_renders_option_and_custom_field_cost_editor():
     source = Path("../frontend/src/pages/MezanProductsWorkspace.jsx").read_text(encoding="utf-8")
     editor = Path("../frontend/src/components/products/ProductOptionCostEditor.jsx").read_text(encoding="utf-8")
 
     assert 'ProductOptionCostEditor' in source
-    assert '<ProductOptionCostEditor productId={selectedId} options={options} />' in source
+    assert '<ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} />' in source
     assert 'تكلفة المنتج الأساسية تُحتسب دائمًا' in editor
     assert 'تُضاف هذه التكلفة فقط عند اختيار العميل لهذه القيمة' in editor
+    assert 'تُضاف هذه التكلفة فقط عندما يرسل العميل قيمة غير فارغة' in editor
