@@ -12,9 +12,11 @@ on:
       - "backend/product_v2_catalog_rank.py"
       - "backend/product_v2_details_routes.py"
       - "backend/product_option_cost_routes.py"
+      - "backend/order_option_cost_snapshot_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_product_v2_*.py"
       - "backend/tests/test_product_option_shared_cost_engine.py"
+      - "backend/tests/test_order_option_cost_snapshots.py"
       - "frontend/src/pages/MezanProducts.jsx"
       - "frontend/src/pages/MezanProductsWorkspace.jsx"
       - "frontend/src/pages/MezanComponents.jsx"
@@ -37,7 +39,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install targeted dependencies
-        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl cryptography
+        run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest openpyxl cryptography reportlab
       - name: Run Products V2 unit tests
         shell: bash
         run: |
@@ -51,6 +53,7 @@ jobs:
             tests/test_product_v2_catalog_rank.py \
             tests/test_product_v2_live_salla_order_contract.py \
             tests/test_product_option_shared_cost_engine.py \
+            tests/test_order_option_cost_snapshots.py \
             -q --tb=short > /tmp/products-v2-pytest.log 2>&1
           status=$?
           cat /tmp/products-v2-pytest.log
