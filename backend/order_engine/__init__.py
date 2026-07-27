@@ -76,6 +76,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_details_routes import make_product_v2_details_router
     from product_v2_source_authority import install_product_source_authority
     from product_option_cost_routes import make_product_option_cost_router
+    from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
 
     # Product V2 sync hotfix: Salla returns only its default 15 products when
     # ``format=light`` is sent. Patch the module global before building the
@@ -99,6 +100,7 @@ def make_order_engine_router(*args, **kwargs):
         make_product_v2_workspace_router(db, current_user),
         make_product_v2_details_router(db, current_user),
         make_product_option_cost_router(db, current_user),
+        make_order_option_cost_snapshot_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:
