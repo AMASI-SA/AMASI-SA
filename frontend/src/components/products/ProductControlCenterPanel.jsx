@@ -143,7 +143,10 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         } catch (error) { toast.error(error?.response?.data?.detail?.message || "تعذر تحميل مركز التحكم بالمنتج"); }
     }
 
-    useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        setTab("edit");
+        load();
+    }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => {
         let live = true; setCategoriesLoading(true);
         getSallaCategoryCatalog().then((result) => { if (live) setCategories(result.items || []); }).catch(() => {}).finally(() => { if (live) setCategoriesLoading(false); });

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 from typing import Any, Callable
+from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
@@ -39,6 +41,63 @@ def _image_record(value: Any, index: int) -> dict[str, Any] | None:
         "is_main": bool(value.get("is_main") or value.get("main") or index == 0),
         "sort": value.get("sort") if value.get("sort") is not None else index,
     }
+
+
+def _image_identity(url: Any) -> str:
+    """Return a stable identity for the same Salla image across URL variants.
+
+    Salla may return the main image separately and again inside `images`, sometimes
+    with a transformed CDN URL. Query strings and transform folders must not create
+    an extra product image in Mezan.
+    """
+    text = _text(url)
+    if not text:
+        return ""
+    try:
+        parsed = urlsplit(text)
+        path = unquote(parsed.path).rstrip("/")
+    except Exception:
+        path = text.split("?", 1)[0].rstrip("/")
+    filename = PurePosixPath(path).name.lower()
+    return filename or path.lower()
+
+
+def _dedupe_images(rows: list[dict[str, Any]], main_image: Any = None, product_name: Any = None) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_urls: set[str] = set()
+
+    for row in rows:
+        image_id = _text(row.get("id"))
+        identity = _image_identity(row.get("url"))
+        if (image_id and image_id in seen_ids) or (identity and identity in seen_urls):
+            continue
+        if image_id:
+            seen_ids.add(image_id)
+        if identity:
+            seen_urls.add(identity)
+        result.append(dict(row))
+
+    main_identity = _image_identity(main_image)
+    if main_image and main_identity and main_identity not in seen_urls:
+        result.insert(0, {
+            "id": "main",
+            "url": _text(main_image),
+            "thumbnail": None,
+            "alt": _text(product_name) or None,
+            "is_main": True,
+            "sort": 0,
+        })
+    elif main_identity:
+        for row in result:
+            if _image_identity(row.get("url")) == main_identity:
+                row["is_main"] = True
+                break
+
+    result.sort(key=lambda row: (0 if row.get("is_main") else 1, row.get("sort") if row.get("sort") is not None else 999999))
+    for index, row in enumerate(result):
+        row["sort"] = index
+    return result
 
 
 def _option_value(value: Any, index: int) -> dict[str, Any]:
@@ -100,13 +159,12 @@ def _normalize_variants(raw: Any) -> list[dict[str, Any]]:
 def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
     normalized = normalize_salla_product(raw, user_id=user_id, synced_at=_now())
     images_raw = raw.get("images") or raw.get("media") or []
-    images = []
+    image_rows = []
     for index, value in enumerate(images_raw if isinstance(images_raw, list) else []):
         record = _image_record(value, index)
         if record:
-            images.append(record)
-    if normalized.get("main_image") and not any(row["url"] == normalized["main_image"] for row in images):
-        images.insert(0, {"id": "main", "url": normalized["main_image"], "thumbnail": None, "alt": normalized.get("name"), "is_main": True, "sort": 0})
+            image_rows.append(record)
+    images = _dedupe_images(image_rows, normalized.get("main_image"), normalized.get("name"))
 
     options = _normalize_options(raw.get("options") or raw.get("product_options"))
     variants = _normalize_variants(raw.get("variants") or raw.get("skus") or raw.get("product_variants"))
