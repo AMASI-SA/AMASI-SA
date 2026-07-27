@@ -75,6 +75,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_creation_order_routes import make_product_v2_creation_order_router
     from product_v2_details_routes import make_product_v2_details_router
     from product_v2_source_authority import install_product_source_authority
+    from product_field_cost_support import install_product_field_cost_support
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
@@ -87,6 +88,7 @@ def make_order_engine_router(*args, **kwargs):
 
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
+    install_product_field_cost_support()
     make_product_v2_router = _product_v2_routes.make_product_v2_router
 
     child_routers = [
