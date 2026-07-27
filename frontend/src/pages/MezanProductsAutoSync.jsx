@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { syncRecentProductsV2 } from "../services/mezanProductsV2";
 import MezanProductsWorkspace from "./MezanProductsWorkspace";
@@ -6,8 +6,6 @@ import MezanProductsWorkspace from "./MezanProductsWorkspace";
 const AUTO_SYNC_INTERVAL_MS = 60_000;
 
 export default function MezanProductsAutoSync() {
-    const [revision, setRevision] = useState(0);
-
     useEffect(() => {
         let active = true;
         async function refreshRecent() {
@@ -16,10 +14,10 @@ export default function MezanProductsAutoSync() {
                 const result = await syncRecentProductsV2({ force: true });
                 if (!active) return;
                 if ((result?.created || 0) > 0 || (result?.updated || 0) > 0) {
-                    setRevision((value) => value + 1);
+                    window.dispatchEvent(new CustomEvent("mezan:products-recent-sync", { detail: result }));
                 }
             } catch {
-                // The workspace remains usable during temporary Salla outages.
+                // Keep the open product editor and local V2 catalogue usable.
             }
         }
         const timer = window.setInterval(refreshRecent, AUTO_SYNC_INTERVAL_MS);
@@ -32,5 +30,6 @@ export default function MezanProductsAutoSync() {
         };
     }, []);
 
-    return <MezanProductsWorkspace key={revision} />;
+    // Never key/remount the workspace: a background sync must not erase unsaved edits.
+    return <MezanProductsWorkspace />;
 }
