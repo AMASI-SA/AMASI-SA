@@ -75,6 +75,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_creation_order_routes import make_product_v2_creation_order_router
     from product_v2_details_routes import make_product_v2_details_router
     from product_v2_source_authority import install_product_source_authority
+    from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
 
@@ -99,6 +100,9 @@ def make_order_engine_router(*args, **kwargs):
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
         make_product_v2_details_router(db, current_user),
+        # Editable component POST/PUT routes must be registered before the older
+        # handlers that share the same paths.
+        make_component_edit_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
     ]
