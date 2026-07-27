@@ -3,13 +3,16 @@
 Rules:
 - Variants expose a human-readable combination label, not only a Salla id.
 - Product custom fields are normalized with their Salla field type.
-- A custom text field can carry a conditional cost through the synthetic
-  identity ``field:<field_id> / filled``. The cost is applied only when the
-  customer submitted a non-empty value on the order item.
+- Text-like custom fields and text-like Salla options can carry a conditional
+  cost through the synthetic value ``filled``. The cost is applied only when
+  the customer submitted a non-empty value on the order item.
 """
 from __future__ import annotations
 
 from typing import Any, Callable
+
+
+FILL_BASED_TYPES = {"text", "textarea", "long_text", "number", "date", "time", "file"}
 
 
 def _text(value: Any) -> str:
@@ -106,7 +109,6 @@ def readable_variant_label(variant: dict[str, Any], options: list[dict[str, Any]
             normalized.append({"option_name": option_name, "value_name": value_name})
 
     explicit = _text(variant.get("name") or variant.get("title"))
-    # Salla sometimes returns the numeric variant id as its name. Ignore it.
     if explicit and not explicit.isdigit() and explicit != _text(variant.get("id")):
         label = explicit
     else:
@@ -123,6 +125,10 @@ def _field_value_is_filled(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)):
         return bool(value)
     return bool(str(value).strip())
+
+
+def _option_is_fill_based(option: dict[str, Any]) -> bool:
+    return _text(option.get("type")).lower() in FILL_BASED_TYPES and not (option.get("values") or [])
 
 
 def install_product_field_cost_support() -> None:
@@ -143,8 +149,6 @@ def install_product_field_cost_support() -> None:
                     continue
                 label, selections = readable_variant_label(variant, options)
                 variant["display_name"] = label
-                # Existing Product V2 table renders ``name`` first. Replace only
-                # missing/numeric provider names so real explicit names survive.
                 existing_name = _text(variant.get("name"))
                 if not existing_name or existing_name.isdigit() or existing_name == _text(variant.get("id")):
                     variant["name"] = label
@@ -165,6 +169,13 @@ def install_product_field_cost_support() -> None:
                             {"id": str(option_id), "name": field.get("name"), "type": field.get("type")},
                             {"id": "filled", "name": "عند تعبئة الحقل"},
                         )
+            if str(value_id) == "filled":
+                for option in product.get("options") or []:
+                    if isinstance(option, dict) and str(option.get("id")) == str(option_id) and _option_is_fill_based(option):
+                        return (
+                            {"id": str(option_id), "name": option.get("name"), "type": option.get("type")},
+                            {"id": "filled", "name": "عند تعبئة الحقل"},
+                        )
             return original_option_value(product, option_id, value_id)
         option_or_custom_field._mezan_field_cost_support = True  # type: ignore[attr-defined]
         cost_module._option_value = option_or_custom_field
@@ -173,6 +184,24 @@ def install_product_field_cost_support() -> None:
     if not getattr(original_tokens, "_mezan_field_cost_support", False):
         def tokens_with_custom_fields(item: Any):
             tokens = set(original_tokens(item))
+            for row in getattr(item, "options_raw", None) or []:
+                if not isinstance(row, dict):
+                    continue
+                option = row.get("option") if isinstance(row.get("option"), dict) else {}
+                option_id = row.get("option_id") or row.get("id") or option.get("id")
+                option_name = row.get("option_name") or row.get("name") or option.get("name")
+                value = row.get("value")
+                if isinstance(value, dict):
+                    value = value.get("name") or value.get("value") or value.get("text")
+                if value is None:
+                    value = row.get("text") or row.get("answer")
+                if not _field_value_is_filled(value):
+                    continue
+                if option_id not in (None, ""):
+                    tokens.add((f"id:{option_id}", "id:filled"))
+                if option_name not in (None, ""):
+                    tokens.add((f"name:{snapshot_module._norm(option_name)}", f"name:{snapshot_module._norm('عند تعبئة الحقل')}"))
+
             for row in getattr(item, "custom_fields", None) or []:
                 if not isinstance(row, dict):
                     continue

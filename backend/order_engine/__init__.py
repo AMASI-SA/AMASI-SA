@@ -50,12 +50,7 @@ _original_make_order_engine_router = _routes.make_order_engine_router
 
 
 def _route_keys(route):
-    """Return unique (path, method) keys for an APIRoute.
-
-    FastAPI legitimately supports GET and POST on the same path. Comparing
-    paths alone silently dropped later methods, which caused GET warehouse
-    endpoints to return 405 while POST remained registered.
-    """
+    """Return unique (path, method) keys for an APIRoute."""
     path = getattr(route, "path", None)
     methods = getattr(route, "methods", None) or {None}
     return {(path, method) for method in methods}
@@ -76,13 +71,11 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_details_routes import make_product_v2_details_router
     from product_v2_source_authority import install_product_source_authority
     from product_field_cost_support import install_product_field_cost_support
+    from product_v2_recent_sync_routes import make_product_v2_recent_sync_router
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
 
-    # Product V2 sync hotfix: Salla returns only its default 15 products when
-    # ``format=light`` is sent. Patch the module global before building the
-    # router so POST /products-v2/sync uses the proven full-catalog request.
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
 
@@ -97,13 +90,10 @@ def make_order_engine_router(*args, **kwargs):
         make_warehouse_room_router(db, current_user),
         make_warehouse_reset_router(db, current_user),
         make_product_v2_router(db, current_user),
-        # Register the corrected GET /workspace/products first so the old route
-        # is skipped by the (path, method) duplicate guard below.
+        make_product_v2_recent_sync_router(db, current_user),
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
         make_product_v2_details_router(db, current_user),
-        # Editable component POST/PUT routes must be registered before the older
-        # handlers that share the same paths.
         make_component_edit_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
@@ -121,8 +111,6 @@ def make_order_engine_router(*args, **kwargs):
     return router
 
 
-# ``from order_engine.routes import make_order_engine_router`` happens after
-# this package initializer, so expose the bridge on the routes module too.
 _routes.make_order_engine_router = make_order_engine_router
 
 
