@@ -1,12 +1,21 @@
-"""Normalize Product Control Center category payloads for Salla.
+"""Normalize Product Control Center payloads for Salla.
 
-Salla Update Product expects `categories` as an array of integer category IDs.
-The UI stores selected IDs as strings so they remain lossless and easy to diff.
-This adapter converts only at the Salla write boundary.
+Mezan keeps friendly internal values while Salla Update Product expects integer
+category IDs and product status values: sale, hidden, or out.
 """
 from __future__ import annotations
 
 from typing import Any
+
+
+STATUS_MAP = {
+    "active": "sale",
+    "sale": "sale",
+    "inactive": "hidden",
+    "hidden": "hidden",
+    "out_of_stock": "out",
+    "out": "out",
+}
 
 
 def normalize_category_ids(value: Any) -> list[int]:
@@ -32,6 +41,11 @@ def normalize_category_ids(value: Any) -> list[int]:
     return result
 
 
+def normalize_product_status(value: Any) -> str:
+    text = str(value or "").strip()
+    return STATUS_MAP.get(text, text)
+
+
 def install_product_category_publish_support() -> None:
     import product_control_center_routes as module
 
@@ -43,6 +57,8 @@ def install_product_category_publish_support() -> None:
         payload = original(patch)
         if "categories" in payload:
             payload["categories"] = normalize_category_ids(payload["categories"])
+        if "status" in payload:
+            payload["status"] = normalize_product_status(payload["status"])
         return payload
 
     wrapped._mezan_category_publish_support = True  # type: ignore[attr-defined]
