@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { LinkSimple, Plus, SpinnerGap, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-import ProductControlCenter from "./ProductControlCenter";
 import {
     deleteProductOptionCost,
     getProductOptionCosts,
@@ -126,8 +125,6 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
 
     return (
         <div className="space-y-5">
-            <ProductControlCenter productId={productId} />
-
             <section className="rounded-2xl border border-slate-200 p-4">
                 <div className="mb-4">
                     <h2 className="font-black">تكاليف الخيارات والحقول</h2>
