@@ -1,9 +1,10 @@
 import { CheckCircle, Clock, LockKey, Question, WarningCircle } from "@phosphor-icons/react";
 import ProviderMark from "./ProviderMark";
+import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATE = {
     available: {
-        label: "متاح",
+        label: "قراءة محلية متاحة",
         Icon: CheckCircle,
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
     },
@@ -79,6 +80,10 @@ export default function CapabilityMatrix({ providers }) {
                             <h2 className="font-extrabold text-slate-900">{provider.name_ar}</h2>
                             <p className="text-xs text-slate-400">{provider.name}</p>
                         </div>
+                        <span className="me-auto rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-extrabold text-slate-600">
+                            {CONNECTION_PROVENANCE_LABELS[provider.connection_provenance]
+                                || CONNECTION_PROVENANCE_LABELS.unknown}
+                        </span>
                     </div>
                     <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
                         {Object.entries(provider.capabilities || {}).map(([key, entry]) => (

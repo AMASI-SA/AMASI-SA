@@ -283,6 +283,7 @@ def build_capability_matrix(
     connection_status: str,
     has_data: bool,
     current_permissions: Iterable[str] = (),
+    permissions_observed: bool | None = None,
     evidence_capabilities: Iterable[str] = (),
 ) -> dict[str, dict]:
     """Build an evidence-based matrix without granting inferred writes."""
@@ -290,22 +291,37 @@ def build_capability_matrix(
     connected = status in {"connected", "active", "healthy"}
     data_visible = bool(has_data) or status == "data_available"
     current = {str(item) for item in current_permissions}
+    permission_evidence_present = (
+        bool(current)
+        if permissions_observed is None
+        else bool(permissions_observed)
+    )
     evidence = {str(item) for item in evidence_capabilities}
 
     if definition.advertising:
         matrix: dict[str, dict] = {}
         for capability in AD_CAPABILITY_KEYS:
             if capability in AD_MUTATION_CAPABILITIES:
-                matrix[capability] = _entry(
-                    "approval_required",
-                    (
-                        "Phase 1 blocks provider mutations until proposal, "
-                        "preview, approval, verification, audit, and rollback "
-                        "controls are implemented."
-                    ),
-                    approval_required=True,
-                    blocked_by_policy=True,
-                )
+                if not connected:
+                    matrix[capability] = _entry(
+                        "not_connected",
+                        (
+                            "A provider-management connection is required "
+                            "before this mutation can enter the approval lifecycle."
+                        ),
+                        blocked_by_policy=True,
+                    )
+                else:
+                    matrix[capability] = _entry(
+                        "approval_required",
+                        (
+                            "Phase 1 blocks provider mutations until proposal, "
+                            "preview, approval, verification, audit, and rollback "
+                            "controls are implemented."
+                        ),
+                        approval_required=True,
+                        blocked_by_policy=True,
+                    )
             elif (
                 capability in LOCAL_DATA_READ_CAPABILITIES
                 and data_visible
@@ -344,6 +360,11 @@ def build_capability_matrix(
             matrix[capability] = _entry(
                 "not_connected",
                 "No verified connection evidence was found.",
+            )
+        elif definition.required_permissions and not permission_evidence_present:
+            matrix[capability] = _entry(
+                "unknown",
+                "Permission evidence is unavailable; no missing permission is asserted.",
             )
         elif missing:
             matrix[capability] = _entry(

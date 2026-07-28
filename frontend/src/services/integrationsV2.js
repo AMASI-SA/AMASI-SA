@@ -37,6 +37,23 @@ const SAFE_CAPABILITY_STATES = new Set([
     "planned",
     "unknown",
 ]);
+const SAFE_CONNECTION_PROVENANCE = new Set([
+    "api_connection",
+    "legacy_integration",
+    "data_feed",
+    "disconnected",
+    "planned",
+    "unknown",
+]);
+
+export const CONNECTION_PROVENANCE_LABELS = Object.freeze({
+    api_connection: "ربط API مباشر",
+    legacy_integration: "تكامل قائم سابقًا",
+    data_feed: "تغذية بيانات فقط",
+    disconnected: "غير مرتبط",
+    planned: "مستقبلي",
+    unknown: "غير معروف",
+});
 
 function text(value, fallback = "") {
     return typeof value === "string" ? value : fallback;
@@ -94,7 +111,53 @@ function normalizeCapabilities(value) {
     }, {});
 }
 
-function normalizeAccount(account, provider, fallbackStatus, fallbackSource) {
+function safeInternalHref(value) {
+    if (
+        typeof value !== "string"
+        || !value.startsWith("/")
+        || value.startsWith("//")
+        || value.includes("\\")
+        || /[\r\n]/.test(value)
+    ) {
+        return null;
+    }
+    try {
+        const parsed = new URL(value, "https://mezan.local");
+        if (parsed.origin !== "https://mezan.local") return null;
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+        return null;
+    }
+}
+
+function inferConnectionProvenance({
+    value,
+    connectionStatus,
+    sourceMode,
+}) {
+    if (SAFE_CONNECTION_PROVENANCE.has(value)) return value;
+    if (connectionStatus === "planned") return "planned";
+    if (["not_connected", "not_configured"].includes(connectionStatus)) {
+        return "disconnected";
+    }
+    if (
+        connectionStatus === "data_available"
+        || ["data_feed", "legacy_data"].includes(sourceMode)
+    ) {
+        return "data_feed";
+    }
+    // A connected-looking status without explicit provenance must not be
+    // promoted to a direct API connection in the browser.
+    return "unknown";
+}
+
+function normalizeAccount(
+    account,
+    provider,
+    fallbackStatus,
+    fallbackSource,
+    fallbackProvenance,
+) {
     const safe = redactIntegrationValue(account || {});
     return {
         mezan_integration_account_id: nullableText(safe.mezan_integration_account_id),
@@ -114,6 +177,11 @@ function normalizeAccount(account, provider, fallbackStatus, fallbackSource) {
         data_delay_minutes: safeNumber(safe.data_delay_minutes, { min: 0 }),
         health_score: safeNumber(safe.health_score, { min: 0, max: 100 }),
         source_mode: text(safe.source_mode, fallbackSource),
+        connection_provenance: inferConnectionProvenance({
+            value: safe.connection_provenance || fallbackProvenance,
+            connectionStatus: text(safe.connection_status, fallbackStatus),
+            sourceMode: text(safe.source_mode, fallbackSource),
+        }),
     };
 }
 
@@ -121,9 +189,11 @@ function normalizeActions(actions = {}) {
     return ["test_connection", "reconnect", "settings", "disconnect"].reduce(
         (result, key) => {
             const action = actions?.[key] || {};
+            const href = safeInternalHref(action.href);
             result[key] = {
-                enabled: Boolean(action.enabled),
+                enabled: key === "disconnect" ? false : Boolean(action.enabled),
                 reason: nullableText(action.reason),
+                href: key === "disconnect" ? null : href,
             };
             return result;
         },
@@ -139,6 +209,7 @@ function fallbackProvider(provider) {
         name_ar: nameAr,
         category,
         connection_status: provider === "shipping_companies" ? "planned" : "not_configured",
+        connection_provenance: provider === "shipping_companies" ? "planned" : "disconnected",
         source_mode: provider === "shipping_companies" ? "planned" : "none",
         accounts: [],
         permissions: { current: [], missing: [], unknown: true },
@@ -160,8 +231,23 @@ function fallbackProvider(provider) {
 export function normalizeProviderCard(raw, provider) {
     const fallback = fallbackProvider(provider);
     const safe = redactIntegrationValue(raw || {});
-    const connectionStatus = text(safe.connection_status, fallback.connection_status);
+    let connectionStatus = text(safe.connection_status, fallback.connection_status);
     const sourceMode = text(safe.source_mode, fallback.source_mode);
+    const connectionProvenance = inferConnectionProvenance({
+        value: safe.connection_provenance,
+        connectionStatus,
+        sourceMode,
+    });
+    if (
+        connectionStatus === "connected"
+        && ["data_feed", "disconnected", "unknown"].includes(connectionProvenance)
+    ) {
+        connectionStatus = connectionProvenance === "data_feed"
+            ? "data_available"
+            : connectionProvenance === "disconnected"
+                ? "not_connected"
+                : "unknown";
+    }
     const latestError = safe.latest_error && typeof safe.latest_error === "object"
         ? {
             code: nullableText(safe.latest_error.code),
@@ -177,6 +263,7 @@ export function normalizeProviderCard(raw, provider) {
         name_ar: text(safe.name_ar, fallback.name_ar),
         category: text(safe.category, fallback.category),
         connection_status: connectionStatus,
+        connection_provenance: connectionProvenance,
         source_mode: sourceMode,
         accounts: Array.isArray(safe.accounts)
             ? safe.accounts.map((account) => normalizeAccount(
@@ -184,6 +271,7 @@ export function normalizeProviderCard(raw, provider) {
                 provider,
                 connectionStatus,
                 sourceMode,
+                connectionProvenance,
             ))
             : [],
         permissions: {
@@ -221,11 +309,29 @@ export function summarizeProviders(providers) {
     const rows = Array.isArray(providers) ? providers : [];
     return {
         total: rows.length,
-        connected: rows.filter((row) => (
-            ["connected", "data_available"].includes(row.connection_status)
+        connected: rows.filter((row) => row.connection_status === "connected").length,
+        api_connections: rows.filter((row) => (
+            row.connection_provenance === "api_connection"
+        )).length,
+        legacy_integrations: rows.filter((row) => (
+            row.connection_provenance === "legacy_integration"
+        )).length,
+        data_feeds: rows.filter((row) => (
+            row.connection_provenance === "data_feed"
+        )).length,
+        disconnected: rows.filter((row) => (
+            row.connection_provenance === "disconnected"
+        )).length,
+        planned: rows.filter((row) => (
+            row.connection_provenance === "planned"
+        )).length,
+        unknown: rows.filter((row) => (
+            row.connection_provenance === "unknown"
         )).length,
         healthy: rows.filter((row) => row.health?.status === "healthy").length,
         missing_permissions: rows.filter((row) => (
+            !row.permissions?.unknown
+            &&
             (row.permissions?.missing || []).length > 0
         )).length,
         attention_required: rows.filter((row) => (
@@ -269,13 +375,12 @@ export function filterIntegrationProviders(
     return (providers || []).filter((provider) => {
         const matchesStatus = (
             status === "all"
-            || (status === "connected" && ["connected", "data_available"].includes(provider.connection_status))
+            || status === provider.connection_provenance
             || (status === "attention" && (
                 ["needs_reauth", "expired", "error"].includes(provider.connection_status)
                 || (provider.permissions?.missing || []).length > 0
                 || ["degraded", "unhealthy", "error"].includes(provider.health?.status)
             ))
-            || (status === "planned" && ["planned", "not_configured"].includes(provider.connection_status))
         );
         if (!matchesStatus) return false;
         if (!needle) return true;
