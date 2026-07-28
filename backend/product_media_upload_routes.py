@@ -13,6 +13,7 @@ from product_v2_routes import PRODUCTS
 
 MEDIA_UPLOADS = "mezan_product_media_uploads_v2"
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+UPLOAD_TTL_DAYS = 7
 ALLOWED_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
@@ -70,7 +71,7 @@ def make_product_media_upload_router(db: Any, current_user: Callable) -> APIRout
 
         token = secrets.token_urlsafe(32)
         now = _now()
-        expires_at = now + timedelta(hours=24)
+        expires_at = now + timedelta(days=UPLOAD_TTL_DAYS)
         await db[MEDIA_UPLOADS].create_index("expires_at", expireAfterSeconds=0)
         await db[MEDIA_UPLOADS].insert_one({
             "token": token,
