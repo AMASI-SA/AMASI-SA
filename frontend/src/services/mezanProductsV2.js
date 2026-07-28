@@ -68,3 +68,16 @@ export async function getProductControlHistory(productId) {
 export async function saveProductAiPolicy(payload) {
     return (await api.put("/products-v2/control-center/policy", payload)).data;
 }
+
+export async function getProductMediaControl(productId) {
+    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-control`)).data;
+}
+export async function saveProductMediaDraft(productId, payload) {
+    return (await api.put(`/products-v2/${encodeURIComponent(productId)}/media-draft`, payload)).data;
+}
+export async function approveProductMediaDraft(productId, draftId) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/approve`)).data;
+}
+export async function publishProductMediaDraft(productId, draftId) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر صور المنتج إلى سلة" })).data;
+}
