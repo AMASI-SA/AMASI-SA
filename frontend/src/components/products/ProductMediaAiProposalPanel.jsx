@@ -66,6 +66,9 @@ export default function ProductMediaAiProposalPanel({ productId, images = [] }) 
             setState(result);
             const firstAllowed = (result.operations || []).find((row) => row.allowed);
             setOperation((current) => current || firstAllowed?.key || "");
+            setSourceImageUrl((current) => (
+                (result.source_images || []).some((row) => row.url === current) ? current : ""
+            ));
         } catch (error) {
             toast.error(error?.response?.data?.detail?.message || "تعذر تحميل طبقة ذكاء الصور");
         } finally {
@@ -83,7 +86,10 @@ export default function ProductMediaAiProposalPanel({ productId, images = [] }) 
 
     const operations = state?.operations || [];
     const selectedOperation = operations.find((row) => row.key === operation);
-    const availableImages = useMemo(() => (images || []).filter((row) => row?.url), [images]);
+    const availableImages = useMemo(() => {
+        const authoritative = Array.isArray(state?.source_images) ? state.source_images : images;
+        return (authoritative || []).filter((row) => row?.url);
+    }, [state?.source_images, images]);
 
     async function createJob() {
         if (!operation) return toast.error("اختر نوع التعديل");
@@ -141,12 +147,13 @@ export default function ProductMediaAiProposalPanel({ productId, images = [] }) 
                         </label>
                     </div>
                     {selectedOperation?.requires_source && <label className="mt-3 block text-xs font-bold text-slate-600">الصورة الأصلية
-                        <select value={sourceImageUrl} onChange={(event) => setSourceImageUrl(event.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3 text-sm"><option value="">اختر صورة…</option>{availableImages.map((row, index) => <option key={row.id || row.url} value={row.url}>صورة {index + 1}{row.is_main ? " — الرئيسية" : ""}{row.alt ? ` — ${row.alt}` : ""}</option>)}</select>
+                        <select value={sourceImageUrl} onChange={(event) => setSourceImageUrl(event.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3 text-sm"><option value="">اختر صورة محفوظة…</option>{availableImages.map((row, index) => <option key={row.id || row.url} value={row.url}>صورة {index + 1}{row.is_main ? " — الرئيسية" : ""}{row.alt ? ` — ${row.alt}` : ""}</option>)}</select>
                     </label>}
+                    {selectedOperation?.requires_source && !availableImages.length && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">احفظ صورة المنتج أو مسودة الصور أولًا، ثم أنشئ طلب التعديل.</div>}
                     <label className="mt-3 block text-xs font-bold text-slate-600">تعليمات التعديل
                         <textarea rows={3} maxLength={1200} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="مثال: حافظ على لون المريول وتفاصيل القماش، أزل الخلفية وضع خلفية استوديو بيضاء…" className="mt-1 w-full rounded-xl border bg-white p-3 text-sm" />
                     </label>
-                    <div className="mt-3 flex justify-end"><button type="button" onClick={createJob} disabled={saving || !selectedOperation?.allowed} className="rounded-xl bg-indigo-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? <SpinnerGap className="inline animate-spin" /> : <MagicWand className="inline" />} حفظ طلب AI</button></div>
+                    <div className="mt-3 flex justify-end"><button type="button" onClick={createJob} disabled={saving || !selectedOperation?.allowed || (selectedOperation?.requires_source && !availableImages.length)} className="rounded-xl bg-indigo-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? <SpinnerGap className="inline animate-spin" /> : <MagicWand className="inline" />} حفظ طلب AI</button></div>
                 </>
             )}
 
