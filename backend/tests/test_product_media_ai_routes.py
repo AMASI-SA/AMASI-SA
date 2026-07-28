@@ -2,6 +2,7 @@ import base64
 
 import pytest
 
+from product_media_ai_execution_support import install_product_media_ai_execution_support
 from product_media_ai_routes import (
     MAX_PROMPT_LENGTH,
     AiMediaExecutionError,
@@ -13,6 +14,8 @@ from product_media_ai_routes import (
     image_provider_status,
     validate_ai_media_request,
 )
+
+install_product_media_ai_execution_support()
 
 
 def test_provider_is_disconnected_without_key(monkeypatch):
@@ -35,13 +38,15 @@ def test_connected_analysis_is_not_reported_as_disconnected_when_images_are_off(
     assert status["analysis_ready"] is True
     assert status["ready"] is False
     assert status["state"] == "connected_analysis_only"
-    assert status["image_model"] == "gpt-image-2"
+    assert status["image_model"] is None
 
 
-def test_image_execution_requires_explicit_policy_but_has_safe_default_model(monkeypatch):
+def test_image_execution_requires_explicit_policy_and_model(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "configured")
     monkeypatch.setenv("MEZAN_AI_IMAGE_ENABLED", "true")
     monkeypatch.delenv("MEZAN_OPENAI_IMAGE_MODEL", raising=False)
+    assert image_provider_status()["execution_available"] is False
+    monkeypatch.setenv("MEZAN_OPENAI_IMAGE_MODEL", "gpt-image-2")
     status = image_provider_status()
     assert status["state"] == "connected_images_ready"
     assert status["image_model"] == "gpt-image-2"
