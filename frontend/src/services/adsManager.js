@@ -182,6 +182,78 @@ function normalizePerformanceCoverage(value, freshness) {
     };
 }
 
+function normalizeAccountPerformanceCoverage(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .filter((row) => row && typeof row === "object")
+        .map((row) => {
+            const accountId = nullableText(row.account_id);
+            if (!accountId) return null;
+            const requestedDays = safePositiveInteger(
+                row.requested_days, 0, { min: 0, max: 366 },
+            );
+            const spendDays = safePositiveInteger(
+                row.spend_days, 0, { min: 0, max: requestedDays || 366 },
+            );
+            const conversionCompleteDays = safePositiveInteger(
+                row.conversion_complete_days,
+                0,
+                { min: 0, max: requestedDays || 366 },
+            );
+            const sourceStatus = ["complete", "partial", "unavailable"].includes(
+                row.status,
+            )
+                ? row.status
+                : "unavailable";
+            const currentDayLagAllowed = row.current_day_lag_allowed === true;
+            const fullCoverage = requestedDays > 0
+                && spendDays === requestedDays
+                && conversionCompleteDays === requestedDays;
+            const boundedCurrentDayLag = currentDayLagAllowed
+                && requestedDays > 1
+                && [requestedDays - 1, requestedDays].includes(spendDays)
+                && [requestedDays - 1, requestedDays].includes(
+                    conversionCompleteDays,
+                )
+                && (
+                    spendDays === requestedDays - 1
+                    || conversionCompleteDays === requestedDays - 1
+                );
+            const status = sourceStatus === "complete"
+                && !fullCoverage
+                && !boundedCurrentDayLag
+                ? spendDays === 0 && conversionCompleteDays === 0
+                    ? "unavailable"
+                    : "partial"
+                : sourceStatus;
+            const dates = (items) => Array.isArray(items)
+                ? items
+                    .filter((item) => typeof item === "string" && ISO_DATE_RE.test(item))
+                    .slice(0, 90)
+                : [];
+            return {
+                account_id: accountId,
+                account_name: safeText(row.account_name, accountId),
+                status,
+                spend_sar: safeNumber(row.spend_sar, { min: 0 }),
+                spend_days: spendDays,
+                conversion_complete_days: conversionCompleteDays,
+                requested_days: requestedDays,
+                missing_spend_dates: dates(row.missing_spend_dates),
+                missing_conversion_dates: dates(row.missing_conversion_dates),
+                current_day_lag_allowed: (
+                    status === "complete" && boundedCurrentDayLag
+                ),
+                last_observed_date: ISO_DATE_RE.test(row.last_observed_date || "")
+                    ? row.last_observed_date
+                    : null,
+                detail: safeText(row.detail),
+            };
+        })
+        .filter(Boolean)
+        .slice(0, 250);
+}
+
 function normalizeReconciliation(value) {
     const source = value && typeof value === "object" ? value : {};
     const status = SAFE_RECONCILIATION.has(source.status)
@@ -242,6 +314,9 @@ function normalizeProvider(value) {
         performance_coverage: normalizePerformanceCoverage(
             source.performance_coverage,
             freshness,
+        ),
+        account_performance_coverage: normalizeAccountPerformanceCoverage(
+            source.account_performance_coverage,
         ),
         campaign_coverage: normalizeCampaignCoverage(source.campaign_coverage),
         reconciliation: normalizeReconciliation(source.reconciliation),
