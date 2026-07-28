@@ -55,6 +55,19 @@ def test_new_workspace_route_sidebar_and_v2_navigation_are_wired():
     assert '"/fulfillment-v2"' in layout_source
 
 
+def test_parent_mezan_tab_stays_active_while_a_nested_stage_query_is_selected():
+    layout_source = (ROOT / "frontend/src/components/Layout.jsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "const hasSpecificChild = V2_LINKS.some((item) => "
+        "item.to.startsWith(`${pathname}?`));"
+        in layout_source
+    )
+    assert "!hasSpecificChild || !location.search" in layout_source
+
+
 def test_owner_sees_one_preparation_entry_while_employee_review_access_is_preserved():
     sidebar_source = (ROOT / "frontend/src/components/Sidebar.jsx").read_text(
         encoding="utf-8"
