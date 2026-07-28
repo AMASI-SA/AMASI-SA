@@ -4,6 +4,7 @@ from product_media_draft_routes import (
     media_diff,
     normalize_media_rows,
     published_image_from_response,
+    upload_token_from_row,
 )
 
 
@@ -50,6 +51,14 @@ def test_temporary_upload_requires_token():
                 "source": "temporary_upload",
             }
         ])
+
+
+def test_recovers_upload_token_from_legacy_saved_draft_url():
+    row = {
+        "url": "https://mezansalla.com/api/products-v2/media-upload/file/legacy-secret-token",
+        "source": "external_url",
+    }
+    assert upload_token_from_row(row) == "legacy-secret-token"
 
 
 def test_media_diff_detects_add_remove_and_metadata_update():
