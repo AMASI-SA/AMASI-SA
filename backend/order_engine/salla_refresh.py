@@ -18,7 +18,6 @@ from orders_db import upsert_order
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import (
     _enrich_order_receiving_bank,
-    _fetch_salla_order_items,
     _salla_order_to_doc,
 )
 
@@ -337,6 +336,28 @@ async def _find_internal_order_id(
     return None
 
 
+async def _fetch_order_items(
+    db: Any,
+    user_id: str,
+    internal_order_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch authoritative line items through the Orders read permission."""
+    response = await call_salla(
+        db,
+        user_id,
+        "GET",
+        "/orders/items",
+        params={"order_id": str(internal_order_id)},
+    )
+    rows = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(rows, list):
+        raise RuntimeError(
+            "Salla List Order Items returned invalid payload: "
+            f"internal_order_id={internal_order_id}"
+        )
+    return [dict(row) for row in rows if isinstance(row, dict)]
+
+
 async def refresh_order_from_salla(
     db: Any,
     user_id: str,
@@ -425,7 +446,7 @@ async def refresh_order_from_salla(
                 "no_qoyod_calls": True,
             }
 
-        items = await _fetch_salla_order_items(
+        items = await _fetch_order_items(
             db,
             str(user_id),
             internal_id,

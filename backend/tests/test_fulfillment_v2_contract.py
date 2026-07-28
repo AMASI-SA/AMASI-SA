@@ -124,6 +124,7 @@ def test_salla_refresh_is_centralized_in_orders_v2():
     assert "_refresh_review_source_once" not in review_source
     assert '"/{order_number}/refresh-from-salla"' in routes_source
     assert 'f"/orders/{internal_id}"' in refresh_source
+    assert '"/orders/items"' in refresh_source
     assert '"/shipments"' not in refresh_source
     assert "no_shipments_api_calls" in refresh_source
     assert "refreshOrderFromSalla" in service_source
