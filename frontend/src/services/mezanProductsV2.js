@@ -69,3 +69,13 @@ export async function uploadProductMediaFile(productId, file) {
 export async function deleteProductMediaUpload(productId, token) {
     return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/media-upload/${encodeURIComponent(token)}`)).data;
 }
+
+export async function getProductMediaAiState(productId) {
+    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-ai`)).data;
+}
+export async function createProductMediaAiJob(productId, payload) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs`, payload)).data;
+}
+export async function cancelProductMediaAiJob(productId, jobId) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/cancel`)).data;
+}
