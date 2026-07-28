@@ -46,8 +46,7 @@ def openai_integration_card() -> dict[str, Any]:
             "connection_status": "connected",
             "connection_provenance": "api_connection",
             "permissions": current,
-            "capabilities": [],
-            "has_data": True,
+            "capabilities": {},
             "last_sync_at": None,
             "data_delay_minutes": None,
             "health_score": 100,
@@ -62,7 +61,7 @@ def openai_integration_card() -> dict[str, Any]:
             "analysis.generate": _capability(
                 "available" if connected else "not_connected",
                 "محلل ميزان يستخدم اتصال OpenAI الحالي بالقراءة فقط."
-                if connected else "OPENAI_API_KEY غير موجود في بيئة التشغيل.",
+                if connected else "مفتاح OpenAI غير موجود في بيئة التشغيل.",
             ),
             "images.propose": _capability(
                 "available" if connected else "not_connected",
@@ -92,7 +91,7 @@ def openai_integration_card() -> dict[str, Any]:
             "cannot": ([
                 "تنفيذ تعديل الصور قبل تفعيل نموذج وسياسة الصور",
                 "النشر المباشر إلى سلة دون مسودة واعتماد وتحقق",
-            ] if connected else ["لا يوجد مفتاح OpenAI في بيئة التشغيل."]),
+            ] if connected else ["لا يوجد اتصال OpenAI في بيئة التشغيل."]),
         },
         "actions": {
             "test_connection": {
@@ -104,7 +103,6 @@ def openai_integration_card() -> dict[str, Any]:
             "settings": {"enabled": False, "reason": "يُدار المفتاح من أسرار بيئة النشر.", "href": None},
             "disconnect": {"enabled": False, "reason": "إزالة الأسرار إجراء حساس ومحظور من هذه الصفحة.", "href": None},
         },
-        "runtime_status": status,
     }
 
 
