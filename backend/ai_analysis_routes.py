@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
+from ai_provider_status import openai_runtime_status
+
 MAX_LIST_ITEMS = 30
 MAX_TEXT_LENGTH = 500
 DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 20.0
@@ -84,18 +86,22 @@ def _default_client() -> AsyncOpenAI:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="خدمة الذكاء غير مهيأة: OPENAI_API_KEY غير موجود في بيئة الإنتاج.")
-    return AsyncOpenAI(
-        api_key=api_key,
-        max_retries=0,
-        timeout=_analysis_timeout_seconds(),
-    )
+    return AsyncOpenAI(api_key=api_key, max_retries=0, timeout=_analysis_timeout_seconds())
 
 def make_ai_analysis_router(current_user: Callable, client_factory: Callable[[], Any] = _default_client) -> APIRouter:
     router = APIRouter(prefix="/ai", tags=["ai-readonly"])
     @router.get("/status")
     async def ai_status(user: dict = Depends(current_user)) -> dict[str, Any]:
         del user
-        return {"ok": True, "configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "mode": "read_only_analysis", "model": os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini"), "writes_enabled": False}
+        status = openai_runtime_status()
+        return {
+            "ok": True,
+            **status,
+            "configured": status["connected"],
+            "mode": "read_only_analysis",
+            "model": status["analysis"]["model"],
+            "writes_enabled": False,
+        }
     @router.post("/analyze")
     async def analyze(body: AIAnalysisIn, user: dict = Depends(current_user)) -> dict[str, Any]:
         del user
@@ -115,37 +121,22 @@ def make_ai_analysis_router(current_user: Callable, client_factory: Callable[[],
                 timeout=_analysis_timeout_seconds(),
             )
             output_text = getattr(response, "output_text", None)
-            if not isinstance(output_text, str) or not output_text.strip():
-                raise ValueError("empty_openai_output")
+            if not isinstance(output_text, str) or not output_text.strip(): raise ValueError("empty_openai_output")
             result = AIAnalysisResult.model_validate_json(output_text).model_dump()
         except (asyncio.TimeoutError, APITimeoutError) as exc:
             logger.warning("Mezan AI analysis timed out")
-            raise HTTPException(
-                status_code=504,
-                detail="انتهت مهلة تحليل الذكاء. لم يتم تعديل أو إرسال أي بيانات؛ حاول مرة أخرى.",
-            ) from exc
+            raise HTTPException(status_code=504, detail="انتهت مهلة تحليل الذكاء. لم يتم تعديل أو إرسال أي بيانات؛ حاول مرة أخرى.") from exc
         except HTTPException:
             raise
         except (ValidationError, json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
-            logger.warning(
-                "Mezan AI analysis returned an invalid result: %s",
-                type(exc).__name__,
-            )
-            raise HTTPException(
-                status_code=502,
-                detail="عاد محلل الذكاء بنتيجة غير صالحة. لم يتم تعديل أو إرسال أي بيانات.",
-            ) from exc
+            logger.warning("Mezan AI analysis returned an invalid result: %s", type(exc).__name__)
+            raise HTTPException(status_code=502, detail="عاد محلل الذكاء بنتيجة غير صالحة. لم يتم تعديل أو إرسال أي بيانات.") from exc
         except Exception as exc:
-            logger.warning(
-                "Mezan AI analysis request failed: %s",
-                type(exc).__name__,
-            )
+            logger.warning("Mezan AI analysis request failed: %s", type(exc).__name__)
             raise HTTPException(status_code=502, detail="تعذر إكمال تحليل الذكاء الآن. لم يتم تعديل أو إرسال أي بيانات.") from exc
         finally:
             if client is not None and client_factory is _default_client:
-                try:
-                    await client.close()
-                except Exception:
-                    logger.warning("Mezan AI client close failed")
+                try: await client.close()
+                except Exception: logger.warning("Mezan AI client close failed")
         return {"ok": True, "mode": "read_only_analysis", "writes_performed": False, "analysis": result}
     return router
