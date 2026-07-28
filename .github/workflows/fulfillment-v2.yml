@@ -5,8 +5,10 @@ on:
     paths:
       - "backend/order_review_routes.py"
       - "backend/order_engine/mapper.py"
+      - "backend/order_engine/repository.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_engine_mapper.py"
+      - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -22,8 +24,10 @@ on:
     paths:
       - "backend/order_review_routes.py"
       - "backend/order_engine/mapper.py"
+      - "backend/order_engine/repository.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_engine_mapper.py"
+      - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -68,6 +72,7 @@ jobs:
           python -m pytest
           tests/test_order_review_stage_one.py
           tests/test_order_engine_mapper.py
+          tests/test_order_engine_repository.py
           tests/test_fulfillment_v2_contract.py
           -q --tb=short
 
