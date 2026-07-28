@@ -1,0 +1,188 @@
+name: Fulfillment V2 branch bootstrap
+
+on:
+  push:
+    branches:
+      - feat/orders-review-workflow-v2
+    paths:
+      - frontend/src/pages/FulfillmentV2.jsx
+
+permissions:
+  contents: write
+
+jobs:
+  wire-workspace:
+    if: ${{ !contains(github.event.head_commit.message, '[fulfillment-bootstrap]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/orders-review-workflow-v2
+          fetch-depth: 0
+
+      - name: Wire Fulfillment V2 without touching product or integration modules
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {count}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "frontend/src/App.js",
+              'import OrderReview from "./pages/OrderReview";',
+              'import FulfillmentV2 from "./pages/FulfillmentV2";',
+          )
+
+          replace_once(
+              "frontend/src/App.js",
+              '''            <Route
+                  path="/order-review"
+                  element={<ProtectedRoute><Layout><OrderReview /></Layout></ProtectedRoute>}
+              />''',
+              '''            <Route
+                  path="/fulfillment-v2"
+                  element={<ProtectedRoute><Layout><FulfillmentV2 /></Layout></ProtectedRoute>}
+              />
+              <Route
+                  path="/order-review"
+                  element={<ProtectedRoute><Navigate to="/fulfillment-v2?stage=pending_review" replace /></ProtectedRoute>}
+              />''',
+          )
+
+          replace_once(
+              "frontend/src/components/Sidebar.jsx",
+              '''            {
+                  to: "/orders-v2",
+                  label: "الطلبات",
+                  icon: Package,
+                  testid: "nav-mezan-os-orders",
+              },
+              {
+                  to: "/products-v2",''',
+              '''            {
+                  to: "/orders-v2",
+                  label: "الطلبات",
+                  icon: Package,
+                  testid: "nav-mezan-os-orders",
+              },
+              {
+                  to: "/fulfillment-v2",
+                  label: "إدارة رفع الطلبات",
+                  icon: Queue,
+                  testid: "nav-mezan-os-fulfillment",
+              },
+              {
+                  to: "/products-v2",''',
+          )
+
+          replace_once(
+              "backend/order_review_routes.py",
+              'from salla_integration.service import SallaError, call_salla',
+              'from salla_integration.auto_sync import schedule_salla_auto_sync\nfrom salla_integration.service import SallaError, call_salla',
+          )
+
+          replace_once(
+              "backend/order_review_routes.py",
+              '''        reviewer = _require_reviewer(user)
+              merchant_id = _merchant_user_id(reviewer)
+              try:''',
+              '''        reviewer = _require_reviewer(user)
+              merchant_id = _merchant_user_id(reviewer)
+              # Non-blocking, throttled Salla Direct ingestion. It reads only the
+              # light order list and order items, performs no Qoyod API calls, and
+              # never delays the local queue response.
+              schedule_salla_auto_sync(db, merchant_id)
+              try:''',
+          )
+
+          replace_once(
+              "frontend/src/pages/OrderReview.jsx",
+              '''    const load = useCallback(async ({ cursor = null, append = false } = {}) => {
+              setLoading(true);
+              setError("");
+              try {
+                  const result = await listPendingOrderReviews({ limit: 50, cursor });
+                  setOrders((current) => {
+                      if (!append) return result.items;
+                      const rows = new Map(current.map((order) => [order.order_number, order]));
+                      result.items.forEach((order) => rows.set(order.order_number, order));
+                      return Array.from(rows.values());
+                  });
+                  setNextCursor(result.nextCursor);
+              } catch (loadError) {
+                  setError(loadError.message);
+              } finally {
+                  setLoading(false);
+              }
+          }, []);
+
+          useEffect(() => { load(); }, [load]);''',
+              '''    const load = useCallback(async ({ cursor = null, append = false, background = false } = {}) => {
+              if (!background) setLoading(true);
+              setError("");
+              try {
+                  const result = await listPendingOrderReviews({ limit: 50, cursor });
+                  setOrders((current) => {
+                      if (!append) return result.items;
+                      const rows = new Map(current.map((order) => [order.order_number, order]));
+                      result.items.forEach((order) => rows.set(order.order_number, order));
+                      return Array.from(rows.values());
+                  });
+                  setNextCursor(result.nextCursor);
+              } catch (loadError) {
+                  setError(loadError.message);
+              } finally {
+                  if (!background) setLoading(false);
+              }
+          }, []);
+
+          useEffect(() => {
+              load();
+              const refresh = () => {
+                  if (document.hidden || !navigator.onLine) return;
+                  load({ background: true });
+              };
+              const intervalId = window.setInterval(refresh, 10_000);
+              window.addEventListener("focus", refresh);
+              window.addEventListener("online", refresh);
+              document.addEventListener("visibilitychange", refresh);
+              return () => {
+                  window.clearInterval(intervalId);
+                  window.removeEventListener("focus", refresh);
+                  window.removeEventListener("online", refresh);
+                  document.removeEventListener("visibilitychange", refresh);
+              };
+          }, [load]);''',
+          )
+          PY
+
+      - name: Validate patched source
+        shell: bash
+        run: |
+          git diff --check
+          python -m py_compile backend/order_review_routes.py
+          grep -q 'path="/fulfillment-v2"' frontend/src/App.js
+          grep -q 'nav-mezan-os-fulfillment' frontend/src/components/Sidebar.jsx
+          grep -q 'schedule_salla_auto_sync(db, merchant_id)' backend/order_review_routes.py
+          grep -q 'window.setInterval(refresh, 10_000)' frontend/src/pages/OrderReview.jsx
+
+      - name: Commit branch wiring
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No wiring changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/App.js frontend/src/components/Sidebar.jsx frontend/src/pages/OrderReview.jsx backend/order_review_routes.py
+          git commit -m "feat(fulfillment): wire V2 workspace and safe order ingestion [fulfillment-bootstrap]"
+          git push origin HEAD:feat/orders-review-workflow-v2
