@@ -6,13 +6,19 @@ on:
       - feat/orders-review-workflow-v2
     paths:
       - frontend/src/pages/FulfillmentV2.jsx
+  pull_request:
+    branches:
+      - main
+    paths:
+      - frontend/src/pages/FulfillmentV2.jsx
+      - .github/workflows/fulfillment-v2-bootstrap.yml
 
 permissions:
   contents: write
 
 jobs:
   wire-workspace:
-    if: ${{ !contains(github.event.head_commit.message, '[fulfillment-bootstrap]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[fulfillment-bootstrap]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
