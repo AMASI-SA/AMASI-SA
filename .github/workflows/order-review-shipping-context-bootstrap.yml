@@ -1,0 +1,55 @@
+name: Order review shipping context bootstrap
+
+on:
+  push:
+    branches:
+      - fix/order-review-preserve-shipping-address
+    paths:
+      - "scripts/patch_order_review_shipping_context.py"
+      - ".github/workflows/order-review-shipping-context-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/order-review-preserve-shipping-address
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply shipping context repair
+        run: python scripts/patch_order_review_shipping_context.py
+
+      - name: Validate source and targeted tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile \
+            backend/salla_integration/sync.py \
+            backend/order_review_routes.py \
+            backend/tests/test_order_review_stage_one.py
+          grep -q 'REVIEW_SOURCE_REFRESH_VERSION = 2' backend/order_review_routes.py
+          grep -q '_SHIPMENT_CONTEXT_FIELDS' backend/salla_integration/sync.py
+          grep -q 'test_empty_current_shipments_preserve_embedded_delivery_context' backend/tests/test_order_review_stage_one.py
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Shipping context fix already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/salla_integration/sync.py \
+            backend/order_review_routes.py \
+            backend/tests/test_order_review_stage_one.py
+          git commit -m "fix(fulfillment): preserve shipping address during review refresh"
+          git push origin HEAD:fix/order-review-preserve-shipping-address
