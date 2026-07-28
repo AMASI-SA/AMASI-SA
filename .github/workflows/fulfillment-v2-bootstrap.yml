@@ -99,14 +99,16 @@ jobs:
               "backend/order_review_routes.py",
               '''        reviewer = _require_reviewer(user)
               merchant_id = _merchant_user_id(reviewer)
-              try:''',
+              try:
+                  page = await list_orders(''',
               '''        reviewer = _require_reviewer(user)
               merchant_id = _merchant_user_id(reviewer)
               # Non-blocking, throttled Salla Direct ingestion. It reads only the
               # light order list and order items, performs no Qoyod API calls, and
               # never delays the local queue response.
               schedule_salla_auto_sync(db, merchant_id)
-              try:''',
+              try:
+                  page = await list_orders(''',
           )
 
           replace_once(
