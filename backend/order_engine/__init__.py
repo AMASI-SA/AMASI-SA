@@ -61,6 +61,8 @@ def make_order_engine_router(*args, **kwargs):
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
     from product_media_ai_routes import make_product_media_ai_router
+    from product_media_ai_draft_routes import make_product_media_ai_draft_router
+    from product_media_ai_execution_support import install_product_media_ai_execution_support
     from ai_store_operations_foundation import make_ai_store_operations_router
     from ai_store_access_control import make_ai_store_access_router
 
@@ -74,6 +76,7 @@ def make_order_engine_router(*args, **kwargs):
     install_product_category_publish_support()
     install_product_main_image_dedupe_support()
     install_product_category_variant_support()
+    install_product_media_ai_execution_support()
     make_product_v2_router = _product_v2_routes.make_product_v2_router
 
     child_routers = [
@@ -94,6 +97,7 @@ def make_order_engine_router(*args, **kwargs):
         make_product_control_center_router(db, current_user),
         make_product_media_draft_router(db, current_user),
         make_product_media_ai_router(db, current_user),
+        make_product_media_ai_draft_router(db, current_user),
         make_product_v2_router(db, current_user),
         make_product_v2_details_router(db, current_user),
         # This GET route must be registered before the older workspace route.

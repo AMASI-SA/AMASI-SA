@@ -76,6 +76,12 @@ export async function getProductMediaAiState(productId) {
 export async function createProductMediaAiJob(productId, payload) {
     return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs`, payload)).data;
 }
+export async function executeProductMediaAiJob(productId, jobId) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/execute`)).data;
+}
+export async function addProductMediaAiResultToDraft(productId, jobId) {
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/add-to-draft`)).data;
+}
 export async function cancelProductMediaAiJob(productId, jobId) {
     return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/cancel`)).data;
 }
