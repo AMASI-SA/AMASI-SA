@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, NavLink } from "react-router-dom";
-import { List, MagnifyingGlass, Package, Cube, Warehouse, Plug, Robot } from "@phosphor-icons/react";
+import { List, MagnifyingGlass, Package, Cube, Warehouse, Plug, Robot, UsersThree } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
@@ -9,6 +9,7 @@ import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
+import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
 
 function GlobalOrderSearch({ compact = false }) {
     const navigate = useNavigate();
@@ -37,6 +38,7 @@ const V2_LINKS = [
     { to: "/orders-v2", label: "الطلبات", Icon: Package },
     { to: "/products-v2", label: "المنتجات", Icon: Package },
     { to: "/products-v2?workspace=intake", label: "استقبال المنتجات", Icon: Robot },
+    { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات", Icon: UsersThree },
     { to: "/components-v2", label: "المكونات", Icon: Cube },
     { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن", Icon: Warehouse },
     { to: "/integrations-v2", label: "التطبيقات والتكاملات", Icon: Plug },
@@ -105,11 +107,14 @@ export default function Layout({ children }) {
     const workspace = new URLSearchParams(location.search).get("workspace");
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
+    const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />
         : isProductIntake
             ? <ProductIntakeWorkspace />
-            : children;
+            : isStoreAccess
+                ? <StoreOperationsAccessWorkspace />
+                : children;
 
     useEffect(() => { setMobileOpen(false); }, [location.pathname, location.search]);
     useEffect(() => {
