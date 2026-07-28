@@ -175,7 +175,12 @@ class AdsDaily(BaseModel):
     currency_native: str = "SAR"
     impressions: int = 0
     clicks: int = 0
-    purchases: int = 0
+    # Keep the legacy model default for callers that construct a row without
+    # this field, while allowing sync adapters to persist None explicitly
+    # when the provider did not supply conversion evidence.
+    purchases: Optional[int] = 0
+    conversion_data_status: str = "unavailable"
+    conversion_data_error: Optional[str] = None
 
     fx_rate: float = 1.0
     fx_source: str = "manual"

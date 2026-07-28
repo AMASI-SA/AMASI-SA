@@ -39,8 +39,38 @@ class CampaignCoverage(StrictResponseModel):
     detail: str
 
 
+class PerformanceCoverage(StrictResponseModel):
+    status: Literal["complete", "partial", "stale", "unavailable"]
+    eligible_for_ratios: bool = False
+    observed_days: int = 0
+    requested_days: int = 0
+    coverage_pct: float | None = None
+    missing_spend_dates: list[str] = Field(default_factory=list)
+    reasons: list[
+        Literal[
+            "source_unavailable",
+            "source_truncated",
+            "invalid_source_dates",
+            "incomplete_spend",
+            "missing_performance_dates",
+            "stale_performance",
+            "incomplete_revenue",
+            "incomplete_conversions",
+            "unverified_zero_performance",
+        ]
+    ] = Field(default_factory=list)
+    detail: str
+
+
 class Reconciliation(StrictResponseModel):
     status: Literal["matched", "drift", "not_comparable", "no_data"]
+    comparison_basis: Literal[
+        "account_day_aligned",
+        "aggregate_period_only",
+        "unavailable",
+    ]
+    severity: Literal["none", "info", "warning"]
+    action_required: bool = False
     provider_reported_spend_sar: float | None = None
     booked_ad_expense_sar: float | None = None
     gap_sar: float | None = None
@@ -59,6 +89,7 @@ class ProviderSummary(StrictResponseModel):
     last_sync_at: str | None = None
     metrics: MetricSet
     freshness: Freshness
+    performance_coverage: PerformanceCoverage
     campaign_coverage: CampaignCoverage
     reconciliation: Reconciliation
     metric_availability: dict[str, bool] = Field(default_factory=dict)
@@ -133,6 +164,7 @@ class CoverageSummary(StrictResponseModel):
     conversion_providers: int = 0
     click_providers: int = 0
     impression_providers: int = 0
+    ratio_eligible_providers: int = 0
     provider_spend_providers: int = 0
     booked_expense_providers: int = 0
     unscoped_booked_expense_sar: float | None = None

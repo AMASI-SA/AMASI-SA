@@ -51,6 +51,203 @@ class SnapchatConfigIn(BaseModel):
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+def _parse_snap_conversion_payload(payload: object) -> dict:
+    """Parse Snapchat conversion stats without inventing zeroes.
+
+    Snapchat can return HTTP 200 while omitting the requested conversion
+    fields (for example when the account has no usable Pixel stats).  That
+    is not evidence of zero purchases/revenue.  A metric is considered
+    available only when at least one numeric value for that requested field
+    is present and no malformed value for the same field was observed.
+    """
+    if not isinstance(payload, dict):
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": "invalid_payload",
+        }
+
+    timeseries = payload.get("timeseries_stats")
+    if not isinstance(timeseries, list) or not timeseries:
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": "no_conversion_timeseries",
+        }
+
+    totals = {
+        "conversion_purchases": 0,
+        "conversion_purchases_value": 0,
+    }
+    seen = {key: False for key in totals}
+    invalid = {key: False for key in totals}
+
+    for wrapped in timeseries:
+        stat = (
+            wrapped.get("timeseries_stat", wrapped)
+            if isinstance(wrapped, dict)
+            else {}
+        )
+        points = stat.get("timeseries")
+        if not isinstance(points, list):
+            continue
+        for point in points:
+            stats = point.get("stats") if isinstance(point, dict) else None
+            if not isinstance(stats, dict):
+                continue
+            for key in totals:
+                if key not in stats:
+                    continue
+                value = stats.get(key)
+                # bool is an int subclass, but is never a valid provider
+                # metric and must not silently become 0/1.
+                if isinstance(value, bool) or value is None:
+                    invalid[key] = True
+                    continue
+                try:
+                    parsed = int(value)
+                except (TypeError, ValueError, OverflowError):
+                    invalid[key] = True
+                    continue
+                if parsed < 0:
+                    invalid[key] = True
+                    continue
+                totals[key] += parsed
+                seen[key] = True
+
+    purchases_known = seen["conversion_purchases"] and not invalid[
+        "conversion_purchases"
+    ]
+    revenue_known = seen["conversion_purchases_value"] and not invalid[
+        "conversion_purchases_value"
+    ]
+    if purchases_known and revenue_known:
+        status = "available"
+        error = None
+    elif purchases_known or revenue_known:
+        status = "partial"
+        missing = []
+        if not purchases_known:
+            missing.append("conversion_purchases")
+        if not revenue_known:
+            missing.append("conversion_purchases_value")
+        error = "missing_or_invalid:" + ",".join(missing)
+    else:
+        status = "unavailable"
+        error = "conversion_fields_missing_or_invalid"
+
+    return {
+        "purchases": (
+            totals["conversion_purchases"] if purchases_known else None
+        ),
+        "revenue_value_micro": (
+            totals["conversion_purchases_value"] if revenue_known else None
+        ),
+        "conversion_data_status": status,
+        "conversion_data_error": error,
+    }
+
+
+async def _fetch_snap_conversion_metrics(
+    http: httpx.AsyncClient, url: str, headers: dict, params: dict,
+) -> dict:
+    """Fetch conversion metrics fail-closed while leaving spend usable."""
+    try:
+        response = await http.get(url, headers=headers, params=params)
+    except httpx.HTTPError as exc:
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": f"network_error:{type(exc).__name__}",
+        }
+    if response.status_code >= 400:
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": f"http_{response.status_code}",
+        }
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": "invalid_json",
+        }
+    return _parse_snap_conversion_payload(payload)
+
+
+def _aggregate_snap_conversion_rows(account_rows: list[dict]) -> dict:
+    """Aggregate conversions only when every account metric is known."""
+
+    def _legacy_metric_is_known(row: dict, key: str) -> bool:
+        status = row.get("conversion_data_status")
+        if status in {"available", "partial"}:
+            return row.get(key) is not None
+        if status == "unavailable":
+            return False
+        # Backward compatibility: positive legacy values are known provider
+        # data.  A legacy zero without quality metadata is ambiguous.
+        try:
+            return float(row.get(key)) > 0
+        except (TypeError, ValueError):
+            return False
+
+    purchases_complete = bool(account_rows) and all(
+        _legacy_metric_is_known(row, "purchases") for row in account_rows
+    )
+    revenue_complete = bool(account_rows) and all(
+        _legacy_metric_is_known(row, "revenue_sar") for row in account_rows
+    )
+    purchases = (
+        sum(int(row["purchases"]) for row in account_rows)
+        if purchases_complete
+        else None
+    )
+    revenue = (
+        round(sum(float(row["revenue_sar"]) for row in account_rows), 2)
+        if revenue_complete
+        else None
+    )
+    if purchases_complete and revenue_complete:
+        status = "available"
+    elif purchases_complete or revenue_complete:
+        status = "partial"
+    else:
+        status = "unavailable"
+    errors = sorted({
+        str(row.get("conversion_data_error"))[:120]
+        for row in account_rows
+        if row.get("conversion_data_error")
+    })
+    error = (
+        ";".join(errors)[:240]
+        if errors
+        else (None if status == "available" else "one_or_more_accounts_unknown")
+    )
+    complete_accounts = sum(
+        1
+        for row in account_rows
+        if (
+            _legacy_metric_is_known(row, "purchases")
+            and _legacy_metric_is_known(row, "revenue_sar")
+        )
+    )
+    return {
+        "purchases": purchases,
+        "revenue": revenue,
+        "conversion_data_status": status,
+        "conversion_data_error": error,
+        "conversion_accounts_total": len(account_rows),
+        "conversion_accounts_complete": complete_accounts,
+    }
+
+
 def _build_router(db) -> APIRouter:
     from auth import get_current_user_from_db
 
@@ -500,11 +697,17 @@ def _build_router(db) -> APIRouter:
         """
         account_rows = await db.snapchat_account_daily.find(
             {"user_id": uid, "date": date_str},
-            {"_id": 0, "spend_sar": 1, "revenue_sar": 1, "purchases": 1},
+            {
+                "_id": 0,
+                "spend_sar": 1,
+                "revenue_sar": 1,
+                "purchases": 1,
+                "conversion_data_status": 1,
+                "conversion_data_error": 1,
+            },
         ).to_list(50)
         sum_spend = round(sum(float(r.get("spend_sar") or 0) for r in account_rows), 2)
-        sum_revenue = round(sum(float(r.get("revenue_sar") or 0) for r in account_rows), 2)
-        sum_purchases = sum(int(r.get("purchases") or 0) for r in account_rows)
+        conversions = _aggregate_snap_conversion_rows(account_rows)
 
         now_iso = datetime.now(timezone.utc).isoformat()
         existing_dc = await db.daily_costs.find_one(
@@ -534,13 +737,19 @@ def _build_router(db) -> APIRouter:
             {"user_id": uid, "date": date_str},
             {"$set": {
                 "user_id": uid, "date": date_str,
-                "spend": sum_spend, "revenue": sum_revenue,
-                "purchases": sum_purchases, "updated_at": now_iso,
+                "spend": sum_spend,
+                **conversions,
+                "updated_at": now_iso,
             }},
             upsert=True,
         )
-        return {"sum_spend": sum_spend, "sum_revenue": sum_revenue,
-                "sum_purchases": sum_purchases, "account_count": len(account_rows)}
+        return {
+            "sum_spend": sum_spend,
+            "sum_revenue": conversions["revenue"],
+            "sum_purchases": conversions["purchases"],
+            "conversion_data_status": conversions["conversion_data_status"],
+            "account_count": len(account_rows),
+        }
 
     async def _ensure_legacy_account_tracked(
         uid: str, ad_id: str, ad_currency: str, ad_tz: str, ad_name: str = "",
@@ -842,13 +1051,10 @@ def _build_router(db) -> APIRouter:
                         except (TypeError, ValueError):
                             pass
 
-                # ── 2. CONVERSIONS (best-effort) ────────────────────────────
-                # These require attribution windows; if Snapchat rejects the
-                # query (Unsupported Stats Query for accounts without active
-                # Pixel events), we silently fall back to purchases=0 and let
-                # the dashboard read store-side orders instead.
-                total_purchases = 0
-                total_purchases_value_micro = 0
+                # ── 2. CONVERSIONS (best-effort, fail-closed) ───────────────
+                # A failed/unsupported conversion query is not evidence of
+                # zero purchases.  Keep spend, but persist conversions as
+                # unknown with an explicit quality reason.
                 conv_params = {
                     "start_time": start_local.isoformat(timespec="seconds"),
                     "end_time": end_local.isoformat(timespec="seconds"),
@@ -857,38 +1063,34 @@ def _build_router(db) -> APIRouter:
                     "swipe_up_attribution_window": "28_DAY",
                     "view_attribution_window": "1_DAY",
                 }
-                try:
-                    conv_resp = await http.get(stats_url, headers=base_headers, params=conv_params)
-                    if conv_resp.status_code < 400:
-                        cdata = conv_resp.json()
-                        for ts in cdata.get("timeseries_stats", []) or []:
-                            stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
-                            for point in stat.get("timeseries", []) or []:
-                                s = point.get("stats") or {}
-                                try:
-                                    total_purchases += int(s.get("conversion_purchases", 0) or 0)
-                                except (TypeError, ValueError):
-                                    pass
-                                try:
-                                    total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
-                                except (TypeError, ValueError):
-                                    pass
-                    else:
-                        # Conversions not available → log once at debug level
-                        # and move on. Spend (the must-have) is already saved.
-                        logger.info("Snap conversions skipped for %s: HTTP %s",
-                                    d.isoformat(), conv_resp.status_code)
-                except httpx.HTTPError as exc:
-                    logger.info("Snap conversions skipped for %s: %s",
-                                d.isoformat(), exc)
+                conversion = await _fetch_snap_conversion_metrics(
+                    http, stats_url, base_headers, conv_params,
+                )
+                total_purchases = conversion["purchases"]
+                total_purchases_value_micro = conversion["revenue_value_micro"]
+                if conversion["conversion_data_status"] != "available":
+                    logger.info(
+                        "Snap conversions %s for %s: %s",
+                        conversion["conversion_data_status"],
+                        d.isoformat(),
+                        conversion["conversion_data_error"],
+                    )
 
                 spend_native = round(total_micro / 1_000_000, 2)
-                revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
+                revenue_native = (
+                    round(total_purchases_value_micro / 1_000_000, 2)
+                    if total_purchases_value_micro is not None
+                    else None
+                )
                 spend, fx_rate = await _to_sar(
                     spend_native, ad_currency, user_id=user["id"],
                 )
-                revenue, _ = await _to_sar(
-                    revenue_native, ad_currency, user_id=user["id"],
+                revenue = (
+                    (await _to_sar(
+                        revenue_native, ad_currency, user_id=user["id"],
+                    ))[0]
+                    if revenue_native is not None
+                    else None
                 )
                 date_str = d.isoformat()
 
@@ -914,6 +1116,10 @@ def _build_router(db) -> APIRouter:
                         "purchases": total_purchases,
                         "revenue_native": revenue_native,
                         "revenue_sar": revenue,
+                        "conversion_data_status":
+                            conversion["conversion_data_status"],
+                        "conversion_data_error":
+                            conversion["conversion_data_error"],
                         "business_timezone": "Asia/Riyadh",
                         "ad_account_timezone": tz_name,
                         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -939,6 +1145,10 @@ def _build_router(db) -> APIRouter:
                     "spend_native": spend_native,
                     "revenue": revenue,
                     "purchases": total_purchases,
+                    "conversion_data_status":
+                        conversion["conversion_data_status"],
+                    "conversion_data_error":
+                        conversion["conversion_data_error"],
                     "native_currency": ad_currency,
                     "fx_rate": fx_rate,
                 })
@@ -1120,9 +1330,7 @@ def _build_router(db) -> APIRouter:
                     except (TypeError, ValueError):
                         pass
 
-            # Conversions — best-effort (won't fail spend save).
-            total_purchases = 0
-            total_purchases_value_micro = 0
+            # Conversions — best-effort for spend, fail-closed for metrics.
             conv_params = {
                 "start_time": start_local.isoformat(timespec="seconds"),
                 "end_time": end_local.isoformat(timespec="seconds"),
@@ -1131,32 +1339,27 @@ def _build_router(db) -> APIRouter:
                 "swipe_up_attribution_window": "28_DAY",
                 "view_attribution_window": "1_DAY",
             }
-            try:
-                conv_resp = await http.get(stats_url, headers=base_headers, params=conv_params)
-                if conv_resp.status_code < 400:
-                    cdata = conv_resp.json()
-                    for ts in cdata.get("timeseries_stats", []) or []:
-                        stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
-                        for point in stat.get("timeseries", []) or []:
-                            s = point.get("stats") or {}
-                            try:
-                                total_purchases += int(s.get("conversion_purchases", 0) or 0)
-                            except (TypeError, ValueError):
-                                pass
-                            try:
-                                total_purchases_value_micro += int(s.get("conversion_purchases_value", 0) or 0)
-                            except (TypeError, ValueError):
-                                pass
-            except httpx.HTTPError:
-                pass
+            conversion = await _fetch_snap_conversion_metrics(
+                http, stats_url, base_headers, conv_params,
+            )
+            total_purchases = conversion["purchases"]
+            total_purchases_value_micro = conversion["revenue_value_micro"]
 
             spend_native = round(total_micro / 1_000_000, 2)
-            revenue_native = round(total_purchases_value_micro / 1_000_000, 2)
+            revenue_native = (
+                round(total_purchases_value_micro / 1_000_000, 2)
+                if total_purchases_value_micro is not None
+                else None
+            )
             spend_sar, fx_rate = await _to_sar(
                 spend_native, ad_currency, user_id=uid,
             )
-            revenue_sar, _ = await _to_sar(
-                revenue_native, ad_currency, user_id=uid,
+            revenue_sar = (
+                (await _to_sar(
+                    revenue_native, ad_currency, user_id=uid,
+                ))[0]
+                if revenue_native is not None
+                else None
             )
             date_str = d.isoformat()
 
@@ -1175,6 +1378,10 @@ def _build_router(db) -> APIRouter:
                     "purchases": total_purchases,
                     "revenue_native": revenue_native,
                     "revenue_sar": revenue_sar,
+                    "conversion_data_status":
+                        conversion["conversion_data_status"],
+                    "conversion_data_error":
+                        conversion["conversion_data_error"],
                     "business_timezone": "Asia/Riyadh",
                     "ad_account_timezone": ad_tz,
                     "snap_day_start_riyadh": start_local.strftime("%Y-%m-%d %H:%M"),

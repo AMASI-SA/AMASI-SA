@@ -28,6 +28,7 @@ MAX_RANGE_DAYS = 90
 MAX_PERFORMANCE_ROWS = 2_000
 MAX_ACCOUNTS = 250
 DEFAULT_USD_TO_SAR = 3.7544
+MAX_EXPECTED_CURRENT_DAY_DELAY_MINUTES = 180
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PROVIDER_ORDER = ("snapchat", "tiktok", "meta")
 PROVIDER_ALIASES = {
@@ -366,6 +367,184 @@ def _freshness(
         "requested_days": requested_days,
         "status": status,
     }
+
+
+def _performance_coverage(
+    *,
+    performance_rows: list[dict],
+    spend_series: dict[str, float | None],
+    start: date,
+    end: date,
+    today: date,
+    freshness: dict,
+    source_truncated: bool,
+    source_invalid: bool,
+    spend_period_complete: bool,
+    revenue_complete: bool,
+    conversions_complete: bool,
+    unverified_zero_performance: bool,
+) -> dict:
+    """Return a fail-closed eligibility verdict for performance ratios.
+
+    Connection freshness is not enough: a recent spend sync must never make
+    old or incomplete conversion facts look current.  Coverage therefore uses
+    the performance rows themselves, checks every requested calendar day, and
+    separately verifies that every positive-spend day has a performance row.
+
+    The only tolerated requested-day gap is the still-open current day when
+    the integration itself is within its documented delayed window and no
+    positive spend has been recorded for that day yet.
+    """
+
+    requested_dates: set[str] = set()
+    cursor = start
+    while cursor <= end:
+        requested_dates.add(cursor.isoformat())
+        cursor += timedelta(days=1)
+
+    observed_dates = _observed_dates(performance_rows)
+    positive_spend_dates = {
+        date_key
+        for date_key, amount in spend_series.items()
+        if amount is not None and amount > 0
+    }
+    missing_spend_dates = sorted(positive_spend_dates - observed_dates)
+    missing_requested_dates = requested_dates - observed_dates
+
+    delay = _optional_nonnegative_number(freshness.get("data_delay_minutes"))
+    current_day_iso = today.isoformat()
+    allow_current_day_lag = (
+        end == today
+        and missing_requested_dates == {current_day_iso}
+        and current_day_iso not in positive_spend_dates
+        and freshness.get("status") == "fresh"
+        and delay is not None
+        and delay <= MAX_EXPECTED_CURRENT_DAY_DELAY_MINUTES
+    )
+    uncovered_requested_dates = (
+        missing_requested_dates - {current_day_iso}
+        if allow_current_day_lag
+        else missing_requested_dates
+    )
+
+    latest_performance_date: date | None = None
+    if observed_dates:
+        latest_performance_date = date.fromisoformat(max(observed_dates))
+    stale = bool(
+        latest_performance_date is not None
+        and (end - latest_performance_date).days > 1
+    )
+
+    reasons: list[str] = []
+    if not performance_rows:
+        reasons.append("source_unavailable")
+    if source_truncated:
+        reasons.append("source_truncated")
+    if source_invalid:
+        reasons.append("invalid_source_dates")
+    if not spend_period_complete:
+        reasons.append("incomplete_spend")
+    if uncovered_requested_dates or missing_spend_dates:
+        reasons.append("missing_performance_dates")
+    if stale:
+        reasons.append("stale_performance")
+    if not revenue_complete:
+        reasons.append("incomplete_revenue")
+    if not conversions_complete:
+        reasons.append("incomplete_conversions")
+    if unverified_zero_performance:
+        reasons.append("unverified_zero_performance")
+
+    if not performance_rows:
+        status = "unavailable"
+    elif stale:
+        status = "stale"
+    elif reasons:
+        status = "partial"
+    else:
+        status = "complete"
+    eligible_for_ratios = status == "complete"
+
+    requested_days = len(requested_dates)
+    coverage_pct = (
+        round(len(observed_dates) / requested_days * 100, 2)
+        if requested_days
+        else None
+    )
+    if status == "complete" and allow_current_day_lag:
+        detail = (
+            "تغطية الأداء مؤهلة للنسب؛ يوم اليوم فقط ما زال ضمن نافذة "
+            "التأخر المتوقعة ولا يوجد له صرف موجب مرصود."
+        )
+    elif status == "complete":
+        detail = "تغطية الإيراد والتحويلات مكتملة وحديثة ضمن الفترة."
+    elif status == "stale":
+        detail = (
+            "آخر صف أداء أقدم من نهاية الفترة؛ أُخفيت الإيرادات والتحويلات "
+            "والنسب المشتقة."
+        )
+    elif status == "partial":
+        detail = (
+            "تغطية الأداء جزئية أو غير مؤكدة؛ أُخفيت الإيرادات والتحويلات "
+            "والنسب المشتقة."
+        )
+    else:
+        detail = (
+            "لا توجد صفوف أداء موثوقة ضمن الفترة؛ لا يمكن حساب الإيراد "
+            "أو التحويلات أو النسب."
+        )
+    return {
+        "status": status,
+        "eligible_for_ratios": eligible_for_ratios,
+        "observed_days": len(observed_dates),
+        "requested_days": requested_days,
+        "coverage_pct": coverage_pct,
+        "missing_spend_dates": missing_spend_dates,
+        "reasons": reasons,
+        "detail": detail,
+    }
+
+
+def _spend_period_complete(
+    *,
+    spend_series: dict[str, float | None],
+    start: date,
+    end: date,
+    today: date,
+    freshness: dict,
+    source_truncated: bool,
+    source_invalid: bool,
+) -> bool:
+    """Whether provider spend covers the requested period without guessing."""
+
+    if source_truncated or source_invalid or not spend_series:
+        return False
+    requested_dates: set[str] = set()
+    cursor = start
+    while cursor <= end:
+        requested_dates.add(cursor.isoformat())
+        cursor += timedelta(days=1)
+    known_dates = {
+        date_key
+        for date_key, amount in spend_series.items()
+        if amount is not None
+    }
+    if any(amount is None for amount in spend_series.values()):
+        return False
+    missing_dates = requested_dates - known_dates
+    if not missing_dates:
+        return True
+
+    current_day_iso = today.isoformat()
+    delay = _optional_nonnegative_number(freshness.get("data_delay_minutes"))
+    return bool(
+        end == today
+        and missing_dates == {current_day_iso}
+        and current_day_iso not in spend_series
+        and freshness.get("status") == "fresh"
+        and delay is not None
+        and delay <= MAX_EXPECTED_CURRENT_DAY_DELAY_MINUTES
+    )
 
 
 def _normalized_provider(value: Any) -> str | None:
@@ -904,10 +1083,15 @@ def _reconciliation(
     booked_ad_expense_sar: float | None,
     *,
     comparable: bool,
+    totals_complete: bool,
+    account_day_values_match: bool = True,
 ) -> dict:
     if provider_reported_spend_sar is None:
         return {
             "status": "no_data",
+            "comparison_basis": "unavailable",
+            "severity": "info",
+            "action_required": False,
             "provider_reported_spend_sar": None,
             "booked_ad_expense_sar": (
                 None
@@ -918,26 +1102,38 @@ def _reconciliation(
             "gap_pct": None,
             "detail": "لا توجد حقيقة صرف من المنصة قابلة للمقارنة ضمن الفترة.",
         }
+    if not totals_complete:
+        return {
+            "status": "not_comparable",
+            "comparison_basis": "unavailable",
+            "severity": "warning",
+            "action_required": False,
+            "provider_reported_spend_sar": _round(
+                provider_reported_spend_sar
+            ),
+            "booked_ad_expense_sar": (
+                None
+                if booked_ad_expense_sar is None
+                else _round(booked_ad_expense_sar)
+            ),
+            "gap_sar": None,
+            "gap_pct": None,
+            "detail": (
+                "تغطية صرف الفترة أو القيود المحاسبية غير مكتملة؛ "
+                "أُخفي الفرق حتى لا تُقارن فترات جزئية."
+            ),
+        }
     if booked_ad_expense_sar is None:
         return {
             "status": "not_comparable",
+            "comparison_basis": "unavailable",
+            "severity": "info",
+            "action_required": False,
             "provider_reported_spend_sar": _round(provider_reported_spend_sar),
             "booked_ad_expense_sar": None,
             "gap_sar": None,
             "gap_pct": None,
             "detail": "لا توجد قيود محاسبية مُرحّلة قابلة للمقارنة ضمن الفترة.",
-        }
-    if not comparable:
-        return {
-            "status": "not_comparable",
-            "provider_reported_spend_sar": _round(provider_reported_spend_sar),
-            "booked_ad_expense_sar": _round(booked_ad_expense_sar),
-            "gap_sar": None,
-            "gap_pct": None,
-            "detail": (
-                "الحقيقتان معروضتان منفصلتين؛ لم تتطابق تغطية الحساب واليوم "
-                "بما يكفي لحساب فرق موثوق."
-            ),
         }
     provider_value = _round(provider_reported_spend_sar)
     booked_value = _round(booked_ad_expense_sar)
@@ -948,18 +1144,47 @@ def _reconciliation(
         else 0.0 if booked_value == 0 else None
     )
     threshold = max(1.0, provider_value * 0.02)
-    status = "matched" if abs(gap) <= threshold else "drift"
+    material_gap = abs(gap) > threshold
+    if not comparable:
+        return {
+            "status": "not_comparable",
+            "comparison_basis": "aggregate_period_only",
+            "severity": "warning" if material_gap else "info",
+            "action_required": material_gap,
+            "provider_reported_spend_sar": provider_value,
+            "booked_ad_expense_sar": booked_value,
+            "gap_sar": gap,
+            "gap_pct": gap_pct,
+            "detail": (
+                "فرق إجمالي الفترة ظاهر للمراجعة، لكن تغطية الحساب واليوم "
+                "غير متطابقة؛ لا يُعامل كتسوية محاسبية مؤكدة."
+            ),
+        }
+    aggregate_within_tolerance = abs(gap) <= threshold
+    status = (
+        "matched"
+        if aggregate_within_tolerance and account_day_values_match
+        else "drift"
+    )
+    if not account_day_values_match and aggregate_within_tolerance:
+        detail = (
+            "تتعادل فروق الإجمالي، لكن قيمة حساب × يوم واحدة أو أكثر "
+            "لا تطابق المصروف المحاسبي ضمن السماحية."
+        )
+    elif status == "matched":
+        detail = "فرق المنصة مقابل المصروف المُرحّل ضمن سماحية 2% أو 1 ر.س."
+    else:
+        detail = "صرف المنصة لا يطابق المصروف المحاسبي المُرحّل ضمن السماحية."
     return {
         "status": status,
+        "comparison_basis": "account_day_aligned",
+        "severity": "none" if status == "matched" else "warning",
+        "action_required": status == "drift",
         "provider_reported_spend_sar": provider_value,
         "booked_ad_expense_sar": booked_value,
         "gap_sar": gap,
         "gap_pct": gap_pct,
-        "detail": (
-            "فرق المنصة مقابل المصروف المُرحّل ضمن سماحية 2% أو 1 ر.س."
-            if status == "matched"
-            else "صرف المنصة لا يطابق المصروف المحاسبي المُرحّل ضمن السماحية."
-        ),
+        "detail": detail,
     }
 
 
@@ -1034,6 +1259,9 @@ class AdsManagerService:
                 "date": 1,
                 "purchases": 1,
                 "revenue": 1,
+                "conversion_data_status": 1,
+                "conversion_accounts_total": 1,
+                "conversion_accounts_complete": 1,
                 "updated_at": 1,
             },
             limit=MAX_PERFORMANCE_ROWS,
@@ -1271,6 +1499,11 @@ class AdsManagerService:
             booked_expense.get("row_limit_reached")
             or booked_expense.get("invalid_rows_count")
         )
+        booked_totals_complete = not (
+            booked_incomplete
+            or booked_expense.get("unscoped_by_date")
+            or booked_expense.get("account_mapping_limit_reached")
+        )
         integration_cards = {
             row.get("provider"): row
             for row in integration_overview.get("providers") or []
@@ -1321,18 +1554,46 @@ class AdsManagerService:
                 and bool(provider_account_date)
                 and set(provider_account_date) == set(booked_account_date)
             )
+            account_day_values_match = bool(comparable) and all(
+                abs(
+                    _number(provider_account_date[pair])
+                    - _number(booked_account_date[pair])
+                )
+                <= max(1.0, abs(_number(provider_account_date[pair])) * 0.02)
+                for pair in provider_account_date
+            )
             card = integration_cards.get(definition["integration_provider"]) or {}
             rows_for_freshness = (
                 snap_stats_rows + snap_account_rows
                 if provider_key == "snapchat"
                 else raw_rows[provider_key]
             )
+            latest_observed = _latest_marker(rows_for_freshness)
+            freshness = _freshness(
+                integration_delay=card.get("data_delay_minutes"),
+                latest_observed_at=latest_observed,
+                observed_days=len(_observed_dates(rows_for_freshness)),
+                requested_days=requested_days,
+                now=now,
+            )
+            spend_period_complete = _spend_period_complete(
+                spend_series=spend_series,
+                start=start,
+                end=end,
+                today=today,
+                freshness=freshness,
+                source_truncated=provider_source_truncated,
+                source_invalid=provider_source_invalid,
+            )
 
             if provider_key == "snapchat":
-                has_performance = bool(snap_stats_rows)
-                performance_truncated = source_limit_reached[
+                performance_rows = snap_stats_rows
+                performance_source_truncated = source_limit_reached[
                     "snapchat_daily_stats"
-                ] or bool(source_invalid_date_rows["snapchat_daily_stats"])
+                ]
+                performance_source_invalid = bool(
+                    source_invalid_date_rows["snapchat_daily_stats"]
+                )
                 snap_revenue_values = [
                     _optional_nonnegative_number(row.get("revenue"))
                     for row in snap_stats_rows
@@ -1341,62 +1602,160 @@ class AdsManagerService:
                     _optional_nonnegative_integer(row.get("purchases"))
                     for row in snap_stats_rows
                 ]
-                revenue_sar = (
+                revenue_complete = bool(snap_stats_rows) and all(
+                    value is not None for value in snap_revenue_values
+                )
+                conversions_complete = bool(snap_stats_rows) and all(
+                    value is not None for value in snap_purchase_values
+                )
+                unverified_zero_performance = False
+                for row, revenue_value, purchase_value in zip(
+                    snap_stats_rows,
+                    snap_revenue_values,
+                    snap_purchase_values,
+                ):
+                    status = _clean_text(
+                        row.get("conversion_data_status"),
+                        limit=24,
+                    ).lower()
+                    if status in {"partial", "unavailable"}:
+                        revenue_complete = False
+                        conversions_complete = False
+                    elif status and status != "available":
+                        revenue_complete = False
+                        conversions_complete = False
+                    elif not status:
+                        # The historical failed path fabricated zero. Keep
+                        # legacy positive facts for compatibility, but treat
+                        # every unmarked zero independently as unknown.
+                        if revenue_value is None or revenue_value <= 0:
+                            revenue_complete = False
+                            if revenue_value == 0:
+                                unverified_zero_performance = True
+                        if purchase_value is None or purchase_value <= 0:
+                            conversions_complete = False
+                            if purchase_value == 0:
+                                unverified_zero_performance = True
+                    accounts_total = _optional_nonnegative_integer(
+                        row.get("conversion_accounts_total")
+                    )
+                    accounts_complete = _optional_nonnegative_integer(
+                        row.get("conversion_accounts_complete")
+                    )
+                    if (
+                        accounts_total is not None
+                        and accounts_complete is not None
+                        and accounts_complete < accounts_total
+                    ):
+                        revenue_complete = False
+                        conversions_complete = False
+                candidate_revenue_sar = (
                     sum(value for value in snap_revenue_values if value is not None)
-                    if has_performance
-                    and not performance_truncated
-                    and all(value is not None for value in snap_revenue_values)
+                    if revenue_complete
                     else None
                 )
-                purchases = (
+                candidate_purchases = (
                     sum(value for value in snap_purchase_values if value is not None)
-                    if has_performance
-                    and not performance_truncated
-                    and all(value is not None for value in snap_purchase_values)
+                    if conversions_complete
                     else None
                 )
-                impressions = None
-                clicks = None
+                unverified_zero_performance = bool(
+                    provider_reported_spend_sar
+                    and provider_reported_spend_sar > 0
+                    and unverified_zero_performance
+                )
+                candidate_impressions = None
+                candidate_clicks = None
                 campaign_source_rows = []
             else:
                 grouped = campaign_rows[provider_key]
-                has_performance = bool(raw_rows[provider_key])
-                performance_truncated = (
-                    provider_source_truncated or provider_source_invalid
-                )
+                performance_rows = raw_rows[provider_key]
+                performance_source_truncated = provider_source_truncated
+                performance_source_invalid = provider_source_invalid
                 revenue_values = [
                     row.get("revenue_sar_equivalent")
                     for row in grouped
                 ]
-                revenue_sar = (
+                revenue_complete = bool(grouped) and all(
+                    value is not None for value in revenue_values
+                )
+                conversions_complete = bool(grouped) and all(
+                    row.get("purchases") is not None for row in grouped
+                )
+                candidate_revenue_sar = (
                     sum(value for value in revenue_values if value is not None)
-                    if grouped
-                    and not performance_truncated
-                    and all(value is not None for value in revenue_values)
+                    if revenue_complete
                     else None
                 )
-                purchases = (
+                candidate_purchases = (
                     sum(int(row["purchases"]) for row in grouped)
-                    if has_performance
-                    and not performance_truncated
-                    and all(row.get("purchases") is not None for row in grouped)
+                    if conversions_complete
                     else None
                 )
-                impressions = (
+                candidate_impressions = (
                     sum(int(row["impressions"]) for row in grouped)
-                    if has_performance
-                    and not performance_truncated
+                    if grouped
                     and all(row.get("impressions") is not None for row in grouped)
                     else None
                 )
-                clicks = (
+                candidate_clicks = (
                     sum(int(row["clicks"]) for row in grouped)
-                    if has_performance
-                    and not performance_truncated
+                    if grouped
                     and all(row.get("clicks") is not None for row in grouped)
                     else None
                 )
+                unverified_zero_performance = False
                 campaign_source_rows = raw_rows[provider_key]
+
+            # The open-current-day lag exception is valid only when both
+            # sides of the ratio omit that still-open day. If performance
+            # already contains today's facts while spend does not, their
+            # date coverage differs and the ratio must fail closed.
+            current_day_iso = today.isoformat()
+            if (
+                end == today
+                and current_day_iso in _observed_dates(performance_rows)
+                and current_day_iso not in spend_series
+            ):
+                spend_period_complete = False
+
+            performance_coverage = _performance_coverage(
+                performance_rows=performance_rows,
+                spend_series=spend_series,
+                start=start,
+                end=end,
+                today=today,
+                freshness=freshness,
+                source_truncated=performance_source_truncated,
+                source_invalid=performance_source_invalid,
+                spend_period_complete=spend_period_complete,
+                revenue_complete=revenue_complete,
+                conversions_complete=conversions_complete,
+                unverified_zero_performance=unverified_zero_performance,
+            )
+            performance_eligible = performance_coverage[
+                "eligible_for_ratios"
+            ]
+            revenue_sar = (
+                candidate_revenue_sar if performance_eligible else None
+            )
+            purchases = (
+                candidate_purchases if performance_eligible else None
+            )
+            impressions = (
+                candidate_impressions if performance_eligible else None
+            )
+            clicks = candidate_clicks if performance_eligible else None
+            if not performance_eligible and provider_key in campaign_rows:
+                for campaign in campaign_rows[provider_key]:
+                    for ratio_key in (
+                        "roas",
+                        "cpa_reported",
+                        "cpc_reported",
+                        "cpm_reported",
+                        "ctr_pct",
+                    ):
+                        campaign[ratio_key] = None
 
             metrics = _metric_set(
                 provider_reported_spend_sar=provider_reported_spend_sar,
@@ -1406,7 +1765,10 @@ class AdsManagerService:
                 impressions=impressions,
                 clicks=clicks,
             )
-            latest_observed = _latest_marker(rows_for_freshness)
+            campaign_coverage = _campaign_coverage(
+                provider_key,
+                campaign_source_rows,
+            )
             provider_summaries.append(
                 {
                     "provider": provider_key,
@@ -1421,36 +1783,30 @@ class AdsManagerService:
                     "health_score": (card.get("health") or {}).get("score"),
                     "last_sync_at": card.get("last_sync_at"),
                     "metrics": metrics,
-                    "freshness": _freshness(
-                        integration_delay=card.get("data_delay_minutes"),
-                        latest_observed_at=latest_observed,
-                        observed_days=len(_observed_dates(rows_for_freshness)),
-                        requested_days=requested_days,
-                        now=now,
-                    ),
-                    "campaign_coverage": _campaign_coverage(
-                        provider_key,
-                        campaign_source_rows,
-                    ),
+                    "freshness": freshness,
+                    "performance_coverage": performance_coverage,
+                    "campaign_coverage": campaign_coverage,
                     "reconciliation": _reconciliation(
                         provider_reported_spend_sar,
                         booked_ad_expense_sar,
                         comparable=comparable,
+                        account_day_values_match=account_day_values_match,
+                        totals_complete=(
+                            spend_period_complete
+                            and booked_totals_complete
+                        ),
                     ),
                     "metric_availability": {
                         "provider_spend": provider_reported_spend_sar is not None,
+                        "provider_spend_period_complete": (
+                            spend_period_complete
+                        ),
                         "booked_expense": booked_ad_expense_sar is not None,
                         "revenue": revenue_sar is not None,
                         "purchases": purchases is not None,
                         "impressions": impressions is not None,
                         "clicks": clicks is not None,
-                        "campaigns": (
-                            _campaign_coverage(
-                                provider_key,
-                                campaign_source_rows,
-                            )["status"]
-                            == "available"
-                        ),
+                        "campaigns": campaign_coverage["status"] == "available",
                     },
                 }
             )
@@ -1617,6 +1973,12 @@ class AdsManagerService:
                 "revenue_is_partial": len(known_revenue) < len(selected_summaries),
                 "provider_spend_is_partial": (
                     len(known_provider_spend) < len(selected_summaries)
+                    or any(
+                        not row["metric_availability"][
+                            "provider_spend_period_complete"
+                        ]
+                        for row in selected_summaries
+                    )
                 ),
                 "booked_expense_is_partial": (
                     len(known_booked_expense) < len(selected_summaries)
@@ -1638,6 +2000,10 @@ class AdsManagerService:
                 "conversion_providers": len(known_purchases),
                 "click_providers": len(known_clicks),
                 "impression_providers": len(known_impressions),
+                "ratio_eligible_providers": sum(
+                    row["performance_coverage"]["eligible_for_ratios"]
+                    for row in selected_summaries
+                ),
                 "provider_spend_providers": len(known_provider_spend),
                 "booked_expense_providers": len(known_booked_expense),
                 "unscoped_booked_expense_sar": (
@@ -1709,6 +2075,9 @@ class AdsManagerService:
             row
             for row in providers
             if (row["metrics"]["provider_reported_spend_sar"] or 0) > 0
+            and row["metric_availability"][
+                "provider_spend_period_complete"
+            ]
         ]
         if spenders:
             highest = max(
@@ -1774,43 +2143,62 @@ class AdsManagerService:
                         },
                     }
                 )
-            if row["reconciliation"]["status"] == "drift":
+            if row["reconciliation"]["severity"] == "warning":
                 insights.append(
                     {
-                        "code": f"{row['provider']}_spend_drift",
+                        "code": (
+                            f"{row['provider']}_spend_drift"
+                            if row["reconciliation"]["status"] == "drift"
+                            else f"{row['provider']}_spend_gap"
+                        ),
                         "severity": "warning",
                         "title": f"فرق صرف يحتاج مراجعة في {row['provider_label']}",
                         "detail": row["reconciliation"]["detail"],
-                        "confidence": "medium",
+                        "confidence": (
+                            "high"
+                            if row["reconciliation"]["comparison_basis"]
+                            == "account_day_aligned"
+                            else "medium"
+                        ),
                         "evidence": {
                             "provider": row["provider"],
                             "gap_sar": row["reconciliation"]["gap_sar"],
                             "gap_pct": row["reconciliation"]["gap_pct"],
+                            "comparison_basis": row["reconciliation"][
+                                "comparison_basis"
+                            ],
+                            "action_required": row["reconciliation"][
+                                "action_required"
+                            ],
                         },
                     }
                 )
             if (
                 (row["metrics"]["provider_reported_spend_sar"] or 0) > 0
-                and not any(
-                    row["metric_availability"][key]
-                    for key in ("revenue", "purchases", "clicks")
-                )
+                and not row["performance_coverage"]["eligible_for_ratios"]
             ):
                 insights.append(
                     {
-                        "code": f"{row['provider']}_performance_gap",
+                        "code": (
+                            f"{row['provider']}_performance_"
+                            f"{row['performance_coverage']['status']}"
+                        ),
                         "severity": "warning",
                         "title": f"الصرف موجود دون أداء مكتمل في {row['provider_label']}",
-                        "detail": (
-                            "يمكن عرض الصرف المالي، لكن بيانات التحويل أو النقر غير "
-                            "متاحة بما يكفي للتحليل."
-                        ),
+                        "detail": row["performance_coverage"]["detail"],
                         "confidence": "high",
                         "evidence": {
                             "provider": row["provider"],
                             "provider_reported_spend_sar": (
                                 row["metrics"]["provider_reported_spend_sar"]
                             ),
+                            "coverage_status": row["performance_coverage"][
+                                "status"
+                            ],
+                            "coverage_pct": row["performance_coverage"][
+                                "coverage_pct"
+                            ],
+                            "reasons": row["performance_coverage"]["reasons"],
                         },
                     }
                 )
