@@ -7,6 +7,7 @@ on:
     paths:
       - "scripts/patch_order_review_pagination.py"
       - ".github/workflows/fulfillment-review-pagination-bootstrap.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
