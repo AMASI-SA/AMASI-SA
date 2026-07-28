@@ -35,12 +35,236 @@ jobs:
   scope-and-safety-guard:
     name: Strict scope and AST safety guard
     runs-on: ubuntu-latest
+    outputs:
+      run_full: ${{ steps.classify.outputs.run_full }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Classify Ads Manager-owned changes
+        id: classify
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_full=false
+          shared_changed=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            run_full=true
+          else
+            git fetch --no-tags origin main
+            comparison_base="${PULL_REQUEST_BASE_SHA:-origin/main}"
+            changed_paths_file="${RUNNER_TEMP}/ads-manager-classified-paths.txt"
+
+            git diff --name-only --no-renames --diff-filter=ACDMRT \
+              "${comparison_base}...HEAD" > "${changed_paths_file}"
+
+            while IFS= read -r changed_path; do
+              [[ -z "${changed_path}" ]] && continue
+              case "${changed_path}" in
+                backend/ad_spend_reporting.py|\
+                backend/ads_manager/__init__.py|\
+                backend/ads_manager/models.py|\
+                backend/ads_manager/routes.py|\
+                backend/ads_manager/service.py|\
+                backend/ads_v2/models.py|\
+                backend/ads_v2/sync/adapters.py|\
+                backend/ads_v2/sync/core.py|\
+                backend/snapchat_routes.py|\
+                backend/tests/test_snapchat_conversion_quality.py|\
+                backend/tests/test_unified_ads_manager_phase1.py|\
+                frontend/src/pages/AdsManager.jsx|\
+                frontend/src/pages/AdsManager.test.jsx|\
+                frontend/src/services/adsManager.js|\
+                frontend/src/services/adsManager.test.js|\
+                docs/UNIFIED_ADS_MANAGER_READ_ONLY_PHASE1.md|\
+                .github/workflows/ads-manager-readonly.yml)
+                  run_full=true
+                  ;;
+                backend/server.py|\
+                frontend/src/App.js|\
+                frontend/src/components/Layout.jsx|\
+                frontend/src/components/Sidebar.jsx)
+                  shared_changed=true
+                  ;;
+              esac
+            done < "${changed_paths_file}"
+          fi
+
+          {
+            echo "run_full=${run_full}"
+            echo "shared_changed=${shared_changed}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "Ads-owned changes: ${run_full}"
+          echo "Shared wiring changes: ${shared_changed}"
+
+      - name: Verify persistent Ads Manager shared wiring
+        if: >-
+          steps.classify.outputs.run_full == 'true' ||
+          steps.classify.outputs.shared_changed == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          import pathlib
+          import re
+
+          errors = []
+
+          def read(path):
+              return pathlib.Path(path).read_text(encoding="utf-8")
+
+          def require_count(source, needle, expected, label):
+              actual = source.count(needle)
+              if actual != expected:
+                  errors.append(
+                      f"{label}: expected {expected}, found {actual}"
+                  )
+
+          server_path = pathlib.Path("backend/server.py")
+          server_source = read(server_path)
+          server_tree = ast.parse(server_source, filename=str(server_path))
+          ads_imports = [
+              node
+              for node in ast.walk(server_tree)
+              if isinstance(node, ast.ImportFrom)
+              and node.module == "ads_manager"
+              and any(
+                  alias.name == "make_ads_manager_router"
+                  for alias in node.names
+              )
+          ]
+          if len(ads_imports) != 1:
+              errors.append(
+                  "backend/server.py: expected one Ads Manager router import"
+              )
+
+          include_calls = []
+          router_calls = []
+          for node in ast.walk(server_tree):
+              if not isinstance(node, ast.Call):
+                  continue
+              if (
+                  isinstance(node.func, ast.Name)
+                  and node.func.id == "make_ads_manager_router"
+              ):
+                  router_calls.append(node)
+              if (
+                  isinstance(node.func, ast.Attribute)
+                  and node.func.attr == "include_router"
+                  and node.args
+                  and isinstance(node.args[0], ast.Call)
+                  and isinstance(node.args[0].func, ast.Name)
+                  and node.args[0].func.id == "make_ads_manager_router"
+              ):
+                  include_calls.append(node)
+
+          if len(router_calls) != 1:
+              errors.append(
+                  "backend/server.py: expected one Ads Manager router call"
+              )
+          elif [
+              getattr(argument, "id", None)
+              for argument in router_calls[0].args
+          ] != ["db", "current_user"]:
+              errors.append(
+                  "backend/server.py: Ads Manager router arguments changed"
+              )
+          if len(include_calls) != 1:
+              errors.append(
+                  "backend/server.py: expected one Ads Manager include_router"
+              )
+
+          app_source = read("frontend/src/App.js")
+          require_count(
+              app_source,
+              'import AdsManager from "./pages/AdsManager";',
+              1,
+              "frontend/src/App.js AdsManager import",
+          )
+          require_count(
+              app_source,
+              'path="/ads-manager"',
+              1,
+              "frontend/src/App.js Ads Manager route",
+          )
+          route_pattern = re.compile(
+              r"""
+              <Route\s+
+              path="/ads-manager"\s+
+              element=\{\s*
+                <ProtectedRoute>\s*
+                  <OwnerOnlyRoute>\s*
+                    <Layout>\s*<AdsManager\s*/>\s*</Layout>\s*
+                  </OwnerOnlyRoute>\s*
+                </ProtectedRoute>\s*
+              \}\s*
+              />
+              """,
+              re.DOTALL | re.VERBOSE,
+          )
+          if len(route_pattern.findall(app_source)) != 1:
+              errors.append(
+                  "frontend/src/App.js: Ads Manager route must remain "
+                  "ProtectedRoute + OwnerOnlyRoute"
+              )
+
+          layout_source = read("frontend/src/components/Layout.jsx")
+          require_count(
+              layout_source,
+              '{ to: "/ads-manager", label: "مدير الإعلانات", '
+              "Icon: ChartLineUp },",
+              1,
+              "frontend/src/components/Layout.jsx Ads Manager link",
+          )
+          is_v2_pattern = re.compile(
+              r"const\s+isV2\s*=\s*\[[^\]]*"
+              r'"/ads-manager"[^\]]*\]\.some\(',
+              re.DOTALL,
+          )
+          if len(is_v2_pattern.findall(layout_source)) != 1:
+              errors.append(
+                  "frontend/src/components/Layout.jsx: Ads Manager must "
+                  "remain in Mezan V2 routing"
+              )
+
+          sidebar_source = read("frontend/src/components/Sidebar.jsx")
+          require_count(
+              sidebar_source,
+              'testid: "nav-mezan-os-ads-manager"',
+              1,
+              "frontend/src/components/Sidebar.jsx Ads Manager test id",
+          )
+          sidebar_pattern = re.compile(
+              r"""
+              \{\s*
+                to:\s*"/ads-manager",\s*
+                label:\s*"مدير\s+الإعلانات",\s*
+                icon:\s*ChartLineUp,\s*
+                testid:\s*"nav-mezan-os-ads-manager",\s*
+              \}
+              """,
+              re.DOTALL | re.VERBOSE,
+          )
+          if len(sidebar_pattern.findall(sidebar_source)) != 1:
+              errors.append(
+                  "frontend/src/components/Sidebar.jsx: Ads Manager "
+                  "navigation contract changed"
+              )
+
+          if errors:
+              raise SystemExit("\n".join(errors))
+
+          print("Persistent Ads Manager shared wiring passed.")
+          PY
+
       - name: Reject every path outside the approved Phase 1 surface
+        if: steps.classify.outputs.run_full == 'true'
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
@@ -95,6 +319,7 @@ jobs:
           echo "Strict Phase 1 path allowlist passed."
 
       - name: Permit only the isolated router wiring in server.py
+        if: steps.classify.outputs.run_full == 'true'
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
@@ -137,6 +362,7 @@ jobs:
           PY
 
       - name: Permit only the reviewed frontend route and navigation wiring
+        if: steps.classify.outputs.run_full == 'true'
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
@@ -229,6 +455,7 @@ jobs:
           PY
 
       - name: Constrain operational source-quality changes by AST delta
+        if: steps.classify.outputs.run_full == 'true'
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
@@ -548,6 +775,7 @@ jobs:
           PY
 
       - name: Reject writes, provider networking, and non-GET routes by AST
+        if: steps.classify.outputs.run_full == 'true'
         shell: bash
         run: |
           python - <<'PY'
@@ -807,6 +1035,7 @@ jobs:
   backend-tests:
     name: Hermetic backend safety tests
     needs: scope-and-safety-guard
+    if: needs.scope-and-safety-guard.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -850,6 +1079,7 @@ jobs:
   frontend-tests:
     name: Frontend tests and production build
     needs: scope-and-safety-guard
+    if: needs.scope-and-safety-guard.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
