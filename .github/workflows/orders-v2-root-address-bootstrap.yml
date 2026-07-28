@@ -48,7 +48,17 @@ jobs:
         run: |
           set -euo pipefail
           cd backend
-          python -m pip install -q pydantic==2.13.4 pytest pytest-asyncio openpyxl
+          python -m pip install -q \
+            fastapi==0.110.1 \
+            pydantic==2.13.4 \
+            pymongo==4.5.0 \
+            httpx \
+            pytest \
+            pytest-asyncio \
+            openpyxl \
+            cryptography \
+            reportlab \
+            python-multipart
           python -m pytest tests/test_order_engine_repository.py -q --tb=short
 
       - name: Commit source fix
