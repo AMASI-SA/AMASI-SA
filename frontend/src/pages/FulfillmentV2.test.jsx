@@ -34,10 +34,10 @@ test("fulfillment workspace keeps the governed stage order", () => {
     expect(FULFILLMENT_STAGES.map((stage) => stage.key)).toEqual(EXPECTED_STAGE_KEYS);
     expect(new Set(FULFILLMENT_STAGES.map((stage) => stage.key)).size).toBe(FULFILLMENT_STAGES.length);
     expect(FULFILLMENT_STAGES.map((stage) => stage.label)).toEqual([
-        "انتظار المراجعة",
+        "بانتظار المراجعة",
         "تم المراجعة",
         "قيد التنفيذ",
-        "إدارة التجهيز",
+        "التجهيز",
         "الاستلام والتجميع",
         "جاهز للشحن",
         "تم التنفيذ",
@@ -46,13 +46,24 @@ test("fulfillment workspace keeps the governed stage order", () => {
     ]);
 });
 
-test("pending review is embedded inside the new Mezan OS V2 workspace", () => {
+test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
-    expect(markup).toContain("إدارة رفع الطلبات");
+    expect(markup).toContain("إدارة التجهيز");
+    expect(markup).not.toContain("إدارة رفع الطلبات");
+    expect(markup).toContain("تبويبات إدارة التجهيز");
+    expect(markup).toContain("9 مراحل");
+    EXPECTED_STAGE_KEYS.forEach((stageKey) => {
+        expect(markup).toContain(`data-testid="fulfillment-stage-tab-${stageKey}"`);
+    });
+});
+
+test("pending review is embedded under the organized preparation tabs", () => {
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
     expect(markup).toContain("قائمة انتظار المراجعة");
     expect(markup).toContain("المرحلة الحالية");
-    expect(markup).toContain("انتظار المراجعة");
+    expect(markup).toContain("بانتظار المراجعة");
 });
 
 test("preparation stage exposes warehouse supplier manufacturing and shortage tracks", () => {
