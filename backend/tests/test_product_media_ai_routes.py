@@ -8,29 +8,39 @@ from product_media_ai_routes import (
 )
 
 
-def test_provider_is_unconfigured_without_key(monkeypatch):
+def test_provider_is_disconnected_without_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("MEZAN_AI_IMAGE_ENABLED", raising=False)
     monkeypatch.delenv("MEZAN_OPENAI_IMAGE_MODEL", raising=False)
     status = image_provider_status()
+    assert status["connected"] is False
     assert status["ready"] is False
-    assert status["state"] == "unconfigured"
+    assert status["state"] == "disconnected"
     assert status["execution_available"] is False
     assert status["mode"] == "proposal_only"
 
 
-def test_provider_requires_explicit_image_policy_and_model(monkeypatch):
+def test_connected_analysis_is_not_reported_as_disconnected_when_images_are_off(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "configured")
     monkeypatch.delenv("MEZAN_AI_IMAGE_ENABLED", raising=False)
     monkeypatch.delenv("MEZAN_OPENAI_IMAGE_MODEL", raising=False)
-    assert image_provider_status()["state"] == "disabled_by_policy"
+    status = image_provider_status()
+    assert status["connected"] is True
+    assert status["analysis_ready"] is True
+    assert status["ready"] is False
+    assert status["state"] == "connected_analysis_only"
+    assert "متصل للتحليل" in status["label_ar"]
 
+
+def test_image_readiness_requires_explicit_policy_and_model(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "configured")
     monkeypatch.setenv("MEZAN_AI_IMAGE_ENABLED", "true")
-    assert image_provider_status()["state"] == "model_not_configured"
+    monkeypatch.delenv("MEZAN_OPENAI_IMAGE_MODEL", raising=False)
+    assert image_provider_status()["ready"] is False
 
     monkeypatch.setenv("MEZAN_OPENAI_IMAGE_MODEL", "configured-image-model")
     status = image_provider_status()
-    assert status["state"] == "ready"
+    assert status["state"] == "connected_images_ready"
     assert status["ready"] is True
     assert status["execution_available"] is False
 
