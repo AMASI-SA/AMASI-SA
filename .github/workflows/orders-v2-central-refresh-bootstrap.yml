@@ -1,0 +1,65 @@
+name: Orders V2 central refresh bootstrap
+
+on:
+  push:
+    branches:
+      - fix/orders-v2-address-root-fallback
+    paths:
+      - "scripts/patch_orders_v2_central_refresh_v2.py"
+      - ".github/workflows/orders-v2-central-refresh-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  wire-central-refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/orders-v2-address-root-fallback
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply central Orders V2 refresh wiring
+        run: python scripts/patch_orders_v2_central_refresh_v2.py
+
+      - name: Validate source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile \
+            backend/order_engine/routes.py \
+            backend/order_engine/salla_refresh.py \
+            backend/order_review_routes.py \
+            backend/tests/test_order_engine_salla_refresh.py \
+            backend/tests/test_order_review_stage_one.py \
+            backend/tests/test_fulfillment_v2_contract.py
+          grep -q 'refresh-from-salla' backend/order_engine/routes.py
+          grep -q 'refresh_order_from_salla' backend/order_review_routes.py
+          ! grep -q 'resync_single_order' backend/order_review_routes.py
+          ! grep -q '"/shipments"' backend/order_engine/salla_refresh.py
+          grep -q 'order-v2-refresh-from-salla' frontend/src/pages/OrderDetailsV2.jsx
+          grep -q 'refreshOrderFromSalla' frontend/src/services/orderEngine.js
+
+      - name: Commit central refresh wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Central refresh wiring already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/order_engine/routes.py \
+            backend/order_review_routes.py \
+            backend/tests/test_order_review_stage_one.py \
+            backend/tests/test_fulfillment_v2_contract.py \
+            frontend/src/services/orderEngine.js \
+            frontend/src/pages/OrderDetailsV2.jsx \
+            .github/workflows/fulfillment-v2.yml
+          git commit -m "feat(orders-v2): centralize Salla order refresh"
+          git push origin HEAD:fix/orders-v2-address-root-fallback
