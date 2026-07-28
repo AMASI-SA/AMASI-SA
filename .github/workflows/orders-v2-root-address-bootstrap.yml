@@ -6,12 +6,14 @@ on:
     branches:
       - fix/orders-v2-address-root-fallback
     paths:
+      - "scripts/repair_orders_v2_address_patch.py"
       - "scripts/patch_orders_v2_root_address_fallback.py"
       - ".github/workflows/orders-v2-root-address-bootstrap.yml"
   pull_request:
     branches:
       - main
     paths:
+      - "scripts/repair_orders_v2_address_patch.py"
       - "scripts/patch_orders_v2_root_address_fallback.py"
       - ".github/workflows/orders-v2-root-address-bootstrap.yml"
 
@@ -27,6 +29,9 @@ jobs:
           ref: fix/orders-v2-address-root-fallback
           fetch-depth: 0
           show-progress: false
+
+      - name: Repair one-shot patch contracts
+        run: python scripts/repair_orders_v2_address_patch.py
 
       - name: Apply V2 canonical address fallback
         run: python scripts/patch_orders_v2_root_address_fallback.py
