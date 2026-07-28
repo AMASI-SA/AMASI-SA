@@ -4,7 +4,7 @@ import {
     ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
     UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
-    HandCoins, Coin, Briefcase, Lightning, Cube,
+    HandCoins, Coin, Briefcase, Lightning, Cube, ChatsCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
@@ -212,6 +212,12 @@ const SECTIONS = [
                 label: "التطبيقات والتكاملات",
                 icon: Plug,
                 testid: "nav-mezan-os-integrations",
+            },
+            {
+                to: "/customer-intelligence",
+                label: "ذكاء العملاء والمبيعات",
+                icon: ChatsCircle,
+                testid: "nav-mezan-os-customer-intelligence",
             },
             {
                 to: "/ads-manager",

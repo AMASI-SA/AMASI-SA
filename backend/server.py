@@ -4004,6 +4004,10 @@ api.include_router(make_integrations_control_center_router(db, current_user))
 from ads_manager import make_ads_manager_router
 api.include_router(make_ads_manager_router(db, current_user))
 
+# ── Customer Intelligence Phase 1 (owner-only synthetic preview) ───
+from customer_intelligence import make_customer_intelligence_router
+api.include_router(make_customer_intelligence_router(current_user))
+
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
 # expose only the merchant-facing config surface so a real API key can

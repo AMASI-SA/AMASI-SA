@@ -443,3 +443,26 @@ until the Product Definition phase.
 
 Current contracts must preserve all required identity and option data
 without calculating cost.
+
+## Decision-028 — Customer Intelligence Starts as an Isolated Preview
+
+Status: Approved, Phase 1 implementation
+
+The Customer Intelligence & Sales Center may establish its long-term contracts
+and owner-only workspace before live customer-channel ingestion begins, but the
+initial implementation must remain an isolated synthetic preview.
+
+The Phase 1 boundary is mandatory:
+
+- The server owns the preview contract; React does not carry a second business
+  fixture or source of truth.
+- The preview service receives no database handle, customer-channel client,
+  commerce connector, payment client, advertising client or AI execution
+  client.
+- Only an authenticated owner may read the preview.
+- No live customer data is used.
+- WhatsApp sending, follow-up execution, order creation, discount creation,
+  payment-link creation, product mutation, campaign mutation and AI execution
+  are contractually fixed to `false`.
+- Future live capabilities require separate ingestion, privacy, identity,
+  approval, quality and rollback gates. They are not implied by this preview.

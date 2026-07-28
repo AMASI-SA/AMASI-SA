@@ -1,0 +1,283 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+    ArrowClockwise,
+    ChartLineUp,
+    ChatCircleDots,
+    CheckCircle,
+    ClipboardText,
+    Clock,
+    Eye,
+    Megaphone,
+    Package,
+    Plug,
+    ShieldCheck,
+    ShoppingCart,
+    UsersThree,
+    WarningCircle,
+} from "@phosphor-icons/react";
+
+import {
+    AuditPanel,
+    CampaignImpactPanel,
+    ConversationsPanel,
+    CustomersPanel,
+    FollowUpsPanel,
+    IntegrationsPanel,
+    KnowledgePanel,
+    MarketOpportunitiesPanel,
+    ObjectionsPanel,
+    OrderDraftsPanel,
+    OverviewPanel,
+    QualityPanel,
+    SalesOpportunitiesPanel,
+} from "../components/customerIntelligence/CustomerIntelligencePanels";
+import {
+    CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    customerIntelligenceWritesLocked,
+    getCustomerIntelligenceWorkspace,
+    normalizeCustomerIntelligenceWorkspace,
+} from "../services/customerIntelligence";
+
+export const CUSTOMER_INTELLIGENCE_TABS = [
+    { id: "overview", label: "نظرة عامة", Icon: Eye },
+    { id: "conversations", label: "المحادثات", Icon: ChatCircleDots },
+    { id: "customers", label: "العملاء", Icon: UsersThree },
+    { id: "followups", label: "المتابعات", Icon: Clock },
+    { id: "sales", label: "فرص البيع", Icon: ChartLineUp },
+    { id: "drafts", label: "مسودات الطلبات", Icon: ShoppingCart },
+    { id: "market", label: "فرص المنتجات/المنافسين", Icon: Package },
+    { id: "objections", label: "الاعتراضات", Icon: WarningCircle },
+    { id: "campaigns", label: "أثر الحملات", Icon: Megaphone },
+    { id: "knowledge", label: "المعرفة", Icon: ClipboardText },
+    { id: "quality", label: "الجودة", Icon: CheckCircle },
+    { id: "integrations", label: "التكاملات", Icon: Plug },
+    { id: "audit", label: "سجل الإجراءات", Icon: ShieldCheck },
+];
+
+function tabIsSupported(tab) {
+    return CUSTOMER_INTELLIGENCE_TABS.some((item) => item.id === tab);
+}
+
+function LoadingPanel() {
+    return (
+        <div className="space-y-4" data-testid="customer-intelligence-loading">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {[0, 1, 2, 3, 4].map((key) => (
+                    <div key={key} className="h-28 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+            </div>
+            <div className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white" />
+        </div>
+    );
+}
+
+function renderActivePanel({ activeTab, model, writesLocked }) {
+    const common = { model };
+    switch (activeTab) {
+        case "conversations":
+            return <ConversationsPanel {...common} />;
+        case "customers":
+            return <CustomersPanel {...common} />;
+        case "followups":
+            return <FollowUpsPanel {...common} />;
+        case "sales":
+            return <SalesOpportunitiesPanel {...common} />;
+        case "drafts":
+            return <OrderDraftsPanel {...common} writesLocked={writesLocked} />;
+        case "market":
+            return <MarketOpportunitiesPanel {...common} />;
+        case "objections":
+            return <ObjectionsPanel {...common} />;
+        case "campaigns":
+            return <CampaignImpactPanel {...common} />;
+        case "knowledge":
+            return <KnowledgePanel {...common} />;
+        case "quality":
+            return <QualityPanel {...common} />;
+        case "integrations":
+            return (
+                <IntegrationsPanel
+                    {...common}
+                    writesLocked={writesLocked}
+                    policyKeys={CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS}
+                />
+            );
+        case "audit":
+            return <AuditPanel {...common} />;
+        case "overview":
+        default:
+            return (
+                <OverviewPanel
+                    {...common}
+                    writesLocked={writesLocked}
+                    policyKeys={CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS}
+                />
+            );
+    }
+}
+
+export function CustomerIntelligenceCenterView({
+    model,
+    activeTab = "overview",
+    onTabChange = () => {},
+    onRefresh = () => {},
+    loading = false,
+    refreshing = false,
+    error = "",
+}) {
+    const normalized = normalizeCustomerIntelligenceWorkspace(model);
+    const selectedTab = tabIsSupported(activeTab) ? activeTab : "overview";
+    const writesLocked = customerIntelligenceWritesLocked(normalized.safety_policy);
+    const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
+    const titleEn = normalized.workspace.title_en || "Customer Intelligence & Sales Center";
+    const description = normalized.workspace.description_ar
+        || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
+
+    return (
+        <div
+            className="space-y-5"
+            dir="rtl"
+            data-testid="customer-intelligence-center"
+            data-preview-only="true"
+            data-write-mode="observe_only"
+        >
+            <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
+                <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-300/40 bg-violet-400/10 px-3 py-1 text-xs font-extrabold text-violet-100">
+                            <Eye size={16} weight="fill" />
+                            معاينة المالك · Owner Preview
+                        </div>
+                        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{titleAr}</h1>
+                        <div className="mt-1 text-xs font-bold tracking-wide text-emerald-300">{titleEn}</div>
+                        <p className="mt-3 max-w-3xl text-sm leading-7 text-emerald-100">{description}</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                        <div className="rounded-xl border border-emerald-700 bg-emerald-900 p-3 text-xs font-bold leading-5 text-emerald-100">
+                            <div>المستوى {normalized.workspace.operating_level || 1}</div>
+                            <div className="mt-1 text-white">
+                                {normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onRefresh}
+                            disabled={loading || refreshing}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-white px-4 text-sm font-extrabold text-emerald-950 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            data-testid="customer-intelligence-refresh"
+                        >
+                            <ArrowClockwise size={18} weight="bold" className={refreshing ? "animate-spin" : ""} />
+                            {refreshing ? "جارٍ تحديث المعاينة…" : "تحديث المعاينة"}
+                        </button>
+                    </div>
+                </div>
+                <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-6 text-emerald-100 sm:px-7">
+                    البيانات مصطنعة من Backend ومخصّصة لإثبات البنية فقط. لا اتصال واتساب،
+                    ولا طلب أو خصم أو رابط دفع حقيقي، ولا تعديل منتج أو حملة.
+                </div>
+            </header>
+
+            {error && (
+                <div
+                    className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900"
+                    data-testid="customer-intelligence-error"
+                >
+                    <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
+                    <div>
+                        <div className="font-extrabold">تعذر تحميل مساحة المعاينة</div>
+                        <p className="mt-1 text-xs leading-5">{error}</p>
+                        <p className="mt-1 text-xs font-bold">
+                            لم تُستخدم بيانات محلية بديلة. أعد التحديث بعد التحقق من Backend.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 [scrollbar-width:thin]">
+                <nav className="flex min-w-max gap-2" aria-label="أقسام مركز ذكاء العملاء">
+                    {CUSTOMER_INTELLIGENCE_TABS.map(({ id, label, Icon }) => {
+                        const active = selectedTab === id;
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => onTabChange(id)}
+                                className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-extrabold transition ${
+                                    active
+                                        ? "bg-violet-700 text-white shadow-sm"
+                                        : "text-slate-600 hover:bg-violet-50 hover:text-violet-800"
+                                }`}
+                                aria-current={active ? "page" : undefined}
+                                data-testid={`customer-intelligence-tab-${id}`}
+                            >
+                                <Icon size={18} weight="duotone" />
+                                {label}
+                            </button>
+                        );
+                    })}
+                </nav>
+            </div>
+
+            {loading ? LoadingPanel() : renderActivePanel({
+                activeTab: selectedTab,
+                model: normalized,
+                writesLocked,
+            })}
+        </div>
+    );
+}
+
+function errorMessage(error) {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (typeof detail?.message === "string" && detail.message.trim()) return detail.message;
+    return "تعذر الاتصال بمساحة ذكاء العملاء التجريبية.";
+}
+
+export default function CustomerIntelligenceCenter() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedTab = searchParams.get("tab") || "overview";
+    const activeTab = tabIsSupported(requestedTab) ? requestedTab : "overview";
+    const [model, setModel] = useState(() => normalizeCustomerIntelligenceWorkspace({}));
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState("");
+
+    const load = useCallback(async ({ refresh = false } = {}) => {
+        if (refresh) setRefreshing(true);
+        else setLoading(true);
+        setError("");
+        try {
+            setModel(await getCustomerIntelligenceWorkspace());
+        } catch (requestError) {
+            setModel(normalizeCustomerIntelligenceWorkspace({}));
+            setError(errorMessage(requestError));
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const selectTab = useCallback((tab) => {
+        const next = new URLSearchParams(searchParams);
+        next.set("tab", tab);
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
+
+    const viewProps = useMemo(() => ({
+        model,
+        activeTab,
+        onTabChange: selectTab,
+        onRefresh: () => load({ refresh: true }),
+        loading,
+        refreshing,
+        error,
+    }), [activeTab, error, load, loading, model, refreshing, selectTab]);
+
+    return <CustomerIntelligenceCenterView {...viewProps} />;
+}
