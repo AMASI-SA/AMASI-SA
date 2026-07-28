@@ -79,7 +79,20 @@ jobs:
       - name: Run Fulfillment V2 UI contract
         env:
           CI: "true"
-        run: yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx
+        shell: bash
+        run: |
+          set +e
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx > /tmp/fulfillment-v2-jest.log 2>&1
+          status=$?
+          cat /tmp/fulfillment-v2-jest.log
+          exit "$status"
+      - name: Upload Fulfillment V2 Jest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fulfillment-v2-jest-log
+          path: /tmp/fulfillment-v2-jest.log
+          if-no-files-found: ignore
       - name: Build frontend
         env:
           CI: "false"
