@@ -80,3 +80,18 @@ def test_owner_sees_one_preparation_entry_while_employee_review_access_is_preser
         'const items = section.items.filter((item) => item.to !== "/order-review");'
         in sidebar_source
     )
+
+
+
+def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
+    source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
+
+    assert "export const REVIEW_PAGE_SIZE = 10;" in source
+    assert "limit: REVIEW_PAGE_SIZE" in source
+    assert "const [currentCursor, setCurrentCursor]" in source
+    assert "const [previousCursors, setPreviousCursors]" in source
+    assert 'aria-label="الصفحة السابقة"' in source
+    assert 'aria-label="الصفحة التالية"' in source
+    assert "الصفحة {pageNumber}" in source
+    assert "تحميل طلبات إضافية" not in source
+    assert "append: true" not in source
