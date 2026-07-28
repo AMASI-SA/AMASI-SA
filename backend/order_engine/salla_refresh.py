@@ -493,15 +493,23 @@ async def refresh_order_from_salla(
         )
 
         now = datetime.now(timezone.utc)
+        canonical_updates: dict[str, Any] = {
+            REFRESH_TIMESTAMP_FIELD: now.isoformat(),
+            REFRESH_MODE_FIELD: "orders_v2_central_refresh",
+            REFRESH_ENDPOINT_FIELD: "GET /orders/{id}?format=light + GET /orders/items",
+            REFRESH_ITEMS_FIELD: len(items),
+            "orders_v2_salla_address_source": address_source,
+        }
+        # An explicit Orders V2 refresh is authoritative for non-empty delivery
+        # facts returned by Order Details. Persist them at the canonical root so
+        # a later light list sync cannot make the address disappear again.
+        for key, value in shipping_fields.items():
+            if key == "shipping_address_found" or _present(value):
+                canonical_updates[key] = deepcopy(value)
+
         await db.unified_orders.update_one(
             {"user_id": str(user_id), "order_number": normalized},
-            {"$set": {
-                REFRESH_TIMESTAMP_FIELD: now.isoformat(),
-                REFRESH_MODE_FIELD: "orders_v2_central_refresh",
-                REFRESH_ENDPOINT_FIELD: "GET /orders/{id}?format=light + GET /orders/items",
-                REFRESH_ITEMS_FIELD: len(items),
-                "orders_v2_salla_address_source": address_source,
-            }},
+            {"$set": canonical_updates},
         )
 
         return {

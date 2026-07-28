@@ -140,6 +140,10 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
     assert raw["shipping_address"]["formatted"] == "حي العليا، طريق الملك فهد"
     assert raw["shipping"]["address"]["country"] == "السعودية"
     assert len(raw["items"]) == 1
+    assert db.unified_orders.row["shipping_company"] == "iMile"
+    assert db.unified_orders.row["shipping_city"] == "الرياض"
+    assert db.unified_orders.row["shipping_country"] == "السعودية"
+    assert db.unified_orders.row["shipping_address"] == "حي العليا، طريق الملك فهد"
 
 
 @pytest.mark.asyncio
