@@ -6,9 +6,12 @@ on:
       - "backend/order_review_routes.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
+      - "backend/order_engine/routes.py"
+      - "backend/order_engine/salla_refresh.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
+      - "backend/tests/test_order_engine_salla_refresh.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -17,6 +20,8 @@ on:
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
+      - "frontend/src/pages/OrderDetailsV2.jsx"
+      - "frontend/src/services/orderEngine.js"
       - ".github/workflows/fulfillment-v2.yml"
   push:
     branches:
@@ -25,9 +30,12 @@ on:
       - "backend/order_review_routes.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
+      - "backend/order_engine/routes.py"
+      - "backend/order_engine/salla_refresh.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
+      - "backend/tests/test_order_engine_salla_refresh.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -36,6 +44,8 @@ on:
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
+      - "frontend/src/pages/OrderDetailsV2.jsx"
+      - "frontend/src/services/orderEngine.js"
       - ".github/workflows/fulfillment-v2.yml"
   workflow_dispatch:
 
@@ -73,6 +83,7 @@ jobs:
           tests/test_order_review_stage_one.py
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
+          tests/test_order_engine_salla_refresh.py
           tests/test_fulfillment_v2_contract.py
           -q --tb=short
 
