@@ -61,6 +61,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
     from product_media_ai_routes import make_product_media_ai_router
+    from product_media_ai_draft_routes import make_product_media_ai_draft_router
     from ai_store_operations_foundation import make_ai_store_operations_router
     from ai_store_access_control import make_ai_store_access_router
 
@@ -94,6 +95,7 @@ def make_order_engine_router(*args, **kwargs):
         make_product_control_center_router(db, current_user),
         make_product_media_draft_router(db, current_user),
         make_product_media_ai_router(db, current_user),
+        make_product_media_ai_draft_router(db, current_user),
         make_product_v2_router(db, current_user),
         make_product_v2_details_router(db, current_user),
         # This GET route must be registered before the older workspace route.
