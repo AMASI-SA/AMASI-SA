@@ -42,6 +42,19 @@ an explicit provider-to-legacy-source allowlist so a stored health check cannot
 freeze their current connection state. Providers without a legacy connector
 use native V2 snapshots when those become available.
 
+`connection_status` and `connection_provenance` are separate:
+
+- `connection_status` describes operational state (`connected`,
+  `data_available`, `needs_reauth`, and so on).
+- `connection_provenance` describes what Mezan actually has:
+  `api_connection`, `legacy_integration`, `data_feed`, `disconnected`,
+  `planned`, or `unknown`.
+
+Current production classification is intentionally explicit: Salla and Meta
+are API connections; Snapchat and Qoyod are existing legacy integrations;
+TikTok is a Make-fed data feed; Google providers are disconnected; shipping
+connectors are planned. Data feeds are never counted as connected.
+
 ## New MongoDB Collections
 
 | Collection | Purpose | Key indexes |
@@ -78,6 +91,7 @@ display_name
 currency
 timezone
 connection_status
+connection_provenance
 capabilities
 permissions
 last_sync_at
@@ -211,16 +225,26 @@ changes to protected employee/RBAC/product-upload paths in this PR.
 The single responsive page contains:
 
 1. Header and an explicit read-only/safety banner.
-2. KPI cards for connected, healthy, missing permissions, and delayed/error
-   integrations.
+2. Exact classification cards for API connections, existing legacy
+   integrations, data feeds, disconnected providers, planned connectors, and
+   insufficient/unknown evidence. These buckets always sum to the provider
+   total.
 3. Provider cards with multi-account support.
 4. Capability matrix.
 5. Sync and sanitized error activity.
 
-Cards show provider mark, connection status, linked account/store, current and
+Cards show provider mark, connection status and provenance, linked
+account/store, current and
 missing permissions, last sync, delay, latest error, integration health, data
 quality, test/reconnect/settings/disconnect controls, and explicit AI can/cannot
 lists.
+
+The Phase-1 "test" action is labelled as a local inspection. It does not contact
+the provider, refresh a credential, or prove current provider reachability.
+Unobservable permissions remain `unknown`; absence of a connection or scope
+record is not reported as a confirmed permission denial. Permission rows carry
+an observation ID, so a newer empty/unknown observation cannot revive stale
+“current” or “missing” rows from an earlier local check.
 
 ## Protected Boundaries
 

@@ -514,9 +514,11 @@ def _snapshot(
     definition: ProviderDefinition,
     *,
     connection_status: str,
+    connection_provenance: str,
     source_mode: str,
     accounts: list[dict] | None = None,
     current_permissions: list[str] | None = None,
+    permissions_observed: bool | None = None,
     last_sync_at: Any = None,
     latest_error: dict | None = None,
     has_data: bool = False,
@@ -524,7 +526,25 @@ def _snapshot(
 ) -> dict:
     current = sorted(set(current_permissions or []))
     required = set(definition.required_permissions)
-    missing = sorted(required - set(current))
+    permission_evidence_present = (
+        bool(current) if permissions_observed is None else bool(permissions_observed)
+    )
+    connection_can_have_permissions = connection_status in {
+        "connected",
+        "active",
+        "healthy",
+        "needs_reauth",
+        "expired",
+        "error",
+    }
+    # No API connection is not the same as a denied permission. Likewise, an
+    # absent scope field is unknown evidence, not proof that every scope is
+    # missing.
+    missing = (
+        sorted(required - set(current))
+        if permission_evidence_present and connection_can_have_permissions
+        else []
+    )
     delay = data_delay_minutes(last_sync_at)
     if has_data and delay is not None and delay <= 24 * 60:
         quality = "good"
@@ -539,10 +559,12 @@ def _snapshot(
     return {
         "provider": definition.provider,
         "connection_status": connection_status,
+        "connection_provenance": connection_provenance,
         "source_mode": source_mode,
         "accounts": _deduplicate_accounts(accounts or []),
         "current_permissions": current,
         "missing_permissions": missing,
+        "permissions_observed": permission_evidence_present,
         "last_sync_at": _latest_timestamp(last_sync_at),
         "data_delay_minutes": delay,
         "latest_error": sanitize_for_output(latest_error) if latest_error else None,
@@ -564,10 +586,32 @@ async def _read_salla(db: Any, user_id: str, definition: ProviderDefinition) -> 
         {"user_id": user_id},
         sort=[("started_at", -1)],
     )
+    credential_present = await _credential_present(
+        db,
+        "salla_integrations",
+        {
+            "user_id": user_id,
+            "$or": [
+                {
+                    "access_token_encrypted": {
+                        "$exists": True,
+                        "$nin": ["", None],
+                    }
+                },
+                {
+                    "refresh_token_encrypted": {
+                        "$exists": True,
+                        "$nin": ["", None],
+                    }
+                },
+            ],
+        },
+    )
     if not integration:
         return _snapshot(
             definition,
             connection_status="not_connected",
+            connection_provenance="disconnected",
             source_mode="legacy_fallback",
         )
 
@@ -579,8 +623,12 @@ async def _read_salla(db: Any, user_id: str, definition: ProviderDefinition) -> 
         status = "error"
     elif expires_at and expires_at <= datetime.now(timezone.utc):
         status = "expired"
-    elif raw_status == "connected":
+    elif raw_status == "connected" and credential_present:
         status = "connected"
+    elif raw_status == "connected":
+        # Fail closed when a stale status row remains without either encrypted
+        # credential. Credential values are never projected into Python.
+        status = "unknown"
     else:
         status = "unknown"
 
@@ -615,12 +663,17 @@ async def _read_salla(db: Any, user_id: str, definition: ProviderDefinition) -> 
         integration.get("updated_at"),
     )
     has_data = bool(sync and str(sync.get("status") or "").lower() in {"success", "completed"})
+    permissions = _split_permissions(integration.get("scope"))
     return _snapshot(
         definition,
         connection_status=status,
+        connection_provenance=(
+            "api_connection" if credential_present else "disconnected"
+        ),
         source_mode="legacy_connection",
         accounts=accounts,
-        current_permissions=_split_permissions(integration.get("scope")),
+        current_permissions=permissions,
+        permissions_observed=bool(permissions),
         last_sync_at=last_sync,
         latest_error=latest_error,
         has_data=has_data,
@@ -642,10 +695,7 @@ async def _read_snapchat(
         "snapchat_connections",
         {
             "user_id": user_id,
-            "$or": [
-                {"refresh_token": {"$exists": True, "$nin": ["", None]}},
-                {"access_token": {"$exists": True, "$nin": ["", None]}},
-            ],
+            "refresh_token": {"$exists": True, "$nin": ["", None]},
         },
     )
     rows = await _find_many(
@@ -704,9 +754,19 @@ async def _read_snapchat(
     return _snapshot(
         definition,
         connection_status=status,
+        connection_provenance=(
+            "legacy_integration"
+            if credential_present
+            else "data_feed"
+            if has_data
+            else "disconnected"
+        ),
         source_mode="legacy_connection" if credential_present else "legacy_data",
         accounts=accounts,
-        current_permissions=["snapchat-marketing-api"] if credential_present else [],
+        # The legacy connector stores the requested Snapchat scope, not the
+        # provider-granted scope. Do not present that request as verified.
+        current_permissions=[],
+        permissions_observed=False,
         last_sync_at=last_sync,
         has_data=has_data,
         capability_evidence=_advertising_evidence([daily] if daily else []),
@@ -773,7 +833,12 @@ async def _read_tiktok(
     elif raw_status in {"error", "failed", "last_check_failed"}:
         status = "error"
         source_mode = "legacy_connection"
-    elif credential_present:
+    elif credential_present and raw_status in {
+        "connected",
+        "active",
+        "healthy",
+        "verified",
+    }:
         status = "connected"
         source_mode = "legacy_connection"
     elif has_data:
@@ -800,9 +865,18 @@ async def _read_tiktok(
     return _snapshot(
         definition,
         connection_status=status,
+        connection_provenance=(
+            "api_connection"
+            if credential_present
+            and status in {"connected", "needs_reauth", "error"}
+            else "data_feed"
+            if has_data
+            else "disconnected"
+        ),
         source_mode=source_mode,
         accounts=account_rows,
         current_permissions=current_permissions,
+        permissions_observed=bool(current_permissions),
         last_sync_at=last_sync,
         latest_error=latest_error,
         has_data=has_data,
@@ -885,8 +959,15 @@ async def _read_meta(db: Any, user_id: str, definition: ProviderDefinition) -> d
         status = "needs_reauth"
     elif raw_status in {"error", "failed", "last_check_failed"}:
         status = "error"
-    elif credential_present:
+    elif credential_present and raw_status in {
+        "ok",
+        "connected",
+        "active",
+        "healthy",
+    }:
         status = "connected"
+    elif credential_present:
+        status = "unknown"
     elif has_data:
         status = "data_available"
     else:
@@ -908,12 +989,24 @@ async def _read_meta(db: Any, user_id: str, definition: ProviderDefinition) -> d
         if status == "error"
         else None
     )
+    current_permissions = _split_permissions((connection or {}).get("scope"))
     return _snapshot(
         definition,
         connection_status=status,
+        connection_provenance=(
+            "api_connection"
+            if credential_present
+            else "data_feed"
+            if has_data
+            else "disconnected"
+        ),
         source_mode="legacy_connection" if credential_present else "legacy_data",
         accounts=accounts,
-        current_permissions=_split_permissions((connection or {}).get("scope")),
+        current_permissions=current_permissions,
+        # Meta's live diagnostic can read granted scopes but the legacy
+        # connector does not persist them. Empty scope evidence is therefore
+        # unknown, not a confirmed list of missing permissions.
+        permissions_observed=bool(current_permissions),
         last_sync_at=last_sync,
         latest_error=latest_error,
         has_data=has_data,
@@ -955,7 +1048,20 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
         {"user_id": legacy_tenant},
         sort=[("updated_at", -1)],
     )
-    status = "connected" if credential_present else "not_connected"
+    verified_at = _parse_datetime((credential or {}).get("last_verified_at"))
+    rotated_at = _parse_datetime((credential or {}).get("rotated_at"))
+    credential_verified = bool(
+        credential_present
+        and verified_at
+        and (rotated_at is None or verified_at >= rotated_at)
+    )
+    status = (
+        "connected"
+        if credential_verified
+        else "unknown"
+        if credential_present
+        else "not_connected"
+    )
     invoice_status = str((invoice or {}).get("status") or "").lower()
     invoice_stage = str((invoice or {}).get("pipeline_stage") or "").lower()
     latest_error = None
@@ -993,9 +1099,13 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
     return _snapshot(
         definition,
         connection_status=status,
+        connection_provenance=(
+            "legacy_integration" if credential_present else "disconnected"
+        ),
         source_mode="legacy_connection",
         accounts=accounts,
         current_permissions=["api_credentials"] if credential_present else [],
+        permissions_observed=credential_present,
         last_sync_at=last_sync,
         latest_error=latest_error,
         has_data=bool(invoice),
@@ -1023,12 +1133,14 @@ async def read_provider_snapshot(
         result = _snapshot(
             definition,
             connection_status="planned",
+            connection_provenance="planned",
             source_mode="planned",
         )
     else:
         result = _snapshot(
             definition,
             connection_status="not_configured",
+            connection_provenance="disconnected",
             source_mode="not_configured",
         )
     return sanitize_for_output(result)

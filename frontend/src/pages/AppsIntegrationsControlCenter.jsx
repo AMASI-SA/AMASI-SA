@@ -21,14 +21,6 @@ import {
     testIntegrationConnection,
 } from "../services/integrationsV2";
 
-const SETTINGS_PATHS = Object.freeze({
-    salla: "/settings/salla",
-    snapchat_ads: "/snapchat-accounts",
-    tiktok_ads: "/ads-v2/settings",
-    meta_ads: "/settings",
-    qoyod: "/integrations/qoyod/settings",
-});
-
 const TABS = [
     { id: "apps", label: "التطبيقات", Icon: Plug },
     { id: "capabilities", label: "مصفوفة القدرات", Icon: ChartLineUp },
@@ -37,17 +29,24 @@ const TABS = [
 
 const FILTERS = [
     { id: "all", label: "الكل" },
-    { id: "connected", label: "متصل أو لديه بيانات" },
+    { id: "api_connection", label: "ربط API مباشر" },
+    { id: "legacy_integration", label: "تكامل قائم سابقًا" },
+    { id: "data_feed", label: "تغذية بيانات فقط" },
     { id: "attention", label: "يحتاج انتباه" },
-    { id: "planned", label: "غير مربوط / مستقبلاً" },
+    { id: "disconnected", label: "غير مرتبط" },
+    { id: "planned", label: "مستقبلي" },
+    { id: "unknown", label: "غير محسوم" },
 ];
 
 function SummaryCard({ label, value, hint, tone, Icon, testid }) {
     const tones = {
         emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
         blue: "border-blue-100 bg-blue-50 text-blue-700",
+        sky: "border-sky-100 bg-sky-50 text-sky-700",
         amber: "border-amber-100 bg-amber-50 text-amber-700",
         rose: "border-rose-100 bg-rose-50 text-rose-700",
+        slate: "border-slate-200 bg-slate-50 text-slate-700",
+        violet: "border-violet-100 bg-violet-50 text-violet-700",
     };
     return (
         <div className={`rounded-xl border p-4 ${tones[tone]}`} data-testid={testid}>
@@ -69,8 +68,8 @@ function PageSkeleton() {
     return (
         <div className="space-y-5" data-testid="integrations-v2-loading">
             <div className="h-40 animate-pulse rounded-xl bg-slate-200" />
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[0, 1, 2, 3].map((key) => (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                {[0, 1, 2, 3, 4, 5].map((key) => (
                     <div key={key} className="h-28 animate-pulse rounded-xl bg-slate-100" />
                 ))}
             </div>
@@ -131,7 +130,7 @@ export default function AppsIntegrationsControlCenter() {
         try {
             const result = await testIntegrationConnection(provider);
             if (["passed", "healthy", "success", "succeeded"].includes(result?.status)) {
-                toast.success("نجح فحص الاتصال الآمن");
+                toast.success("نجح الفحص المحلي للإعداد والبيانات");
             } else {
                 toast.warning(result?.message || "اكتمل الفحص ويحتاج الربط إلى مراجعة");
             }
@@ -149,7 +148,11 @@ export default function AppsIntegrationsControlCenter() {
     }
 
     function openSettings(provider) {
-        const target = SETTINGS_PATHS[provider];
+        const integration = overview.providers.find((row) => row.provider === provider);
+        const target = (
+            integration?.actions?.settings?.href
+            || integration?.actions?.reconnect?.href
+        );
         if (!target) {
             toast.info("صفحة الربط الخاصة بهذا التطبيق ستُضاف في مرحلة لاحقة.");
             return;
@@ -190,9 +193,10 @@ export default function AppsIntegrationsControlCenter() {
                     </button>
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
-                    لا ينشئ هذا المركز حملات، ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة
-                    أو قيود. أي تعديل حساس مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ←
-                    تحقق ← سجل ← رجوع.
+                    التصنيف مبني على أدلة محلية محفوظة، وزر الفحص لا يتصل بالمنصة ولا يغيّر
+                    الربط. لا ينشئ المركز حملات، ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط
+                    سلة أو قيود. أي تعديل حساس مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ←
+                    تنفيذ ← تحقق ← سجل ← رجوع.
                 </div>
             </header>
 
@@ -213,43 +217,62 @@ export default function AppsIntegrationsControlCenter() {
                 </div>
             )}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="ملخص التكاملات">
+            <section
+                className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+                aria-label="تصنيف مصادر التكامل"
+            >
                 <SummaryCard
-                    label="متصل أو يستقبل بيانات"
-                    value={overview.summary.connected}
-                    hint={`من أصل ${overview.summary.total} تطبيقات`}
+                    label="ربط API مباشر"
+                    value={overview.summary.api_connections}
+                    hint="سلة وموصلات API الحديثة"
                     tone="emerald"
                     Icon={Plug}
-                    testid="integrations-summary-connected"
+                    testid="integrations-summary-api"
                 />
                 <SummaryCard
-                    label="حالة صحية"
-                    value={overview.summary.healthy}
-                    hint="بحسب آخر فحص مسجل"
-                    tone="blue"
-                    Icon={CheckCircle}
-                    testid="integrations-summary-healthy"
-                />
-                <SummaryCard
-                    label="صلاحيات ناقصة"
-                    value={overview.summary.missing_permissions}
-                    hint="تمنع قدرات مطلوبة"
+                    label="تكامل قائم سابقًا"
+                    value={overview.summary.legacy_integrations}
+                    hint="يعمل خارج المركز الجديد"
                     tone="amber"
                     Icon={ShieldCheck}
-                    testid="integrations-summary-permissions"
+                    testid="integrations-summary-legacy"
                 />
                 <SummaryCard
-                    label="يحتاج انتباه"
-                    value={overview.summary.attention_required}
-                    hint="خطأ أو انتهاء صلاحية أو تدهور"
+                    label="تغذية بيانات فقط"
+                    value={overview.summary.data_feeds}
+                    hint="لا تثبت اتصال إدارة API"
+                    tone="sky"
+                    Icon={ChartLineUp}
+                    testid="integrations-summary-feed"
+                />
+                <SummaryCard
+                    label="غير مرتبط"
+                    value={overview.summary.disconnected}
+                    hint="يحتاج موصلًا معتمدًا"
+                    tone="slate"
+                    Icon={WarningCircle}
+                    testid="integrations-summary-disconnected"
+                />
+                <SummaryCard
+                    label="مستقبلي"
+                    value={overview.summary.planned}
+                    hint="ضمن الخطة اللاحقة"
+                    tone="violet"
+                    Icon={CheckCircle}
+                    testid="integrations-summary-planned"
+                />
+                <SummaryCard
+                    label="غير محسوم"
+                    value={overview.summary.unknown}
+                    hint={`من أصل ${overview.summary.total} تطبيقات`}
                     tone="rose"
                     Icon={WarningCircle}
-                    testid="integrations-summary-attention"
+                    testid="integrations-summary-unknown"
                 />
             </section>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-                <nav className="flex min-w-max gap-2" aria-label="تبويبات مركز التكاملات">
+                <nav className="flex min-w-max gap-2" aria-label="أقسام مركز التكاملات">
                     {TABS.map(({ id, label, Icon }) => (
                         <button
                             key={id}
@@ -260,6 +283,7 @@ export default function AppsIntegrationsControlCenter() {
                                     ? "bg-emerald-900 text-white"
                                     : "text-slate-600 hover:bg-slate-50"
                             }`}
+                            aria-pressed={activeTab === id}
                             data-testid={`integrations-tab-${id}`}
                         >
                             <Icon size={18} weight="duotone" />
@@ -296,6 +320,7 @@ export default function AppsIntegrationsControlCenter() {
                                             ? "border-emerald-900 bg-emerald-900 text-white"
                                             : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"
                                     }`}
+                                    aria-pressed={statusFilter === filter.id}
                                     data-testid={`integrations-filter-${filter.id}`}
                                 >
                                     {filter.label}
@@ -311,7 +336,10 @@ export default function AppsIntegrationsControlCenter() {
                                     key={integration.provider}
                                     integration={integration}
                                     testing={testingProvider === integration.provider}
-                                    settingsAvailable={Boolean(SETTINGS_PATHS[integration.provider])}
+                                    settingsAvailable={Boolean(
+                                        integration.actions?.settings?.href
+                                        || integration.actions?.reconnect?.href
+                                    )}
                                     onTest={handleTest}
                                     onSettings={openSettings}
                                 />

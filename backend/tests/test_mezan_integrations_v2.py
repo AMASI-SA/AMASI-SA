@@ -31,6 +31,13 @@ from integrations_control_center.service import IntegrationsControlCenterService
 
 
 NOW = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
+SALLA_DEFAULT_SCOPES = (
+    "offline_access",
+    "settings.read",
+    "orders.read_write",
+    "shipping.read_write",
+    "webhooks.read_write",
+)
 
 
 def _matches(document: dict, query: dict) -> bool:
@@ -238,6 +245,10 @@ def test_catalog_has_exact_provider_and_ad_capability_contract():
         "insights.read",
         "conversions.read",
     )
+    # Keep this isolated contract aligned with
+    # salla_integration.service._DEFAULT_SCOPES_FALLBACK without importing
+    # the operational connector (which has provider/network dependencies).
+    assert PROVIDER_BY_ID["salla"].required_permissions == SALLA_DEFAULT_SCOPES
 
 
 @pytest.mark.parametrize("provider", sorted(ADVERTISING_PROVIDERS))
@@ -292,6 +303,19 @@ def test_advertising_reads_require_field_level_local_evidence():
     }:
         assert proven[capability]["state"] == "available"
         assert proven[capability]["available"] is True
+
+
+def test_advertising_mutations_need_a_management_connection_before_approval():
+    matrix = build_capability_matrix(
+        PROVIDER_BY_ID["tiktok_ads"],
+        connection_status="data_available",
+        has_data=True,
+        evidence_capabilities={"campaigns.read", "insights.read"},
+    )
+    for capability in AD_MUTATION_CAPABILITIES:
+        assert matrix[capability]["state"] == "not_connected"
+        assert matrix[capability]["approval_required"] is False
+        assert matrix[capability]["blocked_by_policy"] is True
 
 
 def test_recursive_sanitizer_removes_nested_secrets_and_token_text():
@@ -398,10 +422,7 @@ async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
                     "status": "connected",
                     "store_id": "store-7",
                     "store_name": "AMASI",
-                    "scope": (
-                        "offline_access settings.read orders.read_write "
-                        "shipping.read_write webhooks.read_write"
-                    ),
+                    "scope": " ".join(SALLA_DEFAULT_SCOPES),
                     "expires_at": "2099-01-01T00:00:00+00:00",
                     "access_token_encrypted": b"must-never-leak",
                 }
@@ -433,11 +454,283 @@ async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
     assert len(overview["providers"]) == 10
     by_provider = {card["provider"]: card for card in overview["providers"]}
     assert by_provider["salla"]["connection_status"] == "connected"
+    assert by_provider["salla"]["connection_provenance"] == "api_connection"
+    assert by_provider["salla"]["permissions"]["missing"] == []
     assert by_provider["tiktok_ads"]["connection_status"] == "data_available"
+    assert by_provider["tiktok_ads"]["connection_provenance"] == "data_feed"
     assert by_provider["tiktok_ads"]["source_mode"] == "data_feed"
+    assert overview["summary"]["connected"] == 1
+    assert overview["summary"]["api_connections"] == 1
+    assert overview["summary"]["data_feeds"] == 1
     assert by_provider["shipping_companies"]["connection_status"] == "planned"
     rendered = json.dumps(overview, ensure_ascii=False)
     assert "must-never-leak" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
+    base_connection = {
+        "user_id": "owner-1",
+        "status": "connected",
+        "store_id": "store-7",
+        "store_name": "AMASI",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "access_token_encrypted": b"must-never-leak",
+    }
+    unknown_db = FakeDB({"salla_integrations": [base_connection]})
+    unknown_overview = await _service(unknown_db).overview("owner-1")
+    unknown_salla = next(
+        card
+        for card in unknown_overview["providers"]
+        if card["provider"] == "salla"
+    )
+    assert unknown_salla["permissions"] == {
+        "current": [],
+        "missing": [],
+        "unknown": True,
+    }
+    assert {
+        entry["state"] for entry in unknown_salla["capabilities"].values()
+    } == {"unknown"}
+
+    await _service(unknown_db).test_connection("owner-1", "salla")
+    stored_account = unknown_db.rows["mezan_integration_accounts_v2"][0]
+    assert {
+        entry["state"] for entry in stored_account["capabilities"].values()
+    } == {"unknown"}
+
+    incomplete_db = FakeDB(
+        {
+            "salla_integrations": [
+                {
+                    **base_connection,
+                    "scope": (
+                        "offline_access settings.read orders.read_write "
+                        "webhooks.read_write"
+                    ),
+                }
+            ]
+        }
+    )
+    incomplete_overview = await _service(incomplete_db).overview("owner-1")
+    incomplete_salla = next(
+        card
+        for card in incomplete_overview["providers"]
+        if card["provider"] == "salla"
+    )
+    assert incomplete_salla["permissions"] == {
+        "current": [
+            "offline_access",
+            "orders.read_write",
+            "settings.read",
+            "webhooks.read_write",
+        ],
+        "missing": ["shipping.read_write"],
+        "unknown": False,
+    }
+    assert {
+        entry["state"] for entry in incomplete_salla["capabilities"].values()
+    } == {"blocked_missing_permission"}
+
+
+@pytest.mark.asyncio
+async def test_production_shape_separates_api_legacy_feed_and_disconnected():
+    db = FakeDB(
+        {
+            "salla_integrations": [
+                {
+                    "user_id": "owner-1",
+                    "status": "connected",
+                    "store_id": "store-amasi",
+                    "store_name": "متجر أماسي",
+                    "scope": " ".join(SALLA_DEFAULT_SCOPES),
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                    "refresh_token_encrypted": b"encrypted-salla-refresh",
+                }
+            ],
+            "meta_connections": [
+                {
+                    "user_id": "owner-1",
+                    "access_token": "meta-token-never-project",
+                    "ad_account_id": "act_amasi",
+                    "ad_account_name": "اماسي",
+                    "connection_status": "connected",
+                }
+            ],
+            "meta_ads_daily": [
+                {
+                    "user_id": "owner-1",
+                    "account_id": "act_amasi",
+                    "date": "2026-07-28",
+                    "updated_at": "2026-07-28T11:30:00+00:00",
+                    "campaign_id": "meta-campaign",
+                    "spend": 10,
+                }
+            ],
+            "snapchat_connections": [
+                {
+                    "user_id": "owner-1",
+                    "refresh_token": "snap-token-never-project",
+                    "ad_account_id": "snap-amasi",
+                    "ad_account_name": "متجر أماسي سعودي",
+                }
+            ],
+            "snapchat_account_daily": [
+                {
+                    "user_id": "owner-1",
+                    "ad_account_id": "snap-amasi",
+                    "date": "2026-07-28",
+                    "updated_at": "2026-07-28T11:30:00+00:00",
+                    "spend": 12,
+                }
+            ],
+            "tiktok_ads_daily": [
+                {
+                    "user_id": "owner-1",
+                    "date": "2026-07-06",
+                    "updated_at": "2026-07-06T00:00:00+00:00",
+                    "campaign_id": "tiktok-feed-campaign",
+                    "spend": 8,
+                }
+            ],
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "qoyod-key-never-project",
+                    "last_verified_at": "2026-07-27T20:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    by_provider = {card["provider"]: card for card in overview["providers"]}
+
+    assert by_provider["salla"]["connection_provenance"] == "api_connection"
+    assert by_provider["meta_ads"]["connection_provenance"] == "api_connection"
+    assert by_provider["snapchat_ads"]["connection_provenance"] == "legacy_integration"
+    assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
+    assert by_provider["tiktok_ads"]["connection_provenance"] == "data_feed"
+    assert by_provider["salla"]["permissions"]["missing"] == []
+    assert by_provider["meta_ads"]["permissions"] == {
+        "current": [],
+        "missing": [],
+        "unknown": True,
+    }
+    assert by_provider["snapchat_ads"]["permissions"] == {
+        "current": [],
+        "missing": [],
+        "unknown": True,
+    }
+    for provider in {
+        "google_analytics_4",
+        "google_search_console",
+        "google_merchant_center",
+        "google_ads",
+    }:
+        assert by_provider[provider]["connection_provenance"] == "disconnected"
+    assert by_provider["shipping_companies"]["connection_provenance"] == "planned"
+
+    expected_summary = {
+        "total": 10,
+        "connected": 4,
+        "api_connections": 2,
+        "legacy_integrations": 2,
+        "data_feeds": 1,
+        "disconnected": 4,
+        "planned": 1,
+        "unknown": 0,
+        "missing_permissions": 0,
+    }
+    assert {
+        key: overview["summary"][key] for key in expected_summary
+    } == expected_summary
+    assert sum(
+        overview["summary"][key]
+        for key in (
+            "api_connections",
+            "legacy_integrations",
+            "data_feeds",
+            "disconnected",
+            "planned",
+            "unknown",
+        )
+    ) == overview["summary"]["total"]
+    rendered = json.dumps(overview, ensure_ascii=False)
+    assert "meta-token-never-project" not in rendered
+    assert "snap-token-never-project" not in rendered
+    assert "qoyod-key-never-project" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_stored_or_stale_credentials_do_not_claim_verified_connection():
+    db = FakeDB(
+        {
+            "salla_integrations": [
+                {
+                    "user_id": "owner-1",
+                    "status": "connected",
+                    "store_id": "stale-store",
+                    # No encrypted access or refresh credential.
+                }
+            ],
+            "meta_connections": [
+                {
+                    "user_id": "owner-1",
+                    "access_token": "stored-but-unverified",
+                    "ad_account_id": "act_123",
+                    # Saving config alone does not set a verified status.
+                }
+            ],
+            "snapchat_connections": [
+                {
+                    "user_id": "owner-1",
+                    "access_token": "access-only-is-not-oauth-complete",
+                }
+            ],
+            "tiktok_connections": [
+                {
+                    "user_id": "owner-1",
+                    "access_token": "placeholder-token",
+                }
+            ],
+            "tiktok_ads_daily": [
+                {
+                    "user_id": "owner-1",
+                    "date": "2026-07-28",
+                    "updated_at": "2026-07-28T11:00:00+00:00",
+                    "spend": 1,
+                }
+            ],
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "rotated-key",
+                    "last_verified_at": "2026-07-20T00:00:00+00:00",
+                    "rotated_at": "2026-07-21T00:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    by_provider = {card["provider"]: card for card in overview["providers"]}
+
+    assert by_provider["salla"]["connection_status"] == "unknown"
+    assert by_provider["salla"]["connection_provenance"] == "disconnected"
+    assert by_provider["meta_ads"]["connection_status"] == "unknown"
+    assert by_provider["meta_ads"]["connection_provenance"] == "api_connection"
+    assert by_provider["meta_ads"]["permissions"] == {
+        "current": [],
+        "missing": [],
+        "unknown": True,
+    }
+    assert by_provider["snapchat_ads"]["connection_status"] == "not_connected"
+    assert by_provider["snapchat_ads"]["connection_provenance"] == "disconnected"
+    assert by_provider["tiktok_ads"]["connection_status"] == "data_available"
+    assert by_provider["tiktok_ads"]["connection_provenance"] == "data_feed"
+    assert by_provider["qoyod"]["connection_status"] == "unknown"
+    assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
 
 
 @pytest.mark.asyncio
@@ -494,12 +787,19 @@ async def test_local_connection_test_only_writes_mezan_v2_and_sanitizes_errors()
     assert len(db.rows["mezan_integration_health_v2"]) == 1
     assert len(db.rows["mezan_integration_sync_runs_v2"]) == 1
     assert len(db.rows["mezan_integration_errors_v2"]) == 1
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_provenance"] == "api_connection"
     account = db.rows["mezan_integration_accounts_v2"][0]
+    assert account["connection_provenance"] == "api_connection"
     assert account["capabilities"]["campaigns.read"]["available"] is True
     assert account["capabilities"]["ads.read"]["available"] is True
     assert account["capabilities"]["insights.read"]["available"] is True
     assert account["capabilities"]["conversions.read"]["available"] is True
     assert account["capabilities"]["budgets.update"]["available"] is False
+    health = db.rows["mezan_integration_health_v2"][0]
+    assert health["connection_provenance"] == "api_connection"
+    run = db.rows["mezan_integration_sync_runs_v2"][0]
+    assert run["summary"]["connection_provenance"] == "api_connection"
 
 
 @pytest.mark.asyncio
@@ -512,11 +812,9 @@ async def test_legacy_state_stays_live_after_a_v2_health_snapshot():
                     "status": "connected",
                     "store_id": "current-store",
                     "store_name": "Current Store",
-                    "scope": (
-                        "offline_access settings.read orders.read_write "
-                        "shipping.read_write webhooks.read_write"
-                    ),
+                    "scope": " ".join(SALLA_DEFAULT_SCOPES),
                     "expires_at": "2099-01-01T00:00:00+00:00",
+                    "refresh_token_encrypted": b"encrypted-refresh",
                 }
             ],
             "mezan_integrations_v2": [
@@ -536,6 +834,7 @@ async def test_legacy_state_stays_live_after_a_v2_health_snapshot():
                     "health_score": 70,
                     "data_quality": "delayed",
                     "connection_status": "connected",
+                    "connection_provenance": "api_connection",
                     "checked_at": "2026-07-28T09:00:00+00:00",
                 }
             ],
@@ -544,6 +843,7 @@ async def test_legacy_state_stays_live_after_a_v2_health_snapshot():
     overview = await _service(db).overview("owner-1")
     salla = next(card for card in overview["providers"] if card["provider"] == "salla")
     assert salla["connection_status"] == "connected"
+    assert salla["connection_provenance"] == "api_connection"
     assert salla["source_mode"] == "legacy_connection"
     assert salla["accounts"][0]["store_id"] == "current-store"
     assert salla["health"]["score"] == 70
@@ -626,10 +926,163 @@ async def test_v2_snapshot_is_preferred_but_cannot_grant_ad_writes():
     google = next(
         card for card in overview["providers"] if card["provider"] == "google_ads"
     )
+    assert google["connection_status"] == "data_available"
+    assert google["connection_provenance"] == "unknown"
+    assert overview["summary"]["unknown"] == 1
+    assert sum(
+        overview["summary"][key]
+        for key in (
+            "api_connections",
+            "legacy_integrations",
+            "data_feeds",
+            "disconnected",
+            "planned",
+            "unknown",
+        )
+    ) == overview["summary"]["total"]
     budget_write = google["capabilities"]["budgets.update"]
-    assert budget_write["state"] == "approval_required"
+    assert budget_write["state"] == "not_connected"
     assert budget_write["blocked_by_policy"] is True
     assert "must-not-leak" not in json.dumps(overview, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_v2_permission_observations_ignore_stale_rows():
+    db = FakeDB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "google_analytics_4",
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "source_mode": "v2_snapshot",
+                    "has_data": True,
+                    "permissions_observed": False,
+                    "permission_observation_id": "observation-new",
+                }
+            ],
+            "mezan_integration_permissions_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "google_analytics_4",
+                    "permission_key": "analytics.readonly",
+                    "permission_status": "missing",
+                    "permission_observation_id": "observation-old",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    ga4 = next(
+        card
+        for card in overview["providers"]
+        if card["provider"] == "google_analytics_4"
+    )
+    assert ga4["permissions"] == {
+        "current": [],
+        "missing": [],
+        "unknown": True,
+    }
+    assert {
+        entry["state"] for entry in ga4["capabilities"].values()
+    } == {"unknown"}
+
+    db.rows["mezan_integrations_v2"][0].update(
+        {
+            "permissions_observed": True,
+            "permission_observation_id": "observation-current",
+        }
+    )
+    db.rows["mezan_integration_permissions_v2"].append(
+        {
+            "user_id": "owner-1",
+            "provider": "google_analytics_4",
+            "permission_key": "analytics.readonly",
+            "permission_status": "current",
+            "permission_observation_id": "observation-current",
+        }
+    )
+    refreshed = await _service(db).overview("owner-1")
+    refreshed_ga4 = next(
+        card
+        for card in refreshed["providers"]
+        if card["provider"] == "google_analytics_4"
+    )
+    assert refreshed_ga4["permissions"] == {
+        "current": ["analytics.readonly"],
+        "missing": [],
+        "unknown": False,
+    }
+    assert {
+        entry["state"] for entry in refreshed_ga4["capabilities"].values()
+    } == {"available"}
+
+
+@pytest.mark.asyncio
+async def test_v2_accounts_keep_individual_state_and_fail_closed_on_bad_provenance():
+    db = FakeDB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "google_ads",
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "source_mode": "v2_snapshot",
+                    "has_data": True,
+                    "data_quality": "good",
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "google_ads",
+                    "mezan_integration_account_id": "google-account-1",
+                    "ad_account_id": "act-1",
+                    "connection_status": "needs_reauth",
+                    "connection_provenance": "api_connection",
+                    "source_mode": "v2_account",
+                },
+                {
+                    "user_id": "owner-1",
+                    "provider": "google_ads",
+                    "mezan_integration_account_id": "google-account-2",
+                    "ad_account_id": "act-2",
+                    "connection_status": "connected",
+                    "connection_provenance": "untrusted-value",
+                    "source_mode": "v2_account",
+                    "last_sync_at": "2026-07-28T11:30:00+00:00",
+                },
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    google = next(
+        card for card in overview["providers"] if card["provider"] == "google_ads"
+    )
+    accounts = {
+        account["mezan_integration_account_id"]: account
+        for account in google["accounts"]
+    }
+    assert accounts["google-account-1"]["connection_status"] == "needs_reauth"
+    assert (
+        accounts["google-account-1"]["connection_provenance"]
+        == "api_connection"
+    )
+    assert accounts["google-account-2"]["connection_status"] == "data_available"
+    assert accounts["google-account-2"]["connection_provenance"] == "unknown"
+    assert google["capabilities"]["budgets.update"]["state"] == "approval_required"
+    assert (
+        accounts["google-account-1"]["capabilities"]["budgets.update"]["state"]
+        == "not_connected"
+    )
+    assert (
+        accounts["google-account-2"]["capabilities"]["budgets.update"]["state"]
+        == "not_connected"
+    )
 
 
 @pytest.mark.asyncio

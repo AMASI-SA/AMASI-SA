@@ -8,6 +8,7 @@ import {
     XCircle,
 } from "@phosphor-icons/react";
 import ProviderMark from "./ProviderMark";
+import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATUS = {
     connected: ["متصل", "border-emerald-200 bg-emerald-50 text-emerald-700"],
@@ -19,6 +20,42 @@ const STATUS = {
     error: ["خطأ", "border-rose-200 bg-rose-50 text-rose-700"],
     planned: ["مستقبلاً", "border-violet-200 bg-violet-50 text-violet-700"],
     unknown: ["غير معروف", "border-slate-200 bg-slate-50 text-slate-600"],
+};
+
+const PROVENANCE = {
+    api_connection: [
+        CONNECTION_PROVENANCE_LABELS.api_connection,
+        "border-emerald-200 bg-emerald-50 text-emerald-700",
+    ],
+    legacy_integration: [
+        CONNECTION_PROVENANCE_LABELS.legacy_integration,
+        "border-amber-200 bg-amber-50 text-amber-800",
+    ],
+    data_feed: [
+        CONNECTION_PROVENANCE_LABELS.data_feed,
+        "border-sky-200 bg-sky-50 text-sky-700",
+    ],
+    disconnected: [
+        CONNECTION_PROVENANCE_LABELS.disconnected,
+        "border-slate-200 bg-slate-50 text-slate-600",
+    ],
+    planned: [
+        CONNECTION_PROVENANCE_LABELS.planned,
+        "border-violet-200 bg-violet-50 text-violet-700",
+    ],
+    unknown: [
+        CONNECTION_PROVENANCE_LABELS.unknown,
+        "border-slate-200 bg-slate-50 text-slate-600",
+    ],
+};
+
+const PROVENANCE_DESCRIPTION = {
+    api_connection: "اتصال مباشر محفوظ بواجهة المنصة",
+    legacy_integration: "موصل سابق قائم خارج المركز الجديد",
+    data_feed: "بيانات محلية دون اتصال إدارة API",
+    disconnected: "لا توجد أدلة ربط أو تغذية بيانات",
+    planned: "الموصل ضمن الخطة المستقبلية",
+    unknown: "لا تكفي الأدلة لتحديد نوع الاتصال",
 };
 
 const DATA_QUALITY = {
@@ -53,7 +90,15 @@ function ScoreBar({ label, score, testid }) {
     const value = known ? Math.max(0, Math.min(100, Number(score))) : 0;
     const color = value >= 80 ? "bg-emerald-500" : value >= 55 ? "bg-amber-500" : "bg-rose-500";
     return (
-        <div data-testid={testid}>
+        <div
+            data-testid={testid}
+            role="progressbar"
+            aria-label={label}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={known ? Math.round(value) : undefined}
+            aria-valuetext={known ? `${Math.round(value)}%` : "غير معروف"}
+        >
             <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-600">{label}</span>
                 <span className="font-mono font-bold text-slate-800">
@@ -70,7 +115,9 @@ function ScoreBar({ label, score, testid }) {
 function PermissionChips({ title, items, tone, emptyLabel }) {
     const palette = tone === "missing"
         ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+        : tone === "unknown"
+            ? "border-slate-200 bg-slate-50 text-slate-600"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700";
     return (
         <div>
             <div className="mb-2 text-xs font-extrabold text-slate-600">{title}</div>
@@ -120,12 +167,14 @@ function ActionButton({
     onClick,
     primary = false,
 }) {
+    const accessibleLabel = !enabled && reason ? `${label}: ${reason}` : label;
     return (
         <button
             type="button"
             onClick={onClick}
             disabled={!enabled}
             title={!enabled ? (reason || "غير متاح في المرحلة الأولى") : undefined}
+            aria-label={accessibleLabel}
             className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-extrabold transition ${
                 enabled
                     ? primary
@@ -149,11 +198,35 @@ export default function IntegrationCard({
     onSettings,
 }) {
     const [statusLabel, statusClass] = STATUS[integration.connection_status] || STATUS.unknown;
+    const [provenanceLabel, provenanceClass] = (
+        PROVENANCE[integration.connection_provenance] || PROVENANCE.unknown
+    );
     const healthScore = integration.health?.score;
     const canTest = Boolean(integration.actions?.test_connection?.enabled) && !testing;
     const canRelink = settingsAvailable && Boolean(integration.actions?.reconnect?.enabled);
     const canOpenSettings = settingsAvailable && Boolean(integration.actions?.settings?.enabled);
     const primaryAccount = integration.accounts?.[0];
+    const showOperationalStatus = ![
+        "connected",
+        "data_available",
+        "not_connected",
+        "not_configured",
+        "planned",
+    ].includes(integration.connection_status);
+    const permissionsUnknown = Boolean(integration.permissions?.unknown);
+    const noApiPermissionContext = ["data_feed", "disconnected", "planned"].includes(
+        integration.connection_provenance,
+    );
+    const currentPermissionsEmptyLabel = permissionsUnknown
+        ? "لم نتمكن من التحقق من الصلاحيات"
+        : noApiPermissionContext
+            ? "تظهر الصلاحيات بعد ربط API"
+            : "لا توجد صلاحيات مثبتة";
+    const missingPermissionsEmptyLabel = permissionsUnknown
+        ? "لا يوجد نقص مؤكد؛ التحقق غير متاح"
+        : noApiPermissionContext
+            ? "لا تُحسب قبل وجود ربط API"
+            : "لا يوجد نقص مثبت";
 
     return (
         <article
@@ -172,9 +245,16 @@ export default function IntegrationCard({
                         </div>
                     </div>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${statusClass}`}>
-                    {statusLabel}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${provenanceClass}`}>
+                        {provenanceLabel}
+                    </span>
+                    {showOperationalStatus && (
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass}`}>
+                            {statusLabel}
+                        </span>
+                    )}
+                </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
@@ -183,13 +263,19 @@ export default function IntegrationCard({
                     <div className="mt-1 truncate font-bold text-slate-800">
                         {primaryAccount?.display_name || integration.accounts?.length
                             ? primaryAccount?.display_name || `${integration.accounts.length} حساب`
-                            : "لا يوجد حساب مرتبط"}
+                            : integration.connection_provenance === "data_feed"
+                                ? "تصل بيانات دون حساب API مرتبط"
+                                : "لا يوجد حساب مرتبط"}
                     </div>
                 </div>
                 <div>
-                    <div className="text-slate-400">مصدر الربط</div>
-                    <div className="mt-1 truncate font-mono font-bold text-slate-700">
-                        {integration.source_mode || "unknown"}
+                    <div className="text-slate-400">نوع الاتصال</div>
+                    <div className="mt-1 font-bold text-slate-700">
+                        {provenanceLabel}
+                    </div>
+                    <div className="mt-0.5 text-[10px] leading-4 text-slate-400">
+                        {PROVENANCE_DESCRIPTION[integration.connection_provenance]
+                            || PROVENANCE_DESCRIPTION.unknown}
                     </div>
                 </div>
                 <div>
@@ -263,13 +349,14 @@ export default function IntegrationCard({
                 <PermissionChips
                     title="الصلاحيات الحالية"
                     items={integration.permissions?.current}
-                    emptyLabel={integration.permissions?.unknown ? "غير معروفة" : "لا توجد صلاحيات مثبتة"}
+                    tone={permissionsUnknown ? "unknown" : undefined}
+                    emptyLabel={currentPermissionsEmptyLabel}
                 />
                 <PermissionChips
                     title="الصلاحيات الناقصة"
                     items={integration.permissions?.missing}
-                    tone="missing"
-                    emptyLabel="لا يوجد نقص مثبت"
+                    tone={permissionsUnknown ? "unknown" : "missing"}
+                    emptyLabel={missingPermissionsEmptyLabel}
                 />
             </div>
 
@@ -282,7 +369,7 @@ export default function IntegrationCard({
                 <ActionButton
                     provider={integration.provider}
                     action="test"
-                    label={testing ? "جاري الاختبار…" : "اختبار"}
+                    label={testing ? "جاري الفحص…" : "فحص محلي"}
                     Icon={ArrowClockwise}
                     enabled={canTest}
                     reason={integration.actions?.test_connection?.reason}

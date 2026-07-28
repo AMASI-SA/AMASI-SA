@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import CapabilityMatrix from "./CapabilityMatrix";
 import IntegrationCard from "./IntegrationCard";
 
 test("integration card renders required status, permissions, AI limits, and safe actions", () => {
@@ -10,6 +11,7 @@ test("integration card renders required status, permissions, AI limits, and safe
                 name: "Meta Ads",
                 name_ar: "إعلانات ميتا",
                 connection_status: "connected",
+                connection_provenance: "api_connection",
                 source_mode: "legacy_connection",
                 accounts: [{
                     mezan_integration_account_id: "account-1",
@@ -45,6 +47,7 @@ test("integration card renders required status, permissions, AI limits, and safe
     );
 
     expect(markup).toContain("إعلانات ميتا");
+    expect(markup).toContain("ربط API مباشر");
     expect(markup).toContain("AMASI Ads");
     expect(markup).toContain("ads_read");
     expect(markup).toContain("read_insights");
@@ -56,4 +59,68 @@ test("integration card renders required status, permissions, AI limits, and safe
     )?.[0];
     expect(disconnectButton).toContain("disabled");
     expect(markup).not.toContain(sentinel);
+    expect(markup).not.toContain("legacy_connection");
+});
+
+test("data feed is never rendered as an API connection or a confirmed permission gap", () => {
+    const markup = renderToStaticMarkup(
+        <IntegrationCard
+            integration={{
+                provider: "tiktok_ads",
+                name: "TikTok Ads",
+                name_ar: "إعلانات تيك توك",
+                connection_status: "data_available",
+                connection_provenance: "data_feed",
+                source_mode: "data_feed",
+                accounts: [],
+                permissions: { current: [], missing: [], unknown: false },
+                health: { score: 22, data_quality: "stale" },
+                ai: { can: ["قراءة البيانات المحلية"], cannot: ["إدارة الحملات"] },
+                actions: {
+                    test_connection: { enabled: true },
+                    reconnect: { enabled: false, reason: "لا يوجد موصل API" },
+                    settings: { enabled: false },
+                    disconnect: { enabled: false },
+                },
+            }}
+            onTest={() => {}}
+            onSettings={() => {}}
+        />,
+    );
+
+    expect(markup).toContain("تغذية بيانات فقط");
+    expect(markup).toContain("تصل بيانات دون حساب API مرتبط");
+    expect(markup).toContain("لا تُحسب قبل وجود ربط API");
+    expect(markup).toContain("فحص محلي");
+    expect(markup).not.toContain("ربط API مباشر");
+    expect(markup).not.toContain(">متصل<");
+    expect(markup).not.toContain("data_feed");
+});
+
+test("capability matrix distinguishes local reads from unavailable mutations", () => {
+    const markup = renderToStaticMarkup(
+        <CapabilityMatrix
+            providers={[{
+                provider: "tiktok_ads",
+                name: "TikTok Ads",
+                name_ar: "إعلانات تيك توك",
+                connection_provenance: "data_feed",
+                capabilities: {
+                    "insights.read": {
+                        state: "available",
+                        reason: "local rows",
+                    },
+                    "campaigns.create": {
+                        state: "not_connected",
+                        reason: "management connection required",
+                    },
+                },
+            }]}
+        />,
+    );
+
+    expect(markup).toContain("تغذية بيانات فقط");
+    expect(markup).toContain("قراءة محلية متاحة");
+    expect(markup).toContain("غير متصل");
+    expect(markup).not.toContain("يحتاج اعتماد");
 });

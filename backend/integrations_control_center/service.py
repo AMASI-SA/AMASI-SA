@@ -26,12 +26,15 @@ V2_PROJECTIONS: dict[str, dict[str, int]] = {
         "user_id": 1,
         "provider": 1,
         "connection_status": 1,
+        "connection_provenance": 1,
         "source_mode": 1,
         "last_sync_at": 1,
         "data_delay_minutes": 1,
         "data_quality": 1,
         "has_data": 1,
         "capability_evidence": 1,
+        "permissions_observed": 1,
+        "permission_observation_id": 1,
         "checked_at": 1,
         "created_at": 1,
         "updated_at": 1,
@@ -48,8 +51,12 @@ V2_PROJECTIONS: dict[str, dict[str, int]] = {
         "currency": 1,
         "timezone": 1,
         "connection_status": 1,
+        "connection_provenance": 1,
         "permissions": 1,
+        "permissions_observed": 1,
         "capabilities": 1,
+        "capability_evidence": 1,
+        "has_data": 1,
         "last_sync_at": 1,
         "data_delay_minutes": 1,
         "health_score": 1,
@@ -62,6 +69,7 @@ V2_PROJECTIONS: dict[str, dict[str, int]] = {
         "provider": 1,
         "permission_key": 1,
         "permission_status": 1,
+        "permission_observation_id": 1,
         "source_mode": 1,
         "observed_at": 1,
     },
@@ -73,6 +81,7 @@ V2_PROJECTIONS: dict[str, dict[str, int]] = {
         "health_score": 1,
         "data_quality": 1,
         "connection_status": 1,
+        "connection_provenance": 1,
         "data_delay_minutes": 1,
         "checked_at": 1,
         "source_mode": 1,
@@ -180,6 +189,63 @@ def _normalise_connection_status(value: Any) -> str:
         "unknown",
     }
     return normalised if normalised in allowed else "unknown"
+
+
+def _normalise_connection_provenance(
+    value: Any,
+    *,
+    connection_status: str,
+    source_mode: str,
+    has_data: bool,
+) -> str:
+    raw = str(value or "").strip().lower()
+    allowed = {
+        "api_connection",
+        "legacy_integration",
+        "data_feed",
+        "disconnected",
+        "planned",
+        "unknown",
+    }
+    if raw in allowed:
+        return raw
+    if connection_status == "planned":
+        return "planned"
+    if connection_status in {"not_connected", "not_configured"}:
+        return "disconnected"
+    if connection_status == "data_available" or source_mode in {
+        "data_feed",
+        "legacy_data",
+    }:
+        return "data_feed"
+    # Never promote a legacy/v2 row to a real API connection merely because
+    # its operational status string says "connected".
+    return "unknown"
+
+
+def _enforce_connection_invariants(snapshot: dict) -> dict:
+    safe = dict(snapshot)
+    status = _normalise_connection_status(safe.get("connection_status"))
+    has_data = bool(safe.get("has_data"))
+    provenance = _normalise_connection_provenance(
+        safe.get("connection_provenance"),
+        connection_status=status,
+        source_mode=str(safe.get("source_mode") or ""),
+        has_data=has_data,
+    )
+    if provenance == "planned":
+        status = "planned"
+    elif provenance in {"data_feed", "disconnected", "unknown"} and status == "connected":
+        status = (
+            "data_available"
+            if has_data
+            else "not_connected"
+            if provenance == "disconnected"
+            else "unknown"
+        )
+    safe["connection_status"] = status
+    safe["connection_provenance"] = provenance
+    return safe
 
 
 def _health_for(snapshot: dict, *, checked_at: str | None = None) -> dict:
@@ -308,10 +374,69 @@ def _ai_actions(
 def _decorate_account(
     account: dict,
     *,
+    definition: ProviderDefinition,
     snapshot: dict,
-    capabilities: dict[str, dict],
     health: dict,
 ) -> dict:
+    account_count = len(snapshot.get("accounts") or [])
+    if "has_data" in account:
+        account_has_data = bool(account.get("has_data"))
+    else:
+        account_has_data = bool(
+            account.get("last_sync_at")
+            or account.get("data_delay_minutes") is not None
+            or (account_count <= 1 and snapshot.get("has_data"))
+        )
+    account_status = (
+        _normalise_connection_status(account.get("connection_status"))
+        if account.get("connection_status") is not None
+        else snapshot["connection_status"]
+    )
+    account_provenance = (
+        _normalise_connection_provenance(
+            account.get("connection_provenance"),
+            connection_status=account_status,
+            source_mode=str(
+                account.get("source_mode") or snapshot.get("source_mode") or ""
+            ),
+            has_data=account_has_data,
+        )
+        if account.get("connection_provenance") is not None
+        else snapshot["connection_provenance"]
+    )
+    account_state = _enforce_connection_invariants(
+        {
+            "connection_status": account_status,
+            "connection_provenance": account_provenance,
+            "source_mode": account.get("source_mode")
+            or snapshot.get("source_mode")
+            or "unknown",
+            "has_data": account_has_data,
+        }
+    )
+    if "permissions" in account:
+        account_permissions = list(account.get("permissions") or [])
+    else:
+        account_permissions = list(snapshot.get("current_permissions") or [])
+    account_permissions_observed = (
+        bool(account.get("permissions_observed"))
+        if "permissions_observed" in account
+        else bool(snapshot.get("permissions_observed"))
+    )
+    if "capability_evidence" in account:
+        account_evidence = list(account.get("capability_evidence") or [])
+    elif account_count <= 1:
+        account_evidence = list(snapshot.get("capability_evidence") or [])
+    else:
+        account_evidence = []
+    account_capabilities = build_capability_matrix(
+        definition,
+        connection_status=account_state["connection_status"],
+        has_data=account_has_data,
+        current_permissions=account_permissions,
+        permissions_observed=account_permissions_observed,
+        evidence_capabilities=account_evidence,
+    )
     return {
         "mezan_integration_account_id": str(
             account.get("mezan_integration_account_id") or ""
@@ -323,13 +448,9 @@ def _decorate_account(
         "display_name": account.get("display_name"),
         "currency": account.get("currency"),
         "timezone": account.get("timezone"),
-        "connection_status": _normalise_connection_status(
-            account.get("connection_status") or snapshot.get("connection_status")
-        ),
-        "capabilities": capabilities,
-        "permissions": list(
-            account.get("permissions") or snapshot.get("current_permissions") or []
-        ),
+        "connection_status": account_state["connection_status"],
+        "capabilities": account_capabilities,
+        "permissions": account_permissions,
         "last_sync_at": account.get("last_sync_at") or snapshot.get("last_sync_at"),
         "data_delay_minutes": (
             account.get("data_delay_minutes")
@@ -344,6 +465,7 @@ def _decorate_account(
         "source_mode": str(
             account.get("source_mode") or snapshot.get("source_mode") or "unknown"
         ),
+        "connection_provenance": account_state["connection_provenance"],
     }
 
 
@@ -354,11 +476,8 @@ def _card_from_snapshot(
     checked_at: str | None = None,
     health_override: dict | None = None,
 ) -> dict:
-    snapshot = dict(snapshot)
+    snapshot = _enforce_connection_invariants(snapshot)
     snapshot["provider"] = definition.provider
-    snapshot["connection_status"] = _normalise_connection_status(
-        snapshot.get("connection_status")
-    )
     current = sorted(set(snapshot.get("current_permissions") or []))
     missing = sorted(set(snapshot.get("missing_permissions") or []))
     capabilities = build_capability_matrix(
@@ -366,13 +485,23 @@ def _card_from_snapshot(
         connection_status=snapshot["connection_status"],
         has_data=bool(snapshot.get("has_data")),
         current_permissions=current,
+        permissions_observed=bool(snapshot.get("permissions_observed")),
         evidence_capabilities=snapshot.get("capability_evidence") or [],
     )
     if health_override:
         observed_status = _normalise_connection_status(
             health_override.get("connection_status")
         )
-        if observed_status != snapshot["connection_status"]:
+        observed_provenance = _normalise_connection_provenance(
+            health_override.get("connection_provenance"),
+            connection_status=observed_status,
+            source_mode=str(health_override.get("source_mode") or ""),
+            has_data=bool(snapshot.get("has_data")),
+        )
+        if (
+            observed_status != snapshot["connection_status"]
+            or observed_provenance != snapshot["connection_provenance"]
+        ):
             health_override = None
     health = health_override or _health_for(snapshot, checked_at=checked_at)
     # Stored health is evidence only; recalculate status fields that could
@@ -393,8 +522,8 @@ def _card_from_snapshot(
     accounts = [
         _decorate_account(
             account,
+            definition=definition,
             snapshot=snapshot,
-            capabilities=capabilities,
             health=health,
         )
         for account in snapshot.get("accounts") or []
@@ -407,14 +536,16 @@ def _card_from_snapshot(
             "name_ar": definition.name_ar,
             "category": definition.category,
             "connection_status": snapshot["connection_status"],
+            "connection_provenance": snapshot["connection_provenance"],
             "source_mode": snapshot.get("source_mode") or "unknown",
             "accounts": accounts,
             "permissions": {
                 "current": current,
                 "missing": missing,
                 "unknown": bool(
-                    snapshot["connection_status"] == "connected"
-                    and not current
+                    snapshot["connection_provenance"]
+                    in {"api_connection", "legacy_integration"}
+                    and not snapshot.get("permissions_observed")
                     and bool(definition.required_permissions)
                 ),
             },
@@ -451,6 +582,15 @@ class IntegrationsControlCenterService:
         )
         if not integration:
             return None
+        permission_query: dict[str, Any] = {
+            "user_id": user_id,
+            "provider": definition.provider,
+        }
+        permission_observation_id = integration.get("permission_observation_id")
+        if permission_observation_id:
+            permission_query["permission_observation_id"] = (
+                permission_observation_id
+            )
         accounts, permissions, health, latest_error = await asyncio.gather(
             _find_many_v2(
                 self.db,
@@ -462,7 +602,7 @@ class IntegrationsControlCenterService:
             _find_many_v2(
                 self.db,
                 "mezan_integration_permissions_v2",
-                {"user_id": user_id, "provider": definition.provider},
+                permission_query,
                 sort=[("permission_key", 1)],
                 limit=100,
             ),
@@ -479,16 +619,31 @@ class IntegrationsControlCenterService:
                 sort=[("occurred_at", -1)],
             ),
         )
+        permissions_observed = (
+            bool(integration.get("permissions_observed"))
+            if "permissions_observed" in integration
+            else bool(permissions)
+        )
         current = [
             row["permission_key"]
             for row in permissions
-            if row.get("permission_status") == "current" and row.get("permission_key")
+            if permissions_observed
+            and row.get("permission_status") == "current"
+            and row.get("permission_key")
         ]
-        missing = [
-            row["permission_key"]
-            for row in permissions
-            if row.get("permission_status") == "missing" and row.get("permission_key")
-        ]
+        missing = (
+            sorted(
+                {
+                    row["permission_key"]
+                    for row in permissions
+                    if row.get("permission_status") == "missing"
+                    and row.get("permission_key")
+                }
+                | (set(definition.required_permissions) - set(current))
+            )
+            if permissions_observed
+            else []
+        )
         last_sync_at = integration.get("last_sync_at")
         delay = integration.get("data_delay_minutes")
         if delay is None:
@@ -496,6 +651,7 @@ class IntegrationsControlCenterService:
         snapshot = {
             "provider": definition.provider,
             "connection_status": integration.get("connection_status"),
+            "connection_provenance": integration.get("connection_provenance"),
             "source_mode": integration.get("source_mode") or "v2_snapshot",
             "accounts": accounts,
             "current_permissions": current,
@@ -508,6 +664,7 @@ class IntegrationsControlCenterService:
             "capability_evidence": list(
                 integration.get("capability_evidence") or []
             ),
+            "permissions_observed": permissions_observed,
         }
         return sanitize_for_output(snapshot), health
 
@@ -553,9 +710,24 @@ class IntegrationsControlCenterService:
             )
             for definition, (snapshot, stored_health) in zip(PROVIDERS, snapshots)
         ]
-        connected = sum(
-            card["connection_status"] in {"connected", "data_available"}
-            for card in cards
+        connected = sum(card["connection_status"] == "connected" for card in cards)
+        api_connections = sum(
+            card["connection_provenance"] == "api_connection" for card in cards
+        )
+        legacy_integrations = sum(
+            card["connection_provenance"] == "legacy_integration" for card in cards
+        )
+        data_feeds = sum(
+            card["connection_provenance"] == "data_feed" for card in cards
+        )
+        disconnected = sum(
+            card["connection_provenance"] == "disconnected" for card in cards
+        )
+        planned = sum(
+            card["connection_provenance"] == "planned" for card in cards
+        )
+        unknown = sum(
+            card["connection_provenance"] == "unknown" for card in cards
         )
         healthy = sum(card["health"]["status"] == "healthy" for card in cards)
         missing_permissions = sum(
@@ -572,6 +744,12 @@ class IntegrationsControlCenterService:
                 "summary": {
                     "total": len(cards),
                     "connected": connected,
+                    "api_connections": api_connections,
+                    "legacy_integrations": legacy_integrations,
+                    "data_feeds": data_feeds,
+                    "disconnected": disconnected,
+                    "planned": planned,
+                    "unknown": unknown,
                     "healthy": healthy,
                     "missing_permissions": missing_permissions,
                     "attention_required": attention_required,
@@ -591,6 +769,7 @@ class IntegrationsControlCenterService:
                     "name": card["name"],
                     "name_ar": card["name_ar"],
                     "connection_status": card["connection_status"],
+                    "connection_provenance": card["connection_provenance"],
                     "source_mode": card["source_mode"],
                     "capabilities": card["capabilities"],
                 }
@@ -662,9 +841,8 @@ class IntegrationsControlCenterService:
         definition = PROVIDER_BY_ID[provider]
         started_at = _iso(self._now())
         run_id = str(uuid.uuid4())
-        snapshot = await read_provider_snapshot(self.db, user_id, definition)
-        snapshot["connection_status"] = _normalise_connection_status(
-            snapshot.get("connection_status")
+        snapshot = _enforce_connection_invariants(
+            await read_provider_snapshot(self.db, user_id, definition)
         )
         snapshot["data_delay_minutes"] = data_delay_minutes(
             snapshot.get("last_sync_at"),
@@ -674,7 +852,10 @@ class IntegrationsControlCenterService:
 
         if snapshot["connection_status"] == "connected":
             run_status = "passed"
-            message = "Local connection evidence is present."
+            message = (
+                "Local configuration evidence is present. "
+                "No provider network request was made."
+            )
         elif snapshot["connection_status"] == "data_available":
             run_status = "data_only"
             message = "Local data exists, but no native management connection is proven."
@@ -723,6 +904,7 @@ class IntegrationsControlCenterService:
             "user_id": user_id,
             "provider": definition.provider,
             "connection_status": safe_snapshot["connection_status"],
+            "connection_provenance": safe_snapshot["connection_provenance"],
             "source_mode": safe_snapshot.get("source_mode") or "unknown",
             "last_sync_at": safe_snapshot.get("last_sync_at"),
             "data_delay_minutes": safe_snapshot.get("data_delay_minutes"),
@@ -731,6 +913,10 @@ class IntegrationsControlCenterService:
             "capability_evidence": list(
                 safe_snapshot.get("capability_evidence") or []
             ),
+            "permissions_observed": bool(
+                safe_snapshot.get("permissions_observed")
+            ),
+            "permission_observation_id": run_id,
             "checked_at": started_at,
             "updated_at": now_iso,
         }
@@ -743,33 +929,55 @@ class IntegrationsControlCenterService:
             upsert=True,
         )
 
-        capabilities = build_capability_matrix(
-            definition,
-            connection_status=safe_snapshot["connection_status"],
-            has_data=bool(safe_snapshot.get("has_data")),
-            current_permissions=safe_snapshot.get("current_permissions") or [],
-            evidence_capabilities=safe_snapshot.get("capability_evidence") or [],
-        )
         for account in safe_snapshot.get("accounts") or []:
+            decorated_account = _decorate_account(
+                account,
+                definition=definition,
+                snapshot=safe_snapshot,
+                health=health,
+            )
             account_doc = {
                 "user_id": user_id,
                 "provider": definition.provider,
-                "mezan_integration_account_id": account[
+                "mezan_integration_account_id": decorated_account[
                     "mezan_integration_account_id"
                 ],
-                "external_account_id": account.get("external_account_id"),
-                "store_id": account.get("store_id"),
-                "ad_account_id": account.get("ad_account_id"),
-                "display_name": account.get("display_name"),
-                "currency": account.get("currency"),
-                "timezone": account.get("timezone"),
-                "connection_status": safe_snapshot["connection_status"],
-                "permissions": safe_snapshot.get("current_permissions") or [],
-                "capabilities": capabilities,
-                "last_sync_at": safe_snapshot.get("last_sync_at"),
-                "data_delay_minutes": safe_snapshot.get("data_delay_minutes"),
-                "health_score": health.get("score"),
-                "source_mode": safe_snapshot.get("source_mode") or "unknown",
+                "external_account_id": decorated_account.get("external_account_id"),
+                "store_id": decorated_account.get("store_id"),
+                "ad_account_id": decorated_account.get("ad_account_id"),
+                "display_name": decorated_account.get("display_name"),
+                "currency": decorated_account.get("currency"),
+                "timezone": decorated_account.get("timezone"),
+                "connection_status": decorated_account["connection_status"],
+                "connection_provenance": decorated_account[
+                    "connection_provenance"
+                ],
+                "permissions": decorated_account.get("permissions") or [],
+                "permissions_observed": bool(
+                    account.get("permissions_observed")
+                    if "permissions_observed" in account
+                    else safe_snapshot.get("permissions_observed")
+                ),
+                "capabilities": decorated_account["capabilities"],
+                "capability_evidence": list(
+                    account.get("capability_evidence") or []
+                ),
+                "has_data": bool(
+                    account.get("has_data")
+                    if "has_data" in account
+                    else (
+                        account.get("last_sync_at")
+                        or account.get("data_delay_minutes") is not None
+                        or (
+                            len(safe_snapshot.get("accounts") or []) <= 1
+                            and safe_snapshot.get("has_data")
+                        )
+                    )
+                ),
+                "last_sync_at": decorated_account.get("last_sync_at"),
+                "data_delay_minutes": decorated_account.get("data_delay_minutes"),
+                "health_score": decorated_account.get("health_score"),
+                "source_mode": decorated_account.get("source_mode") or "unknown",
                 "last_observed_at": now_iso,
             }
             await _collection(
@@ -797,6 +1005,7 @@ class IntegrationsControlCenterService:
                 "permission_status": (
                     "current" if permission_key in current else "missing"
                 ),
+                "permission_observation_id": run_id,
                 "source_mode": safe_snapshot.get("source_mode") or "unknown",
                 "observed_at": now_iso,
             }
@@ -820,6 +1029,7 @@ class IntegrationsControlCenterService:
                 "health_score": health["score"],
                 "data_quality": health["data_quality"],
                 "connection_status": safe_snapshot["connection_status"],
+                "connection_provenance": safe_snapshot["connection_provenance"],
                 "data_delay_minutes": safe_snapshot.get("data_delay_minutes"),
                 "checked_at": started_at,
                 "source_mode": safe_snapshot.get("source_mode") or "unknown",
@@ -861,6 +1071,9 @@ class IntegrationsControlCenterService:
                 "summary": {
                     "message": message,
                     "connection_status": safe_snapshot["connection_status"],
+                    "connection_provenance": safe_snapshot[
+                        "connection_provenance"
+                    ],
                     "health_status": health["status"],
                     "health_score": health["score"],
                     "data_quality": health["data_quality"],

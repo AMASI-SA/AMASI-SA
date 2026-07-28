@@ -97,6 +97,22 @@ class ConnectionStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ConnectionProvenance(str, Enum):
+    """How Mezan receives or manages the provider integration.
+
+    This is deliberately orthogonal to ``connection_status``.  A legacy
+    connector may be operational, while a data feed may contain fresh rows
+    without proving any provider-management connection.
+    """
+
+    API_CONNECTION = "api_connection"
+    LEGACY_INTEGRATION = "legacy_integration"
+    DATA_FEED = "data_feed"
+    DISCONNECTED = "disconnected"
+    PLANNED = "planned"
+    UNKNOWN = "unknown"
+
+
 class CapabilityState(str, Enum):
     AVAILABLE = "available"
     APPROVAL_REQUIRED = "approval_required"
@@ -165,6 +181,7 @@ class IntegrationAccount(SecretSafeModel):
     data_delay_minutes: int | None = Field(default=None, ge=0)
     health_score: int | None = Field(default=None, ge=0, le=100)
     source_mode: str
+    connection_provenance: ConnectionProvenance
 
 
 class HealthSummary(SecretSafeModel):
@@ -186,6 +203,7 @@ class ProviderCard(SecretSafeModel):
     name_ar: str
     category: str
     connection_status: ConnectionStatus
+    connection_provenance: ConnectionProvenance
     source_mode: str
     accounts: list[IntegrationAccount] = Field(default_factory=list)
     permissions: PermissionSummary
@@ -200,7 +218,15 @@ class ProviderCard(SecretSafeModel):
 
 class OverviewSummary(SecretSafeModel):
     total: int
+    # Backward-compatible operational count. Unlike the original
+    # implementation, data feeds are never included.
     connected: int
+    api_connections: int
+    legacy_integrations: int
+    data_feeds: int
+    disconnected: int
+    planned: int
+    unknown: int
     healthy: int
     missing_permissions: int
     attention_required: int
