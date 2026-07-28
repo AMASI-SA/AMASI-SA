@@ -7,6 +7,14 @@ on:
     paths:
       - "scripts/patch_orders_v2_central_refresh_v2.py"
       - ".github/workflows/orders-v2-central-refresh-bootstrap.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/order_engine/salla_refresh.py"
+      - "backend/tests/test_order_engine_salla_refresh.py"
+      - "scripts/patch_orders_v2_central_refresh_v2.py"
+      - ".github/workflows/orders-v2-central-refresh-bootstrap.yml"
 
 permissions:
   contents: write
@@ -22,7 +30,14 @@ jobs:
           show-progress: false
 
       - name: Apply central Orders V2 refresh wiring
-        run: python scripts/patch_orders_v2_central_refresh_v2.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'data-testid="order-v2-refresh-from-salla"' frontend/src/pages/OrderDetailsV2.jsx; then
+            echo "Central refresh wiring already applied."
+            exit 0
+          fi
+          python scripts/patch_orders_v2_central_refresh_v2.py
 
       - name: Validate source contracts
         shell: bash
@@ -48,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           if git diff --quiet; then
-            echo "Central refresh wiring already applied."
+            echo "Central refresh wiring already committed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -61,5 +76,5 @@ jobs:
             frontend/src/services/orderEngine.js \
             frontend/src/pages/OrderDetailsV2.jsx \
             .github/workflows/fulfillment-v2.yml
-          git commit -m "feat(orders-v2): centralize Salla order refresh"
+          git commit -m "feat(orders-v2): centralize Salla order refresh [central-refresh-bootstrap]"
           git push origin HEAD:fix/orders-v2-address-root-fallback
