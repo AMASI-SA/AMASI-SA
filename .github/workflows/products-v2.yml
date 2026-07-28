@@ -27,6 +27,7 @@ on:
       - "backend/product_media_ai_execution_support.py"
       - "backend/product_media_ai_gpt2_compat_routes.py"
       - "backend/ai_store_operations_foundation.py"
+      - "backend/product_intelligence_foundation.py"
       - "backend/ai_store_access_control.py"
       - "backend/component_edit_routes.py"
       - "backend/component_edit_policy.py"
@@ -47,6 +48,7 @@ on:
       - "backend/tests/test_product_control_center_policy.py"
       - "backend/tests/test_product_option_shared_cost_engine.py"
       - "backend/tests/test_ai_store_operations_foundation.py"
+      - "backend/tests/test_product_intelligence_foundation.py"
       - "backend/tests/test_ai_store_access_control.py"
       - "backend/tests/test_component_edit_policy.py"
       - "backend/tests/test_order_option_cost_snapshots.py"
@@ -111,6 +113,7 @@ jobs:
             tests/test_product_control_center_policy.py \
             tests/test_product_option_shared_cost_engine.py \
             tests/test_ai_store_operations_foundation.py \
+            tests/test_product_intelligence_foundation.py \
             tests/test_ai_store_access_control.py \
             tests/test_component_edit_policy.py \
             tests/test_order_option_cost_snapshots.py \
