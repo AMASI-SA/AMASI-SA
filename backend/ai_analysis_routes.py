@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
+from ai_provider_status import openai_runtime_status
+
 MAX_LIST_ITEMS = 30
 MAX_TEXT_LENGTH = 500
 DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 20.0
@@ -95,7 +97,16 @@ def make_ai_analysis_router(current_user: Callable, client_factory: Callable[[],
     @router.get("/status")
     async def ai_status(user: dict = Depends(current_user)) -> dict[str, Any]:
         del user
-        return {"ok": True, "configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "mode": "read_only_analysis", "model": os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini"), "writes_enabled": False}
+        status = openai_runtime_status()
+        return {
+            "ok": True,
+            **status,
+            # Backward-compatible fields consumed by older clients/tests.
+            "configured": status["connected"],
+            "mode": "read_only_analysis",
+            "model": status["analysis"]["model"],
+            "writes_enabled": False,
+        }
     @router.post("/analyze")
     async def analyze(body: AIAnalysisIn, user: dict = Depends(current_user)) -> dict[str, Any]:
         del user
