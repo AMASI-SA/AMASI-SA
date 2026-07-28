@@ -6,6 +6,7 @@ import {
     Package,
     Plug,
     Receipt,
+    Robot,
     Storefront,
     Truck,
 } from "@phosphor-icons/react";
@@ -15,6 +16,11 @@ const PROVIDERS = {
         Icon: Storefront,
         className: "bg-emerald-600 text-white",
         label: "Salla",
+    },
+    openai: {
+        Icon: Robot,
+        className: "bg-slate-950 text-white",
+        label: "OpenAI · Mezan AI",
     },
     snapchat_ads: {
         Icon: Ghost,
