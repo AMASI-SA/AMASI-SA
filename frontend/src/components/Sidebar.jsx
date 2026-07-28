@@ -207,6 +207,12 @@ const SECTIONS = [
                 icon: Plug,
                 testid: "nav-mezan-os-integrations",
             },
+            {
+                to: "/ads-manager",
+                label: "مدير الإعلانات",
+                icon: ChartLineUp,
+                testid: "nav-mezan-os-ads-manager",
+            },
         ],
     },
     {

@@ -4000,6 +4000,10 @@ from integrations_control_center import (
 )
 api.include_router(make_integrations_control_center_router(db, current_user))
 
+# ── Unified Ads Manager Phase 1 (owner-only, local reads only) ──────
+from ads_manager import make_ads_manager_router
+api.include_router(make_ads_manager_router(db, current_user))
+
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
 # expose only the merchant-facing config surface so a real API key can
