@@ -349,8 +349,8 @@ export default function OrderReview() {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [search, setSearch] = useState("");
 
-    const load = useCallback(async ({ cursor = null, append = false } = {}) => {
-        setLoading(true);
+    const load = useCallback(async ({ cursor = null, append = false, background = false } = {}) => {
+        if (!background) setLoading(true);
         setError("");
         try {
             const result = await listPendingOrderReviews({ limit: 50, cursor });
@@ -364,11 +364,27 @@ export default function OrderReview() {
         } catch (loadError) {
             setError(loadError.message);
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        const refresh = () => {
+            if (document.hidden || !navigator.onLine) return;
+            load({ background: true });
+        };
+        const intervalId = window.setInterval(refresh, 10_000);
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", refresh);
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", refresh);
+        };
+    }, [load]);
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
