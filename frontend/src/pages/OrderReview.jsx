@@ -110,8 +110,8 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
     const specs = uniqueProductSpecs(item);
     const gallery = Array.from(new Set((item.gallery || []).filter(Boolean)));
     return (
-        <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="grid gap-4 p-4 sm:grid-cols-[150px_minmax(0,1fr)]">
+        <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[128px_minmax(0,1fr)]">
                 <div>
                     <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
                         {item.selected_image_url ? (
@@ -122,7 +122,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                     </div>
                 </div>
                 <div className="min-w-0">
-                    <h3 className="text-lg font-extrabold text-slate-900">{item.name}</h3>
+                    <h3 className="break-words text-base font-extrabold leading-7 text-slate-900 sm:text-lg">{item.name}</h3>
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
                         <span>SKU: <b dir="ltr">{item.sku || "—"}</b></span>
                         <span>الكمية: <b>{item.quantity}</b></span>
@@ -138,7 +138,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                                         key={`${url}-${index}`}
                                         disabled={busy || selected}
                                         onClick={() => save({ selected_image_url: url }, "تم حفظ الصورة لهذه الخيارات وستُستخدم تلقائيًا لاحقًا.")}
-                                        className={`h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 ${selected ? "border-teal-500 ring-2 ring-teal-100" : "border-slate-200 hover:border-violet-400"}`}
+                                        className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 sm:h-20 sm:w-20 ${selected ? "border-teal-500 ring-2 ring-teal-100" : "border-slate-200 hover:border-violet-400"}`}
                                         aria-label={`اختيار صورة التجهيز رقم ${index + 1}`}
                                     >
                                         <img src={url} alt="" className="h-full w-full object-cover" />
@@ -153,11 +153,11 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
             <div className="border-t border-slate-100 px-4 py-3">
                 <div className="mb-2 text-sm font-extrabold text-slate-700">مواصفات المنتج</div>
                 {specs.length > 0 ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div data-testid="order-review-product-specs" className="grid gap-2">
                         {specs.map((spec) => (
-                            <div key={spec.key} className="flex min-w-0 items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 text-sm">
+                            <div key={spec.key} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-xl bg-violet-50 px-3 py-2 text-sm">
                                 <span className="shrink-0 font-bold text-violet-700">{spec.name}:</span>
-                                <span className="min-w-0 break-words font-extrabold text-slate-900">{spec.value}</span>
+                                <span className="min-w-0 whitespace-pre-wrap break-words font-extrabold leading-6 text-slate-900">{spec.value}</span>
                             </div>
                         ))}
                     </div>
@@ -267,7 +267,7 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     return (
         <div className="fixed inset-0 z-[80] flex bg-slate-950/45" dir="rtl">
             <button type="button" className="hidden flex-1 md:block" onClick={onClose} aria-label="إغلاق" />
-            <section className="h-full w-full overflow-y-auto bg-slate-50 shadow-2xl md:max-w-5xl">
+            <section className="h-full w-full overflow-y-auto bg-slate-50 shadow-2xl md:max-w-7xl">
                 <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white/95 px-5 py-4 backdrop-blur">
                     <div>
                         <h2 className="text-xl font-extrabold">مراجعة الطلب #{orderNumber}</h2>
@@ -320,7 +320,7 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
                         <section>
                             <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-extrabold">منتجات الطلب</h3><span className="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-800">{detail.items.length} منتج</span></div>
-                            <div className="grid gap-4 xl:grid-cols-3">
+                            <div data-testid="order-review-products-grid" className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                                 {detail.items.map((item) => (
                                     <ProductReviewCard key={item.order_item_id} item={item} workflowRevision={detail.revision} orderNumber={orderNumber} onChanged={setDetail} />
                                 ))}

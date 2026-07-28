@@ -95,3 +95,17 @@ def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
     assert "الصفحة {pageNumber}" in source
     assert "تحميل طلبات إضافية" not in source
     assert "append: true" not in source
+
+
+
+def test_order_review_product_cards_keep_titles_and_specs_readable():
+    source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
+
+    assert 'data-testid="order-review-product-card"' in source
+    assert 'grid-cols-[96px_minmax(0,1fr)]' in source
+    assert 'sm:grid-cols-[128px_minmax(0,1fr)]' in source
+    assert 'data-testid="order-review-product-specs" className="grid gap-2"' in source
+    assert 'data-testid="order-review-products-grid" className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3"' in source
+    assert 'md:max-w-7xl' in source
+    assert 'sm:grid-cols-[150px_minmax(0,1fr)]' not in source
+    assert 'grid gap-4 xl:grid-cols-3' not in source
