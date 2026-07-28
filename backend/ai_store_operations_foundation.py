@@ -9,8 +9,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from product_intelligence_foundation import (
+    action_candidates,
+    product_intelligence_foundation,
+    product_intelligence_readiness,
+)
 from product_v2_routes import PRODUCTS
 from product_v2_details_routes import COST_PROFILES
 
@@ -149,6 +154,62 @@ def make_ai_store_operations_router(db: Any, current_user: Callable) -> APIRoute
                 "drafts": PRODUCT_MEDIA_DRAFTS,
             },
             "safety_flow": ["proposal", "preview", "approval", "execute", "verify", "audit", "rollback"],
+        }
+
+    @router.get("/product-intelligence/foundation")
+    async def product_intelligence_rules(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return product_intelligence_foundation()
+
+    @router.get("/product-intelligence/products/{product_id}")
+    async def product_intelligence_product(
+        product_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        user_id = str(user["id"])
+        product = await db[PRODUCTS].find_one(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"id": product_id},
+                    {"mezan_product_id": product_id},
+                    {"salla_product_id": product_id},
+                ],
+            },
+            {"_id": 0, "raw_salla": 0, "raw_salla_details": 0},
+        )
+        if not product:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "product_v2_not_found"},
+            )
+        salla_id = str(product.get("salla_product_id") or "")
+        cost_profile = await db[COST_PROFILES].find_one(
+            {"user_id": user_id, "salla_product_id": salla_id},
+            {"_id": 0},
+        )
+        # Connector states remain explicitly absent until their V2 adapters
+        # provide verified local snapshots.  This endpoint never calls them.
+        readiness = product_intelligence_readiness(
+            product,
+            cost_profile,
+            source_states={},
+        )
+        return {
+            "ok": True,
+            "mode": "rules_only",
+            "legacy_dependency": False,
+            "external_calls_made": False,
+            "writes_made": False,
+            "product": {
+                "mezan_product_id": product.get("mezan_product_id") or product.get("id"),
+                "salla_product_id": product.get("salla_product_id"),
+                "name": product.get("name"),
+                "sku": product.get("sku"),
+            },
+            "readiness": readiness,
+            "action_candidates": action_candidates(readiness),
         }
 
     @router.get("/product-intake")
