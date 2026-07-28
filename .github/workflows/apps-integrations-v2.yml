@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - "backend/integrations_control_center/**"
+      - "backend/snapchat_routes.py"
       - "backend/ai_provider_status.py"
       - "backend/ai_analysis_routes.py"
       - "backend/openai_integration_status_support.py"
       - "backend/tests/test_mezan_integrations_v2.py"
+      - "backend/tests/test_snapchat_conversion_quality.py"
       - "backend/tests/test_openai_integration_status_support.py"
       - "backend/server.py"
       - "frontend/src/pages/AppsIntegrationsControlCenter.jsx"
@@ -99,25 +101,304 @@ jobs:
         run: >-
           python -m pip install -q
           fastapi==0.110.1
+          httpx==0.28.1
           pydantic==2.13.4
           pytest==9.0.3
           pytest-asyncio
           openpyxl==3.1.5
       - name: Compile Apps Integrations V2 backend
         run: |
-          python -m compileall -q integrations_control_center tests/test_mezan_integrations_v2.py
-          python -m py_compile ai_provider_status.py ai_analysis_routes.py openai_integration_status_support.py server.py
+          python -m compileall -q \
+            integrations_control_center \
+            tests/test_mezan_integrations_v2.py \
+            tests/test_snapchat_conversion_quality.py
+          python -m py_compile \
+            ai_provider_status.py \
+            ai_analysis_routes.py \
+            openai_integration_status_support.py \
+            snapchat_routes.py \
+            server.py
       - name: Run Apps Integrations V2 backend tests
         run: >-
           python -m pytest
           tests/test_mezan_integrations_v2.py
+          tests/test_snapchat_conversion_quality.py
           tests/test_openai_integration_status_support.py
           -q
           --tb=short
 
+  v2-ownership-guard:
+    name: V2 ownership and legacy-exit guard
+    needs: protected-path-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject V2 calls or links to the legacy Snapchat operation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          errors = []
+          v2_frontend_paths = [
+              Path("frontend/src/pages/AppsIntegrationsControlCenter.jsx"),
+              Path("frontend/src/components/integrationsV2/IntegrationCard.jsx"),
+              Path("frontend/src/services/integrationsV2.js"),
+          ]
+          for path in v2_frontend_paths:
+              source = path.read_text(encoding="utf-8")
+              for forbidden in (
+                  "/snapchat-accounts",
+                  "/snapchat/sync-all-accounts",
+              ):
+                  if forbidden in source:
+                      errors.append(f"{path}: legacy dependency {forbidden}")
+
+          backend_service = Path(
+              "backend/integrations_control_center/service.py"
+          ).read_text(encoding="utf-8")
+          if "/snapchat-accounts" in backend_service:
+              errors.append(
+                  "V2 backend still exposes the legacy Snapchat page"
+              )
+
+          sidebar = Path(
+              "frontend/src/components/Sidebar.jsx"
+          ).read_text(encoding="utf-8")
+          if "/snapchat-accounts" in sidebar:
+              errors.append(
+                  "legacy Snapchat page remains in primary navigation"
+              )
+
+          app = Path("frontend/src/App.js").read_text(encoding="utf-8")
+          expected_redirect = (
+              '<Navigate to="/integrations-v2?provider=snapchat_ads" '
+              'replace />'
+          )
+          if app.count(expected_redirect) != 1:
+              errors.append(
+                  "legacy Snapchat browser route must redirect once to V2"
+              )
+
+          legacy_adapter = Path(
+              "backend/snapchat_routes.py"
+          ).read_text(encoding="utf-8")
+          if '@router.post("/sync-all-accounts", deprecated=True)' not in legacy_adapter:
+              errors.append(
+                  "legacy API must remain an explicitly deprecated adapter"
+              )
+          if (
+              "IntegrationsControlCenterService(" not in legacy_adapter
+              or ".sync_snapchat_analytics(" not in legacy_adapter
+          ):
+              errors.append(
+                  "legacy API must delegate through the audited V2 service"
+              )
+          if "SnapchatAnalyticsBackfill(db).run" in legacy_adapter:
+              errors.append(
+                  "legacy API may not bypass the audited V2 service"
+              )
+
+          if errors:
+              raise SystemExit("\n".join(errors))
+          print("V2 ownership and legacy-exit guard passed.")
+          PY
+      - name: Constrain Snapchat refresh writes to analytical and V2 audit collections
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          write_methods = {
+              "insert_one",
+              "insert_many",
+              "update_one",
+              "update_many",
+              "replace_one",
+              "delete_one",
+              "delete_many",
+              "bulk_write",
+          }
+          engine_allowed = {
+              "snapchat_connections",
+              "snapchat_ad_accounts",
+              "snapchat_account_daily",
+              "snapchat_daily_stats",
+          }
+          audit_allowed = {
+              "mezan_integrations_v2",
+              "mezan_integration_accounts_v2",
+              "mezan_integration_sync_runs_v2",
+              "mezan_integration_errors_v2",
+              "mezan_integration_health_v2",
+          }
+          service_methods = {
+              "sync_snapchat_analytics",
+              "_insert_snapchat_sync_error",
+              "_record_snapchat_sync_failure",
+          }
+          errors = []
+
+          def dotted_name(node):
+              parts = []
+              while isinstance(node, ast.Attribute):
+                  parts.append(node.attr)
+                  node = node.value
+              if isinstance(node, ast.Name):
+                  parts.append(node.id)
+              return ".".join(reversed(parts))
+
+          engine_path = Path(
+              "backend/integrations_control_center/"
+              "snapchat_analytics_backfill.py"
+          )
+          engine_tree = ast.parse(
+              engine_path.read_text(encoding="utf-8"),
+              filename=str(engine_path),
+          )
+          engine_writes = set()
+          for node in ast.walk(engine_tree):
+              if not isinstance(node, ast.Call):
+                  continue
+              call_name = dotted_name(node.func)
+              method = call_name.rsplit(".", 1)[-1]
+              if method in write_methods:
+                  prefix = "self.db."
+                  if not call_name.startswith(prefix):
+                      errors.append(
+                          f"{engine_path}:{node.lineno}: "
+                          f"unresolved write receiver {call_name}"
+                      )
+                      continue
+                  collection = call_name[len(prefix):].split(".", 1)[0]
+                  engine_writes.add(collection)
+                  if collection not in engine_allowed:
+                      errors.append(
+                          f"{engine_path}:{node.lineno}: "
+                          f"forbidden write collection {collection}"
+                      )
+              if (
+                  call_name in {"getattr", "object.__getattribute__"}
+                  and len(node.args) >= (
+                      2 if call_name == "getattr" else 1
+                  )
+              ):
+                  method_arg = (
+                      node.args[1]
+                      if call_name == "getattr"
+                      else node.args[0]
+                  )
+                  try:
+                      dynamic_method = ast.literal_eval(method_arg)
+                  except Exception:
+                      dynamic_method = None
+                  if dynamic_method in write_methods:
+                      errors.append(
+                          f"{engine_path}:{node.lineno}: "
+                          "dynamic write lookup is forbidden"
+                      )
+          if engine_writes != engine_allowed:
+              errors.append(
+                  "engine write contract changed: "
+                  f"{sorted(engine_writes)}"
+              )
+
+          service_path = Path(
+              "backend/integrations_control_center/service.py"
+          )
+          service_tree = ast.parse(
+              service_path.read_text(encoding="utf-8"),
+              filename=str(service_path),
+          )
+          selected = [
+              node
+              for node in ast.walk(service_tree)
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and node.name in service_methods
+          ]
+          if {node.name for node in selected} != service_methods:
+              errors.append("Snapchat V2 audit methods are missing")
+          audit_collections = set()
+          for function in selected:
+              for node in ast.walk(function):
+                  if not isinstance(node, ast.Call):
+                      continue
+                  call_name = dotted_name(node.func)
+                  if call_name == "_collection":
+                      if len(node.args) < 2:
+                          errors.append(
+                              f"{service_path}:{node.lineno}: "
+                              "_collection name must be explicit"
+                          )
+                          continue
+                      try:
+                          collection = ast.literal_eval(node.args[1])
+                      except Exception:
+                          errors.append(
+                              f"{service_path}:{node.lineno}: "
+                              "dynamic collection name is forbidden"
+                          )
+                          continue
+                      audit_collections.add(collection)
+                      if collection not in audit_allowed:
+                          errors.append(
+                              f"{service_path}:{node.lineno}: "
+                              f"forbidden V2 write collection {collection}"
+                          )
+                  method = call_name.rsplit(".", 1)[-1]
+                  if method in write_methods:
+                      receiver_node = (
+                          node.func.value
+                          if isinstance(node.func, ast.Attribute)
+                          else None
+                      )
+                      receiver_is_run = (
+                          isinstance(receiver_node, ast.Name)
+                          and receiver_node.id == "run_collection"
+                      )
+                      receiver_is_collection_call = (
+                          isinstance(receiver_node, ast.Call)
+                          and dotted_name(receiver_node.func) == "_collection"
+                      )
+                      if not (
+                          receiver_is_run or receiver_is_collection_call
+                      ):
+                          errors.append(
+                              f"{service_path}:{node.lineno}: "
+                              f"unresolved audit write receiver {call_name}"
+                          )
+          if not audit_collections.issubset(audit_allowed):
+              errors.append(
+                  "V2 audit write contract changed: "
+                  f"{sorted(audit_collections)}"
+              )
+
+          unsafe = ast.parse(
+              "async def bad(self):\n"
+              "    await self.db.daily_costs.update_one({}, {})\n"
+          )
+          unsafe_call = next(
+              node
+              for node in ast.walk(unsafe)
+              if isinstance(node, ast.Call)
+          )
+          unsafe_collection = dotted_name(
+              unsafe_call.func
+          )[len("self.db."):].split(".", 1)[0]
+          if unsafe_collection in engine_allowed:
+              errors.append("write guard self-test failed")
+
+          if errors:
+              raise SystemExit("\n".join(errors))
+          print("Snapchat analytics-only write guard passed.")
+          PY
+
   frontend-tests:
     name: Frontend test and build
-    needs: protected-path-guard
+    needs:
+      - protected-path-guard
+      - v2-ownership-guard
     runs-on: ubuntu-latest
     defaults:
       run:

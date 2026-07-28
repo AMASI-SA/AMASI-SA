@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,6 +60,24 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
     await db.mezan_integration_sync_runs_v2.create_index(
         [("user_id", 1), ("provider", 1), ("started_at", -1)],
         name="mezan_integration_sync_runs_v2_provider_latest",
+    )
+    await db.mezan_integration_sync_runs_v2.create_index(
+        [("user_id", 1), ("provider", 1), ("status", 1)],
+        unique=True,
+        partialFilterExpression={
+            "run_type": "analytics_refresh",
+            "status": "running",
+        },
+        name="mezan_integration_sync_runs_v2_one_running",
+    )
+    await db.mezan_integration_sync_runs_v2.create_index(
+        [
+            ("user_id", 1),
+            ("provider", 1),
+            ("idempotency_key", 1),
+            ("finished_at", -1),
+        ],
+        name="mezan_integration_sync_runs_v2_idempotency",
     )
     await db.mezan_integration_errors_v2.create_index(
         [("user_id", 1), ("error_id", 1)],
@@ -257,3 +275,18 @@ class ConnectionTestResponse(SecretSafeModel):
     status: str
     health: HealthSummary
     message: str
+
+
+class SnapchatAnalyticsSyncResponse(SecretSafeModel):
+    run_id: str
+    provider: Literal["snapchat_ads"]
+    status: Literal["complete", "partial", "failed"]
+    date_from: str | None = None
+    date_to: str | None = None
+    accounts_attempted: int = Field(ge=0)
+    accounts_complete: int = Field(ge=0)
+    rows_saved: int = Field(ge=0)
+    errors_count: int = Field(ge=0)
+    source_only: Literal[True]
+    accounting_write_reached: Literal[False]
+    qoyod_write_reached: Literal[False]

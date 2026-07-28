@@ -28,6 +28,9 @@ if "auth" not in sys.modules:
     sys.modules["auth"] = auth_import_stub
 
 from ad_account_routes import _fetch_daily_spend
+from integrations_control_center.snapchat_analytics_backfill import (
+    _parse_snap_spend_payload as _parse_v2_snap_spend_payload,
+)
 from snapchat_routes import (
     _aggregate_snap_conversion_rows,
     _build_router,
@@ -105,6 +108,27 @@ def test_spend_parser_accepts_explicit_zero_but_rejects_partial_payload():
     assert partial["spend_micro"] is None
     assert partial["spend_data_status"] == "unavailable"
     assert partial["spend_data_error"] == "invalid_spend_metric"
+
+
+def test_spend_parser_rejects_unconsumed_pagination():
+    payload = {
+        "timeseries_stats": [{
+            "timeseries_stat": {
+                "timeseries": [{
+                    "stats": {"spend": 5_000_000},
+                }],
+            },
+        }],
+        "paging": {"next_link": "https://adsapi.snapchat.com/v1/next"},
+    }
+    expected = {
+        "spend_micro": None,
+        "spend_data_status": "unavailable",
+        "spend_data_error": "spend_pagination_incomplete",
+    }
+
+    assert _parse_snap_spend_payload(payload) == expected
+    assert _parse_v2_snap_spend_payload(payload) == expected
 
 
 def test_explicit_provider_zero_is_available_not_unknown():
@@ -561,6 +585,11 @@ class _RouteDB:
         self.snapchat_daily_stats = _Collection()
         self.daily_costs = _Collection()
         self.ads_currency_settings = _Collection()
+        self.mezan_integrations_v2 = _Collection()
+        self.mezan_integration_accounts_v2 = _Collection()
+        self.mezan_integration_sync_runs_v2 = _Collection()
+        self.mezan_integration_errors_v2 = _Collection()
+        self.mezan_integration_health_v2 = _Collection()
 
     def __getitem__(self, name):
         return getattr(self, name)
@@ -973,7 +1002,7 @@ def test_multi_account_route_wires_failed_conversions_as_unknown(
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["accounts_synced"] == 1
@@ -987,6 +1016,39 @@ def test_multi_account_route_wires_failed_conversions_as_unknown(
     assert ledger_calls == []
     assert db.daily_costs.docs == []
     _assert_unknown_route_rows(db, analytics_only=True)
+
+
+def test_deprecated_multi_account_adapter_is_owner_only_before_v2_work(
+    monkeypatch,
+):
+    class _NetworkMustNotStart:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("employee reached Snapchat provider network")
+
+    db = _RouteDB()
+    _install_route_stubs(monkeypatch)
+    monkeypatch.setattr(
+        snapchat_routes.httpx,
+        "AsyncClient",
+        _NetworkMustNotStart,
+    )
+    route = _route(_build_router(db), "/snapchat/sync-all-accounts")
+    payload_type = route.dependant.body_params[0].type_
+
+    try:
+        asyncio.run(route.endpoint(
+            payload_type(days=1),
+            user={"id": "employee-1", "role": "admin"},
+        ))
+    except Exception as exc:  # FastAPI HTTPException, kept dependency-light
+        assert getattr(exc, "status_code", None) == 403
+        assert exc.detail["code"] == "owner_only"
+    else:  # pragma: no cover - explicit security assertion
+        raise AssertionError("deprecated adapter accepted a non-owner")
+
+    assert db.mezan_integration_sync_runs_v2.docs == []
+    assert db.mezan_integration_errors_v2.docs == []
+    assert db.mezan_integration_health_v2.docs == []
 
 
 def test_multi_account_route_fetches_campaign_breakdown_conversions(
@@ -1006,7 +1068,7 @@ def test_multi_account_route_fetches_campaign_breakdown_conversions(
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["accounts_synced"] == 1
@@ -1039,7 +1101,7 @@ def test_multi_account_route_does_not_turn_empty_spend_into_zero(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["items"][0]["rows_saved"] == 0
@@ -1065,7 +1127,7 @@ def test_multi_account_route_persists_explicit_provider_zero(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["sync_status"] == "complete"
@@ -1098,7 +1160,7 @@ def test_malformed_and_failed_status_spend_payloads_fail_per_date(
                 from_date="2026-07-28",
                 to_date="2026-07-28",
             ),
-            user={"id": "user-1"},
+            user={"id": "user-1", "role": "owner"},
         ))
 
         assert result["sync_status"] == "partial"
@@ -1140,7 +1202,7 @@ def test_missing_second_account_is_visible_in_daily_quality(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["accounts_synced"] == 2
@@ -1183,7 +1245,7 @@ def test_failed_refresh_does_not_bless_stale_row_as_fresh(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     assert result["sync_status"] == "partial"
@@ -1223,7 +1285,7 @@ def test_transient_conversion_failure_preserves_provider_proven_values(
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     row = db.snapchat_account_daily.docs[0]
@@ -1274,7 +1336,7 @@ def test_transient_failure_preserves_each_known_partial_metric(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     row = db.snapchat_account_daily.docs[0]
@@ -1313,7 +1375,7 @@ def test_backfill_refreshes_snapshot_after_foreground_accounting_update(
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     row = db.snapchat_account_daily.docs[0]
@@ -1376,7 +1438,7 @@ def test_concurrent_foreground_refresh_wins_over_analytics_backfill(
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     row = db.snapchat_account_daily.docs[0]
@@ -1413,7 +1475,7 @@ def test_complementary_partial_refresh_completes_existing_metric(monkeypatch):
             from_date="2026-07-28",
             to_date="2026-07-28",
         ),
-        user={"id": "user-1"},
+        user={"id": "user-1", "role": "owner"},
     ))
 
     row = db.snapchat_account_daily.docs[0]

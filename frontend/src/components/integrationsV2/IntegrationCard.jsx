@@ -193,8 +193,10 @@ function ActionButton({
 export default function IntegrationCard({
     integration,
     testing = false,
+    syncing = false,
     settingsAvailable = false,
     onTest,
+    onSync,
     onSettings,
 }) {
     const [statusLabel, statusClass] = STATUS[integration.connection_status] || STATUS.unknown;
@@ -203,6 +205,10 @@ export default function IntegrationCard({
     );
     const healthScore = integration.health?.score;
     const canTest = Boolean(integration.actions?.test_connection?.enabled) && !testing;
+    const showSync = integration.provider === "snapchat_ads";
+    const canSync = showSync
+        && Boolean(integration.actions?.sync_data?.enabled)
+        && !syncing;
     const canRelink = settingsAvailable && Boolean(integration.actions?.reconnect?.enabled);
     const canOpenSettings = settingsAvailable && Boolean(integration.actions?.settings?.enabled);
     const primaryAccount = integration.accounts?.[0];
@@ -365,7 +371,9 @@ export default function IntegrationCard({
                 <AiList title="ما لا يستطيع فعله الآن" items={integration.ai?.cannot} />
             </div>
 
-            <div className="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 lg:grid-cols-4">
+            <div className={`mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 ${
+                showSync ? "lg:grid-cols-5" : "lg:grid-cols-4"
+            }`}>
                 <ActionButton
                     provider={integration.provider}
                     action="test"
@@ -376,6 +384,17 @@ export default function IntegrationCard({
                     onClick={() => onTest(integration.provider)}
                     primary
                 />
+                {showSync && (
+                    <ActionButton
+                        provider={integration.provider}
+                        action="sync"
+                        label={syncing ? "جاري المزامنة…" : "مزامنة 30 يوم"}
+                        Icon={ArrowClockwise}
+                        enabled={canSync}
+                        reason={integration.actions?.sync_data?.reason}
+                        onClick={() => onSync?.(integration.provider)}
+                    />
+                )}
                 <ActionButton
                     provider={integration.provider}
                     action="reconnect"

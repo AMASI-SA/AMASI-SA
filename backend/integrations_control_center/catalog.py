@@ -403,11 +403,25 @@ def build_capability_matrix(
 
 SAFETY_POLICY: Final[dict] = {
     "phase": 1,
-    "read_only": True,
+    # Kept for older clients, but now truthfully describes the whole control
+    # center: the bounded Snapchat analytics refresh persists facts and logs.
+    "read_only": False,
+    "provider_mutations_enabled": False,
+    "campaign_mutations_enabled": False,
+    "accounting_mutations_enabled": False,
     "advertising_mutations_enabled": False,
     "mutation_lifecycle": list(MUTATION_LIFECYCLE),
     "policy": (
-        "Provider mutations are blocked. This control centre may inspect local "
-        "evidence and persist only sanitized mezan_*_v2 snapshots."
+        "Provider, campaign, account, and accounting mutations are blocked. "
+        "The control center may refresh bounded provider analytics and persist "
+        "only approved analytical facts, sync metadata, and sanitized V2 logs."
     ),
 }
+
+
+def build_safety_policy(*, analytics_refresh_enabled: bool) -> dict:
+    """Return the request-time policy; runtime kill switches stay truthful."""
+    return {
+        **SAFETY_POLICY,
+        "analytics_refresh_enabled": bool(analytics_refresh_enabled),
+    }

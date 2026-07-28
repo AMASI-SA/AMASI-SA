@@ -6,8 +6,18 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from .catalog import PROVIDER_BY_ID, provider_or_none
-from .models import ActivityListResponse, CapabilityResponse, ConnectionTestResponse, OverviewResponse
+from .models import (
+    ActivityListResponse,
+    CapabilityResponse,
+    ConnectionTestResponse,
+    OverviewResponse,
+    SnapchatAnalyticsSyncResponse,
+)
 from .service import IntegrationsControlCenterService
+from .snapchat_analytics_backfill import (
+    SnapchatAnalyticsSyncError,
+    SnapchatAnalyticsSyncInput,
+)
 
 
 def _is_owner(user: Any) -> bool:
@@ -60,6 +70,57 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
     async def errors(provider: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
         owner = _require_owner(user)
         return await service.list_errors(str(owner["id"]), provider=_validated_provider(provider), limit=limit)
+
+    @router.post(
+        "/snapchat_ads/sync",
+        response_model=SnapchatAnalyticsSyncResponse,
+    )
+    async def sync_snapchat_ads(
+        payload: SnapchatAnalyticsSyncInput,
+        user: dict = Depends(current_user),
+    ) -> dict:
+        owner = _require_owner(user)
+        try:
+            return await service.sync_snapchat_analytics(
+                str(owner["id"]),
+                payload,
+            )
+        except SnapchatAnalyticsSyncError as exc:
+            failure_result = exc.result or {}
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "run_id": getattr(exc, "run_id", None),
+                    "provider": "snapchat_ads",
+                    "status": "failed",
+                    "date_from": (
+                        failure_result.get("date_from")
+                        or payload.from_date
+                    ),
+                    "date_to": (
+                        failure_result.get("date_to")
+                        or payload.to_date
+                    ),
+                    "accounts_attempted": int(
+                        failure_result.get("accounts_synced") or 0
+                    ),
+                    "accounts_complete": int(
+                        failure_result.get("accounts_complete") or 0
+                    ),
+                    "rows_saved": int(
+                        failure_result.get("rows_saved") or 0
+                    ),
+                    "errors_count": int(
+                        failure_result.get("errors_count") or 1
+                    ),
+                    "source_only": True,
+                    "accounting_write_reached": False,
+                    "qoyod_write_reached": False,
+                    "code": exc.code,
+                    "message": exc.message,
+                    "retryable": exc.retryable,
+                },
+            ) from exc
 
     @router.post("/{provider}/test-connection", response_model=ConnectionTestResponse)
     async def test_connection(provider: str, user: dict = Depends(current_user)) -> dict:

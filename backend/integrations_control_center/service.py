@@ -2,23 +2,49 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from .catalog import (
     PROVIDERS,
     PROVIDER_BY_ID,
-    SAFETY_POLICY,
     ProviderDefinition,
     build_capability_matrix,
+    build_safety_policy,
 )
 from .legacy_readers import (
     data_delay_minutes,
     read_provider_snapshot,
     sanitize_for_output,
 )
+from .snapchat_analytics_backfill import (
+    SnapchatAnalyticsBackfill,
+    SnapchatAnalyticsSyncError,
+    SnapchatAnalyticsSyncInput,
+    enumerate_sync_dates,
+    snapchat_analytics_sync_enabled,
+)
 
+logger = logging.getLogger(__name__)
+SNAPCHAT_SYNC_LOCK_TTL = timedelta(hours=4)
+SNAPCHAT_IDEMPOTENCY_WINDOW = timedelta(minutes=5)
+SNAPCHAT_RESPONSE_KEYS = (
+    "run_id",
+    "provider",
+    "status",
+    "date_from",
+    "date_to",
+    "accounts_attempted",
+    "accounts_complete",
+    "rows_saved",
+    "errors_count",
+    "source_only",
+    "accounting_write_reached",
+    "qoyod_write_reached",
+)
 
 V2_PROJECTIONS: dict[str, dict[str, int]] = {
     "mezan_integrations_v2": {
@@ -300,15 +326,20 @@ def _health_for(snapshot: dict, *, checked_at: str | None = None) -> dict:
 
 _SAFE_SETTINGS_DEEP_LINKS = {
     "salla": "/settings/salla",
-    "snapchat_ads": "/snapchat-accounts",
     "meta_ads": "/settings",
     "qoyod": "/integrations/qoyod/settings",
 }
 
 
-def _actions(definition: ProviderDefinition) -> dict:
+def _actions(definition: ProviderDefinition, snapshot: dict) -> dict:
     can_inspect = bool(definition.legacy_sources) and not definition.planned
     settings_href = _SAFE_SETTINGS_DEEP_LINKS.get(definition.provider)
+    snapchat_sync_enabled = bool(
+        definition.provider == "snapchat_ads"
+        and snapshot.get("connection_status") == "connected"
+        and snapshot.get("accounts")
+        and snapchat_analytics_sync_enabled()
+    )
     return {
         "test_connection": {
             "enabled": can_inspect,
@@ -340,6 +371,24 @@ def _actions(definition: ProviderDefinition) -> dict:
         "disconnect": {
             "enabled": False,
             "reason": "Disconnect is a destructive credential action and is blocked here.",
+            "href": None,
+        },
+        "sync_data": {
+            "enabled": snapchat_sync_enabled,
+            "reason": (
+                None
+                if snapchat_sync_enabled
+                else (
+                    "Snapchat analytics refresh is disabled by the runtime safety switch."
+                    if (
+                        definition.provider == "snapchat_ads"
+                        and not snapchat_analytics_sync_enabled()
+                    )
+                    else "Connect Snapchat and select at least one ad account first."
+                    if definition.provider == "snapchat_ads"
+                    else "A V2-owned analytics refresh is not available for this provider yet."
+                )
+            ),
             "href": None,
         },
     }
@@ -555,7 +604,7 @@ def _card_from_snapshot(
             "health": health,
             "latest_error": snapshot.get("latest_error"),
             "ai": _ai_actions(definition, snapshot, capabilities),
-            "actions": _actions(definition),
+            "actions": _actions(definition, snapshot),
         }
     )
 
@@ -755,7 +804,11 @@ class IntegrationsControlCenterService:
                     "attention_required": attention_required,
                 },
                 "providers": cards,
-                "safety_policy": SAFETY_POLICY,
+                "safety_policy": build_safety_policy(
+                    analytics_refresh_enabled=(
+                        snapchat_analytics_sync_enabled()
+                    )
+                ),
             }
         )
 
@@ -885,6 +938,543 @@ class IntegrationsControlCenterService:
                 "message": message,
             }
         )
+
+    async def sync_snapchat_analytics(
+        self,
+        user_id: str,
+        payload: SnapchatAnalyticsSyncInput,
+        *,
+        include_legacy_details: bool = False,
+    ) -> dict:
+        """Run the V2-owned Snapchat analytics refresh and audit the result."""
+        provider = "snapchat_ads"
+        runtime_sync_enabled = snapchat_analytics_sync_enabled()
+        started_at = _iso(self._now())
+        source_mode = "v2_owned_analytics"
+        run_collection = _collection(
+            self.db,
+            "mezan_integration_sync_runs_v2",
+        )
+        running = await run_collection.find_one(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "run_type": "analytics_refresh",
+                "status": "running",
+            },
+            {
+                "_id": 0,
+                "run_id": 1,
+                "lock_expires_at": 1,
+            },
+        )
+        if running:
+            try:
+                lock_expires_at = datetime.fromisoformat(
+                    str(running.get("lock_expires_at") or "")
+                )
+            except (TypeError, ValueError):
+                lock_expires_at = self._now() + SNAPCHAT_SYNC_LOCK_TTL
+            if lock_expires_at > self._now():
+                conflict = SnapchatAnalyticsSyncError(
+                    "snapchat_analytics_sync_in_progress",
+                    "A Snapchat analytics refresh is already running.",
+                    status_code=409,
+                    retryable=True,
+                )
+                conflict.run_id = running.get("run_id")
+                raise conflict
+            await run_collection.update_one(
+                {
+                    "user_id": user_id,
+                    "run_id": running.get("run_id"),
+                    "status": "running",
+                },
+                {
+                    "$set": {
+                        "status": "failed",
+                        "finished_at": started_at,
+                        "error": {
+                            "code": "stale_sync_lock_recovered",
+                        },
+                    }
+                },
+            )
+
+        try:
+            from zoneinfo import ZoneInfo
+
+            business_today = self._now().astimezone(
+                ZoneInfo("Asia/Riyadh")
+            ).date()
+        except ImportError:  # pragma: no cover
+            business_today = (
+                self._now() + timedelta(hours=3)
+            ).date()
+        requested_dates = enumerate_sync_dates(
+            payload,
+            today=business_today,
+        )
+        fingerprint_source = (
+            f"{user_id}:{provider}:{requested_dates[0].isoformat()}:"
+            f"{requested_dates[-1].isoformat()}:"
+            f"{payload.idempotency_key or ''}"
+        )
+        idempotency_key = hashlib.sha256(
+            fingerprint_source.encode("utf-8")
+        ).hexdigest()
+        replay_cutoff = _iso(self._now() - SNAPCHAT_IDEMPOTENCY_WINDOW)
+        prior = (
+            await run_collection.find_one(
+                {
+                    "user_id": user_id,
+                    "provider": provider,
+                    "run_type": "analytics_refresh",
+                    "idempotency_key": idempotency_key,
+                    "status": {"$in": ["complete", "partial"]},
+                    "finished_at": {"$gte": replay_cutoff},
+                },
+                {"_id": 0, "summary": 1},
+                sort=[("finished_at", -1)],
+            )
+            if runtime_sync_enabled
+            else None
+        )
+        if prior and isinstance(prior.get("summary"), dict):
+            replay = {
+                key: prior["summary"].get(key)
+                for key in SNAPCHAT_RESPONSE_KEYS
+            }
+            if replay.get("status") in {"complete", "partial"}:
+                return sanitize_for_output(replay)
+
+        run_id = str(uuid.uuid4())
+        lock_expires_at = _iso(self._now() + SNAPCHAT_SYNC_LOCK_TTL)
+        try:
+            await run_collection.insert_one(
+                {
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "provider": provider,
+                    "run_type": "analytics_refresh",
+                    "status": "running",
+                    "started_at": started_at,
+                    "finished_at": None,
+                    "lock_expires_at": lock_expires_at,
+                    "idempotency_key": idempotency_key,
+                    "source_mode": source_mode,
+                    "summary": {
+                        "requested_days": payload.days,
+                        "requested_from": payload.from_date,
+                        "requested_to": payload.to_date,
+                    },
+                    "error": None,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            if (
+                getattr(exc, "code", None) == 11000
+                or type(exc).__name__ == "DuplicateKeyError"
+            ):
+                conflict = SnapchatAnalyticsSyncError(
+                    "snapchat_analytics_sync_in_progress",
+                    "A Snapchat analytics refresh is already running.",
+                    status_code=409,
+                    retryable=True,
+                )
+                raise conflict from exc
+            raise
+        try:
+            engine_result = await SnapchatAnalyticsBackfill(
+                self.db,
+                now=self._now,
+            ).run(user_id, payload)
+        except SnapchatAnalyticsSyncError as exc:
+            await self._record_snapchat_sync_failure(
+                user_id=user_id,
+                run_id=run_id,
+                started_at=started_at,
+                source_mode=source_mode,
+                error=exc,
+            )
+            exc.run_id = run_id
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "Unexpected Snapchat V2 analytics refresh failure run_id=%s",
+                run_id,
+            )
+            safe_error = SnapchatAnalyticsSyncError(
+                "snapchat_analytics_sync_failed",
+                "Snapchat analytics refresh failed.",
+                status_code=502,
+                retryable=True,
+            )
+            await self._record_snapchat_sync_failure(
+                user_id=user_id,
+                run_id=run_id,
+                started_at=started_at,
+                source_mode=source_mode,
+                error=safe_error,
+            )
+            safe_error.run_id = run_id
+            raise safe_error from exc
+
+        finished_at = _iso(self._now())
+        status_value = (
+            "complete"
+            if engine_result.get("sync_status") == "complete"
+            else "partial"
+        )
+        errors_count = int(
+            engine_result.get("errors_count")
+            if engine_result.get("errors_count") is not None
+            else len(engine_result.get("errors") or [])
+        )
+        response = sanitize_for_output(
+            {
+                "run_id": run_id,
+                "provider": provider,
+                "status": status_value,
+                "date_from": engine_result.get("date_from"),
+                "date_to": engine_result.get("date_to"),
+                "accounts_attempted": int(
+                    engine_result.get("accounts_synced") or 0
+                ),
+                "accounts_complete": int(
+                    engine_result.get("accounts_complete") or 0
+                ),
+                "rows_saved": int(engine_result.get("rows_saved") or 0),
+                "errors_count": errors_count,
+                "source_only": True,
+                "accounting_write_reached": False,
+                "qoyod_write_reached": False,
+            }
+        )
+        summary = {
+            **response,
+            "business_timezone": engine_result.get("business_timezone"),
+            "errors_truncated": bool(
+                engine_result.get("errors_truncated")
+            ),
+        }
+        partial_error = None
+        if status_value == "partial":
+            needs_reauth = bool(engine_result.get("needs_reauth"))
+            partial_code = (
+                "snapchat_analytics_needs_reauth"
+                if needs_reauth
+                else "snapchat_analytics_partial"
+            )
+            partial_error = await self._insert_snapchat_sync_error(
+                user_id=user_id,
+                run_id=run_id,
+                code=partial_code,
+                message=(
+                    "Snapchat authorization must be renewed."
+                    if needs_reauth
+                    else (
+                        "Snapchat analytics refresh completed with "
+                        f"{errors_count} bounded errors."
+                    )
+                ),
+                occurred_at=finished_at,
+                retryable=not needs_reauth,
+                source_mode=source_mode,
+            )
+        await run_collection.update_one(
+            {"user_id": user_id, "run_id": run_id},
+            {
+                "$set": {
+                    "status": status_value,
+                    "finished_at": finished_at,
+                    "summary": summary,
+                    "error": (
+                        {
+                            "error_id": partial_error,
+                            "code": partial_code,
+                        }
+                        if partial_error
+                        else None
+                    ),
+                }
+            },
+        )
+        health_status = "healthy" if status_value == "complete" else "degraded"
+        health_score = 100 if status_value == "complete" else 65
+        data_quality = "complete" if status_value == "complete" else "partial"
+        needs_reauth = bool(engine_result.get("needs_reauth"))
+        observed_connection_status = (
+            "needs_reauth" if needs_reauth else "connected"
+        )
+        await _collection(
+            self.db,
+            "mezan_integration_health_v2",
+        ).insert_one(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "health_status": health_status,
+                "health_score": health_score,
+                "data_quality": data_quality,
+                "connection_status": observed_connection_status,
+                "connection_provenance": "legacy_integration",
+                "data_delay_minutes": (
+                    0 if status_value == "complete" else None
+                ),
+                "checked_at": finished_at,
+                "source_mode": source_mode,
+                "run_id": run_id,
+            }
+        )
+        integration_patch = {
+            "user_id": user_id,
+            "provider": provider,
+            "connection_status": observed_connection_status,
+            "connection_provenance": "legacy_integration",
+            "source_mode": source_mode,
+            "data_quality": data_quality,
+            "checked_at": finished_at,
+            "updated_at": finished_at,
+        }
+        if int(engine_result.get("rows_saved") or 0) > 0:
+            integration_patch["has_data"] = True
+        if (
+            status_value == "complete"
+            and int(engine_result.get("rows_saved") or 0) > 0
+        ):
+            integration_patch["last_sync_at"] = finished_at
+            integration_patch["data_delay_minutes"] = 0
+        await _collection(self.db, "mezan_integrations_v2").update_one(
+            {"user_id": user_id, "provider": provider},
+            {
+                "$set": integration_patch,
+                "$setOnInsert": {"created_at": started_at},
+            },
+            upsert=True,
+        )
+        for item in engine_result.get("items") or []:
+            account_id = str(item.get("ad_account_id") or "")
+            if not account_id:
+                continue
+            account_complete = (
+                int(item.get("rows_saved") or 0)
+                == int(engine_result.get("days_requested") or 0)
+                and int(item.get("errors") or 0) == 0
+            )
+            account_doc = {
+                "user_id": user_id,
+                "provider": provider,
+                "mezan_integration_account_id": str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        "mezan-integration:"
+                        f"{user_id}:{provider}:{account_id}",
+                    )
+                ),
+                "external_account_id": account_id,
+                "ad_account_id": account_id,
+                "display_name": item.get("name"),
+                "currency": item.get("currency_native"),
+                "connection_status": observed_connection_status,
+                "connection_provenance": "legacy_integration",
+                "permissions": [],
+                "permissions_observed": False,
+                "capabilities": {},
+                "capability_evidence": ["insights.read"],
+                "has_data": int(item.get("rows_saved") or 0) > 0,
+                "health_score": 100 if account_complete else 65,
+                "source_mode": source_mode,
+                "last_observed_at": finished_at,
+            }
+            if account_complete:
+                account_doc["last_sync_at"] = finished_at
+                account_doc["data_delay_minutes"] = 0
+            await _collection(
+                self.db,
+                "mezan_integration_accounts_v2",
+            ).update_one(
+                {
+                    "user_id": user_id,
+                    "provider": provider,
+                    "external_account_id": account_id,
+                },
+                {
+                    "$set": account_doc,
+                    "$setOnInsert": {"created_at": started_at},
+                },
+                upsert=True,
+            )
+        if include_legacy_details:
+            return {
+                **engine_result,
+                **response,
+                "sync_status": response["status"],
+            }
+        return response
+
+    async def _insert_snapchat_sync_error(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        code: str,
+        message: str,
+        occurred_at: str,
+        retryable: bool,
+        source_mode: str,
+    ) -> str:
+        error_id = str(uuid.uuid4())
+        await _collection(
+            self.db,
+            "mezan_integration_errors_v2",
+        ).insert_one(
+            {
+                "error_id": error_id,
+                "user_id": user_id,
+                "provider": "snapchat_ads",
+                "code": code,
+                "message": message,
+                "occurred_at": occurred_at,
+                "retryable": retryable,
+                "source_mode": source_mode,
+                "run_id": run_id,
+            }
+        )
+        return error_id
+
+    async def _record_snapchat_sync_failure(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        started_at: str,
+        source_mode: str,
+        error: SnapchatAnalyticsSyncError,
+    ) -> None:
+        finished_at = _iso(self._now())
+        failure_result = error.result or {}
+        provider_state_failure = bool(
+            error.code
+            in {
+                "snapchat_not_connected",
+                "snapchat_needs_reauth",
+                "snapchat_analytics_no_rows",
+                "snapchat_token_refresh_rejected",
+                "snapchat_token_refresh_failed",
+                "snapchat_token_missing",
+                "snapchat_currency_unverified",
+                "snapchat_usd_rate_unverified",
+            }
+            or failure_result.get("needs_reauth")
+        )
+        failure_connection_status = (
+            "not_connected"
+            if error.code == "snapchat_not_connected"
+            else "needs_reauth"
+            if (
+                error.code == "snapchat_needs_reauth"
+                or failure_result.get("needs_reauth")
+            )
+            else "error"
+            if provider_state_failure
+            else "unknown"
+        )
+        error_id = await self._insert_snapchat_sync_error(
+            user_id=user_id,
+            run_id=run_id,
+            code=error.code,
+            message=error.message,
+            occurred_at=finished_at,
+            retryable=error.retryable,
+            source_mode=source_mode,
+        )
+        await _collection(
+            self.db,
+            "mezan_integration_sync_runs_v2",
+        ).update_one(
+            {"user_id": user_id, "run_id": run_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "finished_at": finished_at,
+                    "summary": {
+                        "run_id": run_id,
+                        "provider": "snapchat_ads",
+                        "status": "failed",
+                        "date_from": failure_result.get("date_from"),
+                        "date_to": failure_result.get("date_to"),
+                        "accounts_attempted": int(
+                            failure_result.get("accounts_synced") or 0
+                        ),
+                        "accounts_complete": int(
+                            failure_result.get("accounts_complete") or 0
+                        ),
+                        "rows_saved": int(
+                            failure_result.get("rows_saved") or 0
+                        ),
+                        "errors_count": int(
+                            failure_result.get("errors_count") or 1
+                        ),
+                        "source_only": True,
+                        "accounting_write_reached": False,
+                        "qoyod_write_reached": False,
+                    },
+                    "error": {
+                        "error_id": error_id,
+                        "code": error.code,
+                    },
+                }
+            },
+        )
+        await _collection(
+            self.db,
+            "mezan_integration_health_v2",
+        ).insert_one(
+            {
+                "user_id": user_id,
+                "provider": "snapchat_ads",
+                "health_status": (
+                    "unhealthy" if provider_state_failure else "unknown"
+                ),
+                "health_score": 20 if provider_state_failure else None,
+                "data_quality": (
+                    "unavailable" if provider_state_failure else "unknown"
+                ),
+                "connection_status": failure_connection_status,
+                "connection_provenance": (
+                    "disconnected"
+                    if error.code == "snapchat_not_connected"
+                    else "legacy_integration"
+                ),
+                "data_delay_minutes": None,
+                "checked_at": finished_at,
+                "source_mode": source_mode,
+                "run_id": run_id,
+            }
+        )
+        if provider_state_failure:
+            await _collection(self.db, "mezan_integrations_v2").update_one(
+                {"user_id": user_id, "provider": "snapchat_ads"},
+                {
+                    "$set": {
+                        "user_id": user_id,
+                        "provider": "snapchat_ads",
+                        "connection_status": failure_connection_status,
+                        "connection_provenance": (
+                            "disconnected"
+                            if failure_connection_status == "not_connected"
+                            else "legacy_integration"
+                        ),
+                        "source_mode": source_mode,
+                        "data_quality": "unavailable",
+                        "checked_at": finished_at,
+                        "updated_at": finished_at,
+                    },
+                    "$setOnInsert": {"created_at": started_at},
+                },
+                upsert=True,
+            )
 
     async def _persist_test_snapshot(
         self,

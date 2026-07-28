@@ -14,19 +14,32 @@ on:
       - "backend/ads_v2/models.py"
       - "backend/ads_v2/sync/adapters.py"
       - "backend/ads_v2/sync/core.py"
+      - "backend/integrations_control_center/catalog.py"
+      - "backend/integrations_control_center/models.py"
+      - "backend/integrations_control_center/routes.py"
+      - "backend/integrations_control_center/service.py"
+      - "backend/integrations_control_center/snapchat_analytics_backfill.py"
       - "backend/snapchat_routes.py"
+      - "backend/tests/test_mezan_integrations_v2.py"
       - "backend/tests/test_snapchat_conversion_quality.py"
       - "backend/tests/test_unified_ads_manager_phase1.py"
       - "backend/server.py"
       - "frontend/src/pages/AdsManager.jsx"
       - "frontend/src/pages/AdsManager.test.jsx"
+      - "frontend/src/pages/AppsIntegrationsControlCenter.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCard.test.jsx"
       - "frontend/src/services/adsManager.js"
       - "frontend/src/services/adsManager.test.js"
+      - "frontend/src/services/integrationsV2.js"
+      - "frontend/src/services/integrationsV2.test.js"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "docs/UNIFIED_ADS_MANAGER_READ_ONLY_PHASE1.md"
+      - "docs/APPS_INTEGRATIONS_CONTROL_CENTER_V2_PLAN.md"
       - ".github/workflows/ads-manager-readonly.yml"
+      - ".github/workflows/apps-integrations-v2.yml"
   workflow_dispatch:
 
 permissions:
@@ -76,14 +89,27 @@ jobs:
                 backend/ads_v2/models.py|\
                 backend/ads_v2/sync/adapters.py|\
                 backend/ads_v2/sync/core.py|\
+                backend/integrations_control_center/catalog.py|\
+                backend/integrations_control_center/models.py|\
+                backend/integrations_control_center/routes.py|\
+                backend/integrations_control_center/service.py|\
+                backend/integrations_control_center/snapchat_analytics_backfill.py|\
                 backend/snapchat_routes.py|\
+                backend/tests/test_mezan_integrations_v2.py|\
                 backend/tests/test_snapchat_conversion_quality.py|\
                 backend/tests/test_unified_ads_manager_phase1.py|\
                 frontend/src/pages/AdsManager.jsx|\
                 frontend/src/pages/AdsManager.test.jsx|\
+                frontend/src/pages/AppsIntegrationsControlCenter.jsx|\
+                frontend/src/components/integrationsV2/IntegrationCard.jsx|\
+                frontend/src/components/integrationsV2/IntegrationCard.test.jsx|\
                 frontend/src/services/adsManager.js|\
                 frontend/src/services/adsManager.test.js|\
+                frontend/src/services/integrationsV2.js|\
+                frontend/src/services/integrationsV2.test.js|\
+                docs/APPS_INTEGRATIONS_CONTROL_CENTER_V2_PLAN.md|\
                 docs/UNIFIED_ADS_MANAGER_READ_ONLY_PHASE1.md|\
+                .github/workflows/apps-integrations-v2.yml|\
                 .github/workflows/ads-manager-readonly.yml)
                   run_full=true
                   ;;
@@ -293,18 +319,31 @@ jobs:
               backend/ads_v2/models.py|\
               backend/ads_v2/sync/adapters.py|\
               backend/ads_v2/sync/core.py|\
+              backend/integrations_control_center/catalog.py|\
+              backend/integrations_control_center/models.py|\
+              backend/integrations_control_center/routes.py|\
+              backend/integrations_control_center/service.py|\
+              backend/integrations_control_center/snapchat_analytics_backfill.py|\
               backend/snapchat_routes.py|\
+              backend/tests/test_mezan_integrations_v2.py|\
               backend/tests/test_snapchat_conversion_quality.py|\
               backend/tests/test_unified_ads_manager_phase1.py|\
               backend/server.py|\
               frontend/src/pages/AdsManager.jsx|\
               frontend/src/pages/AdsManager.test.jsx|\
+              frontend/src/pages/AppsIntegrationsControlCenter.jsx|\
+              frontend/src/components/integrationsV2/IntegrationCard.jsx|\
+              frontend/src/components/integrationsV2/IntegrationCard.test.jsx|\
               frontend/src/services/adsManager.js|\
               frontend/src/services/adsManager.test.js|\
+              frontend/src/services/integrationsV2.js|\
+              frontend/src/services/integrationsV2.test.js|\
               frontend/src/App.js|\
               frontend/src/components/Layout.jsx|\
               frontend/src/components/Sidebar.jsx|\
+              docs/APPS_INTEGRATIONS_CONTROL_CENTER_V2_PLAN.md|\
               docs/UNIFIED_ADS_MANAGER_READ_ONLY_PHASE1.md|\
+              .github/workflows/apps-integrations-v2.yml|\
               .github/workflows/ads-manager-readonly.yml)
                 ;;
               *)
@@ -461,41 +500,25 @@ jobs:
           expected = {
               "frontend/src/App.js": {
                   "additions": [
-                      'import AdsManager from "./pages/AdsManager";',
-                      "            <Route",
-                      '                path="/ads-manager"',
-                      "                element={",
-                      "                    <ProtectedRoute>",
-                      "                        <OwnerOnlyRoute>",
-                      "                            <Layout><AdsManager /></Layout>",
-                      "                        </OwnerOnlyRoute>",
-                      "                    </ProtectedRoute>",
-                      "                }",
-                      "            />",
-                  ],
-                  "deletions": [],
-              },
-              "frontend/src/components/Layout.jsx": {
-                  "additions": [
-                      'import { List, MagnifyingGlass, Package, Cube, Warehouse, Plug, Robot, UsersThree, ChartLineUp } from "@phosphor-icons/react";',
-                      '    { to: "/ads-manager", label: "مدير الإعلانات", Icon: ChartLineUp },',
-                      '    const isV2 = ["/orders-v2", "/products-v2", "/components-v2", "/integrations-v2", "/ads-manager"].some((prefix) => location.pathname.startsWith(prefix));',
+                      '            <Route path="/snapchat-accounts" element={<ProtectedRoute><Navigate to="/integrations-v2?provider=snapchat_ads" replace /></ProtectedRoute>} />',
                   ],
                   "deletions": [
-                      'import { List, MagnifyingGlass, Package, Cube, Warehouse, Plug, Robot, UsersThree } from "@phosphor-icons/react";',
-                      '    const isV2 = ["/orders-v2", "/products-v2", "/components-v2", "/integrations-v2"].some((prefix) => location.pathname.startsWith(prefix));',
+                      'import SnapchatAccounts from "./pages/SnapchatAccounts";',
+                      '            <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />',
                   ],
+              },
+              "frontend/src/components/Layout.jsx": {
+                  "additions": [],
+                  "deletions": [],
               },
               "frontend/src/components/Sidebar.jsx": {
                   "additions": [
-                      "            {",
-                      '                to: "/ads-manager",',
-                      '                label: "مدير الإعلانات",',
-                      "                icon: ChartLineUp,",
-                      '                testid: "nav-mezan-os-ads-manager",',
-                      "            },",
+                      "    ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Package, Image, UserCircle,",
                   ],
-                  "deletions": [],
+                  "deletions": [
+                      "    ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,",
+                      '            { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },',
+                  ],
               },
           }
 
@@ -575,6 +598,12 @@ jobs:
                   "backend/snapchat_routes.py",
                   "_fetch_snap_conversion_metrics",
               ): Counter({"http.get": 1}),
+          }
+          approved_new_imports = {
+              "backend/snapchat_routes.py": {
+                  "integrations_control_center.snapchat_analytics_backfill",
+                  "integrations_control_center.service",
+              },
           }
           write_methods = {
               "create_collection",
@@ -777,12 +806,36 @@ jobs:
               baseline = snapshot(baseline_source, f"{base}:{path}")
               current = snapshot(current_source, path)
 
-              if current["routes"] != baseline["routes"]:
+              current_routes = current["routes"]
+              if path == "backend/snapchat_routes.py":
+                  legacy_route = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[])"
+                  )
+                  deprecated_adapter = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[keyword(arg='deprecated', "
+                      "value=Constant(value=True))])"
+                  )
+                  current_routes = sorted(
+                      legacy_route if route == deprecated_adapter else route
+                      for route in current_routes
+                  )
+              if current_routes != baseline["routes"]:
                   errors.append(f"{path}: route declarations changed")
-              if not current["imports"].issubset(baseline["imports"]):
+              unexpected_imports = (
+                  current["imports"]
+                  - baseline["imports"]
+                  - approved_new_imports.get(path, set())
+              )
+              if unexpected_imports:
                   errors.append(
                       f"{path}: new imports are forbidden: "
-                      f"{sorted(current['imports'] - baseline['imports'])}"
+                      f"{sorted(unexpected_imports)}"
                   )
               if not current["urls"].issubset(baseline["urls"]):
                   errors.append(f"{path}: new network URL literal is forbidden")
@@ -1150,7 +1203,13 @@ jobs:
             ads_v2/models.py \
             ads_v2/sync/adapters.py \
             ads_v2/sync/core.py \
+            integrations_control_center/catalog.py \
+            integrations_control_center/models.py \
+            integrations_control_center/routes.py \
+            integrations_control_center/service.py \
+            integrations_control_center/snapchat_analytics_backfill.py \
             snapchat_routes.py \
+            tests/test_mezan_integrations_v2.py \
             tests/test_snapchat_conversion_quality.py \
             tests/test_unified_ads_manager_phase1.py
           python -m py_compile server.py

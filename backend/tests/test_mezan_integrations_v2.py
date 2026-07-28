@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -24,10 +25,20 @@ from integrations_control_center.legacy_readers import (
 from integrations_control_center.models import (
     ConnectionTestResponse,
     OverviewResponse,
+    SnapchatAnalyticsSyncResponse,
     ensure_integrations_control_center_indexes,
 )
-from integrations_control_center.routes import _require_owner
+from integrations_control_center.routes import (
+    _require_owner,
+    make_integrations_control_center_router,
+)
 from integrations_control_center.service import IntegrationsControlCenterService
+from integrations_control_center.snapchat_analytics_backfill import (
+    SYNC_ENABLED_ENV,
+    SnapchatAnalyticsSyncInput,
+)
+import integrations_control_center.snapchat_analytics_backfill as snap_backfill
+import integrations_control_center.service as control_center_service
 
 
 NOW = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
@@ -461,9 +472,32 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
         "mezan_integration_accounts_v2_identity_unique",
         "mezan_integration_permissions_v2_key_unique",
         "mezan_integration_sync_runs_v2_run_unique",
+        "mezan_integration_sync_runs_v2_one_running",
         "mezan_integration_errors_v2_error_unique",
         "mezan_campaign_product_links_v2_idempotency_unique",
     }
+    running_lock_indexes = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if (
+            collection == "mezan_integration_sync_runs_v2"
+            and options.get("name")
+            == "mezan_integration_sync_runs_v2_one_running"
+        )
+    ]
+    assert running_lock_indexes == [
+        (
+            [("user_id", 1), ("provider", 1), ("status", 1)],
+            {
+                "unique": True,
+                "partialFilterExpression": {
+                    "run_type": "analytics_refresh",
+                    "status": "running",
+                },
+                "name": "mezan_integration_sync_runs_v2_one_running",
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -934,7 +968,6 @@ async def test_safe_settings_and_reconnect_deep_links_never_enable_disconnect():
     by_provider = {card["provider"]: card for card in overview["providers"]}
     expected = {
         "salla": "/settings/salla",
-        "snapchat_ads": "/snapchat-accounts",
         "meta_ads": "/settings",
         "qoyod": "/integrations/qoyod/settings",
     }
@@ -949,6 +982,10 @@ async def test_safe_settings_and_reconnect_deep_links_never_enable_disconnect():
             "reason": None,
             "href": href,
         }
+    assert by_provider["snapchat_ads"]["actions"]["settings"]["enabled"] is False
+    assert by_provider["snapchat_ads"]["actions"]["settings"]["href"] is None
+    assert by_provider["snapchat_ads"]["actions"]["reconnect"]["enabled"] is False
+    assert by_provider["snapchat_ads"]["actions"]["reconnect"]["href"] is None
     for card in overview["providers"]:
         assert card["actions"]["disconnect"]["enabled"] is False
         assert card["actions"]["disconnect"]["href"] is None
@@ -1174,3 +1211,633 @@ async def test_activity_lists_are_tenant_scoped_bounded_and_sanitized():
     assert result["total"] == 1
     assert [item["run_id"] for item in result["items"]] == ["r1"]
     assert "hidden" not in json.dumps(result)
+
+
+class _SnapAnalyticsResponse:
+    status_code = 200
+    text = ""
+
+    def __init__(self, payload: dict):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return deepcopy(self.payload)
+
+
+class _SnapAnalyticsClient:
+    network_calls = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, *args, **kwargs):
+        type(self).network_calls += 1
+        params = kwargs.get("params") or {}
+        if params.get("fields") == "spend":
+            return _SnapAnalyticsResponse(
+                {
+                    "timeseries_stats": [
+                        {
+                            "timeseries_stat": {
+                                "timeseries": [
+                                    {"stats": {"spend": 5_000_000}}
+                                ]
+                            }
+                        }
+                    ]
+                }
+            )
+        return _SnapAnalyticsResponse(
+            {
+                "timeseries_stats": [
+                    {
+                        "timeseries_stat": {
+                            "breakdown_stats": {
+                                "campaign": [
+                                    {
+                                        "id": "campaign-1",
+                                        "timeseries": [
+                                            {
+                                                "stats": {
+                                                    "conversion_purchases": 2,
+                                                    "conversion_purchases_value": 10_000_000,
+                                                }
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        )
+
+
+class _SnapProviderFailureResponse:
+    text = ""
+
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        request = httpx.Request(
+            "GET",
+            "https://adsapi.snapchat.com/v1/test",
+        )
+        response = httpx.Response(self.status_code, request=request)
+        raise httpx.HTTPStatusError(
+            "provider failure",
+            request=request,
+            response=response,
+        )
+
+    def json(self):
+        return {}
+
+
+class _SnapProviderFailureClient:
+    status_code = 500
+    network_calls = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, *args, **kwargs):
+        type(self).network_calls += 1
+        return _SnapProviderFailureResponse(type(self).status_code)
+
+
+class _SnapAuthorizationFailureClient(_SnapProviderFailureClient):
+    status_code = 401
+
+
+def _snapchat_v2_db() -> FakeDB:
+    return FakeDB(
+        {
+            "snapchat_connections": [
+                {
+                    "user_id": "owner-1",
+                    "refresh_token": "refresh-secret",
+                    "access_token": "access-secret",
+                    "access_token_expires_at": "2099-01-01T00:00:00+00:00",
+                }
+            ],
+            "snapchat_ad_accounts": [
+                {
+                    "user_id": "owner-1",
+                    "ad_account_id": "snap-account-1",
+                    "enabled": True,
+                    "name": "Amasi Snapchat",
+                    "currency_native": "SAR",
+                    "timezone": "Asia/Riyadh",
+                }
+            ],
+            "daily_costs": [{"user_id": "owner-1", "sentinel": True}],
+            "ad_account_ledger": [{"user_id": "owner-1", "sentinel": True}],
+            "liabilities": [{"user_id": "owner-1", "sentinel": True}],
+            "ledgers": [{"user_id": "owner-1", "sentinel": True}],
+            "salla_integrations": [{"user_id": "owner-1", "sentinel": True}],
+            "qoyod_integrations": [{"user_id": "owner-1", "sentinel": True}],
+            "ads_daily": [{"user_id": "owner-1", "sentinel": True}],
+            "campaigns": [{"user_id": "owner-1", "sentinel": True}],
+        }
+    )
+
+
+def _sync_route(db: FakeDB):
+    async def _current_user():
+        return {"id": "owner-1", "role": "owner"}
+
+    router = make_integrations_control_center_router(db, _current_user)
+    return next(
+        route
+        for route in router.routes
+        if route.path == "/integrations-v2/snapchat_ads/sync"
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapchat_v2_sync_is_owner_only_before_any_write_or_network(
+    monkeypatch,
+):
+    db = _snapchat_v2_db()
+
+    class _NetworkMustNotStart:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("network started before owner gate")
+
+    monkeypatch.setattr(snap_backfill.httpx, "AsyncClient", _NetworkMustNotStart)
+    route = _sync_route(db)
+    with pytest.raises(HTTPException) as exc:
+        await route.endpoint(
+            SnapchatAnalyticsSyncInput(
+                from_date="2026-07-28",
+                to_date="2026-07-28",
+            ),
+            user={"id": "employee-1", "role": "admin"},
+        )
+    assert exc.value.status_code == 403
+    assert db.writes == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_v2_sync_contract_logs_and_writes_only_allowlisted_data(
+    monkeypatch,
+):
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    _SnapAnalyticsClient.network_calls = 0
+    monkeypatch.setattr(
+        snap_backfill.httpx,
+        "AsyncClient",
+        _SnapAnalyticsClient,
+    )
+    db = _snapchat_v2_db()
+    before_forbidden = {
+        name: deepcopy(db.rows[name])
+        for name in {
+            "daily_costs",
+            "ad_account_ledger",
+            "liabilities",
+            "ledgers",
+            "salla_integrations",
+            "qoyod_integrations",
+            "ads_daily",
+            "campaigns",
+        }
+    }
+    result = await _sync_route(db).endpoint(
+        SnapchatAnalyticsSyncInput(
+            from_date="2026-07-28",
+            to_date="2026-07-28",
+        ),
+        user={"id": "owner-1", "role": "owner"},
+    )
+
+    SnapchatAnalyticsSyncResponse.model_validate(result)
+    assert set(result) == {
+        "run_id",
+        "provider",
+        "status",
+        "date_from",
+        "date_to",
+        "accounts_attempted",
+        "accounts_complete",
+        "rows_saved",
+        "errors_count",
+        "source_only",
+        "accounting_write_reached",
+        "qoyod_write_reached",
+    }
+    assert result["status"] == "complete"
+    assert result["accounts_attempted"] == 1
+    assert result["accounts_complete"] == 1
+    assert result["rows_saved"] == 1
+    assert result["errors_count"] == 0
+    assert result["accounting_write_reached"] is False
+    assert result["qoyod_write_reached"] is False
+    assert _SnapAnalyticsClient.network_calls == 2
+
+    write_collections = {name for name, _, _ in db.writes}
+    assert write_collections <= {
+        "snapchat_account_daily",
+        "snapchat_daily_stats",
+        "snapchat_ad_accounts",
+        "snapchat_connections",
+        "mezan_integrations_v2",
+        "mezan_integration_accounts_v2",
+        "mezan_integration_permissions_v2",
+        "mezan_integration_health_v2",
+        "mezan_integration_sync_runs_v2",
+        "mezan_integration_errors_v2",
+    }
+    assert {
+        "snapchat_account_daily",
+        "snapchat_daily_stats",
+        "snapchat_ad_accounts",
+        "mezan_integrations_v2",
+        "mezan_integration_accounts_v2",
+        "mezan_integration_health_v2",
+        "mezan_integration_sync_runs_v2",
+    } <= write_collections
+    for name, original in before_forbidden.items():
+        assert db.rows[name] == original
+
+
+@pytest.mark.asyncio
+async def test_snapchat_v2_kill_switch_blocks_before_network_and_logs_failure(
+    monkeypatch,
+):
+    network_started = False
+
+    class _NetworkMustNotStart:
+        def __init__(self, *args, **kwargs):
+            nonlocal network_started
+            network_started = True
+            raise AssertionError("kill switch did not block network")
+
+    monkeypatch.setenv(SYNC_ENABLED_ENV, "false")
+    monkeypatch.setattr(snap_backfill.httpx, "AsyncClient", _NetworkMustNotStart)
+    db = _snapchat_v2_db()
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(
+                from_date="2026-07-28",
+                to_date="2026-07-28",
+            ),
+            user={"id": "owner-1", "role": "owner"},
+        )
+    assert exc.value.status_code == 503
+    assert exc.value.detail["status"] == "failed"
+    assert exc.value.detail["code"] == "snapchat_analytics_sync_disabled"
+    assert exc.value.detail["run_id"]
+    assert network_started is False
+    write_collections = {name for name, _, _ in db.writes}
+    assert write_collections == {
+        "mezan_integration_sync_runs_v2",
+        "mezan_integration_errors_v2",
+        "mezan_integration_health_v2",
+    }
+    assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "failed"
+    assert db.rows["mezan_integration_errors_v2"][0]["run_id"] == (
+        exc.value.detail["run_id"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapchat_sync_action_requires_connection_and_enabled_account():
+    connected_db = _snapchat_v2_db()
+    connected = await _service(connected_db).overview("owner-1")
+    snap = next(
+        card
+        for card in connected["providers"]
+        if card["provider"] == "snapchat_ads"
+    )
+    assert snap["actions"]["sync_data"] == {
+        "enabled": True,
+        "reason": None,
+        "href": None,
+    }
+    assert snap["actions"]["settings"]["href"] is None
+    assert snap["actions"]["reconnect"]["href"] is None
+
+    no_account_db = _snapchat_v2_db()
+    no_account_db.rows["snapchat_ad_accounts"] = []
+    without_account = await _service(no_account_db).overview("owner-1")
+    snap_without_account = next(
+        card
+        for card in without_account["providers"]
+        if card["provider"] == "snapchat_ads"
+    )
+    assert snap_without_account["actions"]["sync_data"]["enabled"] is False
+
+
+def test_safety_policy_allows_only_bounded_analytics_refresh_mutation():
+    from integrations_control_center.catalog import build_safety_policy
+
+    policy = build_safety_policy(analytics_refresh_enabled=True)
+    assert policy["read_only"] is False
+    assert policy["analytics_refresh_enabled"] is True
+    assert policy["provider_mutations_enabled"] is False
+    assert policy["campaign_mutations_enabled"] is False
+    assert policy["accounting_mutations_enabled"] is False
+    assert policy["advertising_mutations_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_partial_sync_preserves_prior_success_timestamps_and_total_errors(
+    monkeypatch,
+):
+    class _PartialEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, user_id, payload):
+            return {
+                "sync_status": "partial",
+                "date_from": "2026-07-28",
+                "date_to": "2026-07-28",
+                "accounts_synced": 1,
+                "accounts_complete": 0,
+                "rows_saved": 0,
+                "days_requested": 1,
+                "errors": [{"error": "bounded"}] * 200,
+                "errors_count": 250,
+                "errors_truncated": True,
+                "business_timezone": "Asia/Riyadh",
+                "items": [
+                    {
+                        "ad_account_id": "snap-account-1",
+                        "name": "Amasi Snapchat",
+                        "currency_native": "SAR",
+                        "rows_saved": 0,
+                        "errors": 250,
+                    }
+                ],
+            }
+
+    prior_sync = "2026-07-20T00:00:00+00:00"
+    db = FakeDB(
+        {
+            "mezan_integrations_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "snapchat_ads",
+                    "last_sync_at": prior_sync,
+                    "has_data": True,
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "snapchat_ads",
+                    "external_account_id": "snap-account-1",
+                    "last_sync_at": prior_sync,
+                    "has_data": True,
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        control_center_service,
+        "SnapchatAnalyticsBackfill",
+        _PartialEngine,
+    )
+    result = await _service(db).sync_snapchat_analytics(
+        "owner-1",
+        SnapchatAnalyticsSyncInput(
+            from_date="2026-07-28",
+            to_date="2026-07-28",
+        ),
+    )
+
+    assert result["status"] == "partial"
+    assert result["errors_count"] == 250
+    assert db.rows["mezan_integrations_v2"][0]["last_sync_at"] == prior_sync
+    assert db.rows["mezan_integration_accounts_v2"][0][
+        "last_sync_at"
+    ] == prior_sync
+    partial_health = db.rows["mezan_integration_health_v2"][-1]
+    assert partial_health["health_status"] == "degraded"
+    assert partial_health["data_delay_minutes"] is None
+
+
+@pytest.mark.asyncio
+async def test_snapchat_runtime_switch_typo_fails_closed_and_disables_action(
+    monkeypatch,
+):
+    monkeypatch.setenv(SYNC_ENABLED_ENV, "flase")
+    db = _snapchat_v2_db()
+
+    overview = await _service(db).overview("owner-1")
+    snap = next(
+        card
+        for card in overview["providers"]
+        if card["provider"] == "snapchat_ads"
+    )
+
+    assert overview["safety_policy"]["analytics_refresh_enabled"] is False
+    assert snap["actions"]["sync_data"]["enabled"] is False
+    assert "runtime safety switch" in snap["actions"]["sync_data"]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_snapchat_active_run_lock_rejects_before_provider_network(
+    monkeypatch,
+):
+    class _NetworkMustNotStart:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("active lock did not block provider network")
+
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(snap_backfill.httpx, "AsyncClient", _NetworkMustNotStart)
+    db = _snapchat_v2_db()
+    db.rows["mezan_integration_sync_runs_v2"] = [
+        {
+            "run_id": "running-1",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": "analytics_refresh",
+            "status": "running",
+            "started_at": "2026-07-28T11:59:00+00:00",
+            "lock_expires_at": "2099-01-01T00:00:00+00:00",
+        }
+    ]
+
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(days=1),
+            user={"id": "owner-1", "role": "owner"},
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "snapchat_analytics_sync_in_progress"
+    assert exc.value.detail["run_id"] == "running-1"
+    assert db.writes == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_account_limit_fails_before_provider_network(
+    monkeypatch,
+):
+    network_started = False
+
+    class _NetworkMustNotStart:
+        def __init__(self, *args, **kwargs):
+            nonlocal network_started
+            network_started = True
+            raise AssertionError("account limit did not block provider network")
+
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(snap_backfill.httpx, "AsyncClient", _NetworkMustNotStart)
+    db = _snapchat_v2_db()
+    template = db.rows["snapchat_ad_accounts"][0]
+    for index in range(2, 7):
+        db.rows["snapchat_ad_accounts"].append(
+            {
+                **deepcopy(template),
+                "ad_account_id": f"snap-account-{index}",
+                "name": f"Snap account {index}",
+            }
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(days=1),
+            user={"id": "owner-1", "role": "owner"},
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "snapchat_account_limit_exceeded"
+    assert network_started is False
+    assert db.rows.get("snapchat_account_daily", []) == []
+    assert db.rows.get("snapchat_daily_stats", []) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("currency", [None, "", "AED", "EUR"])
+async def test_snapchat_unverified_currency_never_writes_analytics_facts(
+    monkeypatch,
+    currency,
+):
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    _SnapAnalyticsClient.network_calls = 0
+    monkeypatch.setattr(
+        snap_backfill.httpx,
+        "AsyncClient",
+        _SnapAnalyticsClient,
+    )
+    db = _snapchat_v2_db()
+    db.rows["snapchat_ad_accounts"][0]["currency_native"] = currency
+
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(days=1),
+            user={"id": "owner-1", "role": "owner"},
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "snapchat_currency_unverified"
+    assert _SnapAnalyticsClient.network_calls == 0
+    assert db.rows.get("snapchat_account_daily", []) == []
+    assert db.rows.get("snapchat_daily_stats", []) == []
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_status"] == "error"
+    assert "last_sync_at" not in integration
+
+
+@pytest.mark.asyncio
+async def test_snapchat_invalid_usd_rate_fails_before_fact_write(
+    monkeypatch,
+):
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    _SnapAnalyticsClient.network_calls = 0
+    monkeypatch.setattr(
+        snap_backfill.httpx,
+        "AsyncClient",
+        _SnapAnalyticsClient,
+    )
+    db = _snapchat_v2_db()
+    db.rows["snapchat_ad_accounts"][0]["currency_native"] = "USD"
+    db.rows["ads_currency_settings"] = [
+        {"user_id": "owner-1", "usd_to_sar_rate": -1}
+    ]
+
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(days=1),
+            user={"id": "owner-1", "role": "owner"},
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "snapchat_usd_rate_unverified"
+    assert _SnapAnalyticsClient.network_calls == 0
+    assert db.rows.get("snapchat_account_daily", []) == []
+    assert db.rows.get("snapchat_daily_stats", []) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client_type", "expected_code", "expected_connection", "status_code"),
+    [
+        (
+            _SnapAuthorizationFailureClient,
+            "snapchat_needs_reauth",
+            "needs_reauth",
+            409,
+        ),
+        (
+            _SnapProviderFailureClient,
+            "snapchat_analytics_no_rows",
+            "error",
+            502,
+        ),
+    ],
+)
+async def test_snapchat_total_provider_failure_is_never_reported_connected(
+    monkeypatch,
+    client_type,
+    expected_code,
+    expected_connection,
+    status_code,
+):
+    monkeypatch.delenv(SYNC_ENABLED_ENV, raising=False)
+    client_type.network_calls = 0
+    monkeypatch.setattr(snap_backfill.httpx, "AsyncClient", client_type)
+    db = _snapchat_v2_db()
+
+    with pytest.raises(HTTPException) as exc:
+        await _sync_route(db).endpoint(
+            SnapchatAnalyticsSyncInput(days=1),
+            user={"id": "owner-1", "role": "owner"},
+        )
+
+    assert exc.value.status_code == status_code
+    assert exc.value.detail["status"] == "failed"
+    assert exc.value.detail["code"] == expected_code
+    assert client_type.network_calls == 1
+    run = db.rows["mezan_integration_sync_runs_v2"][0]
+    assert run["status"] == "failed"
+    assert run["summary"]["rows_saved"] == 0
+    health = db.rows["mezan_integration_health_v2"][-1]
+    assert health["connection_status"] == expected_connection
+    assert health["data_delay_minutes"] is None
+    integration = db.rows["mezan_integrations_v2"][0]
+    assert integration["connection_status"] == expected_connection
+    assert integration.get("data_delay_minutes") is None
+    assert integration.get("last_sync_at") is None
