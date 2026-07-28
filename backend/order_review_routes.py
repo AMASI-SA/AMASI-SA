@@ -19,6 +19,7 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
+from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
 
 
@@ -408,6 +409,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
+        # Non-blocking, throttled Salla Direct ingestion. It reads only the
+        # light order list and order items, performs no Qoyod API calls, and
+        # never delays the local queue response.
+        schedule_salla_auto_sync(db, merchant_id)
         try:
             page = await list_orders(
                 repository, user_id=merchant_id, limit=limit,

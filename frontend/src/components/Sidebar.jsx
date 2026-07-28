@@ -190,6 +190,12 @@ const SECTIONS = [
                 testid: "nav-mezan-os-orders",
             },
             {
+                to: "/fulfillment-v2",
+                label: "إدارة رفع الطلبات",
+                icon: Queue,
+                testid: "nav-mezan-os-fulfillment",
+            },
+            {
                 to: "/products-v2",
                 label: "المنتجات",
                 icon: Package,

@@ -62,7 +62,7 @@ import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
 import AdsManager from "./pages/AdsManager";
-import OrderReview from "./pages/OrderReview";
+import FulfillmentV2 from "./pages/FulfillmentV2";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
@@ -316,8 +316,12 @@ function AppRoutes() {
                 }
             />
             <Route
+                path="/fulfillment-v2"
+                element={<ProtectedRoute><Layout><FulfillmentV2 /></Layout></ProtectedRoute>}
+            />
+            <Route
                 path="/order-review"
-                element={<ProtectedRoute><Layout><OrderReview /></Layout></ProtectedRoute>}
+                element={<ProtectedRoute><Navigate to="/fulfillment-v2?stage=pending_review" replace /></ProtectedRoute>}
             />
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
