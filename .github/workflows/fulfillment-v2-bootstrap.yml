@@ -25,7 +25,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: feat/orders-review-workflow-v2
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
 
       - name: Wire Fulfillment V2 without touching product or integration modules
         shell: bash
@@ -37,6 +38,7 @@ jobs:
               target = Path(path)
               text = target.read_text(encoding="utf-8")
               count = text.count(old)
+              print(f"PATCH {path}: matches={count} marker={old.splitlines()[0]!r}")
               if count != 1:
                   raise SystemExit(f"Expected exactly one match in {path}, found {count}")
               target.write_text(text.replace(old, new, 1), encoding="utf-8")
