@@ -61,6 +61,7 @@ import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
+import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
@@ -301,6 +302,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><AppsIntegrationsControlCenter /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/customer-intelligence"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><CustomerIntelligenceCenter /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

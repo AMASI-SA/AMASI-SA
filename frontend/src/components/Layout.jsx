@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, NavLink } from "react-router-dom";
-import { List, MagnifyingGlass, Package, Queue, Cube, Warehouse, Plug, Robot, UsersThree, ChartLineUp } from "@phosphor-icons/react";
+import { List, MagnifyingGlass, Package, Queue, Cube, Warehouse, Plug, Robot, UsersThree, ChartLineUp, ChatsCircle } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
@@ -43,11 +43,12 @@ const V2_LINKS = [
     { to: "/components-v2", label: "المكونات", Icon: Cube },
     { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن", Icon: Warehouse },
     { to: "/integrations-v2", label: "التطبيقات والتكاملات", Icon: Plug },
+    { to: "/customer-intelligence", label: "ذكاء العملاء", Icon: ChatsCircle },
     { to: "/ads-manager", label: "مدير الإعلانات", Icon: ChartLineUp },
 ];
 
 function MezanV2Navigation({ location }) {
-    const isV2 = ["/orders-v2", "/fulfillment-v2", "/products-v2", "/components-v2", "/integrations-v2", "/ads-manager"].some((prefix) => location.pathname.startsWith(prefix));
+    const isV2 = ["/orders-v2", "/fulfillment-v2", "/products-v2", "/components-v2", "/integrations-v2", "/customer-intelligence", "/ads-manager"].some((prefix) => location.pathname.startsWith(prefix));
     if (!isV2) return null;
     return (
         <nav className="mb-5 flex flex-wrap gap-2 rounded-xl border border-violet-100 bg-white p-2 shadow-sm" aria-label="صفحات Mezan OS V2">
