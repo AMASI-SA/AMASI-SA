@@ -28,6 +28,7 @@ WORKFLOWS = "order_review_workflows"
 PREFERENCES = "product_option_image_preferences"
 EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
+REVIEW_SOURCE_REFRESH_VERSION = 2
 
 _PERSONAL_OPTION_HINTS = (
     "اسم", "نقش", "كتابة", "رسالة", "اهداء", "إهداء", "تهنئة", "رقم الجوال",
@@ -394,9 +395,13 @@ async def _refresh_review_source_once(db: Any, user_id: str, order_number: str) 
     try:
         existing = await db.unified_orders.find_one(
             {"user_id": user_id, "order_number": order_number},
-            {"_id": 0, "order_review_source_refreshed_at": 1},
+            {"_id": 0, "order_review_source_refreshed_at": 1, "order_review_source_refresh_version": 1},
         )
-        if _text((existing or {}).get("order_review_source_refreshed_at")):
+        refresh_version = int((existing or {}).get("order_review_source_refresh_version") or 0)
+        if (
+            refresh_version >= REVIEW_SOURCE_REFRESH_VERSION
+            and _text((existing or {}).get("order_review_source_refreshed_at"))
+        ):
             return False
 
         result = await resync_single_order(db, user_id, order_number)
@@ -409,6 +414,7 @@ async def _refresh_review_source_once(db: Any, user_id: str, order_number: str) 
             {"$set": {
                 "order_review_source_refreshed_at": refreshed_at,
                 "order_review_source_refresh_mode": "explicit_review_open",
+                "order_review_source_refresh_version": REVIEW_SOURCE_REFRESH_VERSION,
             }},
         )
         return True

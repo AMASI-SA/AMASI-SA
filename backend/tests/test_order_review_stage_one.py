@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from order_engine.mapper import map_salla_order
+from salla_integration.sync import _fetch_salla_shipment_details
 from order_item_engine.models import (
     OrderItemIdentityDTO,
     OrderItemOptionDTO,
     OrderItemSourceDTO,
 )
 from order_review_routes import (
+    REVIEW_SOURCE_REFRESH_VERSION,
     _can_review,
     _merchant_user_id,
     _refresh_review_source_once,
@@ -208,7 +210,12 @@ async def test_review_refreshes_and_caches_the_complete_product_gallery():
 
 class _ReviewRefreshCollection:
     def __init__(self):
-        self.row = {"user_id": "owner-1", "order_number": "274724433"}
+        self.row = {
+            "user_id": "owner-1",
+            "order_number": "274724433",
+            # Marker written by the first implementation, before versioning.
+            "order_review_source_refreshed_at": "2026-07-28T20:00:00+00:00",
+        }
 
     async def find_one(self, _query, _projection=None):
         return dict(self.row)
@@ -234,3 +241,74 @@ async def test_review_open_refreshes_authoritative_salla_details_only_once():
 
     refresh.assert_awaited_once_with(db, "owner-1", "274724433")
     assert db.unified_orders.row["order_review_source_refresh_mode"] == "explicit_review_open"
+    assert db.unified_orders.row["order_review_source_refresh_version"] == REVIEW_SOURCE_REFRESH_VERSION
+
+
+
+@pytest.mark.asyncio
+async def test_empty_current_shipments_preserve_embedded_delivery_context():
+    embedded = [{
+        "id": "shipment-1",
+        "courier": {"name": "iMile"},
+        "shipping_address": {
+            "country": {"name": "السعودية"},
+            "city": {"name": "الرياض"},
+            "district": "العليا",
+            "street": "شارع الاختبار",
+        },
+        "label_url": "https://example.test/stale-label.pdf",
+        "tracking_number": "STALE-TRACKING",
+    }]
+
+    async def fake_call(_db, _user_id, method, path, params=None):
+        assert method == "GET"
+        assert path == "/shipments"
+        assert params == {"order_id": "order-1", "per_page": 50}
+        return {"data": []}
+
+    with patch("salla_integration.sync.call_salla", new=fake_call):
+        rows = await _fetch_salla_shipment_details(
+            object(), "owner-1", "order-1", embedded
+        )
+
+    assert len(rows) == 1
+    assert rows[0]["courier"]["name"] == "iMile"
+    assert rows[0]["shipping_address"]["city"]["name"] == "الرياض"
+    assert rows[0]["shipping_address"]["district"] == "العليا"
+    assert "label_url" not in rows[0]
+    assert "tracking_number" not in rows[0]
+
+
+@pytest.mark.asyncio
+async def test_current_shipment_merges_embedded_address_without_reviving_stale_label():
+    embedded = [{
+        "id": "shipment-1",
+        "courier": {"name": "iMile"},
+        "shipping_address": {
+            "city": {"name": "جدة"},
+            "district": "الروضة",
+            "street": "شارع الأمير",
+        },
+        "label_url": "https://example.test/stale-label.pdf",
+    }]
+
+    async def fake_call(_db, _user_id, method, path, params=None):
+        assert method == "GET"
+        if path == "/shipments":
+            return {"data": [{"id": "shipment-1", "status": "created"}]}
+        assert path == "/shipments/shipment-1"
+        return {"data": {
+            "id": "shipment-1",
+            "tracking_number": "CURRENT-TRACKING",
+            "shipping_address": {},
+        }}
+
+    with patch("salla_integration.sync.call_salla", new=fake_call):
+        rows = await _fetch_salla_shipment_details(
+            object(), "owner-1", "order-1", embedded
+        )
+
+    assert rows[0]["shipping_address"]["city"]["name"] == "جدة"
+    assert rows[0]["shipping_address"]["street"] == "شارع الأمير"
+    assert rows[0]["tracking_number"] == "CURRENT-TRACKING"
+    assert "label_url" not in rows[0]

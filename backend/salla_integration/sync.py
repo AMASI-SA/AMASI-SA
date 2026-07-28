@@ -965,17 +965,77 @@ async def _fetch_salla_order_items(
     ]
 
 
+_SHIPMENT_CLEARABLE_FIELDS = {
+    "label",
+    "label_url",
+    "shipping_number",
+    "tracking_number",
+    "tracking_link",
+    "tracking_url",
+    "status",
+}
+
+_SHIPMENT_CONTEXT_FIELDS = {
+    "ship_to",
+    "shipping_address",
+    "address",
+    "courier",
+    "courier_name",
+    "company",
+    "company_name",
+    "method",
+    "shipping_method",
+    "service",
+    "recipient",
+    "receiver",
+    "pickup_address",
+    "branch",
+    "total_weight",
+}
+
+
+def _shipment_context(row: Any) -> dict:
+    if not isinstance(row, dict):
+        return {}
+    return {
+        key: value
+        for key, value in row.items()
+        if key in _SHIPMENT_CONTEXT_FIELDS and value not in (None, "", [], {})
+    }
+
+
+def _embedded_shipment_context(row: dict, embedded_rows: list[dict]) -> dict:
+    shipment_id = _str(row.get("id"))
+    if shipment_id:
+        for embedded in embedded_rows:
+            if _str(embedded.get("id")) == shipment_id:
+                return _shipment_context(embedded)
+    if len(embedded_rows) == 1:
+        return _shipment_context(embedded_rows[0])
+    return {}
+
+
+def _merge_shipment_payload(base: dict, overlay: dict) -> dict:
+    merged = dict(base or {})
+    for key, value in (overlay or {}).items():
+        if key in _SHIPMENT_CLEARABLE_FIELDS or value not in (None, "", [], {}):
+            merged[key] = value
+    return merged
+
+
 async def _fetch_salla_shipment_details(
     db,
     user_id: str,
     internal_order_id: str,
     embedded_shipments: Any,
 ) -> list[dict]:
-    """Return Salla's current shipment rows, including printable AWB data.
+    """Return current shipment rows without losing order delivery context.
 
-    The shipments endpoint is authoritative.  Embedded order shipments are
-    only a fallback when listing fails, because they may retain a label that
-    Salla later cancelled.
+    The shipment-list/detail endpoints remain authoritative for labels, tracking
+    and status.  Salla may omit the shipping address and courier from those
+    responses, or return an empty list before a shipment is created.  In that
+    case we preserve only address/courier context from Order Details and strip
+    any embedded label/tracking fields so cancelled labels cannot reappear.
     """
     embedded_rows = [
         dict(row)
@@ -983,6 +1043,7 @@ async def _fetch_salla_shipment_details(
         if isinstance(row, dict)
     ]
     rows: list[dict] = []
+    listed_succeeded = False
 
     try:
         response = await call_salla(
@@ -997,11 +1058,10 @@ async def _fetch_salla_shipment_details(
         )
         listed = response.get("data") if isinstance(response, dict) else None
         if isinstance(listed, list):
-            rows = [
-                dict(row)
-                for row in listed
-                if isinstance(row, dict)
-            ]
+            listed_succeeded = True
+            rows = [dict(row) for row in listed if isinstance(row, dict)]
+        else:
+            rows = embedded_rows
     except SallaError as exc:
         logger.warning(
             "Could not list Salla shipments for order %s: %s",
@@ -1010,10 +1070,23 @@ async def _fetch_salla_shipment_details(
         )
         rows = embedded_rows
 
+    if listed_succeeded and not rows:
+        return [
+            context
+            for context in (_shipment_context(row) for row in embedded_rows)
+            if context
+        ]
+
     async def enrich(row: dict) -> dict:
+        base = (
+            _embedded_shipment_context(row, embedded_rows)
+            if listed_succeeded
+            else {}
+        )
+        merged = _merge_shipment_payload(base, row)
         shipment_id = _str(row.get("id"))
         if not shipment_id:
-            return row
+            return merged
 
         try:
             response = await call_salla(
@@ -1028,26 +1101,12 @@ async def _fetch_salla_shipment_details(
                 shipment_id,
                 exc,
             )
-            return row
+            return merged
 
         details = response.get("data") if isinstance(response, dict) else None
         if not isinstance(details, dict):
-            return row
-
-        merged = dict(row)
-        authoritative_clearable = {
-            "label",
-            "label_url",
-            "shipping_number",
-            "tracking_number",
-            "tracking_link",
-            "tracking_url",
-            "status",
-        }
-        for key, value in details.items():
-            if key in authoritative_clearable or value not in (None, "", [], {}):
-                merged[key] = value
-        return merged
+            return merged
+        return _merge_shipment_payload(merged, details)
 
     if not rows:
         return []
