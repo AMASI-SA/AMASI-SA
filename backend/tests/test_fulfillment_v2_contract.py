@@ -109,3 +109,22 @@ def test_order_review_product_cards_keep_titles_and_specs_readable():
     assert 'md:max-w-7xl' in source
     assert 'sm:grid-cols-[150px_minmax(0,1fr)]' not in source
     assert 'grid gap-4 xl:grid-cols-3' not in source
+
+
+
+def test_salla_refresh_is_centralized_in_orders_v2():
+    review_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
+    routes_source = (ROOT / "backend/order_engine/routes.py").read_text(encoding="utf-8")
+    refresh_source = (ROOT / "backend/order_engine/salla_refresh.py").read_text(encoding="utf-8")
+    service_source = (ROOT / "frontend/src/services/orderEngine.js").read_text(encoding="utf-8")
+    details_source = (ROOT / "frontend/src/pages/OrderDetailsV2.jsx").read_text(encoding="utf-8")
+
+    assert "from order_engine.salla_refresh import refresh_order_from_salla" in review_source
+    assert "resync_single_order" not in review_source
+    assert "_refresh_review_source_once" not in review_source
+    assert '"/{order_number}/refresh-from-salla"' in routes_source
+    assert 'f"/orders/{internal_id}"' in refresh_source
+    assert '"/shipments"' not in refresh_source
+    assert "no_shipments_api_calls" in refresh_source
+    assert "refreshOrderFromSalla" in service_source
+    assert 'data-testid="order-v2-refresh-from-salla"' in details_source

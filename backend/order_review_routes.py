@@ -16,19 +16,18 @@ from pymongo.errors import DuplicateKeyError
 
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
+from order_engine.salla_refresh import refresh_order_from_salla
 from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
-from salla_integration.sync import resync_single_order
 
 
 WORKFLOWS = "order_review_workflows"
 PREFERENCES = "product_option_image_preferences"
 EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
-REVIEW_SOURCE_REFRESH_VERSION = 2
 
 _PERSONAL_OPTION_HINTS = (
     "اسم", "نقش", "كتابة", "رسالة", "اهداء", "إهداء", "تهنئة", "رقم الجوال",
@@ -384,44 +383,6 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
     }
 
 
-async def _refresh_review_source_once(db: Any, user_id: str, order_number: str) -> bool:
-    """Refresh the order from Salla once when the reviewer explicitly opens it.
-
-    List polling remains light and never opens Salla Order Details. Opening the
-    review drawer is an explicit merchant action, so it is the correct boundary
-    for retrieving the receipt image and authoritative line-item options/files.
-    Failures are non-blocking: the locally cached review still opens.
-    """
-    try:
-        existing = await db.unified_orders.find_one(
-            {"user_id": user_id, "order_number": order_number},
-            {"_id": 0, "order_review_source_refreshed_at": 1, "order_review_source_refresh_version": 1},
-        )
-        refresh_version = int((existing or {}).get("order_review_source_refresh_version") or 0)
-        if (
-            refresh_version >= REVIEW_SOURCE_REFRESH_VERSION
-            and _text((existing or {}).get("order_review_source_refreshed_at"))
-        ):
-            return False
-
-        result = await resync_single_order(db, user_id, order_number)
-        if not isinstance(result, dict) or not result.get("ok") or not result.get("found"):
-            return False
-
-        refreshed_at = _now()
-        await db.unified_orders.update_one(
-            {"user_id": user_id, "order_number": order_number},
-            {"$set": {
-                "order_review_source_refreshed_at": refreshed_at,
-                "order_review_source_refresh_mode": "explicit_review_open",
-                "order_review_source_refresh_version": REVIEW_SOURCE_REFRESH_VERSION,
-            }},
-        )
-        return True
-    except Exception:
-        return False
-
-
 async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[str, Optional[str]]:
     internal_id = _text(order.source.source_order_id) or _text(order.order_id)
     if not internal_id:
@@ -478,16 +439,23 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     async def get_review_detail(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
+
+        # One central V2 refresh boundary. It reads delivery facts from Salla
+        # Order Details and line items from List Order Items, never Shipments or
+        # Qoyod. Failure is non-blocking so the durable local snapshot remains
+        # available to the reviewer.
+        await refresh_order_from_salla(
+            db,
+            merchant_id,
+            order_number,
+            force=False,
+            minimum_fresh_seconds=120,
+        )
+
         try:
             order = await get_order(repository, user_id=merchant_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-
-        if await _refresh_review_source_once(db, merchant_id, order_number):
-            try:
-                order = await get_order(repository, user_id=merchant_id, order_number=order_number)
-            except OrderNotFoundError:
-                pass
         return await _detail(db, merchant_id, order)
 
     @router.patch("/{order_number}/items/{order_item_id:path}")
