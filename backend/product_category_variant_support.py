@@ -19,29 +19,82 @@ def _text(value: Any) -> str:
     return str(value).strip()
 
 
-def _category_row(value: Any, parent_path: str = "") -> dict[str, Any] | None:
+def _category_row(value: Any, parent_path: str = "", parent_id: str = "") -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
     category_id = _text(value.get("id") or value.get("category_id"))
     name = _text(value.get("name") or value.get("title") or value.get("label"))
     if not category_id and not name:
         return None
+    status = _text(value.get("status") or value.get("visibility") or "active").lower() or "active"
+    resolved_parent_id = _text(value.get("parent_id") or value.get("parentId") or value.get("parent") or parent_id)
     path = _text(value.get("path") or value.get("full_name") or value.get("breadcrumb"))
     if not path:
-        path = " > ".join(part for part in (parent_path, name) if part)
-    return {"id": category_id, "name": name or category_id, "path": path or name or category_id}
+        path = " ← ".join(part for part in (parent_path, name) if part)
+    return {
+        "id": category_id,
+        "name": name or category_id,
+        "path": path or name or category_id,
+        "parent_id": resolved_parent_id,
+        "status": status,
+        "is_hidden": status in {"hidden", "inactive", "disabled"},
+    }
 
 
-def _flatten_categories(rows: Any, parent_path: str = "") -> list[dict[str, Any]]:
+def _flatten_categories(rows: Any, parent_path: str = "", parent_id: str = "") -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for value in rows if isinstance(rows, list) else []:
-        row = _category_row(value, parent_path)
+        row = _category_row(value, parent_path, parent_id)
         if not row:
             continue
         result.append(row)
-        children = value.get("children") or value.get("subcategories") or value.get("items") or []
-        result.extend(_flatten_categories(children, row["path"]))
+        children = (
+            value.get("children")
+            or value.get("sub_categories")
+            or value.get("subcategories")
+            or value.get("items")
+            or []
+        )
+        result.extend(_flatten_categories(children, row["path"], row["id"]))
     return result
+
+
+def _build_category_catalog(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build full breadcrumb paths from Salla's flat parent_id response.
+
+    Salla's List Categories response is commonly flat and exposes `parent_id`.
+    Nested children may also arrive through `sub_categories`/`items`.  This
+    function supports both forms and preserves hidden categories for admin use.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = _text(row.get("id"))
+        if not key:
+            continue
+        current = by_id.get(key, {})
+        by_id[key] = {**current, **row}
+
+    def resolve_path(category_id: str, trail: set[str] | None = None) -> tuple[str, int]:
+        trail = set(trail or set())
+        row = by_id.get(category_id) or {}
+        name = _text(row.get("name")) or category_id
+        parent_id = _text(row.get("parent_id"))
+        if not parent_id or parent_id in {"0", category_id} or parent_id not in by_id or parent_id in trail:
+            return name, 0
+        parent_path, parent_depth = resolve_path(parent_id, trail | {category_id})
+        return f"{parent_path} ← {name}", parent_depth + 1
+
+    result: list[dict[str, Any]] = []
+    for category_id, row in by_id.items():
+        path, depth = resolve_path(category_id)
+        hidden = bool(row.get("is_hidden"))
+        result.append({
+            **row,
+            "path": f"{path} — مخفي" if hidden else path,
+            "depth": depth,
+            "status_label": "مخفي" if hidden else "نشط",
+        })
+    return sorted(result, key=lambda row: (row.get("path") or row.get("name") or "").casefold())
 
 
 def _selection_label(selection: Any, value_lookup: dict[str, tuple[str, str]], option_lookup: dict[str, str]) -> str:
@@ -68,7 +121,7 @@ def enrich_product_patch(raw: dict[str, Any], patch: dict[str, Any]) -> dict[str
     categories_raw = raw.get("categories") or raw.get("category") or []
     if isinstance(categories_raw, dict):
         categories_raw = [categories_raw]
-    categories = _flatten_categories(categories_raw)
+    categories = _build_category_catalog(_flatten_categories(categories_raw))
     if categories:
         patch["categories"] = categories
 
@@ -137,7 +190,13 @@ def make_product_category_catalog_router(db: Any, current_user: Callable) -> API
         page = 1
         try:
             while page <= 20:
-                response = await call_salla(db, user_id, "GET", "/categories", params={"page": page, "per_page": 100})
+                response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    "/categories",
+                    params={"page": page, "per_page": 100, "with": "items"},
+                )
                 rows = response.get("data") if isinstance(response, dict) else None
                 if not isinstance(rows, list) or not rows:
                     break
@@ -150,11 +209,7 @@ def make_product_category_catalog_router(db: Any, current_user: Callable) -> API
         except SallaError as exc:
             raise HTTPException(status_code=exc.status_code if exc.status_code != 200 else 400, detail={"message": str(exc), "needs_reauth": exc.needs_reauth}) from exc
 
-        unique: dict[str, dict[str, Any]] = {}
-        for row in categories:
-            key = row.get("id") or row.get("path")
-            if key:
-                unique[str(key)] = row
-        return {"ok": True, "items": sorted(unique.values(), key=lambda row: row.get("path") or row.get("name") or ""), "total": len(unique)}
+        items = _build_category_catalog(categories)
+        return {"ok": True, "items": items, "total": len(items)}
 
     return router
