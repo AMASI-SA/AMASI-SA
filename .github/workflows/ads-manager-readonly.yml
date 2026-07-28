@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "backend/ad_spend_reporting.py"
+      - "backend/ad_account_routes.py"
       - "backend/ads_manager/__init__.py"
       - "backend/ads_manager/models.py"
       - "backend/ads_manager/routes.py"
@@ -67,6 +68,7 @@ jobs:
               [[ -z "${changed_path}" ]] && continue
               case "${changed_path}" in
                 backend/ad_spend_reporting.py|\
+                backend/ad_account_routes.py|\
                 backend/ads_manager/__init__.py|\
                 backend/ads_manager/models.py|\
                 backend/ads_manager/routes.py|\
@@ -283,6 +285,7 @@ jobs:
             [[ -z "${changed_path}" ]] && continue
             case "${changed_path}" in
               backend/ad_spend_reporting.py|\
+              backend/ad_account_routes.py|\
               backend/ads_manager/__init__.py|\
               backend/ads_manager/models.py|\
               backend/ads_manager/routes.py|\
@@ -317,6 +320,86 @@ jobs:
           fi
 
           echo "Strict Phase 1 path allowlist passed."
+
+      - name: Permit only the reviewed accounting eligibility filter
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          comparison_base="${PULL_REQUEST_BASE_SHA:-origin/main}"
+          COMPARISON_BASE="${comparison_base}" python - <<'PY'
+          import ast
+          import hashlib
+          import os
+          import pathlib
+          import subprocess
+
+          path = "backend/ad_account_routes.py"
+          base_source = subprocess.check_output(
+              ["git", "show", f"{os.environ['COMPARISON_BASE']}:{path}"],
+              text=True,
+          )
+          current_source = pathlib.Path(path).read_text(encoding="utf-8")
+
+          def isolate(source):
+              tree = ast.parse(source)
+              matches = [
+                  node for node in tree.body
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and node.name == "_fetch_daily_spend"
+              ]
+              if len(matches) != 1:
+                  raise SystemExit("_fetch_daily_spend must exist exactly once")
+              node = matches[0]
+              lines = source.splitlines()
+              function_source = "\n".join(
+                  lines[node.lineno - 1:node.end_lineno]
+              )
+              remainder = (
+                  lines[:node.lineno - 1]
+                  + ["<reviewed _fetch_daily_spend>"]
+                  + lines[node.end_lineno:]
+              )
+              while remainder and not remainder[-1].strip():
+                  remainder.pop()
+              digest = hashlib.sha256(
+                  ast.dump(node, include_attributes=False).encode()
+              ).hexdigest()
+              return function_source, "\n".join(remainder), digest
+
+          _, base_remainder, _ = isolate(base_source)
+          function_source, current_remainder, current_digest = isolate(
+              current_source
+          )
+          if current_remainder != base_remainder:
+              raise SystemExit(
+                  "ad_account_routes.py changed outside _fetch_daily_spend"
+              )
+          required_contract = (
+              "accounting_eligible",
+              "accounting_spend_snapshot",
+              "source_rows_seen",
+              "return [], col_name",
+          )
+          missing = [
+              marker for marker in required_contract
+              if marker not in function_source
+          ]
+          if missing:
+              raise SystemExit(
+                  f"accounting eligibility contract missing: {missing}"
+              )
+          expected_digest = (
+              "5e3e5de480ecaea67d12da2b818097c53d98b2042573cb16696e4c2668f54672"
+          )
+          if current_digest != expected_digest:
+              raise SystemExit(
+                  "_fetch_daily_spend differs from the reviewed AST contract"
+              )
+          print("Accounting eligibility filter guard passed.")
+          PY
 
       - name: Permit only the isolated router wiring in server.py
         if: steps.classify.outputs.run_full == 'true'
@@ -471,6 +554,7 @@ jobs:
           import subprocess
 
           paths = [
+              "backend/ad_account_routes.py",
               "backend/snapchat_routes.py",
               "backend/ads_v2/models.py",
               "backend/ads_v2/sync/adapters.py",
@@ -479,6 +563,8 @@ jobs:
           approved_new_functions = {
               "backend/snapchat_routes.py": {
                   "_parse_snap_conversion_payload",
+                  "_parse_snap_spend_payload",
+                  "_merge_snap_conversion_metrics",
                   "_fetch_snap_conversion_metrics",
                   "_aggregate_snap_conversion_rows",
                   "_legacy_metric_is_known",
@@ -1059,6 +1145,7 @@ jobs:
         run: |
           python -m compileall -q \
             ad_spend_reporting.py \
+            ad_account_routes.py \
             ads_manager \
             ads_v2/models.py \
             ads_v2/sync/adapters.py \
