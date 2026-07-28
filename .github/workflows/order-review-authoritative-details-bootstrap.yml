@@ -7,6 +7,12 @@ on:
     paths:
       - "scripts/patch_order_review_authoritative_details.py"
       - ".github/workflows/order-review-authoritative-details-bootstrap.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/patch_order_review_authoritative_details.py"
+      - ".github/workflows/order-review-authoritative-details-bootstrap.yml"
 
 permissions:
   contents: write
