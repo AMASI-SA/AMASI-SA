@@ -50,34 +50,22 @@ export async function applyMissingSkus({ prefix = "AMS", width = 5, limit = 50, 
     return (await api.post("/products-v2/workspace/sku/apply", { prefix, width, limit, confirmation })).data;
 }
 
-export async function getProductControlCenter(productId) {
-    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center`)).data;
-}
-export async function saveProductControlDraft(productId, payload) {
-    return (await api.put(`/products-v2/${encodeURIComponent(productId)}/control-center/draft`, payload)).data;
-}
-export async function approveProductControlDraft(productId, draftId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/approve`)).data;
-}
-export async function publishProductControlDraft(productId, draftId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر التعديل إلى سلة" })).data;
-}
-export async function getProductControlHistory(productId) {
-    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center/history`)).data;
-}
-export async function saveProductAiPolicy(payload) {
-    return (await api.put("/products-v2/control-center/policy", payload)).data;
-}
+export async function getProductControlCenter(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center`)).data; }
+export async function saveProductControlDraft(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/control-center/draft`, payload)).data; }
+export async function approveProductControlDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/approve`)).data; }
+export async function publishProductControlDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/control-center/draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر التعديل إلى سلة" })).data; }
+export async function getProductControlHistory(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/control-center/history`)).data; }
+export async function saveProductAiPolicy(payload) { return (await api.put("/products-v2/control-center/policy", payload)).data; }
 
-export async function getProductMediaControl(productId) {
-    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-control`)).data;
+export async function getProductMediaControl(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-control`)).data; }
+export async function saveProductMediaDraft(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/media-draft`, payload)).data; }
+export async function approveProductMediaDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/approve`)).data; }
+export async function publishProductMediaDraft(productId, draftId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر صور المنتج إلى سلة" })).data; }
+export async function uploadProductMediaFile(productId, file) {
+    const form = new FormData();
+    form.append("file", file);
+    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-upload`, form, { headers: { "Content-Type": "multipart/form-data" } })).data;
 }
-export async function saveProductMediaDraft(productId, payload) {
-    return (await api.put(`/products-v2/${encodeURIComponent(productId)}/media-draft`, payload)).data;
-}
-export async function approveProductMediaDraft(productId, draftId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/approve`)).data;
-}
-export async function publishProductMediaDraft(productId, draftId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-draft/${encodeURIComponent(draftId)}/publish`, { confirmation: "نشر صور المنتج إلى سلة" })).data;
+export async function deleteProductMediaUpload(productId, token) {
+    return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/media-upload/${encodeURIComponent(token)}`)).data;
 }
