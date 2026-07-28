@@ -5,7 +5,6 @@ workspaces and engines.
 It must not expose MongoDB-shaped documents to frontend consumers.
 """
 
-# Payment-method freshness policy
 import orders_db as _orders_db
 
 _orders_db.CRITICAL_FIELDS.add("payment_method")
@@ -15,23 +14,18 @@ from .repository import MongoOrderRepository, OrderDiscoveryRow, OrderRepository
 from . import routes as _routes
 from .routes import OrderListResponse
 from .service import InvalidOrderCursorError, OrderNotFoundError, OrderPage, get_order, list_orders
-from .models import (
-    AddressDTO, CustomerDTO, MoneyTotalsDTO, OrderDTO, OrderItemDTO,
-    OrderSourceDTO, PaymentDTO, ShippingDTO,
-)
+from .models import AddressDTO, CustomerDTO, MoneyTotalsDTO, OrderDTO, OrderItemDTO, OrderSourceDTO, PaymentDTO, ShippingDTO
 
 _original_make_order_engine_router = _routes.make_order_engine_router
 
 
 def _route_keys(route):
-    """Return unique (path, method) keys for an APIRoute."""
     path = getattr(route, "path", None)
     methods = getattr(route, "methods", None) or {None}
     return {(path, method) for method in methods}
 
 
 def make_order_engine_router(*args, **kwargs):
-    """Build Order Engine plus independent Mezan OS operations engines."""
     router = _original_make_order_engine_router(*args, **kwargs)
     db = args[0] if args else kwargs["db"]
     current_user = args[1] if len(args) > 1 else kwargs["current_user"]
@@ -48,10 +42,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_sale_schedule_support import install_product_sale_schedule_support
     from product_category_publish_support import install_product_category_publish_support
     from product_main_image_dedupe_support import install_product_main_image_dedupe_support
-    from product_category_variant_support import (
-        install_product_category_variant_support,
-        make_product_category_catalog_router,
-    )
+    from product_category_variant_support import install_product_category_variant_support, make_product_category_catalog_router
     from product_v2_recent_sync_routes import make_product_v2_recent_sync_router
     from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
     from component_edit_routes import make_component_edit_router
@@ -60,6 +51,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_control_center_routes import make_product_control_center_router
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
+    from product_media_ai_routes import make_product_media_ai_router
     from ai_store_operations_foundation import make_ai_store_operations_router
     from ai_store_access_control import make_ai_store_access_router
 
@@ -83,20 +75,15 @@ def make_order_engine_router(*args, **kwargs):
         make_ai_store_operations_router(db, current_user),
         make_ai_store_access_router(db, current_user),
         make_product_media_upload_router(db, current_user),
-        # Static Products V2 routes must be registered before
-        # /products-v2/{product_id}; otherwise FastAPI interprets
-        # "category-catalog" as a product id and the selector stays empty.
         make_product_category_catalog_router(db, current_user),
         make_product_v2_recent_sync_router(db, current_user),
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
         make_product_control_center_router(db, current_user),
         make_product_media_draft_router(db, current_user),
+        make_product_media_ai_router(db, current_user),
         make_product_v2_router(db, current_user),
         make_product_v2_details_router(db, current_user),
-        # This GET route must be registered before the older workspace route.
-        # It exposes the current cost consistently for legacy and new rows so
-        # the component edit modal is always pre-filled.
         make_component_workspace_cost_compat_router(db, current_user),
         make_component_edit_router(db, current_user),
         make_product_option_cost_router(db, current_user),
@@ -105,7 +92,6 @@ def make_order_engine_router(*args, **kwargs):
     existing_keys = set()
     for route in router.routes:
         existing_keys.update(_route_keys(route))
-
     for child_router in child_routers:
         for route in child_router.routes:
             route_keys = _route_keys(route)
@@ -122,6 +108,5 @@ __all__ = [
     "OrderSourceDTO", "PaymentDTO", "ShippingDTO", "OrderMappingError",
     "map_salla_order", "InvalidOrderCursorError", "OrderNotFoundError",
     "OrderPage", "get_order", "list_orders", "MongoOrderRepository",
-    "OrderDiscoveryRow", "OrderRepository", "OrderListResponse",
-    "make_order_engine_router",
+    "OrderDiscoveryRow", "OrderRepository", "OrderListResponse", "make_order_engine_router",
 ]
