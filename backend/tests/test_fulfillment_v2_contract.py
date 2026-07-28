@@ -33,9 +33,12 @@ def test_review_route_uses_safe_auto_sync_module_and_never_imports_qoyod():
     ).casefold()
 
 
-def test_new_workspace_route_and_sidebar_entry_are_wired():
+def test_new_workspace_route_sidebar_and_v2_navigation_are_wired():
     app_source = (ROOT / "frontend/src/App.js").read_text(encoding="utf-8")
     sidebar_source = (ROOT / "frontend/src/components/Sidebar.jsx").read_text(
+        encoding="utf-8"
+    )
+    layout_source = (ROOT / "frontend/src/components/Layout.jsx").read_text(
         encoding="utf-8"
     )
 
@@ -48,3 +51,5 @@ def test_new_workspace_route_and_sidebar_entry_are_wired():
     assert 'to: "/fulfillment-v2"' in sidebar_source
     assert 'label: "إدارة رفع الطلبات"' in sidebar_source
     assert 'testid: "nav-mezan-os-fulfillment"' in sidebar_source
+    assert '{ to: "/fulfillment-v2", label: "إدارة رفع الطلبات", Icon: Queue }' in layout_source
+    assert '"/fulfillment-v2"' in layout_source
