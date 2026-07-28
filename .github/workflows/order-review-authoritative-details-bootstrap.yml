@@ -1,0 +1,63 @@
+name: Order review authoritative details bootstrap
+
+on:
+  push:
+    branches:
+      - fix/order-review-authoritative-options
+    paths:
+      - "scripts/patch_order_review_authoritative_details.py"
+      - ".github/workflows/order-review-authoritative-details-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/order-review-authoritative-options
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply authoritative receipt and item-spec fix
+        run: python scripts/patch_order_review_authoritative_details.py
+
+      - name: Validate patched source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile \
+            backend/order_review_routes.py \
+            backend/order_engine/mapper.py \
+            backend/tests/test_order_review_stage_one.py \
+            backend/tests/test_order_engine_mapper.py
+          grep -q 'resync_single_order' backend/order_review_routes.py
+          grep -q 'order_review_source_refreshed_at' backend/order_review_routes.py
+          grep -q 'item.get("files")' backend/order_engine/mapper.py
+          grep -q 'order-review-payment-receipt' frontend/src/pages/OrderReview.jsx
+          grep -q 'reviewProductSpecs' frontend/src/pages/OrderReview.jsx
+          grep -q 'OrderReview.test.jsx' .github/workflows/fulfillment-v2.yml
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Fix already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/order_review_routes.py \
+            backend/order_engine/mapper.py \
+            backend/tests/test_order_review_stage_one.py \
+            backend/tests/test_order_engine_mapper.py \
+            frontend/src/pages/OrderReview.jsx \
+            frontend/src/pages/OrderReview.test.jsx \
+            .github/workflows/fulfillment-v2.yml
+          git commit -m "fix(fulfillment): show transfer receipt and Salla item details"
+          git push origin HEAD:fix/order-review-authoritative-options
