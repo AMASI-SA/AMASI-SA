@@ -25,7 +25,7 @@ def openai_integration_card() -> dict[str, Any]:
     status = openai_runtime_status()
     connected = status["connected"]
     image_ready = status["images"]["ready"]
-    current = ["api_key_present"] if connected else []
+    current = ["runtime_configured"] if connected else []
     return {
         "provider": "openai",
         "name": "OpenAI",
@@ -54,14 +54,14 @@ def openai_integration_card() -> dict[str, Any]:
         }] if connected else []),
         "permissions": {
             "current": current,
-            "missing": [] if connected else ["api_key"],
+            "missing": [] if connected else ["runtime_configuration"],
             "unknown": False,
         },
         "capabilities": {
             "analysis.generate": _capability(
                 "available" if connected else "not_connected",
                 "محلل ميزان يستخدم اتصال OpenAI الحالي بالقراءة فقط."
-                if connected else "مفتاح OpenAI غير موجود في بيئة التشغيل.",
+                if connected else "إعداد OpenAI غير موجود في بيئة التشغيل.",
             ),
             "images.propose": _capability(
                 "available" if connected else "not_connected",
@@ -99,8 +99,8 @@ def openai_integration_card() -> dict[str, Any]:
                 "reason": "حالة الاتصال مثبتة من بيئة التشغيل؛ اختبار الشبكة غير منفذ من مركز التكاملات.",
                 "href": None,
             },
-            "reconnect": {"enabled": False, "reason": "يُدار المفتاح من أسرار بيئة النشر.", "href": None},
-            "settings": {"enabled": False, "reason": "يُدار المفتاح من أسرار بيئة النشر.", "href": None},
+            "reconnect": {"enabled": False, "reason": "يُدار الاتصال من أسرار بيئة النشر.", "href": None},
+            "settings": {"enabled": False, "reason": "يُدار الاتصال من أسرار بيئة النشر.", "href": None},
             "disconnect": {"enabled": False, "reason": "إزالة الأسرار إجراء حساس ومحظور من هذه الصفحة.", "href": None},
         },
     }
