@@ -129,3 +129,11 @@ def test_salla_refresh_is_centralized_in_orders_v2():
     assert "no_shipments_api_calls" in refresh_source
     assert "refreshOrderFromSalla" in service_source
     assert 'data-testid="order-v2-refresh-from-salla"' in details_source
+
+
+
+def test_orders_v2_shipping_card_shows_complete_order_address():
+    source = (ROOT / "frontend/src/pages/OrderDetailsV2.jsx").read_text(encoding="utf-8")
+
+    assert '["العنوان", address.formatted || address.address_line' in source
+    assert 'تفاصيل العنوان لم تصل من سلة' in source

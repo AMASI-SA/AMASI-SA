@@ -587,6 +587,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting
         ["المدينة", address.city],
         ["الحي", address.district || address.neighborhood || address.block],
         ["الشارع", address.street || address.street_name || address.street_number],
+        ["العنوان", address.formatted || address.address_line || address.address_line1 || address.description || address.location],
         ["العنوان الوطني", address.national_address || address.short_address],
         ["رقم المبنى", address.building_number],
         ["الرقم الإضافي", address.additional_number],
