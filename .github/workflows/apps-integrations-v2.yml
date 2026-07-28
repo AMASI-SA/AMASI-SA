@@ -6,7 +6,11 @@ on:
       - main
     paths:
       - "backend/integrations_control_center/**"
+      - "backend/ai_provider_status.py"
+      - "backend/ai_analysis_routes.py"
+      - "backend/openai_integration_status_support.py"
       - "backend/tests/test_mezan_integrations_v2.py"
+      - "backend/tests/test_openai_integration_status_support.py"
       - "backend/server.py"
       - "frontend/src/pages/AppsIntegrationsControlCenter.jsx"
       - "frontend/src/components/integrationsV2/**"
@@ -36,15 +40,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           git fetch --no-tags origin main
           comparison_base="${PULL_REQUEST_BASE_SHA:-origin/main}"
           changed_paths_file="${RUNNER_TEMP}/apps-integrations-v2-changed-paths.txt"
           protected_paths_file="${RUNNER_TEMP}/apps-integrations-v2-protected-paths.txt"
-
-          git diff --name-only --diff-filter=ACDMRT \
-            "${comparison_base}...HEAD" > "${changed_paths_file}"
-
+          git diff --name-only --diff-filter=ACDMRT "${comparison_base}...HEAD" > "${changed_paths_file}"
           while IFS= read -r changed_path; do
             case "${changed_path}" in
               backend/auth.py|\
@@ -75,13 +75,11 @@ jobs:
                 ;;
             esac
           done < "${changed_paths_file}"
-
           if [[ -s "${protected_paths_file}" ]]; then
             echo "::error::This branch changes protected product upload, preparation, employee, team, auth, role, or RBAC files."
             sed 's/^/ - /' "${protected_paths_file}"
             exit 1
           fi
-
           echo "Protected path guard passed."
 
   backend-tests:
@@ -107,14 +105,13 @@ jobs:
           openpyxl==3.1.5
       - name: Compile Apps Integrations V2 backend
         run: |
-          python -m compileall -q \
-            integrations_control_center \
-            tests/test_mezan_integrations_v2.py
-          python -m py_compile server.py
+          python -m compileall -q integrations_control_center tests/test_mezan_integrations_v2.py
+          python -m py_compile ai_provider_status.py ai_analysis_routes.py openai_integration_status_support.py server.py
       - name: Run Apps Integrations V2 backend tests
         run: >-
           python -m pytest
           tests/test_mezan_integrations_v2.py
+          tests/test_openai_integration_status_support.py
           -q
           --tb=short
 
