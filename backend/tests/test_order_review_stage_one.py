@@ -1,11 +1,13 @@
 """Stage-one review invariants: image learning, RBAC and status lookup."""
 
 from datetime import datetime, timezone
+import inspect
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from order_engine.mapper import map_salla_order
+from order_engine.repository import MongoOrderRepository
 from salla_integration.sync import _fetch_salla_shipment_details
 from order_item_engine.models import (
     OrderItemIdentityDTO,
@@ -13,13 +15,12 @@ from order_item_engine.models import (
     OrderItemSourceDTO,
 )
 from order_review_routes import (
-    REVIEW_SOURCE_REFRESH_VERSION,
     _can_review,
     _merchant_user_id,
-    _refresh_review_source_once,
     _review_item_identities,
     _reviewed_status_id,
     build_image_preference_identity,
+    make_order_review_router,
 )
 
 
@@ -208,43 +209,6 @@ async def test_review_refreshes_and_caches_the_complete_product_gallery():
 
 
 
-class _ReviewRefreshCollection:
-    def __init__(self):
-        self.row = {
-            "user_id": "owner-1",
-            "order_number": "274724433",
-            # Marker written by the first implementation, before versioning.
-            "order_review_source_refreshed_at": "2026-07-28T20:00:00+00:00",
-        }
-
-    async def find_one(self, _query, _projection=None):
-        return dict(self.row)
-
-    async def update_one(self, _selector, update):
-        self.row.update(update.get("$set") or {})
-        return None
-
-
-class _ReviewRefreshDB:
-    def __init__(self):
-        self.unified_orders = _ReviewRefreshCollection()
-
-
-@pytest.mark.asyncio
-async def test_review_open_refreshes_authoritative_salla_details_only_once():
-    db = _ReviewRefreshDB()
-    result = {"ok": True, "found": True}
-
-    with patch("order_review_routes.resync_single_order", new=AsyncMock(return_value=result)) as refresh:
-        assert await _refresh_review_source_once(db, "owner-1", "274724433") is True
-        assert await _refresh_review_source_once(db, "owner-1", "274724433") is False
-
-    refresh.assert_awaited_once_with(db, "owner-1", "274724433")
-    assert db.unified_orders.row["order_review_source_refresh_mode"] == "explicit_review_open"
-    assert db.unified_orders.row["order_review_source_refresh_version"] == REVIEW_SOURCE_REFRESH_VERSION
-
-
-
 @pytest.mark.asyncio
 async def test_empty_current_shipments_preserve_embedded_delivery_context():
     embedded = [{
@@ -312,3 +276,67 @@ async def test_current_shipment_merges_embedded_address_without_reviving_stale_l
     assert rows[0]["shipping_address"]["street"] == "شارع الأمير"
     assert rows[0]["tracking_number"] == "CURRENT-TRACKING"
     assert "label_url" not in rows[0]
+
+
+
+def test_v2_read_model_restores_durable_shipping_receipt_and_items():
+    row = {
+        "user_id": "owner-1",
+        "order_number": "274682897",
+        "order_date": "2026-07-28",
+        "order_id": "salla-internal-1",
+        "order_status": "بانتظار المراجعة",
+        "order_status_slug": "under_review",
+        "customer_name": "عميل اختبار",
+        "customer_mobile": "0500000000",
+        "payment_method": "bank",
+        "payment_receipt_url": "https://cdn.salla.sa/receipt.jpg",
+        "shipping_company": "iMile",
+        "shipping_city": "الرياض",
+        "shipping_district": "العليا",
+        "shipping_street": "شارع الاختبار",
+        "shipping_country": "السعودية",
+        "total_amount": 134.0,
+        "currency": "SAR",
+        "products": [{
+            "id": "line-1",
+            "product_id": "product-1",
+            "sku": "AMS12095",
+            "name": "قلادة",
+            "quantity": 1,
+            "custom_fields": [{"name": "هل تريد إضافة كرت اهداء", "value": "لا"}],
+        }],
+        # Simulates the reduced provider raw snapshot that previously replaced
+        # the richer webhook payload.
+        "raw_by_source": {
+            "salla_direct": {
+                "id": "salla-internal-1",
+                "reference_id": "274682897",
+                "date": "2026-07-28T12:00:00+03:00",
+                "status": {"slug": "under_review", "name": "بانتظار المراجعة"},
+                "shipping": {},
+                "shipments": [{"shipping_address": {}}],
+                "items": [],
+            }
+        },
+    }
+
+    discovery = MongoOrderRepository._to_discovery_row(row)
+    assert discovery is not None
+    order = map_salla_order(discovery.salla_raw)
+
+    assert order.shipping.company == "iMile"
+    assert order.shipping.address.city == "الرياض"
+    assert order.shipping.address.district == "العليا"
+    assert order.shipping.address.street == "شارع الاختبار"
+    assert order.shipping.address.country == "السعودية"
+    assert order.payment.receipt_url == "https://cdn.salla.sa/receipt.jpg"
+    assert order.items[0].custom_fields[0]["value"] == "لا"
+
+
+def test_fulfillment_review_uses_orders_v2_read_model_without_order_resync():
+    source = inspect.getsource(make_order_review_router)
+
+    assert "resync_single_order" not in source
+    assert "_refresh_review_source_once" not in source
+    assert "return await _detail(db, merchant_id, order)" in source

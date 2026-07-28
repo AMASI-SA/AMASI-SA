@@ -118,6 +118,13 @@ def _first(*values: Any) -> Any:
     return None
 
 
+def _first_nonempty(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
 def _nested(data: dict[str, Any], *path: str) -> Any:
     current: Any = data
 
@@ -449,7 +456,7 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
     district = _dict(data.get("district"))
 
     address = AddressDTO(
-        country=_text(_first(country.get("name"), data.get("country"))),
+        country=_text(_first(country.get("name"), data.get("country_name"), data.get("country"))),
         country_code=_text(
             _first(
                 country.get("code"),
@@ -457,10 +464,11 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
                 data.get("country_code"),
             )
         ),
-        city=_text(_first(city.get("name"), data.get("city"))),
+        city=_text(_first(city.get("name"), data.get("city_name"), data.get("locality"), data.get("city"))),
         district=_text(
             _first(
                 district.get("name"),
+                data.get("district"),
                 data.get("district_name"),
                 data.get("neighborhood"),
                 data.get("block"),
@@ -979,7 +987,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
 
     customer_raw = _dict(raw_order.get("customer"))
     shipping_raw = _dict(
-        _first(
+        _first_nonempty(
             raw_order.get("shipping"),
             raw_order.get("shipping_address"),
         )
@@ -1130,13 +1138,13 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     )
 
     courier = _dict(
-        _first(
+        _first_nonempty(
             first_shipment.get("courier"),
             shipping_raw.get("company"),
         )
     )
 
-    shipping_address_raw = _first(
+    shipping_address_raw = _first_nonempty(
         first_shipment.get("ship_to"),
         first_shipment.get("shipping_address"),
         first_shipment.get("address"),
