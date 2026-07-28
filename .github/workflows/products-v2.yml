@@ -24,7 +24,7 @@ on:
       - "backend/product_media_upload_routes.py"
       - "backend/product_media_ai_routes.py"
       - "backend/product_media_ai_draft_routes.py"
-      - "backend/ai_provider_status.py"
+      - "backend/product_media_ai_execution_support.py"
       - "backend/ai_store_operations_foundation.py"
       - "backend/ai_store_access_control.py"
       - "backend/component_edit_routes.py"
