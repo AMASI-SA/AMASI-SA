@@ -228,15 +228,36 @@ async def _fetch_daily_spend(
             q[scope_field] = external_id
         rows: dict[str, float] = {}
         any_row = False
-        async for row in db[col_name].find(q, {"_id": 0, "date": 1, "spend": 1}):
-            any_row = True
+        source_rows_seen = False
+        projection = {"_id": 0, "date": 1, "spend": 1}
+        if col_name == "snapchat_account_daily":
+            projection.update({
+                "accounting_eligible": 1,
+                "accounting_spend_snapshot": 1,
+            })
+        async for row in db[col_name].find(q, projection):
+            source_rows_seen = True
             d = row.get("date")
             if not d:
                 continue
-            rows[d] = rows.get(d, 0.0) + float(row.get("spend") or 0)
+            spend_value = row.get("spend")
+            if (
+                col_name == "snapchat_account_daily"
+                and row.get("accounting_eligible") is False
+            ):
+                spend_value = row.get("accounting_spend_snapshot")
+                if spend_value is None:
+                    continue
+            any_row = True
+            rows[d] = rows.get(d, 0.0) + float(spend_value or 0)
         if any_row:
             ordered = [{"date": d, "spend": round(s, 2)} for d, s in sorted(rows.items())]
             return ordered, col_name
+        if source_rows_seen and scope_field:
+            # A scoped source existed but every row was analytics-only. Do
+            # not fall through to an unscoped legacy aggregate that could
+            # leak another Snapchat account's spend into this counterparty.
+            return [], col_name
     return [], (sources[0]["collection"] if sources else "")
 
 
@@ -3333,4 +3354,3 @@ async def run_yesterday_final_sync(db) -> dict:
         users_done.append({"user_id": uid, "results": results})
     return {"ran_at": _now(), "yesterday": yesterday,
             "users_processed": len(users_done), "details": users_done}
-
