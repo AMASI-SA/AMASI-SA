@@ -355,6 +355,100 @@ function PerformanceQualityNotice({ provider }) {
     );
 }
 
+function SnapchatAccountCoverage({ accounts }) {
+    if (!accounts?.length) {
+        return (
+            <div
+                className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                data-testid="ads-snapchat-account-coverage"
+            >
+                <span className="text-xs font-black text-slate-800">
+                    تغطية حسابات سناب
+                </span>
+                <p className="mt-1 text-[11px] font-bold leading-5 text-slate-600">
+                    لا تتوفر تغطية تفصيلية على مستوى الحسابات لهذه الفترة.
+                </p>
+            </div>
+        );
+    }
+    return (
+        <div
+            className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+            data-testid="ads-snapchat-account-coverage"
+        >
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-slate-800">
+                    تغطية حسابات سناب
+                </span>
+                <span className="font-mono text-[11px] font-black text-slate-500">
+                    عدد الحسابات: {accounts.length}
+                </span>
+            </div>
+            <div className="space-y-2">
+                {accounts.map((account) => {
+                    const complete = account.status === "complete";
+                    const missingConversions = Math.max(
+                        account.requested_days - account.conversion_complete_days,
+                        0,
+                    );
+                    const missingSpend = Math.max(
+                        account.requested_days - account.spend_days,
+                        0,
+                    );
+                    return (
+                        <div
+                            key={account.account_id}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                            data-testid={`ads-snap-account-${account.account_id}`}
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="font-black text-slate-900">
+                                    {account.account_name}
+                                </span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${complete
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-amber-200 bg-amber-50 text-amber-700"}`}
+                                >
+                                    {complete ? "مكتمل" : account.status === "partial" ? "جزئي" : "غير متاح"}
+                                </span>
+                            </div>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-600">
+                                <span>
+                                    الصرف:{" "}
+                                    <b className="font-mono text-slate-900">
+                                        {account.spend_days}/{account.requested_days}
+                                    </b>
+                                </span>
+                                <span>
+                                    التحويلات:{" "}
+                                    <b className="font-mono text-slate-900">
+                                        {account.conversion_complete_days}/{account.requested_days}
+                                    </b>
+                                </span>
+                            </div>
+                            {complete && account.current_day_lag_allowed && (
+                                <p className="mt-1.5 text-[11px] font-bold leading-5 text-slate-600">
+                                    اليوم الحالي ضمن نافذة التأخر المتوقعة.
+                                </p>
+                            )}
+                            {!complete && (missingSpend > 0 || missingConversions > 0) && (
+                                <p className="mt-1.5 text-[11px] font-bold leading-5 text-amber-700">
+                                    ناقص: {missingSpend} يوم صرف، و{missingConversions} يوم تحويلات.
+                                </p>
+                            )}
+                            {!complete && missingSpend === 0 && missingConversions === 0 && (
+                                <p className="mt-1.5 text-[11px] font-bold leading-5 text-amber-700">
+                                    {account.detail || "لا يمكن إثبات اكتمال هذا الحساب."}
+                                </p>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function ReconciliationNotice({ provider }) {
     const reconciliation = provider.reconciliation;
     const approximate = reconciliation.comparison_basis === "aggregate_period_only";
@@ -455,6 +549,11 @@ function ProviderFreshnessCard({ provider }) {
                 </div>
             </dl>
             <PerformanceQualityNotice provider={provider} />
+            {provider.provider === "snapchat" && (
+                <SnapchatAccountCoverage
+                    accounts={provider.account_performance_coverage}
+                />
+            )}
             <ReconciliationNotice provider={provider} />
         </article>
     );

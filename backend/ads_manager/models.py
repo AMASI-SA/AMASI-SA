@@ -62,6 +62,21 @@ class PerformanceCoverage(StrictResponseModel):
     detail: str
 
 
+class AccountPerformanceCoverage(StrictResponseModel):
+    account_id: str
+    account_name: str
+    status: Literal["complete", "partial", "unavailable"]
+    spend_sar: float | None = None
+    spend_days: int = 0
+    conversion_complete_days: int = 0
+    requested_days: int = 0
+    missing_spend_dates: list[str] = Field(default_factory=list)
+    missing_conversion_dates: list[str] = Field(default_factory=list)
+    current_day_lag_allowed: bool = False
+    last_observed_date: str | None = None
+    detail: str
+
+
 class Reconciliation(StrictResponseModel):
     status: Literal["matched", "drift", "not_comparable", "no_data"]
     comparison_basis: Literal[
@@ -90,6 +105,9 @@ class ProviderSummary(StrictResponseModel):
     metrics: MetricSet
     freshness: Freshness
     performance_coverage: PerformanceCoverage
+    account_performance_coverage: list[AccountPerformanceCoverage] = Field(
+        default_factory=list
+    )
     campaign_coverage: CampaignCoverage
     reconciliation: Reconciliation
     metric_availability: dict[str, bool] = Field(default_factory=dict)

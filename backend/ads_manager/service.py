@@ -505,6 +505,176 @@ def _performance_coverage(
     }
 
 
+def _snapchat_account_performance_coverage(
+    *,
+    account_rows: list[dict],
+    configured_accounts: list[dict],
+    start: date,
+    end: date,
+    allow_current_day_lag: bool,
+    source_truncated: bool,
+    source_invalid: bool,
+) -> list[dict]:
+    """Explain Snapchat coverage independently for every enabled account."""
+    requested_dates: list[str] = []
+    cursor = start
+    while cursor <= end:
+        requested_dates.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    requested = set(requested_dates)
+
+    rows_by_account: dict[str, list[dict]] = {}
+    for row in account_rows:
+        account_id = str(row.get("ad_account_id") or "").strip()
+        if account_id:
+            rows_by_account.setdefault(account_id, []).append(row)
+
+    identities: dict[str, str] = {}
+    for account in configured_accounts:
+        if account.get("enabled") is not True:
+            continue
+        account_id = str(account.get("ad_account_id") or "").strip()
+        if account_id:
+            identities[account_id] = str(
+                account.get("name") or account_id
+            ).strip()
+    if not configured_accounts:
+        for account_id, rows in rows_by_account.items():
+            identities[account_id] = str(
+                rows[0].get("account_name") or account_id
+            ).strip()
+
+    def spend_value(row: dict) -> float | None:
+        raw = row.get("spend_sar")
+        if raw is None:
+            raw = row.get("spend")
+        return _optional_nonnegative_number(raw)
+
+    def conversion_metric_known(
+        row: dict,
+        key: str,
+        *,
+        integer: bool,
+    ) -> bool:
+        parser = (
+            _optional_nonnegative_integer
+            if integer
+            else _optional_nonnegative_number
+        )
+        value = parser(row.get(key))
+        status = _clean_text(
+            row.get("conversion_data_status"),
+            limit=24,
+        ).lower()
+        if status in {"available", "partial"}:
+            return value is not None
+        if status:
+            return False
+        return value is not None and value > 0
+
+    result: list[dict] = []
+    for account_id, account_name in sorted(
+        identities.items(), key=lambda item: (item[1].casefold(), item[0])
+    ):
+        rows = rows_by_account.get(account_id, [])
+        rows_by_date = {
+            row["date"]: row
+            for row in rows
+            if row.get("date") in requested
+        }
+        spend_dates = {
+            date_key
+            for date_key, row in rows_by_date.items()
+            if spend_value(row) is not None
+        }
+        conversion_dates = {
+            date_key
+            for date_key, row in rows_by_date.items()
+            if conversion_metric_known(row, "revenue_sar", integer=False)
+            and conversion_metric_known(row, "purchases", integer=True)
+        }
+        missing_spend = sorted(requested - spend_dates)
+        missing_conversions = sorted(requested - conversion_dates)
+        known_spend_values = [
+            value
+            for row in rows_by_date.values()
+            if (value := spend_value(row)) is not None
+        ]
+        spend_sar = (
+            round(sum(known_spend_values), 2)
+            if known_spend_values
+            else None
+        )
+        current_day_iso = end.isoformat()
+        account_current_day_lag_allowed = bool(
+            allow_current_day_lag
+            and rows_by_date
+            and current_day_iso in requested
+            and (
+                current_day_iso in missing_spend
+                or current_day_iso in missing_conversions
+            )
+            and set(missing_spend).issubset({current_day_iso})
+            and set(missing_conversions).issubset({current_day_iso})
+        )
+        required_missing_spend = (
+            set(missing_spend) - {current_day_iso}
+            if account_current_day_lag_allowed
+            else set(missing_spend)
+        )
+        required_missing_conversions = (
+            set(missing_conversions) - {current_day_iso}
+            if account_current_day_lag_allowed
+            else set(missing_conversions)
+        )
+        if not rows_by_date:
+            status = "unavailable"
+            detail = "لا توجد صفوف يومية لهذا الحساب ضمن الفترة."
+        elif source_truncated:
+            status = "partial"
+            detail = (
+                "وصل مصدر الحسابات إلى حد القراءة؛ لا يمكن إثبات اكتمال "
+                "هذا الحساب."
+            )
+        elif source_invalid:
+            status = "partial"
+            detail = (
+                "توجد تواريخ غير صالحة في مصدر الحسابات؛ لا يمكن إثبات "
+                "اكتمال هذا الحساب."
+            )
+        elif not required_missing_spend and not required_missing_conversions:
+            status = "complete"
+            detail = (
+                "الصرف والتحويلات مكتملان، مع إبقاء اليوم الحالي ضمن "
+                "نافذة التأخر المتوقعة."
+                if account_current_day_lag_allowed
+                else "الصرف والتحويلات مكتملان لكل أيام الفترة."
+            )
+        else:
+            status = "partial"
+            detail = (
+                "تغطية الحساب جزئية؛ راجع الأيام الناقصة قبل استخدامه "
+                "في ROAS أو المقارنة."
+            )
+        result.append(
+            {
+                "account_id": account_id,
+                "account_name": account_name or account_id,
+                "status": status,
+                "spend_sar": spend_sar,
+                "spend_days": len(spend_dates),
+                "conversion_complete_days": len(conversion_dates),
+                "requested_days": len(requested_dates),
+                "missing_spend_dates": missing_spend,
+                "missing_conversion_dates": missing_conversions,
+                "current_day_lag_allowed": account_current_day_lag_allowed,
+                "last_observed_date": max(rows_by_date) if rows_by_date else None,
+                "detail": detail,
+            }
+        )
+    return result
+
+
 def _spend_period_complete(
     *,
     spend_series: dict[str, float | None],
@@ -1246,9 +1416,26 @@ class AdsManagerService:
                 "spend": 1,
                 "updated_at": 1,
                 "ad_account_id": 1,
+                "account_name": 1,
+                "purchases": 1,
+                "revenue_sar": 1,
+                "conversion_data_status": 1,
             },
             limit=MAX_PERFORMANCE_ROWS,
             sort=[("date", 1), ("ad_account_id", 1)],
+        )
+        snap_accounts_task = _rows(
+            self.db,
+            "snapchat_ad_accounts",
+            {"user_id": user_id},
+            {
+                "_id": 0,
+                "ad_account_id": 1,
+                "name": 1,
+                "enabled": 1,
+            },
+            limit=MAX_ACCOUNTS,
+            sort=[("enabled", -1), ("name", 1), ("ad_account_id", 1)],
         )
         snap_stats_task = _rows(
             self.db,
@@ -1363,6 +1550,7 @@ class AdsManagerService:
             integration_overview,
             booked_expense,
             snap_account_rows,
+            snap_accounts,
             snap_stats_rows,
             tiktok_rows,
             meta_rows,
@@ -1373,6 +1561,7 @@ class AdsManagerService:
             integration_task,
             booked_expense_task,
             snap_account_task,
+            snap_accounts_task,
             snap_stats_task,
             tiktok_task,
             meta_task,
@@ -1383,6 +1572,7 @@ class AdsManagerService:
         source_limit_reached = {
             "snapchat_account_daily": len(snap_account_rows)
             > MAX_PERFORMANCE_ROWS,
+            "snapchat_ad_accounts": len(snap_accounts) > MAX_ACCOUNTS,
             "snapchat_daily_stats": len(snap_stats_rows)
             > MAX_PERFORMANCE_ROWS,
             "tiktok_ads_daily": len(tiktok_rows) > MAX_PERFORMANCE_ROWS,
@@ -1391,6 +1581,7 @@ class AdsManagerService:
             "counterparties": len(legacy_accounts) > MAX_ACCOUNTS,
         }
         snap_account_rows = snap_account_rows[:MAX_PERFORMANCE_ROWS]
+        snap_accounts = snap_accounts[:MAX_ACCOUNTS]
         snap_stats_rows = snap_stats_rows[:MAX_PERFORMANCE_ROWS]
         tiktok_rows = tiktok_rows[:MAX_PERFORMANCE_ROWS]
         meta_rows = meta_rows[:MAX_PERFORMANCE_ROWS]
@@ -1510,6 +1701,7 @@ class AdsManagerService:
         }
 
         provider_summaries: list[dict] = []
+        snap_account_coverage: list[dict] = []
         for provider_key in PROVIDER_ORDER:
             definition = PROVIDER_DEFINITIONS[provider_key]
             spend_evidence = provider_spend_evidence[provider_key]
@@ -1587,6 +1779,34 @@ class AdsManagerService:
             )
 
             if provider_key == "snapchat":
+                current_day_iso = today.isoformat()
+                freshness_delay = _optional_nonnegative_number(
+                    freshness.get("data_delay_minutes")
+                )
+                allow_current_day_lag = bool(
+                    spend_series
+                    and end == today
+                    and current_day_iso not in spend_series
+                    and current_day_iso not in _observed_dates(snap_stats_rows)
+                    and freshness.get("status") == "fresh"
+                    and freshness_delay is not None
+                    and freshness_delay
+                    <= MAX_EXPECTED_CURRENT_DAY_DELAY_MINUTES
+                )
+                snap_account_coverage = (
+                    _snapchat_account_performance_coverage(
+                        account_rows=snap_account_rows,
+                        configured_accounts=snap_accounts,
+                        start=start,
+                        end=end,
+                        allow_current_day_lag=allow_current_day_lag,
+                        source_truncated=bool(
+                            provider_source_truncated
+                            or source_limit_reached["snapchat_ad_accounts"]
+                        ),
+                        source_invalid=provider_source_invalid,
+                    )
+                )
                 performance_rows = snap_stats_rows
                 performance_source_truncated = source_limit_reached[
                     "snapchat_daily_stats"
@@ -1785,6 +2005,11 @@ class AdsManagerService:
                     "metrics": metrics,
                     "freshness": freshness,
                     "performance_coverage": performance_coverage,
+                    "account_performance_coverage": (
+                        snap_account_coverage
+                        if provider_key == "snapchat"
+                        else []
+                    ),
                     "campaign_coverage": campaign_coverage,
                     "reconciliation": _reconciliation(
                         provider_reported_spend_sar,
