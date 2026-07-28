@@ -53,8 +53,9 @@ function MezanV2Navigation({ location }) {
         <nav className="mb-5 flex flex-wrap gap-2 rounded-xl border border-violet-100 bg-white p-2 shadow-sm" aria-label="صفحات Mezan OS V2">
             {V2_LINKS.map(({ to, label, Icon }) => {
                 const [pathname, search = ""] = to.split("?");
+                const hasSpecificChild = V2_LINKS.some((item) => item.to.startsWith(`${pathname}?`));
                 const active = location.pathname === pathname
-                    && (search ? location.search === `?${search}` : !location.search);
+                    && (search ? location.search === `?${search}` : !hasSpecificChild || !location.search);
                 return (
                     <NavLink key={to} to={to} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${active ? "bg-violet-700 text-white" : "text-slate-700 hover:bg-violet-50"}`}>
                         <Icon size={18} weight="duotone" />
