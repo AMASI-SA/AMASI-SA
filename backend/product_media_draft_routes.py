@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import unquote, urlparse
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -35,6 +36,21 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def upload_token_from_row(row: dict[str, Any]) -> str | None:
+    explicit = _text(row.get("upload_token"))
+    if explicit:
+        return explicit
+    try:
+        path = unquote(urlparse(_text(row.get("url"))).path).rstrip("/")
+    except Exception:
+        return None
+    marker = "/media-upload/file/"
+    if marker not in path:
+        return None
+    token = path.rsplit(marker, 1)[-1].strip("/")
+    return token or None
+
+
 def normalize_media_rows(rows: Any) -> list[dict[str, Any]]:
     if not isinstance(rows, list):
         raise ValueError("images_must_be_list")
@@ -50,8 +66,9 @@ def normalize_media_rows(rows: Any) -> list[dict[str, Any]]:
         url = _text(raw.get("url"))
         if not url.startswith(("https://", "http://")):
             raise ValueError("image_url_must_be_http")
-        source = "salla" if image_id else (_text(raw.get("source")) or ("temporary_upload" if raw.get("upload_token") else "external_url"))
-        upload_token = _text(raw.get("upload_token")) or None
+        inferred_token = upload_token_from_row(raw)
+        source = "salla" if image_id else (_text(raw.get("source")) or ("temporary_upload" if inferred_token else "external_url"))
+        upload_token = inferred_token if source == "temporary_upload" else None
         if source == "temporary_upload" and not upload_token:
             raise ValueError("temporary_upload_token_required")
         if source not in {"salla", "external_url", "temporary_upload"}:
@@ -123,9 +140,7 @@ async def _salla_multipart(
     photo: tuple[str, bytes, str] | None = None,
 ) -> dict[str, Any]:
     token = await ensure_fresh_access_token(db, user_id, recover_needs_reauth=True)
-    multipart: dict[str, tuple[Any, ...]] = {
-        key: (None, str(value)) for key, value in (fields or {}).items() if value is not None
-    }
+    multipart: dict[str, tuple[Any, ...]] = {key: (None, str(value)) for key, value in (fields or {}).items() if value is not None}
     if photo is not None:
         filename, content, content_type = photo
         multipart["photo"] = (filename, content, content_type)
@@ -137,10 +152,7 @@ async def _salla_multipart(
             files=multipart or None,
         )
     if response.status_code >= 400:
-        raise SallaError(
-            f"Salla {method} {path} → {response.status_code}: {response.text[:500]}",
-            status_code=response.status_code,
-        )
+        raise SallaError(f"Salla {method} {path} → {response.status_code}: {response.text[:500]}", status_code=response.status_code)
     if not response.content:
         return {"status": response.status_code, "success": True}
     try:
@@ -179,10 +191,7 @@ async def _temporary_upload(db: Any, user_id: str, salla_product_id: str, token:
         "expires_at": {"$gt": _now_dt()},
     })
     if not row:
-        raise SallaError(
-            "Temporary product image is missing or expired. Upload it again before publishing.",
-            status_code=410,
-        )
+        raise SallaError("Temporary product image is missing or expired. Upload it again before publishing.", status_code=410)
     return row
 
 
@@ -337,7 +346,6 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
             for row in after:
                 fields = {
                     "default": 1 if row.get("is_main") else 0,
-                    "main": "true" if row.get("is_main") else "false",
                     "sort": row.get("sort"),
                     "alt": row.get("alt") or "",
                 }
@@ -345,9 +353,9 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
                     response = await _salla_multipart(db, user_id, "POST", f"/products/images/{row['id']}", fields)
                     published_images.append(published_image_from_response(response, row))
                     continue
-                if row.get("source") == "temporary_upload":
-                    token = _text(row.get("upload_token"))
-                    upload = await _temporary_upload(db, user_id, salla_product_id, token)
+                temp_token = upload_token_from_row(row)
+                if temp_token:
+                    upload = await _temporary_upload(db, user_id, salla_product_id, temp_token)
                     response = await _salla_multipart(
                         db,
                         user_id,
@@ -360,7 +368,7 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
                             _text(upload.get("content_type")) or "image/jpeg",
                         ),
                     )
-                    cleanup_tokens.append(token)
+                    cleanup_tokens.append(temp_token)
                 else:
                     response = await _salla_multipart(
                         db,
