@@ -52,7 +52,7 @@ test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
     expect(markup).toContain("إدارة التجهيز");
     expect(markup).not.toContain("إدارة رفع الطلبات");
     expect(markup).toContain("تبويبات إدارة التجهيز");
-    expect(markup).toContain("9 مراحل");
+    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(9);
     EXPECTED_STAGE_KEYS.forEach((stageKey) => {
         expect(markup).toContain(`data-testid="fulfillment-stage-tab-${stageKey}"`);
     });
