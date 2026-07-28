@@ -68,13 +68,83 @@ def _parse_snap_conversion_payload(payload: object) -> dict:
             "conversion_data_error": "invalid_payload",
         }
 
-    timeseries = payload.get("timeseries_stats")
-    if not isinstance(timeseries, list) or not timeseries:
+    paging = payload.get("paging")
+    if isinstance(paging, dict) and paging.get("next_link"):
         return {
             "purchases": None,
             "revenue_value_micro": None,
             "conversion_data_status": "unavailable",
-            "conversion_data_error": "no_conversion_timeseries",
+            "conversion_data_error": "pagination_incomplete",
+        }
+
+    wrapped_stats = []
+    structural_invalid = False
+    for group_key, stat_key in (
+        ("timeseries_stats", "timeseries_stat"),
+        ("total_stats", "total_stat"),
+    ):
+        group = payload.get(group_key)
+        if group is None:
+            continue
+        if not isinstance(group, list):
+            structural_invalid = True
+            continue
+        for wrapped in group:
+            if not isinstance(wrapped, dict):
+                structural_invalid = True
+                continue
+            stat = wrapped.get(stat_key, wrapped)
+            if isinstance(stat, dict):
+                wrapped_stats.append((group_key, wrapped, stat))
+            else:
+                structural_invalid = True
+
+    status_containers = [payload] + [
+        candidate
+        for _, wrapped, stat in wrapped_stats
+        for candidate in (wrapped, stat)
+    ]
+    for _, _, stat in wrapped_stats:
+        breakdown = stat.get("breakdown_stats")
+        if not isinstance(breakdown, dict):
+            continue
+        for entities in breakdown.values():
+            if isinstance(entities, list):
+                status_containers.extend(
+                    entity for entity in entities if isinstance(entity, dict)
+                )
+
+    failed_statuses = []
+    for container in status_containers:
+        for status_key in ("request_status", "sub_request_status"):
+            status_value = (
+                container.get(status_key)
+                if isinstance(container, dict)
+                else None
+            )
+            if status_value is None:
+                continue
+            if isinstance(status_value, dict):
+                status_value = (
+                    status_value.get("status")
+                    or status_value.get("code")
+                    or status_value.get("message")
+                )
+            normalized = str(status_value or "").strip().upper()
+            if normalized and (
+                "FAIL" in normalized
+                or "ERROR" in normalized
+                or normalized in {"INVALID", "CANCELLED"}
+            ):
+                failed_statuses.append(normalized[:80])
+    if failed_statuses:
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": (
+                "provider_status:" + ",".join(sorted(set(failed_statuses)))
+            )[:240],
         }
 
     totals = {
@@ -83,39 +153,83 @@ def _parse_snap_conversion_payload(payload: object) -> dict:
     }
     seen = {key: False for key in totals}
     invalid = {key: False for key in totals}
+    if structural_invalid:
+        invalid = {key: True for key in totals}
+    metric_points = []
 
-    for wrapped in timeseries:
-        stat = (
-            wrapped.get("timeseries_stat", wrapped)
-            if isinstance(wrapped, dict)
-            else {}
-        )
-        points = stat.get("timeseries")
+    for group_key, _, stat in wrapped_stats:
+        breakdown = stat.get("breakdown_stats")
+        breakdown_points = []
+        if isinstance(breakdown, dict):
+            for entities in breakdown.values():
+                if not isinstance(entities, list):
+                    for key in invalid:
+                        invalid[key] = True
+                    continue
+                for entity in entities:
+                    if not isinstance(entity, dict):
+                        for key in invalid:
+                            invalid[key] = True
+                        continue
+                    if group_key == "timeseries_stats":
+                        points = entity.get("timeseries")
+                        if isinstance(points, list):
+                            breakdown_points.extend(points)
+                        else:
+                            for key in invalid:
+                                invalid[key] = True
+                    else:
+                        breakdown_points.append(entity)
+        if breakdown_points:
+            points = breakdown_points
+        elif group_key == "timeseries_stats":
+            points = stat.get("timeseries")
+        else:
+            points = [stat]
         if not isinstance(points, list):
+            for key in invalid:
+                invalid[key] = True
             continue
         for point in points:
             stats = point.get("stats") if isinstance(point, dict) else None
-            if not isinstance(stats, dict):
+            if isinstance(stats, dict):
+                metric_points.append(stats)
+                for key in invalid:
+                    if key not in stats:
+                        invalid[key] = True
+            else:
+                for key in invalid:
+                    invalid[key] = True
+
+    if not metric_points:
+        return {
+            "purchases": None,
+            "revenue_value_micro": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": "no_conversion_stats",
+        }
+
+    for stats in metric_points:
+        for key in totals:
+            if key not in stats:
+                invalid[key] = True
                 continue
-            for key in totals:
-                if key not in stats:
-                    continue
-                value = stats.get(key)
-                # bool is an int subclass, but is never a valid provider
-                # metric and must not silently become 0/1.
-                if isinstance(value, bool) or value is None:
-                    invalid[key] = True
-                    continue
-                try:
-                    parsed = int(value)
-                except (TypeError, ValueError, OverflowError):
-                    invalid[key] = True
-                    continue
-                if parsed < 0:
-                    invalid[key] = True
-                    continue
-                totals[key] += parsed
-                seen[key] = True
+            value = stats.get(key)
+            # bool is an int subclass, but is never a valid provider metric
+            # and must not silently become 0/1.
+            if isinstance(value, bool) or value is None:
+                invalid[key] = True
+                continue
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError, OverflowError):
+                invalid[key] = True
+                continue
+            if parsed < 0:
+                invalid[key] = True
+                continue
+            totals[key] += parsed
+            seen[key] = True
 
     purchases_known = seen["conversion_purchases"] and not invalid[
         "conversion_purchases"
@@ -147,6 +261,206 @@ def _parse_snap_conversion_payload(payload: object) -> dict:
         ),
         "conversion_data_status": status,
         "conversion_data_error": error,
+    }
+
+
+def _parse_snap_spend_payload(payload: object) -> dict:
+    """Parse provider-proven spend without turning missing data into zero."""
+    if not isinstance(payload, dict):
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "invalid_spend_payload",
+        }
+
+    timeseries = payload.get("timeseries_stats")
+    legacy_stats = payload.get("stats")
+    if timeseries is not None and not isinstance(timeseries, list):
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "invalid_spend_timeseries",
+        }
+    if legacy_stats is not None and not isinstance(legacy_stats, list):
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "invalid_spend_stats",
+        }
+
+    status_containers = [payload]
+    metric_points = []
+    invalid = False
+    for wrapped in timeseries or []:
+        if not isinstance(wrapped, dict):
+            invalid = True
+            continue
+        status_containers.append(wrapped)
+        stat = wrapped.get("timeseries_stat", wrapped)
+        if not isinstance(stat, dict):
+            invalid = True
+            continue
+        status_containers.append(stat)
+        points = stat.get("timeseries")
+        if not isinstance(points, list):
+            invalid = True
+            continue
+        for point in points:
+            stats = point.get("stats") if isinstance(point, dict) else None
+            if not isinstance(stats, dict) or "spend" not in stats:
+                invalid = True
+                continue
+            metric_points.append(stats)
+
+    if not metric_points:
+        for entry in legacy_stats or []:
+            if not isinstance(entry, dict) or "spend" not in entry:
+                invalid = True
+                continue
+            metric_points.append(entry)
+
+    failed_statuses = []
+    for container in status_containers:
+        for status_key in ("request_status", "sub_request_status"):
+            status_value = container.get(status_key)
+            if isinstance(status_value, dict):
+                status_value = (
+                    status_value.get("status")
+                    or status_value.get("code")
+                    or status_value.get("message")
+                )
+            normalized = str(status_value or "").strip().upper()
+            if normalized and (
+                "FAIL" in normalized
+                or "ERROR" in normalized
+                or normalized in {"INVALID", "CANCELLED"}
+            ):
+                failed_statuses.append(normalized[:80])
+    if failed_statuses:
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": (
+                "spend_provider_status:"
+                + ",".join(sorted(set(failed_statuses)))
+            )[:240],
+        }
+
+    total_micro = 0
+    seen = False
+    for stats in metric_points:
+        value = stats.get("spend")
+        if isinstance(value, bool) or value is None:
+            invalid = True
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError, OverflowError):
+            invalid = True
+            continue
+        if parsed < 0:
+            invalid = True
+            continue
+        total_micro += parsed
+        seen = True
+
+    if invalid:
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "invalid_spend_metric",
+        }
+    if not seen:
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "spend_metric_missing",
+        }
+    return {
+        "spend_micro": total_micro,
+        "spend_data_status": "available",
+        "spend_data_error": None,
+    }
+
+
+def _merge_snap_conversion_metrics(
+    existing_row: Optional[dict],
+    conversion: dict,
+    *,
+    revenue_native: Optional[float],
+    revenue_sar: Optional[float],
+) -> dict:
+    """Merge a refresh without erasing previously proven conversion facts."""
+    existing = existing_row or {}
+    existing_status = existing.get("conversion_data_status")
+    existing_purchases_known = (
+        existing_status in {"available", "partial"}
+        and existing.get("purchases") is not None
+    )
+    existing_revenue_known = (
+        existing_status in {"available", "partial"}
+        and existing.get("revenue_sar") is not None
+    )
+    if existing_status not in {"available", "partial", "unavailable"}:
+        try:
+            existing_purchases_known = float(existing.get("purchases")) > 0
+        except (TypeError, ValueError):
+            existing_purchases_known = False
+        try:
+            existing_revenue_known = float(existing.get("revenue_sar")) > 0
+        except (TypeError, ValueError):
+            existing_revenue_known = False
+
+    stored_purchases = (
+        conversion.get("purchases")
+        if conversion.get("purchases") is not None
+        else (
+            existing.get("purchases")
+            if existing_purchases_known
+            else None
+        )
+    )
+    stored_revenue_native = (
+        revenue_native
+        if revenue_native is not None
+        else (
+            existing.get("revenue_native")
+            if existing_revenue_known
+            else None
+        )
+    )
+    stored_revenue_sar = (
+        revenue_sar
+        if revenue_sar is not None
+        else (
+            existing.get("revenue_sar")
+            if existing_revenue_known
+            else None
+        )
+    )
+    purchases_known = stored_purchases is not None
+    revenue_known = stored_revenue_sar is not None
+    if purchases_known and revenue_known:
+        stored_status = "available"
+        stored_error = None
+    elif purchases_known or revenue_known:
+        stored_status = "partial"
+        stored_error = (
+            conversion.get("conversion_data_error")
+            or "one_conversion_metric_unknown"
+        )
+    else:
+        stored_status = "unavailable"
+        stored_error = conversion.get("conversion_data_error")
+
+    return {
+        "purchases": stored_purchases,
+        "revenue_native": stored_revenue_native,
+        "revenue_sar": stored_revenue_sar,
+        "conversion_data_status": stored_status,
+        "conversion_data_error": stored_error,
+        "conversion_refresh_status": conversion.get("conversion_data_status"),
+        "conversion_refresh_error": conversion.get("conversion_data_error"),
     }
 
 
@@ -678,10 +992,20 @@ def _build_router(db) -> APIRouter:
         logger.warning("Unknown Snapchat ad account currency %r; leaving amount unchanged.", cur)
         return round(amount, 2), 1.0
 
-    async def _reaggregate_snap_daily(uid: str, date_str: str) -> dict:
-        """Recompute `daily_costs.snapchat_ads` and `snapchat_daily_stats`
-        for one (user, date) by SUMMING every per-account row in
-        `snapchat_account_daily`.
+    async def _reaggregate_snap_daily(
+        uid: str,
+        date_str: str,
+        *,
+        update_daily_costs: bool = True,
+        expected_account_ids: Optional[list[str]] = None,
+        successful_account_ids: Optional[list[str]] = None,
+    ) -> dict:
+        """Recompute the analytical Snapchat daily aggregate.
+
+        Legacy foreground syncs may also opt into updating
+        `daily_costs.snapchat_ads`. Historical multi-account repair passes
+        ``update_daily_costs=False`` so source-quality work cannot alter the
+        financial reporting collection.
 
         Iteration 17 fix — root cause of "after refresh the second account's
         spend disappears": the legacy `/daily-spend/bulk` endpoint and
@@ -695,50 +1019,177 @@ def _build_router(db) -> APIRouter:
 
         Returns {sum_spend, sum_revenue, sum_purchases, account_count}.
         """
+        expected_ids = {
+            str(account_id)
+            for account_id in (expected_account_ids or [])
+            if account_id
+        }
+        successful_ids = (
+            {
+                str(account_id)
+                for account_id in successful_account_ids
+                if account_id
+            }
+            if successful_account_ids is not None
+            else None
+        )
+        aggregate_ids = (
+            expected_ids & successful_ids
+            if successful_ids is not None and expected_ids
+            else successful_ids or expected_ids
+        )
+        if successful_ids is not None and not aggregate_ids:
+            return {
+                "sum_spend": None,
+                "sum_revenue": None,
+                "sum_purchases": None,
+                "conversion_data_status": "unavailable",
+                "spend_data_status": "unavailable",
+                "account_count": 0,
+            }
+        account_query = {"user_id": uid, "date": date_str}
+        if aggregate_ids:
+            account_query["ad_account_id"] = {"$in": sorted(aggregate_ids)}
         account_rows = await db.snapchat_account_daily.find(
-            {"user_id": uid, "date": date_str},
+            account_query,
             {
                 "_id": 0,
+                "ad_account_id": 1,
+                "spend": 1,
                 "spend_sar": 1,
+                "accounting_eligible": 1,
+                "accounting_spend_snapshot": 1,
                 "revenue_sar": 1,
                 "purchases": 1,
                 "conversion_data_status": 1,
                 "conversion_data_error": 1,
+                "conversion_refresh_status": 1,
+                "conversion_refresh_error": 1,
             },
         ).to_list(50)
+        if not account_rows:
+            return {
+                "sum_spend": None,
+                "sum_revenue": None,
+                "sum_purchases": None,
+                "conversion_data_status": "unavailable",
+                "spend_data_status": "unavailable",
+                "account_count": 0,
+            }
+
         sum_spend = round(sum(float(r.get("spend_sar") or 0) for r in account_rows), 2)
-        conversions = _aggregate_snap_conversion_rows(account_rows)
+        present_ids = {
+            str(row.get("ad_account_id"))
+            for row in account_rows
+            if row.get("ad_account_id")
+        }
+        missing_ids = sorted(expected_ids - present_ids)
+        quality_rows = list(account_rows)
+        quality_rows.extend({
+            "purchases": None,
+            "revenue_sar": None,
+            "conversion_data_status": "unavailable",
+            "conversion_data_error": "account_day_missing",
+            "conversion_refresh_status": "unavailable",
+            "conversion_refresh_error": "account_day_missing",
+        } for _ in missing_ids)
+        conversions = _aggregate_snap_conversion_rows(quality_rows)
+        refresh_statuses = [
+            (
+                row.get("conversion_refresh_status")
+                or row.get("conversion_data_status")
+                or "unavailable"
+            )
+            for row in quality_rows
+        ]
+        refresh_complete = sum(
+            1 for status in refresh_statuses if status == "available"
+        )
+        if refresh_statuses and refresh_complete == len(refresh_statuses):
+            conversion_refresh_status = "available"
+        elif refresh_complete or any(
+            status == "partial" for status in refresh_statuses
+        ):
+            conversion_refresh_status = "partial"
+        else:
+            conversion_refresh_status = "unavailable"
+        refresh_errors = sorted({
+            str(
+                row.get("conversion_refresh_error")
+                or row.get("conversion_data_error")
+            )[:120]
+            for row in quality_rows
+            if (
+                row.get("conversion_refresh_error")
+                or row.get("conversion_data_error")
+            )
+        })
+        conversion_refresh_error = (
+            ";".join(refresh_errors)[:240] if refresh_errors else None
+        )
+        spend_accounts_total = len(expected_ids) or len(account_rows)
+        spend_accounts_complete = sum(
+            1 for row in account_rows if row.get("spend_sar") is not None
+        )
+        if spend_accounts_complete == spend_accounts_total:
+            spend_data_status = "available"
+        elif spend_accounts_complete:
+            spend_data_status = "partial"
+        else:
+            spend_data_status = "unavailable"
 
         now_iso = datetime.now(timezone.utc).isoformat()
-        existing_dc = await db.daily_costs.find_one(
-            {"user_id": uid, "date": date_str}, {"_id": 0},
-        )
-        if existing_dc:
-            await db.daily_costs.update_one(
-                {"user_id": uid, "date": date_str},
-                {"$set": {"snapchat_ads": sum_spend, "updated_at": now_iso}},
+        if update_daily_costs:
+            accounting_sum_spend = 0.0
+            for row in account_rows:
+                accounting_spend = row.get("spend")
+                if accounting_spend is None:
+                    accounting_spend = row.get("spend_sar")
+                if row.get("accounting_eligible") is False:
+                    accounting_spend = row.get("accounting_spend_snapshot")
+                if accounting_spend is not None:
+                    accounting_sum_spend += float(accounting_spend)
+            accounting_sum_spend = round(accounting_sum_spend, 2)
+            existing_dc = await db.daily_costs.find_one(
+                {"user_id": uid, "date": date_str}, {"_id": 0},
             )
-        else:
-            import uuid as _uuid
-            await db.daily_costs.insert_one({
-                "id": str(_uuid.uuid4()),
-                "user_id": uid,
-                "date": date_str,
-                "snapchat_ads": sum_spend,
-                "snapchat_ads_2": 0.0,
-                "tiktok_ads": 0.0,
-                "instagram_ads": 0.0,
-                "google_ads": 0.0,
-                "product_costs": 0.0,
-                "notes": f"auto from Snapchat ({len(account_rows)} حساب)",
-                "created_at": now_iso,
-            })
+            if existing_dc:
+                await db.daily_costs.update_one(
+                    {"user_id": uid, "date": date_str},
+                    {"$set": {
+                        "snapchat_ads": accounting_sum_spend,
+                        "updated_at": now_iso,
+                    }},
+                )
+            else:
+                import uuid as _uuid
+                await db.daily_costs.insert_one({
+                    "id": str(_uuid.uuid4()),
+                    "user_id": uid,
+                    "date": date_str,
+                    "snapchat_ads": accounting_sum_spend,
+                    "snapchat_ads_2": 0.0,
+                    "tiktok_ads": 0.0,
+                    "instagram_ads": 0.0,
+                    "google_ads": 0.0,
+                    "product_costs": 0.0,
+                    "notes": (
+                        f"auto from Snapchat ({len(account_rows)} حساب)"
+                    ),
+                    "created_at": now_iso,
+                })
         await db.snapchat_daily_stats.update_one(
             {"user_id": uid, "date": date_str},
             {"$set": {
                 "user_id": uid, "date": date_str,
                 "spend": sum_spend,
+                "spend_data_status": spend_data_status,
+                "spend_accounts_total": spend_accounts_total,
+                "spend_accounts_complete": spend_accounts_complete,
                 **conversions,
+                "conversion_refresh_status": conversion_refresh_status,
+                "conversion_refresh_error": conversion_refresh_error,
+                "conversion_refresh_accounts_complete": refresh_complete,
                 "updated_at": now_iso,
             }},
             upsert=True,
@@ -748,6 +1199,8 @@ def _build_router(db) -> APIRouter:
             "sum_revenue": conversions["revenue"],
             "sum_purchases": conversions["purchases"],
             "conversion_data_status": conversions["conversion_data_status"],
+            "conversion_refresh_status": conversion_refresh_status,
+            "spend_data_status": spend_data_status,
             "account_count": len(account_rows),
         }
 
@@ -849,26 +1302,23 @@ def _build_router(db) -> APIRouter:
             except httpx.HTTPError as exc:
                 raise HTTPException(status_code=502, detail=f"خطأ شبكة مع سناب: {exc}")
 
-        data = resp.json()
-        # Sum spend across all 24 hourly points falling inside the Riyadh day.
-        # Snapchat returns each hourly bucket with start_time/end_time already
-        # in the requested timezone, so we just sum all spend values.
-        total_micro = 0
-        for ts in data.get("timeseries_stats", []) or []:
-            stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
-            for point in stat.get("timeseries", []) or []:
-                spend_val = (point.get("stats") or {}).get("spend", 0)
-                try:
-                    total_micro += int(spend_val)
-                except (TypeError, ValueError):
-                    pass
-        # Fallback for older "stats" array
-        if total_micro == 0:
-            for entry in data.get("stats", []) or []:
-                try:
-                    total_micro += int(entry.get("spend", 0) or 0)
-                except (TypeError, ValueError):
-                    pass
+        try:
+            spend_payload = resp.json()
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=502,
+                detail="رد صرف Snapchat ليس JSON صالحاً",
+            )
+        parsed_spend = _parse_snap_spend_payload(spend_payload)
+        if parsed_spend["spend_data_status"] != "available":
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "تعذر إثبات صرف Snapchat: "
+                    f"{parsed_spend['spend_data_error']}"
+                ),
+            )
+        total_micro = parsed_spend["spend_micro"]
 
         spend_native = round(total_micro / 1_000_000, 2)
         async with httpx.AsyncClient(timeout=10.0) as http2:
@@ -882,15 +1332,22 @@ def _build_router(db) -> APIRouter:
         # picks it up automatically. Previously this endpoint just
         # returned the number; the merchant had to manually rerun
         # /sync-all to see it reflected on the cards.
+        source_row_saved = False
+        ledger_synced = False
+        persistence_error = None
         try:
             await db.snapchat_account_daily.update_one(
                 {"user_id": user["id"], "ad_account_id": ad_id,
                  "date": date},
                 {"$set": {
                     "spend": spend_sar,
+                    "spend_sar": spend_sar,
                     "spend_native": spend_native,
+                    "currency_native": currency,
                     "native_currency": currency,
                     "fx_rate": fx_rate,
+                    "ingestion_mode": "accounting_refresh",
+                    "accounting_eligible": True,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                  "$setOnInsert": {
@@ -900,6 +1357,7 @@ def _build_router(db) -> APIRouter:
                  }},
                 upsert=True,
             )
+            source_row_saved = True
             # Push fresh spend into ad_account_ledger + reconcile the
             # ad-account card's balance/debt for all snap counterparties
             # tied to this ad_account_id.
@@ -907,12 +1365,15 @@ def _build_router(db) -> APIRouter:
                 from ad_account_routes import _run_sync_for_all
                 await _run_sync_for_all(
                     db, user["id"], date, date, force=True)
-            except Exception:  # noqa: BLE001
+                ledger_synced = True
+            except Exception as exc:  # noqa: BLE001
                 # Don't fail the foreground fetch if cron sync errors —
                 # the snapchat_account_daily row is already saved.
-                pass
-        except Exception:  # noqa: BLE001
-            pass
+                persistence_error = (
+                    f"ledger_sync:{type(exc).__name__}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            persistence_error = f"source_write:{type(exc).__name__}"
 
         return {
             "date": date,  # Always the Riyadh business date the merchant requested.
@@ -929,8 +1390,9 @@ def _build_router(db) -> APIRouter:
             "snap_day_start_riyadh": start_riyadh.strftime("%Y-%m-%d %H:%M"),
             "snap_day_end_riyadh": end_riyadh.strftime("%Y-%m-%d %H:%M"),
             "aggregation_method": "hourly_riyadh",
-            # Iter-172 — let the UI know the write-through happened.
-            "synced_to_ad_account_ledger": True,
+            "source_row_saved": source_row_saved,
+            "synced_to_ad_account_ledger": ledger_synced,
+            "persistence_error": persistence_error,
         }
 
     class BulkSpendIn(BaseModel):
@@ -1040,16 +1502,22 @@ def _build_router(db) -> APIRouter:
                     errors.append({"date": d.isoformat(), "error": str(exc)[:200]})
                     continue
 
-                data = resp.json()
-                total_micro = 0
-                for ts in data.get("timeseries_stats", []) or []:
-                    stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
-                    for point in stat.get("timeseries", []) or []:
-                        s = point.get("stats") or {}
-                        try:
-                            total_micro += int(s.get("spend", 0) or 0)
-                        except (TypeError, ValueError):
-                            pass
+                try:
+                    spend_payload = resp.json()
+                except (TypeError, ValueError):
+                    errors.append({
+                        "date": d.isoformat(),
+                        "error": "invalid_spend_json",
+                    })
+                    continue
+                parsed_spend = _parse_snap_spend_payload(spend_payload)
+                if parsed_spend["spend_data_status"] != "available":
+                    errors.append({
+                        "date": d.isoformat(),
+                        "error": parsed_spend["spend_data_error"],
+                    })
+                    continue
+                total_micro = parsed_spend["spend_micro"]
 
                 # ── 2. CONVERSIONS (best-effort, fail-closed) ───────────────
                 # A failed/unsupported conversion query is not evidence of
@@ -1060,13 +1528,14 @@ def _build_router(db) -> APIRouter:
                     "end_time": end_local.isoformat(timespec="seconds"),
                     "granularity": "HOUR",
                     "fields": "conversion_purchases,conversion_purchases_value",
+                    "breakdown": "campaign",
+                    "limit": 200,
                     "swipe_up_attribution_window": "28_DAY",
                     "view_attribution_window": "1_DAY",
                 }
                 conversion = await _fetch_snap_conversion_metrics(
                     http, stats_url, base_headers, conv_params,
                 )
-                total_purchases = conversion["purchases"]
                 total_purchases_value_micro = conversion["revenue_value_micro"]
                 if conversion["conversion_data_status"] != "available":
                     logger.info(
@@ -1075,6 +1544,11 @@ def _build_router(db) -> APIRouter:
                         d.isoformat(),
                         conversion["conversion_data_error"],
                     )
+                    errors.append({
+                        "date": d.isoformat(),
+                        "kind": "conversion_quality",
+                        "error": conversion["conversion_data_error"],
+                    })
 
                 spend_native = round(total_micro / 1_000_000, 2)
                 revenue_native = (
@@ -1093,6 +1567,26 @@ def _build_router(db) -> APIRouter:
                     else None
                 )
                 date_str = d.isoformat()
+                existing_row = await db.snapchat_account_daily.find_one(
+                    {
+                        "user_id": user["id"],
+                        "ad_account_id": ad_id,
+                        "date": date_str,
+                    },
+                    {
+                        "_id": 0,
+                        "purchases": 1,
+                        "revenue_native": 1,
+                        "revenue_sar": 1,
+                        "conversion_data_status": 1,
+                    },
+                )
+                conversion_patch = _merge_snap_conversion_metrics(
+                    existing_row,
+                    conversion,
+                    revenue_native=revenue_native,
+                    revenue_sar=revenue,
+                )
 
                 # ── Per-account row (iteration 17 fix) ─────────────────
                 # Write this account's spend into `snapchat_account_daily`
@@ -1113,13 +1607,9 @@ def _build_router(db) -> APIRouter:
                         "fx_rate": fx_rate,
                         "spend_sar": spend,
                         "spend": spend,
-                        "purchases": total_purchases,
-                        "revenue_native": revenue_native,
-                        "revenue_sar": revenue,
-                        "conversion_data_status":
-                            conversion["conversion_data_status"],
-                        "conversion_data_error":
-                            conversion["conversion_data_error"],
+                        **conversion_patch,
+                        "ingestion_mode": "accounting_refresh",
+                        "accounting_eligible": True,
                         "business_timezone": "Asia/Riyadh",
                         "ad_account_timezone": tz_name,
                         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1143,12 +1633,14 @@ def _build_router(db) -> APIRouter:
                     "date": date_str,
                     "spend": spend,
                     "spend_native": spend_native,
-                    "revenue": revenue,
-                    "purchases": total_purchases,
+                    "revenue": conversion_patch["revenue_sar"],
+                    "purchases": conversion_patch["purchases"],
                     "conversion_data_status":
-                        conversion["conversion_data_status"],
+                        conversion_patch["conversion_data_status"],
                     "conversion_data_error":
-                        conversion["conversion_data_error"],
+                        conversion_patch["conversion_data_error"],
+                    "conversion_refresh_status":
+                        conversion["conversion_data_status"],
                     "native_currency": ad_currency,
                     "fx_rate": fx_rate,
                 })
@@ -1271,16 +1763,12 @@ def _build_router(db) -> APIRouter:
         account_doc: dict,
         dates: list,
         riyadh_tz,
-    ) -> tuple[int, list]:
-        """Sync ONE Snapchat ad account for a range of Riyadh dates.
+    ) -> tuple[int, list, list[str]]:
+        """Backfill analytical facts for one Snapchat ad account.
 
-        Writes per-(account, date) rows into `snapchat_account_daily` AND
-        accumulates daily totals (across all accounts of this user) so the
-        caller can upsert the SUM into legacy `daily_costs.snapchat_ads`.
-
-        Returns (saved_count, errors[]). The caller is responsible for
-        aggregating daily_costs.snapchat_ads after iterating over all
-        accounts.
+        Rows written here are explicitly ineligible for automatic accounting.
+        Existing provider-proven conversions survive a transient refresh
+        failure, and an empty/malformed spend payload never becomes zero.
         """
         ad_id = account_doc["ad_account_id"]
         ad_currency = (account_doc.get("currency_native") or "SAR").upper() or "SAR"
@@ -1291,6 +1779,7 @@ def _build_router(db) -> APIRouter:
         stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
         saved = 0
         errors: list = []
+        successful_dates: list[str] = []
         for d in dates:
             start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=riyadh_tz)
             end_local = start_local + timedelta(days=1)
@@ -1320,15 +1809,24 @@ def _build_router(db) -> APIRouter:
                                "error": str(exc)[:200]})
                 continue
 
-            data = resp.json()
-            total_micro = 0
-            for ts in data.get("timeseries_stats", []) or []:
-                stat = ts.get("timeseries_stat", ts) if isinstance(ts, dict) else {}
-                for point in stat.get("timeseries", []) or []:
-                    try:
-                        total_micro += int((point.get("stats") or {}).get("spend", 0) or 0)
-                    except (TypeError, ValueError):
-                        pass
+            try:
+                data = resp.json()
+            except (TypeError, ValueError):
+                errors.append({
+                    "ad_account_id": ad_id,
+                    "date": d.isoformat(),
+                    "error": "invalid_spend_json",
+                })
+                continue
+            parsed_spend = _parse_snap_spend_payload(data)
+            if parsed_spend["spend_data_status"] != "available":
+                errors.append({
+                    "ad_account_id": ad_id,
+                    "date": d.isoformat(),
+                    "error": parsed_spend["spend_data_error"],
+                })
+                continue
+            total_micro = parsed_spend["spend_micro"]
 
             # Conversions — best-effort for spend, fail-closed for metrics.
             conv_params = {
@@ -1336,14 +1834,22 @@ def _build_router(db) -> APIRouter:
                 "end_time": end_local.isoformat(timespec="seconds"),
                 "granularity": "HOUR",
                 "fields": "conversion_purchases,conversion_purchases_value",
+                "breakdown": "campaign",
+                "limit": 200,
                 "swipe_up_attribution_window": "28_DAY",
                 "view_attribution_window": "1_DAY",
             }
             conversion = await _fetch_snap_conversion_metrics(
                 http, stats_url, base_headers, conv_params,
             )
-            total_purchases = conversion["purchases"]
             total_purchases_value_micro = conversion["revenue_value_micro"]
+            if conversion["conversion_data_status"] != "available":
+                errors.append({
+                    "ad_account_id": ad_id,
+                    "date": d.isoformat(),
+                    "kind": "conversion_quality",
+                    "error": conversion["conversion_data_error"],
+                })
 
             spend_native = round(total_micro / 1_000_000, 2)
             revenue_native = (
@@ -1362,45 +1868,127 @@ def _build_router(db) -> APIRouter:
                 else None
             )
             date_str = d.isoformat()
-
-            await db.snapchat_account_daily.update_one(
-                {"user_id": uid, "ad_account_id": ad_id, "date": date_str},
-                {"$set": {
+            existing_row = await db.snapchat_account_daily.find_one(
+                {
                     "user_id": uid,
                     "ad_account_id": ad_id,
-                    "account_name": ad_name,
                     "date": date_str,
-                    "spend_native": spend_native,
-                    "currency_native": ad_currency,
-                    "fx_rate": fx_rate,
-                    "spend_sar": spend_sar,
-                    "spend": spend_sar,  # alias for legacy reads
-                    "purchases": total_purchases,
-                    "revenue_native": revenue_native,
-                    "revenue_sar": revenue_sar,
-                    "conversion_data_status":
-                        conversion["conversion_data_status"],
-                    "conversion_data_error":
-                        conversion["conversion_data_error"],
-                    "business_timezone": "Asia/Riyadh",
-                    "ad_account_timezone": ad_tz,
-                    "snap_day_start_riyadh": start_local.strftime("%Y-%m-%d %H:%M"),
-                    "snap_day_end_riyadh": end_local.strftime("%Y-%m-%d %H:%M"),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
-                 "$setOnInsert": {
-                     "created_at": datetime.now(timezone.utc).isoformat(),
-                 }},
-                upsert=True,
+                {
+                    "_id": 0,
+                    "spend": 1,
+                    "spend_sar": 1,
+                    "accounting_eligible": 1,
+                    "accounting_spend_snapshot": 1,
+                    "updated_at": 1,
+                    "purchases": 1,
+                    "revenue_native": 1,
+                    "revenue_sar": 1,
+                    "conversion_data_status": 1,
+                },
             )
-            saved += 1
+            conversion_patch = _merge_snap_conversion_metrics(
+                existing_row,
+                conversion,
+                revenue_native=revenue_native,
+                revenue_sar=revenue_sar,
+            )
+            accounting_snapshot_patch = {}
+            if (
+                existing_row
+                and existing_row.get("accounting_eligible") is not False
+            ):
+                prior_accounting_spend = existing_row.get("spend")
+                if prior_accounting_spend is None:
+                    prior_accounting_spend = existing_row.get("spend_sar")
+                if prior_accounting_spend is not None:
+                    accounting_snapshot_patch[
+                        "accounting_spend_snapshot"
+                    ] = prior_accounting_spend
 
-        # Mark this account's last_sync_at.
+            write_query = {
+                "user_id": uid,
+                "ad_account_id": ad_id,
+                "date": date_str,
+                "updated_at": (
+                    existing_row.get("updated_at")
+                    if existing_row
+                    else {"$exists": False}
+                ),
+            }
+            try:
+                write_result = await db.snapchat_account_daily.update_one(
+                    write_query,
+                    {"$set": {
+                        "user_id": uid,
+                        "ad_account_id": ad_id,
+                        "account_name": ad_name,
+                        "date": date_str,
+                        "spend_native": spend_native,
+                        "currency_native": ad_currency,
+                        "fx_rate": fx_rate,
+                        "spend_sar": spend_sar,
+                        "spend": spend_sar,  # alias for legacy reads
+                        **conversion_patch,
+                        **accounting_snapshot_patch,
+                        "ingestion_mode": "analytics_backfill",
+                        "accounting_eligible": False,
+                        "business_timezone": "Asia/Riyadh",
+                        "ad_account_timezone": ad_tz,
+                        "snap_day_start_riyadh": start_local.strftime(
+                            "%Y-%m-%d %H:%M",
+                        ),
+                        "snap_day_end_riyadh": end_local.strftime(
+                            "%Y-%m-%d %H:%M",
+                        ),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                        "$setOnInsert": {
+                            "created_at":
+                                datetime.now(timezone.utc).isoformat(),
+                        },
+                    },
+                    upsert=existing_row is None,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append({
+                    "ad_account_id": ad_id,
+                    "date": date_str,
+                    "error": f"concurrent_or_write_error:{type(exc).__name__}",
+                })
+                continue
+            if (
+                existing_row is not None
+                and getattr(write_result, "matched_count", 1) != 1
+            ):
+                errors.append({
+                    "ad_account_id": ad_id,
+                    "date": date_str,
+                    "error": "concurrent_update_detected",
+                })
+                continue
+            saved += 1
+            successful_dates.append(date_str)
+
+        sync_finished_at = datetime.now(timezone.utc).isoformat()
+        sync_patch = {
+            "last_sync_attempt_at": sync_finished_at,
+            "last_sync_status": (
+                "complete"
+                if saved == len(dates) and not errors
+                else "partial"
+            ),
+            "last_sync_rows_saved": saved,
+            "last_sync_error_count": len(errors),
+        }
+        if saved == len(dates) and not errors:
+            sync_patch["last_sync_at"] = sync_finished_at
+            sync_patch["last_successful_sync_at"] = sync_finished_at
         await db.snapchat_ad_accounts.update_one(
             {"user_id": uid, "ad_account_id": ad_id},
-            {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
+            {"$set": sync_patch},
         )
-        return saved, errors
+        return saved, errors, successful_dates
 
     class _SyncAllIn(BaseModel):
         days: int = Field(default=7, ge=1, le=62)
@@ -1409,11 +1997,12 @@ def _build_router(db) -> APIRouter:
 
     @router.post("/sync-all-accounts")
     async def sync_all_accounts(payload: _SyncAllIn, user: dict = Depends(current_user)):
-        """Sync EVERY enabled Snapchat ad account for the given Riyadh-date
-        range. Writes per-(account, date) rows into `snapchat_account_daily`
-        and updates the AGGREGATED total into legacy `daily_costs.snapchat_ads`
-        so the existing dashboard card + reports continue to show the
-        cross-account total without any other code change.
+        """Backfill EVERY enabled Snapchat account for a Riyadh-date range.
+
+        This route is deliberately source-only: it writes analytical
+        Snapchat facts and their quality aggregate, but it never writes
+        daily costs, ad-account balances, liabilities, ledgers, Salla, Qoyod,
+        or provider campaign configuration.
 
         Body: {days|from_date|to_date}. Returns {accounts_synced, items[],
         errors[]} per-account.
@@ -1454,9 +2043,10 @@ def _build_router(db) -> APIRouter:
 
         accounts_summary: list[dict] = []
         all_errors: list[dict] = []
+        successful_account_ids_by_date: dict[str, set[str]] = {}
         async with httpx.AsyncClient(timeout=30.0) as http:
             for account_doc in enabled:
-                saved, errs = await _sync_one_account(
+                saved, errs, successful_dates = await _sync_one_account(
                     http, access_token, uid, account_doc, dates, riyadh_tz,
                 )
                 accounts_summary.append({
@@ -1467,44 +2057,51 @@ def _build_router(db) -> APIRouter:
                     "errors": len(errs),
                 })
                 all_errors.extend(errs)
+                for successful_date in successful_dates:
+                    successful_account_ids_by_date.setdefault(
+                        successful_date,
+                        set(),
+                    ).add(account_doc["ad_account_id"])
 
-        # ── Aggregate per-date totals across ALL accounts and write back to
-        # legacy `daily_costs.snapchat_ads` so the dashboard card + existing
-        # reports continue to render the cross-account total without any
-        # other code change. Also update `snapchat_daily_stats` (used by the
-        # snapchat-summary card for orders+revenue) with cross-account
-        # aggregates. Iteration 17: refactored to use `_reaggregate_snap_daily`
-        # so the legacy `/daily-spend/bulk` endpoint and this one stay in
-        # sync forever.
+        # Recompute only the analytical cross-account quality aggregate.
+        # Financial daily_costs and every accounting bridge are intentionally
+        # outside this historical source-repair operation.
+        expected_account_ids = [
+            account_doc["ad_account_id"] for account_doc in enabled
+        ]
         for d in dates:
-            await _reaggregate_snap_daily(uid, d.isoformat())
-
-        # Iter-161 Phase 3 — push fresh spend straight into ad_account_ledger
-        # so the Dashboard's "صرف اليوم" card reflects the manual sync
-        # immediately (previously waited up to 30 min for the next cron pass).
-        # We force=True to keep the ledger row in sync with the latest
-        # cumulative platform total.
-        try:
-            from ad_account_routes import _run_sync_for_all
-            if dates:
-                min_d = min(dates).isoformat()
-                max_d = max(dates).isoformat()
-                await _run_sync_for_all(db, uid, min_d, max_d, force=True)
-        except Exception as _e:
-            # Don't fail the user-facing sync if the secondary push fails;
-            # the next half-hour cron will catch up.
-            import logging as _lg
-            _lg.getLogger(__name__).warning(
-                "iter-161p3: ad_account_ledger push after snap sync failed: %s",
-                _e,
+            await _reaggregate_snap_daily(
+                uid,
+                d.isoformat(),
+                update_daily_costs=False,
+                expected_account_ids=expected_account_ids,
+                successful_account_ids=sorted(
+                    successful_account_ids_by_date.get(
+                        d.isoformat(),
+                        set(),
+                    ),
+                ),
             )
 
+        complete_accounts = sum(
+            1 for item in accounts_summary
+            if item["rows_saved"] == len(dates) and item["errors"] == 0
+        )
         return {
             "accounts_synced": len(accounts_summary),
+            "accounts_complete": complete_accounts,
+            "sync_status": (
+                "complete"
+                if complete_accounts == len(accounts_summary)
+                else "partial"
+            ),
             "items": accounts_summary,
             "errors": all_errors,
             "currency": "SAR",
             "business_timezone": "Asia/Riyadh",
+            "source_only": True,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
