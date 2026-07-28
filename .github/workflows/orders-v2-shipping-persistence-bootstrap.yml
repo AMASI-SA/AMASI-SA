@@ -1,0 +1,39 @@
+name: Orders V2 shipping persistence bootstrap
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/persist_orders_v2_authoritative_shipping.py"
+      - ".github/workflows/orders-v2-shipping-persistence-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  persist-shipping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/orders-v2-address-root-fallback
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply authoritative shipping persistence
+        run: python scripts/persist_orders_v2_authoritative_shipping.py
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile backend/order_engine/salla_refresh.py backend/tests/test_order_engine_salla_refresh.py
+          grep -q 'canonical_updates' backend/order_engine/salla_refresh.py
+          grep -q 'later light list sync' backend/order_engine/salla_refresh.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/order_engine/salla_refresh.py backend/tests/test_order_engine_salla_refresh.py
+          git commit -m "fix(orders-v2): persist authoritative order shipping facts"
+          git push origin HEAD:fix/orders-v2-address-root-fallback
