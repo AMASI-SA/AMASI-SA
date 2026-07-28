@@ -14,6 +14,7 @@ from order_item_engine.models import (
 from order_review_routes import (
     _can_review,
     _merchant_user_id,
+    _refresh_review_source_once,
     _review_item_identities,
     _reviewed_status_id,
     build_image_preference_identity,
@@ -202,3 +203,34 @@ async def test_review_refreshes_and_caches_the_complete_product_gallery():
 
     assert cached_items[0].image_urls == items[0].image_urls
     second_fetch.assert_not_awaited()
+
+
+
+class _ReviewRefreshCollection:
+    def __init__(self):
+        self.row = {"user_id": "owner-1", "order_number": "274724433"}
+
+    async def find_one(self, _query, _projection=None):
+        return dict(self.row)
+
+    async def update_one(self, _selector, update):
+        self.row.update(update.get("$set") or {})
+        return None
+
+
+class _ReviewRefreshDB:
+    def __init__(self):
+        self.unified_orders = _ReviewRefreshCollection()
+
+
+@pytest.mark.asyncio
+async def test_review_open_refreshes_authoritative_salla_details_only_once():
+    db = _ReviewRefreshDB()
+    result = {"ok": True, "found": True}
+
+    with patch("order_review_routes.resync_single_order", new=AsyncMock(return_value=result)) as refresh:
+        assert await _refresh_review_source_once(db, "owner-1", "274724433") is True
+        assert await _refresh_review_source_once(db, "owner-1", "274724433") is False
+
+    refresh.assert_awaited_once_with(db, "owner-1", "274724433")
+    assert db.unified_orders.row["order_review_source_refresh_mode"] == "explicit_review_open"

@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "backend/order_review_routes.py"
+      - "backend/order_engine/mapper.py"
       - "backend/tests/test_order_review_stage_one.py"
+      - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -12,13 +14,16 @@ on:
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - "frontend/src/pages/OrderReview.jsx"
+      - "frontend/src/pages/OrderReview.test.jsx"
       - ".github/workflows/fulfillment-v2.yml"
   push:
     branches:
       - main
     paths:
       - "backend/order_review_routes.py"
+      - "backend/order_engine/mapper.py"
       - "backend/tests/test_order_review_stage_one.py"
+      - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -26,6 +31,7 @@ on:
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - "frontend/src/pages/OrderReview.jsx"
+      - "frontend/src/pages/OrderReview.test.jsx"
       - ".github/workflows/fulfillment-v2.yml"
   workflow_dispatch:
 
@@ -61,6 +67,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_order_review_stage_one.py
+          tests/test_order_engine_mapper.py
           tests/test_fulfillment_v2_contract.py
           -q --tb=short
 
@@ -84,7 +91,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"

@@ -676,6 +676,7 @@ def _custom_fields(item: dict[str, Any]) -> list[dict[str, Any]]:
         item.get("customizations"),
         item.get("personalization"),
         item.get("attachments"),
+        item.get("files"),
     ]
 
     result: list[dict[str, Any]] = []
@@ -1089,16 +1090,18 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             remaining_action.get("checkout_url"),
         )
     )
-    receipt_url = _text(
-        _first(
-            raw_order.get("payment_receipt_url"),
-            raw_order.get("receipt_image"),
-            payment_raw.get("receipt_url"),
-            payment_raw.get("receipt_image"),
-            payment_raw.get("attachment_url"),
-            payment_raw.get("proof_url"),
-            payment_raw.get("transfer_receipt_url"),
-        )
+    receipt_url = (
+        _media_url(raw_order.get("payment_receipt_url"))
+        or _media_url(raw_order.get("receipt_image"))
+        or _media_url(raw_order.get("transfer_receipt"))
+        or _media_url(payment_raw.get("receipt_url"))
+        or _media_url(payment_raw.get("receipt_image"))
+        or _media_url(payment_raw.get("attachment_url"))
+        or _media_url(payment_raw.get("proof_url"))
+        or _media_url(payment_raw.get("proof"))
+        or _media_url(payment_raw.get("transfer_receipt_url"))
+        or _media_url(bank_raw.get("receipt_url"))
+        or _media_url(bank_raw.get("receipt_image"))
     )
 
     amounts = _dict(raw_order.get("amounts"))

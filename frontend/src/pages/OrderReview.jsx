@@ -60,12 +60,38 @@ function canonicalSpecName(value) {
     return normalized;
 }
 
-function uniqueProductSpecs(item) {
+function visibleSpecValue(value, depth = 0) {
+    if (depth > 6 || value === null || value === undefined || value === "") return "";
+    if (typeof value === "boolean") return value ? "نعم" : "لا";
+    if (typeof value === "string" || typeof value === "number") return String(value).trim();
+    if (Array.isArray(value)) {
+        return value.map((entry) => visibleSpecValue(entry, depth + 1)).filter(Boolean).join(" / ");
+    }
+    if (typeof value === "object") {
+        for (const key of ["value", "answer", "selected", "choice", "text", "name", "label", "title", "option_value", "response"]) {
+            const visible = visibleSpecValue(value[key], depth + 1);
+            if (visible) return visible;
+        }
+        if (["url", "file_url", "download_url", "src"].some((key) => visibleSpecValue(value[key], depth + 1))) {
+            return "مرفق";
+        }
+    }
+    return "";
+}
+
+const CUSTOM_FIELD_META_KEYS = new Set([
+    "id", "type", "required", "created_at", "updated_at",
+    "name", "label", "title", "question", "key", "option",
+    "value", "answer", "selected", "choice", "text", "values",
+    "option_value", "response", "file", "attachment", "url",
+]);
+
+export function reviewProductSpecs(item) {
     const specs = [];
     const seen = new Set();
     const add = (name, value) => {
         const cleanName = String(name || "").trim();
-        const cleanValue = String(value ?? "").trim();
+        const cleanValue = visibleSpecValue(value);
         if (!cleanName || !cleanValue) return;
         const key = canonicalSpecName(cleanName);
         if (!key || seen.has(key)) return;
@@ -74,9 +100,51 @@ function uniqueProductSpecs(item) {
     };
 
     (Array.isArray(item.options) ? item.options : []).forEach((option) => add(option?.name, option?.value));
+    (Array.isArray(item.custom_fields) ? item.custom_fields : []).forEach((field) => {
+        if (!field || typeof field !== "object" || Array.isArray(field)) return;
+        const label = field.name || field.label || field.title || field.question || field.key || field.option;
+        const value = field.value ?? field.answer ?? field.selected ?? field.choice ?? field.text
+            ?? field.values ?? field.option_value ?? field.response ?? field.file ?? field.attachment ?? field.url;
+        if (label && visibleSpecValue(value)) {
+            add(label, value);
+            return;
+        }
+        Object.entries(field).forEach(([key, rawValue]) => {
+            if (!CUSTOM_FIELD_META_KEYS.has(key)) add(key, rawValue);
+        });
+    });
     add("اللون", item.color);
     add("المقاس", item.size);
+    add("الخامة", item.material);
     return specs;
+}
+
+function safeReceiptUrl(value) {
+    try {
+        const url = new URL(String(value || "").trim());
+        return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+    } catch {
+        return "";
+    }
+}
+
+export function PaymentReceiptCard({ receiptUrl }) {
+    const url = safeReceiptUrl(receiptUrl);
+    if (!url) return null;
+    const isPdf = /\.pdf(?:$|[?#])/i.test(url);
+    return (
+        <div data-testid="order-review-payment-receipt" className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50">
+            <div className="border-b border-amber-200 px-3 py-2 text-sm font-extrabold text-amber-950">صورة إيصال التحويل</div>
+            {!isPdf && (
+                <a href={url} target="_blank" rel="noreferrer" className="block bg-white p-3">
+                    <img src={url} alt="إيصال التحويل البنكي" loading="lazy" className="mx-auto max-h-72 w-full rounded-lg object-contain" />
+                </a>
+            )}
+            <a href={url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-extrabold text-amber-900 hover:bg-amber-100">
+                <Eye size={17} /> فتح الإيصال بالحجم الكامل
+            </a>
+        </div>
+    );
 }
 
 function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
@@ -107,7 +175,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
         }
     };
 
-    const specs = uniqueProductSpecs(item);
+    const specs = reviewProductSpecs(item);
     const gallery = Array.from(new Set((item.gallery || []).filter(Boolean)));
     return (
         <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -242,6 +310,9 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const order = detail?.order;
     const customer = order?.customer || {};
     const payment = order?.payment || {};
+    const paymentMethod = paymentText(order).toLowerCase();
+    const isBankTransfer = paymentMethod === "bank" || paymentMethod.includes("bank transfer")
+        || paymentMethod.includes("تحويل بنكي") || paymentMethod.includes("حوالة بنكية");
     const shipping = order?.shipping || {};
     const address = shipping.address || customer.shipping_address || {};
     const whatsapp = String(customer.mobile || "").replace(/\D/g, "");
@@ -305,6 +376,14 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                                     <Field label="إجمالي الطلب" value={money(order.totals?.total, order.totals?.currency)} dir="ltr" />
                                     <Field label="المبلغ المدفوع" value={money(payment.paid_amount, order.totals?.currency)} dir="ltr" />
                                     <Field label="المبلغ المتبقي" value={money(payment.remaining_amount, order.totals?.currency)} dir="ltr" />
+                                    {payment.receiving_bank_name && <Field label="البنك المستلم" value={payment.receiving_bank_name} />}
+                                    {payment.receipt_url ? (
+                                        <div className="sm:col-span-2"><PaymentReceiptCard receiptUrl={payment.receipt_url} /></div>
+                                    ) : isBankTransfer ? (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900 sm:col-span-2">
+                                            لا توجد صورة إيصال محفوظة في بيانات سلة لهذا الطلب.
+                                        </div>
+                                    ) : null}
                                 </div>
                             </section>
                             <section className="rounded-2xl border bg-white p-4">

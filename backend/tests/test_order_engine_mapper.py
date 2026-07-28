@@ -344,3 +344,26 @@ def test_mapper_has_no_database_or_http_dependency():
     }
 
     assert names.isdisjoint(forbidden)
+
+
+
+def test_maps_nested_transfer_receipt_and_files_custom_field(salla_order_payload):
+    salla_order_payload["receipt_image"] = {
+        "url": "https://cdn.salla.sa/example/receipt-274724433.jpg",
+    }
+    salla_order_payload["items"][0]["files"] = [
+        {
+            "name": "هل تريد إضافة كرت اهداء",
+            "value": {"name": "لا"},
+        }
+    ]
+
+    order = map_salla_order(salla_order_payload)
+
+    assert order.payment.receipt_url == (
+        "https://cdn.salla.sa/example/receipt-274724433.jpg"
+    )
+    assert order.items[0].custom_fields[-1] == {
+        "name": "هل تريد إضافة كرت اهداء",
+        "value": {"name": "لا"},
+    }
