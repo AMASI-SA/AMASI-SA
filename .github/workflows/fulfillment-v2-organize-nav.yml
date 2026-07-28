@@ -1,0 +1,66 @@
+name: Fulfillment V2 organize navigation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/fulfillment-v2-organize-nav.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  organize-navigation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/orders-review-workflow-v2
+          fetch-depth: 0
+          show-progress: false
+      - name: Rename the Mezan OS parent and remove the owner duplicate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("frontend/src/components/Sidebar.jsx")
+          text = path.read_text(encoding="utf-8")
+
+          old_label = '''                label: "إدارة رفع الطلبات",'''
+          new_label = '''                label: "إدارة التجهيز",'''
+          if old_label in text:
+              if text.count(old_label) != 1:
+                  raise SystemExit("Unexpected duplicate fulfillment parent labels")
+              text = text.replace(old_label, new_label, 1)
+          elif new_label not in text:
+              raise SystemExit("Fulfillment parent navigation label was not found")
+
+          old_items = '''            const items = [...section.items];'''
+          new_items = '''            const items = section.items.filter((item) => item.to !== "/order-review");'''
+          if old_items in text:
+              if text.count(old_items) != 1:
+                  raise SystemExit("Unexpected owner operations items initializer count")
+              text = text.replace(old_items, new_items, 1)
+          elif new_items not in text:
+              raise SystemExit("Owner duplicate-filter insertion point was not found")
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          grep -q 'label: "إدارة التجهيز"' frontend/src/components/Sidebar.jsx
+          grep -q 'const items = section.items.filter((item) => item.to !== "/order-review");' frontend/src/components/Sidebar.jsx
+          git diff --check
+      - name: Commit organized navigation
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Navigation already organized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/Sidebar.jsx
+          git commit -m "refactor(fulfillment): organize parent navigation and employee fallback"
+          git push origin HEAD:feat/orders-review-workflow-v2
