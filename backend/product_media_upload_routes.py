@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from bson.binary import Binary
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from product_v2_routes import PRODUCTS
 
@@ -45,7 +45,6 @@ def make_product_media_upload_router(db: Any, current_user: Callable) -> APIRout
     @router.post("/{product_id}/media-upload")
     async def upload_media(
         product_id: str,
-        request: Request,
         file: UploadFile = File(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
@@ -85,7 +84,7 @@ def make_product_media_upload_router(db: Any, current_user: Callable) -> APIRout
             "created_at": now,
             "expires_at": expires_at,
         })
-        url = str(request.url_for("product_media_temp_file", token=token))
+        url = f"/api/products-v2/media-upload/file/{token}"
         return {
             "ok": True,
             "image": {
