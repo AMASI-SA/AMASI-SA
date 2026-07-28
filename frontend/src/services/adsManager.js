@@ -12,7 +12,25 @@ const SAFE_PROVIDERS = new Set(ADS_PROVIDER_ORDER);
 const SAFE_CAMPAIGN_PROVIDERS = new Set(["tiktok", "meta"]);
 const SAFE_FRESHNESS = new Set(["fresh", "delayed", "stale", "unavailable", "unknown"]);
 const SAFE_CAMPAIGN_COVERAGE = new Set(["available", "aggregate_only", "unavailable"]);
+const SAFE_PERFORMANCE_COVERAGE = new Set(["complete", "partial", "stale", "unavailable"]);
+const SAFE_PERFORMANCE_REASONS = new Set([
+    "source_unavailable",
+    "source_truncated",
+    "invalid_source_dates",
+    "incomplete_spend",
+    "missing_performance_dates",
+    "stale_performance",
+    "incomplete_revenue",
+    "incomplete_conversions",
+    "unverified_zero_performance",
+]);
 const SAFE_RECONCILIATION = new Set(["matched", "drift", "not_comparable", "no_data"]);
+const SAFE_RECONCILIATION_BASIS = new Set([
+    "account_day_aligned",
+    "aggregate_period_only",
+    "unavailable",
+]);
+const SAFE_RECONCILIATION_SEVERITY = new Set(["none", "info", "warning"]);
 const SECRET_TEXT_RE = /(bearer\s+[a-z0-9._~+/=-]{8,}|access[\s_-]*token|refresh[\s_-]*token|client[\s_-]*secret|app[\s_-]*secret|api[\s_-]*key|(?:token|secret|authorization|password|cookie|credential)\s*[:=])/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -87,12 +105,107 @@ function normalizeCampaignCoverage(value) {
     };
 }
 
+function normalizePerformanceCoverage(value, freshness) {
+    const source = value && typeof value === "object" ? value : {};
+    const observedDays = safePositiveInteger(
+        source.observed_days,
+        freshness.observed_days,
+        { min: 0, max: 366 },
+    );
+    const requestedDays = safePositiveInteger(
+        source.requested_days,
+        freshness.requested_days,
+        { min: 0, max: 366 },
+    );
+    const derivedStatus = freshness.status === "stale"
+        ? "stale"
+        : requestedDays > 0 && observedDays > 0 && observedDays < requestedDays
+            ? "partial"
+            : observedDays > 0
+                ? "complete"
+                : "unavailable";
+    const status = SAFE_PERFORMANCE_COVERAGE.has(source.status)
+        ? source.status
+        : derivedStatus;
+    const parsedCoveragePct = safeNumber(source.coverage_pct);
+    const explicitCoveragePct = parsedCoveragePct !== null
+        && parsedCoveragePct >= 0
+        && parsedCoveragePct <= 100
+        ? parsedCoveragePct
+        : null;
+    const coveragePct = explicitCoveragePct ?? (
+        requestedDays > 0
+            ? Math.round((Math.min(observedDays, requestedDays) / requestedDays) * 10000) / 100
+            : null
+    );
+    const sourceHasEligibility = Object.prototype.hasOwnProperty.call(
+        source,
+        "eligible_for_ratios",
+    );
+    const coverageWindowAcceptable = requestedDays === 0
+        || observedDays >= requestedDays
+        || (
+            requestedDays - observedDays === 1
+            && freshness.status === "fresh"
+        );
+    const eligibleByEvidence = status === "complete"
+        && !["stale", "unavailable"].includes(freshness.status)
+        && observedDays > 0
+        && coverageWindowAcceptable;
+    const reasons = Array.isArray(source.reasons)
+        ? source.reasons
+            .filter((item) => SAFE_PERFORMANCE_REASONS.has(item))
+            .slice(0, 10)
+        : [];
+    const missingSpendDates = Array.isArray(source.missing_spend_dates)
+        ? source.missing_spend_dates
+            .filter((item) => typeof item === "string" && ISO_DATE_RE.test(item))
+            .slice(0, 90)
+        : [];
+
+    return {
+        status,
+        eligible_for_ratios: sourceHasEligibility
+            ? source.eligible_for_ratios === true && eligibleByEvidence
+            : eligibleByEvidence,
+        observed_days: observedDays,
+        requested_days: requestedDays,
+        coverage_pct: coveragePct,
+        missing_spend_dates: missingSpendDates,
+        reasons,
+        detail: safeText(
+            source.detail,
+            status === "complete"
+                ? "تغطية الأداء مكتملة ضمن الفترة المطلوبة."
+                : "بيانات الأداء لا تغطي الفترة المطلوبة بالكامل.",
+        ),
+    };
+}
+
 function normalizeReconciliation(value) {
     const source = value && typeof value === "object" ? value : {};
+    const status = SAFE_RECONCILIATION.has(source.status)
+        ? source.status
+        : "not_comparable";
+    const hasActionRequired = Object.prototype.hasOwnProperty.call(
+        source,
+        "action_required",
+    );
     return {
-        status: SAFE_RECONCILIATION.has(source.status)
-            ? source.status
-            : "not_comparable",
+        status,
+        comparison_basis: SAFE_RECONCILIATION_BASIS.has(source.comparison_basis)
+            ? source.comparison_basis
+            : "unavailable",
+        severity: SAFE_RECONCILIATION_SEVERITY.has(source.severity)
+            ? source.severity
+            : status === "drift"
+                ? "warning"
+                : status === "matched"
+                    ? "none"
+                    : "info",
+        action_required: hasActionRequired
+            ? source.action_required === true
+            : status === "drift",
         provider_reported_spend_sar: safeNumber(
             source.provider_reported_spend_sar,
             { min: 0 },
@@ -111,6 +224,7 @@ function normalizeProvider(value) {
         && typeof source.metric_availability === "object"
         ? source.metric_availability
         : {};
+    const freshness = normalizeFreshness(source.freshness);
     return {
         provider: source.provider,
         provider_label: safeText(
@@ -124,7 +238,11 @@ function normalizeProvider(value) {
         health_score: safeNumber(source.health_score, { min: 0, max: 100 }),
         last_sync_at: nullableText(source.last_sync_at),
         metrics: normalizeMetrics(source.metrics),
-        freshness: normalizeFreshness(source.freshness),
+        freshness,
+        performance_coverage: normalizePerformanceCoverage(
+            source.performance_coverage,
+            freshness,
+        ),
         campaign_coverage: normalizeCampaignCoverage(source.campaign_coverage),
         reconciliation: normalizeReconciliation(source.reconciliation),
         metric_availability: Object.fromEntries(
@@ -184,6 +302,11 @@ function normalizeCampaign(value) {
 
 function normalizeCoverage(value) {
     const source = value && typeof value === "object" ? value : {};
+    const providersTotal = safePositiveInteger(
+        source.providers_total,
+        3,
+        { min: 0, max: 3 },
+    );
     return {
         revenue_is_partial: source.revenue_is_partial !== false,
         provider_spend_is_partial: source.provider_spend_is_partial !== false,
@@ -193,7 +316,7 @@ function normalizeCoverage(value) {
             0,
             { min: 0, max: 3 },
         ),
-        providers_total: safePositiveInteger(source.providers_total, 3, { min: 0, max: 3 }),
+        providers_total: providersTotal,
         campaign_detail_providers: safePositiveInteger(
             source.campaign_detail_providers,
             0,
@@ -210,6 +333,11 @@ function normalizeCoverage(value) {
             source.impression_providers,
             0,
             { min: 0, max: 3 },
+        ),
+        ratio_eligible_providers: safePositiveInteger(
+            source.ratio_eligible_providers,
+            0,
+            { min: 0, max: providersTotal },
         ),
         provider_spend_providers: safePositiveInteger(
             source.provider_spend_providers,
@@ -300,6 +428,25 @@ export function normalizeAdsManagerOverview(payload = {}) {
         && typeof value.campaign_pagination === "object"
         ? value.campaign_pagination
         : {};
+    const coverage = normalizeCoverage(value.coverage);
+    coverage.ratio_eligible_providers = providers.filter(
+        (provider) => provider.performance_coverage.eligible_for_ratios,
+    ).length;
+    const metrics = normalizeMetrics(value.metrics);
+    if (
+        providers.length === 0
+        || coverage.ratio_eligible_providers < providers.length
+    ) {
+        for (const ratioKey of [
+            "platform_roas",
+            "platform_cpa_sar",
+            "platform_cpc_sar",
+            "platform_cpm_sar",
+            "platform_ctr_pct",
+        ]) {
+            metrics[ratioKey] = null;
+        }
+    }
 
     return {
         generated_at: nullableText(value.generated_at),
@@ -315,8 +462,8 @@ export function normalizeAdsManagerOverview(payload = {}) {
                 ? value.range.provider
                 : "all",
         },
-        metrics: normalizeMetrics(value.metrics),
-        coverage: normalizeCoverage(value.coverage),
+        metrics,
+        coverage,
         providers: ADS_PROVIDER_ORDER.map((provider) => byProvider.get(provider)).filter(Boolean),
         daily_spend: normalizeDailySpend(value.daily_spend),
         campaigns,

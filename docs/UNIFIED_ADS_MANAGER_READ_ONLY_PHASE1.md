@@ -74,6 +74,21 @@ Rows lacking a defensible provider identity remain unscoped. Rows lacking a
 defensible currency or FX rate remain unknown. Neither may be distributed or
 converted by inference.
 
+Snapchat conversion facts carry a separate quality contract:
+
+- `conversion_data_status=available` means the conversion request returned
+  explicit numeric purchase and revenue fields; an explicit provider zero is
+  valid in this state.
+- `partial` or `unavailable` means at least one conversion fact was not
+  observed. Purchases or revenue remain `null`; a failed request must never be
+  persisted or aggregated as zero.
+- historical positive values written before the quality marker may remain
+  usable because the failed path only fabricated zero. Historical zeroes
+  without the marker remain unknown until a fresh sync proves them.
+
+Spend ingestion remains independent: a failed conversion request does not
+discard a successfully fetched spend fact.
+
 For a locally configured USD account, the reader uses the stored
 `ads_currency_settings.usd_to_sar_rate`. If that settings document has never
 been persisted, it uses the existing application policy default `3.7544` and
@@ -88,9 +103,20 @@ the account currency is independently established as USD.
 provider_reported_spend_sar - booked_ad_expense_sar
 ```
 
-The gap is computed only when both facts are available and their exact
-account-and-day keys match for the requested provider and date range.
-Otherwise it is `null` and the status is `not_comparable` or `no_data`.
+When exact account-and-day keys match, `comparison_basis` is
+`account_day_aligned` and the result may be `matched` or `drift`. Matching
+requires the value at every account × day key to be within tolerance; equal
+period totals cannot hide offsetting account-level differences.
+
+When both period totals are complete but the account-and-day identities do not
+align, the response may still show the arithmetic gap with
+`comparison_basis=aggregate_period_only`. Its status remains
+`not_comparable`; it is labelled as a period-level diagnostic and must not be
+described as an accounting match or settlement. A material period gap may
+carry warning severity so it is visible to the owner.
+
+When either total is incomplete, the gap remains `null` and the comparison
+basis is `unavailable`.
 
 A reconciliation gap is not an accounting adjustment. Viewing it must never
 post, reverse, reconcile, or edit a ledger row.
@@ -99,12 +125,18 @@ post, reverse, reconcile, or edit a ledger row.
 
 - Missing or unprovable facts are `null`, never `0`.
 - Zero is valid only when the source explicitly observed zero.
+- A failed Snapchat conversion request is unknown even when spend succeeded.
 - A disconnected provider is `unavailable`, not zero.
 - Daily series preserve `null` gaps.
 - Combined totals include only known, currency-safe facts and expose coverage.
+- Each provider exposes performance coverage separately from spend freshness.
+  Incomplete spend coverage, missing performance days, stale rows, unverified
+  zeroes, invalid dates, or truncated reads make the provider ineligible for
+  performance ratios.
 - Combined ROAS, CPA, CPC, CPM, and CTR remain `null` unless every selected
-  provider has the exact inputs required for that ratio; partial provider sets
-  are never mixed into a headline ratio.
+  provider has complete, current coverage and the exact inputs required for
+  that ratio; stale or partial providers are never mixed into a headline
+  ratio.
 - Platform conversions, purchases, revenue, and ROAS are explicitly
   platform-reported or platform-attributed.
 - Platform ROAS is not net profit, causal attribution, or a cross-source truth.
@@ -198,6 +230,9 @@ or provider credentials:
 - provider spend and booked expense remain separate;
 - `ad_account_ledger` is not queried;
 - missing facts remain `null`;
+- incomplete or stale provider coverage suppresses derived performance ratios;
+- aggregate-only spend gaps remain visibly distinct from exact account/day
+  reconciliation;
 - invalid, future, reversed, and over-90-day ranges fail before data access;
 - secret-bearing fields and sentinel values do not reach the response; and
 - campaign pagination is bounded and deterministic.
@@ -207,6 +242,12 @@ or provider credentials:
 - uses a strict file allowlist for this phase;
 - rejects database mutations, provider networking, and non-GET routes through
   an AST guard;
+- proves that Snapchat conversion failures remain unknown while explicit
+  provider zeroes remain valid;
+- invokes both live Snapchat sync route implementations hermetically and
+  proves that failed conversions persist as `null + unavailable`;
+- constrains operational Snapchat / Ads V2 edits against the reviewed base
+  with a route, import, URL, mutation, network, and helper-effect AST delta;
 - runs the hermetic manager tests and integrations safety regressions; and
 - runs targeted frontend tests plus a production build.
 
@@ -220,8 +261,14 @@ cd /app/backend
 python -m compileall -q \
   ad_spend_reporting.py \
   ads_manager \
+  ads_v2/models.py \
+  ads_v2/sync/adapters.py \
+  ads_v2/sync/core.py \
+  snapchat_routes.py \
+  tests/test_snapchat_conversion_quality.py \
   tests/test_unified_ads_manager_phase1.py
 PYTHONPATH=. python -m pytest -q \
+  tests/test_snapchat_conversion_quality.py \
   tests/test_unified_ads_manager_phase1.py \
   tests/test_mezan_integrations_v2.py \
   --tb=short

@@ -10,6 +10,11 @@ on:
       - "backend/ads_manager/models.py"
       - "backend/ads_manager/routes.py"
       - "backend/ads_manager/service.py"
+      - "backend/ads_v2/models.py"
+      - "backend/ads_v2/sync/adapters.py"
+      - "backend/ads_v2/sync/core.py"
+      - "backend/snapchat_routes.py"
+      - "backend/tests/test_snapchat_conversion_quality.py"
       - "backend/tests/test_unified_ads_manager_phase1.py"
       - "backend/server.py"
       - "frontend/src/pages/AdsManager.jsx"
@@ -58,6 +63,11 @@ jobs:
               backend/ads_manager/models.py|\
               backend/ads_manager/routes.py|\
               backend/ads_manager/service.py|\
+              backend/ads_v2/models.py|\
+              backend/ads_v2/sync/adapters.py|\
+              backend/ads_v2/sync/core.py|\
+              backend/snapchat_routes.py|\
+              backend/tests/test_snapchat_conversion_quality.py|\
               backend/tests/test_unified_ads_manager_phase1.py|\
               backend/server.py|\
               frontend/src/pages/AdsManager.jsx|\
@@ -202,6 +212,8 @@ jobs:
                       additions.append(line[1:])
                   elif line.startswith("-"):
                       deletions.append(line[1:])
+              if not additions and not deletions:
+                  continue
               if Counter(additions) != Counter(contract["additions"]):
                   errors.append(
                       f"{path} additions differ from the reviewed wiring contract"
@@ -214,6 +226,325 @@ jobs:
           if errors:
               raise SystemExit("\n".join(errors))
           print("Frontend wiring guard passed.")
+          PY
+
+      - name: Constrain operational source-quality changes by AST delta
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          comparison_base="${PULL_REQUEST_BASE_SHA:-origin/main}"
+          COMPARISON_BASE="${comparison_base}" python - <<'PY'
+          import ast
+          from collections import Counter
+          import os
+          import pathlib
+          import subprocess
+
+          paths = [
+              "backend/snapchat_routes.py",
+              "backend/ads_v2/models.py",
+              "backend/ads_v2/sync/adapters.py",
+              "backend/ads_v2/sync/core.py",
+          ]
+          approved_new_functions = {
+              "backend/snapchat_routes.py": {
+                  "_parse_snap_conversion_payload",
+                  "_fetch_snap_conversion_metrics",
+                  "_aggregate_snap_conversion_rows",
+                  "_legacy_metric_is_known",
+              },
+          }
+          approved_new_function_network = {
+              (
+                  "backend/snapchat_routes.py",
+                  "_fetch_snap_conversion_metrics",
+              ): Counter({"http.get": 1}),
+          }
+          write_methods = {
+              "create_collection",
+              "insert_one",
+              "insert_many",
+              "update_one",
+              "update_many",
+              "delete_one",
+              "delete_many",
+              "replace_one",
+              "find_one_and_update",
+              "find_one_and_delete",
+              "find_one_and_replace",
+              "bulk_write",
+              "create_index",
+              "drop_index",
+              "drop_indexes",
+              "drop",
+              "drop_collection",
+              "rename",
+          }
+          route_methods = {
+              "get",
+              "post",
+              "put",
+              "patch",
+              "delete",
+              "api_route",
+              "route",
+              "websocket",
+          }
+          network_methods = {
+              "get",
+              "post",
+              "put",
+              "patch",
+              "delete",
+              "request",
+              "send",
+          }
+          network_roots = {
+              "aiohttp",
+              "client",
+              "http",
+              "httpx",
+              "requests",
+              "session",
+          }
+          network_constructors = {
+              "aiohttp.ClientSession",
+              "httpx.AsyncClient",
+          }
+
+          def dotted_name(node):
+              parts = []
+              while isinstance(node, ast.Attribute):
+                  parts.append(node.attr)
+                  node = node.value
+              if isinstance(node, ast.Name):
+                  parts.append(node.id)
+              return ".".join(reversed(parts))
+
+          def snapshot(source, path):
+              tree = ast.parse(source, filename=path)
+              functions = set()
+              classes = set()
+              imports = set()
+              routes = []
+              write_references = Counter()
+              network_references = Counter()
+              network_constructor_calls = Counter()
+              network_aliases = set()
+              urls = set()
+              dynamic_forbidden = 0
+              function_effects = {}
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                      functions.add(node.name)
+                      function_writes = Counter()
+                      function_network = Counter()
+                      for child in ast.walk(node):
+                          if not isinstance(child, ast.Attribute):
+                              continue
+                          child_name = dotted_name(child)
+                          child_method = child_name.rsplit(".", 1)[-1]
+                          child_root = child_name.split(".", 1)[0]
+                          if child_method in write_methods:
+                              function_writes[child_name] += 1
+                          if (
+                              child_method in network_methods
+                              and child_root in network_roots
+                          ):
+                              function_network[child_name] += 1
+                      function_effects[node.name] = {
+                          "writes": function_writes,
+                          "network": function_network,
+                      }
+                      for decorator in node.decorator_list:
+                          if not isinstance(decorator, ast.Call):
+                              continue
+                          name = dotted_name(decorator.func)
+                          if name.rsplit(".", 1)[-1] in route_methods:
+                              routes.append(ast.dump(
+                                  decorator,
+                                  include_attributes=False,
+                              ))
+                  elif isinstance(node, ast.ClassDef):
+                      classes.add(node.name)
+                  elif isinstance(node, ast.Import):
+                      imports.update(alias.name for alias in node.names)
+                  elif isinstance(node, ast.ImportFrom):
+                      imports.add(node.module or "")
+                  elif isinstance(node, ast.Attribute):
+                      name = dotted_name(node)
+                      method = name.rsplit(".", 1)[-1]
+                      root = name.split(".", 1)[0]
+                      if method in write_methods:
+                          write_references[name] += 1
+                      if method in network_methods and root in network_roots:
+                          network_references[name] += 1
+                  elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+                      value = getattr(node, "value", None)
+                      value_name = dotted_name(
+                          value.func if isinstance(value, ast.Call) else value
+                      )
+                      value_root = value_name.split(".", 1)[0]
+                      if (
+                          value_name in network_constructors
+                          or value_root in network_roots
+                      ):
+                          network_aliases.add(ast.dump(
+                              node,
+                              include_attributes=False,
+                          ))
+                  elif isinstance(node, ast.Call):
+                      call_name = dotted_name(node.func)
+                      if call_name in network_constructors:
+                          network_constructor_calls[call_name] += 1
+                      if (
+                          call_name == "getattr"
+                          or call_name.endswith(".__getattribute__")
+                      ) and len(node.args) >= (
+                          2 if call_name == "getattr" else 1
+                      ):
+                          method_arg = (
+                              node.args[1]
+                              if call_name == "getattr"
+                              else node.args[0]
+                          )
+                          try:
+                              method = ast.literal_eval(method_arg)
+                          except Exception:
+                              method = None
+                          if method in write_methods or method in network_methods:
+                              dynamic_forbidden += 1
+                  elif isinstance(node, ast.Constant):
+                      if isinstance(node.value, str) and (
+                          "http://" in node.value or "https://" in node.value
+                      ):
+                          urls.add(node.value)
+              return {
+                  "functions": functions,
+                  "classes": classes,
+                  "imports": imports,
+                  "routes": sorted(routes),
+                  "write_references": write_references,
+                  "network_references": network_references,
+                  "network_constructor_calls": network_constructor_calls,
+                  "network_aliases": network_aliases,
+                  "urls": urls,
+                  "dynamic_forbidden": dynamic_forbidden,
+                  "function_effects": function_effects,
+              }
+
+          base = os.environ["COMPARISON_BASE"]
+          errors = []
+          guard_self_test = snapshot(
+              """
+          async def unsafe(db):
+              transport = httpx.AsyncClient()
+              await transport.get("relative-path")
+              mutate = db.rows.__getattribute__("update_one")
+              await mutate({}, {"$set": {"x": 1}})
+          """,
+              "self-test:operational-aliases",
+          )
+          if not guard_self_test["network_constructor_calls"]:
+              errors.append("operational guard missed a network constructor")
+          if not guard_self_test["network_aliases"]:
+              errors.append("operational guard missed a network alias")
+          if not guard_self_test["dynamic_forbidden"]:
+              errors.append("operational guard missed __getattribute__ mutation")
+
+          for path in paths:
+              baseline_source = subprocess.check_output(
+                  ["git", "show", f"{base}:{path}"],
+                  text=True,
+              )
+              current_source = pathlib.Path(path).read_text(encoding="utf-8")
+              baseline = snapshot(baseline_source, f"{base}:{path}")
+              current = snapshot(current_source, path)
+
+              if current["routes"] != baseline["routes"]:
+                  errors.append(f"{path}: route declarations changed")
+              if not current["imports"].issubset(baseline["imports"]):
+                  errors.append(
+                      f"{path}: new imports are forbidden: "
+                      f"{sorted(current['imports'] - baseline['imports'])}"
+                  )
+              if not current["urls"].issubset(baseline["urls"]):
+                  errors.append(f"{path}: new network URL literal is forbidden")
+              if current["classes"] - baseline["classes"]:
+                  errors.append(f"{path}: new production class is forbidden")
+              new_functions = current["functions"] - baseline["functions"]
+              unexpected_functions = (
+                  new_functions - approved_new_functions.get(path, set())
+              )
+              if unexpected_functions:
+                  errors.append(
+                      f"{path}: unexpected production functions: "
+                      f"{sorted(unexpected_functions)}"
+                  )
+              for function_name in new_functions:
+                  effects = current["function_effects"][function_name]
+                  expected_network = approved_new_function_network.get(
+                      (path, function_name),
+                      Counter(),
+                  )
+                  if effects["writes"]:
+                      errors.append(
+                          f"{path}:{function_name}: new helper may not write"
+                      )
+                  if effects["network"] != expected_network:
+                      errors.append(
+                          f"{path}:{function_name}: unexpected network surface "
+                          f"{dict(effects['network'])}"
+                      )
+              for reference, count in current["write_references"].items():
+                  if count > baseline["write_references"][reference]:
+                      errors.append(
+                          f"{path}: new write reference is forbidden: {reference}"
+                      )
+              for reference, count in current["network_references"].items():
+                  if count > baseline["network_references"][reference]:
+                      errors.append(
+                          f"{path}: new network reference is forbidden: "
+                          f"{reference}"
+                      )
+              if (
+                  path == "backend/snapchat_routes.py"
+                  and "_fetch_snap_conversion_metrics" in new_functions
+                  and current["network_references"]["http.get"]
+                  != baseline["network_references"]["http.get"] - 1
+              ):
+                  errors.append(
+                      f"{path}: reviewed http.get relocation changed"
+                  )
+              for constructor, count in (
+                  current["network_constructor_calls"].items()
+              ):
+                  if (
+                      count
+                      > baseline["network_constructor_calls"][constructor]
+                  ):
+                      errors.append(
+                          f"{path}: new network client is forbidden: "
+                          f"{constructor}"
+                      )
+              if not current["network_aliases"].issubset(
+                  baseline["network_aliases"]
+              ):
+                  errors.append(f"{path}: new network alias is forbidden")
+              if (
+                  current["dynamic_forbidden"]
+                  > baseline["dynamic_forbidden"]
+              ):
+                  errors.append(
+                      f"{path}: dynamic write/network lookup is forbidden"
+                  )
+
+          if errors:
+              raise SystemExit("\n".join(errors))
+          print("Operational source-quality AST delta guard passed.")
           PY
 
       - name: Reject writes, provider networking, and non-GET routes by AST
@@ -298,11 +629,48 @@ jobs:
               return ".".join(reversed(parts))
 
           class SafetyVisitor(ast.NodeVisitor):
-              def __init__(self, path):
+              def __init__(self, path, findings):
                   self.path = path
+                  self.findings = findings
+                  self.aliases = {}
 
               def fail(self, node, message):
-                  errors.append(f"{self.path}:{node.lineno}: {message}")
+                  self.findings.append(f"{self.path}:{node.lineno}: {message}")
+
+              def forbidden_reference(self, name):
+                  resolved = self.aliases.get(name, name)
+                  method = resolved.rsplit(".", 1)[-1]
+                  if method in write_methods:
+                      return f"database mutation alias is forbidden: {resolved}"
+                  if method in forbidden_route_methods:
+                      return f"non-GET route/call alias is forbidden: {resolved}"
+                  if method in network_calls:
+                      return f"provider/network alias is forbidden: {resolved}"
+                  return None
+
+              def bind_alias(self, target, value):
+                  if not isinstance(target, ast.Name):
+                      return
+                  reference = dotted_name(value)
+                  if not reference:
+                      return
+                  resolved = self.aliases.get(reference, reference)
+                  if self.forbidden_reference(resolved):
+                      self.aliases[target.id] = resolved
+
+              def visit_Assign(self, node):
+                  for target in node.targets:
+                      self.bind_alias(target, node.value)
+                  self.generic_visit(node)
+
+              def visit_AnnAssign(self, node):
+                  if node.value is not None:
+                      self.bind_alias(node.target, node.value)
+                  self.generic_visit(node)
+
+              def visit_NamedExpr(self, node):
+                  self.bind_alias(node.target, node.value)
+                  self.generic_visit(node)
 
               def check_import(self, node, module):
                   root = module.split(".", 1)[0]
@@ -322,6 +690,9 @@ jobs:
 
               def visit_Call(self, node):
                   call_name = dotted_name(node.func)
+                  alias_error = self.forbidden_reference(call_name)
+                  if call_name in self.aliases and alias_error:
+                      self.fail(node, alias_error)
                   method = call_name.rsplit(".", 1)[-1]
                   if method in write_methods:
                       self.fail(node, f"database mutation is forbidden: {call_name}")
@@ -329,6 +700,28 @@ jobs:
                       self.fail(node, f"non-GET route/call is forbidden: {call_name}")
                   if method in network_calls:
                       self.fail(node, f"provider/network call is forbidden: {call_name}")
+                  if (
+                      call_name == "getattr"
+                      or call_name.endswith(".__getattribute__")
+                  ) and len(node.args) >= (2 if call_name == "getattr" else 1):
+                      method_arg = (
+                          node.args[1]
+                          if call_name == "getattr"
+                          else node.args[0]
+                      )
+                      try:
+                          dynamic_method = ast.literal_eval(method_arg)
+                      except Exception:
+                          dynamic_method = None
+                      if isinstance(dynamic_method, str) and (
+                          dynamic_method in write_methods
+                          or dynamic_method in forbidden_route_methods
+                          or dynamic_method in network_calls
+                      ):
+                          self.fail(
+                              node,
+                              f"dynamic forbidden method lookup: {dynamic_method}",
+                          )
                   if method in {"api_route", "add_api_route"}:
                       methods_keyword = next(
                           (
@@ -364,13 +757,43 @@ jobs:
                   ):
                       self.fail(node, "provider/network URL literal is forbidden")
 
+          negative_cases = {
+              "write-alias": (
+                  "async def f(collection):\n"
+                  "    mutate = collection.update_one\n"
+                  "    await mutate({}, {})\n"
+              ),
+              "dynamic-write": (
+                  "async def f(collection):\n"
+                  "    mutate = getattr(collection, 'update_one')\n"
+                  "    await mutate({}, {})\n"
+              ),
+              "dunder-dynamic-write": (
+                  "async def f(collection):\n"
+                  "    mutate = collection.__getattribute__('update_one')\n"
+                  "    await mutate({}, {})\n"
+              ),
+              "network-alias": (
+                  "async def f(client):\n"
+                  "    send = client.request\n"
+                  "    await send('GET', '/x')\n"
+              ),
+          }
+          for label, source in negative_cases.items():
+              findings = []
+              SafetyVisitor(f"self-test:{label}", findings).visit(
+                  ast.parse(source)
+              )
+              if not findings:
+                  errors.append(f"guard self-test failed to reject {label}")
+
           for path in files:
               try:
                   tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
               except SyntaxError as exc:
                   errors.append(f"{path}:{exc.lineno}: syntax error: {exc.msg}")
                   continue
-              SafetyVisitor(path).visit(tree)
+              SafetyVisitor(path, errors).visit(tree)
 
           if errors:
               print("Read-only AST guard failed:", file=sys.stderr)
@@ -403,16 +826,22 @@ jobs:
           pytest==9.0.3
           pytest-asyncio
           openpyxl==3.1.5
-      - name: Compile the read-only surface
+      - name: Compile the read-only and source-quality surfaces
         run: |
           python -m compileall -q \
             ad_spend_reporting.py \
             ads_manager \
+            ads_v2/models.py \
+            ads_v2/sync/adapters.py \
+            ads_v2/sync/core.py \
+            snapchat_routes.py \
+            tests/test_snapchat_conversion_quality.py \
             tests/test_unified_ads_manager_phase1.py
           python -m py_compile server.py
-      - name: Run Ads Manager and integration safety regressions
+      - name: Run Ads Manager, source-quality, and integration regressions
         run: >-
           python -m pytest
+          tests/test_snapchat_conversion_quality.py
           tests/test_unified_ads_manager_phase1.py
           tests/test_mezan_integrations_v2.py
           -q
@@ -505,9 +934,70 @@ jobs:
               return null;
           }
 
-          function inspect(path, node, result) {
+          function resolveName(name, result) {
+              let resolved = name;
+              const seen = new Set();
+              for (let index = 0; index < 8; index += 1) {
+                  if (!resolved || seen.has(resolved)) break;
+                  seen.add(resolved);
+                  const [root, ...rest] = resolved.split(".");
+                  const alias = result.aliases.get(root);
+                  if (!alias) break;
+                  resolved = [alias, ...rest].filter(Boolean).join(".");
+              }
+              return resolved;
+          }
+
+          function bindAlias(identifier, valueName, result) {
+              if (!identifier || identifier.type !== "Identifier") return;
+              const resolved = resolveName(valueName, result);
+              if (resolved) result.aliases.set(identifier.name, resolved);
+          }
+
+          function networkKind(name) {
+              const parts = name.split(".");
+              const root = parts[0];
+              const method = parts[parts.length - 1];
+              if (root === "axios") return "axios";
+              if (method === "fetch") return "fetch";
+              if (method === "sendBeacon") return "sendBeacon";
+              if (forbiddenConstructors.has(method)) return method;
+              return "";
+          }
+
+          function inspect(path, node, result, parent = null) {
               if (!node || typeof node !== "object") return;
               const line = node.loc?.start?.line ?? 0;
+
+              if (node.type === "VariableDeclarator" && node.init) {
+                  const valueName = dottedName(node.init);
+                  if (node.id.type === "Identifier") {
+                      bindAlias(node.id, valueName, result);
+                  } else if (
+                      node.id.type === "ObjectPattern"
+                      && valueName
+                  ) {
+                      for (const property of node.id.properties) {
+                          if (
+                              property.type === "ObjectProperty"
+                              && property.key.type === "Identifier"
+                              && property.value.type === "Identifier"
+                          ) {
+                              bindAlias(
+                                  property.value,
+                                  `${resolveName(valueName, result)}.${property.key.name}`,
+                                  result,
+                              );
+                          }
+                      }
+                  }
+              }
+              if (
+                  node.type === "AssignmentExpression"
+                  && node.operator === "="
+              ) {
+                  bindAlias(node.left, dottedName(node.right), result);
+              }
 
               if (
                   node.type === "StringLiteral"
@@ -524,17 +1014,46 @@ jobs:
                   node.type === "MemberExpression"
                   || node.type === "OptionalMemberExpression"
               ) {
-                  const member = dottedName(node);
-                  if (
-                      member === "navigator.sendBeacon"
-                      || member === "window.fetch"
-                      || member === "globalThis.fetch"
-                      || member === "self.fetch"
-                      || member.startsWith("axios.")
-                  ) {
+                  const rawMember = dottedName(node);
+                  const member = resolveName(rawMember, result);
+                  if (networkKind(member)) {
                       result.errors.push(
                           `${path}:${line}: network escape hatch is forbidden: ${member}`
                       );
+                  }
+                  if (member === "api" || member.startsWith("api.")) {
+                      const approvedDirectGet = (
+                          member === "api.get"
+                          && rawMember === "api.get"
+                          && (
+                              parent?.type === "CallExpression"
+                              || parent?.type === "OptionalCallExpression"
+                          )
+                          && parent.callee === node
+                      );
+                      if (!approvedDirectGet) {
+                          result.errors.push(
+                              `${path}:${line}: API member may only be the direct approved GET`
+                          );
+                      }
+                  }
+                  if (node.computed && !rawMember) {
+                      const objectName = resolveName(
+                          dottedName(node.object),
+                          result,
+                      );
+                      if (
+                          objectName === "api"
+                          || objectName.startsWith("api.")
+                          || objectName === "axios"
+                          || objectName.startsWith("axios.")
+                          || objectName.endsWith("navigator")
+                          || ["window", "globalThis", "self"].includes(objectName)
+                      ) {
+                          result.errors.push(
+                              `${path}:${line}: dynamic network member is forbidden`
+                          );
+                      }
                   }
               }
 
@@ -542,10 +1061,16 @@ jobs:
                   node.type === "CallExpression"
                   || node.type === "OptionalCallExpression"
               ) {
-                  const callee = dottedName(node.callee);
+                  const rawCallee = dottedName(node.callee);
+                  const callee = resolveName(rawCallee, result);
+                  const method = callee.split(".").pop();
                   if (callee === "api.get") {
                       const endpoint = stringValue(node.arguments[0]);
-                      if (endpoint !== "/ads-manager/overview") {
+                      if (rawCallee !== "api.get") {
+                          result.errors.push(
+                              `${path}:${line}: aliased api.get is forbidden`
+                          );
+                      } else if (endpoint !== "/ads-manager/overview") {
                           result.errors.push(
                               `${path}:${line}: api.get may only read /ads-manager/overview`
                           );
@@ -558,15 +1083,48 @@ jobs:
                       );
                   }
                   if (
-                      callee === "fetch"
-                      || callee === "navigator.sendBeacon"
-                      || callee === "window.fetch"
-                      || callee === "globalThis.fetch"
-                      || callee === "self.fetch"
-                      || callee === "axios"
-                      || callee.startsWith("axios.")
-                      || forbiddenConstructors.has(callee)
+                      ["post", "put", "patch", "delete", "request"].includes(method)
                   ) {
+                      result.errors.push(
+                          `${path}:${line}: mutation-capable call is forbidden: ${callee}`
+                      );
+                  }
+                  if (callee === "Reflect.get") {
+                      const objectName = resolveName(
+                          dottedName(node.arguments[0]),
+                          result,
+                      );
+                      const property = stringValue(node.arguments[1]);
+                      if (
+                          objectName === "api"
+                          || objectName.startsWith("api.")
+                          || objectName === "axios"
+                          || objectName.startsWith("axios.")
+                          || objectName.endsWith("navigator")
+                          || ["fetch", "sendBeacon", ...forbiddenConstructors]
+                              .includes(property)
+                      ) {
+                          result.errors.push(
+                              `${path}:${line}: reflective network lookup is forbidden`
+                          );
+                      }
+                  }
+                  if (callee === "Reflect.apply") {
+                      const targetName = resolveName(
+                          dottedName(node.arguments[0]),
+                          result,
+                      );
+                      if (
+                          targetName === "api"
+                          || targetName.startsWith("api.")
+                          || networkKind(targetName)
+                      ) {
+                          result.errors.push(
+                              `${path}:${line}: reflective network call is forbidden`
+                          );
+                      }
+                  }
+                  if (networkKind(callee)) {
                       result.errors.push(
                           `${path}:${line}: frontend network call is forbidden: ${callee}`
                       );
@@ -574,8 +1132,15 @@ jobs:
               }
 
               if (node.type === "NewExpression") {
-                  const constructor = dottedName(node.callee);
-                  if (forbiddenConstructors.has(constructor)) {
+                  const constructor = resolveName(
+                      dottedName(node.callee),
+                      result,
+                  );
+                  if (
+                      forbiddenConstructors.has(
+                          constructor.split(".").pop(),
+                      )
+                  ) {
                       result.errors.push(
                           `${path}:${line}: network constructor is forbidden: ${constructor}`
                       );
@@ -585,9 +1150,9 @@ jobs:
               for (const [key, child] of Object.entries(node)) {
                   if (key === "loc" || key === "start" || key === "end") continue;
                   if (Array.isArray(child)) {
-                      child.forEach((item) => inspect(path, item, result));
+                      child.forEach((item) => inspect(path, item, result, node));
                   } else if (child && typeof child === "object") {
-                      inspect(path, child, result);
+                      inspect(path, child, result, node);
                   }
               }
           }
@@ -597,7 +1162,11 @@ jobs:
                   sourceType: "module",
                   plugins: ["jsx"],
               });
-              const result = { errors: [], allowedApiGetCount: 0 };
+              const result = {
+                  errors: [],
+                  allowedApiGetCount: 0,
+                  aliases: new Map(),
+              };
               inspect(path, tree, result);
               return result;
           }
@@ -605,11 +1174,19 @@ jobs:
           const errors = [];
           const negativeCases = [
               ['api.request({ method: "POST", url: "/x" })', "api.request"],
+              ['const client = api; client.post("/x")', "aliased api.post"],
+              ['const read = api.get; read("/ads-manager/overview")', "aliased api.get"],
+              ['Reflect.apply(api.post, api, ["/x"])', "Reflect.apply api.post"],
+              ['((client) => client.post("/x"))(api)', "IIFE api.post"],
               ['api.get("https://provider.invalid/data")', "external api.get"],
               ['navigator.sendBeacon("/x", "payload")', "sendBeacon"],
+              ['const send = window.navigator.sendBeacon; send("/x", "payload")', "aliased sendBeacon"],
+              ['Reflect.get(window.navigator, "sendBeacon")("/x", "payload")', "Reflect.get sendBeacon"],
               ['new EventSource("/events")', "EventSource"],
               ['new WebSocket("wss:" + "//provider.invalid")', "WebSocket"],
+              ['new globalThis.WebSocket("/events")', "qualified WebSocket"],
               ['fetch("/x")', "fetch"],
+              ['const send = fetch; send("/x")', "aliased fetch"],
               ['axios.post("/x")', "axios"],
           ];
           for (const [source, label] of negativeCases) {

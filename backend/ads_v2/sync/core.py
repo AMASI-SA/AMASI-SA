@@ -392,6 +392,17 @@ async def run_sync_for_account(
         has_data=True,
     )
 
+    fetched_purchases = fetched.get("purchases")
+    purchases = (
+        int(fetched_purchases)
+        if fetched_purchases is not None
+        else None
+    )
+    conversion_data_status = (
+        fetched.get("conversion_data_status")
+        or ("available" if purchases is not None else "unavailable")
+    )
+
     set_doc = {
         "user_id":          user_id,
         "account_id":       account_id,
@@ -401,7 +412,9 @@ async def run_sync_for_account(
         "currency_native":  currency_native,
         "impressions":      int(fetched.get("impressions") or 0),
         "clicks":           int(fetched.get("clicks") or 0),
-        "purchases":        int(fetched.get("purchases") or 0),
+        "purchases":        purchases,
+        "conversion_data_status": conversion_data_status,
+        "conversion_data_error": fetched.get("conversion_data_error"),
         "fx_rate":          fx_rate,
         "fx_source":        fx_source,
         "spend_sar":        spend_sar,

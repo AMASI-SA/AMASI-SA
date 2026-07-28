@@ -8,7 +8,8 @@ and returns a normalized row:
       "currency_native": str,
       "impressions":    int,
       "clicks":         int,
-      "purchases":      int,
+      "purchases":      int | None,
+      "conversion_data_status": str,
       "raw_excerpt":    dict,   # for audit only
     }
 
@@ -189,8 +190,14 @@ async def fetch_snapchat_day(
                     "currency_native": "USD",
                     "impressions":     0,
                     "clicks":          0,
-                    "purchases":       0,
-                    "raw_excerpt":     {"empty": True},
+                    "purchases":       None,
+                    "conversion_data_status": "unavailable",
+                    "conversion_data_error":
+                        "account_level_spend_only",
+                    "raw_excerpt": {
+                        "empty": True,
+                        "conversion_data_status": "unavailable",
+                    },
                 }, {"code": "empty"}
             row = (stats[0] or {}).get("total_stat") or {}
             stat = row.get("stats") or {}
@@ -202,10 +209,16 @@ async def fetch_snapchat_day(
                 "currency_native": "USD",  # Snap reports in USD
                 "impressions":     0,  # Not available at account-level
                 "clicks":          0,  # Not available at account-level
-                "purchases":       0,  # Snap conversion fetching is separate
+                # This endpoint only proves spend.  Snap conversion fetching
+                # is separate, so 0 here would be fabricated evidence.
+                "purchases":       None,
+                "conversion_data_status": "unavailable",
+                "conversion_data_error": "account_level_spend_only",
                 "raw_excerpt":     {"granularity": "TOTAL",
                                      "spend_micros": spend_micros,
-                                     "note": "account-level: spend only"},
+                                     "note": "account-level: spend only",
+                                     "conversion_data_status":
+                                         "unavailable"},
             }, {"code": "ok"}
     except Exception as exc:
         return None, {"code": "exception", "message": str(exc)[:200]}

@@ -60,6 +60,13 @@ const CAMPAIGN_COVERAGE_LABELS = {
     unavailable: "تفاصيل الحملات غير متاحة",
 };
 
+const RECONCILIATION_STATUS_LABELS = {
+    matched: "ضمن السماحية",
+    drift: "فرق يحتاج مراجعة",
+    not_comparable: "غير قابل للمقارنة",
+    no_data: "لا توجد بيانات مقارنة",
+};
+
 const CONNECTION_PROVENANCE_LABELS = {
     api_connection: "ربط API مباشر",
     legacy_integration: "تكامل قائم سابقًا",
@@ -94,6 +101,25 @@ function displayRatio(value, suffix = "") {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     })}${suffix}`;
+}
+
+function displayPercent(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        return "—";
+    }
+    return `${Number(value).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })}%`;
+}
+
+function displaySignedMoney(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+        return "—";
+    }
+    const numeric = Number(value);
+    const sign = numeric > 0 ? "+" : numeric < 0 ? "−" : "";
+    return `${sign}${displayMoney(Math.abs(numeric))}`;
 }
 
 function displayDate(value) {
@@ -177,6 +203,10 @@ function CoverageStrip({ coverage }) {
             label: "منصات ببيانات أداء",
             value: `${coverage.providers_with_performance_data}/${coverage.providers_total}`,
         },
+        {
+            label: "منصات صالحة لـ ROAS",
+            value: `${coverage.ratio_eligible_providers}/${coverage.providers_total}`,
+        },
     ];
     return (
         <section
@@ -204,7 +234,7 @@ function CoverageStrip({ coverage }) {
                     ))}
                 </div>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                 {items.map((item) => (
                     <div key={item.label} className="rounded-lg bg-slate-50 px-3 py-3">
                         <div className="font-mono text-xl font-black text-slate-900">
@@ -244,11 +274,145 @@ function CoverageStrip({ coverage }) {
     );
 }
 
+function providerQuality(provider) {
+    const coverage = provider.performance_coverage;
+    if (coverage.status === "unavailable") {
+        return {
+            label: "بيانات الأداء غير متاحة",
+            tone: "border-slate-200 bg-slate-50 text-slate-600",
+        };
+    }
+    const isPartial = coverage.status === "partial"
+        || (
+            coverage.status === "stale"
+            && coverage.requested_days > 0
+            && coverage.observed_days < coverage.requested_days
+        );
+    const isStale = coverage.status === "stale"
+        || provider.freshness.status === "stale";
+
+    if (isPartial && isStale) {
+        return {
+            label: "بيانات جزئية وقديمة",
+            tone: "border-rose-200 bg-rose-50 text-rose-700",
+        };
+    }
+    if (isStale) {
+        return {
+            label: "بيانات قديمة",
+            tone: "border-rose-200 bg-rose-50 text-rose-700",
+        };
+    }
+    if (isPartial) {
+        return {
+            label: "بيانات جزئية",
+            tone: "border-amber-200 bg-amber-50 text-amber-700",
+        };
+    }
+    if (!coverage.eligible_for_ratios) {
+        return {
+            label: "غير صالحة للنسب",
+            tone: "border-amber-200 bg-amber-50 text-amber-700",
+        };
+    }
+    return {
+        label: "بيانات مكتملة",
+        tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+}
+
+function PerformanceQualityNotice({ provider }) {
+    const coverage = provider.performance_coverage;
+    const quality = providerQuality(provider);
+    const observed = coverage.requested_days
+        ? `${coverage.observed_days}/${coverage.requested_days} يوم`
+        : `${coverage.observed_days} يوم`;
+    return (
+        <div
+            className={`mt-3 rounded-lg border px-3 py-2.5 text-xs ${quality.tone}`}
+            data-testid={`ads-performance-quality-${provider.provider}`}
+        >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-black">{quality.label}</span>
+                <span className="font-mono font-black">
+                    {observed}
+                    {coverage.coverage_pct !== null
+                        ? ` · ${displayPercent(coverage.coverage_pct)}`
+                        : ""}
+                </span>
+            </div>
+            {!coverage.eligible_for_ratios && (
+                <p className="mt-1.5 font-bold leading-5">
+                    مستبعدة من ROAS الإجمالي حتى تكتمل وتصبح حديثة.
+                </p>
+            )}
+            {coverage.detail && (
+                <p className="mt-1 font-semibold leading-5 opacity-80">
+                    {coverage.detail}
+                </p>
+            )}
+        </div>
+    );
+}
+
+function ReconciliationNotice({ provider }) {
+    const reconciliation = provider.reconciliation;
+    const approximate = reconciliation.comparison_basis === "aggregate_period_only";
+    const exact = reconciliation.comparison_basis === "account_day_aligned";
+    const warning = reconciliation.severity === "warning"
+        || reconciliation.action_required;
+    const tone = warning
+        ? "border-rose-200 bg-rose-50 text-rose-700"
+        : reconciliation.status === "matched"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : "border-slate-200 bg-slate-50 text-slate-600";
+    const basisLabel = approximate
+        ? "فرق إجمالي للفترة — ليس مطابقة حساب × يوم"
+        : exact
+            ? "مطابقة على مستوى الحساب واليوم"
+            : "أساس المقارنة غير متاح";
+    return (
+        <div
+            className={`mt-3 rounded-lg border px-3 py-2.5 text-xs ${tone}`}
+            data-testid={`ads-reconciliation-${provider.provider}`}
+        >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-black">
+                    {RECONCILIATION_STATUS_LABELS[reconciliation.status]}
+                </span>
+                {reconciliation.action_required && (
+                    <span className="inline-flex items-center gap-1 font-black">
+                        <WarningCircle size={15} weight="fill" />
+                        يتطلب مراجعة
+                    </span>
+                )}
+            </div>
+            <p className="mt-1.5 font-bold">{basisLabel}</p>
+            <p className="mt-1.5 font-semibold">
+                فرق المنصة − المحاسبة:{" "}
+                <span className="font-mono font-black">
+                    {displaySignedMoney(reconciliation.gap_sar)}
+                </span>
+                {" · "}
+                <span className="font-mono font-black">
+                    {displayPercent(reconciliation.gap_pct)}
+                </span>
+            </p>
+            {reconciliation.detail && (
+                <p className="mt-1 font-semibold leading-5 opacity-80">
+                    {reconciliation.detail}
+                </p>
+            )}
+        </div>
+    );
+}
+
 function ProviderFreshnessCard({ provider }) {
     const freshness = provider.freshness;
-    const observed = freshness.requested_days
-        ? `${freshness.observed_days}/${freshness.requested_days} يوم`
-        : `${freshness.observed_days} يوم`;
+    const coverage = provider.performance_coverage;
+    const observed = coverage.requested_days
+        ? `${coverage.observed_days}/${coverage.requested_days} يوم`
+        : `${coverage.observed_days} يوم`;
     return (
         <article
             className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -290,6 +454,8 @@ function ProviderFreshnessCard({ provider }) {
                     </dd>
                 </div>
             </dl>
+            <PerformanceQualityNotice provider={provider} />
+            <ReconciliationNotice provider={provider} />
         </article>
     );
 }
@@ -579,6 +745,18 @@ export function AdsManagerView({
     onPageChange = () => {},
 }) {
     const metrics = overview.metrics;
+    const roasExcludedProviders = overview.providers.filter(
+        (provider) => !provider.performance_coverage.eligible_for_ratios,
+    );
+    const roasUnavailable = metrics.platform_roas === null
+        || metrics.platform_roas === undefined;
+    const roasHint = roasUnavailable && roasExcludedProviders.length
+        ? `محجوب لأن بيانات ${roasExcludedProviders
+            .map((provider) => provider.provider_label)
+            .join(" و")} جزئية أو قديمة أو غير مكتملة.`
+        : roasUnavailable
+            ? "محجوب لعدم توفر صرف وإيراد موثوقين وقابلين للحساب."
+            : "يُعرض فقط عند توفر صرف وإيراد حديثين ومكتملين لكل المنصات المحددة.";
     return (
         <div className="space-y-5" dir="rtl" data-testid="ads-manager-page">
             <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
@@ -736,8 +914,8 @@ export function AdsManagerView({
                 />
                 <MetricCard
                     label="ROAS المنصّي"
-                    value={displayRatio(metrics.platform_roas, "×")}
-                    hint="يُعرض فقط عند توفر صرف وإيراد قابلين للحساب."
+                    value={roasUnavailable ? "—" : displayRatio(metrics.platform_roas, "×")}
+                    hint={roasHint}
                     Icon={Database}
                     tone="amber"
                     testid="ads-metric-roas"

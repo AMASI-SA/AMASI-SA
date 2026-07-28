@@ -523,6 +523,9 @@ async def test_provider_fact_and_booked_accounting_fact_stay_distinct():
     assert provider["metrics"]["booked_ad_expense_sar"] == 100
     assert provider["reconciliation"] == {
         "status": "drift",
+        "comparison_basis": "account_day_aligned",
+        "severity": "warning",
+        "action_required": True,
         "provider_reported_spend_sar": 120,
         "booked_ad_expense_sar": 100,
         "gap_sar": 20,
@@ -1046,6 +1049,363 @@ async def test_combined_ratios_require_complete_aligned_provider_coverage():
 
 
 @pytest.mark.asyncio
+async def test_stale_partial_tiktok_is_excluded_from_ratios_and_comparisons():
+    db = FakeDB(
+        {
+            "tiktok_ads_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": f"2026-07-{day:02d}",
+                    "account_id": "tiktok-owner",
+                    "campaign_id": "old-tiktok-campaign",
+                    "campaign_name": "Old TikTok campaign",
+                    "spend": 10,
+                    "currency": "SAR",
+                    "revenue": 20,
+                    "conversions": 1,
+                    "impressions": 100,
+                    "clicks": 10,
+                }
+                for day in range(1, 6)
+            ],
+            "general_ledger": [
+                {
+                    "user_id": OWNER_ID,
+                    "entity_type": "expense",
+                    "entity_id": "advertising",
+                    "side": "debit",
+                    "status": "posted",
+                    "entry_type": "normal",
+                    "amount": 45,
+                    "metadata": {
+                        "spend_date": "2026-07-05",
+                        "ad_provider": "tiktok",
+                        "ad_account_id": "unmapped-tiktok-account",
+                    },
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-01",
+        date_to="2026-07-28",
+        provider="tiktok",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 50
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_reported_purchases"] is None
+    assert provider["metrics"]["platform_reported_impressions"] is None
+    assert provider["metrics"]["platform_reported_clicks"] is None
+    assert provider["metrics"]["platform_roas"] is None
+    assert provider["performance_coverage"] == {
+        "status": "stale",
+        "eligible_for_ratios": False,
+        "observed_days": 5,
+        "requested_days": 28,
+        "coverage_pct": 17.86,
+        "missing_spend_dates": [],
+        "reasons": [
+            "incomplete_spend",
+            "missing_performance_dates",
+            "stale_performance",
+        ],
+        "detail": (
+            "آخر صف أداء أقدم من نهاية الفترة؛ أُخفيت الإيرادات والتحويلات "
+            "والنسب المشتقة."
+        ),
+    }
+    assert result["metrics"]["provider_reported_spend_sar"] == 50
+    assert result["metrics"]["platform_attributed_revenue_sar"] is None
+    assert result["metrics"]["platform_roas"] is None
+    assert result["coverage"]["provider_spend_is_partial"] is True
+    assert result["coverage"]["ratio_eligible_providers"] == 0
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is False
+    assert provider["reconciliation"]["status"] == "not_comparable"
+    assert provider["reconciliation"]["comparison_basis"] == "unavailable"
+    assert provider["reconciliation"]["severity"] == "warning"
+    assert provider["reconciliation"]["gap_sar"] is None
+    assert provider["reconciliation"]["gap_pct"] is None
+    assert result["campaigns"][0]["revenue_reported"] == 100
+    assert result["campaigns"][0]["roas"] is None
+    assert result["campaigns"][0]["cpa_reported"] is None
+    insight_codes = {row["code"] for row in result["insights"]}
+    assert "tiktok_performance_stale" in insight_codes
+    assert "highest_spend_provider" not in insight_codes
+    assert "highest_observed_roas" not in insight_codes
+
+
+@pytest.mark.asyncio
+async def test_legacy_snapchat_zeroes_are_unknown_until_quality_is_explicit():
+    rows = {
+        "snapchat_account_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "ad_account_id": "snap-owner",
+                "spend_sar": 100,
+            }
+        ],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "revenue": 0,
+                "purchases": 0,
+            }
+        ],
+    }
+    unknown = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-28",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = unknown["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 100
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_reported_purchases"] is None
+    assert provider["metrics"]["platform_roas"] is None
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is True
+    assert unknown["coverage"]["provider_spend_is_partial"] is False
+    assert "unverified_zero_performance" in provider[
+        "performance_coverage"
+    ]["reasons"]
+
+    rows["snapchat_daily_stats"][0]["conversion_data_status"] = "available"
+    verified = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-28",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+    provider = verified["providers"][0]
+    assert provider["performance_coverage"]["status"] == "complete"
+    assert provider["performance_coverage"]["eligible_for_ratios"] is True
+    assert provider["metrics"]["platform_attributed_revenue_sar"] == 0
+    assert provider["metrics"]["platform_reported_purchases"] == 0
+    assert provider["metrics"]["platform_roas"] == 0
+
+
+@pytest.mark.asyncio
+async def test_snapchat_partial_quality_status_fails_closed_with_numeric_values():
+    rows = {
+        "snapchat_account_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "ad_account_id": "snap-owner",
+                "spend_sar": 100,
+            }
+        ],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "revenue": 200,
+                "purchases": 2,
+                "conversion_data_status": "partial",
+            }
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-28",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert provider["performance_coverage"]["eligible_for_ratios"] is False
+    assert "incomplete_revenue" in provider["performance_coverage"]["reasons"]
+    assert "incomplete_conversions" in provider[
+        "performance_coverage"
+    ]["reasons"]
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_reported_purchases"] is None
+    assert provider["metrics"]["platform_roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_aggregate_spend_gap_is_visible_without_claiming_reconciliation():
+    db = FakeDB(
+        {
+            "snapchat_account_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-28",
+                    "ad_account_id": "snap-owner",
+                    "spend_sar": 100,
+                }
+            ],
+            "snapchat_daily_stats": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-28",
+                    "revenue": 200,
+                    "purchases": 2,
+                    "conversion_data_status": "available",
+                }
+            ],
+            "general_ledger": [
+                {
+                    "user_id": OWNER_ID,
+                    "entity_type": "expense",
+                    "entity_id": "advertising",
+                    "side": "debit",
+                    "status": "posted",
+                    "entry_type": "normal",
+                    "amount": 90,
+                    "metadata": {
+                        "spend_date": "2026-07-28",
+                        "ad_provider": "snapchat",
+                        "ad_account_id": "missing-counterparty",
+                    },
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-28",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    reconciliation = result["providers"][0]["reconciliation"]
+    assert reconciliation == {
+        "status": "not_comparable",
+        "comparison_basis": "aggregate_period_only",
+        "severity": "warning",
+        "action_required": True,
+        "provider_reported_spend_sar": 100,
+        "booked_ad_expense_sar": 90,
+        "gap_sar": 10,
+        "gap_pct": 10,
+        "detail": (
+            "فرق إجمالي الفترة ظاهر للمراجعة، لكن تغطية الحساب واليوم "
+            "غير متطابقة؛ لا يُعامل كتسوية محاسبية مؤكدة."
+        ),
+    }
+    gap_insight = next(
+        row
+        for row in result["insights"]
+        if row["code"] == "snapchat_spend_gap"
+    )
+    assert gap_insight["severity"] == "warning"
+    assert gap_insight["evidence"]["gap_sar"] == 10
+    assert gap_insight["evidence"]["gap_pct"] == 10
+    assert gap_insight["evidence"]["comparison_basis"] == (
+        "aggregate_period_only"
+    )
+
+
+@pytest.mark.asyncio
+async def test_only_open_current_day_may_use_documented_fresh_delay_window():
+    rows = {
+        "meta_ads_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": f"2026-07-{day:02d}",
+                "account_id": "act-owner",
+                "campaign_id": "current-meta-campaign",
+                "campaign_name": "Current Meta campaign",
+                "spend": 10,
+                "currency": "SAR",
+                "purchase_value": 20,
+                "purchases": 1,
+                "impressions": 100,
+                "clicks": 10,
+            }
+            for day in range(1, 28)
+        ]
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-01",
+        date_to="2026-07-28",
+        provider="meta",
+    )
+
+    provider = result["providers"][0]
+    assert provider["performance_coverage"]["status"] == "complete"
+    assert provider["performance_coverage"]["eligible_for_ratios"] is True
+    assert provider["performance_coverage"]["observed_days"] == 27
+    assert provider["performance_coverage"]["requested_days"] == 28
+    assert provider["performance_coverage"]["coverage_pct"] == 96.43
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is True
+    assert result["coverage"]["provider_spend_is_partial"] is False
+    assert provider["metrics"]["platform_roas"] == 2
+
+
+@pytest.mark.asyncio
+async def test_current_day_gap_fails_closed_outside_expected_delay(
+    monkeypatch,
+):
+    async def delayed_overview(_service, _user_id):
+        card = _integration_card("meta_ads")
+        card["data_delay_minutes"] = 181
+        return {"providers": [card]}
+
+    monkeypatch.setattr(
+        ads_manager_service.IntegrationsControlCenterService,
+        "overview",
+        delayed_overview,
+    )
+    rows = {
+        "meta_ads_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": f"2026-07-{day:02d}",
+                "account_id": "act-owner",
+                "campaign_id": "delayed-meta-campaign",
+                "campaign_name": "Delayed Meta campaign",
+                "spend": 10,
+                "currency": "SAR",
+                "purchase_value": 20,
+                "purchases": 1,
+                "impressions": 100,
+                "clicks": 10,
+            }
+            for day in range(1, 28)
+        ]
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-01",
+        date_to="2026-07-28",
+        provider="meta",
+    )
+
+    provider = result["providers"][0]
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert "missing_performance_dates" in provider[
+        "performance_coverage"
+    ]["reasons"]
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is False
+    assert provider["metrics"]["platform_roas"] is None
+    assert result["coverage"]["provider_spend_is_partial"] is True
+
+
+@pytest.mark.asyncio
 async def test_invalid_source_dates_and_boolean_ledger_amounts_fail_closed():
     rows = _seeded_rows()
     rows["meta_ads_daily"].append(
@@ -1107,3 +1467,198 @@ async def test_response_contract_validates_after_full_seeded_projection():
     validated = AdsManagerOverview.model_validate(result)
     assert validated.policy.mutations_allowed is False
     assert validated.policy.advertising_mutations_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_complete_snap_performance_cannot_mask_incomplete_spend_period():
+    rows = {
+        "snapchat_account_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": date_key,
+                "ad_account_id": "snap-owner",
+                "spend_sar": 100,
+            }
+            for date_key in ("2026-07-26", "2026-07-28")
+        ],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": f"2026-07-{day:02d}",
+                "revenue": 300,
+                "purchases": 1,
+                "conversion_data_status": "available",
+            }
+            for day in range(26, 29)
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-26",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 200
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is False
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert provider["performance_coverage"]["eligible_for_ratios"] is False
+    assert "incomplete_spend" in provider["performance_coverage"]["reasons"]
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_roas"] is None
+    assert result["metrics"]["platform_roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_open_day_exception_requires_spend_and_performance_to_align():
+    rows = {
+        "snapchat_account_daily": [{
+            "user_id": OWNER_ID,
+            "date": "2026-07-27",
+            "ad_account_id": "snap-owner",
+            "spend_sar": 100,
+        }],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": f"2026-07-{day:02d}",
+                "revenue": 200,
+                "purchases": 1,
+                "conversion_data_status": "available",
+            }
+            for day in (27, 28)
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-27",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metric_availability"][
+        "provider_spend_period_complete"
+    ] is False
+    assert provider["performance_coverage"]["eligible_for_ratios"] is False
+    assert "incomplete_spend" in provider["performance_coverage"]["reasons"]
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_each_mixed_legacy_snap_zero_remains_unknown():
+    rows = {
+        "snapchat_account_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": f"2026-07-{day:02d}",
+                "ad_account_id": "snap-owner",
+                "spend_sar": 100,
+            }
+            for day in (27, 28)
+        ],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-27",
+                "revenue": 300,
+                "purchases": 2,
+            },
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "revenue": 0,
+                "purchases": 0,
+            },
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-27",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert "unverified_zero_performance" in provider[
+        "performance_coverage"
+    ]["reasons"]
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_reported_purchases"] is None
+    assert provider["metrics"]["platform_roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_account_day_offsets_cannot_look_matched_at_zero_net_gap():
+    rows = {
+        "meta_ads_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "account_id": account_id,
+                "campaign_id": f"campaign-{account_id}",
+                "campaign_name": account_id,
+                "spend": spend,
+                "currency": "SAR",
+                "purchase_value": 600,
+                "purchases": 1,
+                "impressions": 100,
+                "clicks": 10,
+            }
+            for account_id, spend in (("act_a", 200), ("act_b", 100))
+        ],
+        "general_ledger": [
+            {
+                "user_id": OWNER_ID,
+                "entity_type": "expense",
+                "entity_id": "advertising",
+                "side": "debit",
+                "status": "posted",
+                "entry_type": "normal",
+                "amount": amount,
+                "metadata": {
+                    "spend_date": "2026-07-28",
+                    "ad_provider": "meta",
+                    "ad_account_id": counterparty,
+                },
+            }
+            for counterparty, amount in (("cp-a", 100), ("cp-b", 200))
+        ],
+        "counterparties": [
+            {
+                "user_id": OWNER_ID,
+                "id": counterparty,
+                "kind": "ad_account",
+                "ad_provider": "meta",
+                "external_account_id": external_id,
+            }
+            for counterparty, external_id in (
+                ("cp-a", "act_a"),
+                ("cp-b", "act_b"),
+            )
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-28",
+        date_to="2026-07-28",
+        provider="meta",
+    )
+
+    reconciliation = result["providers"][0]["reconciliation"]
+    assert reconciliation["comparison_basis"] == "account_day_aligned"
+    assert reconciliation["status"] == "drift"
+    assert reconciliation["severity"] == "warning"
+    assert reconciliation["action_required"] is True
+    assert reconciliation["gap_sar"] == 0
+    assert reconciliation["gap_pct"] == 0
+    assert "تتعادل فروق الإجمالي" in reconciliation["detail"]
