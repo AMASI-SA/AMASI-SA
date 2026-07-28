@@ -3,7 +3,10 @@ import base64
 import pytest
 
 from product_media_ai_execution_support import install_product_media_ai_execution_support
-from product_media_ai_routes import (
+
+install_product_media_ai_execution_support()
+
+from product_media_ai_routes import (  # noqa: E402
     MAX_PROMPT_LENGTH,
     AiMediaExecutionError,
     OPERATION_CATALOG,
@@ -14,8 +17,6 @@ from product_media_ai_routes import (
     image_provider_status,
     validate_ai_media_request,
 )
-
-install_product_media_ai_execution_support()
 
 
 def test_provider_is_disconnected_without_key(monkeypatch):
