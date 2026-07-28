@@ -318,6 +318,60 @@ def test_advertising_mutations_need_a_management_connection_before_approval():
         assert matrix[capability]["blocked_by_policy"] is True
 
 
+def test_salla_capabilities_use_permission_specific_evidence():
+    definition = PROVIDER_BY_ID["salla"]
+    production_permissions = {
+        "offline_access",
+        "settings.read",
+        "orders.read_write",
+        "products.read_write",
+        "webhooks.read_write",
+    }
+    matrix = build_capability_matrix(
+        definition,
+        connection_status="connected",
+        has_data=True,
+        current_permissions=production_permissions,
+        permissions_observed=True,
+    )
+    assert {entry["state"] for entry in matrix.values()} == {"available"}
+
+    without_products = build_capability_matrix(
+        definition,
+        connection_status="connected",
+        has_data=True,
+        current_permissions=production_permissions - {"products.read_write"},
+        permissions_observed=True,
+    )
+    assert without_products["products.read"]["state"] == (
+        "blocked_missing_permission"
+    )
+    assert {
+        without_products[key]["state"]
+        for key in {
+            "store.read",
+            "orders.read",
+            "customers.read_from_orders",
+        }
+    } == {"available"}
+
+    without_orders = build_capability_matrix(
+        definition,
+        connection_status="connected",
+        has_data=True,
+        current_permissions=production_permissions - {"orders.read_write"},
+        permissions_observed=True,
+    )
+    assert without_orders["orders.read"]["state"] == (
+        "blocked_missing_permission"
+    )
+    assert without_orders["customers.read_from_orders"]["state"] == (
+        "blocked_missing_permission"
+    )
+    assert without_orders["store.read"]["state"] == "available"
+    assert without_orders["products.read"]["state"] == "available"
+
+
 def test_recursive_sanitizer_removes_nested_secrets_and_token_text():
     dirty = {
         "access_token": "top-secret",
@@ -506,7 +560,7 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
                     **base_connection,
                     "scope": (
                         "offline_access settings.read orders.read_write "
-                        "webhooks.read_write"
+                        "products.read_write webhooks.read_write"
                     ),
                 }
             ]
@@ -522,6 +576,7 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
         "current": [
             "offline_access",
             "orders.read_write",
+            "products.read_write",
             "settings.read",
             "webhooks.read_write",
         ],
@@ -530,7 +585,7 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
     }
     assert {
         entry["state"] for entry in incomplete_salla["capabilities"].values()
-    } == {"blocked_missing_permission"}
+    } == {"available"}
 
 
 @pytest.mark.asyncio

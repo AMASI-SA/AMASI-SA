@@ -74,6 +74,10 @@ class ProviderDefinition:
     legacy_sources: tuple[str, ...]
     required_permissions: tuple[str, ...] = ()
     native_capabilities: tuple[str, ...] = ()
+    # Optional per-capability permission alternatives.  When present, any one
+    # of the listed scopes proves that specific read capability.  This keeps
+    # an unrelated missing operational scope from blocking every read.
+    capability_permissions: tuple[tuple[str, tuple[str, ...]], ...] = ()
     ai_can_when_ready: tuple[str, ...] = ()
     ai_cannot_phase_one: tuple[str, ...] = ()
     planned: bool = False
@@ -99,6 +103,15 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
             "orders.read",
             "products.read",
             "customers.read_from_orders",
+        ),
+        capability_permissions=(
+            ("store.read", ("settings.read",)),
+            ("orders.read", ("orders.read", "orders.read_write")),
+            ("products.read", ("products.read", "products.read_write")),
+            (
+                "customers.read_from_orders",
+                ("orders.read", "orders.read_write"),
+            ),
         ),
         ai_can_when_ready=(
             "قراءة بيانات المتجر والطلبات المتاحة محليًا",
@@ -350,7 +363,16 @@ def build_capability_matrix(
 
     matrix = {}
     missing = set(definition.required_permissions) - current
+    capability_permissions = dict(definition.capability_permissions)
     for capability in definition.native_capabilities:
+        permission_alternatives = set(
+            capability_permissions.get(capability, ())
+        )
+        capability_permission_missing = (
+            not bool(current & permission_alternatives)
+            if permission_alternatives
+            else bool(missing)
+        )
         if definition.planned:
             matrix[capability] = _entry(
                 "planned",
@@ -366,7 +388,7 @@ def build_capability_matrix(
                 "unknown",
                 "Permission evidence is unavailable; no missing permission is asserted.",
             )
-        elif missing:
+        elif capability_permission_missing:
             matrix[capability] = _entry(
                 "blocked_missing_permission",
                 "Required permission evidence is incomplete.",
