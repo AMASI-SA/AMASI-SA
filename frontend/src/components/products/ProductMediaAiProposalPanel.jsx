@@ -3,6 +3,7 @@ import { CheckCircle, Clock, MagicWand, Robot, SpinnerGap, WarningCircle, XCircl
 import { toast } from "sonner";
 
 import {
+    addProductMediaAiResultToDraft,
     cancelProductMediaAiJob,
     createProductMediaAiJob,
     executeProductMediaAiJob,
@@ -15,8 +16,10 @@ const STATUS_LABELS = {
     ready_for_execution: "جاهز للتنفيذ",
     proposal_created: "تم إنشاء الاقتراح",
     executing: "جارٍ تنفيذ الصورة",
-    cancelled: "ملغاة",
     completed: "اكتمل التنفيذ",
+    adding_to_draft: "جارٍ الإضافة للمسودة",
+    added_to_draft: "أضيفت إلى مسودة الصور",
+    cancelled: "ملغاة",
     failed: "فشل التنفيذ",
 };
 
@@ -39,7 +42,7 @@ function ProviderStatus({ provider }) {
     return <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-900"><CheckCircle className="ml-1 inline" /> محرك صور OpenAI مفعّل. كل نتيجة تُحفظ مؤقتًا وتحتاج إضافتها لمسودة الصور واعتمادها قبل النشر.</div>;
 }
 
-function JobRow({ job, provider, operation, onCancel, onExecute, onAddResult, onApplyAlt, busy }) {
+function JobRow({ job, provider, operation, onCancel, onExecute, onAddToDraft, busy }) {
     const pending = ["waiting_provider", "waiting_image_engine", "ready_for_execution", "proposal_created"].includes(job.status);
     const canExecute = pending && provider?.execution_available && operation?.execution_allowed;
     const source = previewUrl(job.source_image_url);
@@ -61,14 +64,14 @@ function JobRow({ job, provider, operation, onCancel, onExecute, onAddResult, on
                 <div><div className="mb-1 text-center text-[10px] text-slate-500">الأصل</div>{source ? <img src={source} alt="الصورة الأصلية" className="aspect-square w-full rounded-xl border object-cover" /> : <div className="flex aspect-square items-center justify-center rounded-xl border bg-slate-50 text-slate-400">إنشاء من وصف</div>}</div>
                 <div><div className="mb-1 text-center text-[10px] text-emerald-700">النتيجة المقترحة</div><img src={result} alt="نتيجة الذكاء الاصطناعي" className="aspect-square w-full rounded-xl border border-emerald-300 object-cover" /></div>
             </div>
-            <button type="button" onClick={() => onAddResult(job.result_image, job)} className="mt-3 w-full rounded-lg bg-emerald-700 px-3 py-2 font-black text-white">إضافة النتيجة إلى مسودة الصور</button>
+            {job.status === "completed" && <button type="button" disabled={busy} onClick={() => onAddToDraft(job.id)} className="mt-3 w-full rounded-lg bg-emerald-700 px-3 py-2 font-black text-white disabled:opacity-40">إضافة النتيجة إلى مسودة الصور</button>}
         </div>}
-        {job.result_alt && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div className="font-black text-emerald-900">ALT المقترح</div><p className="mt-1 leading-5 text-emerald-800">{job.result_alt}</p><button type="button" onClick={() => onApplyAlt(job.source_image_url, job.result_alt, job)} className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 font-black text-white">تطبيقه في مسودة الصور</button></div>}
+        {job.result_alt && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div className="font-black text-emerald-900">ALT المقترح</div><p className="mt-1 leading-5 text-emerald-800">{job.result_alt}</p>{job.status === "completed" && <button type="button" disabled={busy} onClick={() => onAddToDraft(job.id)} className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 font-black text-white disabled:opacity-40">تطبيقه في مسودة الصور</button>}</div>}
         <div className="mt-2 text-[10px] text-slate-400">{job.execution_finished_at || job.created_at || ""}</div>
     </article>;
 }
 
-export default function ProductMediaAiProposalPanel({ productId, images = [], onAddResult = () => {}, onApplyAlt = () => {} }) {
+export default function ProductMediaAiProposalPanel({ productId, images = [] }) {
     const [state, setState] = useState(null);
     const [operation, setOperation] = useState("");
     const [sourceImageUrl, setSourceImageUrl] = useState("");
@@ -134,6 +137,19 @@ export default function ProductMediaAiProposalPanel({ productId, images = [], on
         } finally { setBusyJob(""); }
     }
 
+    async function addToDraft(jobId) {
+        setBusyJob(jobId);
+        try {
+            const result = await addProductMediaAiResultToDraft(productId, jobId);
+            replaceJob(result.job);
+            toast.success("تمت إضافة النتيجة لمسودة الصور؛ راجعها ثم احفظ واعتمد");
+            window.setTimeout(() => window.location.reload(), 600);
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            toast.error(detail?.message || detail?.code || "تعذر إضافة النتيجة للمسودة");
+        } finally { setBusyJob(""); }
+    }
+
     async function cancelJob(jobId) {
         setBusyJob(jobId);
         try {
@@ -153,7 +169,7 @@ export default function ProductMediaAiProposalPanel({ productId, images = [], on
             <label className="mt-3 block text-xs font-bold text-slate-600">تعليمات التعديل<textarea rows={3} maxLength={1200} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="مثال: حافظ على لون المنتج وتفاصيله، وأزل الخلفية بدقة…" className="mt-1 w-full rounded-xl border bg-white p-3 text-sm" /></label>
             <div className="mt-3 flex justify-end"><button type="button" onClick={createJob} disabled={saving || !selectedOperation?.allowed || (selectedOperation?.requires_source && !availableImages.length)} className="rounded-xl bg-indigo-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? <SpinnerGap className="inline animate-spin" /> : <MagicWand className="inline" />} حفظ طلب AI</button></div>
         </>}
-        <div className="mt-5 border-t border-indigo-100 pt-4"><h3 className="text-sm font-black"><Clock className="ml-1 inline" /> الطلبات الأخيرة</h3><div className="mt-3 space-y-2">{!(state?.jobs || []).length ? <div className="rounded-xl border border-dashed bg-white p-4 text-center text-xs text-slate-400">لا توجد طلبات بعد.</div> : (state.jobs || []).map((job) => <JobRow key={job.id} job={job} provider={state?.provider} operation={operations.find((row) => row.key === job.operation)} busy={busyJob === job.id} onExecute={executeJob} onCancel={cancelJob} onAddResult={onAddResult} onApplyAlt={onApplyAlt} />)}</div></div>
+        <div className="mt-5 border-t border-indigo-100 pt-4"><h3 className="text-sm font-black"><Clock className="ml-1 inline" /> الطلبات الأخيرة</h3><div className="mt-3 space-y-2">{!(state?.jobs || []).length ? <div className="rounded-xl border border-dashed bg-white p-4 text-center text-xs text-slate-400">لا توجد طلبات بعد.</div> : (state.jobs || []).map((job) => <JobRow key={job.id} job={job} provider={state?.provider} operation={operations.find((row) => row.key === job.operation)} busy={busyJob === job.id} onExecute={executeJob} onCancel={cancelJob} onAddToDraft={addToDraft} />)}</div></div>
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900"><WarningCircle className="ml-1 inline" /> لا تُنشر أي نتيجة مباشرة. بعد المقارنة أضفها للمسودة، ثم احفظ واعتمد وانشر من دورة الصور المعتادة.</div>
     </section>;
 }
