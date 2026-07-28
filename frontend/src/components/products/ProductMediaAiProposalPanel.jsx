@@ -44,20 +44,21 @@ function ProviderStatus({ provider }) {
 
 function JobRow({ job, provider, operation, onCancel, onExecute, onAddToDraft, busy }) {
     const pending = ["waiting_provider", "waiting_image_engine", "ready_for_execution", "proposal_created"].includes(job.status);
-    const canExecute = pending && provider?.execution_available && operation?.execution_allowed;
+    const retryable = job.status === "failed";
+    const canExecute = (pending || retryable) && provider?.execution_available && operation?.execution_allowed;
     const source = previewUrl(job.source_image_url);
     const result = previewUrl(job.result_image?.url);
     return <article className="rounded-xl border bg-white p-3 text-xs">
         <div className="flex flex-wrap items-start justify-between gap-2">
             <div><div className="font-black text-slate-900">{job.operation_label || job.operation}</div><div className="mt-1 text-slate-500">{STATUS_LABELS[job.status] || job.status} · {job.aspect_ratio || "original"}</div></div>
             <div className="flex flex-wrap gap-2">
-                {canExecute && <button type="button" disabled={busy} onClick={() => onExecute(job.id)} className="rounded-lg bg-indigo-700 px-3 py-2 font-black text-white disabled:opacity-40">{busy ? <SpinnerGap className="inline animate-spin" /> : <MagicWand className="inline" />} تنفيذ</button>}
+                {canExecute && <button type="button" disabled={busy} onClick={() => onExecute(job.id)} className="rounded-lg bg-indigo-700 px-3 py-2 font-black text-white disabled:opacity-40">{busy ? <SpinnerGap className="inline animate-spin" /> : <MagicWand className="inline" />} {retryable ? "إعادة المحاولة" : "تنفيذ"}</button>}
                 {pending && <button type="button" disabled={busy} onClick={() => onCancel(job.id)} className="rounded-lg border border-rose-200 px-3 py-2 font-bold text-rose-700 disabled:opacity-40">إلغاء</button>}
             </div>
         </div>
         {job.prompt && <p className="mt-2 rounded-lg bg-slate-50 p-2 leading-5 text-slate-600">{job.prompt}</p>}
         {job.status === "executing" && <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 font-bold text-indigo-800"><SpinnerGap className="ml-1 inline animate-spin" /> يجري إنشاء النتيجة. لا تغلق الصفحة حتى يكتمل الطلب.</div>}
-        {job.last_error?.message && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800">{job.last_error.message}</div>}
+        {job.last_error?.message && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800"><div>{job.last_error.message}</div>{job.last_error.code && <div className="mt-1 font-mono text-[10px] text-rose-500" dir="ltr">{job.last_error.code}</div>}</div>}
         {result && <div className="mt-3">
             <div className="mb-2 font-black">مقارنة الأصل والنتيجة</div>
             <div className="grid grid-cols-2 gap-2">

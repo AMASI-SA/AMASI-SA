@@ -60,6 +60,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_control_center_routes import make_product_control_center_router
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
+    from product_media_ai_gpt2_compat_routes import make_product_media_ai_gpt2_compat_router
     from product_media_ai_routes import make_product_media_ai_router
     from product_media_ai_draft_routes import make_product_media_ai_draft_router
     from product_media_ai_execution_support import install_product_media_ai_execution_support
@@ -96,6 +97,9 @@ def make_order_engine_router(*args, **kwargs):
         make_product_v2_workspace_router(db, current_user),
         make_product_control_center_router(db, current_user),
         make_product_media_draft_router(db, current_user),
+        # Register the GPT Image 2-compatible execute route before the legacy
+        # route so the duplicate-key guard keeps the compatible implementation.
+        make_product_media_ai_gpt2_compat_router(db, current_user),
         make_product_media_ai_router(db, current_user),
         make_product_media_ai_draft_router(db, current_user),
         make_product_v2_router(db, current_user),
