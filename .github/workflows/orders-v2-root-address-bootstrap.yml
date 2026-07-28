@@ -1,0 +1,61 @@
+name: Orders V2 root address bootstrap
+
+on:
+  push:
+    branches:
+      - fix/orders-v2-address-root-fallback
+    paths:
+      - "scripts/patch_orders_v2_root_address_fallback.py"
+      - ".github/workflows/orders-v2-root-address-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/orders-v2-address-root-fallback
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply V2 canonical address fallback
+        run: python scripts/patch_orders_v2_root_address_fallback.py
+
+      - name: Validate targeted V2 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile \
+            backend/order_engine/repository.py \
+            backend/tests/test_order_engine_repository.py
+          grep -q '_V2_CANONICAL_ROOT_FIELDS' backend/order_engine/repository.py
+          grep -q '_apply_v2_root_fallbacks' backend/order_engine/repository.py
+          grep -q 'test_repository_rehydrates_shipping_from_v2_root_snapshot' backend/tests/test_order_engine_repository.py
+
+      - name: Run repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend
+          python -m pip install -q pydantic==2.13.4 pytest pytest-asyncio
+          python -m pytest tests/test_order_engine_repository.py -q --tb=short
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "V2 address fallback already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/order_engine/repository.py \
+            backend/tests/test_order_engine_repository.py
+          git commit -m "fix(orders-v2): restore shipping facts from canonical root"
+          git push origin HEAD:fix/orders-v2-address-root-fallback
