@@ -20,7 +20,7 @@ const PROVIDER_DEFAULTS = Object.freeze({
     shipping_companies: ["Shipping Companies", "شركات الشحن", "shipping"],
 });
 
-const SECRET_KEY_RE = /(token|secret|api[_-]?key|authorization|password|credential|cipher|private[_-]?key|refresh)/i;
+const SECRET_KEY_RE = /(?:^|[_-])(?:access[_-]?token|refresh[_-]?token|token|secret|client[_-]?secret|api[_-]?key|authorization|password|credential|ciphertext|private[_-]?key|signing[_-]?key)(?:$|[_-])/i;
 const SECRET_TEXT_RE = /(bearer\s+[a-z0-9._~+/=-]{8,}|access[\s_-]*token|refresh[\s_-]*token|client[\s_-]*secret|app[\s_-]*secret|api[\s_-]*key|(?:token|secret|authorization|password|cookie|credential)\s*[:=])/i;
 const SAFE_CAPABILITY_STATES = new Set(["available", "approval_required", "blocked_missing_permission", "blocked_missing_data", "not_connected", "planned", "unknown"]);
 const SAFE_CONNECTION_PROVENANCE = new Set(["api_connection", "legacy_integration", "data_feed", "disconnected", "planned", "unknown"]);
@@ -42,11 +42,31 @@ function safeNumber(value, { min = null, max = null } = {}) {
     return parsed;
 }
 
+function isSecretKey(key) {
+    const value = String(key || "").trim();
+    if (SECRET_KEY_RE.test(value)) return true;
+    const compact = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return ["token", "secret", "cookie"].includes(compact)
+        || [
+            "accesstoken",
+            "refreshtoken",
+            "clientsecret",
+            "appsecret",
+            "apikey",
+            "authorization",
+            "password",
+            "credential",
+            "ciphertext",
+            "privatekey",
+            "signingkey",
+        ].some((fragment) => compact.includes(fragment));
+}
+
 export function redactIntegrationValue(value) {
     if (Array.isArray(value)) return value.map(redactIntegrationValue);
     if (value && typeof value === "object") {
         return Object.entries(value).reduce((safe, [key, item]) => {
-            if (SECRET_KEY_RE.test(key)) return safe;
+            if (isSecretKey(key)) return safe;
             safe[key] = redactIntegrationValue(item);
             return safe;
         }, {});
@@ -98,7 +118,7 @@ function normalizeAccount(account, provider, fallbackStatus, fallbackSource, fal
 }
 
 function normalizeActions(actions = {}) {
-    return ["test_connection", "reconnect", "settings", "disconnect"].reduce((result, key) => {
+    return ["test_connection", "sync_data", "reconnect", "settings", "disconnect"].reduce((result, key) => {
         const action = actions?.[key] || {};
         const href = safeInternalHref(action.href);
         result[key] = { enabled: key === "disconnect" ? false : Boolean(action.enabled), reason: nullableText(action.reason), href: key === "disconnect" ? null : href };
@@ -161,7 +181,25 @@ export function normalizeIntegrationOverview(payload) {
     const safe = redactIntegrationValue(payload || {});
     const incoming = new Map((Array.isArray(safe.providers) ? safe.providers : []).filter((row) => PROVIDER_ORDER.includes(row?.provider)).map((row) => [row.provider, row]));
     const providers = PROVIDER_ORDER.map((provider) => normalizeProviderCard(incoming.get(provider), provider));
-    return { generated_at: nullableText(safe.generated_at), providers, summary: summarizeProviders(providers), safety_policy: { phase: safeNumber(safe.safety_policy?.phase, { min: 1 }) || 1, read_only: safe.safety_policy?.read_only !== false, advertising_mutations_enabled: false, mutation_lifecycle: Array.isArray(safe.safety_policy?.mutation_lifecycle) ? safe.safety_policy.mutation_lifecycle.filter((item) => typeof item === "string") : [], policy: nullableText(safe.safety_policy?.policy) } };
+    return {
+        generated_at: nullableText(safe.generated_at),
+        providers,
+        summary: summarizeProviders(providers),
+        safety_policy: {
+            phase: safeNumber(safe.safety_policy?.phase, { min: 1 }) || 1,
+            read_only: safe.safety_policy?.read_only === true,
+            analytics_refresh_enabled: (
+                safe.safety_policy?.analytics_refresh_enabled === true
+            ),
+            provider_mutations_enabled: false,
+            advertising_mutations_enabled: false,
+            accounting_mutations_enabled: false,
+            mutation_lifecycle: Array.isArray(safe.safety_policy?.mutation_lifecycle)
+                ? safe.safety_policy.mutation_lifecycle.filter((item) => typeof item === "string")
+                : [],
+            policy: nullableText(safe.safety_policy?.policy),
+        },
+    };
 }
 
 export function filterIntegrationProviders(providers, { query = "", status = "all" } = {}) {
@@ -178,6 +216,44 @@ export function summarizeCapabilityStates(capabilities) {
     return Object.values(capabilities || {}).reduce((summary, entry) => { const state = SAFE_CAPABILITY_STATES.has(entry?.state) ? entry.state : "unknown"; summary[state] = (summary[state] || 0) + 1; return summary; }, {});
 }
 
+export function normalizeIntegrationSyncResult(payload) {
+    const safe = redactIntegrationValue(payload || {});
+    const reportedStatus = ["complete", "partial", "failed"].includes(
+        safe.status || safe.sync_status,
+    )
+        ? (safe.status || safe.sync_status)
+        : "failed";
+    const sourceOnly = safe.source_only === true;
+    const accountingWriteReached = safe.accounting_write_reached === true;
+    const qoyodWriteReached = safe.qoyod_write_reached === true;
+    const status = (
+        sourceOnly
+        && !accountingWriteReached
+        && !qoyodWriteReached
+    ) ? reportedStatus : "failed";
+    return {
+        run_id: nullableText(safe.run_id),
+        provider: "snapchat_ads",
+        status,
+        date_from: nullableText(safe.date_from),
+        date_to: nullableText(safe.date_to),
+        accounts_attempted: safeNumber(
+            safe.accounts_attempted ?? safe.accounts_synced,
+            { min: 0 },
+        ) || 0,
+        accounts_complete: safeNumber(safe.accounts_complete, { min: 0 }) || 0,
+        rows_saved: safeNumber(safe.rows_saved, { min: 0 }) || 0,
+        errors_count: safeNumber(
+            safe.errors_count ?? (Array.isArray(safe.errors) ? safe.errors.length : 0),
+            { min: 0 },
+        ) || 0,
+        business_timezone: text(safe.business_timezone, "Asia/Riyadh"),
+        source_only: sourceOnly,
+        accounting_write_reached: accountingWriteReached,
+        qoyod_write_reached: qoyodWriteReached,
+    };
+}
+
 export async function getIntegrationsOverview() { const response = await api.get("/integrations-v2/overview"); return normalizeIntegrationOverview(response.data); }
 export async function getIntegrationsActivity({ provider = "", limit = 50 } = {}) {
     const params = { limit }; if (provider) params.provider = provider;
@@ -185,3 +261,15 @@ export async function getIntegrationsActivity({ provider = "", limit = 50 } = {}
     return { runs: Array.isArray(runs.data?.items) ? redactIntegrationValue(runs.data.items) : [], errors: Array.isArray(errors.data?.items) ? redactIntegrationValue(errors.data.items) : [] };
 }
 export async function testIntegrationConnection(provider) { if (!PROVIDER_ORDER.includes(provider)) throw new Error("unsupported_provider"); const response = await api.post(`/integrations-v2/${encodeURIComponent(provider)}/test-connection`); return redactIntegrationValue(response.data); }
+export async function syncIntegrationData(provider, { days = 30 } = {}) {
+    if (provider !== "snapchat_ads") throw new Error("unsupported_sync_provider");
+    const parsedDays = Number(days);
+    if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 62) {
+        throw new Error("invalid_sync_days");
+    }
+    const response = await api.post(
+        `/integrations-v2/${encodeURIComponent(provider)}/sync`,
+        { days: parsedDays },
+    );
+    return normalizeIntegrationSyncResult(response.data);
+}

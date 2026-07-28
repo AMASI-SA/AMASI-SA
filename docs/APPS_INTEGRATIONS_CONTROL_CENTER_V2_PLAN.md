@@ -17,16 +17,18 @@ errors, and AI readiness for:
 9. Qoyod
 10. Shipping companies (future)
 
-Phase 1 is a control and observability layer. It does not create, edit, pause,
-resume, or delete campaigns, budgets, ads, creatives, accounting records,
-shipping records, credentials, or tokens.
+Phase 1 is a control and observability layer with one bounded migration
+exception: an owner may refresh Snapchat analytical facts from the Snapchat
+card in V2. The refresh does not create, edit, pause, resume, or delete
+campaigns, budgets, ads, creatives, accounting records, shipping records, or
+provider credentials. Legacy pages are not an operational dependency of V2.
 
 ## Existing Sources — Transitional Read Only
 
 | Provider | Existing read source | Phase 1 treatment |
 |---|---|---|
 | Salla | `salla_integrations`, `salla_sync_logs` | Read sanitized store, scopes, sync, expiry, and error state. Never copy encrypted tokens. |
-| Snapchat Ads | `snapchat_connections`, `snapchat_ad_accounts`, `snapchat_account_daily`, `ads_accounts` | Read connection/account/freshness metadata. Never return plaintext legacy secrets. |
+| Snapchat Ads | `snapchat_connections`, `snapchat_ad_accounts`, `snapchat_account_daily`, `ads_accounts` | Read connection/account/freshness metadata and refresh bounded analytical facts through V2. Never return plaintext legacy secrets. |
 | TikTok Ads | `tiktok_connections` when present, otherwise `tiktok_ads_daily` data feed | Distinguish native connection from `data_feed`; insights may be available without campaign management. |
 | Meta Ads | `meta_connections`, `meta_ads_daily`, `ads_accounts` | Read account, connection, expiry, sync, and sanitized error metadata. |
 | GA4 | No canonical connection found | Report `not_configured`; do not infer a connection. |
@@ -36,11 +38,14 @@ shipping records, credentials, or tokens.
 | Qoyod | `qoyod_credentials`, `qoyod_settings`, `qoyod_invoices` | Read credential presence/fingerprint and operational health only. Never call posting paths. |
 | Shipping companies | Existing operational shipping settings are not provider integrations | Report `planned`; no migration or write in Phase 1. |
 
-The legacy collections remain untouched and are not the final source of truth.
-During transition, providers with an existing connector are read live through
-an explicit provider-to-legacy-source allowlist so a stored health check cannot
-freeze their current connection state. Providers without a legacy connector
-use native V2 snapshots when those become available.
+Legacy pages remain frozen and are not the final source of truth. During
+transition, providers with an existing connector are read live through an
+explicit provider-to-legacy-source allowlist so a stored health check cannot
+freeze their current connection state. The Snapchat analytics refresh may
+write only its approved fact and V2 activity collections; credential token
+rotation remains a documented transitional connector exception. Providers
+without a legacy connector use native V2 snapshots when those become
+available.
 
 `connection_status` and `connection_provenance` are separate:
 
@@ -136,9 +141,11 @@ Capability states are:
 - `planned`: not implemented in Phase 1.
 - `unknown`: evidence is insufficient.
 
-All advertising mutations are unavailable in Phase 1 and carry
+All advertising-object mutations are unavailable in Phase 1 and carry
 `approval_required`. A broad provider scope such as `ads_management` does not
-enable execution on its own.
+enable execution on its own. Refreshing analytical facts is a separate,
+explicit capability: it never enables campaign, budget, ad, creative,
+accounting, Salla, or Qoyod writes.
 
 Advertising reads are also evidence-based at field level. A generic daily row
 does not grant campaign, ad, insight, or conversion access: a real campaign/ad
@@ -163,11 +170,18 @@ secret-safe.
 | `GET` | `/api/integrations-v2/sync-runs?provider=&limit=` | Newest-first V2 activity log |
 | `GET` | `/api/integrations-v2/errors?provider=&limit=` | Newest-first sanitized errors |
 | `POST` | `/api/integrations-v2/{provider}/test-connection` | Explicit read-only provider probe where supported; persists only V2 health/activity snapshots |
+| `POST` | `/api/integrations-v2/snapchat_ads/sync` | Owner-only bounded Snapchat analytics refresh; persists approved analytical facts and sanitized V2 run/error records only |
 
 There is no Phase 1 endpoint for disconnecting providers or mutating campaigns,
 budgets, ads, creatives, accounting, Salla, Qoyod, shipping, employees,
 permissions, or product uploads. The UI displays dangerous actions as disabled
-with a reason returned by the backend.
+with a reason returned by the backend. The Snapchat refresh is analytics-only
+and must fail closed before provider access when its kill switch is disabled.
+Each run is limited to 1–62 days, at most five enabled accounts, and a
+400-provider-call budget. A tenant/provider lock prevents concurrent runs and a
+short idempotency window prevents accidental duplicate refreshes. Missing or
+unsupported currency, an invalid USD rate, and zero usable rows fail closed
+without creating analytical facts.
 
 ## Planned Files
 
@@ -179,6 +193,7 @@ backend/integrations_control_center/
   catalog.py
   models.py
   legacy_readers.py
+  snapchat_analytics_backfill.py
   service.py
   routes.py
 backend/tests/test_mezan_integrations_v2.py
@@ -224,7 +239,8 @@ changes to protected employee/RBAC/product-upload paths in this PR.
 
 The single responsive page contains:
 
-1. Header and an explicit read-only/safety banner.
+1. Header and an explicit safety banner that distinguishes analytical refresh
+   from disabled provider-object and accounting mutations.
 2. Exact classification cards for API connections, existing legacy
    integrations, data feeds, disconnected providers, planned connectors, and
    insufficient/unknown evidence. These buckets always sum to the provider
@@ -239,12 +255,39 @@ missing permissions, last sync, delay, latest error, integration health, data
 quality, test/reconnect/settings/disconnect controls, and explicit AI can/cannot
 lists.
 
+The Snapchat card is the only Phase-1 provider card with an enabled analytics
+refresh action. It reports complete, partial, or failed results, refreshes V2
+activity, and never links to `/snapchat-accounts`. The old browser route is a
+compatibility redirect to the focused Snapchat card in V2.
+
 The Phase-1 "test" action is labelled as a local inspection. It does not contact
 the provider, refresh a credential, or prove current provider reachability.
 Unobservable permissions remain `unknown`; absence of a connection or scope
 record is not reported as a confirmed permission denial. Permission rows carry
 an observation ID, so a newer empty/unknown observation cannot revive stale
 “current” or “missing” rows from an earlier local check.
+
+## Legacy Page Exit Register
+
+Legacy deletion is capability-driven, not filename-driven. A page can be
+deleted only after V2 has functional parity, owner/employee role parity, one
+approved write owner, a compatibility redirect, and passing regression tests.
+
+| Legacy surface | V2 destination | Current decision |
+|---|---|---|
+| `/snapchat-accounts` | `/integrations-v2?provider=snapchat_ads` plus `/ads-manager` for analysis | Phase 1 removes navigation and operation; keep redirect for one verified deployment, then delete the unreferenced component and legacy API adapter. |
+| `/order-review` | `/fulfillment-v2?stage=pending_review` | Redirect exists; retain until employee-role parity is verified. |
+| `/orders` | `/orders-v2` | Do not delete yet: advanced search, export, summaries, and manual sync still need an approved V2 home. |
+| `/products`, `/product-costs` | `/products-v2`, `/components-v2` | Do not delete yet: supplier-invoice search, import/export, and cost-history workflows need parity. |
+| `/product-preparation`, `/image-catalog` | `/fulfillment-v2` and V2 product media | Do not delete yet: batch PDF, images, assignment, and receiving stages remain incomplete. |
+| `/ads-v2/settings`, `/ads-v2/report` | `/integrations-v2`, `/ads-manager` | Migrate provider/account setup and reconcile/manual-value operations separately; Ads Manager remains read-only. |
+| Salla, Qoyod, webhook, BNPL, and shipping setup pages | Provider cards and dedicated V2 workspaces | Migrate provider by provider. This Snapchat phase must not modify them. |
+| Financial SSOT pages without a `-v2` suffix | Existing canonical finance workspaces | Keep. A missing `-v2` suffix alone does not make a page legacy. |
+
+Pages already implemented as compatibility redirects may have their dead
+components removed in a dedicated cleanup PR after route, role, and reference
+checks. No migration phase copies old UI wholesale; it moves the required
+capability into the canonical V2 workspace and leaves exactly one write path.
 
 ## Protected Boundaries
 
@@ -253,10 +296,11 @@ This branch must not modify:
 - product-file upload or product import implementation;
 - product preparation implementation;
 - employee, team, role, permission, or auth implementation;
-- existing Salla, Snapchat, TikTok, Meta, Qoyod, webhook, or shipping write
-  paths;
+- existing Salla, TikTok, Meta, Qoyod, webhook, or shipping write paths;
+- Snapchat provider/campaign/accounting writes outside the explicitly allowed
+  analytics fact refresh and transitional token rotation;
 - Qoyod invoice/payment posting or accounting logic;
-- stored keys, tokens, secrets, or legacy records.
+- stored keys, tokens, secrets, or unrelated legacy records.
 
 Before merge, the branch is refreshed against `origin/main`, the protected-path
 guard is run, all targeted checks pass, and GitHub reports no merge conflict.

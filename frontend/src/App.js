@@ -20,7 +20,6 @@ import OperatingExpenses from "./pages/OperatingExpenses";
 import OperationalReports from "./pages/OperationalReports";
 import AdsReport from "./pages/AdsReport";
 import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
-import SnapchatAccounts from "./pages/SnapchatAccounts";
 import AdsV2Settings from "./pages/AdsV2Settings";
 import AdsV2Report from "./pages/AdsV2Report";
 import ProductCosts from "./pages/ProductCosts";
@@ -149,7 +148,7 @@ function AppRoutes() {
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
-            <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatAccounts /></Layout></ProtectedRoute>} />
+            <Route path="/snapchat-accounts" element={<ProtectedRoute><Navigate to="/integrations-v2?provider=snapchat_ads" replace /></ProtectedRoute>} />
             <Route path="/ads-v2/settings" element={<ProtectedRoute><Layout><AdsV2Settings /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/report" element={<ProtectedRoute><Layout><AdsV2Report /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />

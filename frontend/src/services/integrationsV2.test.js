@@ -2,9 +2,20 @@ import {
     PROVIDER_ORDER,
     filterIntegrationProviders,
     normalizeIntegrationOverview,
+    normalizeIntegrationSyncResult,
     redactIntegrationValue,
+    syncIntegrationData,
     summarizeCapabilityStates,
 } from "./integrationsV2";
+import api from "../lib/api";
+
+jest.mock("../lib/api", () => ({
+    __esModule: true,
+    default: {
+        get: jest.fn(),
+        post: jest.fn(),
+    },
+}));
 
 test("overview always contains the eleven providers in the fixed order", () => {
     const overview = normalizeIntegrationOverview({
@@ -54,11 +65,92 @@ test("secret-shaped fields and bearer text are removed from frontend state", () 
 });
 
 test("advertising write actions remain policy-blocked", () => {
-    const overview = normalizeIntegrationOverview({ safety_policy: { advertising_mutations_enabled: true }, providers: [{ provider: "snapchat_ads", connection_status: "connected", connection_provenance: "legacy_integration", capabilities: { "campaigns.create": { state: "approval_required", available: true, approval_required: true, blocked_by_policy: true, reason: "approval" } }, actions: { disconnect: { enabled: true } } }] });
+    const overview = normalizeIntegrationOverview({ safety_policy: { read_only: false, analytics_refresh_enabled: true, advertising_mutations_enabled: true }, providers: [{ provider: "snapchat_ads", connection_status: "connected", connection_provenance: "legacy_integration", capabilities: { "campaigns.create": { state: "approval_required", available: true, approval_required: true, blocked_by_policy: true, reason: "approval" } }, actions: { sync_data: { enabled: true }, disconnect: { enabled: true } } }] });
     const snap = overview.providers.find((row) => row.provider === "snapchat_ads");
+    expect(overview.safety_policy.read_only).toBe(false);
+    expect(overview.safety_policy.analytics_refresh_enabled).toBe(true);
+    expect(overview.safety_policy.provider_mutations_enabled).toBe(false);
     expect(overview.safety_policy.advertising_mutations_enabled).toBe(false);
+    expect(overview.safety_policy.accounting_mutations_enabled).toBe(false);
     expect(snap.capabilities["campaigns.create"].available).toBe(false);
     expect(snap.capabilities["campaigns.create"].blocked_by_policy).toBe(true);
+    expect(snap.actions.sync_data.enabled).toBe(true);
+    expect(snap.actions.sync_data.href).toBeNull();
+});
+
+test("Snapchat analytics sync results stay explicit and secret-safe", () => {
+    const result = normalizeIntegrationSyncResult({
+        run_id: "run-1",
+        provider: "snapchat_ads",
+        status: "partial",
+        date_from: "2026-06-30",
+        date_to: "2026-07-29",
+        accounts_attempted: 2,
+        accounts_complete: 1,
+        rows_saved: 48,
+        errors_count: 3,
+        source_only: true,
+        accounting_write_reached: false,
+        qoyod_write_reached: false,
+        access_token: "MUST-NOT-RENDER",
+    });
+
+    expect(result).toEqual({
+        run_id: "run-1",
+        provider: "snapchat_ads",
+        status: "partial",
+        date_from: "2026-06-30",
+        date_to: "2026-07-29",
+        accounts_attempted: 2,
+        accounts_complete: 1,
+        rows_saved: 48,
+        errors_count: 3,
+        business_timezone: "Asia/Riyadh",
+        source_only: true,
+        accounting_write_reached: false,
+        qoyod_write_reached: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("MUST-NOT-RENDER");
+});
+
+test("Snapchat sync normalization fails closed if the analytics-only contract is absent", () => {
+    const result = normalizeIntegrationSyncResult({
+        provider: "snapchat_ads",
+        status: "complete",
+        source_only: false,
+        accounting_write_reached: true,
+        qoyod_write_reached: false,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.source_only).toBe(false);
+    expect(result.accounting_write_reached).toBe(true);
+});
+
+test("Snapchat sync calls only the V2-owned endpoint with a bounded day count", async () => {
+    api.post.mockResolvedValueOnce({
+        data: {
+            run_id: "run-2",
+            provider: "snapchat_ads",
+            status: "complete",
+            accounts_attempted: 2,
+            accounts_complete: 2,
+            rows_saved: 60,
+            errors_count: 0,
+            source_only: true,
+            accounting_write_reached: false,
+            qoyod_write_reached: false,
+        },
+    });
+
+    const result = await syncIntegrationData("snapchat_ads", { days: 30 });
+
+    expect(api.post).toHaveBeenCalledWith(
+        "/integrations-v2/snapchat_ads/sync",
+        { days: 30 },
+    );
+    expect(result.status).toBe("complete");
+    expect(result.rows_saved).toBe(60);
 });
 
 test("filters and capability summaries support the control-centre tabs", () => {

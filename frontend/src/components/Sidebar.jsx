@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
     House, UploadSimple, Gear, ClockCounterClockwise, Receipt, SignOut,
-    ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Ghost, Package, Image, UserCircle,
+    ChartPieSlice, ChartLineUp, Truck, Plug, Wallet, Package, Image, UserCircle,
     UsersThree, MagnifyingGlass, Queue, ArrowsLeftRight, Scales, Storefront,
     CurrencyDollar, LinkSimple, GearSix, CaretDown, X, PaperPlaneRight,
     HandCoins, Coin, Briefcase, Lightning, Cube, ChatsCircle,
@@ -235,7 +235,6 @@ const SECTIONS = [
             { to: "/order-review", label: "بانتظار المراجعة", icon: MagnifyingGlass, testid: "nav-order-review" },
             { to: "/operational-reports", label: "التقارير التشغيلية", icon: Wallet, testid: "nav-operational-reports" },
             { to: "/reports", label: "التقارير", icon: ChartPieSlice, testid: "nav-reports" },
-            { to: "/snapchat-accounts", label: "حسابات Snapchat", icon: Ghost, testid: "nav-snapchat-accounts" },
             { to: "/ads-v2/settings", label: "📐 إعدادات الإعلانات V2", icon: Gear, testid: "nav-ads-v2-settings" },
             { to: "/ads-v2/report", label: "📊 تقرير الإعلانات V2", icon: ChartPieSlice, testid: "nav-ads-v2-report" },
             { to: "/products", label: "المنتجات", icon: Package, testid: "nav-products" },

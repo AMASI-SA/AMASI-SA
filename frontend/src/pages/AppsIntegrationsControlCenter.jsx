@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
     ArrowClockwise,
     ChartLineUp,
@@ -18,6 +18,7 @@ import {
     getIntegrationsActivity,
     getIntegrationsOverview,
     normalizeIntegrationOverview,
+    syncIntegrationData,
     testIntegrationConnection,
 } from "../services/integrationsV2";
 
@@ -84,6 +85,7 @@ function PageSkeleton() {
 
 export default function AppsIntegrationsControlCenter() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [overview, setOverview] = useState(() => normalizeIntegrationOverview({}));
     const [activity, setActivity] = useState({ runs: [], errors: [] });
     const [loading, setLoading] = useState(true);
@@ -93,6 +95,7 @@ export default function AppsIntegrationsControlCenter() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [query, setQuery] = useState("");
     const [testingProvider, setTestingProvider] = useState("");
+    const [syncingProvider, setSyncingProvider] = useState("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
@@ -120,10 +123,18 @@ export default function AppsIntegrationsControlCenter() {
         load();
     }, [load]);
 
+    const focusedProvider = searchParams.get("provider") === "snapchat_ads"
+        ? "snapchat_ads"
+        : "";
     const visibleProviders = useMemo(() => filterIntegrationProviders(
         overview.providers,
         { query, status: statusFilter },
-    ), [overview.providers, query, statusFilter]);
+    ).filter((provider) => !focusedProvider || provider.provider === focusedProvider), [
+        overview.providers,
+        query,
+        statusFilter,
+        focusedProvider,
+    ]);
 
     async function handleTest(provider) {
         setTestingProvider(provider);
@@ -144,6 +155,49 @@ export default function AppsIntegrationsControlCenter() {
             await load({ silent: true });
         } finally {
             setTestingProvider("");
+        }
+    }
+
+    async function handleSync(provider) {
+        setSyncingProvider(provider);
+        try {
+            const result = await syncIntegrationData(provider, { days: 30 });
+            if (result.status === "complete") {
+                toast.success(
+                    `اكتملت مزامنة سناب: ${result.accounts_complete} حساب، ${result.rows_saved} صف يومي`,
+                );
+            } else if (result.status === "partial") {
+                toast.warning(
+                    `اكتملت المزامنة جزئيًا: ${result.accounts_complete}/${result.accounts_attempted} حساب، ${result.errors_count} ملاحظة`,
+                    { duration: 8000 },
+                );
+            } else {
+                toast.error("لم تكتمل مزامنة بيانات سناب.");
+            }
+            await load({ silent: true });
+        } catch (syncError) {
+            const status = syncError?.response?.status;
+            const code = syncError?.response?.data?.detail?.code;
+            const knownMessages = {
+                snapchat_analytics_sync_in_progress: "توجد مزامنة سناب قيد التشغيل بالفعل.",
+                snapchat_account_limit_exceeded: "عدد حسابات سناب المفعّلة يتجاوز الحد الآمن للتشغيل الواحد.",
+                snapchat_provider_call_budget_exceeded: "النطاق المطلوب يتجاوز ميزانية الاتصال الآمنة.",
+                snapchat_currency_unverified: "عملة أحد حسابات سناب مفقودة أو غير مدعومة.",
+                snapchat_usd_rate_unverified: "سعر تحويل الدولار إلى الريال غير صالح.",
+                snapchat_needs_reauth: "يجب إعادة توثيق ربط Snapchat قبل المزامنة.",
+                snapchat_analytics_sync_disabled: "مزامنة سناب متوقفة مؤقتًا بحارس الأمان.",
+            };
+            const message = knownMessages[code] || (status === 403
+                ? "مزامنة سناب متاحة لمالك الحساب فقط."
+                : status === 409
+                    ? "لا يمكن بدء المزامنة الآن؛ راجع حالة ربط حسابات سناب."
+                    : status === 503
+                        ? "مزامنة سناب متوقفة مؤقتًا بحارس الأمان."
+                        : "تعذر مزامنة بيانات سناب. راجع سجل المزامنة المنقح.");
+            toast.error(message);
+            await load({ silent: true });
+        } finally {
+            setSyncingProvider("");
         }
     }
 
@@ -180,6 +234,7 @@ export default function AppsIntegrationsControlCenter() {
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-100">
                             مركز واحد لقياس صحة الربط وجودة البيانات والصلاحيات، وتجهيز ميزان
                             لإدارة المتجر والإعلانات مستقبلًا ضمن دورة اعتماد وتحقق كاملة.
+                            مزامنة سناب التحليلية تتم هنا داخل V2 ولا تعتمد على صفحات القديم.
                         </p>
                     </div>
                     <button
@@ -194,9 +249,9 @@ export default function AppsIntegrationsControlCenter() {
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
                     التصنيف مبني على أدلة محلية محفوظة، وزر الفحص لا يتصل بالمنصة ولا يغيّر
-                    الربط. لا ينشئ المركز حملات، ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط
-                    سلة أو قيود. أي تعديل حساس مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ←
-                    تنفيذ ← تحقق ← سجل ← رجوع.
+                    الربط. زر مزامنة سناب يحدّث الحقائق التحليلية فقط؛ لا ينشئ المركز حملات،
+                    ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة أو قيود. أي تعديل حساس
+                    مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ← تحقق ← سجل ← رجوع.
                 </div>
             </header>
 
@@ -232,7 +287,7 @@ export default function AppsIntegrationsControlCenter() {
                 <SummaryCard
                     label="تكامل قائم سابقًا"
                     value={overview.summary.legacy_integrations}
-                    hint="يعمل خارج المركز الجديد"
+                    hint="موصل انتقالي تحت إدارة V2"
                     tone="amber"
                     Icon={ShieldCheck}
                     testid="integrations-summary-legacy"
@@ -336,11 +391,13 @@ export default function AppsIntegrationsControlCenter() {
                                     key={integration.provider}
                                     integration={integration}
                                     testing={testingProvider === integration.provider}
+                                    syncing={syncingProvider === integration.provider}
                                     settingsAvailable={Boolean(
                                         integration.actions?.settings?.href
                                         || integration.actions?.reconnect?.href
                                     )}
                                     onTest={handleTest}
+                                    onSync={handleSync}
                                     onSettings={openSettings}
                                 />
                             ))}

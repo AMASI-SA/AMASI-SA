@@ -97,6 +97,73 @@ test("data feed is never rendered as an API connection or a confirmed permission
     expect(markup).not.toContain("data_feed");
 });
 
+test("Snapchat card owns the V2 analytics sync action without a legacy settings link", () => {
+    const markup = renderToStaticMarkup(
+        <IntegrationCard
+            integration={{
+                provider: "snapchat_ads",
+                name: "Snapchat Ads",
+                name_ar: "إعلانات سناب شات",
+                connection_status: "connected",
+                connection_provenance: "legacy_integration",
+                source_mode: "legacy_connection",
+                accounts: [{
+                    mezan_integration_account_id: "snap-1",
+                    display_name: "متجر أماسي",
+                    external_account_id: "snap-account-1",
+                    currency: "SAR",
+                    timezone: "Asia/Riyadh",
+                }],
+                permissions: { current: [], missing: [], unknown: true },
+                health: { score: 75, data_quality: "degraded" },
+                ai: { can: ["تحليل الأداء"], cannot: ["تعديل الحملات"] },
+                actions: {
+                    test_connection: { enabled: true },
+                    sync_data: { enabled: true },
+                    reconnect: { enabled: false, href: null },
+                    settings: { enabled: false, href: null },
+                    disconnect: { enabled: false },
+                },
+            }}
+            onTest={() => {}}
+            onSync={() => {}}
+            onSettings={() => {}}
+        />,
+    );
+
+    expect(markup).toContain('data-testid="integration-snapchat_ads-sync"');
+    expect(markup).toContain("مزامنة 30 يوم");
+    expect(markup).not.toContain("/snapchat-accounts");
+});
+
+test("Snapchat sync button is disabled while a V2 sync is running", () => {
+    const markup = renderToStaticMarkup(
+        <IntegrationCard
+            integration={{
+                provider: "snapchat_ads",
+                name: "Snapchat Ads",
+                name_ar: "إعلانات سناب شات",
+                connection_status: "connected",
+                connection_provenance: "legacy_integration",
+                accounts: [],
+                permissions: { current: [], missing: [], unknown: true },
+                health: { score: 60, data_quality: "unknown" },
+                ai: { can: [], cannot: [] },
+                actions: { sync_data: { enabled: true } },
+            }}
+            syncing
+            onTest={() => {}}
+            onSync={() => {}}
+            onSettings={() => {}}
+        />,
+    );
+    const syncButton = markup.match(
+        /<button[^>]*data-testid="integration-snapchat_ads-sync"[^>]*>/,
+    )?.[0];
+    expect(syncButton).toContain("disabled");
+    expect(markup).toContain("جاري المزامنة…");
+});
+
 test("capability matrix distinguishes local reads from unavailable mutations", () => {
     const markup = renderToStaticMarkup(
         <CapabilityMatrix

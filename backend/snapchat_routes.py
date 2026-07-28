@@ -25,6 +25,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from integrations_control_center.snapchat_analytics_backfill import (
+    SnapchatAnalyticsSyncError,
+    SnapchatAnalyticsSyncInput,
+)
+from integrations_control_center.service import IntegrationsControlCenterService
+
 logger = logging.getLogger(__name__)
 
 SNAPCHAT_AUTH_URL = "https://accounts.snapchat.com/login/oauth2/authorize"
@@ -271,6 +277,13 @@ def _parse_snap_spend_payload(payload: object) -> dict:
             "spend_micro": None,
             "spend_data_status": "unavailable",
             "spend_data_error": "invalid_spend_payload",
+        }
+    paging = payload.get("paging")
+    if isinstance(paging, dict) and paging.get("next_link"):
+        return {
+            "spend_micro": None,
+            "spend_data_status": "unavailable",
+            "spend_data_error": "spend_pagination_incomplete",
         }
 
     timeseries = payload.get("timeseries_stats")
@@ -1756,354 +1769,65 @@ def _build_router(db) -> APIRouter:
         )
         return {"ok": True, "enabled_count": enabled_count}
 
-    async def _sync_one_account(
-        http: httpx.AsyncClient,
-        access_token: str,
-        uid: str,
-        account_doc: dict,
-        dates: list,
-        riyadh_tz,
-    ) -> tuple[int, list, list[str]]:
-        """Backfill analytical facts for one Snapchat ad account.
-
-        Rows written here are explicitly ineligible for automatic accounting.
-        Existing provider-proven conversions survive a transient refresh
-        failure, and an empty/malformed spend payload never becomes zero.
-        """
-        ad_id = account_doc["ad_account_id"]
-        ad_currency = (account_doc.get("currency_native") or "SAR").upper() or "SAR"
-        ad_name = account_doc.get("name") or ""
-        ad_tz = account_doc.get("timezone") or ""
-        base_headers = {"Authorization": f"Bearer {access_token}",
-                        "Accept": "application/json"}
-        stats_url = f"{SNAPCHAT_API_BASE}/adaccounts/{ad_id}/stats"
-        saved = 0
-        errors: list = []
-        successful_dates: list[str] = []
-        for d in dates:
-            start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=riyadh_tz)
-            end_local = start_local + timedelta(days=1)
-            # ── Spend (HOUR granularity to bypass Snap's DAY TZ constraint) ──
-            spend_params = {
-                "start_time": start_local.isoformat(timespec="seconds"),
-                "end_time": end_local.isoformat(timespec="seconds"),
-                "granularity": "HOUR",
-                "fields": "spend",
-            }
-            try:
-                resp = await http.get(stats_url, headers=base_headers, params=spend_params)
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                body = (exc.response.text or "")[:240]
-                try:
-                    import json as _json
-                    j = _json.loads(body)
-                    snap_msg = j.get("debug_message") or j.get("request_status") or body
-                except Exception:
-                    snap_msg = body
-                errors.append({"ad_account_id": ad_id, "date": d.isoformat(),
-                               "error": str(snap_msg)[:240]})
-                continue
-            except httpx.HTTPError as exc:
-                errors.append({"ad_account_id": ad_id, "date": d.isoformat(),
-                               "error": str(exc)[:200]})
-                continue
-
-            try:
-                data = resp.json()
-            except (TypeError, ValueError):
-                errors.append({
-                    "ad_account_id": ad_id,
-                    "date": d.isoformat(),
-                    "error": "invalid_spend_json",
-                })
-                continue
-            parsed_spend = _parse_snap_spend_payload(data)
-            if parsed_spend["spend_data_status"] != "available":
-                errors.append({
-                    "ad_account_id": ad_id,
-                    "date": d.isoformat(),
-                    "error": parsed_spend["spend_data_error"],
-                })
-                continue
-            total_micro = parsed_spend["spend_micro"]
-
-            # Conversions — best-effort for spend, fail-closed for metrics.
-            conv_params = {
-                "start_time": start_local.isoformat(timespec="seconds"),
-                "end_time": end_local.isoformat(timespec="seconds"),
-                "granularity": "HOUR",
-                "fields": "conversion_purchases,conversion_purchases_value",
-                "breakdown": "campaign",
-                "limit": 200,
-                "swipe_up_attribution_window": "28_DAY",
-                "view_attribution_window": "1_DAY",
-            }
-            conversion = await _fetch_snap_conversion_metrics(
-                http, stats_url, base_headers, conv_params,
-            )
-            total_purchases_value_micro = conversion["revenue_value_micro"]
-            if conversion["conversion_data_status"] != "available":
-                errors.append({
-                    "ad_account_id": ad_id,
-                    "date": d.isoformat(),
-                    "kind": "conversion_quality",
-                    "error": conversion["conversion_data_error"],
-                })
-
-            spend_native = round(total_micro / 1_000_000, 2)
-            revenue_native = (
-                round(total_purchases_value_micro / 1_000_000, 2)
-                if total_purchases_value_micro is not None
-                else None
-            )
-            spend_sar, fx_rate = await _to_sar(
-                spend_native, ad_currency, user_id=uid,
-            )
-            revenue_sar = (
-                (await _to_sar(
-                    revenue_native, ad_currency, user_id=uid,
-                ))[0]
-                if revenue_native is not None
-                else None
-            )
-            date_str = d.isoformat()
-            existing_row = await db.snapchat_account_daily.find_one(
-                {
-                    "user_id": uid,
-                    "ad_account_id": ad_id,
-                    "date": date_str,
-                },
-                {
-                    "_id": 0,
-                    "spend": 1,
-                    "spend_sar": 1,
-                    "accounting_eligible": 1,
-                    "accounting_spend_snapshot": 1,
-                    "updated_at": 1,
-                    "purchases": 1,
-                    "revenue_native": 1,
-                    "revenue_sar": 1,
-                    "conversion_data_status": 1,
-                },
-            )
-            conversion_patch = _merge_snap_conversion_metrics(
-                existing_row,
-                conversion,
-                revenue_native=revenue_native,
-                revenue_sar=revenue_sar,
-            )
-            accounting_snapshot_patch = {}
-            if (
-                existing_row
-                and existing_row.get("accounting_eligible") is not False
-            ):
-                prior_accounting_spend = existing_row.get("spend")
-                if prior_accounting_spend is None:
-                    prior_accounting_spend = existing_row.get("spend_sar")
-                if prior_accounting_spend is not None:
-                    accounting_snapshot_patch[
-                        "accounting_spend_snapshot"
-                    ] = prior_accounting_spend
-
-            write_query = {
-                "user_id": uid,
-                "ad_account_id": ad_id,
-                "date": date_str,
-                "updated_at": (
-                    existing_row.get("updated_at")
-                    if existing_row
-                    else {"$exists": False}
-                ),
-            }
-            try:
-                write_result = await db.snapchat_account_daily.update_one(
-                    write_query,
-                    {"$set": {
-                        "user_id": uid,
-                        "ad_account_id": ad_id,
-                        "account_name": ad_name,
-                        "date": date_str,
-                        "spend_native": spend_native,
-                        "currency_native": ad_currency,
-                        "fx_rate": fx_rate,
-                        "spend_sar": spend_sar,
-                        "spend": spend_sar,  # alias for legacy reads
-                        **conversion_patch,
-                        **accounting_snapshot_patch,
-                        "ingestion_mode": "analytics_backfill",
-                        "accounting_eligible": False,
-                        "business_timezone": "Asia/Riyadh",
-                        "ad_account_timezone": ad_tz,
-                        "snap_day_start_riyadh": start_local.strftime(
-                            "%Y-%m-%d %H:%M",
-                        ),
-                        "snap_day_end_riyadh": end_local.strftime(
-                            "%Y-%m-%d %H:%M",
-                        ),
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    },
-                        "$setOnInsert": {
-                            "created_at":
-                                datetime.now(timezone.utc).isoformat(),
-                        },
-                    },
-                    upsert=existing_row is None,
-                )
-            except Exception as exc:  # noqa: BLE001
-                errors.append({
-                    "ad_account_id": ad_id,
-                    "date": date_str,
-                    "error": f"concurrent_or_write_error:{type(exc).__name__}",
-                })
-                continue
-            if (
-                existing_row is not None
-                and getattr(write_result, "matched_count", 1) != 1
-            ):
-                errors.append({
-                    "ad_account_id": ad_id,
-                    "date": date_str,
-                    "error": "concurrent_update_detected",
-                })
-                continue
-            saved += 1
-            successful_dates.append(date_str)
-
-        sync_finished_at = datetime.now(timezone.utc).isoformat()
-        sync_patch = {
-            "last_sync_attempt_at": sync_finished_at,
-            "last_sync_status": (
-                "complete"
-                if saved == len(dates) and not errors
-                else "partial"
-            ),
-            "last_sync_rows_saved": saved,
-            "last_sync_error_count": len(errors),
-        }
-        if saved == len(dates) and not errors:
-            sync_patch["last_sync_at"] = sync_finished_at
-            sync_patch["last_successful_sync_at"] = sync_finished_at
-        await db.snapchat_ad_accounts.update_one(
-            {"user_id": uid, "ad_account_id": ad_id},
-            {"$set": sync_patch},
-        )
-        return saved, errors, successful_dates
-
-    class _SyncAllIn(BaseModel):
+    class _SyncAllIn(SnapchatAnalyticsSyncInput):
+        # Preserve the deprecated route's old default.  The V2-owned action
+        # defaults to 30 days.
         days: int = Field(default=7, ge=1, le=62)
-        from_date: Optional[str] = None
-        to_date: Optional[str] = None
 
-    @router.post("/sync-all-accounts")
+    @router.post("/sync-all-accounts", deprecated=True)
     async def sync_all_accounts(payload: _SyncAllIn, user: dict = Depends(current_user)):
-        """Backfill EVERY enabled Snapchat account for a Riyadh-date range.
-
-        This route is deliberately source-only: it writes analytical
-        Snapchat facts and their quality aggregate, but it never writes
-        daily costs, ad-account balances, liabilities, ledgers, Salla, Qoyod,
-        or provider campaign configuration.
-
-        Body: {days|from_date|to_date}. Returns {accounts_synced, items[],
-        errors[]} per-account.
-        """
-        uid = user["id"]
-        access_token, _ = await _ensure_access_token(uid)
-        enabled = await db.snapchat_ad_accounts.find(
-            {"user_id": uid, "enabled": True}, {"_id": 0},
-        ).to_list(50)
-        if not enabled:
-            raise HTTPException(status_code=400,
-                                detail="لم يتم تفعيل أي حساب Snapchat بعد. اختر حساباً واحداً أو أكثر من الإعدادات.")
-
-        # Riyadh-anchored date enumeration (00:00 → 23:59 Asia/Riyadh — per
-        # merchant requirement: SA timezone is the source of truth, NOT PDT).
-        try:
-            from zoneinfo import ZoneInfo as _ZI
-            riyadh_tz = _ZI("Asia/Riyadh")
-        except ImportError:  # pragma: no cover
-            riyadh_tz = timezone(timedelta(hours=3))
-        from datetime import date as _date
-        today_local = datetime.now(riyadh_tz).date()
-        if payload.from_date or payload.to_date:
-            try:
-                start_d = _date.fromisoformat(payload.from_date) if payload.from_date else today_local
-                end_d = _date.fromisoformat(payload.to_date) if payload.to_date else today_local
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid date format; use YYYY-MM-DD")
-            if end_d < start_d:
-                raise HTTPException(status_code=400, detail="to_date < from_date")
-            span = (end_d - start_d).days + 1
-            if span > 62:
-                raise HTTPException(status_code=400, detail="Range too wide (max 62 days)")
-            dates = [start_d + timedelta(days=i) for i in range(span)]
-        else:
-            dates = [today_local - timedelta(days=i) for i in range(payload.days)]
-            dates.reverse()
-
-        accounts_summary: list[dict] = []
-        all_errors: list[dict] = []
-        successful_account_ids_by_date: dict[str, set[str]] = {}
-        async with httpx.AsyncClient(timeout=30.0) as http:
-            for account_doc in enabled:
-                saved, errs, successful_dates = await _sync_one_account(
-                    http, access_token, uid, account_doc, dates, riyadh_tz,
-                )
-                accounts_summary.append({
-                    "ad_account_id": account_doc["ad_account_id"],
-                    "name": account_doc.get("name"),
-                    "currency_native": account_doc.get("currency_native"),
-                    "rows_saved": saved,
-                    "errors": len(errs),
-                })
-                all_errors.extend(errs)
-                for successful_date in successful_dates:
-                    successful_account_ids_by_date.setdefault(
-                        successful_date,
-                        set(),
-                    ).add(account_doc["ad_account_id"])
-
-        # Recompute only the analytical cross-account quality aggregate.
-        # Financial daily_costs and every accounting bridge are intentionally
-        # outside this historical source-repair operation.
-        expected_account_ids = [
-            account_doc["ad_account_id"] for account_doc in enabled
-        ]
-        for d in dates:
-            await _reaggregate_snap_daily(
-                uid,
-                d.isoformat(),
-                update_daily_costs=False,
-                expected_account_ids=expected_account_ids,
-                successful_account_ids=sorted(
-                    successful_account_ids_by_date.get(
-                        d.isoformat(),
-                        set(),
+        """Deprecated compatibility adapter to the V2-owned sync engine."""
+        role = str(user.get("role") or "").strip().lower()
+        if role != "owner" and user.get("is_owner") is not True:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "owner_only",
+                    "message": (
+                        "مزامنة تحليلات سناب متاحة لمالك النظام فقط."
                     ),
-                ),
+                },
             )
-
-        complete_accounts = sum(
-            1 for item in accounts_summary
-            if item["rows_saved"] == len(dates) and item["errors"] == 0
-        )
-        return {
-            "accounts_synced": len(accounts_summary),
-            "accounts_complete": complete_accounts,
-            "sync_status": (
-                "complete"
-                if complete_accounts == len(accounts_summary)
-                else "partial"
-            ),
-            "items": accounts_summary,
-            "errors": all_errors,
-            "currency": "SAR",
-            "business_timezone": "Asia/Riyadh",
-            "source_only": True,
-            "accounting_write_reached": False,
-            "qoyod_write_reached": False,
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        }
+        try:
+            result = await IntegrationsControlCenterService(
+                db
+            ).sync_snapchat_analytics(
+                str(user["id"]),
+                SnapchatAnalyticsSyncInput(
+                    days=payload.days,
+                    from_date=payload.from_date,
+                    to_date=payload.to_date,
+                ),
+                include_legacy_details=True,
+            )
+        except SnapchatAnalyticsSyncError as exc:
+            # Preserve the legacy route's historical no-account status while
+            # keeping every execution inside the shared V2 engine.
+            if exc.result and exc.code in {
+                "snapchat_analytics_no_rows",
+                "snapchat_needs_reauth",
+                "snapchat_currency_unverified",
+            }:
+                return {
+                    **exc.result,
+                    "run_id": getattr(exc, "run_id", None),
+                    "status": "failed",
+                    # Old clients treated a zero-row attempt as a partial
+                    # diagnostic result. V2 still audits the run as failed.
+                    "sync_status": "partial",
+                    "deprecated_adapter": True,
+                }
+            legacy_status = (
+                400
+                if exc.code == "snapchat_accounts_not_selected"
+                else exc.status_code
+            )
+            raise HTTPException(
+                status_code=legacy_status,
+                detail=exc.message,
+            ) from exc
+        result["deprecated_adapter"] = True
+        return result
 
     @router.get("/accounts-summary")
     async def accounts_summary(user: dict = Depends(current_user)):
