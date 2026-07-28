@@ -49,7 +49,21 @@ def test_new_workspace_route_sidebar_and_v2_navigation_are_wired():
         in app_source
     )
     assert 'to: "/fulfillment-v2"' in sidebar_source
-    assert 'label: "إدارة رفع الطلبات"' in sidebar_source
+    assert 'label: "إدارة التجهيز"' in sidebar_source
     assert 'testid: "nav-mezan-os-fulfillment"' in sidebar_source
-    assert '{ to: "/fulfillment-v2", label: "إدارة رفع الطلبات", Icon: Queue }' in layout_source
+    assert '{ to: "/fulfillment-v2", label: "إدارة التجهيز", Icon: Queue }' in layout_source
     assert '"/fulfillment-v2"' in layout_source
+
+
+def test_owner_sees_one_preparation_entry_while_employee_review_access_is_preserved():
+    sidebar_source = (ROOT / "frontend/src/components/Sidebar.jsx").read_text(
+        encoding="utf-8"
+    )
+
+    # The legacy route remains in the operations definition for non-owner staff.
+    assert '{ to: "/order-review", label: "بانتظار المراجعة"' in sidebar_source
+    # Owners see the organized Mezan OS parent only, without a duplicate link.
+    assert (
+        'const items = section.items.filter((item) => item.to !== "/order-review");'
+        in sidebar_source
+    )
