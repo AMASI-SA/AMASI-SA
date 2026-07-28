@@ -292,6 +292,50 @@ test("legacy or malformed quality fields fall back conservatively", () => {
     expect(overview.coverage.ratio_eligible_providers).toBe(0);
 });
 
+test("Snapchat account coverage fails closed and retains the bounded account set", () => {
+    const accountCoverage = Array.from({ length: 251 }, (_, index) => ({
+        account_id: `snap-${index + 1}`,
+        account_name: `سناب ${index + 1}`,
+        status: index < 2 ? "complete" : "unavailable",
+        spend_days: index === 0 ? 5 : index === 1 ? 27 : 0,
+        conversion_complete_days: index === 0 ? 5 : index === 1 ? 28 : 0,
+        requested_days: 28,
+        current_day_lag_allowed: index === 1,
+        missing_spend_dates: [],
+        missing_conversion_dates: [],
+    }));
+    const overview = normalizeAdsManagerOverview({
+        providers: [{
+            provider: "snapchat",
+            freshness: {},
+            performance_coverage: {},
+            account_performance_coverage: accountCoverage,
+            campaign_coverage: {},
+            reconciliation: {},
+        }],
+    });
+
+    expect(overview.providers[0].account_performance_coverage).toHaveLength(250);
+    expect(overview.providers[0].account_performance_coverage[0]).toMatchObject({
+        account_id: "snap-1",
+        status: "partial",
+        spend_days: 5,
+        conversion_complete_days: 5,
+        requested_days: 28,
+    });
+    expect(overview.providers[0].account_performance_coverage[1]).toMatchObject({
+        account_id: "snap-2",
+        status: "complete",
+        spend_days: 27,
+        conversion_complete_days: 28,
+        requested_days: 28,
+        current_day_lag_allowed: true,
+    });
+    expect(
+        overview.providers[0].account_performance_coverage[2].spend_sar,
+    ).toBeNull();
+});
+
 test("accepts the backend's bounded open-current-day coverage exception", () => {
     const overview = normalizeAdsManagerOverview({
         coverage: {

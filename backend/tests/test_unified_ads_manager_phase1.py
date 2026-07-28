@@ -10,7 +10,7 @@ import asyncio
 import json
 import socket
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
@@ -1194,6 +1194,301 @@ async def test_legacy_snapchat_zeroes_are_unknown_until_quality_is_explicit():
     assert provider["metrics"]["platform_attributed_revenue_sar"] == 0
     assert provider["metrics"]["platform_reported_purchases"] == 0
     assert provider["metrics"]["platform_roas"] == 0
+
+
+@pytest.mark.asyncio
+async def test_snapchat_coverage_is_reported_per_enabled_account():
+    rows = {
+        "snapchat_ad_accounts": [
+            {
+                "user_id": OWNER_ID,
+                "ad_account_id": "snap-a",
+                "name": "سناب الرئيسي",
+                "enabled": True,
+            },
+            {
+                "user_id": OWNER_ID,
+                "ad_account_id": "snap-b",
+                "name": "سناب الثاني",
+                "enabled": True,
+            },
+            {
+                "user_id": OWNER_ID,
+                "ad_account_id": "snap-c",
+                "name": "سناب بلا بيانات",
+                "enabled": True,
+            },
+            {
+                "user_id": OWNER_ID,
+                "ad_account_id": "snap-disabled",
+                "name": "سناب معطل",
+                "enabled": False,
+            },
+        ],
+        "snapchat_account_daily": [
+            {
+                "user_id": OWNER_ID,
+                "date": date_key,
+                "ad_account_id": "snap-a",
+                "account_name": "سناب الرئيسي",
+                "spend_sar": 10,
+                "purchases": 1,
+                "revenue_sar": 20,
+                "conversion_data_status": "available",
+            }
+            for date_key in ("2026-07-27", "2026-07-28")
+        ]
+        + [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "ad_account_id": "snap-b",
+                "account_name": "سناب الثاني",
+                "spend_sar": 5,
+                "purchases": None,
+                "revenue_sar": None,
+                "conversion_data_status": "unavailable",
+            }
+        ]
+        + [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "ad_account_id": "snap-disabled",
+                "account_name": "سناب معطل",
+                "spend_sar": 99,
+                "purchases": 9,
+                "revenue_sar": 199,
+                "conversion_data_status": "available",
+            }
+        ],
+        "snapchat_daily_stats": [
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-27",
+                "revenue": None,
+                "purchases": None,
+                "conversion_data_status": "unavailable",
+            },
+            {
+                "user_id": OWNER_ID,
+                "date": "2026-07-28",
+                "revenue": None,
+                "purchases": None,
+                "conversion_data_status": "unavailable",
+            },
+        ],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-27",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    accounts = {
+        row["account_id"]: row
+        for row in result["providers"][0]["account_performance_coverage"]
+    }
+    assert set(accounts) == {"snap-a", "snap-b", "snap-c"}
+    assert accounts["snap-a"]["status"] == "complete"
+    assert accounts["snap-a"]["spend_days"] == 2
+    assert accounts["snap-a"]["conversion_complete_days"] == 2
+    assert accounts["snap-a"]["missing_conversion_dates"] == []
+    assert accounts["snap-b"]["status"] == "partial"
+    assert accounts["snap-b"]["spend_days"] == 1
+    assert accounts["snap-b"]["conversion_complete_days"] == 0
+    assert accounts["snap-b"]["missing_spend_dates"] == ["2026-07-27"]
+    assert accounts["snap-b"]["missing_conversion_dates"] == [
+        "2026-07-27",
+        "2026-07-28",
+    ]
+    assert accounts["snap-c"]["status"] == "unavailable"
+    assert accounts["snap-c"]["spend_days"] == 0
+    assert accounts["snap-c"]["conversion_complete_days"] == 0
+    assert accounts["snap-c"]["spend_sar"] is None
+    assert accounts["snap-c"]["missing_spend_dates"] == [
+        "2026-07-27",
+        "2026-07-28",
+    ]
+    assert accounts["snap-c"]["missing_conversion_dates"] == [
+        "2026-07-27",
+        "2026-07-28",
+    ]
+
+
+def test_snapchat_account_coverage_preserves_legacy_quality_and_spend_fallback():
+    coverage = ads_manager_service._snapchat_account_performance_coverage(
+        account_rows=[
+            {
+                "date": "2026-07-27",
+                "ad_account_id": "legacy-positive",
+                "spend_sar": None,
+                "spend": 7,
+                "purchases": 1,
+                "revenue_sar": 20,
+            },
+            {
+                "date": "2026-07-27",
+                "ad_account_id": "legacy-zero",
+                "spend_sar": 4,
+                "purchases": 0,
+                "revenue_sar": 0,
+            },
+            {
+                "date": "2026-07-27",
+                "ad_account_id": "verified-zero",
+                "spend_sar": 3,
+                "purchases": 0,
+                "revenue_sar": 0,
+                "conversion_data_status": "available",
+            },
+        ],
+        configured_accounts=[
+            {
+                "ad_account_id": "legacy-positive",
+                "name": "موجب تاريخي",
+                "enabled": True,
+            },
+            {
+                "ad_account_id": "legacy-zero",
+                "name": "صفر غير موثق",
+                "enabled": True,
+            },
+            {
+                "ad_account_id": "verified-zero",
+                "name": "صفر موثق",
+                "enabled": True,
+            },
+        ],
+        start=date(2026, 7, 27),
+        end=date(2026, 7, 27),
+        allow_current_day_lag=False,
+        source_truncated=False,
+        source_invalid=False,
+    )
+
+    accounts = {row["account_id"]: row for row in coverage}
+    assert accounts["legacy-positive"]["status"] == "complete"
+    assert accounts["legacy-positive"]["spend_sar"] == 7
+    assert accounts["legacy-positive"]["conversion_complete_days"] == 1
+    assert accounts["legacy-zero"]["status"] == "partial"
+    assert accounts["legacy-zero"]["conversion_complete_days"] == 0
+    assert accounts["verified-zero"]["status"] == "complete"
+    assert accounts["verified-zero"]["conversion_complete_days"] == 1
+
+    truncated = ads_manager_service._snapchat_account_performance_coverage(
+        account_rows=[{
+            "date": "2026-07-27",
+            "ad_account_id": "legacy-positive",
+            "spend": 7,
+            "purchases": 1,
+            "revenue_sar": 20,
+        }],
+        configured_accounts=[
+            {
+                "ad_account_id": "legacy-positive",
+                "name": "موجب تاريخي",
+                "enabled": True,
+            },
+        ],
+        start=date(2026, 7, 27),
+        end=date(2026, 7, 27),
+        allow_current_day_lag=False,
+        source_truncated=True,
+        source_invalid=False,
+    )
+    assert truncated[0]["status"] == "partial"
+    assert "حد القراءة" in truncated[0]["detail"]
+
+    all_disabled = ads_manager_service._snapchat_account_performance_coverage(
+        account_rows=[{
+            "date": "2026-07-27",
+            "ad_account_id": "disabled",
+            "spend_sar": 10,
+            "purchases": 1,
+            "revenue_sar": 20,
+            "conversion_data_status": "available",
+        }],
+        configured_accounts=[{
+            "ad_account_id": "disabled",
+            "name": "معطل",
+            "enabled": False,
+        }],
+        start=date(2026, 7, 27),
+        end=date(2026, 7, 27),
+        allow_current_day_lag=False,
+        source_truncated=False,
+        source_invalid=False,
+    )
+    assert all_disabled == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_account_coverage_matches_open_current_day_exception():
+    rows = {
+        "snapchat_ad_accounts": [{
+            "user_id": OWNER_ID,
+            "ad_account_id": "snap-a",
+            "name": "سناب الرئيسي",
+            "enabled": True,
+        }],
+        "snapchat_account_daily": [{
+            "user_id": OWNER_ID,
+            "date": "2026-07-27",
+            "ad_account_id": "snap-a",
+            "account_name": "سناب الرئيسي",
+            "spend_sar": 10,
+            "purchases": 1,
+            "revenue_sar": 20,
+            "conversion_data_status": "available",
+        }],
+        "snapchat_daily_stats": [{
+            "user_id": OWNER_ID,
+            "date": "2026-07-27",
+            "revenue": 20,
+            "purchases": 1,
+            "conversion_data_status": "available",
+        }],
+    }
+
+    result = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-27",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    account = provider["account_performance_coverage"][0]
+    assert provider["performance_coverage"]["status"] == "complete"
+    assert account["status"] == "complete"
+    assert account["spend_days"] == 1
+    assert account["conversion_complete_days"] == 1
+    assert account["requested_days"] == 2
+    assert account["current_day_lag_allowed"] is True
+    assert account["missing_spend_dates"] == ["2026-07-28"]
+    assert account["missing_conversion_dates"] == ["2026-07-28"]
+
+    rows["snapchat_daily_stats"].append({
+        "user_id": OWNER_ID,
+        "date": "2026-07-28",
+        "revenue": 0,
+        "purchases": 0,
+        "conversion_data_status": "available",
+    })
+    mismatched = await _service(FakeDB(rows)).overview(
+        OWNER_ID,
+        date_from="2026-07-27",
+        date_to="2026-07-28",
+        provider="snapchat",
+    )
+    provider = mismatched["providers"][0]
+    account = provider["account_performance_coverage"][0]
+    assert provider["performance_coverage"]["status"] == "partial"
+    assert account["status"] == "partial"
+    assert account["current_day_lag_allowed"] is False
 
 
 @pytest.mark.asyncio

@@ -222,3 +222,125 @@ test("shows stale partial TikTok evidence, suppresses aggregate ROAS, and labels
     expect(markup).toContain("+1,932.91 ر.س");
     expect(markup).toContain("4.89%");
 });
+
+test("shows Snapchat coverage independently for each connected account", () => {
+    const overview = normalizeAdsManagerOverview({
+        generated_at: "2026-07-28T12:00:00+03:00",
+        range: {
+            date_from: "2026-07-01",
+            date_to: "2026-07-28",
+            timezone: "Asia/Riyadh",
+            provider: "snapchat",
+        },
+        metrics: {},
+        coverage: {},
+        providers: [{
+            provider: "snapchat",
+            provider_label: "سناب شات",
+            freshness: {
+                status: "fresh",
+                observed_days: 18,
+                requested_days: 28,
+            },
+            performance_coverage: {
+                status: "partial",
+                eligible_for_ratios: false,
+                observed_days: 18,
+                requested_days: 28,
+                coverage_pct: 64.29,
+                reasons: ["missing_performance_dates"],
+                detail: "تغطية جزئية.",
+            },
+            account_performance_coverage: [
+                {
+                    account_id: "snap-a",
+                    account_name: "سناب الرئيسي",
+                    status: "complete",
+                    spend_sar: 100,
+                    spend_days: 28,
+                    conversion_complete_days: 28,
+                    requested_days: 28,
+                    missing_spend_dates: [],
+                    missing_conversion_dates: [],
+                },
+                {
+                    account_id: "snap-b",
+                    account_name: "سناب الثاني",
+                    status: "partial",
+                    spend_sar: 50,
+                    spend_days: 18,
+                    conversion_complete_days: 5,
+                    requested_days: 28,
+                    missing_spend_dates: ["2026-07-01"],
+                    missing_conversion_dates: ["2026-07-01", "2026-07-02"],
+                },
+                {
+                    account_id: "snap-c",
+                    account_name: "سناب بلا بيانات",
+                    status: "unavailable",
+                    spend_sar: 0,
+                    spend_days: 0,
+                    conversion_complete_days: 0,
+                    requested_days: 28,
+                    missing_spend_dates: Array.from(
+                        { length: 28 },
+                        (_, index) => `2026-07-${String(index + 1).padStart(2, "0")}`,
+                    ),
+                    missing_conversion_dates: Array.from(
+                        { length: 28 },
+                        (_, index) => `2026-07-${String(index + 1).padStart(2, "0")}`,
+                    ),
+                },
+                {
+                    account_id: "snap-today",
+                    account_name: "سناب اليوم",
+                    status: "complete",
+                    spend_sar: 80,
+                    spend_days: 27,
+                    conversion_complete_days: 28,
+                    requested_days: 28,
+                    missing_spend_dates: ["2026-07-28"],
+                    missing_conversion_dates: [],
+                    current_day_lag_allowed: true,
+                },
+            ],
+            campaign_coverage: { status: "aggregate_only" },
+            reconciliation: { status: "not_comparable" },
+        }],
+        daily_spend: [],
+        campaigns: [],
+        campaign_pagination: { page: 1, limit: 25, total: 0, pages: 0 },
+        insights: [],
+        sources: [],
+    });
+
+    const markup = renderToStaticMarkup(
+        <AdsManagerView
+            overview={overview}
+            filters={{
+                dateFrom: "2026-07-01",
+                dateTo: "2026-07-28",
+                provider: "snapchat",
+                campaignQuery: "",
+            }}
+        />,
+    );
+    const visibleText = markup
+        .replace(/<[^>]+>/g, "")
+        .replace(/\s+/g, " ");
+
+    expect(markup).toContain("تغطية حسابات سناب");
+    expect(visibleText).toContain("عدد الحسابات: 4");
+    expect(markup).toContain("سناب الرئيسي");
+    expect(markup).toContain("سناب الثاني");
+    expect(markup).toContain("سناب بلا بيانات");
+    expect(markup).toContain("سناب اليوم");
+    expect(markup).toContain("غير متاح");
+    expect(visibleText).toContain("28/28");
+    expect(visibleText).toContain("18/28");
+    expect(visibleText).toContain("5/28");
+    expect(visibleText).toContain("0/28");
+    expect(visibleText).toContain("ناقص: 10 يوم صرف، و23 يوم تحويلات");
+    expect(visibleText).toContain("ناقص: 28 يوم صرف، و28 يوم تحويلات");
+    expect(visibleText).toContain("اليوم الحالي ضمن نافذة التأخر المتوقعة");
+});
