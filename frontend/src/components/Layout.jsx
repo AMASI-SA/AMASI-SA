@@ -36,7 +36,7 @@ function GlobalOrderSearch({ compact = false }) {
 
 const V2_LINKS = [
     { to: "/orders-v2", label: "الطلبات", Icon: Package },
-    { to: "/fulfillment-v2", label: "إدارة رفع الطلبات", Icon: Queue },
+    { to: "/fulfillment-v2", label: "إدارة التجهيز", Icon: Queue },
     { to: "/products-v2", label: "المنتجات", Icon: Package },
     { to: "/products-v2?workspace=intake", label: "استقبال المنتجات", Icon: Robot },
     { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات", Icon: UsersThree },
