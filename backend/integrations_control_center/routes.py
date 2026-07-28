@@ -62,6 +62,11 @@ def make_integrations_control_center_router(
     current_user: Callable,
 ) -> APIRouter:
     """Create the isolated router mounted below the application's `/api`."""
+    # OpenAI is already used by Mezan's analyzer but predates this catalogue.
+    # Install its secret-safe runtime card before constructing the service.
+    from openai_integration_status_support import install_openai_integration_status_support
+
+    install_openai_integration_status_support()
     router = APIRouter(
         prefix="/integrations-v2",
         tags=["apps-integrations-control-center-v2"],
