@@ -3993,6 +3993,13 @@ from ads_v2.routes import make_ads_v2_router
 from ads_v2.models import ensure_indexes as _ads_v2_ensure_indexes
 api.include_router(make_ads_v2_router(db, current_user))
 
+# ── Apps & Integrations Control Center V2 (read-only control plane) ──
+from integrations_control_center import (
+    ensure_integrations_control_center_indexes,
+    make_integrations_control_center_router,
+)
+api.include_router(make_integrations_control_center_router(db, current_user))
+
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
 # expose only the merchant-facing config surface so a real API key can
@@ -4283,6 +4290,9 @@ async def on_startup():
     await ensure_ledger_indexes(db)
     # Ads V2 (Phase 0) — create indexes on the 3 new collections.
     await _ads_v2_ensure_indexes(db)
+    # Apps & Integrations V2 — isolated metadata, health, activity,
+    # errors, and future campaign↔product identity links.
+    await ensure_integrations_control_center_indexes(db)
     # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
     # `qoyod_*` collections. Idempotent — safe to call on every boot.
     # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
