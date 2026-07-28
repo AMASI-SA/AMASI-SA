@@ -201,6 +201,12 @@ const SECTIONS = [
                 icon: Cube,
                 testid: "nav-mezan-os-components",
             },
+            {
+                to: "/integrations-v2",
+                label: "التطبيقات والتكاملات",
+                icon: Plug,
+                testid: "nav-mezan-os-integrations",
+            },
         ],
     },
     {

@@ -1,0 +1,341 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+    ArrowClockwise,
+    ChartLineUp,
+    CheckCircle,
+    MagnifyingGlass,
+    Plug,
+    ShieldCheck,
+    WarningCircle,
+} from "@phosphor-icons/react";
+import { toast } from "sonner";
+import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
+import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
+import IntegrationCard from "../components/integrationsV2/IntegrationCard";
+import {
+    filterIntegrationProviders,
+    getIntegrationsActivity,
+    getIntegrationsOverview,
+    normalizeIntegrationOverview,
+    testIntegrationConnection,
+} from "../services/integrationsV2";
+
+const SETTINGS_PATHS = Object.freeze({
+    salla: "/settings/salla",
+    snapchat_ads: "/snapchat-accounts",
+    tiktok_ads: "/ads-v2/settings",
+    meta_ads: "/settings",
+    qoyod: "/integrations/qoyod/settings",
+});
+
+const TABS = [
+    { id: "apps", label: "التطبيقات", Icon: Plug },
+    { id: "capabilities", label: "مصفوفة القدرات", Icon: ChartLineUp },
+    { id: "activity", label: "المزامنة والأخطاء", Icon: WarningCircle },
+];
+
+const FILTERS = [
+    { id: "all", label: "الكل" },
+    { id: "connected", label: "متصل أو لديه بيانات" },
+    { id: "attention", label: "يحتاج انتباه" },
+    { id: "planned", label: "غير مربوط / مستقبلاً" },
+];
+
+function SummaryCard({ label, value, hint, tone, Icon, testid }) {
+    const tones = {
+        emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+        blue: "border-blue-100 bg-blue-50 text-blue-700",
+        amber: "border-amber-100 bg-amber-50 text-amber-700",
+        rose: "border-rose-100 bg-rose-50 text-rose-700",
+    };
+    return (
+        <div className={`rounded-xl border p-4 ${tones[tone]}`} data-testid={testid}>
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <div className="text-xs font-extrabold opacity-80">{label}</div>
+                    <div className="mt-2 font-mono text-3xl font-black">{value}</div>
+                </div>
+                <div className="rounded-lg bg-white/70 p-2">
+                    <Icon size={22} weight="duotone" />
+                </div>
+            </div>
+            <div className="mt-2 text-[11px] font-semibold opacity-70">{hint}</div>
+        </div>
+    );
+}
+
+function PageSkeleton() {
+    return (
+        <div className="space-y-5" data-testid="integrations-v2-loading">
+            <div className="h-40 animate-pulse rounded-xl bg-slate-200" />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[0, 1, 2, 3].map((key) => (
+                    <div key={key} className="h-28 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+                {[0, 1, 2, 3].map((key) => (
+                    <div key={key} className="h-96 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+export default function AppsIntegrationsControlCenter() {
+    const navigate = useNavigate();
+    const [overview, setOverview] = useState(() => normalizeIntegrationOverview({}));
+    const [activity, setActivity] = useState({ runs: [], errors: [] });
+    const [loading, setLoading] = useState(true);
+    const [activityLoading, setActivityLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [activeTab, setActiveTab] = useState("apps");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [query, setQuery] = useState("");
+    const [testingProvider, setTestingProvider] = useState("");
+
+    const load = useCallback(async ({ silent = false } = {}) => {
+        if (!silent) setLoading(true);
+        setActivityLoading(true);
+        setError("");
+        const [overviewResult, activityResult] = await Promise.allSettled([
+            getIntegrationsOverview(),
+            getIntegrationsActivity({ limit: 50 }),
+        ]);
+
+        if (overviewResult.status === "fulfilled") {
+            setOverview(overviewResult.value);
+        } else {
+            setError("تعذر تحميل حالة التكاملات. أعد المحاولة بعد التحقق من Backend.");
+        }
+
+        if (activityResult.status === "fulfilled") {
+            setActivity(activityResult.value);
+        }
+        setActivityLoading(false);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const visibleProviders = useMemo(() => filterIntegrationProviders(
+        overview.providers,
+        { query, status: statusFilter },
+    ), [overview.providers, query, statusFilter]);
+
+    async function handleTest(provider) {
+        setTestingProvider(provider);
+        try {
+            const result = await testIntegrationConnection(provider);
+            if (["passed", "healthy", "success", "succeeded"].includes(result?.status)) {
+                toast.success("نجح فحص الاتصال الآمن");
+            } else {
+                toast.warning(result?.message || "اكتمل الفحص ويحتاج الربط إلى مراجعة");
+            }
+            await load({ silent: true });
+        } catch (testError) {
+            const detail = testError?.response?.data?.detail;
+            const message = typeof detail === "string"
+                ? detail
+                : detail?.message || "تعذر اختبار الاتصال";
+            toast.error(message);
+            await load({ silent: true });
+        } finally {
+            setTestingProvider("");
+        }
+    }
+
+    function openSettings(provider) {
+        const target = SETTINGS_PATHS[provider];
+        if (!target) {
+            toast.info("صفحة الربط الخاصة بهذا التطبيق ستُضاف في مرحلة لاحقة.");
+            return;
+        }
+        navigate(target);
+    }
+
+    if (loading) return <PageSkeleton />;
+
+    return (
+        <div className="space-y-5" dir="rtl" data-testid="apps-integrations-control-center">
+            <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
+                <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div>
+                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-700 bg-emerald-900 px-3 py-1 text-xs font-extrabold text-emerald-100">
+                            <ShieldCheck size={16} weight="fill" />
+                            مرحلة المراقبة والجاهزية
+                        </div>
+                        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+                            التطبيقات والتكاملات
+                        </h1>
+                        <div className="mt-1 text-xs font-bold tracking-wide text-emerald-300">
+                            Apps &amp; Integrations Control Center
+                        </div>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-100">
+                            مركز واحد لقياس صحة الربط وجودة البيانات والصلاحيات، وتجهيز ميزان
+                            لإدارة المتجر والإعلانات مستقبلًا ضمن دورة اعتماد وتحقق كاملة.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => load({ silent: true })}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-white px-4 text-sm font-extrabold text-emerald-950 transition hover:bg-emerald-50"
+                        data-testid="integrations-refresh-all"
+                    >
+                        <ArrowClockwise size={19} weight="bold" />
+                        تحديث الحالة
+                    </button>
+                </div>
+                <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
+                    لا ينشئ هذا المركز حملات، ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة
+                    أو قيود. أي تعديل حساس مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ←
+                    تحقق ← سجل ← رجوع.
+                </div>
+            </header>
+
+            {error && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                    <div className="flex items-center gap-2 font-bold">
+                        <WarningCircle size={20} weight="fill" />
+                        {error}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => load()}
+                        className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-extrabold"
+                        data-testid="integrations-retry"
+                    >
+                        إعادة المحاولة
+                    </button>
+                </div>
+            )}
+
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="ملخص التكاملات">
+                <SummaryCard
+                    label="متصل أو يستقبل بيانات"
+                    value={overview.summary.connected}
+                    hint={`من أصل ${overview.summary.total} تطبيقات`}
+                    tone="emerald"
+                    Icon={Plug}
+                    testid="integrations-summary-connected"
+                />
+                <SummaryCard
+                    label="حالة صحية"
+                    value={overview.summary.healthy}
+                    hint="بحسب آخر فحص مسجل"
+                    tone="blue"
+                    Icon={CheckCircle}
+                    testid="integrations-summary-healthy"
+                />
+                <SummaryCard
+                    label="صلاحيات ناقصة"
+                    value={overview.summary.missing_permissions}
+                    hint="تمنع قدرات مطلوبة"
+                    tone="amber"
+                    Icon={ShieldCheck}
+                    testid="integrations-summary-permissions"
+                />
+                <SummaryCard
+                    label="يحتاج انتباه"
+                    value={overview.summary.attention_required}
+                    hint="خطأ أو انتهاء صلاحية أو تدهور"
+                    tone="rose"
+                    Icon={WarningCircle}
+                    testid="integrations-summary-attention"
+                />
+            </section>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+                <nav className="flex min-w-max gap-2" aria-label="تبويبات مركز التكاملات">
+                    {TABS.map(({ id, label, Icon }) => (
+                        <button
+                            key={id}
+                            type="button"
+                            onClick={() => setActiveTab(id)}
+                            className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-extrabold transition ${
+                                activeTab === id
+                                    ? "bg-emerald-900 text-white"
+                                    : "text-slate-600 hover:bg-slate-50"
+                            }`}
+                            data-testid={`integrations-tab-${id}`}
+                        >
+                            <Icon size={18} weight="duotone" />
+                            {label}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {activeTab === "apps" && (
+                <>
+                    <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-center">
+                        <div className="relative">
+                            <MagnifyingGlass
+                                size={18}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                            />
+                            <input
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                placeholder="ابحث باسم التطبيق أو الحساب…"
+                                className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pe-3 ps-10 text-sm outline-none transition focus:border-emerald-400 focus:bg-white"
+                                data-testid="integrations-search"
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {FILTERS.map((filter) => (
+                                <button
+                                    key={filter.id}
+                                    type="button"
+                                    onClick={() => setStatusFilter(filter.id)}
+                                    className={`rounded-full border px-3 py-2 text-xs font-extrabold transition ${
+                                        statusFilter === filter.id
+                                            ? "border-emerald-900 bg-emerald-900 text-white"
+                                            : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"
+                                    }`}
+                                    data-testid={`integrations-filter-${filter.id}`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+
+                    {visibleProviders.length ? (
+                        <section className="grid gap-4 xl:grid-cols-2" aria-label="بطاقات التطبيقات">
+                            {visibleProviders.map((integration) => (
+                                <IntegrationCard
+                                    key={integration.provider}
+                                    integration={integration}
+                                    testing={testingProvider === integration.provider}
+                                    settingsAvailable={Boolean(SETTINGS_PATHS[integration.provider])}
+                                    onTest={handleTest}
+                                    onSettings={openSettings}
+                                />
+                            ))}
+                        </section>
+                    ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
+                            لا توجد تطبيقات تطابق البحث أو الفلتر.
+                        </div>
+                    )}
+                </>
+            )}
+
+            {activeTab === "capabilities" && (
+                <CapabilityMatrix providers={overview.providers} />
+            )}
+
+            {activeTab === "activity" && (
+                <IntegrationActivityPanel
+                    runs={activity.runs}
+                    errors={activity.errors}
+                    loading={activityLoading}
+                />
+            )}
+        </div>
+    );
+}
