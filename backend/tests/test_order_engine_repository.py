@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from order_engine.mapper import map_salla_order
 from order_engine.repository import MongoOrderRepository
 
 
@@ -55,6 +56,11 @@ class FakeCollection:
         ]
 
         conditions = query.get("$or") or []
+        if not conditions:
+            for clause in query.get("$and") or []:
+                if isinstance(clause, dict) and isinstance(clause.get("$or"), list):
+                    conditions = clause["$or"]
+                    break
 
         if conditions:
             before_date = conditions[0]["order_date"]["$lt"]
@@ -222,3 +228,106 @@ def test_repository_has_no_write_methods():
     }
 
     assert set(dir(MongoOrderRepository)).isdisjoint(forbidden)
+
+
+
+@pytest.mark.asyncio
+async def test_repository_rehydrates_shipping_from_v2_root_snapshot():
+    rows = [{
+        "user_id": "u1",
+        "order_number": "274682897",
+        "order_date": "2026-07-28",
+        "customer_name": "عبدالله جمعي",
+        "customer_mobile": "561752841",
+        "shipping_company": "iMile",
+        "shipping_company_code": "imile",
+        "shipping_method": "shipping",
+        "shipping_city": "الرياض",
+        "customer_city": "الرياض",
+        "shipping_district": "العليا",
+        "shipping_street": "طريق الملك فهد",
+        "shipping_country": "السعودية",
+        "shipping_postal_code": "12262",
+        "shipping_short_address": "RRRD2929",
+        "shipping_address_raw": {
+            "city": "الرياض",
+            "block": "العليا",
+            "street_number": "طريق الملك فهد",
+            "country": "السعودية",
+        },
+        "payment_receipt_url": "https://cdn.salla.sa/receipt.jpg",
+        # Simulates the modern/light Order Details snapshot that replaced the
+        # richer provider payload after an explicit review refresh.
+        "raw_by_source": {
+            "salla_direct": {
+                "id": "901",
+                "reference_id": "274682897",
+                "date": "2026-07-28T09:00:00+03:00",
+                "customer": {
+                    "full_name": "عبدالله جمعي",
+                    "mobile": "561752841",
+                },
+                "payment_method": "credit_card",
+                "amounts": {"total": {"amount": 127.60, "currency": "SAR"}},
+            },
+        },
+    }]
+    db = FakeDB(rows)
+    repository = MongoOrderRepository(db)
+
+    result = await repository.get_salla_order(
+        user_id="u1",
+        order_number="274682897",
+    )
+
+    assert result is not None
+    dto = map_salla_order(result.salla_raw)
+    assert dto.shipping.company == "iMile"
+    assert dto.shipping.company_code == "imile"
+    assert dto.shipping.method == "shipping"
+    assert dto.shipping.address is not None
+    assert dto.shipping.address.country == "السعودية"
+    assert dto.shipping.address.city == "الرياض"
+    assert dto.shipping.address.district == "العليا"
+    assert dto.shipping.address.street == "طريق الملك فهد"
+    assert dto.shipping.address.postal_code == "12262"
+    assert dto.shipping.address.short_address == "RRRD2929"
+    assert dto.customer.shipping_address.city == "الرياض"
+    assert dto.payment.receipt_url == "https://cdn.salla.sa/receipt.jpg"
+
+    projection = db.unified_orders.last_projection
+    assert projection["shipping_address_raw"] == 1
+    assert projection["shipping_company"] == 1
+    assert projection["shipping_city"] == 1
+
+
+@pytest.mark.asyncio
+async def test_repository_keeps_provider_address_over_root_fallback():
+    rows = [{
+        "user_id": "u1",
+        "order_number": "274724433",
+        "order_date": "2026-07-28",
+        "shipping_city": "الرياض",
+        "shipping_district": "العليا",
+        "raw_by_source": {
+            "salla_direct": {
+                "id": "902",
+                "reference_id": "274724433",
+                "date": "2026-07-28T10:00:00+03:00",
+                "shipping_address": {
+                    "city": "جدة",
+                    "block": "الروضة",
+                    "street_number": "شارع الأمير",
+                },
+                "amounts": {"total": {"amount": 134, "currency": "SAR"}},
+            },
+        },
+    }]
+    repository = MongoOrderRepository(FakeDB(rows))
+
+    result = await repository.get_salla_order(user_id="u1", order_number="274724433")
+    dto = map_salla_order(result.salla_raw)
+
+    assert dto.shipping.address.city == "جدة"
+    assert dto.shipping.address.district == "الروضة"
+    assert dto.shipping.address.street == "شارع الأمير"

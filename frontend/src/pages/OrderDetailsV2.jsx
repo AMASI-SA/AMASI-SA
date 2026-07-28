@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
     ArrowRight,
+    ArrowsClockwise,
     ChartLineUp,
     ChatCircleDots,
     CheckCircle,
@@ -28,6 +29,7 @@ import { useOrderItems } from "../hooks/useOrderItems";
 import {
     issueShippingLabel,
     markOrderRead,
+    refreshOrderFromSalla,
     verifyShippingLabel,
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
@@ -585,6 +587,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting
         ["المدينة", address.city],
         ["الحي", address.district || address.neighborhood || address.block],
         ["الشارع", address.street || address.street_name || address.street_number],
+        ["العنوان", address.formatted || address.address_line || address.address_line1 || address.description || address.location],
         ["العنوان الوطني", address.national_address || address.short_address],
         ["رقم المبنى", address.building_number],
         ["الرقم الإضافي", address.additional_number],
@@ -909,6 +912,9 @@ export default function OrderDetailsV2() {
     const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
     const [returnEngineOpen, setReturnEngineOpen] = useState(false);
+    const [refreshingFromSalla, setRefreshingFromSalla] = useState(false);
+    const [refreshFromSallaError, setRefreshFromSallaError] = useState("");
+    const [refreshFromSallaMessage, setRefreshFromSallaMessage] = useState("");
     const itemCount = useMemo(() => items.length, [items]);
     const openedOrderNumber = String(
         order?.order_number || orderNumber || ""
@@ -925,6 +931,26 @@ export default function OrderDetailsV2() {
         setReturnEngineOpen(false);
     }, [openedOrderNumber]);
 
+    async function updateOrderFromSalla() {
+        if (!openedOrderNumber || refreshingFromSalla) return;
+        setRefreshingFromSalla(true);
+        setRefreshFromSallaError("");
+        setRefreshFromSallaMessage("");
+        try {
+            const result = await refreshOrderFromSalla(openedOrderNumber, { force: true });
+            await Promise.all([reloadOrder(), reloadItems()]);
+            setRefreshFromSallaMessage(
+                result?.address_found
+                    ? "تم تحديث الطلب والعنوان من سلة."
+                    : "تم تحديث الطلب من سلة؛ لم ترجع سلة عنوان توصيل في بيانات الطلب.",
+            );
+        } catch (refreshError) {
+            setRefreshFromSallaError(refreshError?.message || "تعذّر تحديث الطلب من سلة.");
+        } finally {
+            setRefreshingFromSalla(false);
+        }
+    }
+
     if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
     if (error || !order) return <div className="space-y-4" dir="rtl"><Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div></div>;
 
@@ -940,7 +966,21 @@ export default function OrderDetailsV2() {
         <div className="space-y-5" dir="rtl" data-testid="order-details-v2-page">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                 <div><Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> العودة إلى الطلبات الجديدة</Link><h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div></div>
-                <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
+                <div className="flex flex-col items-start gap-3 lg:items-end">
+                    <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
+                    <button
+                        type="button"
+                        onClick={updateOrderFromSalla}
+                        disabled={refreshingFromSalla}
+                        data-testid="order-v2-refresh-from-salla"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-extrabold text-violet-800 transition hover:bg-violet-100 disabled:cursor-wait disabled:opacity-60"
+                    >
+                        <ArrowsClockwise size={19} weight="bold" className={refreshingFromSalla ? "animate-spin" : ""} />
+                        {refreshingFromSalla ? "جاري التحديث…" : "تحديث من سلة"}
+                    </button>
+                    {refreshFromSallaMessage && <div className="max-w-sm text-right text-xs font-bold text-emerald-700">{refreshFromSallaMessage}</div>}
+                    {refreshFromSallaError && <div className="max-w-sm text-right text-xs font-bold text-rose-700">{refreshFromSallaError}</div>}
+                </div>
             </div>
 
             <div className="grid gap-5 lg:grid-cols-3"><CustomerCard customer={customer} shipping={shipping} /><ShippingCard

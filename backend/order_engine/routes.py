@@ -22,6 +22,7 @@ from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
+from .salla_refresh import refresh_order_from_salla
 from .shipping_label_service import (
     ShippingLabelError,
     issue_shipping_label,
@@ -242,6 +243,52 @@ def make_order_engine_router(
                 detail=result,
             )
         return result
+
+    @router.post(
+        "/{order_number}/refresh-from-salla",
+        summary="Refresh one order from Salla Order Details",
+    )
+    async def refresh_one_order_from_salla(
+        order_number: str,
+        force: bool = Query(default=True),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = _require_owner(user)
+        result = await refresh_order_from_salla(
+            db,
+            str(owner["id"]),
+            str(order_number),
+            force=bool(force),
+        )
+
+        if result.get("ok") and result.get("found"):
+            return result
+
+        if result.get("ok") and not result.get("found"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    **result,
+                    "message": "لم يتم العثور على الطلب في سلة.",
+                },
+            )
+
+        if result.get("needs_reauth"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    **result,
+                    "message": "صلاحية قراءة الطلبات في سلة تحتاج إعادة تفويض المتجر.",
+                },
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                **result,
+                "message": result.get("message") or "تعذّر تحديث الطلب من سلة.",
+            },
+        )
 
     @router.post("/{order_number}/read")
     async def mark_order_read(

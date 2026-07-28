@@ -1,6 +1,7 @@
 """Stage-one review invariants: image learning, RBAC and status lookup."""
 
 from datetime import datetime, timezone
+import inspect
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,13 +14,12 @@ from order_item_engine.models import (
     OrderItemSourceDTO,
 )
 from order_review_routes import (
-    REVIEW_SOURCE_REFRESH_VERSION,
     _can_review,
     _merchant_user_id,
-    _refresh_review_source_once,
     _review_item_identities,
     _reviewed_status_id,
     build_image_preference_identity,
+    make_order_review_router,
 )
 
 
@@ -208,41 +208,14 @@ async def test_review_refreshes_and_caches_the_complete_product_gallery():
 
 
 
-class _ReviewRefreshCollection:
-    def __init__(self):
-        self.row = {
-            "user_id": "owner-1",
-            "order_number": "274724433",
-            # Marker written by the first implementation, before versioning.
-            "order_review_source_refreshed_at": "2026-07-28T20:00:00+00:00",
-        }
 
-    async def find_one(self, _query, _projection=None):
-        return dict(self.row)
+def test_review_detail_uses_central_orders_v2_refresh():
+    source = inspect.getsource(make_order_review_router)
 
-    async def update_one(self, _selector, update):
-        self.row.update(update.get("$set") or {})
-        return None
-
-
-class _ReviewRefreshDB:
-    def __init__(self):
-        self.unified_orders = _ReviewRefreshCollection()
-
-
-@pytest.mark.asyncio
-async def test_review_open_refreshes_authoritative_salla_details_only_once():
-    db = _ReviewRefreshDB()
-    result = {"ok": True, "found": True}
-
-    with patch("order_review_routes.resync_single_order", new=AsyncMock(return_value=result)) as refresh:
-        assert await _refresh_review_source_once(db, "owner-1", "274724433") is True
-        assert await _refresh_review_source_once(db, "owner-1", "274724433") is False
-
-    refresh.assert_awaited_once_with(db, "owner-1", "274724433")
-    assert db.unified_orders.row["order_review_source_refresh_mode"] == "explicit_review_open"
-    assert db.unified_orders.row["order_review_source_refresh_version"] == REVIEW_SOURCE_REFRESH_VERSION
-
+    assert "refresh_order_from_salla(" in source
+    assert "minimum_fresh_seconds=120" in source
+    assert "resync_single_order" not in source
+    assert "_refresh_review_source_once" not in source
 
 
 @pytest.mark.asyncio
