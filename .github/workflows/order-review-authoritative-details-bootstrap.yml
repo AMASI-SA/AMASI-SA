@@ -47,14 +47,10 @@ jobs:
           grep -q 'reviewProductSpecs' frontend/src/pages/OrderReview.jsx
           grep -q 'OrderReview.test.jsx' .github/workflows/fulfillment-v2.yml
 
-      - name: Commit fix
+      - name: Commit source fix
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo "Fix already applied."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
@@ -63,7 +59,10 @@ jobs:
             backend/tests/test_order_review_stage_one.py \
             backend/tests/test_order_engine_mapper.py \
             frontend/src/pages/OrderReview.jsx \
-            frontend/src/pages/OrderReview.test.jsx \
-            .github/workflows/fulfillment-v2.yml
+            frontend/src/pages/OrderReview.test.jsx
+          if git diff --cached --quiet; then
+            echo "Source fix already applied."
+            exit 0
+          fi
           git commit -m "fix(fulfillment): show transfer receipt and Salla item details"
           git push origin HEAD:fix/order-review-authoritative-options
