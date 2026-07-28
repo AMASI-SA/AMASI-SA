@@ -2,14 +2,12 @@
 
 Connection means the production runtime has an OpenAI API key. Image execution
 is a separate governed capability and must never make the core connection look
-disconnected merely because its policy flag is not enabled yet.
+disconnected merely because its policy flag or image model is not enabled yet.
 """
 from __future__ import annotations
 
 import os
 from typing import Any
-
-DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 
 
 def _enabled(name: str) -> bool:
@@ -20,8 +18,8 @@ def openai_runtime_status() -> dict[str, Any]:
     connected = bool(os.environ.get("OPENAI_API_KEY", "").strip())
     analysis_model = os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini").strip() or "gpt-5-mini"
     image_policy_enabled = _enabled("MEZAN_AI_IMAGE_ENABLED")
-    image_model = os.environ.get("MEZAN_OPENAI_IMAGE_MODEL", DEFAULT_OPENAI_IMAGE_MODEL).strip() or DEFAULT_OPENAI_IMAGE_MODEL
-    image_ready = connected and image_policy_enabled
+    image_model = os.environ.get("MEZAN_OPENAI_IMAGE_MODEL", "").strip() or None
+    image_ready = connected and image_policy_enabled and bool(image_model)
 
     if not connected:
         state = "disconnected"
@@ -51,8 +49,8 @@ def openai_runtime_status() -> dict[str, Any]:
             "ready": image_ready,
             "policy_enabled": image_policy_enabled,
             "model": image_model,
-            "mode": "governed_execution" if image_ready else "proposal_only",
-            "execution_available": image_ready,
+            "mode": "proposal_only" if not image_ready else "provider_ready_execution_not_connected",
+            "execution_available": False,
             "human_approval_required": True,
             "direct_publish_allowed": False,
         },
