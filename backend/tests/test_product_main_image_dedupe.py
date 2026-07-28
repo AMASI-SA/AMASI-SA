@@ -1,4 +1,10 @@
-from product_v2_details_routes import _dedupe_images
+import product_v2_details_routes as details_module
+from product_main_image_dedupe_support import install_product_main_image_dedupe_support
+
+
+def dedupe(rows, main_image=None, product_name=None):
+    install_product_main_image_dedupe_support()
+    return details_module._dedupe_images(rows, main_image, product_name)
 
 
 def test_main_image_is_not_inserted_when_images_list_already_has_a_main():
@@ -7,7 +13,7 @@ def test_main_image_is_not_inserted_when_images_list_already_has_a_main():
         {"id": "102", "url": "https://cdn.salla.sa/gallery/photo-b.jpg", "is_main": False, "sort": 1},
     ]
 
-    result = _dedupe_images(
+    result = dedupe(
         rows,
         main_image="https://cdn.salla.sa/cover/generated-main-file.jpg",
         product_name="مريول مدرسي",
@@ -23,7 +29,7 @@ def test_main_image_is_inserted_only_when_gallery_has_no_main_image():
         {"id": "102", "url": "https://cdn.salla.sa/gallery/photo-b.jpg", "is_main": False, "sort": 1},
     ]
 
-    result = _dedupe_images(
+    result = dedupe(
         rows,
         main_image="https://cdn.salla.sa/cover/main.jpg",
         product_name="منتج",
