@@ -118,17 +118,41 @@ async def _assignment(db: Any, user_id: str) -> dict[str, Any] | None:
     return await db[ROLE_ASSIGNMENTS].find_one({"user_id": user_id}, {"_id": 0})
 
 
-async def _available_source_urls(db: Any, user_id: str, product: dict[str, Any]) -> set[str]:
-    urls = {_text(row.get("url")) for row in (product.get("images") or []) if isinstance(row, dict) and _text(row.get("url"))}
+def _safe_source_row(raw: Any, index: int) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    url = _text(raw.get("url"))
+    if not url:
+        return None
+    return {
+        "id": _text(raw.get("id")) or None,
+        "url": url,
+        "alt": _text(raw.get("alt"))[:250],
+        "is_main": bool(raw.get("is_main") or raw.get("main") or index == 0),
+        "source": _text(raw.get("source")) or ("salla" if raw.get("id") else "external_url"),
+    }
+
+
+async def _available_source_rows(db: Any, user_id: str, product: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_many(values: Any) -> None:
+        for index, raw in enumerate(values if isinstance(values, list) else []):
+            row = _safe_source_row(raw, index)
+            if not row or row["url"] in seen:
+                continue
+            seen.add(row["url"])
+            rows.append(row)
+
+    add_many(product.get("images") or [])
     draft = await db[MEDIA_DRAFTS].find_one({
         "user_id": user_id,
         "salla_product_id": str(product.get("salla_product_id")),
         "status": {"$in": ["draft", "approved"]},
     }, {"_id": 0}, sort=[("updated_at", -1)])
-    for row in (draft or {}).get("images") or []:
-        if isinstance(row, dict) and _text(row.get("url")):
-            urls.add(_text(row.get("url")))
-    return urls
+    add_many((draft or {}).get("images") or [])
+    return rows[:10]
 
 
 def validate_ai_media_request(payload: dict[str, Any], available_urls: set[str]) -> dict[str, Any]:
@@ -190,11 +214,13 @@ def make_product_media_ai_router(db: Any, current_user: Callable) -> APIRouter:
             "user_id": user_id,
             "salla_product_id": str(product.get("salla_product_id")),
         }, {"_id": 0}).sort("created_at", -1).limit(20).to_list(20)
+        source_images = await _available_source_rows(db, user_id, product)
         return {
             "ok": True,
             "mode": "proposal_only",
             "provider": image_provider_status(),
             "operations": operations,
+            "source_images": source_images,
             "jobs": jobs,
             "publish_from_ai": False,
             "human_approval_required": True,
@@ -205,7 +231,8 @@ def make_product_media_ai_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
         assignment = await _assignment(db, user_id)
-        available_urls = await _available_source_urls(db, user_id, product)
+        source_rows = await _available_source_rows(db, user_id, product)
+        available_urls = {row["url"] for row in source_rows}
         try:
             normalized = validate_ai_media_request(payload, available_urls)
         except ValueError as exc:
