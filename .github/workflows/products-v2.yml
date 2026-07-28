@@ -20,6 +20,7 @@ on:
       - "backend/product_sale_schedule.py"
       - "backend/product_sale_schedule_support.py"
       - "backend/product_control_center_routes.py"
+      - "backend/ai_store_operations_foundation.py"
       - "backend/component_edit_routes.py"
       - "backend/component_edit_policy.py"
       - "backend/order_option_cost_snapshot_routes.py"
@@ -33,6 +34,7 @@ on:
       - "backend/tests/test_product_sale_schedule.py"
       - "backend/tests/test_product_control_center_policy.py"
       - "backend/tests/test_product_option_shared_cost_engine.py"
+      - "backend/tests/test_ai_store_operations_foundation.py"
       - "backend/tests/test_component_edit_policy.py"
       - "backend/tests/test_order_option_cost_snapshots.py"
       - "frontend/src/pages/MezanProducts.jsx"
@@ -84,6 +86,7 @@ jobs:
             tests/test_product_sale_schedule.py \
             tests/test_product_control_center_policy.py \
             tests/test_product_option_shared_cost_engine.py \
+            tests/test_ai_store_operations_foundation.py \
             tests/test_component_edit_policy.py \
             tests/test_order_option_cost_snapshots.py \
             -q --tb=short > /tmp/products-v2-pytest.log 2>&1

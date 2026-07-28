@@ -58,6 +58,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_option_cost_routes import make_product_option_cost_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
     from product_control_center_routes import make_product_control_center_router
+    from ai_store_operations_foundation import make_ai_store_operations_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -76,6 +77,7 @@ def make_order_engine_router(*args, **kwargs):
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),
         make_warehouse_reset_router(db, current_user),
+        make_ai_store_operations_router(db, current_user),
         # Static Products V2 routes must be registered before
         # /products-v2/{product_id}; otherwise FastAPI interprets
         # "category-catalog" as a product id and the selector stays empty.
