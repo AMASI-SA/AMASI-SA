@@ -191,7 +191,7 @@ const SECTIONS = [
             },
             {
                 to: "/fulfillment-v2",
-                label: "إدارة رفع الطلبات",
+                label: "إدارة التجهيز",
                 icon: Queue,
                 testid: "nav-mezan-os-fulfillment",
             },
@@ -307,7 +307,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
         return visibleSections.map((section) => {
             if (section.id !== "operations") return section;
 
-            const items = [...section.items];
+            const items = section.items.filter((item) => item.to !== "/order-review");
             const settingsIdx = items.findIndex(
                 (item) => item.to === "/settings"
             );
