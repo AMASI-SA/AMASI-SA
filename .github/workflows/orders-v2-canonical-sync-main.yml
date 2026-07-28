@@ -1,0 +1,34 @@
+name: Orders V2 canonical fix latest-main sync
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/orders-v2-canonical-sync-main.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/orders-v2-canonical-shipping-read-model
+          fetch-depth: 0
+          show-progress: false
+      - name: Merge latest main into Orders V2 fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "Branch already contains current main."
+            exit 0
+          fi
+          git merge --no-edit origin/main
+          git push origin HEAD:fix/orders-v2-canonical-shipping-read-model
