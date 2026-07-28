@@ -8,6 +8,12 @@ on:
     paths:
       - "scripts/patch_orders_v2_root_address_fallback.py"
       - ".github/workflows/orders-v2-root-address-bootstrap.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/patch_orders_v2_root_address_fallback.py"
+      - ".github/workflows/orders-v2-root-address-bootstrap.yml"
 
 permissions:
   contents: write
