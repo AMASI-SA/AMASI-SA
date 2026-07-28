@@ -7,20 +7,25 @@ later without changing the product-media governance flow.
 """
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
+from ai_provider_status import openai_runtime_status
 from ai_store_operations_foundation import AI_ACTION_LOG, ROLE_ASSIGNMENTS
 from product_media_draft_routes import MEDIA_DRAFTS
 from product_v2_routes import PRODUCTS
 
 AI_MEDIA_JOBS = "mezan_product_media_ai_jobs_v2"
 MAX_PROMPT_LENGTH = 1200
-PENDING_STATUSES = {"waiting_provider", "ready_for_execution", "proposal_created"}
+PENDING_STATUSES = {
+    "waiting_provider",
+    "waiting_image_engine",
+    "ready_for_execution",
+    "proposal_created",
+}
 
 OPERATION_CATALOG: dict[str, dict[str, Any]] = {
     "improve_quality": {
@@ -71,27 +76,23 @@ def _text(value: Any) -> str:
 
 
 def image_provider_status() -> dict[str, Any]:
-    key_present = bool(os.environ.get("OPENAI_API_KEY", "").strip())
-    image_enabled = os.environ.get("MEZAN_AI_IMAGE_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
-    model = os.environ.get("MEZAN_OPENAI_IMAGE_MODEL", "").strip() or None
-    ready = key_present and image_enabled and bool(model)
-    if not key_present:
-        state = "unconfigured"
-    elif not image_enabled:
-        state = "disabled_by_policy"
-    elif not model:
-        state = "model_not_configured"
-    else:
-        state = "ready"
+    runtime = openai_runtime_status()
+    images = runtime["images"]
     return {
         "provider": "openai",
-        "state": state,
-        "key_present": key_present,
-        "image_execution_enabled": image_enabled,
-        "model": model,
-        "ready": ready,
+        "connected": runtime["connected"],
+        "connection_status": runtime["connection_status"],
+        "state": runtime["state"],
+        "label_ar": runtime["label_ar"],
+        "analysis_ready": runtime["analysis"]["ready"],
+        "analysis_model": runtime["analysis"]["model"],
+        "image_policy_enabled": images["policy_enabled"],
+        "image_model": images["model"],
+        "ready": images["ready"],
         "execution_available": False,
         "mode": "proposal_only",
+        "human_approval_required": True,
+        "direct_publish_allowed": False,
     }
 
 
@@ -213,7 +214,12 @@ def make_product_media_ai_router(db: Any, current_user: Callable) -> APIRouter:
             raise HTTPException(status_code=403, detail={"code": "ai_media_permission_required", "permission": normalized["permission"]})
 
         provider = image_provider_status()
-        status = "ready_for_execution" if provider["ready"] else "waiting_provider"
+        if not provider["connected"]:
+            status = "waiting_provider"
+        elif not provider["ready"]:
+            status = "waiting_image_engine"
+        else:
+            status = "ready_for_execution"
         now = _now()
         job = {
             "id": uuid.uuid4().hex,
