@@ -70,7 +70,7 @@ from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from order_engine.routes import make_order_engine_router
 from order_item_engine.routes import make_order_item_engine_router
-from order_review_routes import make_order_review_router
+from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
 from mezan_mcp import make_mezan_mcp_router
 from settlement_cycle import attach_settlement_cycle_routes

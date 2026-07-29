@@ -101,3 +101,16 @@ export async function unlinkOrderReviewOperationalItem(orderNumber, operationalI
         throw new Error(message(error, "تعذّر إلغاء ربط المنتج التشغيلي."));
     }
 }
+
+
+export async function saveOrderReviewImageChoice(orderNumber, orderItemId, payload) {
+    try {
+        const { data } = await api.post(
+            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/image-choice`,
+            payload,
+        );
+        return data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر حفظ اختيار صورة التجهيز."));
+    }
+}
