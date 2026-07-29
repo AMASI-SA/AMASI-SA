@@ -586,7 +586,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "source_order_item_id": source_item.order_item_id,
             "source_product_name": _text(getattr(source_item, "name", None)),
             "linked_specs": linked_specs,
-            "preparation_status": "pending",
+            "preparation_status": "in_progress",
             "blocks_order_completion": True,
             "supplier_export": False,
             "salla_product": False,
@@ -595,6 +595,32 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "created_by": actor_id,
         }
         operational_items.append(operational_item)
+
+        # Mark linked option/custom-field keys on the source product as moved to
+        # an internal operational item. Supplier/preparation exports must omit
+        # these keys from the source product because their content is now owned
+        # by the operational card (for example, gift-card text).
+        states = _state_map(workflow)
+        source_state = states.get(
+            source_item.order_item_id,
+            {"order_item_id": source_item.order_item_id, "review_status": "pending_review", "revision": 0},
+        )
+        existing_excluded = {
+            _normalized(value)
+            for value in source_state.get("supplier_export_excluded_spec_keys") or []
+            if _text(value)
+        }
+        existing_excluded.update(seen_specs)
+        source_state["supplier_export_excluded_spec_keys"] = sorted(existing_excluded)
+        source_state["moved_to_operational_item_ids"] = list(dict.fromkeys([
+            *(source_state.get("moved_to_operational_item_ids") or []),
+            operational_item["operational_item_id"],
+        ]))
+        source_state["revision"] = int(source_state.get("revision") or 0) + 1
+        source_state["updated_at"] = now
+        source_state["updated_by"] = actor_id
+        states[source_item.order_item_id] = source_state
+
         new_doc = {
             **(workflow or {}),
             "user_id": user_id,
@@ -602,7 +628,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "order_id": order.order_id,
             "stage": "pending_review",
             "revision": revision + 1,
-            "items": list((workflow or {}).get("items") or []),
+            "items": list(states.values()),
             "operational_items": operational_items,
             "updated_at": now,
             "updated_by": actor_id,
