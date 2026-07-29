@@ -10,6 +10,9 @@ from integrations_control_center.catalog import (
     PROVIDER_BY_ID,
     build_capability_matrix,
 )
+from integrations_control_center.tiktok_catalog_native import (
+    install_tiktok_native_catalog,
+)
 from integrations_control_center.tiktok_connections import handle_tiktok_callback
 from integrations_control_center import tiktok_discovery
 from integrations_control_center import tiktok_oauth_security as oauth
@@ -183,6 +186,7 @@ def _configure(monkeypatch):
 
 
 def test_tiktok_catalog_is_native_and_mutations_remain_approval_gated():
+    install_tiktok_native_catalog()
     definition = PROVIDER_BY_ID["tiktok_ads"]
     assert definition.legacy_sources == ()
     assert definition.required_permissions == ("tiktok_marketing_api",)
