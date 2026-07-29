@@ -1,0 +1,81 @@
+name: Snapchat Integrations V2
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/integrations_control_center/snapchat_*.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_snapchat_native_integrations_v2.py"
+      - "frontend/src/services/snapchatIntegrationsV2.js"
+      - "frontend/src/services/snapchatIntegrationsV2.test.js"
+      - "frontend/src/components/integrationsV2/ProviderMark.jsx"
+      - "docs/SNAPCHAT_INTEGRATIONS_V2_SETUP.md"
+      - ".github/workflows/snapchat-integrations-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Snapchat OAuth backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          pydantic==2.13.4
+          pytest==9.0.3
+          pytest-asyncio
+          cryptography==48.0.0
+          openpyxl==3.1.5
+      - name: Compile Snapchat V2 connector
+        run: |
+          python -m compileall -q integrations_control_center
+          python -m py_compile tests/test_snapchat_native_integrations_v2.py
+      - name: Enforce legacy isolation
+        run: >-
+          python -c "from integrations_control_center.snapchat_native_guard import assert_snapchat_v2_is_legacy_independent; assert_snapchat_v2_is_legacy_independent()"
+      - name: Run Snapchat V2 tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_native_integrations_v2.py
+          -q
+          --tb=short
+
+  frontend-build:
+    name: Snapchat frontend test and build
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run Snapchat frontend tests
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/services/snapchatIntegrationsV2.test.js
+      - name: Build frontend
+        run: CI=false yarn build
