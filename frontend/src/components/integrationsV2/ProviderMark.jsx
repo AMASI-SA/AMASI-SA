@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { startGoogleConnection } from "../../services/googleIntegrationsV2";
+import { startMetaConnection } from "../../services/metaIntegrationsV2";
 import { startSnapchatConnection } from "../../services/snapchatIntegrationsV2";
 import { startTikTokConnection } from "../../services/tiktokIntegrationsV2";
 
@@ -29,27 +30,37 @@ export default function ProviderMark({ provider, size = "md" }) {
     const dimensions = size === "sm" ? "h-9 w-9 rounded-lg" : "h-12 w-12 rounded-xl";
     const iconSize = size === "sm" ? 20 : 25;
     const isGoogle = String(provider || "").startsWith("google_");
+    const isMeta = provider === "meta_ads";
     const isSnapchat = provider === "snapchat_ads";
     const isTikTok = provider === "tiktok_ads";
-    const supportsNativeConnect = isGoogle || isSnapchat || isTikTok;
+    const supportsNativeConnect = isGoogle || isMeta || isSnapchat || isTikTok;
 
     async function connectProvider(event) {
         event.stopPropagation();
         if (connecting) return;
         setConnecting(true);
         try {
-            const result = isSnapchat
-                ? await startSnapchatConnection()
-                : isTikTok
-                    ? await startTikTokConnection()
-                    : await startGoogleConnection();
+            const result = isMeta
+                ? await startMetaConnection()
+                : isSnapchat
+                    ? await startSnapchatConnection()
+                    : isTikTok
+                        ? await startTikTokConnection()
+                        : await startGoogleConnection();
             window.location.assign(result.authorization_url);
         } catch (error) {
             const detail = error?.response?.data?.detail;
             const untrusted = error?.message === "google_authorization_url_untrusted"
+                || error?.message === "meta_authorization_url_untrusted"
                 || error?.message === "snapchat_authorization_url_untrusted"
                 || error?.message === "tiktok_authorization_url_untrusted";
-            const providerLabel = isSnapchat ? "Snapchat" : isTikTok ? "TikTok" : "Google";
+            const providerLabel = isMeta
+                ? "Meta"
+                : isSnapchat
+                    ? "Snapchat"
+                    : isTikTok
+                        ? "TikTok"
+                        : "Google";
             const message = typeof detail === "string"
                 ? detail
                 : detail?.message
@@ -61,11 +72,13 @@ export default function ProviderMark({ provider, size = "md" }) {
         }
     }
 
-    const connectLabel = isSnapchat
-        ? "ربط Snapchat"
-        : isTikTok
-            ? "ربط TikTok"
-            : "ربط Google";
+    const connectLabel = isMeta
+        ? "ربط Meta"
+        : isSnapchat
+            ? "ربط Snapchat"
+            : isTikTok
+                ? "ربط TikTok"
+                : "ربط Google";
 
     return (
         <div className="flex shrink-0 flex-col items-center gap-1.5">
