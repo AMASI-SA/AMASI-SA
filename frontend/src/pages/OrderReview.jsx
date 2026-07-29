@@ -179,6 +179,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     const [visibleSelectedImage, setVisibleSelectedImage] = useState(item.selected_image_url || item.image_url || "");
     const [imageDialog, setImageDialog] = useState(null);
     const [selectedImageSpecKeys, setSelectedImageSpecKeys] = useState([]);
+    const [imageSavingMode, setImageSavingMode] = useState(null);
 
     useEffect(() => {
         setPreparationNote(item.preparation_note || "");
@@ -210,7 +211,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     const openImageDialog = (url) => {
         setVisibleSelectedImage(url);
         setImageDialog(url);
-        setSelectedImageSpecKeys(specs.map((spec) => spec.key));
+        setSelectedImageSpecKeys([]);
     };
     const saveImageChoice = async (mode) => {
         if (!imageDialog) return;
@@ -219,6 +220,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
             return;
         }
         setBusy(true);
+        setImageSavingMode(mode);
         try {
             const next = await saveOrderReviewImageChoice(orderNumber, item.order_item_id, {
                 expected_revision: workflowRevision,
@@ -234,6 +236,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
             toast.error(error.message);
         } finally {
             setBusy(false);
+            setImageSavingMode(null);
         }
     };
     const sourceGallery = (item.gallery || []).filter(Boolean);
@@ -255,9 +258,9 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
                             <img src={imageDialog} alt="" className="mx-auto h-40 w-40 rounded-2xl border object-cover" />
                             {specs.length > 0 && <div><div className="mb-2 text-sm font-extrabold">الخيارات التي تُحفظ معها الصورة</div><div className="space-y-2">{specs.map((spec) => <label key={spec.key} className="flex items-start gap-2 rounded-xl bg-violet-50 p-3 text-sm"><input type="checkbox" checked={selectedImageSpecKeys.includes(spec.key)} onChange={(event) => setSelectedImageSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} /><span><b>{spec.name}:</b> {spec.value}</span></label>)}</div></div>}
                             <div className="grid gap-2">
-                                <button type="button" disabled={busy} onClick={() => saveImageChoice("order_only")} className="rounded-xl border px-4 py-3 font-extrabold">حفظ لهذا الطلب فقط</button>
-                                <button type="button" disabled={busy || !selectedImageSpecKeys.length} onClick={() => saveImageChoice("options")} className="rounded-xl bg-violet-700 px-4 py-3 font-extrabold text-white disabled:opacity-40">حفظ مع الخيارات المحددة</button>
-                                <button type="button" disabled={busy} onClick={() => saveImageChoice("default")} className="rounded-xl bg-emerald-700 px-4 py-3 font-extrabold text-white">حفظ كصورة رئيسية في ميزان</button>
+                                <button type="button" disabled={busy} onClick={() => saveImageChoice("order_only")} className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-extrabold disabled:opacity-50">{imageSavingMode === "order_only" && <SpinnerGap className="animate-spin" />} {imageSavingMode === "order_only" ? "جارٍ الحفظ…" : "حفظ لهذا الطلب فقط"}</button>
+                                <button type="button" disabled={busy || !selectedImageSpecKeys.length} onClick={() => saveImageChoice("options")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 font-extrabold text-white disabled:opacity-40">{imageSavingMode === "options" && <SpinnerGap className="animate-spin" />} {imageSavingMode === "options" ? "جارٍ الحفظ…" : "حفظ مع الخيارات المحددة"}</button>
+                                <button type="button" disabled={busy || selectedImageSpecKeys.length > 0} onClick={() => saveImageChoice("default")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40">{imageSavingMode === "default" && <SpinnerGap className="animate-spin" />} {imageSavingMode === "default" ? "جارٍ الحفظ…" : "حفظ كصورة رئيسية في ميزان"}</button>
                             </div>
                             {selectedImageSpecKeys.length > 0 && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs"><b>سيتم ربطها بـ:</b> {specs.filter((spec) => selectedImageSpecKeys.includes(spec.key)).map((spec) => `${spec.name} = ${spec.value}`).join(" · ")}</div>}
                         </div>
