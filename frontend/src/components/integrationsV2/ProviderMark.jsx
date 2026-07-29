@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { startGoogleConnection } from "../../services/googleIntegrationsV2";
+import { startTikTokConnection } from "../../services/tiktokIntegrationsV2";
 
 const PROVIDERS = {
     salla: { Icon: Storefront, className: "bg-emerald-600 text-white", label: "Salla" },
@@ -27,22 +28,28 @@ export default function ProviderMark({ provider, size = "md" }) {
     const dimensions = size === "sm" ? "h-9 w-9 rounded-lg" : "h-12 w-12 rounded-xl";
     const iconSize = size === "sm" ? 20 : 25;
     const isGoogle = String(provider || "").startsWith("google_");
+    const isTikTok = provider === "tiktok_ads";
+    const supportsNativeConnect = isGoogle || isTikTok;
 
-    async function connectGoogle(event) {
+    async function connectProvider(event) {
         event.stopPropagation();
         if (connecting) return;
         setConnecting(true);
         try {
-            const result = await startGoogleConnection();
+            const result = isTikTok
+                ? await startTikTokConnection()
+                : await startGoogleConnection();
             window.location.assign(result.authorization_url);
         } catch (error) {
             const detail = error?.response?.data?.detail;
+            const untrusted = error?.message === "google_authorization_url_untrusted"
+                || error?.message === "tiktok_authorization_url_untrusted";
             const message = typeof detail === "string"
                 ? detail
                 : detail?.message
-                    || (error?.message === "google_authorization_url_untrusted"
-                        ? "رفض ميزان رابط ربط Google غير موثوق."
-                        : "تعذر بدء ربط حساب Google.");
+                    || (untrusted
+                        ? "رفض ميزان رابط تفويض غير موثوق."
+                        : `تعذر بدء ربط ${isTikTok ? "TikTok" : "Google"}.`);
             toast.error(message);
             setConnecting(false);
         }
@@ -53,17 +60,21 @@ export default function ProviderMark({ provider, size = "md" }) {
             <div className={`inline-flex items-center justify-center ${dimensions} ${definition.className}`} title={definition.label} aria-label={definition.label} data-testid={`provider-mark-${provider}`}>
                 <Icon size={iconSize} weight="duotone" />
             </div>
-            {isGoogle && size !== "sm" && (
+            {supportsNativeConnect && size !== "sm" && (
                 <button
                     type="button"
-                    onClick={connectGoogle}
+                    onClick={connectProvider}
                     disabled={connecting}
                     className="inline-flex min-h-7 whitespace-nowrap items-center justify-center gap-1 rounded-lg bg-emerald-800 px-2 text-[10px] font-extrabold text-white transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60"
                     data-testid={`integration-${provider}-connect`}
                     aria-label={`ربط ${definition.label}`}
                 >
                     <LinkSimple size={12} weight="bold" />
-                    {connecting ? "جاري الربط…" : "ربط Google"}
+                    {connecting
+                        ? "جاري الربط…"
+                        : isTikTok
+                            ? "ربط TikTok"
+                            : "ربط Google"}
                 </button>
             )}
         </div>
