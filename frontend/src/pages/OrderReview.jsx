@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ArrowLeft, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
+    ArrowLeft, ArrowSquareOut, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
     FloppyDisk, MagnifyingGlass, Plus, SpinnerGap, WarningCircle, WhatsappLogo, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -378,6 +378,7 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         || paymentMethod.includes("تحويل بنكي") || paymentMethod.includes("حوالة بنكية");
     const shipping = order?.shipping || {};
     const address = shipping.address || customer.shipping_address || {};
+    const sallaAdminUrl = safeReceiptUrl(order?.salla_admin_url);
     const whatsapp = String(customer.mobile || "").replace(/\D/g, "");
 
     const openOperationalDialog = (item, specs) => {
@@ -443,7 +444,10 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                     <div className="space-y-5 p-4 sm:p-6">
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4">
                             <div><b className="text-lg">#{order.order_number}</b><div className="text-sm text-slate-500">{new Date(order.created_at).toLocaleString("ar-SA")}</div></div>
-                            <button type="button" onClick={() => copy(order.order_number, "رقم الطلب")} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-bold"><Clipboard /> نسخ رقم الطلب</button>
+                            <div className="flex flex-wrap gap-2">
+                                {sallaAdminUrl && <a href={sallaAdminUrl} target="_blank" rel="noreferrer" data-testid="order-review-open-in-salla" className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 font-extrabold text-teal-900"><ArrowSquareOut /> فتح الطلب في سلة</a>}
+                                <button type="button" onClick={() => copy(order.order_number, "رقم الطلب")} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-bold"><Clipboard /> نسخ رقم الطلب</button>
+                            </div>
                         </div>
 
                         <section className="rounded-2xl border bg-white p-4">

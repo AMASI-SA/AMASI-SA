@@ -23,6 +23,15 @@ export async function listPendingOrderReviews({ limit = 15, cursor = null } = {}
     }
 }
 
+export async function listReviewedOrderReviews({ limit = 50 } = {}) {
+    try {
+        const { data } = await api.get("/order-reviews-v1/reviewed", { params: { limit } });
+        return { items: Array.isArray(data?.items) ? data.items : [] };
+    } catch (error) {
+        throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها."));
+    }
+}
+
 export async function getOrderReview(orderNumber) {
     try {
         const { data } = await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`);
@@ -55,7 +64,6 @@ export async function completeOrderReview(orderNumber, expectedRevision) {
         throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
     }
 }
-
 
 export async function createOrderReviewOperationalItem(orderNumber, payload) {
     try {

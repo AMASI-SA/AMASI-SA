@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 
 import OrderReview from "./OrderReview";
+import ReviewedOrders from "./ReviewedOrders";
 
 export const FULFILLMENT_STAGES = [
     {
@@ -205,6 +206,8 @@ export default function FulfillmentV2() {
 
             {activeStage.key === "pending_review" ? (
                 <OrderReview embedded />
+            ) : activeStage.key === "reviewed" ? (
+                <ReviewedOrders />
             ) : (
                 <PlannedStage stage={activeStage} />
             )}

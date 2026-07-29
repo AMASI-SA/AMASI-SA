@@ -379,6 +379,16 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     return identities
 
 
+async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
+    row = await db.unified_orders.find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0, "raw_by_source.salla_direct.urls.admin": 1, "raw_by_source.salla_direct.urls.customer": 1},
+    ) or {}
+    raw = ((row.get("raw_by_source") or {}).get("salla_direct") or {})
+    urls = raw.get("urls") if isinstance(raw.get("urls"), dict) else {}
+    return _text(urls.get("admin"))
+
+
 async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
     identities = await _review_item_identities(db, user_id, order)
     workflow = await db[WORKFLOWS].find_one(
@@ -391,7 +401,7 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
         product_key, signature, _ = build_image_preference_identity(item)
         item_views.append(_item_view(item, states.get(item.order_item_id), preferences.get((product_key, signature))))
     return {
-        "order": order.model_dump(mode="json"),
+        "order": {**order.model_dump(mode="json"), "salla_admin_url": await _salla_admin_url(db, user_id, order.order_number)},
         "stage": (workflow or {}).get("stage") or "pending_review",
         "revision": int((workflow or {}).get("revision") or 0),
         "items": item_views,
@@ -450,6 +460,38 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "next_cursor": page.next_cursor,
             "skipped_invalid": page.skipped_invalid,
         }
+
+    @router.get("/reviewed")
+    async def list_reviewed_reviews(
+        limit: int = Query(50, ge=1, le=100),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        workflows = await db[WORKFLOWS].find(
+            {"user_id": merchant_id, "stage": "reviewed"},
+            {"_id": 0},
+        ).sort("reviewed_at", -1).limit(limit).to_list(limit)
+        items = []
+        for workflow in workflows:
+            order_number = _text(workflow.get("order_number"))
+            if not order_number:
+                continue
+            try:
+                order = await get_order(repository, user_id=merchant_id, order_number=order_number)
+            except OrderNotFoundError:
+                continue
+            payload = order.model_dump(mode="json")
+            payload.update({
+                "stage": "reviewed",
+                "revision": int(workflow.get("revision") or 0),
+                "reviewed_at": workflow.get("reviewed_at"),
+                "items": list(workflow.get("items") or []),
+                "operational_items": list(workflow.get("operational_items") or []),
+                "salla_admin_url": await _salla_admin_url(db, merchant_id, order_number),
+            })
+            items.append(payload)
+        return {"items": items}
 
     @router.get("/{order_number}")
     async def get_review_detail(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
