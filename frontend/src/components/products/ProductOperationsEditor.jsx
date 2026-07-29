@@ -16,9 +16,7 @@ function errorCode(error, fallback) {
     const code = detail?.code;
     const labels = {
         resource_already_linked_to_option: "هذه الخدمة أو المكوّن مرتبط بأحد خيارات المنتج. أزل ربط الخيار أولًا.",
-        warehouse_not_found: "الفرع أو المخزن المحدد غير متوفر.",
         invalid_fulfillment_type: "اختر نوع تنفيذ المنتج.",
-        warehouse_required_for_instant_shipping: "اختر المخزن المسؤول قبل تفعيل الشحن الفوري.",
     };
     return labels[code] || detail?.message || code || fallback;
 }
@@ -54,9 +52,8 @@ function ResourcePicker({ title, Icon, rows, query, setQuery, onLink, busy }) {
 }
 
 export default function ProductOperationsEditor({ productId }) {
-    const [data, setData] = useState({ profile: {}, product_links: [], resources: [], warehouses: [] });
+    const [data, setData] = useState({ profile: {}, product_links: [], resources: [] });
     const [fulfillmentType, setFulfillmentType] = useState("");
-    const [warehouseId, setWarehouseId] = useState("");
     const [serviceQuery, setServiceQuery] = useState("");
     const [componentQuery, setComponentQuery] = useState("");
     const [loading, setLoading] = useState(true);
@@ -69,7 +66,6 @@ export default function ProductOperationsEditor({ productId }) {
             const result = await getProductOperations(productId);
             setData(result);
             setFulfillmentType(result?.profile?.fulfillment_type || "");
-            setWarehouseId(result?.profile?.warehouse_id || "");
         } catch (error) {
             toast.error(errorCode(error, "تعذر تحميل إعدادات تشغيل المنتج"));
         } finally {
@@ -102,15 +98,10 @@ export default function ProductOperationsEditor({ productId }) {
             toast.error("اختر شحن فوري أو يحتاج تجهيز.");
             return;
         }
-        if (fulfillmentType === "instant" && !warehouseId) {
-            toast.error("اختر المخزن المسؤول قبل تفعيل الشحن الفوري.");
-            return;
-        }
         setBusy(true);
         try {
             const result = await saveProductOperationProfile(productId, {
                 fulfillment_type: fulfillmentType,
-                warehouse_id: warehouseId || null,
             });
             setData(result);
             toast.success("تم حفظ نوع تنفيذ المنتج");
@@ -158,17 +149,15 @@ export default function ProductOperationsEditor({ productId }) {
                 <p className="mt-1 text-xs leading-6 text-slate-500">الربط هنا يطبق على المنتج دائمًا. أي خدمة أو مكوّن مرتبط بخيار لا يمكن تكراره هنا.</p>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px_auto] lg:items-end">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                 <div>
                     <div className="mb-2 text-xs font-bold text-slate-600">نوع تنفيذ المنتج</div>
                     <div className="grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => setFulfillmentType("instant")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "instant" ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "bg-white"}`}><Package className="ml-1 inline" /> شحن فوري</button>
                         <button type="button" onClick={() => setFulfillmentType("requires_preparation")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "requires_preparation" ? "border-violet-500 bg-violet-100 text-violet-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> يحتاج تجهيز</button>
                     </div>
+                    <p className="mt-2 text-[11px] leading-5 text-slate-500">يُحدد الفرع أو المخزن من موقع المخزون، ثم من الموظف المسؤول عند الاستلام إذا لم يكن الموقع مسجلًا.</p>
                 </div>
-                <label className="text-xs font-bold text-slate-600">الفرع أو المخزن المسؤول
-                    <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="mt-1 w-full rounded-xl border bg-white p-3 text-sm text-slate-900"><option value="">غير محدد</option>{(data.warehouses || []).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.city ? ` — ${warehouse.city}` : ""}</option>)}</select>
-                </label>
                 <button type="button" disabled={busy || !fulfillmentType} onClick={saveProfile} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ التشغيل"}</button>
             </div>
 

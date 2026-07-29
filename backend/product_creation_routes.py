@@ -17,14 +17,13 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from ai_store_access_control import effective_permissions
 from ai_store_operations_foundation import ROLE_ASSIGNMENTS
 from product_fulfillment_rules import (
     FULFILLMENT_TYPES,
-    FULFILLMENT_TYPE_INSTANT,
     FULFILLMENT_TYPE_PREPARATION,
     PRODUCT_OPERATION_PROFILES,
     normalize_fulfillment_type,
@@ -37,7 +36,6 @@ from product_v2_routes import (
     normalize_salla_product,
 )
 from salla_integration.service import SallaError, call_salla
-from warehouse_location_routes import WAREHOUSES
 
 
 DRAFTS = "mezan_product_creation_drafts_v2"
@@ -93,7 +91,15 @@ class ProductCreationDraftRequest(BaseModel):
         default=FULFILLMENT_TYPE_PREPARATION,
         max_length=40,
     )
-    warehouse_id: str | None = Field(default=None, max_length=80)
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_product_warehouse(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "warehouse_id" not in value:
+            return value
+        sanitized = dict(value)
+        sanitized.pop("warehouse_id", None)
+        return sanitized
 
 
 def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, Any]:
@@ -105,9 +111,6 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
     if product_type not in ALLOWED_PRODUCT_TYPES:
         raise ValueError("unsupported_product_type")
     fulfillment_type = normalize_fulfillment_type(payload.fulfillment_type)
-    warehouse_id = _text(payload.warehouse_id) or None
-    if fulfillment_type == FULFILLMENT_TYPE_INSTANT and not warehouse_id:
-        raise ValueError("warehouse_required_for_instant_shipping")
     image_urls: list[str] = []
     for value in payload.image_urls:
         url = _text(value)
@@ -126,7 +129,6 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
         "category_ids": list(dict.fromkeys(payload.category_ids)),
         "image_urls": list(dict.fromkeys(image_urls)),
         "fulfillment_type": fulfillment_type,
-        "warehouse_id": warehouse_id,
     }
 
 
@@ -252,29 +254,6 @@ async def _draft(
             detail={"code": "product_creation_draft_not_found"},
         )
     return row
-
-
-async def _validate_warehouse(
-    db: Any,
-    *,
-    merchant_id: str,
-    warehouse_id: str | None,
-) -> None:
-    if not warehouse_id:
-        return
-    row = await db[WAREHOUSES].find_one(
-        {
-            "user_id": merchant_id,
-            "id": warehouse_id,
-            "status": {"$ne": "disabled"},
-        },
-        {"_id": 0, "id": 1},
-    )
-    if not row:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "warehouse_not_found"},
-        )
 
 
 async def _validate_unique_sku(
@@ -416,11 +395,11 @@ async def _save_created_product(
                 "salla_product_id": product["salla_product_id"],
                 "mezan_product_id": product["mezan_product_id"],
                 "fulfillment_type": draft["fulfillment_type"],
-                "warehouse_id": draft.get("warehouse_id"),
                 "configured": True,
                 "updated_at": now,
                 "updated_by": actor_id,
             },
+            "$unset": {"warehouse_id": ""},
             "$setOnInsert": {
                 "id": uuid.uuid4().hex,
                 "created_at": now,
@@ -456,30 +435,19 @@ def make_product_creation_router(
             query,
             {"_id": 0, "salla_response": 0},
         ).sort("updated_at", -1).limit(limit).to_list(limit)
-        warehouses = await db[WAREHOUSES].find(
-            {
-                "user_id": context["merchant_id"],
-                "status": {"$ne": "disabled"},
-            },
-            {
-                "_id": 0,
-                "id": 1,
-                "name": 1,
-                "code": 1,
-                "city": 1,
-                "is_primary": 1,
-            },
-        ).sort([("is_primary", -1), ("created_at", 1)]).to_list(500)
         return {
             "ok": True,
             "items": [_serialize(row) for row in rows],
-            "warehouses": warehouses,
             "rules": {
                 "direction": "mezan_to_salla",
                 "mode": "create_only",
                 "bulk_import_used": False,
                 "publish_confirmation": PUBLISH_CONFIRMATION,
                 "product_type_immutable_after_creation": True,
+                "warehouse_resolution": [
+                    "inventory_location",
+                    "employee_assignment",
+                ],
             },
         }
 
@@ -502,11 +470,6 @@ def make_product_creation_router(
                     "allowed_fulfillment_types": sorted(FULFILLMENT_TYPES),
                 },
             ) from exc
-        await _validate_warehouse(
-            db,
-            merchant_id=context["merchant_id"],
-            warehouse_id=values.get("warehouse_id"),
-        )
         await _validate_unique_sku(
             db,
             merchant_id=context["merchant_id"],
@@ -576,11 +539,6 @@ def make_product_creation_router(
                 status_code=422,
                 detail={"code": str(exc)},
             ) from exc
-        await _validate_warehouse(
-            db,
-            merchant_id=context["merchant_id"],
-            warehouse_id=values.get("warehouse_id"),
-        )
         await _validate_unique_sku(
             db,
             merchant_id=context["merchant_id"],

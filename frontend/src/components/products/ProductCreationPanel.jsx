@@ -21,7 +21,6 @@ const EMPTY_FORM = {
     product_type: "product",
     image_url: "",
     fulfillment_type: "requires_preparation",
-    warehouse_id: "",
 };
 
 const STATUS_LABELS = {
@@ -38,7 +37,6 @@ function errorMessage(error) {
     const code = detail?.code;
     const messages = {
         product_sku_already_used: "رمز SKU مستخدم مسبقًا في ميزان أو في مسودة أخرى.",
-        warehouse_required_for_instant_shipping: "اختر المخزن المسؤول عن المنتج الجاهز للشحن.",
         salla_product_write_scope_required: "اتصال سلة يحتاج صلاحية products.read_write. أعد ربط سلة بعد تفعيل الصلاحية.",
         sku_exists_in_salla: "رمز SKU موجود أصلًا في سلة؛ لم يتم إنشاء نسخة مكررة.",
         salla_product_creation_uncertain: "لم يصل رد نهائي من سلة. احتفظنا بالطلب للمصالحة الآمنة قبل أي إعادة.",
@@ -50,7 +48,6 @@ export default function ProductCreationPanel({ onCreated }) {
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
     const [drafts, setDrafts] = useState([]);
-    const [warehouses, setWarehouses] = useState([]);
     const [activeDraft, setActiveDraft] = useState(null);
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -59,7 +56,6 @@ export default function ProductCreationPanel({ onCreated }) {
         try {
             const result = await listProductCreationDrafts({ limit: 30 });
             setDrafts(result.items || []);
-            setWarehouses(result.warehouses || []);
         } catch (error) {
             toast.error(errorMessage(error));
         }
@@ -71,10 +67,6 @@ export default function ProductCreationPanel({ onCreated }) {
         form.name.trim().length >= 2
         && form.sku.trim()
         && form.price !== ""
-        && (
-            form.fulfillment_type !== "instant"
-            || Boolean(form.warehouse_id)
-        )
     ), [form]);
 
     function update(key, value) {
@@ -96,7 +88,6 @@ export default function ProductCreationPanel({ onCreated }) {
                 category_ids: [],
                 image_urls: form.image_url.trim() ? [form.image_url.trim()] : [],
                 fulfillment_type: form.fulfillment_type,
-                warehouse_id: form.warehouse_id || null,
             });
             setActiveDraft(result.draft);
             setPreview(null);
@@ -242,13 +233,7 @@ export default function ProductCreationPanel({ onCreated }) {
                                     <option value="requires_preparation">يحتاج تجهيز</option>
                                     <option value="instant">جاهز للشحن الفوري</option>
                                 </select>
-                            </label>
-                            <label className="space-y-1 text-sm font-bold">
-                                <span>المخزن {form.fulfillment_type === "instant" ? "(مطلوب)" : "(اختياري)"}</span>
-                                <select value={form.warehouse_id} onChange={(event) => update("warehouse_id", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
-                                    <option value="">اختر المخزن</option>
-                                    {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} {warehouse.code ? `— ${warehouse.code}` : ""}</option>)}
-                                </select>
+                                <span className="block text-xs font-normal leading-5 text-slate-500">المخزن لا يرتبط بالمنتج؛ يُحدد من إدخال المخزون أو من الموظف المرتبط بالفرع/المخزن.</span>
                             </label>
                             <label className="space-y-1 text-sm font-bold lg:col-span-2">
                                 <span>رابط صورة HTTPS (اختياري)</span>

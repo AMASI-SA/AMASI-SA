@@ -3,6 +3,7 @@ from product_creation_routes import (
     build_salla_product_payload,
     normalize_creation_input,
 )
+from product_fulfillment_routes import ProductOperationProfileRequest
 
 
 def _request(**overrides):
@@ -14,7 +15,6 @@ def _request(**overrides):
         "description": "خاتم جاهز للشحن",
         "product_type": "product",
         "fulfillment_type": "instant",
-        "warehouse_id": "warehouse-1",
     }
     values.update(overrides)
     return ProductCreationDraftRequest(**values)
@@ -24,7 +24,26 @@ def test_creation_input_normalizes_sku_and_fulfillment():
     result = normalize_creation_input(_request())
     assert result["sku"] == "RING-100"
     assert result["fulfillment_type"] == "instant"
-    assert result["warehouse_id"] == "warehouse-1"
+    assert "warehouse_id" not in result
+
+
+def test_legacy_product_warehouse_input_is_ignored_not_stored():
+    payload = _request()
+    values = payload.model_dump()
+    values["warehouse_id"] = "legacy-warehouse"
+
+    result = normalize_creation_input(ProductCreationDraftRequest(**values))
+
+    assert "warehouse_id" not in result
+
+
+def test_legacy_operation_profile_warehouse_input_is_ignored():
+    profile = ProductOperationProfileRequest(
+        fulfillment_type="instant",
+        warehouse_id="legacy-warehouse",
+    )
+
+    assert profile.model_dump() == {"fulfillment_type": "instant"}
 
 
 def test_salla_payload_is_create_only_and_hidden():

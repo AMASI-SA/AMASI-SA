@@ -144,7 +144,11 @@ export default function ReadyToShipOrders() {
                         <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2"><span className="text-lg font-black">#{order.order_number}</span>{order.claimed && <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">ضمن دفعة {order.claim_batch_id}</span>}</div>
                             <p className="mt-1 text-sm text-slate-600">{order.customer_name || "—"} · {order.customer_mobile || "—"} · {order.city || "—"}</p>
-                            <p className="mt-1 text-xs text-slate-400">{order.items_count} منتجات · {(order.warehouse_ids || []).length} فرع/مخزن</p>
+                            <p className="mt-1 text-xs text-slate-400">
+                                {order.items_count} منتجات · {(order.warehouse_ids || []).length
+                                    ? `${order.warehouse_ids.length} فرع/مخزن ${order.warehouse_resolution_source === "employee_assignment" ? "من ارتباط الموظف" : "من المخزون"}`
+                                    : "يُحدد الفرع/المخزن من الموظف عند الاستلام"}
+                            </p>
                         </div>
                         <div className="rounded-xl bg-white p-3 text-xs"><div className="font-black">{order.shipping_company || "شركة الشحن غير محددة"}</div><div className="mt-1 text-slate-500">{order.claimed_by_name ? `المستلم: ${order.claimed_by_name}` : "بانتظار استلام الموظف"}</div></div>
                     </article>

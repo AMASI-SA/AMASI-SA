@@ -122,26 +122,27 @@ def _reserve_inventory_for_line(
     *,
     stock_rows: list[dict[str, Any]],
     identifiers: set[str],
-    warehouse_id: str | None,
     quantity: float,
-) -> tuple[bool, float]:
+) -> tuple[bool, float, list[str]]:
     matches = [
         row for row in stock_rows
         if row["remaining"] > 0
-        and (not warehouse_id or row["warehouse_id"] == warehouse_id)
         and not identifiers.isdisjoint(row["identifiers"])
     ]
     available = sum(float(row["remaining"]) for row in matches)
     if available < quantity:
-        return False, available
+        return False, available, []
     needed = quantity
+    warehouse_ids: set[str] = set()
     for row in matches:
         take = min(float(row["remaining"]), needed)
         row["remaining"] -= take
         needed -= take
+        if take > 0 and row["warehouse_id"]:
+            warehouse_ids.add(str(row["warehouse_id"]))
         if needed <= 0:
             break
-    return True, available
+    return True, available, sorted(warehouse_ids)
 
 
 async def build_order_fulfillment_decision(
@@ -261,11 +262,15 @@ async def build_order_fulfillment_decision(
         identifiers.discard("")
         inventory_available = None
         available_quantity = None
+        warehouse_ids: list[str] = []
         if classification["resolved_type"] == FULFILLMENT_TYPE_INSTANT:
-            inventory_available, available_quantity = _reserve_inventory_for_line(
+            (
+                inventory_available,
+                available_quantity,
+                warehouse_ids,
+            ) = _reserve_inventory_for_line(
                 stock_rows=stock_rows,
                 identifiers=identifiers,
-                warehouse_id=classification.get("warehouse_id"),
                 quantity=quantity,
             )
         lines.append({
@@ -278,6 +283,12 @@ async def build_order_fulfillment_decision(
             **classification,
             "inventory_available": inventory_available,
             "available_quantity": available_quantity,
+            "warehouse_ids": warehouse_ids,
+            "warehouse_resolution_source": (
+                "inventory_location"
+                if warehouse_ids
+                else "employee_assignment_pending"
+            ),
         })
 
     decision = evaluate_order_fulfillment(order=order, lines=lines)
@@ -536,7 +547,32 @@ def _warehouse_allowed(
     if context["is_owner"]:
         return True
     required = {str(value) for value in warehouse_ids if value}
-    return bool(required) and required.issubset(context["warehouse_ids"])
+    if required:
+        return required.issubset(context["warehouse_ids"])
+    # No inventory location was recorded. An employee may take the order only
+    # when their own branch/warehouse assignment can provide the fallback.
+    return bool(context["warehouse_ids"])
+
+
+def _resolve_claim_warehouse_ids(
+    context: dict[str, Any],
+    warehouse_ids: list[str],
+) -> tuple[list[str], str]:
+    inventory_ids = sorted({
+        str(value) for value in warehouse_ids if value
+    })
+    if inventory_ids:
+        return inventory_ids, "inventory_location"
+    if context["is_owner"]:
+        return [], "owner_assignment_pending"
+    employee_ids = sorted({
+        str(value) for value in context["warehouse_ids"] if value
+    })
+    return employee_ids, (
+        "employee_assignment"
+        if employee_ids
+        else "employee_assignment_pending"
+    )
 
 
 async def _order_view(
@@ -574,6 +610,12 @@ async def _order_view(
         "warehouse_ids": (
             (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
             or []
+        ),
+        "warehouse_resolution_source": (
+            (workflow.get("fulfillment_decision") or {}).get(
+                "warehouse_resolution_source"
+            )
+            or "employee_assignment_pending"
         ),
         "claimed": bool(workflow.get("claim_batch_id")),
         "claim_batch_id": workflow.get("claim_batch_id"),
@@ -676,7 +718,7 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "ready_orders_changed_refresh_required"},
             )
-        warehouse_ids = sorted({
+        inventory_warehouse_ids = sorted({
             str(warehouse_id)
             for workflow in workflows
             for warehouse_id in (
@@ -685,11 +727,25 @@ def make_fulfillment_v2_router(
             )
             if warehouse_id
         })
-        if not _warehouse_allowed(context, warehouse_ids):
+        if not _warehouse_allowed(context, inventory_warehouse_ids):
             raise HTTPException(
                 status_code=403,
                 detail={"code": "ready_orders_outside_assigned_warehouses"},
             )
+        resolved_warehouses = {}
+        for workflow in workflows:
+            decision = workflow.get("fulfillment_decision") or {}
+            resolved_warehouses[_text(workflow.get("order_number"))] = (
+                _resolve_claim_warehouse_ids(
+                    context,
+                    decision.get("warehouse_ids") or [],
+                )
+            )
+        warehouse_ids = sorted({
+            warehouse_id
+            for resolved_ids, _source in resolved_warehouses.values()
+            for warehouse_id in resolved_ids
+        })
         batch_id = f"ship_{uuid.uuid4().hex}"
         now = _now()
         result = await db[WORKFLOWS].update_many(
@@ -728,12 +784,33 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "ready_orders_claim_conflict"},
             )
+        for order_number, (resolved_ids, source) in resolved_warehouses.items():
+            if source != "employee_assignment":
+                continue
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": context["merchant_id"],
+                    "order_number": order_number,
+                    "claim_batch_id": batch_id,
+                },
+                {"$set": {
+                    "fulfillment_decision.warehouse_ids": resolved_ids,
+                    "fulfillment_decision.warehouse_resolution_source": source,
+                    "fulfillment_decision.warehouse_resolved_by": (
+                        context["actor_id"]
+                    ),
+                    "fulfillment_decision.warehouse_resolved_at": now,
+                }},
+            )
         batch = {
             "id": batch_id,
             "user_id": context["merchant_id"],
             "status": "claimed",
             "order_numbers": order_numbers,
             "warehouse_ids": warehouse_ids,
+            "warehouse_resolution_sources": sorted({
+                source for _ids, source in resolved_warehouses.values()
+            }),
             "claimed_by": context["actor_id"],
             "claimed_by_name": _text(user.get("name") or user.get("email")),
             "claimed_at": now,
@@ -748,6 +825,7 @@ def make_fulfillment_v2_router(
             "event_type": "shipping_batch_claimed",
             "batch_id": batch_id,
             "order_numbers": order_numbers,
+            "warehouse_ids": warehouse_ids,
             "actor_id": context["actor_id"],
             "occurred_at": now,
         })
