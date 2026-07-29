@@ -148,8 +148,9 @@ def test_review_supports_internal_operational_items_without_supplier_export():
     assert 'data-testid="order-review-operational-item"' in frontend_source
     assert 'إضافة منتج تشغيلي' in frontend_source
     assert 'function imageIdentity(value)' in frontend_source
-    assert 'identity === selectedIdentity' in frontend_source
+    assert 'for (const url of [visibleSelectedImage, ...(item.gallery || [])]' in frontend_source
     assert 'seenImageIdentities.has(identity)' in frontend_source
+    assert 'setVisibleSelectedImage(url)' in frontend_source
 
 
 def test_reviewed_stage_and_salla_admin_link_are_active():

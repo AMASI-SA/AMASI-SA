@@ -125,11 +125,19 @@ export function reviewProductSpecs(item) {
 function imageIdentity(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
+    const normalizePath = (pathname) => {
+        const decoded = decodeURIComponent(pathname || "").toLowerCase();
+        const filename = decoded.split("/").filter(Boolean).pop() || decoded;
+        return filename
+            .replace(/[-_](?:thumb|thumbnail|small|medium|large|original)(?=\.|$)/g, "")
+            .replace(/[-_]\d{2,4}x\d{2,4}(?=\.|$)/g, "")
+            .replace(/\.(?:webp|avif)$/g, ".jpg");
+    };
     try {
         const url = new URL(raw);
-        return `${url.origin}${decodeURIComponent(url.pathname)}`.replace(/\/+$/, "").toLowerCase();
+        return normalizePath(url.pathname);
     } catch {
-        return raw.split(/[?#]/, 1)[0].replace(/\/+$/, "").toLowerCase();
+        return normalizePath(raw.split(/[?#]/, 1)[0]);
     }
 }
 
@@ -167,11 +175,16 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     const [showPreparationNote, setShowPreparationNote] = useState(false);
     const [showInternalNote, setShowInternalNote] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [visibleSelectedImage, setVisibleSelectedImage] = useState(item.selected_image_url || item.image_url || "");
 
     useEffect(() => {
         setPreparationNote(item.preparation_note || "");
         setInternalNote(item.internal_note || "");
     }, [item.internal_note, item.preparation_note]);
+
+    useEffect(() => {
+        if (item.selected_image_url) setVisibleSelectedImage(item.selected_image_url);
+    }, [item.selected_image_url]);
 
     const save = async (patch, successMessage) => {
         setBusy(true);
@@ -190,12 +203,12 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     };
 
     const specs = reviewProductSpecs(item);
-    const selectedIdentity = imageIdentity(item.selected_image_url);
+    const selectedIdentity = imageIdentity(visibleSelectedImage);
     const gallery = [];
     const seenImageIdentities = new Set();
-    for (const url of (item.gallery || []).filter(Boolean)) {
+    for (const url of [visibleSelectedImage, ...(item.gallery || [])].filter(Boolean)) {
         const identity = imageIdentity(url);
-        if (!identity || identity === selectedIdentity || seenImageIdentities.has(identity)) continue;
+        if (!identity || seenImageIdentities.has(identity)) continue;
         seenImageIdentities.add(identity);
         gallery.push(url);
     }
@@ -204,8 +217,8 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
             <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[128px_minmax(0,1fr)]">
                 <div>
                     <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
-                        {item.selected_image_url ? (
-                            <img src={item.selected_image_url} alt={item.name} className="h-full w-full object-cover" />
+                        {visibleSelectedImage ? (
+                            <img src={visibleSelectedImage} alt={item.name} className="h-full w-full object-cover" />
                         ) : (
                             <div className="flex h-full items-center justify-center text-sm text-slate-400">لا توجد صورة</div>
                         )}
@@ -227,7 +240,10 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
                                         type="button"
                                         key={`${url}-${index}`}
                                         disabled={busy || selected}
-                                        onClick={() => save({ selected_image_url: url }, "تم حفظ الصورة لهذه الخيارات وستُستخدم تلقائيًا لاحقًا.")}
+                                        onClick={() => {
+                                            setVisibleSelectedImage(url);
+                                            save({ selected_image_url: url }, "تم حفظ الصورة لهذه الخيارات وستُستخدم تلقائيًا لاحقًا.");
+                                        }}
                                         className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 sm:h-20 sm:w-20 ${selected ? "border-teal-500 ring-2 ring-teal-100" : "border-slate-200 hover:border-violet-400"}`}
                                         aria-label={`اختيار صورة التجهيز رقم ${index + 1}`}
                                     >
