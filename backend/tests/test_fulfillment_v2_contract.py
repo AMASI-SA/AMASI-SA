@@ -149,7 +149,7 @@ def test_review_supports_internal_operational_items_without_supplier_export():
     assert 'إضافة منتج تشغيلي' in frontend_source
     assert 'function imageIdentity(value)' in frontend_source
     assert 'const sourceGallery = (item.gallery || []).filter(Boolean);' in frontend_source
-    assert 'selectedExistsInGallery' in frontend_source
+    assert 'identity === selectedIdentity' in frontend_source
     assert 'seenImageIdentities.has(identity)' in frontend_source
     assert 'setVisibleSelectedImage(url)' in frontend_source
 
