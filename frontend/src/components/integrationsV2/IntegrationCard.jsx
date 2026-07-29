@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     ArrowClockwise,
     CheckCircle,
@@ -7,8 +8,10 @@ import {
     WarningCircle,
     XCircle,
 } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import ProviderMark from "./ProviderMark";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
+import { startGoogleConnection } from "../../services/googleIntegrationsV2";
 
 const STATUS = {
     connected: ["متصل", "border-emerald-200 bg-emerald-50 text-emerald-700"],
@@ -199,6 +202,7 @@ export default function IntegrationCard({
     onSync,
     onSettings,
 }) {
+    const [connectingGoogle, setConnectingGoogle] = useState(false);
     const [statusLabel, statusClass] = STATUS[integration.connection_status] || STATUS.unknown;
     const [provenanceLabel, provenanceClass] = (
         PROVENANCE[integration.connection_provenance] || PROVENANCE.unknown
@@ -206,6 +210,9 @@ export default function IntegrationCard({
     const healthScore = integration.health?.score;
     const canTest = Boolean(integration.actions?.test_connection?.enabled) && !testing;
     const showSync = integration.provider === "snapchat_ads";
+    const isGoogle = integration.provider.startsWith("google_");
+    const googleConnectAction = integration.actions?.connect || {};
+    const canConnectGoogle = isGoogle && !connectingGoogle;
     const canSync = showSync
         && Boolean(integration.actions?.sync_data?.enabled)
         && !syncing;
@@ -233,6 +240,24 @@ export default function IntegrationCard({
         : noApiPermissionContext
             ? "لا تُحسب قبل وجود ربط API"
             : "لا يوجد نقص مثبت";
+
+    async function connectGoogle() {
+        setConnectingGoogle(true);
+        try {
+            const result = await startGoogleConnection();
+            window.location.assign(result.authorization_url);
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            const message = typeof detail === "string"
+                ? detail
+                : detail?.message
+                    || (error?.message === "google_authorization_url_untrusted"
+                        ? "رفض ميزان رابط ربط Google غير موثوق."
+                        : "تعذر بدء ربط حساب Google.");
+            toast.error(message);
+            setConnectingGoogle(false);
+        }
+    }
 
     return (
         <article
@@ -372,8 +397,24 @@ export default function IntegrationCard({
             </div>
 
             <div className={`mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 ${
-                showSync ? "lg:grid-cols-5" : "lg:grid-cols-4"
+                showSync || isGoogle ? "lg:grid-cols-5" : "lg:grid-cols-4"
             }`}>
+                {isGoogle && (
+                    <ActionButton
+                        provider={integration.provider}
+                        action="connect"
+                        label={connectingGoogle
+                            ? "جاري فتح Google…"
+                            : integration.connection_status === "connected"
+                                ? "إعادة ربط Google"
+                                : "ربط حساب Google"}
+                        Icon={LinkSimple}
+                        enabled={canConnectGoogle}
+                        reason={googleConnectAction.reason}
+                        onClick={connectGoogle}
+                        primary
+                    />
+                )}
                 <ActionButton
                     provider={integration.provider}
                     action="test"
@@ -382,7 +423,7 @@ export default function IntegrationCard({
                     enabled={canTest}
                     reason={integration.actions?.test_connection?.reason}
                     onClick={() => onTest(integration.provider)}
-                    primary
+                    primary={!isGoogle}
                 />
                 {showSync && (
                     <ActionButton
@@ -395,15 +436,17 @@ export default function IntegrationCard({
                         onClick={() => onSync?.(integration.provider)}
                     />
                 )}
-                <ActionButton
-                    provider={integration.provider}
-                    action="reconnect"
-                    label="إعادة الربط"
-                    Icon={LinkSimple}
-                    enabled={canRelink}
-                    reason={integration.actions?.reconnect?.reason}
-                    onClick={() => onSettings(integration.provider)}
-                />
+                {!isGoogle && (
+                    <ActionButton
+                        provider={integration.provider}
+                        action="reconnect"
+                        label="إعادة الربط"
+                        Icon={LinkSimple}
+                        enabled={canRelink}
+                        reason={integration.actions?.reconnect?.reason}
+                        onClick={() => onSettings(integration.provider)}
+                    />
+                )}
                 <ActionButton
                     provider={integration.provider}
                     action="settings"
