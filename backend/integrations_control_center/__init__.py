@@ -10,6 +10,9 @@ from .catalog import (
     SAFETY_POLICY,
 )
 from .google_connections import attach_google_connection_routes
+from .google_merchant_registration import (
+    attach_google_merchant_registration_route,
+)
 from .models import (
     CampaignProductLinkRecord,
     COLLECTION_NAMES,
@@ -33,6 +36,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     """
     router = _base_make_integrations_router(db, current_user)
     attach_google_connection_routes(router, db, current_user, _require_owner)
+    attach_google_merchant_registration_route(
+        router, db, current_user, _require_owner
+    )
 
     google_test_routes = [
         route
