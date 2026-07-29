@@ -1,0 +1,52 @@
+"""Install the native Snapchat definition only for the V2 control plane.
+
+Old Snapchat pages keep their frozen migration contract. The V2 control centre
+uses encrypted platform-owned OAuth credentials and never reads the legacy
+``snapchat_connections`` or ``snapchat_account_daily`` collections.
+"""
+from __future__ import annotations
+
+from dataclasses import replace
+
+
+def install_snapchat_native_catalog() -> None:
+    from . import catalog as catalog_module
+    from . import service as service_module
+
+    current = catalog_module.PROVIDER_BY_ID["snapchat_ads"]
+    expected_permissions = (
+        "snapchat-marketing-api",
+        "snapchat-offline-conversions-api",
+    )
+    if not current.legacy_sources and current.required_permissions == expected_permissions:
+        return
+
+    native = replace(
+        current,
+        legacy_sources=(),
+        required_permissions=expected_permissions,
+        ai_can_when_ready=(
+            "قراءة المؤسسات والحسابات الإعلانية المصرح بها مباشرة من Snapchat",
+            "قراءة الحملات والمجموعات والإعلانات والتصاميم والجماهير والتقارير بعد المزامنة",
+            "فحص التحويلات وPixel وConversions API واكتشاف نقص بيانات الشراء",
+            "تحليل الإنفاق والتحويلات وربطها بالطلبات وصافي الربح",
+        ),
+        ai_cannot_phase_one=(
+            "تنفيذ إنشاء أو تعديل أو إيقاف دون اقتراح ومعاينة واعتماد وتحقق ورجوع",
+            "استخدام مجموعات Snapchat القديمة كمصدر لبطاقة ميزان 2",
+        ),
+    )
+    providers = tuple(
+        native if item.provider == "snapchat_ads" else item
+        for item in catalog_module.PROVIDERS
+    )
+    catalog_module.PROVIDER_BY_ID["snapchat_ads"] = native
+    catalog_module.PROVIDERS = providers
+    service_module.PROVIDERS = providers
+
+    import sys
+
+    package = sys.modules.get("integrations_control_center")
+    if package is not None:
+        setattr(package, "PROVIDERS", providers)
+        setattr(package, "PROVIDER_BY_ID", catalog_module.PROVIDER_BY_ID)
