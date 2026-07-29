@@ -1,6 +1,6 @@
 name: Fulfillment operational items bootstrap
 
-# One-shot branch bootstrap; removed before merge.
+# One-shot branch bootstrap; removed before merge. Trigger 2.
 on:
   push:
     branches:
