@@ -1,6 +1,11 @@
 from types import SimpleNamespace as Obj
 
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
+from fulfillment_v2_routes import (
+    _reserve_inventory_for_line,
+    _resolve_claim_warehouse_ids,
+    _warehouse_allowed,
+)
 from product_fulfillment_rules import (
     FULFILLMENT_TYPE_INSTANT,
     FULFILLMENT_TYPE_PREPARATION,
@@ -44,7 +49,7 @@ def _instant_line(**overrides):
         "configured_type": FULFILLMENT_TYPE_INSTANT,
         "resolved_type": FULFILLMENT_TYPE_INSTANT,
         "requires_preparation": False,
-        "warehouse_id": "wh-1",
+        "warehouse_ids": ["wh-1"],
         "inventory_available": True,
         "supplier_export_eligible": False,
     }
@@ -54,7 +59,7 @@ def _instant_line(**overrides):
 
 def test_explicit_preparation_service_overrides_instant_product():
     result = classify_line_fulfillment(
-        profile={"fulfillment_type": "instant", "warehouse_id": "wh-1"},
+        profile={"fulfillment_type": "instant"},
         product_resources=[],
         selected_option_resources=[{
             "id": "svc-cut",
@@ -72,7 +77,7 @@ def test_explicit_preparation_service_overrides_instant_product():
 
 def test_stock_component_alone_does_not_override_instant_product():
     result = classify_line_fulfillment(
-        profile={"fulfillment_type": "instant", "warehouse_id": "wh-1"},
+        profile={"fulfillment_type": "instant"},
         product_resources=[{
             "id": "component-box",
             "kind": "stock_component",
@@ -140,7 +145,7 @@ def test_mixed_order_waits_and_excludes_instant_line_from_supplier_export():
                 "configured_type": FULFILLMENT_TYPE_PREPARATION,
                 "resolved_type": FULFILLMENT_TYPE_PREPARATION,
                 "requires_preparation": True,
-                "warehouse_id": "wh-1",
+                "warehouse_ids": [],
                 "inventory_available": None,
                 "supplier_export_eligible": True,
             },
@@ -153,15 +158,73 @@ def test_mixed_order_waits_and_excludes_instant_line_from_supplier_export():
     assert decision["instant_items_excluded_from_supplier_export"] is True
 
 
-def test_missing_warehouse_or_inventory_fails_closed():
+def test_missing_inventory_fails_closed_without_product_warehouse_blocker():
     decision = evaluate_order_fulfillment(
         order=_order(),
-        lines=[_instant_line(warehouse_id=None, inventory_available=False)],
+        lines=[_instant_line(warehouse_ids=[], inventory_available=False)],
     )
 
     assert decision["ready_to_ship"] is False
-    assert "warehouse_not_assigned" in decision["blockers"]
+    assert "warehouse_not_assigned" not in decision["blockers"]
     assert "operational_inventory_not_available" in decision["blockers"]
+
+
+def test_instant_inventory_without_location_waits_for_employee_assignment():
+    decision = evaluate_order_fulfillment(
+        order=_order(),
+        lines=[_instant_line(warehouse_ids=[])],
+    )
+
+    assert decision["ready_to_ship"] is True
+    assert decision["warehouse_ids"] == []
+    assert (
+        decision["warehouse_resolution_source"]
+        == "employee_assignment_pending"
+    )
+
+
+def test_inventory_reservation_sets_warehouse_from_stock_location():
+    stock_rows = [
+        {
+            "warehouse_id": "wh-2",
+            "identifiers": {"SKU-1"},
+            "remaining": 2.0,
+        },
+        {
+            "warehouse_id": "wh-1",
+            "identifiers": {"SKU-1"},
+            "remaining": 4.0,
+        },
+    ]
+
+    available, quantity, warehouse_ids = _reserve_inventory_for_line(
+        stock_rows=stock_rows,
+        identifiers={"SKU-1"},
+        quantity=3,
+    )
+
+    assert available is True
+    assert quantity == 6
+    assert warehouse_ids == ["wh-1", "wh-2"]
+
+
+def test_employee_assignment_is_fallback_only_when_inventory_has_no_location():
+    context = {
+        "is_owner": False,
+        "warehouse_ids": {"wh-employee"},
+    }
+
+    assert _warehouse_allowed(context, []) is True
+    assert _warehouse_allowed(context, ["wh-employee"]) is True
+    assert _warehouse_allowed(context, ["wh-other"]) is False
+    assert _resolve_claim_warehouse_ids(context, []) == (
+        ["wh-employee"],
+        "employee_assignment",
+    )
+    assert _resolve_claim_warehouse_ids(context, ["wh-stock"]) == (
+        ["wh-stock"],
+        "inventory_location",
+    )
 
 
 def test_shipping_batch_pdf_is_generated_without_provider_calls():

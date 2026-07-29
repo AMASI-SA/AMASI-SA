@@ -134,7 +134,6 @@ def classify_line_fulfillment(
         "resolved_type": resolved,
         "requires_preparation": resolved == FULFILLMENT_TYPE_PREPARATION,
         "forcing_services": forcing_services,
-        "warehouse_id": profile.get("warehouse_id") or None,
         "supplier_export_eligible": resolved == FULFILLMENT_TYPE_PREPARATION,
     }
 
@@ -233,8 +232,6 @@ def evaluate_order_fulfillment(
     ]
     if inventory_blocked:
         blockers.append("operational_inventory_not_available")
-    if any(not row.get("warehouse_id") for row in instant_lines):
-        blockers.append("warehouse_not_assigned")
 
     if instant_lines and preparation_lines:
         order_type = "mixed"
@@ -249,9 +246,10 @@ def evaluate_order_fulfillment(
         and len(instant_lines) == len(lines)
     )
     warehouse_ids = sorted({
-        str(row.get("warehouse_id"))
+        str(warehouse_id)
         for row in lines
-        if row.get("warehouse_id")
+        for warehouse_id in (row.get("warehouse_ids") or [])
+        if warehouse_id
     })
     return {
         "order_number": str(getattr(order, "order_number", "") or ""),
@@ -263,5 +261,10 @@ def evaluate_order_fulfillment(
         "instant_items_excluded_from_supplier_export": bool(instant_lines),
         "blockers": list(dict.fromkeys(blockers)),
         "warehouse_ids": warehouse_ids,
+        "warehouse_resolution_source": (
+            "inventory_location"
+            if warehouse_ids
+            else "employee_assignment_pending"
+        ),
         "lines": lines,
     }

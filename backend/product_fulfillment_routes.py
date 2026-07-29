@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING
 
 from product_fulfillment_rules import (
@@ -16,13 +16,20 @@ from product_fulfillment_rules import (
 )
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, _serialize
 from product_v2_routes import PRODUCTS, _number
-from warehouse_location_routes import WAREHOUSES
 
 
 class ProductOperationProfileRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fulfillment_type: str
-    warehouse_id: Optional[str] = Field(default=None, max_length=80)
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_product_warehouse(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "warehouse_id" not in value:
+            return value
+        sanitized = dict(value)
+        sanitized.pop("warehouse_id", None)
+        return sanitized
 
 
 class ProductResourceLinkRequest(BaseModel):
@@ -102,18 +109,6 @@ async def _operations_view(
         {"user_id": user_id},
         {"_id": 0},
     ).sort("name", 1).to_list(length=2000)
-    warehouses = await db[WAREHOUSES].find(
-        {"user_id": user_id, "status": {"$ne": "disabled"}},
-        {
-            "_id": 0,
-            "id": 1,
-            "name": 1,
-            "code": 1,
-            "city": 1,
-            "is_primary": 1,
-        },
-    ).sort([("is_primary", -1), ("created_at", 1)]).to_list(length=500)
-
     product_by_resource = {
         str(row.get("resource_id")): row for row in product_links
     }
@@ -146,6 +141,14 @@ async def _operations_view(
         })
         resource_rows.append(row)
 
+    serialized_profile = _serialize(profile) or {
+        "fulfillment_type": None,
+        "configured": False,
+    }
+    # Legacy product-level warehouse values are intentionally hidden and
+    # ignored. Warehouse resolution belongs to inventory/order-item routing.
+    serialized_profile.pop("warehouse_id", None)
+
     return {
         "product": {
             "mezan_product_id": (
@@ -155,21 +158,20 @@ async def _operations_view(
             "name": product.get("name"),
             "sku": product.get("sku"),
         },
-        "profile": _serialize(profile) or {
-            "fulfillment_type": None,
-            "warehouse_id": None,
-            "configured": False,
-        },
+        "profile": serialized_profile,
         "product_links": [
             _serialize(row) for row in product_links
         ],
         "resources": resource_rows,
-        "warehouses": warehouses,
         "rules": {
             "same_resource_cannot_link_at_product_and_option": True,
             "component_alone_requires_preparation": False,
             "service_can_force_preparation": True,
             "default_when_unconfigured": "requires_preparation",
+            "warehouse_resolution": [
+                "inventory_location",
+                "employee_assignment",
+            ],
         },
     }
 
@@ -218,26 +220,6 @@ def make_product_fulfillment_router(
                     "allowed": sorted(FULFILLMENT_TYPES),
                 },
             ) from exc
-        warehouse_id = str(payload.warehouse_id or "").strip() or None
-        if fulfillment_type == "instant" and not warehouse_id:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "warehouse_required_for_instant_shipping"},
-            )
-        if warehouse_id:
-            warehouse = await db[WAREHOUSES].find_one(
-                {
-                    "user_id": user_id,
-                    "id": warehouse_id,
-                    "status": {"$ne": "disabled"},
-                },
-                {"_id": 0, "id": 1},
-            )
-            if not warehouse:
-                raise HTTPException(
-                    status_code=422,
-                    detail={"code": "warehouse_not_found"},
-                )
         salla_id = _product_key(product)
         selector = {
             "user_id": user_id,
@@ -254,7 +236,6 @@ def make_product_fulfillment_router(
                 product.get("mezan_product_id") or product.get("id")
             ),
             "fulfillment_type": fulfillment_type,
-            "warehouse_id": warehouse_id,
             "configured": True,
             "updated_at": now,
             "updated_by": str(user.get("id") or ""),
@@ -263,6 +244,7 @@ def make_product_fulfillment_router(
             selector,
             {
                 "$set": patch,
+                "$unset": {"warehouse_id": ""},
                 "$setOnInsert": {
                     "id": uuid.uuid4().hex,
                     "created_at": now,
