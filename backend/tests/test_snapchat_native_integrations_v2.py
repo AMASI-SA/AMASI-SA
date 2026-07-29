@@ -13,9 +13,7 @@ from integrations_control_center.catalog import (
 from integrations_control_center.snapchat_catalog_native import (
     install_snapchat_native_catalog,
 )
-from integrations_control_center.snapchat_connections import (
-    handle_snapchat_callback,
-)
+from integrations_control_center.snapchat_connections import handle_snapchat_callback
 from integrations_control_center import snapchat_discovery
 from integrations_control_center import snapchat_oauth_security as oauth
 from integrations_control_center import snapchat_projection
@@ -75,12 +73,18 @@ class FakeCollection:
             target.update(deepcopy(update.get("$set") or {}))
             modified = 1
         self.db.writes.append(
-            (self.name, "update_one", {"query": deepcopy(query), "update": deepcopy(update)})
+            (
+                self.name,
+                "update_one",
+                {"query": deepcopy(query), "update": deepcopy(update)},
+            )
         )
         return FakeResult(modified)
 
     async def delete_many(self, query):
-        self.db.rows[self.name] = [row for row in self.rows if not _matches(row, query)]
+        self.db.rows[self.name] = [
+            row for row in self.rows if not _matches(row, query)
+        ]
         self.db.writes.append((self.name, "delete_many", deepcopy(query)))
         return object()
 
@@ -307,10 +311,18 @@ async def test_snapchat_projection_writes_only_v2_and_encrypted_credentials(
     monkeypatch,
 ):
     db = FakeDB()
+
+    def opaque_ciphertext(value):
+        if value == "snap-access-secret":
+            return b"ciphertext-access"
+        if value == "snap-refresh-secret":
+            return b"ciphertext-refresh"
+        return None
+
     monkeypatch.setattr(
         snapchat_projection,
         "encrypt_snapchat_token",
-        lambda value: f"encrypted:{value}".encode() if value else None,
+        opaque_ciphertext,
     )
     await snapchat_projection.persist_snapchat_projection(
         db,
@@ -360,8 +372,8 @@ async def test_snapchat_projection_writes_only_v2_and_encrypted_credentials(
     rendered = repr(db.rows)
     assert "snap-access-secret" not in rendered
     assert "snap-refresh-secret" not in rendered
-    assert "encrypted:snap-access-secret" in rendered
-    assert "encrypted:snap-refresh-secret" in rendered
+    assert "ciphertext-access" in rendered
+    assert "ciphertext-refresh" in rendered
     integration = db.rows["mezan_integrations_v2"][0]
     assert integration["connection_provenance"] == "api_connection"
     assert integration["has_data"] is True
