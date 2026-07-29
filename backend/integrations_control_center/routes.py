@@ -6,6 +6,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from .catalog import PROVIDER_BY_ID, provider_or_none
+from .google_connections import attach_google_connection_routes
 from .models import (
     ActivityListResponse,
     CapabilityResponse,
@@ -121,6 +122,11 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
                     "retryable": exc.retryable,
                 },
             ) from exc
+
+    # Register Google OAuth start/callback and exact Google test routes before
+    # the generic provider test route, so the four Google cards use their
+    # native V2 connection evidence instead of the legacy-only probe.
+    attach_google_connection_routes(router, db, current_user, _require_owner)
 
     @router.post("/{provider}/test-connection", response_model=ConnectionTestResponse)
     async def test_connection(provider: str, user: dict = Depends(current_user)) -> dict:
