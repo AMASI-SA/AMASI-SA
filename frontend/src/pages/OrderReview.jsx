@@ -13,6 +13,7 @@ import {
     unlinkOrderReviewOperationalItem,
     updateOrderReviewItem,
     updateOrderReviewOperationalItemStatus,
+    saveOrderReviewImageChoice,
 } from "../services/orderReviewEngine";
 
 function money(value, currency = "SAR") {
@@ -176,6 +177,8 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     const [showInternalNote, setShowInternalNote] = useState(false);
     const [busy, setBusy] = useState(false);
     const [visibleSelectedImage, setVisibleSelectedImage] = useState(item.selected_image_url || item.image_url || "");
+    const [imageDialog, setImageDialog] = useState(null);
+    const [selectedImageSpecKeys, setSelectedImageSpecKeys] = useState([]);
 
     useEffect(() => {
         setPreparationNote(item.preparation_note || "");
@@ -204,6 +207,34 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 
     const specs = reviewProductSpecs(item);
     const selectedIdentity = imageIdentity(visibleSelectedImage);
+    const openImageDialog = (url) => {
+        setImageDialog(url);
+        setSelectedImageSpecKeys(specs.map((spec) => spec.key));
+    };
+    const saveImageChoice = async (mode) => {
+        if (!imageDialog) return;
+        if (mode === "options" && !selectedImageSpecKeys.length) {
+            toast.error("اختر خيارًا واحدًا على الأقل");
+            return;
+        }
+        setBusy(true);
+        try {
+            const next = await saveOrderReviewImageChoice(orderNumber, item.order_item_id, {
+                expected_revision: workflowRevision,
+                selected_image_url: imageDialog,
+                mode,
+                selected_spec_keys: mode === "options" ? selectedImageSpecKeys : [],
+            });
+            setVisibleSelectedImage(imageDialog);
+            setImageDialog(null);
+            onChanged(next);
+            toast.success(mode === "order_only" ? "تم حفظ الصورة لهذا الطلب فقط." : mode === "default" ? "تم حفظ الصورة كرئيسية للمنتج في ميزان." : "تم حفظ الصورة مع الخيارات المحددة.");
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setBusy(false);
+        }
+    };
     const sourceGallery = (item.gallery || []).filter(Boolean);
     const gallery = [];
     const seenImageIdentities = new Set();
@@ -215,6 +246,23 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     }
     return (
         <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {imageDialog && (
+                <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-3" dir="rtl">
+                    <div className="max-h-[92vh] w-full max-w-xl overflow-auto rounded-3xl bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b p-4"><div><h3 className="font-extrabold">حفظ صورة التجهيز</h3><p className="text-xs text-slate-500">اختر طريقة استخدام الصورة داخل ميزان.</p></div><button type="button" onClick={() => setImageDialog(null)} className="rounded-xl border p-2"><X /></button></div>
+                        <div className="space-y-4 p-4">
+                            <img src={imageDialog} alt="" className="mx-auto h-40 w-40 rounded-2xl border object-cover" />
+                            {specs.length > 0 && <div><div className="mb-2 text-sm font-extrabold">الخيارات التي تُحفظ معها الصورة</div><div className="space-y-2">{specs.map((spec) => <label key={spec.key} className="flex items-start gap-2 rounded-xl bg-violet-50 p-3 text-sm"><input type="checkbox" checked={selectedImageSpecKeys.includes(spec.key)} onChange={(event) => setSelectedImageSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} /><span><b>{spec.name}:</b> {spec.value}</span></label>)}</div></div>}
+                            <div className="grid gap-2">
+                                <button type="button" disabled={busy} onClick={() => saveImageChoice("order_only")} className="rounded-xl border px-4 py-3 font-extrabold">حفظ لهذا الطلب فقط</button>
+                                <button type="button" disabled={busy || !selectedImageSpecKeys.length} onClick={() => saveImageChoice("options")} className="rounded-xl bg-violet-700 px-4 py-3 font-extrabold text-white disabled:opacity-40">حفظ مع الخيارات المحددة</button>
+                                <button type="button" disabled={busy} onClick={() => saveImageChoice("default")} className="rounded-xl bg-emerald-700 px-4 py-3 font-extrabold text-white">حفظ كصورة رئيسية في ميزان</button>
+                            </div>
+                            {selectedImageSpecKeys.length > 0 && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs"><b>سيتم ربطها بـ:</b> {specs.filter((spec) => selectedImageSpecKeys.includes(spec.key)).map((spec) => `${spec.name} = ${spec.value}`).join(" · ")}</div>}
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[128px_minmax(0,1fr)]">
                 <div>
                     <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
@@ -241,10 +289,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
                                         type="button"
                                         key={`${url}-${index}`}
                                         disabled={busy || selected}
-                                        onClick={() => {
-                                            setVisibleSelectedImage(url);
-                                            save({ selected_image_url: url }, "تم حفظ الصورة لهذه الخيارات وستُستخدم تلقائيًا لاحقًا.");
-                                        }}
+                                        onClick={() => openImageDialog(url)}
                                         className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 sm:h-20 sm:w-20 ${selected ? "border-teal-500 ring-2 ring-teal-100" : "border-slate-200 hover:border-violet-400"}`}
                                         aria-label={`اختيار صورة التجهيز رقم ${index + 1}`}
                                     >
