@@ -14,6 +14,8 @@ from .google_error_resolution import install_google_stale_error_filter
 from .google_merchant_registration import (
     attach_google_merchant_registration_route,
 )
+from .tiktok_catalog_native import install_tiktok_native_catalog
+from .tiktok_connections import attach_tiktok_connection_routes
 from .models import (
     CampaignProductLinkRecord,
     COLLECTION_NAMES,
@@ -27,28 +29,30 @@ from .service import IntegrationsControlCenterService
 
 
 def make_integrations_control_center_router(db: Any, current_user: Callable):
-    """Compose the existing V2 router with isolated Google connection routes.
+    """Compose the V2 router with isolated provider-native connection routes.
 
-    The four exact Google test routes are moved before the generic
-    ``/{provider}/test-connection`` route so FastAPI does not route them through
-    the legacy-only probe. Existing route files and server wiring remain
-    untouched, which keeps this delivery independent from Ads Manager and
-    Fulfillment.
+    TikTok's native provider definition is installed only in this control
+    plane, so old pages keep their frozen migration contract while Mezan 2 does
+    not read Make or legacy TikTok collections.
     """
+    install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
     attach_google_connection_routes(router, db, current_user, _require_owner)
     attach_google_merchant_registration_route(
         router, db, current_user, _require_owner
     )
+    attach_tiktok_connection_routes(router, db, current_user, _require_owner)
 
-    google_test_routes = [
+    exact_test_routes = [
         route
         for route in router.routes
-        if str(getattr(route, "name", "")).startswith("test_google_")
+        if str(getattr(route, "name", "")).startswith(
+            ("test_google_", "test_tiktok_")
+        )
     ]
-    if google_test_routes:
-        for route in google_test_routes:
+    if exact_test_routes:
+        for route in exact_test_routes:
             router.routes.remove(route)
         generic_index = next(
             (
@@ -59,7 +63,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
             ),
             len(router.routes),
         )
-        router.routes[generic_index:generic_index] = google_test_routes
+        router.routes[generic_index:generic_index] = exact_test_routes
     return router
 
 
