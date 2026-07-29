@@ -1,4 +1,4 @@
-"""Full product details and independent Mezan cost profiles for Product V2."""
+"""Full product details and independent Mezan cost/image profiles for Product V2."""
 from __future__ import annotations
 
 import uuid
@@ -14,7 +14,9 @@ from product_v2_routes import PRODUCTS, _now, _number, _text, normalize_salla_pr
 from salla_integration.service import SallaError, call_salla
 
 COST_PROFILES = "mezan_product_cost_profiles_v2"
+IMAGE_PROFILES = "mezan_product_image_profiles_v2"
 DETAIL_LOG = "mezan_product_detail_log_v2"
+IMAGE_PROFILE_LOG = "mezan_product_image_profile_log_v2"
 
 
 def _unwrap(response: Any) -> dict[str, Any]:
@@ -44,12 +46,7 @@ def _image_record(value: Any, index: int) -> dict[str, Any] | None:
 
 
 def _image_identity(url: Any) -> str:
-    """Return a stable identity for the same Salla image across URL variants.
-
-    Salla may return the main image separately and again inside `images`, sometimes
-    with a transformed CDN URL. Query strings and transform folders must not create
-    an extra product image in Mezan.
-    """
+    """Return a stable identity for the same Salla image across URL variants."""
     text = _text(url)
     if not text:
         return ""
@@ -66,7 +63,6 @@ def _dedupe_images(rows: list[dict[str, Any]], main_image: Any = None, product_n
     result: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     seen_urls: set[str] = set()
-
     for row in rows:
         image_id = _text(row.get("id"))
         identity = _image_identity(row.get("url"))
@@ -77,7 +73,6 @@ def _dedupe_images(rows: list[dict[str, Any]], main_image: Any = None, product_n
         if identity:
             seen_urls.add(identity)
         result.append(dict(row))
-
     main_identity = _image_identity(main_image)
     if main_image and main_identity and main_identity not in seen_urls:
         result.insert(0, {
@@ -93,7 +88,6 @@ def _dedupe_images(rows: list[dict[str, Any]], main_image: Any = None, product_n
             if _image_identity(row.get("url")) == main_identity:
                 row["is_main"] = True
                 break
-
     result.sort(key=lambda row: (0 if row.get("is_main") else 1, row.get("sort") if row.get("sort") is not None else 999999))
     for index, row in enumerate(result):
         row["sort"] = index
@@ -165,12 +159,10 @@ def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
         if record:
             image_rows.append(record)
     images = _dedupe_images(image_rows, normalized.get("main_image"), normalized.get("name"))
-
     options = _normalize_options(raw.get("options") or raw.get("product_options"))
     variants = _normalize_variants(raw.get("variants") or raw.get("skus") or raw.get("product_variants"))
     metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
     seo = raw.get("seo") if isinstance(raw.get("seo"), dict) else {}
-
     return {
         **normalized,
         "description_html": raw.get("description") if isinstance(raw.get("description"), str) else normalized.get("description"),
@@ -195,6 +187,66 @@ def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
 
 async def ensure_detail_indexes(db: Any) -> None:
     await db[COST_PROFILES].create_index([("user_id", ASCENDING), ("salla_product_id", ASCENDING)], unique=True, name="uq_product_cost_profile_v2")
+    await db[IMAGE_PROFILES].create_index([("user_id", ASCENDING), ("salla_product_id", ASCENDING)], unique=True, name="uq_product_image_profile_v2")
+    await db[IMAGE_PROFILE_LOG].create_index([("user_id", ASCENDING), ("salla_product_id", ASCENDING), ("occurred_at", ASCENDING)], name="ix_product_image_profile_log_v2")
+
+
+def _product_lookup(product_id: str, user_id: str) -> dict[str, Any]:
+    return {"user_id": user_id, "$or": [{"id": product_id}, {"mezan_product_id": product_id}, {"salla_product_id": product_id}]}
+
+
+def _serialize_profile(profile: dict[str, Any], product: dict[str, Any]) -> dict[str, Any]:
+    updated_at = profile.get("updated_at")
+    return {
+        "salla_product_id": str(product.get("salla_product_id") or ""),
+        "default_image_url": profile.get("default_image_url"),
+        "rules": profile.get("rules") or [],
+        "images": product.get("images") or [],
+        "options": product.get("options") or [],
+        "fallback_image_url": product.get("main_image"),
+        "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else updated_at,
+    }
+
+
+def _valid_image_urls(product: dict[str, Any]) -> set[str]:
+    urls = {_text(product.get("main_image"))}
+    for row in product.get("images") or []:
+        if isinstance(row, dict):
+            urls.add(_text(row.get("url")))
+    return {url for url in urls if url}
+
+
+def _normalize_conditions(raw: Any, product: dict[str, Any]) -> list[dict[str, str]]:
+    conditions = raw if isinstance(raw, list) else []
+    option_map: dict[str, dict[str, Any]] = {
+        str(option.get("id")): option for option in (product.get("options") or []) if isinstance(option, dict) and option.get("id") is not None
+    }
+    normalized: list[dict[str, str]] = []
+    seen_options: set[str] = set()
+    for row in conditions:
+        if not isinstance(row, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_image_rule_condition"})
+        option_id = _text(row.get("option_id"))
+        value_id = _text(row.get("value_id"))
+        option = option_map.get(option_id)
+        if not option or option_id in seen_options:
+            raise HTTPException(status_code=422, detail={"code": "invalid_or_duplicate_image_rule_option", "option_id": option_id})
+        value = next((item for item in (option.get("values") or []) if str(item.get("id")) == value_id), None)
+        if not value:
+            raise HTTPException(status_code=422, detail={"code": "invalid_image_rule_value", "option_id": option_id, "value_id": value_id})
+        seen_options.add(option_id)
+        normalized.append({
+            "option_id": option_id,
+            "option_name": _text(option.get("name")),
+            "value_id": value_id,
+            "value_name": _text(value.get("name")),
+        })
+    normalized.sort(key=lambda row: (row["option_id"], row["value_id"]))
+    return normalized
+
+
+def _rule_signature(conditions: list[dict[str, str]]) -> str:
+    return "|".join(f'{row["option_id"]}:{row["value_id"]}' for row in conditions)
 
 
 def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter:
@@ -203,7 +255,7 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
     @router.post("/{product_id}/refresh-details")
     async def refresh_product_details(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
-        product = await db[PRODUCTS].find_one({"user_id": user_id, "$or": [{"id": product_id}, {"mezan_product_id": product_id}, {"salla_product_id": product_id}]}, {"_id": 0})
+        product = await db[PRODUCTS].find_one(_product_lookup(product_id, user_id), {"_id": 0})
         if not product:
             raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})
         salla_id = str(product["salla_product_id"])
@@ -228,7 +280,7 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
     async def get_product_costs(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         await ensure_detail_indexes(db)
         user_id = str(user["id"])
-        product = await db[PRODUCTS].find_one({"user_id": user_id, "$or": [{"id": product_id}, {"mezan_product_id": product_id}, {"salla_product_id": product_id}]}, {"_id": 0, "salla_product_id": 1, "cost_price_from_salla": 1, "variants": 1})
+        product = await db[PRODUCTS].find_one(_product_lookup(product_id, user_id), {"_id": 0, "salla_product_id": 1, "cost_price_from_salla": 1, "variants": 1})
         if not product:
             raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})
         profile = await db[COST_PROFILES].find_one({"user_id": user_id, "salla_product_id": str(product["salla_product_id"])}, {"_id": 0}) or {}
@@ -245,7 +297,7 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
     async def save_product_costs(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
         await ensure_detail_indexes(db)
         user_id = str(user["id"])
-        product = await db[PRODUCTS].find_one({"user_id": user_id, "$or": [{"id": product_id}, {"mezan_product_id": product_id}, {"salla_product_id": product_id}]}, {"_id": 0, "salla_product_id": 1, "variants": 1})
+        product = await db[PRODUCTS].find_one(_product_lookup(product_id, user_id), {"_id": 0, "salla_product_id": 1, "variants": 1})
         if not product:
             raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})
         base_cost = _number(payload.get("base_cost"))
@@ -264,5 +316,77 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
         salla_id = str(product["salla_product_id"])
         await db[COST_PROFILES].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {"user_id": user_id, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "notes": _text(payload.get("notes")), "updated_at": now}, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}}, upsert=True)
         return {"ok": True, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "updated_at": now.isoformat()}
+
+    @router.get("/{product_id}/image-profile")
+    async def get_product_image_profile(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        await ensure_detail_indexes(db)
+        user_id = str(user["id"])
+        product = await db[PRODUCTS].find_one(_product_lookup(product_id, user_id), {"_id": 0, "salla_product_id": 1, "main_image": 1, "images": 1, "options": 1})
+        if not product:
+            raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})
+        profile = await db[IMAGE_PROFILES].find_one({"user_id": user_id, "salla_product_id": str(product["salla_product_id"])}, {"_id": 0}) or {}
+        return _serialize_profile(profile, product)
+
+    @router.put("/{product_id}/image-profile")
+    async def save_product_image_profile(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
+        await ensure_detail_indexes(db)
+        user_id = str(user["id"])
+        product = await db[PRODUCTS].find_one(_product_lookup(product_id, user_id), {"_id": 0, "salla_product_id": 1, "main_image": 1, "images": 1, "options": 1})
+        if not product:
+            raise HTTPException(status_code=404, detail={"code": "product_v2_not_found"})
+        valid_urls = _valid_image_urls(product)
+        default_image_url = _text(payload.get("default_image_url")) or None
+        if default_image_url and default_image_url not in valid_urls:
+            raise HTTPException(status_code=422, detail={"code": "image_not_in_product_gallery"})
+        raw_rules = payload.get("rules") if isinstance(payload.get("rules"), list) else []
+        rules: list[dict[str, Any]] = []
+        signatures: set[str] = set()
+        for index, raw_rule in enumerate(raw_rules):
+            if not isinstance(raw_rule, dict):
+                raise HTTPException(status_code=422, detail={"code": "invalid_image_rule"})
+            image_url = _text(raw_rule.get("image_url"))
+            if not image_url or image_url not in valid_urls:
+                raise HTTPException(status_code=422, detail={"code": "image_rule_url_not_in_product_gallery", "index": index})
+            conditions = _normalize_conditions(raw_rule.get("conditions"), product)
+            if not conditions:
+                raise HTTPException(status_code=422, detail={"code": "image_rule_requires_condition", "index": index})
+            signature = _rule_signature(conditions)
+            if signature in signatures:
+                raise HTTPException(status_code=409, detail={"code": "duplicate_image_rule_conditions", "signature": signature})
+            signatures.add(signature)
+            rules.append({
+                "id": _text(raw_rule.get("id")) or uuid.uuid4().hex,
+                "image_url": image_url,
+                "conditions": conditions,
+                "condition_count": len(conditions),
+                "signature": signature,
+                "enabled": raw_rule.get("enabled") is not False,
+            })
+        rules.sort(key=lambda row: (-row["condition_count"], row["signature"]))
+        now = _now()
+        salla_id = str(product["salla_product_id"])
+        document = {
+            "user_id": user_id,
+            "salla_product_id": salla_id,
+            "default_image_url": default_image_url,
+            "rules": rules,
+            "updated_by": user_id,
+            "updated_at": now,
+        }
+        await db[IMAGE_PROFILES].update_one(
+            {"user_id": user_id, "salla_product_id": salla_id},
+            {"$set": document, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}},
+            upsert=True,
+        )
+        await db[IMAGE_PROFILE_LOG].insert_one({
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "salla_product_id": salla_id,
+            "event_type": "image_profile_saved",
+            "default_image_url": default_image_url,
+            "rules_count": len(rules),
+            "occurred_at": now,
+        })
+        return {"ok": True, **_serialize_profile(document, product)}
 
     return router
