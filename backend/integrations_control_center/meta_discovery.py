@@ -128,13 +128,17 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                 }
             )
 
+        # Keep the required account-discovery call limited to broadly available
+        # account metadata. Financial fields are requested separately below so
+        # one restricted billing field can never hide an otherwise valid ad
+        # account from Mezan.
         account_rows = await _get_all(
             client,
             "me/adaccounts",
             access_token=access_token,
             fields=(
                 "id,account_id,name,currency,timezone_name,account_status,"
-                "business{id,name},amount_spent,balance,spend_cap,funding_source_details"
+                "business{id,name}"
             ),
             limit=MAX_AD_ACCOUNTS,
         )
@@ -154,15 +158,36 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                     "account_status": item.get("account_status"),
                     "business_id": business.get("id"),
                     "business_name": business.get("name"),
-                    "amount_spent_minor": item.get("amount_spent"),
-                    "balance_minor": item.get("balance"),
-                    "spend_cap_minor": item.get("spend_cap"),
-                    "funding_source_present": bool(item.get("funding_source_details")),
+                    "amount_spent_minor": None,
+                    "balance_minor": None,
+                    "spend_cap_minor": None,
+                    "funding_source_present": None,
                 }
             )
 
         for account in accounts:
             account_id = account["ad_account_id"]
+
+            # Billing/funding visibility differs by account role, ownership,
+            # region, and account configuration. Treat it as optional evidence
+            # and store only numeric summaries plus a boolean—never the payment
+            # instrument payload itself.
+            try:
+                finance = await _get_one(
+                    client,
+                    account_id,
+                    access_token=access_token,
+                    fields="amount_spent,balance,spend_cap,funding_source_details",
+                )
+                account["amount_spent_minor"] = finance.get("amount_spent")
+                account["balance_minor"] = finance.get("balance")
+                account["spend_cap_minor"] = finance.get("spend_cap")
+                account["funding_source_present"] = bool(
+                    finance.get("funding_source_details")
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append({"asset": f"finance:{account_id}", "code": str(exc)})
+
             try:
                 pixel_rows = await _get_all(
                     client,
