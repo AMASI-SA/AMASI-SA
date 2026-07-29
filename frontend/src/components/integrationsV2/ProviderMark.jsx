@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { startGoogleConnection } from "../../services/googleIntegrationsV2";
+import { startSnapchatConnection } from "../../services/snapchatIntegrationsV2";
 import { startTikTokConnection } from "../../services/tiktokIntegrationsV2";
 
 const PROVIDERS = {
@@ -28,32 +29,43 @@ export default function ProviderMark({ provider, size = "md" }) {
     const dimensions = size === "sm" ? "h-9 w-9 rounded-lg" : "h-12 w-12 rounded-xl";
     const iconSize = size === "sm" ? 20 : 25;
     const isGoogle = String(provider || "").startsWith("google_");
+    const isSnapchat = provider === "snapchat_ads";
     const isTikTok = provider === "tiktok_ads";
-    const supportsNativeConnect = isGoogle || isTikTok;
+    const supportsNativeConnect = isGoogle || isSnapchat || isTikTok;
 
     async function connectProvider(event) {
         event.stopPropagation();
         if (connecting) return;
         setConnecting(true);
         try {
-            const result = isTikTok
-                ? await startTikTokConnection()
-                : await startGoogleConnection();
+            const result = isSnapchat
+                ? await startSnapchatConnection()
+                : isTikTok
+                    ? await startTikTokConnection()
+                    : await startGoogleConnection();
             window.location.assign(result.authorization_url);
         } catch (error) {
             const detail = error?.response?.data?.detail;
             const untrusted = error?.message === "google_authorization_url_untrusted"
+                || error?.message === "snapchat_authorization_url_untrusted"
                 || error?.message === "tiktok_authorization_url_untrusted";
+            const providerLabel = isSnapchat ? "Snapchat" : isTikTok ? "TikTok" : "Google";
             const message = typeof detail === "string"
                 ? detail
                 : detail?.message
                     || (untrusted
                         ? "رفض ميزان رابط تفويض غير موثوق."
-                        : `تعذر بدء ربط ${isTikTok ? "TikTok" : "Google"}.`);
+                        : `تعذر بدء ربط ${providerLabel}.`);
             toast.error(message);
             setConnecting(false);
         }
     }
+
+    const connectLabel = isSnapchat
+        ? "ربط Snapchat"
+        : isTikTok
+            ? "ربط TikTok"
+            : "ربط Google";
 
     return (
         <div className="flex shrink-0 flex-col items-center gap-1.5">
@@ -70,11 +82,7 @@ export default function ProviderMark({ provider, size = "md" }) {
                     aria-label={`ربط ${definition.label}`}
                 >
                     <LinkSimple size={12} weight="bold" />
-                    {connecting
-                        ? "جاري الربط…"
-                        : isTikTok
-                            ? "ربط TikTok"
-                            : "ربط Google"}
+                    {connecting ? "جاري الربط…" : connectLabel}
                 </button>
             )}
         </div>
