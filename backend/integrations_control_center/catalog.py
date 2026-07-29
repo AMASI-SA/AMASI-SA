@@ -1,15 +1,14 @@
 """Static provider catalogue and Phase-1 capability policy.
 
-The control centre is intentionally declarative.  A provider appearing in
-this catalogue does not mean that Mezan may mutate that provider.  In
-particular, every advertising write is blocked until the complete approval
+A provider appearing in this catalogue does not grant Mezan permission to
+mutate that provider. Advertising writes remain blocked until the complete
+proposal, preview, approval, execution, verification, audit, and rollback
 lifecycle is implemented.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Final, Iterable
-
 
 AD_CAPABILITY_KEYS: Final[tuple[str, ...]] = (
     "campaigns.read",
@@ -42,9 +41,6 @@ AD_MUTATION_CAPABILITIES: Final[frozenset[str]] = frozenset(
     }
 )
 
-# Phase 1 can prove these capabilities from the bounded local performance
-# rows.  The remaining advertising reads stay planned/unknown rather than
-# being optimistically advertised.
 LOCAL_DATA_READ_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
         "campaigns.read",
@@ -74,9 +70,6 @@ class ProviderDefinition:
     legacy_sources: tuple[str, ...]
     required_permissions: tuple[str, ...] = ()
     native_capabilities: tuple[str, ...] = ()
-    # Optional per-capability permission alternatives.  When present, any one
-    # of the listed scopes proves that specific read capability.  This keeps
-    # an unrelated missing operational scope from blocking every read.
     capability_permissions: tuple[tuple[str, tuple[str, ...]], ...] = ()
     ai_can_when_ready: tuple[str, ...] = ()
     ai_cannot_phase_one: tuple[str, ...] = ()
@@ -149,15 +142,18 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
         name="TikTok Ads",
         name_ar="إعلانات تيك توك",
         category="advertising",
-        legacy_sources=("tiktok_connections", "tiktok_ads_daily"),
-        required_permissions=("ads.read", "reporting.read"),
+        # TikTok V2 is intentionally independent from Make and the legacy
+        # tiktok_connections / tiktok_ads_daily collections.
+        legacy_sources=(),
+        required_permissions=("tiktok_marketing_api",),
         ai_can_when_ready=(
-            "قراءة الأداء المتاح من تغذية البيانات",
+            "قراءة حسابات TikTok المصرح بها مباشرة عبر Marketing API",
+            "قراءة الحملات والإعلانات والتصاميم والجماهير والتقارير بعد المزامنة",
             "تحليل الإنفاق والتحويلات والربحية",
         ),
         ai_cannot_phase_one=(
-            "اعتبار تغذية Make اتصال إدارة أصليًا",
-            "إنشاء أو تعديل الحملات والميزانيات والإعلانات",
+            "تنفيذ إنشاء أو تعديل أو إيقاف دون اقتراح ومعاينة واعتماد وتحقق ورجوع",
+            "استخدام بيانات Make أو مجموعات TikTok القديمة كمصدر لبطاقة ميزان 2",
         ),
         advertising=True,
     ),
@@ -318,20 +314,13 @@ def build_capability_matrix(
                 if not connected:
                     matrix[capability] = _entry(
                         "not_connected",
-                        (
-                            "A provider-management connection is required "
-                            "before this mutation can enter the approval lifecycle."
-                        ),
+                        "A provider-management connection is required before this mutation can enter the approval lifecycle.",
                         blocked_by_policy=True,
                     )
                 else:
                     matrix[capability] = _entry(
                         "approval_required",
-                        (
-                            "Phase 1 blocks provider mutations until proposal, "
-                            "preview, approval, verification, audit, and rollback "
-                            "controls are implemented."
-                        ),
+                        "Provider mutations require proposal, preview, approval, verification, audit, and rollback controls.",
                         approval_required=True,
                         blocked_by_policy=True,
                     )
@@ -403,8 +392,6 @@ def build_capability_matrix(
 
 SAFETY_POLICY: Final[dict] = {
     "phase": 1,
-    # Kept for older clients, but now truthfully describes the whole control
-    # center: the bounded Snapchat analytics refresh persists facts and logs.
     "read_only": False,
     "provider_mutations_enabled": False,
     "campaign_mutations_enabled": False,
