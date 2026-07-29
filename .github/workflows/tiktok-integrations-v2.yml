@@ -10,6 +10,7 @@ on:
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_tiktok_integrations_v2.py"
       - "frontend/src/services/tiktokIntegrationsV2.js"
+      - "frontend/src/services/tiktokIntegrationsV2.test.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
       - "docs/TIKTOK_INTEGRATIONS_V2_SETUP.md"
       - ".github/workflows/tiktok-integrations-v2.yml"
@@ -53,7 +54,7 @@ jobs:
           --tb=short
 
   frontend-build:
-    name: Frontend build
+    name: TikTok frontend test and build
     needs: backend-tests
     runs-on: ubuntu-latest
     defaults:
@@ -63,12 +64,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
+          node-version: "22"
       - name: Enable Yarn Classic
-        run: corepack enable
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --non-interactive
+      - name: Run TikTok frontend tests
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/services/tiktokIntegrationsV2.test.js
       - name: Build frontend
-        run: yarn build
+        run: CI=false yarn build
