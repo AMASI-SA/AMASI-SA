@@ -10,16 +10,25 @@ from integrations_control_center.catalog import (
     PROVIDER_BY_ID,
     build_capability_matrix,
 )
-from integrations_control_center.tiktok_connections import (
-    handle_tiktok_callback,
-)
+from integrations_control_center.tiktok_connections import handle_tiktok_callback
 from integrations_control_center import tiktok_discovery
 from integrations_control_center import tiktok_oauth_security as oauth
 from integrations_control_center import tiktok_projection
 
 
 class FakeResult:
-    modified_count = 1
+    def __init__(self, modified_count=1):
+        self.modified_count = modified_count
+
+
+def _matches(row, query):
+    for key, value in query.items():
+        if isinstance(value, dict) and "$gt" in value:
+            if row.get(key) is None or not row.get(key) > value["$gt"]:
+                return False
+        elif row.get(key) != value:
+            return False
+    return True
 
 
 class FakeCollection:
@@ -47,51 +56,35 @@ class FakeCollection:
         return object()
 
     async def update_one(self, query, update, upsert=False):
-        target = next(
-            (
-                row
-                for row in self.rows
-                if all(row.get(key) == value for key, value in query.items())
-            ),
-            None,
-        )
+        target = next((row for row in self.rows if _matches(row, query)), None)
         if target is None and upsert:
-            target = deepcopy(query)
+            target = {
+                key: deepcopy(value)
+                for key, value in query.items()
+                if not isinstance(value, dict)
+            }
             target.update(deepcopy(update.get("$setOnInsert") or {}))
             self.rows.append(target)
+        modified = 0
         if target is not None:
             target.update(deepcopy(update.get("$set") or {}))
+            modified = 1
         self.db.writes.append(
             (self.name, "update_one", {"query": deepcopy(query), "update": deepcopy(update)})
         )
-        return FakeResult()
+        return FakeResult(modified)
 
     async def delete_many(self, query):
-        self.db.rows[self.name] = [
-            row
-            for row in self.rows
-            if not all(row.get(key) == value for key, value in query.items())
-        ]
+        self.db.rows[self.name] = [row for row in self.rows if not _matches(row, query)]
         self.db.writes.append((self.name, "delete_many", deepcopy(query)))
         return object()
 
     async def find_one(self, query, projection=None):
-        for row in self.rows:
-            matches = True
-            for key, value in query.items():
-                if isinstance(value, dict) and "$gt" in value:
-                    matches = matches and row.get(key) > value["$gt"]
-                else:
-                    matches = matches and row.get(key) == value
-            if matches:
-                return deepcopy(row)
-        return None
+        row = next((item for item in self.rows if _matches(item, query)), None)
+        return deepcopy(row) if row else None
 
     async def count_documents(self, query):
-        return sum(
-            all(row.get(key) == value for key, value in query.items())
-            for row in self.rows
-        )
+        return sum(_matches(row, query) for row in self.rows)
 
 
 class FakeDB:
@@ -327,7 +320,8 @@ async def test_tiktok_projection_writes_only_v2_and_encrypted_credentials(
 
 
 @pytest.mark.asyncio
-async def test_tiktok_callback_rejects_browser_mismatch_before_network():
+async def test_tiktok_callback_rejects_browser_mismatch_before_network(monkeypatch):
+    _configure(monkeypatch)
     response = await handle_tiktok_callback(
         FakeDB(),
         auth_code="auth-code",
