@@ -37,6 +37,8 @@ export async function getProductV2(productId) { return (await api.get(`/products
 export async function refreshProductV2Details(productId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/refresh-details`)).data; }
 export async function getProductV2Costs(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/costs`)).data; }
 export async function saveProductV2Costs(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/costs`, payload)).data; }
+export async function getProductImageProfile(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/image-profile`)).data; }
+export async function saveProductImageProfile(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/image-profile`, payload)).data; }
 export async function getProductOptionCosts(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/option-costs`)).data; }
 export async function saveProductOptionCost(productId, optionId, valueId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`, payload)).data; }
 export async function deleteProductOptionCost(productId, optionId, valueId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`)).data; }
@@ -66,22 +68,9 @@ export async function uploadProductMediaFile(productId, file) {
     form.append("file", file);
     return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-upload`, form, { headers: { "Content-Type": "multipart/form-data" } })).data;
 }
-export async function deleteProductMediaUpload(productId, token) {
-    return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/media-upload/${encodeURIComponent(token)}`)).data;
-}
-
-export async function getProductMediaAiState(productId) {
-    return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-ai`)).data;
-}
-export async function createProductMediaAiJob(productId, payload) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs`, payload)).data;
-}
-export async function executeProductMediaAiJob(productId, jobId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/execute`)).data;
-}
-export async function addProductMediaAiResultToDraft(productId, jobId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/add-to-draft`)).data;
-}
-export async function cancelProductMediaAiJob(productId, jobId) {
-    return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/cancel`)).data;
-}
+export async function deleteProductMediaUpload(productId, token) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/media-upload/${encodeURIComponent(token)}`)).data; }
+export async function getProductMediaAiState(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/media-ai`)).data; }
+export async function createProductMediaAiJob(productId, payload) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs`, payload)).data; }
+export async function executeProductMediaAiJob(productId, jobId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/execute`)).data; }
+export async function addProductMediaAiResultToDraft(productId, jobId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/add-to-draft`)).data; }
+export async function cancelProductMediaAiJob(productId, jobId) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/media-ai/jobs/${encodeURIComponent(jobId)}/cancel`)).data; }
