@@ -73,14 +73,11 @@ def test_owner_sees_one_preparation_entry_while_employee_review_access_is_preser
         encoding="utf-8"
     )
 
-    # The legacy route remains in the operations definition for non-owner staff.
     assert '{ to: "/order-review", label: "بانتظار المراجعة"' in sidebar_source
-    # Owners see the organized Mezan OS parent only, without a duplicate link.
     assert (
         'const items = section.items.filter((item) => item.to !== "/order-review");'
         in sidebar_source
     )
-
 
 
 def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
@@ -97,7 +94,6 @@ def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
     assert "append: true" not in source
 
 
-
 def test_order_review_product_cards_keep_titles_and_specs_readable():
     source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
 
@@ -109,7 +105,6 @@ def test_order_review_product_cards_keep_titles_and_specs_readable():
     assert 'md:max-w-7xl' in source
     assert 'sm:grid-cols-[150px_minmax(0,1fr)]' not in source
     assert 'grid gap-4 xl:grid-cols-3' not in source
-
 
 
 def test_salla_refresh_is_centralized_in_orders_v2():
@@ -129,7 +124,6 @@ def test_salla_refresh_is_centralized_in_orders_v2():
     assert "no_shipments_api_calls" in refresh_source
     assert "refreshOrderFromSalla" in service_source
     assert 'data-testid="order-v2-refresh-from-salla"' in details_source
-
 
 
 def test_orders_v2_shipping_card_shows_complete_order_address():
@@ -153,7 +147,9 @@ def test_review_supports_internal_operational_items_without_supplier_export():
     assert 'createOrderReviewOperationalItem' in service_source
     assert 'data-testid="order-review-operational-item"' in frontend_source
     assert 'إضافة منتج تشغيلي' in frontend_source
-    assert '.filter((url) => url !== item.selected_image_url)' in frontend_source
+    assert 'function imageIdentity(value)' in frontend_source
+    assert 'identity === selectedIdentity' in frontend_source
+    assert 'seenImageIdentities.has(identity)' in frontend_source
 
 
 def test_reviewed_stage_and_salla_admin_link_are_active():
