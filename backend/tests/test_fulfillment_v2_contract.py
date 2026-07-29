@@ -154,3 +154,18 @@ def test_review_supports_internal_operational_items_without_supplier_export():
     assert 'data-testid="order-review-operational-item"' in frontend_source
     assert 'إضافة منتج تشغيلي' in frontend_source
     assert '.filter((url) => url !== item.selected_image_url)' in frontend_source
+
+
+def test_reviewed_stage_and_salla_admin_link_are_active():
+    backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
+    review_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
+    stage_source = (ROOT / "frontend/src/pages/FulfillmentV2.jsx").read_text(encoding="utf-8")
+    reviewed_source = (ROOT / "frontend/src/pages/ReviewedOrders.jsx").read_text(encoding="utf-8")
+    service_source = (ROOT / "frontend/src/services/orderReviewEngine.js").read_text(encoding="utf-8")
+
+    assert '@router.get("/reviewed")' in backend_source
+    assert 'raw_by_source.salla_direct.urls.admin' in backend_source
+    assert 'data-testid="order-review-open-in-salla"' in review_source
+    assert 'activeStage.key === "reviewed"' in stage_source
+    assert 'data-testid="reviewed-orders-stage"' in reviewed_source
+    assert 'listReviewedOrderReviews' in service_source
