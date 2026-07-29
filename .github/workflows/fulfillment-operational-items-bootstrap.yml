@@ -1,5 +1,6 @@
 name: Fulfillment operational items bootstrap
 
+# One-shot branch bootstrap; removed before merge.
 on:
   push:
     branches:
