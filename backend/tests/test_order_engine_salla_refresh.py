@@ -10,6 +10,7 @@ import pytest
 from order_engine.salla_refresh import (
     REFRESH_TIMESTAMP_FIELD,
     extract_order_details_address,
+    extract_order_details_shipping_fields,
     refresh_order_from_salla,
 )
 
@@ -54,7 +55,7 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
         calls.append((method, path, params, json))
         assert method == "GET"
         if path == "/orders/901":
-            assert params == {"format": "light"}
+            assert params is None
             return {"data": {
                 "id": 901,
                 "reference_id": "274682897",
@@ -239,3 +240,40 @@ def test_address_extractor_accepts_customer_city_country_and_location():
     assert address["city"] == "الرياض"
     assert address["country"] == "السعودية"
     assert address["formatted"] == "حي النرجس، شارع عثمان بن عفان"
+
+
+
+def test_full_order_details_uses_embedded_ship_to_and_skips_numeric_ids():
+    fields, address, source = extract_order_details_shipping_fields({
+        "customer": {
+            "city": "جدة",
+            "country": "السعودية",
+        },
+        "shipments": [{
+            "pickup_address": {
+                "country": "السعودية",
+                "city": "الرياض",
+                "block": "الملز",
+                "street_number": "شارع المتجر",
+            },
+            "ship_to": {
+                "country": "السعودية",
+                "city": "جدة",
+                "district": 1939592358,
+                "district_name": "حي الصفا",
+                "block": "حي الصفا",
+                "street": 674989864,
+                "street_number": "شارع الأربعين",
+                "address_line": "شارع الأربعين، حي الصفا، جدة، السعودية",
+                "postal_code": "23455",
+            },
+        }],
+    })
+
+    assert source == "order.shipments[0].ship_to"
+    assert address["block"] == "حي الصفا"
+    assert fields["shipping_city"] == "جدة"
+    assert fields["shipping_district"] == "حي الصفا"
+    assert fields["shipping_street"] == "شارع الأربعين"
+    assert fields["shipping_address"] == "شارع الأربعين، حي الصفا، جدة، السعودية"
+    assert fields["shipping_postal_code"] == "23455"

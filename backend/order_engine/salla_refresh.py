@@ -4,9 +4,11 @@ The service deliberately reads shipping/customer facts from Order Details itself
 and retrieves line items from List Order Items.  It never calls Shipments APIs,
 Qoyod, legacy Mezan routes, or page-specific persistence.
 
-For modern Salla applications, Order Details is requested with ``format=light``.
-That response still contains the order/customer/receiver facts, while order items
-are retrieved through the dedicated ``/orders/items`` endpoint.
+Order Details is requested without ``format=light`` so Salla can return the
+complete delivery facts available on the order itself, including ``ship_to``,
+``block`` and ``street_number``. Order items are retrieved separately through
+``/orders/items``. Embedded shipment objects may be read from Order Details, but
+this service never calls a Shipments API endpoint.
 """
 from __future__ import annotations
 
@@ -43,6 +45,17 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _first_shipment(order: dict[str, Any]) -> dict[str, Any]:
+    rows = order.get("shipments")
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                return dict(row)
+    if isinstance(rows, dict):
+        return dict(rows)
+    return _dict(order.get("shipment"))
+
+
 def _named(value: Any) -> Optional[str]:
     if isinstance(value, dict):
         for key in ("name", "name_ar", "label", "title", "display_name", "value"):
@@ -53,6 +66,15 @@ def _named(value: Any) -> Optional[str]:
     text = _text(value)
     if text and not text.replace(".", "", 1).isdigit():
         return text
+    return None
+
+
+def _first_named(*values: Any) -> Optional[str]:
+    """Return the first human-readable label, skipping numeric Salla IDs."""
+    for value in values:
+        text = _named(value)
+        if text:
+            return text
     return None
 
 
@@ -90,6 +112,8 @@ def _address_score(value: Any) -> int:
         "formatted_address": 8,
         "description": 8,
         "location": 8,
+        "address": 8,
+        "house_desc": 8,
         "short_address": 7,
         "national_address": 7,
         "district": 6,
@@ -192,8 +216,12 @@ def extract_order_details_address(order: dict[str, Any]) -> tuple[dict[str, Any]
     shipping = _dict(order.get("shipping"))
     receiver = _dict(order.get("receiver"))
     customer = _dict(order.get("customer"))
+    first_shipment = _first_shipment(order)
 
     preferred = [
+        ("order.shipments[0].ship_to", _dict(first_shipment.get("ship_to"))),
+        ("order.shipments[0].shipping_address", _dict(first_shipment.get("shipping_address"))),
+        ("order.shipments[0].address", _dict(first_shipment.get("address"))),
         ("order.shipping.ship_to", _dict(shipping.get("ship_to"))),
         ("order.shipping.address", _dict(shipping.get("address"))),
         ("order.ship_to", _dict(order.get("ship_to"))),
@@ -223,20 +251,32 @@ def _address_fields(address: dict[str, Any], source_path: Optional[str]) -> dict
     if not address:
         return {"shipping_address_found": False}
 
-    city = _named(address.get("city") or address.get("city_name") or address.get("city_data"))
-    district = _named(
-        address.get("district")
-        or address.get("district_name")
-        or address.get("neighborhood")
-        or address.get("neighbourhood")
-        or address.get("block")
+    city = _first_named(
+        address.get("city"),
+        address.get("city_name"),
+        address.get("city_data"),
+        address.get("town"),
+        address.get("locality"),
     )
-    street = _named(
-        address.get("street")
-        or address.get("street_name")
-        or address.get("street_number")
+    district = _first_named(
+        address.get("district"),
+        address.get("district_name"),
+        address.get("district_data"),
+        address.get("neighborhood"),
+        address.get("neighbourhood"),
+        address.get("block"),
+        address.get("local"),
     )
-    country = _named(address.get("country") or address.get("country_name") or address.get("country_data"))
+    street = _first_named(
+        address.get("street"),
+        address.get("street_name"),
+        address.get("street_number"),
+    )
+    country = _first_named(
+        address.get("country"),
+        address.get("country_name"),
+        address.get("country_data"),
+    )
     formatted = _first_text(
         address.get("formatted"),
         address.get("formatted_address"),
@@ -245,6 +285,8 @@ def _address_fields(address: dict[str, Any], source_path: Optional[str]) -> dict
         address.get("address_line1"),
         address.get("description"),
         address.get("location"),
+        address.get("address"),
+        address.get("house_desc"),
     )
     short_address = _first_text(
         address.get("short_address"),
@@ -419,7 +461,6 @@ async def refresh_order_from_salla(
             str(user_id),
             "GET",
             f"/orders/{internal_id}",
-            params={"format": "light"},
         )
         details = details_response.get("data") if isinstance(details_response, dict) else None
         if not isinstance(details, dict):
@@ -496,7 +537,7 @@ async def refresh_order_from_salla(
         canonical_updates: dict[str, Any] = {
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
             REFRESH_MODE_FIELD: "orders_v2_central_refresh",
-            REFRESH_ENDPOINT_FIELD: "GET /orders/{id}?format=light + GET /orders/items",
+            REFRESH_ENDPOINT_FIELD: "GET /orders/{id} + GET /orders/items",
             REFRESH_ITEMS_FIELD: len(items),
             "orders_v2_salla_address_source": address_source,
         }
