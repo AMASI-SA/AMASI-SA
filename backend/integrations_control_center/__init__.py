@@ -14,6 +14,8 @@ from .google_error_resolution import install_google_stale_error_filter
 from .google_merchant_registration import (
     attach_google_merchant_registration_route,
 )
+from .snapchat_catalog_native import install_snapchat_native_catalog
+from .snapchat_connections import attach_snapchat_connection_routes
 from .tiktok_catalog_native import install_tiktok_native_catalog
 from .tiktok_connections import attach_tiktok_connection_routes
 from .models import (
@@ -31,10 +33,11 @@ from .service import IntegrationsControlCenterService
 def make_integrations_control_center_router(db: Any, current_user: Callable):
     """Compose the V2 router with isolated provider-native connection routes.
 
-    TikTok's native provider definition is installed only in this control
-    plane, so old pages keep their frozen migration contract while Mezan 2 does
-    not read Make or legacy TikTok collections.
+    Snapchat and TikTok native definitions are installed only in this control
+    plane, so old pages keep their frozen migration contracts while Mezan 2 does
+    not read legacy advertising credentials or data-feed collections.
     """
+    install_snapchat_native_catalog()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
@@ -42,13 +45,14 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_google_merchant_registration_route(
         router, db, current_user, _require_owner
     )
+    attach_snapchat_connection_routes(router, db, current_user, _require_owner)
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
 
     exact_test_routes = [
         route
         for route in router.routes
         if str(getattr(route, "name", "")).startswith(
-            ("test_google_", "test_tiktok_")
+            ("test_google_", "test_snapchat_", "test_tiktok_")
         )
     ]
     if exact_test_routes:
