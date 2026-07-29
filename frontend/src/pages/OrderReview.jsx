@@ -299,7 +299,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 
 function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [busy, setBusy] = useState(false);
-    const statusLabel = { pending: "لم يبدأ", in_progress: "قيد التجهيز", ready: "جاهز" }[item.preparation_status] || "لم يبدأ";
+    const statusLabel = { pending: "لم يبدأ", in_progress: "قيد التجهيز", ready: "جاهز" }[item.preparation_status] || "قيد التجهيز";
     const setStatus = async (preparationStatus) => {
         setBusy(true);
         try {
