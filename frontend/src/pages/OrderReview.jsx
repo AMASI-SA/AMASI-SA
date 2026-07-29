@@ -204,13 +204,20 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 
     const specs = reviewProductSpecs(item);
     const selectedIdentity = imageIdentity(visibleSelectedImage);
+    const sourceGallery = (item.gallery || []).filter(Boolean);
     const gallery = [];
     const seenImageIdentities = new Set();
-    for (const url of [visibleSelectedImage, ...(item.gallery || [])].filter(Boolean)) {
+    for (const url of sourceGallery) {
         const identity = imageIdentity(url);
         if (!identity || seenImageIdentities.has(identity)) continue;
         seenImageIdentities.add(identity);
         gallery.push(url);
+    }
+    const selectedExistsInGallery = sourceGallery.some((url) =>
+        url === visibleSelectedImage || imageIdentity(url) === selectedIdentity
+    );
+    if (item.selected_image_url && visibleSelectedImage && !selectedExistsInGallery) {
+        gallery.unshift(visibleSelectedImage);
     }
     return (
         <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
