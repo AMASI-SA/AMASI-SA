@@ -122,6 +122,17 @@ export function reviewProductSpecs(item) {
     return specs;
 }
 
+function imageIdentity(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    try {
+        const url = new URL(raw);
+        return `${url.origin}${decodeURIComponent(url.pathname)}`.replace(/\/+$/, "").toLowerCase();
+    } catch {
+        return raw.split(/[?#]/, 1)[0].replace(/\/+$/, "").toLowerCase();
+    }
+}
+
 function safeReceiptUrl(value) {
     try {
         const url = new URL(String(value || "").trim());
@@ -179,7 +190,15 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     };
 
     const specs = reviewProductSpecs(item);
-    const gallery = Array.from(new Set((item.gallery || []).filter(Boolean))).filter((url) => url !== item.selected_image_url);
+    const selectedIdentity = imageIdentity(item.selected_image_url);
+    const gallery = [];
+    const seenImageIdentities = new Set();
+    for (const url of (item.gallery || []).filter(Boolean)) {
+        const identity = imageIdentity(url);
+        if (!identity || identity === selectedIdentity || seenImageIdentities.has(identity)) continue;
+        seenImageIdentities.add(identity);
+        gallery.push(url);
+    }
     return (
         <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[128px_minmax(0,1fr)]">
@@ -202,7 +221,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
                     <div className="mt-4">
                         <div className="flex gap-2 overflow-x-auto pb-2">
                             {gallery.map((url, index) => {
-                                const selected = url === item.selected_image_url;
+                                const selected = imageIdentity(url) === selectedIdentity;
                                 return (
                                     <button
                                         type="button"
