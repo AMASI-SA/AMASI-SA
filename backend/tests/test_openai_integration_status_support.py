@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from integrations_control_center.models import ProviderCard
+from integrations_control_center import google_error_resolution
 from integrations_control_center import google_merchant_registration as merchant_registration
 from openai_integration_status_support import _recount, openai_integration_card
 
@@ -229,3 +230,38 @@ async def test_merchant_registration_rejects_wrong_google_identity_before_networ
     assert exc.value.detail["code"] == (
         "google_merchant_developer_email_mismatch"
     )
+
+
+def test_google_discovery_error_is_resolved_by_newer_successful_sync():
+    snapshot = {
+        "provider": "google_ads",
+        "has_data": True,
+        "last_sync_at": "2026-07-29T16:35:00+00:00",
+        "latest_error": {
+            "code": "google_discovery_developer_token_missing",
+            "occurred_at": "2026-07-29T14:03:06+00:00",
+        },
+    }
+
+    assert google_error_resolution.google_discovery_error_is_resolved(snapshot)
+
+
+def test_google_discovery_error_is_not_hidden_without_newer_success():
+    base = {
+        "provider": "google_ads",
+        "has_data": True,
+        "last_sync_at": "2026-07-29T14:00:00+00:00",
+        "latest_error": {
+            "code": "google_discovery_http_401",
+            "occurred_at": "2026-07-29T14:03:06+00:00",
+        },
+    }
+    assert not google_error_resolution.google_discovery_error_is_resolved(base)
+
+    base["has_data"] = False
+    base["last_sync_at"] = "2026-07-29T15:00:00+00:00"
+    assert not google_error_resolution.google_discovery_error_is_resolved(base)
+
+    base["provider"] = "meta_ads"
+    base["has_data"] = True
+    assert not google_error_resolution.google_discovery_error_is_resolved(base)
