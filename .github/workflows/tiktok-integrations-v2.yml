@@ -13,6 +13,7 @@ on:
       - "frontend/src/services/tiktokIntegrationsV2.test.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
       - "docs/TIKTOK_INTEGRATIONS_V2_SETUP.md"
+      - "docs/TIKTOK_NATIVE_V2_IMPLEMENTATION_NOTE.md"
       - ".github/workflows/tiktok-integrations-v2.yml"
   workflow_dispatch:
 
@@ -46,6 +47,10 @@ jobs:
         run: |
           python -m compileall -q integrations_control_center
           python -m py_compile tests/test_tiktok_integrations_v2.py
+      - name: Enforce legacy isolation
+        run: >-
+          python -c
+          "from integrations_control_center.tiktok_native_guard import assert_tiktok_v2_is_legacy_independent; assert_tiktok_v2_is_legacy_independent()"
       - name: Run TikTok V2 tests
         run: >-
           python -m pytest
