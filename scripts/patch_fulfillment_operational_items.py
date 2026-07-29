@@ -217,8 +217,11 @@ if marker not in backend:
 backend = backend.replace(marker, insert + marker, 1)
 backend = replace_once(
     backend,
-    '            "items": frozen_items,\n            "updated_at": now,',
-    '            "items": frozen_items,\n            "operational_items": list((workflow or {}).get("operational_items") or []),\n            "updated_at": now,',
+    '            "stage": "reviewed", "revision": revision + 1, "items": frozen_items,\n'
+    '            "reviewed_at": now, "reviewed_by": actor_id,',
+    '            "stage": "reviewed", "revision": revision + 1, "items": frozen_items,\n'
+    '            "operational_items": list((workflow or {}).get("operational_items") or []),\n'
+    '            "reviewed_at": now, "reviewed_by": actor_id,',
     'freeze operational items',
 )
 BACKEND.write_text(backend, encoding='utf-8')

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ArrowLeft, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
-    FloppyDisk, MagnifyingGlass, SpinnerGap, WarningCircle, WhatsappLogo, X,
+    FloppyDisk, MagnifyingGlass, Plus, SpinnerGap, WarningCircle, WhatsappLogo, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import {
     completeOrderReview,
+    createOrderReviewOperationalItem,
     getOrderReview,
     listPendingOrderReviews,
     updateOrderReviewItem,
+    updateOrderReviewOperationalItemStatus,
 } from "../services/orderReviewEngine";
 
 function money(value, currency = "SAR") {
@@ -147,7 +149,7 @@ export function PaymentReceiptCard({ receiptUrl }) {
     );
 }
 
-function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
+function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onCreateOperationalItem }) {
     const [preparationNote, setPreparationNote] = useState(item.preparation_note || "");
     const [internalNote, setInternalNote] = useState(item.internal_note || "");
     const [showPreparationNote, setShowPreparationNote] = useState(false);
@@ -176,7 +178,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
     };
 
     const specs = reviewProductSpecs(item);
-    const gallery = Array.from(new Set((item.gallery || []).filter(Boolean)));
+    const gallery = Array.from(new Set((item.gallery || []).filter(Boolean))).filter((url) => url !== item.selected_image_url);
     return (
         <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 p-4 sm:grid-cols-[128px_minmax(0,1fr)]">
@@ -237,6 +239,13 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
                 <div className="flex flex-wrap gap-2">
                     <button
                         type="button"
+                        onClick={() => onCreateOperationalItem(item, specs)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-extrabold text-amber-900 hover:bg-amber-100"
+                    >
+                        <Plus size={15} /> إضافة منتج تشغيلي
+                    </button>
+                    <button
+                        type="button"
                         aria-expanded={showPreparationNote}
                         onClick={() => setShowPreparationNote((visible) => !visible)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 text-xs font-extrabold text-teal-800 hover:bg-teal-50"
@@ -287,11 +296,65 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged }) {
     );
 }
 
+
+function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged }) {
+    const [busy, setBusy] = useState(false);
+    const statusLabel = { pending: "لم يبدأ", in_progress: "قيد التجهيز", ready: "جاهز" }[item.preparation_status] || "لم يبدأ";
+    const setStatus = async (preparationStatus) => {
+        setBusy(true);
+        try {
+            const next = await updateOrderReviewOperationalItemStatus(orderNumber, item.operational_item_id, {
+                expected_revision: workflowRevision,
+                preparation_status: preparationStatus,
+            });
+            onChanged(next);
+            toast.success("تم تحديث حالة المنتج التشغيلي.");
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <article className="overflow-hidden rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/60 shadow-sm" data-testid="order-review-operational-item">
+            <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="text-xs font-extrabold text-amber-700">منتج تشغيلي داخلي</div>
+                        <h3 className="mt-1 text-lg font-extrabold text-slate-900">{item.name}</h3>
+                        <div className="mt-1 text-xs text-slate-500">مرتبط بـ: {item.source_product_name || "منتج الطلب"}</div>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-amber-800">{statusLabel}</span>
+                </div>
+                <div className="mt-4 grid gap-2">
+                    {(item.linked_specs || []).map((spec) => (
+                        <div key={`${spec.key}:${spec.value}`} className="rounded-xl bg-white px-3 py-2 text-sm">
+                            <span className="font-bold text-violet-700">{spec.name}: </span>
+                            <span className="whitespace-pre-wrap break-words font-extrabold text-slate-900">{spec.value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-4 rounded-xl bg-white/80 p-3 text-xs font-bold leading-6 text-slate-600">
+                    يظهر داخل ميزان فقط، لا يُرسل إلى سلة أو قيود ولا يدخل ملف المورد. ويمنع اكتمال التجهيز حتى يصبح جاهزًا.
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button disabled={busy || item.preparation_status === "in_progress"} onClick={() => setStatus("in_progress")} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-extrabold text-amber-900 disabled:opacity-50">قيد التجهيز</button>
+                    <button disabled={busy || item.preparation_status === "ready"} onClick={() => setStatus("ready")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50">جاهز</button>
+                </div>
+            </div>
+        </article>
+    );
+}
+
 function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [detail, setDetail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [completing, setCompleting] = useState(false);
+    const [operationalDialog, setOperationalDialog] = useState(null);
+    const [operationalName, setOperationalName] = useState("كرت إهداء");
+    const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
+    const [creatingOperational, setCreatingOperational] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -316,6 +379,32 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const shipping = order?.shipping || {};
     const address = shipping.address || customer.shipping_address || {};
     const whatsapp = String(customer.mobile || "").replace(/\D/g, "");
+
+    const openOperationalDialog = (item, specs) => {
+        setOperationalDialog({ item, specs });
+        setOperationalName("كرت إهداء");
+        setLinkedSpecKeys(specs.map((spec) => spec.key));
+    };
+
+    const createOperational = async () => {
+        if (!operationalDialog || !operationalName.trim()) return;
+        setCreatingOperational(true);
+        try {
+            const next = await createOrderReviewOperationalItem(orderNumber, {
+                expected_revision: detail.revision,
+                source_order_item_id: operationalDialog.item.order_item_id,
+                name: operationalName.trim(),
+                linked_spec_keys: linkedSpecKeys,
+            });
+            setDetail(next);
+            setOperationalDialog(null);
+            toast.success("تمت إضافة المنتج التشغيلي وربط بياناته.");
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setCreatingOperational(false);
+        }
+    };
 
     const finish = async () => {
         setCompleting(true);
@@ -401,10 +490,21 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-extrabold">منتجات الطلب</h3><span className="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-800">{detail.items.length} منتج</span></div>
                             <div data-testid="order-review-products-grid" className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                                 {detail.items.map((item) => (
-                                    <ProductReviewCard key={item.order_item_id} item={item} workflowRevision={detail.revision} orderNumber={orderNumber} onChanged={setDetail} />
+                                    <ProductReviewCard key={item.order_item_id} item={item} workflowRevision={detail.revision} orderNumber={orderNumber} onChanged={setDetail} onCreateOperationalItem={openOperationalDialog} />
                                 ))}
                             </div>
                         </section>
+
+                        {(detail.operational_items || []).length > 0 && (
+                            <section>
+                                <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-extrabold">المنتجات التشغيلية الداخلية</h3><span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-900">{detail.operational_items.length} منتج</span></div>
+                                <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                                    {detail.operational_items.map((item) => (
+                                        <OperationalItemCard key={item.operational_item_id} item={item} workflowRevision={detail.revision} orderNumber={orderNumber} onChanged={setDetail} />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
 
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <p className="text-sm font-semibold text-emerald-900">اعتماد المراجعة يجمّد الصورة والتعليمات المختارة، ويخرج الطلب من هذه الصفحة نهائيًا. لا يتم إنشاء ملف تجهيز أو بوليصة شحن في هذه المرحلة.</p>
@@ -412,6 +512,17 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                                 {completing ? <SpinnerGap className="animate-spin" /> : <CheckCircle weight="fill" />}
                                 تمت المراجعة
                             </button>
+                        </div>
+                    </div>
+                )}
+                {operationalDialog && (
+                    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/55 p-4" dir="rtl">
+                        <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
+                            <div className="flex items-center justify-between gap-3"><h3 className="text-xl font-extrabold">إضافة منتج تشغيلي</h3><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-lg border p-2"><X /></button></div>
+                            <p className="mt-2 text-sm text-slate-500">أنشئ منتجًا داخليًا واربط به الخيارات أو النصوص المطلوبة من المنتج الأصلي.</p>
+                            <label className="mt-4 block"><span className="mb-1 block text-sm font-extrabold">اسم المنتج الداخلي</span><input value={operationalName} onChange={(event) => setOperationalName(event.target.value)} maxLength={120} className="w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-amber-500" /></label>
+                            <div className="mt-4"><div className="mb-2 text-sm font-extrabold">البيانات التي تنتقل إليه</div><div className="grid gap-2">{operationalDialog.specs.map((spec) => (<label key={spec.key} className="flex items-start gap-3 rounded-xl bg-violet-50 p-3"><input type="checkbox" checked={linkedSpecKeys.includes(spec.key)} onChange={(event) => setLinkedSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} className="mt-1" /><span><b className="text-violet-700">{spec.name}:</b> <span className="whitespace-pre-wrap break-words font-bold">{spec.value}</span></span></label>))}</div></div>
+                            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-xl border px-4 py-2 font-bold">إلغاء</button><button type="button" disabled={creatingOperational || !operationalName.trim()} onClick={createOperational} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-extrabold text-white disabled:opacity-50">{creatingOperational ? <SpinnerGap className="animate-spin" /> : <Plus />} إضافة وربط</button></div>
                         </div>
                     </div>
                 )}
