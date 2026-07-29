@@ -148,6 +148,11 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                 continue
             account_id = raw_id if raw_id.startswith("act_") else f"act_{raw_id}"
             business = item.get("business") if isinstance(item.get("business"), dict) else {}
+            funding_present = (
+                bool(item.get("funding_source_details"))
+                if "funding_source_details" in item
+                else None
+            )
             accounts.append(
                 {
                     "external_account_id": account_id,
@@ -158,10 +163,10 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                     "account_status": item.get("account_status"),
                     "business_id": business.get("id"),
                     "business_name": business.get("name"),
-                    "amount_spent_minor": None,
-                    "balance_minor": None,
-                    "spend_cap_minor": None,
-                    "funding_source_present": None,
+                    "amount_spent_minor": item.get("amount_spent"),
+                    "balance_minor": item.get("balance"),
+                    "spend_cap_minor": item.get("spend_cap"),
+                    "funding_source_present": funding_present,
                 }
             )
 
@@ -171,22 +176,38 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
             # Billing/funding visibility differs by account role, ownership,
             # region, and account configuration. Treat it as optional evidence
             # and store only numeric summaries plus a boolean—never the payment
-            # instrument payload itself.
-            try:
-                finance = await _get_one(
-                    client,
-                    account_id,
-                    access_token=access_token,
-                    fields="amount_spent,balance,spend_cap,funding_source_details",
+            # instrument payload itself. Skip this request if a provider/mock
+            # already included all optional fields with the account object.
+            finance_missing = any(
+                account.get(key) is None
+                for key in (
+                    "amount_spent_minor",
+                    "balance_minor",
+                    "spend_cap_minor",
+                    "funding_source_present",
                 )
-                account["amount_spent_minor"] = finance.get("amount_spent")
-                account["balance_minor"] = finance.get("balance")
-                account["spend_cap_minor"] = finance.get("spend_cap")
-                account["funding_source_present"] = bool(
-                    finance.get("funding_source_details")
-                )
-            except Exception as exc:  # noqa: BLE001
-                errors.append({"asset": f"finance:{account_id}", "code": str(exc)})
+            )
+            if finance_missing:
+                try:
+                    finance = await _get_one(
+                        client,
+                        account_id,
+                        access_token=access_token,
+                        fields=(
+                            "amount_spent,balance,spend_cap,"
+                            "funding_source_details"
+                        ),
+                    )
+                    account["amount_spent_minor"] = finance.get("amount_spent")
+                    account["balance_minor"] = finance.get("balance")
+                    account["spend_cap_minor"] = finance.get("spend_cap")
+                    account["funding_source_present"] = bool(
+                        finance.get("funding_source_details")
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(
+                        {"asset": f"finance:{account_id}", "code": str(exc)}
+                    )
 
             try:
                 pixel_rows = await _get_all(
