@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -164,6 +165,20 @@ class ReviewItemPatch(BaseModel):
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
+
+
+class OperationalItemCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    source_order_item_id: str = Field(min_length=1, max_length=300)
+    name: str = Field(min_length=1, max_length=120)
+    linked_spec_keys: list[str] = Field(default_factory=list, max_length=30)
+
+
+class OperationalItemStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    preparation_status: str
 
 
 async def _ensure_indexes(db: Any) -> None:
@@ -380,6 +395,7 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
         "stage": (workflow or {}).get("stage") or "pending_review",
         "revision": int((workflow or {}).get("revision") or 0),
         "items": item_views,
+        "operational_items": list((workflow or {}).get("operational_items") or []),
     }
 
 
@@ -457,6 +473,165 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
         return await _detail(db, merchant_id, order)
+
+    @router.post("/{order_number}/operational-items")
+    async def create_operational_item(
+        order_number: str,
+        payload: OperationalItemCreateRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        user_id = _merchant_user_id(reviewer)
+        actor_id = str(reviewer["id"])
+        await _ensure_indexes(db)
+        try:
+            order = await get_order(repository, user_id=user_id, order_number=order_number)
+        except OrderNotFoundError as exc:
+            raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
+        identities = await _review_item_identities(db, user_id, order)
+        source_item = next(
+            (item for item in identities if item.order_item_id == payload.source_order_item_id),
+            None,
+        )
+        if source_item is None:
+            raise HTTPException(status_code=404, detail={"code": "order_item_not_found"})
+
+        workflow = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
+        )
+        if (workflow or {}).get("stage") == "reviewed":
+            raise HTTPException(status_code=409, detail={"code": "review_already_completed"})
+        revision = int((workflow or {}).get("revision") or 0)
+        if revision != payload.expected_revision:
+            raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+
+        selected_keys = {_normalized(value) for value in payload.linked_spec_keys if _text(value)}
+        linked_specs = []
+        seen_specs = set()
+        for option in getattr(source_item, "options", None) or []:
+            name = _text(getattr(option, "name", None))
+            value = _text(getattr(option, "value", None))
+            key = _normalized(name)
+            if key in selected_keys and key not in seen_specs and value:
+                linked_specs.append({"name": name, "value": value, "key": key})
+                seen_specs.add(key)
+        for name in ("color", "size", "material"):
+            value = _text(getattr(source_item, name, None))
+            key = _normalized(name)
+            if key in selected_keys and key not in seen_specs and value:
+                linked_specs.append({"name": name, "value": value, "key": key})
+                seen_specs.add(key)
+        for field in getattr(source_item, "custom_fields", None) or []:
+            if not isinstance(field, dict):
+                continue
+            name = _text(field.get("name") or field.get("label") or field.get("title") or field.get("question") or field.get("key"))
+            key = _normalized(name)
+            if key not in selected_keys or key in seen_specs:
+                continue
+            raw_value = field.get("value") or field.get("answer") or field.get("selected") or field.get("choice") or field.get("text") or field.get("response")
+            value = _text(raw_value.get("name") if isinstance(raw_value, dict) else raw_value)
+            if value:
+                linked_specs.append({"name": name, "value": value, "key": key})
+                seen_specs.add(key)
+
+        now = _now()
+        operational_items = list((workflow or {}).get("operational_items") or [])
+        operational_item = {
+            "operational_item_id": f"op:{uuid.uuid4().hex}",
+            "item_type": "internal_operational",
+            "name": _text(payload.name),
+            "quantity": 1,
+            "source_order_item_id": source_item.order_item_id,
+            "source_product_name": _text(getattr(source_item, "name", None)),
+            "linked_specs": linked_specs,
+            "preparation_status": "pending",
+            "blocks_order_completion": True,
+            "supplier_export": False,
+            "salla_product": False,
+            "financial_item": False,
+            "created_at": now,
+            "created_by": actor_id,
+        }
+        operational_items.append(operational_item)
+        new_doc = {
+            **(workflow or {}),
+            "user_id": user_id,
+            "order_number": order.order_number,
+            "order_id": order.order_id,
+            "stage": "pending_review",
+            "revision": revision + 1,
+            "items": list((workflow or {}).get("items") or []),
+            "operational_items": operational_items,
+            "updated_at": now,
+            "updated_by": actor_id,
+        }
+        new_doc.pop("_id", None)
+        if workflow:
+            result = await db[WORKFLOWS].replace_one(
+                {"user_id": user_id, "order_number": order.order_number, "revision": revision},
+                new_doc,
+            )
+            if not result.matched_count:
+                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+        else:
+            new_doc["created_at"] = now
+            try:
+                await db[WORKFLOWS].insert_one(new_doc)
+            except DuplicateKeyError as exc:
+                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+        await db[EVENTS].insert_one({
+            "user_id": user_id,
+            "order_number": order.order_number,
+            "operational_item_id": operational_item["operational_item_id"],
+            "event_type": "operational_item_created",
+            "occurred_at": now,
+            "actor_id": actor_id,
+        })
+        return await _detail(db, user_id, order)
+
+    @router.patch("/{order_number}/operational-items/{operational_item_id:path}")
+    async def update_operational_item_status(
+        order_number: str,
+        operational_item_id: str,
+        payload: OperationalItemStatusRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        user_id = _merchant_user_id(reviewer)
+        actor_id = str(reviewer["id"])
+        status_value = _normalized(payload.preparation_status)
+        status_map = {
+            "pending": "pending",
+            "لم يبدأ": "pending",
+            "in progress": "in_progress",
+            "قيد التجهيز": "in_progress",
+            "ready": "ready",
+            "جاهز": "ready",
+        }
+        normalized_status = status_map.get(status_value)
+        if not normalized_status:
+            raise HTTPException(status_code=422, detail={"code": "invalid_operational_item_status"})
+        workflow = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": order_number}, {"_id": 0}
+        )
+        revision = int((workflow or {}).get("revision") or 0)
+        if revision != payload.expected_revision:
+            raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+        operational_items = list((workflow or {}).get("operational_items") or [])
+        target = next((row for row in operational_items if _text(row.get("operational_item_id")) == operational_item_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail={"code": "operational_item_not_found"})
+        target["preparation_status"] = normalized_status
+        target["updated_at"] = _now()
+        target["updated_by"] = actor_id
+        result = await db[WORKFLOWS].update_one(
+            {"user_id": user_id, "order_number": order_number, "revision": revision},
+            {"$set": {"operational_items": operational_items, "revision": revision + 1, "updated_at": _now(), "updated_by": actor_id}},
+        )
+        if not result.matched_count:
+            raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+        order = await get_order(repository, user_id=user_id, order_number=order_number)
+        return await _detail(db, user_id, order)
 
     @router.patch("/{order_number}/items/{order_item_id:path}")
     async def update_review_item(
@@ -624,6 +799,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         new_doc = {
             "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
             "stage": "reviewed", "revision": revision + 1, "items": frozen_items,
+            "operational_items": list((workflow or {}).get("operational_items") or []),
             "reviewed_at": now, "reviewed_by": actor_id,
             "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
             "salla_status_sync": "sent", "salla_status_sync_error": None,

@@ -137,3 +137,20 @@ def test_orders_v2_shipping_card_shows_complete_order_address():
 
     assert '["العنوان", address.formatted || address.address_line' in source
     assert 'تفاصيل العنوان لم تصل من سلة' in source
+
+
+def test_review_supports_internal_operational_items_without_supplier_export():
+    backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
+    frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
+    service_source = (ROOT / "frontend/src/services/orderReviewEngine.js").read_text(encoding="utf-8")
+
+    assert '"/{order_number}/operational-items"' in backend_source
+    assert '"item_type": "internal_operational"' in backend_source
+    assert '"supplier_export": False' in backend_source
+    assert '"financial_item": False' in backend_source
+    assert '"salla_product": False' in backend_source
+    assert '"blocks_order_completion": True' in backend_source
+    assert 'createOrderReviewOperationalItem' in service_source
+    assert 'data-testid="order-review-operational-item"' in frontend_source
+    assert 'إضافة منتج تشغيلي' in frontend_source
+    assert '.filter((url) => url !== item.selected_image_url)' in frontend_source

@@ -55,3 +55,28 @@ export async function completeOrderReview(orderNumber, expectedRevision) {
         throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
     }
 }
+
+
+export async function createOrderReviewOperationalItem(orderNumber, payload) {
+    try {
+        const { data } = await api.post(
+            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items`,
+            payload,
+        );
+        return data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إضافة المنتج التشغيلي."));
+    }
+}
+
+export async function updateOrderReviewOperationalItemStatus(orderNumber, operationalItemId, payload) {
+    try {
+        const { data } = await api.patch(
+            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`,
+            payload,
+        );
+        return data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر تحديث حالة المنتج التشغيلي."));
+    }
+}
