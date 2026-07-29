@@ -88,3 +88,16 @@ export async function updateOrderReviewOperationalItemStatus(orderNumber, operat
         throw new Error(message(error, "تعذّر تحديث حالة المنتج التشغيلي."));
     }
 }
+
+
+export async function unlinkOrderReviewOperationalItem(orderNumber, operationalItemId, expectedRevision) {
+    try {
+        const { data } = await api.delete(
+            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`,
+            { params: { expected_revision: expectedRevision } },
+        );
+        return data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إلغاء ربط المنتج التشغيلي."));
+    }
+}

@@ -10,6 +10,7 @@ import {
     createOrderReviewOperationalItem,
     getOrderReview,
     listPendingOrderReviews,
+    unlinkOrderReviewOperationalItem,
     updateOrderReviewItem,
     updateOrderReviewOperationalItemStatus,
 } from "../services/orderReviewEngine";
@@ -315,6 +316,36 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
             setBusy(false);
         }
     };
+    const rename = async () => {
+        const nextName = window.prompt("اسم المنتج التشغيلي", item.name || "");
+        if (!nextName || nextName.trim() === item.name) return;
+        setBusy(true);
+        try {
+            const next = await updateOrderReviewOperationalItemStatus(orderNumber, item.operational_item_id, {
+                expected_revision: workflowRevision,
+                name: nextName.trim(),
+            });
+            onChanged(next);
+            toast.success("تم تعديل اسم المنتج التشغيلي.");
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+    const unlink = async () => {
+        if (!window.confirm("إلغاء الربط وإرجاع الحقول إلى المنتج الأصلي؟")) return;
+        setBusy(true);
+        try {
+            const next = await unlinkOrderReviewOperationalItem(orderNumber, item.operational_item_id, workflowRevision);
+            onChanged(next);
+            toast.success("تم إلغاء الربط وإرجاع الحقول إلى المنتج الأصلي.");
+        } catch (error) {
+            toast.error(error.message);
+        } finally {
+            setBusy(false);
+        }
+    };
     return (
         <article className="overflow-hidden rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/60 shadow-sm" data-testid="order-review-operational-item">
             <div className="p-4">
@@ -340,6 +371,8 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button disabled={busy || item.preparation_status === "in_progress"} onClick={() => setStatus("in_progress")} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-extrabold text-amber-900 disabled:opacity-50">قيد التجهيز</button>
                     <button disabled={busy || item.preparation_status === "ready"} onClick={() => setStatus("ready")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50">جاهز</button>
+                    <button disabled={busy} onClick={rename} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-extrabold text-violet-800 disabled:opacity-50">تعديل الاسم</button>
+                    <button disabled={busy} onClick={unlink} data-testid="order-review-operational-item-unlink" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-700 disabled:opacity-50">إلغاء الربط وإرجاع القيم</button>
                 </div>
             </div>
         </article>
