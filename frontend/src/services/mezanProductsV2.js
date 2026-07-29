@@ -43,6 +43,16 @@ export async function getProductOptionCosts(productId) { return (await api.get(`
 export async function saveProductOptionCost(productId, optionId, valueId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`, payload)).data; }
 export async function deleteProductOptionCost(productId, optionId, valueId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/option-costs/${encodeURIComponent(optionId)}/${encodeURIComponent(valueId)}`)).data; }
 export async function calculateProductCost(productId, selectedOptions) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/calculate-cost`, { selected_options: selectedOptions })).data; }
+export async function getProductOperations(productId) { return (await api.get(`/products-v2/${encodeURIComponent(productId)}/operations`)).data; }
+export async function saveProductOperationProfile(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/operations/profile`, payload)).data; }
+export async function linkProductResource(productId, resourceId, quantity = 1) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`, { quantity })).data; }
+export async function unlinkProductResource(productId, resourceId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`)).data; }
+export async function listProductCreationDrafts(params = {}) { return (await api.get("/products-v2/creation-drafts", { params })).data; }
+export async function createProductCreationDraft(payload) { return (await api.post("/products-v2/creation-drafts", payload)).data; }
+export async function updateProductCreationDraft(draftId, payload) { return (await api.put(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}`, payload)).data; }
+export async function previewProductCreationDraft(draftId) { return (await api.post(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}/preview`)).data; }
+export async function approveProductCreationDraft(draftId) { return (await api.post(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}/approve`)).data; }
+export async function publishProductCreationDraft(draftId) { return (await api.post(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}/publish`, { confirmation: "إنشاء المنتج في سلة" })).data; }
 export async function getSallaCategoryCatalog() { return (await api.get("/products-v2/category-catalog")).data; }
 
 export async function previewMissingSkus({ prefix = "AMS", width = 5, limit = 20 } = {}) {

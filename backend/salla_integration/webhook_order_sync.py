@@ -449,6 +449,29 @@ async def sync_order_from_verified_webhook(
             source="salla_direct",
             raw=payload,
         )
+        auto_fulfillment = {
+            "attempted": True,
+            "promoted": False,
+            "reason": "evaluation_failed",
+        }
+        try:
+            from fulfillment_v2_routes import auto_route_instant_order
+            from order_engine.repository import MongoOrderRepository
+            from order_engine.service import get_order
+
+            canonical_order = await get_order(
+                MongoOrderRepository(db),
+                user_id=user_id,
+                order_number=order_number,
+            )
+            auto_fulfillment = await auto_route_instant_order(
+                db,
+                user_id=user_id,
+                order=canonical_order,
+            )
+            auto_fulfillment["attempted"] = True
+        except Exception as exc:
+            auto_fulfillment["error"] = str(exc)[:300]
         return {
             "attempted": True,
             "synced": True,
@@ -458,6 +481,7 @@ async def sync_order_from_verified_webhook(
             "address_from_order_webhook": bool(_address_candidate(payload)),
             "shipping_company_from_order_webhook": bool(shipping_fields.get("shipping_company")),
             "tracking_from_order_webhook": bool(shipping_fields.get("tracking_number")),
+            "auto_fulfillment": auto_fulfillment,
             "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }

@@ -29,6 +29,13 @@ WORKFLOWS = "order_review_workflows"
 PREFERENCES = "product_option_image_preferences"
 EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
+REVIEW_COMPLETED_STAGES = {
+    "reviewed",
+    "ready_to_ship",
+    "completed",
+    "delivering",
+    "delivered",
+}
 
 _PERSONAL_OPTION_HINTS = (
     "اسم", "نقش", "كتابة", "رسالة", "اهداء", "إهداء", "تهنئة", "رقم الجوال",
@@ -452,7 +459,11 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         completed = set()
         if numbers:
             docs = await db[WORKFLOWS].find(
-                {"user_id": merchant_id, "order_number": {"$in": numbers}, "stage": "reviewed"},
+                {
+                    "user_id": merchant_id,
+                    "order_number": {"$in": numbers},
+                    "stage": {"$in": sorted(REVIEW_COMPLETED_STAGES)},
+                },
                 {"_id": 0, "order_number": 1},
             ).to_list(len(numbers))
             completed = {_text(doc.get("order_number")) for doc in docs}
@@ -542,7 +553,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
         )
-        if (workflow or {}).get("stage") == "reviewed":
+        if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
             raise HTTPException(status_code=409, detail={"code": "review_already_completed"})
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
@@ -724,7 +735,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         )
         if not workflow:
             raise HTTPException(status_code=404, detail={"code": "review_workflow_not_found"})
-        if workflow.get("stage") == "reviewed":
+        if workflow.get("stage") in REVIEW_COMPLETED_STAGES:
             raise HTTPException(status_code=409, detail={"code": "review_already_completed"})
         revision = int(workflow.get("revision") or 0)
         if revision != expected_revision:
@@ -805,7 +816,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
         )
-        if (workflow or {}).get("stage") == "reviewed":
+        if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
             raise HTTPException(status_code=409, detail={"code": "review_already_completed", "message": "تمت مراجعة الطلب ولا يمكن تعديل نسخته المعتمدة من هذه المرحلة."})
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
@@ -898,7 +909,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
         )
-        if (workflow or {}).get("stage") == "reviewed":
+        if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
             return {"ok": True, "already_reviewed": True, "order_number": order.order_number}
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
@@ -945,15 +956,58 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                     "reason": sync_error,
                 },
             )
+        # Product V2 owns the fulfillment classification.  Only an explicitly
+        # configured, fully eligible instant order may skip preparation and
+        # enter the shipping/labeling queue automatically.  Any missing local
+        # fact fails closed and leaves the order in the reviewed stage.
+        try:
+            from fulfillment_v2_routes import build_order_fulfillment_decision
+
+            fulfillment_decision = await build_order_fulfillment_decision(
+                db,
+                user_id=user_id,
+                order=order,
+                operational_items=list(
+                    (workflow or {}).get("operational_items") or []
+                ),
+            )
+        except Exception as exc:
+            fulfillment_decision = {
+                "order_number": order.order_number,
+                "order_type": "unknown",
+                "route_stage": "reviewed",
+                "ready_to_ship": False,
+                "preparation_stages_required": True,
+                "blockers": ["fulfillment_evaluation_failed"],
+                "error": str(exc)[:300],
+                "evaluated_at": _now(),
+                "external_calls_made": False,
+            }
+            await db[EVENTS].insert_one({
+                "user_id": user_id,
+                "order_number": order.order_number,
+                "event_type": "fulfillment_evaluation_failed",
+                "error": str(exc)[:500],
+                "occurred_at": _now(),
+                "actor_id": actor_id,
+            })
+        next_stage = (
+            "ready_to_ship"
+            if fulfillment_decision.get("ready_to_ship") is True
+            else "reviewed"
+        )
         new_doc = {
             "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
-            "stage": "reviewed", "revision": revision + 1, "items": frozen_items,
+            "stage": next_stage, "revision": revision + 1, "items": frozen_items,
             "operational_items": list((workflow or {}).get("operational_items") or []),
+            "fulfillment_decision": fulfillment_decision,
             "reviewed_at": now, "reviewed_by": actor_id,
             "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
             "salla_status_sync": "sent", "salla_status_sync_error": None,
             "salla_status_sync_at": _now(), "updated_at": now, "updated_by": actor_id,
         }
+        if next_stage == "ready_to_ship":
+            new_doc["ready_to_ship_at"] = now
         if workflow:
             result = await db[WORKFLOWS].replace_one(
                 {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
@@ -972,9 +1026,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "occurred_at": now, "actor_id": actor_id,
         })
         return {
-            "ok": True, "order_number": order.order_number, "stage": "reviewed",
+            "ok": True, "order_number": order.order_number, "stage": next_stage,
             "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",
             "salla_status_sync_error": None,
+            "fulfillment_decision": fulfillment_decision,
         }
 
     return router

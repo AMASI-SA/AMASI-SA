@@ -552,6 +552,29 @@ async def refresh_order_from_salla(
             {"user_id": str(user_id), "order_number": normalized},
             {"$set": canonical_updates},
         )
+        auto_fulfillment = {
+            "attempted": True,
+            "promoted": False,
+            "reason": "evaluation_failed",
+        }
+        try:
+            from fulfillment_v2_routes import auto_route_instant_order
+            from order_engine.repository import MongoOrderRepository
+            from order_engine.service import get_order
+
+            canonical_order = await get_order(
+                MongoOrderRepository(db),
+                user_id=str(user_id),
+                order_number=normalized,
+            )
+            auto_fulfillment = await auto_route_instant_order(
+                db,
+                user_id=str(user_id),
+                order=canonical_order,
+            )
+            auto_fulfillment["attempted"] = True
+        except Exception as exc:
+            auto_fulfillment["error"] = str(exc)[:300]
 
         return {
             "ok": True,
@@ -567,6 +590,7 @@ async def refresh_order_from_salla(
             "shipping_company_found": bool(shipping_fields.get("shipping_company")),
             "refreshed_at": now.isoformat(),
             "source": "orders_v2_central_salla_refresh",
+            "auto_fulfillment": auto_fulfillment,
             "no_shipments_api_calls": True,
             "no_qoyod_calls": True,
         }

@@ -8,16 +8,29 @@ import {
     saveStoreOperationsAccess,
 } from "../services/aiStoreOperations";
 
-function RoleCard({ user, roleLabels, roleCatalog, onSave }) {
+const RESPONSIBILITY_LABELS = {
+    instant_ready: "الطلبات الجاهزة والشحن الفوري",
+    packing: "التغليف",
+    shipping_labeling: "الشحن والعنونة",
+    carrier_handoff: "التسليم لشركة الشحن",
+};
+
+function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTypes, onSave }) {
     const assignment = user.assignment || {};
     const [roleKey, setRoleKey] = useState(assignment.role_key || (user.is_owner ? "owner" : "product_operator"));
     const [enabled, setEnabled] = useState(assignment.enabled !== false);
+    const [warehouseIds, setWarehouseIds] = useState(assignment.warehouse_ids || []);
+    const [responsibilities, setResponsibilities] = useState(assignment.fulfillment_responsibilities || []);
+    const [extraPermissions, setExtraPermissions] = useState(assignment.extra_permissions || []);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         setRoleKey(assignment.role_key || (user.is_owner ? "owner" : "product_operator"));
         setEnabled(assignment.enabled !== false);
-    }, [assignment.role_key, assignment.enabled, user.is_owner]);
+        setWarehouseIds(assignment.warehouse_ids || []);
+        setResponsibilities(assignment.fulfillment_responsibilities || []);
+        setExtraPermissions(assignment.extra_permissions || []);
+    }, [assignment.role_key, assignment.enabled, assignment.warehouse_ids, assignment.fulfillment_responsibilities, assignment.extra_permissions, user.is_owner]);
 
     async function save() {
         setBusy(true);
@@ -25,8 +38,10 @@ function RoleCard({ user, roleLabels, roleCatalog, onSave }) {
             await onSave(user.id, {
                 role_key: roleKey,
                 enabled,
-                extra_permissions: assignment.extra_permissions || [],
+                extra_permissions: extraPermissions,
                 denied_permissions: assignment.denied_permissions || [],
+                warehouse_ids: warehouseIds,
+                fulfillment_responsibilities: responsibilities,
             });
             toast.success(`تم حفظ صلاحيات ${user.name || user.email}`);
         } finally {
@@ -35,6 +50,7 @@ function RoleCard({ user, roleLabels, roleCatalog, onSave }) {
     }
 
     const effective = user.effective_permissions || [];
+    const toggle = (values, value, setter) => setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
     return (
         <article className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
@@ -58,6 +74,25 @@ function RoleCard({ user, roleLabels, roleCatalog, onSave }) {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
                 {effective.length ? effective.map((permission) => <span key={permission} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-800" dir="ltr">{permission}</span>) : <span className="text-xs text-slate-400">لا توجد صلاحيات تشغيلية فعالة.</span>}
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <section className="rounded-xl border bg-slate-50 p-3">
+                    <div className="text-xs font-black text-slate-700">الفروع والمخازن المسؤولة</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {(warehouses || []).map((warehouse) => <label key={warehouse.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${warehouseIds.includes(warehouse.id) ? "border-violet-400 bg-violet-50 text-violet-900" : "bg-white"}`}><input type="checkbox" checked={warehouseIds.includes(warehouse.id)} onChange={() => toggle(warehouseIds, warehouse.id, setWarehouseIds)} />{warehouse.name}{warehouse.city ? ` — ${warehouse.city}` : ""}</label>)}
+                        {!(warehouses || []).length && <span className="text-xs text-slate-400">أنشئ فرعًا أو مخزنًا أولًا.</span>}
+                    </div>
+                </section>
+                <section className="rounded-xl border bg-slate-50 p-3">
+                    <div className="text-xs font-black text-slate-700">مسؤوليات التنفيذ</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {(responsibilityTypes || []).map((value) => <label key={value} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${responsibilities.includes(value) ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "bg-white"}`}><input type="checkbox" checked={responsibilities.includes(value)} onChange={() => toggle(responsibilities, value, setResponsibilities)} />{RESPONSIBILITY_LABELS[value] || value}</label>)}
+                    </div>
+                    <label className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${extraPermissions.includes("fulfillment.labels.reprint") ? "border-amber-400 bg-amber-50 text-amber-950" : "bg-white"}`}>
+                        <input type="checkbox" checked={extraPermissions.includes("fulfillment.labels.reprint")} onChange={() => toggle(extraPermissions, "fulfillment.labels.reprint", setExtraPermissions)} />
+                        <span>السماح بإعادة الطباعة<span className="mt-1 block font-normal">تظل بحاجة إلى سبب، وتسجل باسم الموظف.</span></span>
+                    </label>
+                </section>
             </div>
         </article>
     );
@@ -128,7 +163,7 @@ export default function StoreOperationsAccessWorkspace() {
 
             <section className="space-y-3">
                 {loading && <div className="rounded-2xl border bg-white p-10 text-center text-slate-500">جارٍ تحميل المستخدمين والصلاحيات…</div>}
-                {!loading && users.map((user) => <RoleCard key={user.id} user={user} roleLabels={data?.role_labels} roleCatalog={data?.role_catalog} onSave={save} />)}
+                {!loading && users.map((user) => <RoleCard key={user.id} user={user} roleLabels={data?.role_labels} roleCatalog={data?.role_catalog} warehouses={data?.warehouses} responsibilityTypes={data?.fulfillment_responsibility_types} onSave={save} />)}
             </section>
 
             <section className="rounded-2xl border bg-white p-4 shadow-sm">

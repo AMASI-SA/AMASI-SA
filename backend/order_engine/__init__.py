@@ -42,6 +42,7 @@ def make_order_engine_router(*args, **kwargs):
     from warehouse_reset_routes import make_warehouse_reset_router
     from product_v2_workspace_routes import make_product_v2_workspace_router
     from product_v2_creation_order_routes import make_product_v2_creation_order_router
+    from product_creation_routes import make_product_creation_router
     from product_v2_details_routes import make_product_v2_details_router
     from product_v2_source_authority import install_product_source_authority
     from product_field_cost_support import install_product_field_cost_support
@@ -56,7 +57,9 @@ def make_order_engine_router(*args, **kwargs):
     from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
+    from product_fulfillment_routes import make_product_fulfillment_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
+    from fulfillment_v2_routes import make_fulfillment_v2_router
     from product_control_center_routes import make_product_control_center_router
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
@@ -93,6 +96,7 @@ def make_order_engine_router(*args, **kwargs):
         # "category-catalog" as a product id and the selector stays empty.
         make_product_category_catalog_router(db, current_user),
         make_product_v2_recent_sync_router(db, current_user),
+        make_product_creation_router(db, current_user),
         make_product_v2_creation_order_router(db, current_user),
         make_product_v2_workspace_router(db, current_user),
         make_product_control_center_router(db, current_user),
@@ -109,8 +113,10 @@ def make_order_engine_router(*args, **kwargs):
         # the component edit modal is always pre-filled.
         make_component_workspace_cost_compat_router(db, current_user),
         make_component_edit_router(db, current_user),
+        make_product_fulfillment_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
+        make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
     for route in router.routes:

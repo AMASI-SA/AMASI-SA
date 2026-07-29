@@ -26,6 +26,7 @@ PRODUCT_MEDIA_DRAFTS = "mezan_product_media_drafts_v2"
 
 PERMISSIONS = {
     "products.read",
+    "products.create",
     "products.review",
     "products.publish",
     "products.cost.read",
@@ -45,25 +46,43 @@ PERMISSIONS = {
     "employees.manage",
     "roles.manage",
     "audit.read",
+    "fulfillment.ready.read",
+    "fulfillment.batch.claim",
+    "fulfillment.labels.print",
+    "fulfillment.labels.reprint",
+    "fulfillment.pack.confirm",
+    "fulfillment.carrier.handoff",
 }
 
 ROLE_CATALOG = {
     "owner": sorted(PERMISSIONS),
     "product_manager": sorted({
-        "products.read", "products.review", "products.publish",
+        "products.read", "products.create", "products.review", "products.publish",
         "products.cost.read", "products.media.read", "products.media.upload",
         "products.media.edit", "products.media.delete", "products.media.reorder",
         "products.media.publish", "products.ai.recommend", "audit.read",
     }),
     "product_operator": sorted({
-        "products.read", "products.review", "products.cost.read",
+        "products.read", "products.create", "products.review", "products.cost.read",
         "products.media.read", "products.media.upload", "products.media.edit",
         "products.media.reorder", "products.ai.recommend",
     }),
     "cost_manager": sorted({
         "products.read", "products.cost.read", "products.cost.write", "audit.read",
     }),
-    "warehouse_operator": sorted({"products.read", "products.cost.read"}),
+    "warehouse_operator": sorted({
+        "products.read", "products.cost.read",
+        "fulfillment.ready.read", "fulfillment.batch.claim",
+        "fulfillment.pack.confirm",
+    }),
+    "shipping_operator": sorted({
+        "products.read",
+        "fulfillment.ready.read",
+        "fulfillment.batch.claim",
+        "fulfillment.labels.print",
+        "fulfillment.pack.confirm",
+        "fulfillment.carrier.handoff",
+    }),
     "marketing_manager": sorted({
         "products.read", "products.review", "products.media.read",
         "products.media.upload", "products.media.edit", "products.media.reorder",

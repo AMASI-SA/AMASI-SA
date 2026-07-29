@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends
 
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES, _serialize, ensure_indexes
 from product_v2_routes import PRODUCTS, _number
 
@@ -44,6 +45,9 @@ def make_component_workspace_cost_compat_router(db: Any, current_user: Callable[
             {"user_id": user_id}, {"_id": 0}
         ).sort("name", 1).to_list(length=1000)
         bindings = await db[BINDINGS].find(
+            {"user_id": user_id}, {"_id": 0}
+        ).to_list(length=10000)
+        product_bindings = await db[PRODUCT_RESOURCE_BINDINGS].find(
             {"user_id": user_id}, {"_id": 0}
         ).to_list(length=10000)
         products = await db[PRODUCTS].find(
@@ -85,6 +89,35 @@ def make_component_workspace_cost_compat_router(db: Any, current_user: Callable[
                 },
             }
             by_resource.setdefault(str(binding.get("resource_id")), []).append(usage)
+        for binding in product_bindings:
+            if not binding.get("resource_id"):
+                continue
+            product = products_by_salla.get(
+                str(binding.get("salla_product_id"))
+            )
+            usage = {
+                "id": binding.get("id"),
+                "product_id": (
+                    product.get("mezan_product_id")
+                    if product
+                    else binding.get("mezan_product_id")
+                    or binding.get("salla_product_id")
+                ),
+                "product_name": (
+                    product.get("name")
+                    if product
+                    else binding.get("product_name")
+                    or "منتج غير متوفر"
+                ),
+                "product_sku": product.get("sku") if product else None,
+                "quantity": binding.get("quantity") or 1,
+                "source": "product",
+                "condition": None,
+            }
+            by_resource.setdefault(
+                str(binding.get("resource_id")),
+                [],
+            ).append(usage)
 
         component_rows = []
         for resource in resources:

@@ -43,3 +43,24 @@ def test_effective_permissions_apply_extra_and_denied():
 
 def test_disabled_assignment_has_no_permissions():
     assert effective_permissions({"role_key": "product_manager", "enabled": False}) == []
+
+
+def test_shipping_assignment_scopes_employee_to_warehouses_and_responsibilities():
+    assignment = validate_assignment({
+        "role_key": "shipping_operator",
+        "warehouse_ids": ["wh-2", "wh-1", "wh-1"],
+        "fulfillment_responsibilities": [
+            "shipping_labeling",
+            "instant_ready",
+        ],
+    })
+    permissions = effective_permissions(assignment)
+
+    assert assignment["warehouse_ids"] == ["wh-1", "wh-2"]
+    assert assignment["fulfillment_responsibilities"] == [
+        "instant_ready",
+        "shipping_labeling",
+    ]
+    assert "fulfillment.ready.read" in permissions
+    assert "fulfillment.labels.print" in permissions
+    assert "fulfillment.labels.reprint" not in permissions
