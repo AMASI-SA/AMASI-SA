@@ -1,0 +1,45 @@
+name: Fulfillment operational items bootstrap
+
+on:
+  push:
+    branches:
+      - feat/fulfillment-operational-items
+    paths:
+      - "scripts/patch_fulfillment_operational_items.py"
+      - ".github/workflows/fulfillment-operational-items-bootstrap.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-operational-items:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/fulfillment-operational-items
+          fetch-depth: 0
+      - name: Apply patch
+        run: python scripts/patch_fulfillment_operational_items.py
+      - name: Validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m py_compile backend/order_review_routes.py backend/tests/test_fulfillment_v2_contract.py
+          grep -q 'operational-items' backend/order_review_routes.py
+          grep -q 'order-review-operational-item' frontend/src/pages/OrderReview.jsx
+          grep -q 'createOrderReviewOperationalItem' frontend/src/services/orderReviewEngine.js
+      - name: Commit generated implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/order_review_routes.py backend/tests/test_fulfillment_v2_contract.py frontend/src/pages/OrderReview.jsx frontend/src/services/orderReviewEngine.js
+          git commit -m "feat(fulfillment): add linked internal operational items"
+          git push origin HEAD:feat/fulfillment-operational-items
