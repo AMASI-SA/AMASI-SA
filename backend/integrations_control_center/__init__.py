@@ -14,6 +14,7 @@ from .google_error_resolution import install_google_stale_error_filter
 from .google_merchant_registration import (
     attach_google_merchant_registration_route,
 )
+from .tiktok_catalog_native import install_tiktok_native_catalog
 from .tiktok_connections import attach_tiktok_connection_routes
 from .models import (
     CampaignProductLinkRecord,
@@ -30,10 +31,11 @@ from .service import IntegrationsControlCenterService
 def make_integrations_control_center_router(db: Any, current_user: Callable):
     """Compose the V2 router with isolated provider-native connection routes.
 
-    Exact Google and TikTok local-test routes are moved before the generic
-    ``/{provider}/test-connection`` route so FastAPI cannot dispatch them to a
-    transitional legacy probe.
+    TikTok's native provider definition is installed only in this control
+    plane, so old pages keep their frozen migration contract while Mezan 2 does
+    not read Make or legacy TikTok collections.
     """
+    install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
     attach_google_connection_routes(router, db, current_user, _require_owner)
