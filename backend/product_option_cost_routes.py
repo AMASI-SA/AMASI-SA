@@ -17,6 +17,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_v2_routes import PRODUCTS, _number, _text
 
 RESOURCES = "mezan_cost_resources_v2"
@@ -219,14 +220,34 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
     async def get_option_costs(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
+        salla_product_id = str(product["salla_product_id"])
         bindings = await db[BINDINGS].find({
             "user_id": user_id,
-            "salla_product_id": str(product["salla_product_id"]),
+            "salla_product_id": salla_product_id,
         }, {"_id": 0}).to_list(length=1000)
+        product_links = await db[PRODUCT_RESOURCE_BINDINGS].find({
+            "user_id": user_id,
+            "salla_product_id": salla_product_id,
+        }, {"_id": 0}).to_list(length=1000)
+        product_resource_ids = {
+            str(row.get("resource_id"))
+            for row in product_links
+            if row.get("resource_id")
+        }
+        resources = []
+        async for raw in db[RESOURCES].find(
+            {"user_id": user_id}, {"_id": 0}
+        ).sort("name", 1):
+            row = _serialize(raw) or {}
+            row["linked_to_product"] = str(row.get("id")) in product_resource_ids
+            row["available_for_option_link"] = not row["linked_to_product"]
+            resources.append(row)
         return {
-            "salla_product_id": str(product["salla_product_id"]),
+            "salla_product_id": salla_product_id,
             "bindings": [await _binding_view(db, row) for row in bindings],
-            "resources": [_serialize(row) for row in await db[RESOURCES].find({"user_id": user_id}, {"_id": 0}).sort("name", 1).to_list(length=1000)],
+            "product_links": [_serialize(row) for row in product_links],
+            "product_resource_ids": sorted(product_resource_ids),
+            "resources": resources,
         }
 
     @router.put("/products-v2/{product_id}/option-costs/{option_id}/{value_id}")
@@ -247,6 +268,19 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             resource = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
             if not resource:
                 raise HTTPException(status_code=422, detail={"code": "component_not_found"})
+            product_conflict = await db[PRODUCT_RESOURCE_BINDINGS].find_one(
+                {
+                    "user_id": user_id,
+                    "salla_product_id": str(product["salla_product_id"]),
+                    "resource_id": resource_id,
+                },
+                {"_id": 0, "id": 1},
+            )
+            if product_conflict:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "resource_already_linked_to_product"},
+                )
             direct_amount = None
         elif direct_amount is None or direct_amount < 0:
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
@@ -303,20 +337,54 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "user_id": user_id,
             "salla_product_id": str(product["salla_product_id"]),
         }, {"_id": 0}).to_list(length=1000)
+        product_links = await db[PRODUCT_RESOURCE_BINDINGS].find({
+            "user_id": user_id,
+            "salla_product_id": str(product["salla_product_id"]),
+        }, {"_id": 0}).to_list(length=1000)
+        product_resource_ids = [
+            str(row.get("resource_id"))
+            for row in product_links
+            if row.get("resource_id")
+        ]
+        product_resources = await db[RESOURCES].find(
+            {"user_id": user_id, "id": {"$in": product_resource_ids}},
+            {"_id": 0},
+        ).to_list(length=max(1, len(product_resource_ids)))
+        product_resource_map = {
+            str(row.get("id")): row for row in product_resources
+        }
         applied = []
-        additional = 0.0
+        option_additional = 0.0
         for binding in bindings:
             key = (str(binding.get("option_id")), str(binding.get("value_id")))
             if key not in selected_keys:
                 continue
             view = await _binding_view(db, binding)
             amount = _number(view.get("resolved_amount")) or 0.0
-            additional += amount
+            option_additional += amount
             applied.append(view)
+        applied_product_resources = []
+        product_additional = 0.0
+        for link in product_links:
+            resource = product_resource_map.get(str(link.get("resource_id")), {})
+            amount = (
+                (_number(resource.get("unit_cost")) or 0.0)
+                * (_number(link.get("quantity")) or 1.0)
+            )
+            product_additional += amount
+            applied_product_resources.append({
+                "binding_id": link.get("id"),
+                "quantity": link.get("quantity") or 1,
+                "resolved_amount": round(amount, 4),
+                "resource": _serialize(resource),
+            })
+        additional = product_additional + option_additional
         return {
             "base_cost": base_cost,
-            "option_cost": round(additional, 4),
+            "product_resource_cost": round(product_additional, 4),
+            "option_cost": round(option_additional, 4),
             "total_cost": round(base_cost + additional, 4),
+            "applied_product_resources": applied_product_resources,
             "applied_bindings": applied,
         }
 

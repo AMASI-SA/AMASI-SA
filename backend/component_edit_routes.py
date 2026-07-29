@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from component_edit_policy import component_cost_metadata
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, ensure_indexes
 from product_v2_routes import _number, _text
 
@@ -19,6 +20,19 @@ def _kind_fields(payload: dict[str, Any], current: dict[str, Any] | None = None)
     track_inventory = kind == "stock_component"
     unit = _text(payload.get("unit")) or _text(current.get("unit")) or ("piece" if track_inventory else "job")
     return kind, unit, track_inventory
+
+
+def _requires_preparation(
+    payload: dict[str, Any],
+    *,
+    kind: str,
+    current: dict[str, Any] | None = None,
+) -> bool:
+    if kind != "service":
+        return False
+    if "requires_preparation" in payload:
+        return payload.get("requires_preparation") is True
+    return bool((current or {}).get("requires_preparation"))
 
 
 def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
@@ -47,6 +61,10 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "category": _text(payload.get("category")) or "other",
             "description": _text(payload.get("description")),
             "track_inventory": track_inventory,
+            "requires_preparation": _requires_preparation(
+                payload,
+                kind=kind,
+            ),
             **component_cost_metadata(track_inventory=track_inventory, amount=amount),
             "created_at": now,
             "updated_at": now,
@@ -90,19 +108,32 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
             "category": _text(payload.get("category")) or _text(before.get("category")) or "other",
             "description": _text(payload.get("description")) if "description" in payload else _text(before.get("description")),
             "track_inventory": track_inventory,
+            "requires_preparation": _requires_preparation(
+                payload,
+                kind=kind,
+                current=before,
+            ),
             **component_cost_metadata(track_inventory=track_inventory, amount=amount, purchase_cost=purchase_cost),
             "updated_at": now,
         }
         await db[RESOURCES].update_one({"user_id": user_id, "id": resource_id}, {"$set": patch})
-        impacted = await db[BINDINGS].count_documents({"user_id": user_id, "resource_id": resource_id})
+        option_impacted = await db[BINDINGS].count_documents(
+            {"user_id": user_id, "resource_id": resource_id}
+        )
+        product_impacted = await db[PRODUCT_RESOURCE_BINDINGS].count_documents(
+            {"user_id": user_id, "resource_id": resource_id}
+        )
+        impacted = option_impacted + product_impacted
         await db[AUDIT].insert_one({
             "id": uuid.uuid4().hex,
             "user_id": user_id,
             "event_type": "resource_updated",
             "resource_id": resource_id,
-            "before": {key: before.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source")},
-            "after": {key: patch.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source")},
+            "before": {key: before.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation")},
+            "after": {key: patch.get(key) for key in ("name", "code", "kind", "unit", "unit_cost", "initial_unit_cost", "cost_source", "requires_preparation")},
             "impacted_bindings": impacted,
+            "impacted_option_bindings": option_impacted,
+            "impacted_product_bindings": product_impacted,
             "created_at": now,
         })
         saved = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
@@ -122,7 +153,14 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         metadata = component_cost_metadata(track_inventory=bool(before.get("track_inventory")), amount=amount)
         now = _now()
         await db[RESOURCES].update_one({"user_id": user_id, "id": resource_id}, {"$set": {**metadata, "updated_at": now}})
-        impacted = await db[BINDINGS].count_documents({"user_id": user_id, "resource_id": resource_id})
+        impacted = (
+            await db[BINDINGS].count_documents(
+                {"user_id": user_id, "resource_id": resource_id}
+            )
+            + await db[PRODUCT_RESOURCE_BINDINGS].count_documents(
+                {"user_id": user_id, "resource_id": resource_id}
+            )
+        )
         await db[AUDIT].insert_one({
             "id": uuid.uuid4().hex,
             "user_id": user_id,

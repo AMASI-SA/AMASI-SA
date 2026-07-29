@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import ProductControlCenterPanel from "../components/products/ProductControlCenterPanel";
 import ProductMediaDraftEditor from "../components/products/ProductMediaDraftEditor";
 import ProductOptionCostEditor from "../components/products/ProductOptionCostEditor";
+import ProductOperationsEditor from "../components/products/ProductOperationsEditor";
 import {
     applyMissingSkus, getProductV2Costs, getProductsV2Summary,
     listWorkspaceProducts, previewMissingSkus, refreshProductV2Details,
@@ -202,6 +203,7 @@ export default function MezanProductsWorkspace() {
                     <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected} />
                     <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
                     <section className="rounded-2xl border border-emerald-200 p-3 sm:p-4"><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">التكلفة الأساسية — Mezan</h2><p className="text-xs text-slate-500">مستقلة عن نشر بيانات المنتج إلى سلة.</p></div><button onClick={saveCosts} disabled={costSaving} className="rounded-xl bg-emerald-700 px-4 py-2 text-white"><FloppyDisk className="inline" /> حفظ</button></div><div className="grid gap-3 sm:grid-cols-2 sm:gap-4"><label className="text-sm">تكلفة سلة<input value={selected.cost_price_from_salla ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-50 p-3" /></label><label className="text-sm">تكلفة المنتج في ميزان<input type="number" min="0" step="0.01" value={costs.base_cost} onChange={(event) => setCosts((current) => ({ ...current, base_cost: event.target.value }))} className="mt-1 w-full rounded-xl border border-emerald-300 p-3" /></label></div></section>
+                    <ProductOperationsEditor productId={selectedId} />
                     <ProductOptionCostEditor productId={selectedId} options={options} customFields={customFields} />
                     <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">المتغيرات ({variants.length})</h2>{!variants.length ? <p className="text-slate-400">لا توجد متغيرات مستقلة.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-right text-xs"><thead><tr><th className="p-3">المتغير</th><th>SKU</th><th>السعر</th><th>تكلفة ميزان</th></tr></thead><tbody>{variants.map((variant) => <tr key={variant.id} className="border-t"><td className="p-3 font-bold">{variant.display_name || variant.name || `متغير #${variant.id}`}</td><td>{variant.sku || "—"}</td><td>{money(variant.price)}</td><td><input type="number" min="0" step="0.01" value={costs.variant_costs?.[variant.id] ?? ""} onChange={(event) => setCosts((current) => ({ ...current, variant_costs: { ...current.variant_costs, [variant.id]: event.target.value } }))} className="w-28 rounded-lg border p-2" /></td></tr>)}</tbody></table></div>}</section>
                 </div>}

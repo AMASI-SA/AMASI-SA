@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 
 import { getAiStoreFoundation, listProductIntake } from "../services/aiStoreOperations";
+import ProductCreationPanel from "../components/products/ProductCreationPanel";
 
 const LABELS = {
     has_sku: "SKU",
@@ -100,7 +101,7 @@ export default function ProductIntakeWorkspace() {
                         <div>
                             <div className="flex items-center gap-2 text-sm font-black text-violet-100"><Robot size={22} weight="duotone" /> Mezan AI Store Operations</div>
                             <h1 className="mt-2 text-2xl font-black sm:text-3xl">قائمة استقبال المنتجات</h1>
-                            <p className="mt-2 max-w-3xl text-sm leading-7 text-violet-100">تستقبل المنتجات من سلة وتحدد ما ينقصها قبل السماح للموظفين أو الذكاء الاصطناعي بإدارتها أو الترويج لها.</p>
+                            <p className="mt-2 max-w-3xl text-sm leading-7 text-violet-100">أنشئ المنتجات الجديدة من ميزان إلى سلة، ثم تابع اكتمال بيانات المنتجات وتكاليفها قبل إدارتها أو الترويج لها.</p>
                         </div>
                         <button type="button" onClick={load} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-black text-violet-800 shadow-sm disabled:opacity-60"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث القائمة</button>
                     </div>
@@ -109,6 +110,8 @@ export default function ProductIntakeWorkspace() {
                     <ShieldCheck className="ml-1 inline" /> القاعدة: المنتج لا يصبح جاهزًا لإدارة الذكاء الاصطناعي حتى تكتمل بياناته وتكاليفه ومكوناته الأساسية.
                 </div>
             </section>
+
+            <ProductCreationPanel onCreated={load} />
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="المنتجات المعروضة" value={stats.total} hint="حسب الفلتر الحالي" Icon={Package} />

@@ -15,6 +15,7 @@ import {
 
 import OrderReview from "./OrderReview";
 import ReviewedOrders from "./ReviewedOrders";
+import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 
 export const FULFILLMENT_STAGES = [
     {
@@ -208,6 +209,8 @@ export default function FulfillmentV2() {
                 <OrderReview embedded />
             ) : activeStage.key === "reviewed" ? (
                 <ReviewedOrders />
+            ) : activeStage.key === "ready_to_ship" ? (
+                <ReadyToShipOrders />
             ) : (
                 <PlannedStage stage={activeStage} />
             )}

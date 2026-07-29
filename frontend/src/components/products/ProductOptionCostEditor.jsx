@@ -72,6 +72,13 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
     }
 
     useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        const refresh = (event) => {
+            if (!event?.detail?.productId || event.detail.productId === productId) load();
+        };
+        window.addEventListener("mezan:product-resource-links-changed", refresh);
+        return () => window.removeEventListener("mezan:product-resource-links-changed", refresh);
+    }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const bindings = useMemo(() => {
         const map = new Map();
@@ -109,7 +116,8 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
             setEditing(null);
             await load();
         } catch (error) {
-            toast.error(error?.response?.data?.detail?.code || "تعذر حفظ التكلفة");
+            const code = error?.response?.data?.detail?.code;
+            toast.error(code === "resource_already_linked_to_product" ? "هذه الخدمة أو المكوّن مرتبط بالمنتج مباشرة. ألغِ ذلك الربط أولًا." : code || "تعذر حفظ التكلفة");
         } finally { setBusy(false); }
     }
 
@@ -167,7 +175,7 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                         </div>
                         {editing.mode === "resource" ? (
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id}>{resource.name} — {money(resource.unit_cost)}</option>)}</select></label>
+                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id} disabled={resource.linked_to_product}>{resource.name} — {money(resource.unit_cost)}{resource.linked_to_product ? " — مرتبط بالمنتج" : ""}</option>)}</select></label>
                                 <label className="text-xs font-bold text-slate-500">الكمية<input type="number" min="0.0001" step="0.01" value={editing.quantity} onChange={(e) => setEditing((row) => ({ ...row, quantity: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>
                             </div>
                         ) : <label className="mt-4 block text-xs font-bold text-slate-500">التكلفة الإضافية<input type="number" min="0" step="0.01" value={editing.direct_amount} onChange={(e) => setEditing((row) => ({ ...row, direct_amount: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>}

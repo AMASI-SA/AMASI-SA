@@ -16,6 +16,7 @@ from pymongo import ASCENDING
 
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
@@ -91,11 +92,26 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
     bindings = await db[BINDINGS].find(
         {"user_id": user_id, "salla_product_id": {"$in": list(product_ids)}}, {"_id": 0}
     ).to_list(length=10000)
+    product_bindings = await db[PRODUCT_RESOURCE_BINDINGS].find(
+        {
+            "user_id": user_id,
+            "salla_product_id": {"$in": list(product_ids)},
+        },
+        {"_id": 0},
+    ).to_list(length=10000)
     bindings_by_product: dict[str, list[dict[str, Any]]] = {}
+    product_bindings_by_product: dict[str, list[dict[str, Any]]] = {}
     resource_ids = set()
     for row in bindings:
         bindings_by_product.setdefault(str(row.get("salla_product_id")), []).append(row)
         if row.get("mode") == "resource" and row.get("resource_id"):
+            resource_ids.add(str(row.get("resource_id")))
+    for row in product_bindings:
+        product_bindings_by_product.setdefault(
+            str(row.get("salla_product_id")),
+            [],
+        ).append(row)
+        if row.get("resource_id"):
             resource_ids.add(str(row.get("resource_id")))
     resources = await db[RESOURCES].find(
         {"user_id": user_id, "id": {"$in": list(resource_ids)}}, {"_id": 0}
@@ -110,6 +126,25 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
         quantity = float(item.quantity or 1)
         profile = profile_map.get(product_id, {})
         base_unit_cost = _number(profile.get("base_cost")) or 0.0
+        applied_product_resources = []
+        product_resource_unit_cost = 0.0
+        for binding in product_bindings_by_product.get(product_id, []):
+            resource = resource_map.get(str(binding.get("resource_id")), {})
+            unit_cost = _number(resource.get("unit_cost")) or 0.0
+            amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
+            product_resource_unit_cost += amount
+            applied_product_resources.append({
+                "binding_id": binding.get("id"),
+                "quantity": binding.get("quantity") or 1,
+                "resolved_amount": round(amount, 4),
+                "resource": {
+                    "id": resource.get("id"),
+                    "code": resource.get("code"),
+                    "name": resource.get("name"),
+                    "kind": resource.get("kind"),
+                    "unit_cost": unit_cost,
+                },
+            })
         tokens = selected_option_tokens(item)
         applied = []
         option_unit_cost = 0.0
@@ -134,7 +169,11 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
                 "mode": binding.get("mode"), "quantity": binding.get("quantity") or 1,
                 "resolved_amount": round(amount, 4), "resource": resource_snapshot,
             })
-        unit_cost = base_unit_cost + option_unit_cost
+        unit_cost = (
+            base_unit_cost
+            + product_resource_unit_cost
+            + option_unit_cost
+        )
         line_cost = unit_cost * quantity
         order_total_cost += line_cost
         snapshot = {
@@ -150,10 +189,15 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             "sku": item.sku,
             "quantity": quantity,
             "base_unit_cost": round(base_unit_cost, 4),
+            "product_resource_unit_cost": round(
+                product_resource_unit_cost,
+                4,
+            ),
             "option_unit_cost": round(option_unit_cost, 4),
             "unit_cost": round(unit_cost, 4),
             "line_cost": round(line_cost, 4),
             "selected_options": [list(token) for token in sorted(tokens)],
+            "applied_product_resources": applied_product_resources,
             "applied_option_costs": applied,
             "cost_authority": "mezan_v2_snapshot",
             "calculated_at": now,
