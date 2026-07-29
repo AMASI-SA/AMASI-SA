@@ -6,6 +6,7 @@ import {
 import { toast } from "sonner";
 
 import ProductMediaAiProposalPanel from "./ProductMediaAiProposalPanel";
+import ProductPreparationImageProfile from "./ProductPreparationImageProfile";
 import {
     approveProductMediaDraft,
     deleteProductMediaUpload,
@@ -173,6 +174,7 @@ export default function ProductMediaDraftEditor({ productId, images = [], onPubl
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">{current.map((row) => <div key={row.id || row.url} className="relative"><img src={previewUrl(row.url)} alt={row.alt || ""} className="aspect-square w-full rounded-xl border object-cover" />{row.is_main && <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-black text-white">الرئيسية</span>}</div>)}</div>
                 {draft && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">توجد مسودة صور بحالة: {draft.status}</div>}
             </section>
+            <ProductPreparationImageProfile productId={productId} />
             <ProductMediaAiProposalPanel productId={productId} images={draft?.images?.length ? draft.images : current} />
         </div>;
     }
@@ -187,6 +189,7 @@ export default function ProductMediaDraftEditor({ productId, images = [], onPubl
             <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" disabled={busy || uploading || !permissions.edit || !changed} onClick={save} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white disabled:opacity-40">{busy ? <SpinnerGap className="inline animate-spin" /> : <FloppyDisk className="inline" />} حفظ مسودة</button>{draft?.status === "draft" && <button type="button" disabled={busy || !permissions.approve} onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button type="button" disabled={busy || !permissions.publish} onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-40"><PaperPlaneTilt className="inline" /> نشر إلى سلة</button>}</div>
             {!permissions.publish && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><WarningCircle className="ml-1 inline" /> النشر يتطلب صلاحية products.media.publish.</div>}
         </section>
+        <ProductPreparationImageProfile productId={productId} />
         <ProductMediaAiProposalPanel productId={productId} images={draftImages} />
     </div>;
 }
