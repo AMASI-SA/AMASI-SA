@@ -1,0 +1,245 @@
+name: Apply review image save modes
+
+on:
+  push:
+    branches: [feat/review-image-save-modes]
+    paths: [.github/workflows/agent-apply-review-image-modes.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/review-image-save-modes
+      - name: Apply implementation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          backend = r'''"""Selectable preparation-image save modes for order review."""
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from typing import Any, Callable, Literal
+
+          from fastapi import APIRouter, Body, Depends, HTTPException
+          from pydantic import BaseModel, ConfigDict, Field
+          from pymongo.errors import DuplicateKeyError
+
+          import order_review_routes as base
+          from order_engine.repository import MongoOrderRepository
+          from order_engine.service import OrderNotFoundError, get_order
+
+
+          def _selected_values(item: Any) -> dict[str, str]:
+              values: dict[str, str] = {}
+              for option in getattr(item, "options", None) or []:
+                  name = base._text(getattr(option, "name", None))
+                  value = base._text(getattr(option, "value", None))
+                  if name and value:
+                      values[base._normalized(name)] = base._normalized(value)
+              for name in ("color", "size", "material"):
+                  value = base._text(getattr(item, name, None))
+                  if value:
+                      values.setdefault(base._normalized(name), base._normalized(value))
+              for field in getattr(item, "custom_fields", None) or []:
+                  if not isinstance(field, dict):
+                      continue
+                  name = base._text(field.get("name") or field.get("label") or field.get("title") or field.get("question") or field.get("key"))
+                  raw = field.get("value") or field.get("answer") or field.get("selected") or field.get("choice") or field.get("text") or field.get("response")
+                  value = base._text(raw.get("name") if isinstance(raw, dict) else raw)
+                  if name and value:
+                      values.setdefault(base._normalized(name), base._normalized(value))
+              return values
+
+
+          def _signature(product_key: str, values: dict[str, str]) -> str:
+              canonical = json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+              return hashlib.sha256(f"{product_key}|{canonical}".encode("utf-8")).hexdigest()
+
+
+          async def _preference_map(db: Any, user_id: str, identities: list[Any]) -> dict[tuple[str, str], dict[str, Any]]:
+              contexts = []
+              product_keys = set()
+              for item in identities:
+                  product_key, exact_signature, _ = base.build_image_preference_identity(item)
+                  contexts.append((item, product_key, exact_signature, _selected_values(item)))
+                  product_keys.add(product_key)
+              if not product_keys:
+                  return {}
+              docs = await db[base.PREFERENCES].find(
+                  {"user_id": user_id, "product_key": {"$in": sorted(product_keys)}}, {"_id": 0}
+              ).to_list(5000)
+              by_product: dict[str, list[dict[str, Any]]] = {}
+              for doc in docs:
+                  by_product.setdefault(base._text(doc.get("product_key")), []).append(doc)
+              result = {}
+              for _, product_key, exact_signature, current_values in contexts:
+                  best = None
+                  best_score = -2
+                  for doc in by_product.get(product_key, []):
+                      mode = base._text(doc.get("mode")) or "options"
+                      rule_values = {
+                          base._normalized(key): base._normalized(value)
+                          for key, value in (doc.get("option_values") or {}).items()
+                          if base._text(key) and base._text(value)
+                      }
+                      if mode == "default":
+                          score = -1
+                      elif rule_values and all(current_values.get(key) == value for key, value in rule_values.items()):
+                          score = len(rule_values)
+                      elif doc.get("option_signature") == exact_signature:
+                          score = len(rule_values)
+                      else:
+                          continue
+                      if score > best_score:
+                          best, best_score = doc, score
+                  if best:
+                      result[(product_key, exact_signature)] = best
+              return result
+
+
+          base._preference_map = _preference_map
+
+
+          class ImageChoiceRequest(BaseModel):
+              model_config = ConfigDict(extra="forbid")
+              expected_revision: int = Field(ge=0)
+              selected_image_url: str = Field(min_length=1, max_length=3000)
+              mode: Literal["order_only", "options", "default"]
+              selected_spec_keys: list[str] = Field(default_factory=list, max_length=40)
+
+
+          def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
+              router = APIRouter()
+              router.include_router(base.make_order_review_router(db, current_user))
+              repository = MongoOrderRepository(db)
+
+              @router.post("/order-reviews-v1/{order_number}/items/{order_item_id:path}/image-choice")
+              async def save_image_choice(
+                  order_number: str,
+                  order_item_id: str,
+                  payload: ImageChoiceRequest = Body(...),
+                  user: dict = Depends(current_user),
+              ) -> dict[str, Any]:
+                  reviewer = base._require_reviewer(user)
+                  user_id = base._merchant_user_id(reviewer)
+                  actor_id = str(reviewer["id"])
+                  await base._ensure_indexes(db)
+                  try:
+                      order = await get_order(repository, user_id=user_id, order_number=order_number)
+                  except OrderNotFoundError as exc:
+                      raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
+                  identities = await base._review_item_identities(db, user_id, order)
+                  target = next((item for item in identities if item.order_item_id == order_item_id), None)
+                  if target is None:
+                      raise HTTPException(status_code=404, detail={"code": "order_item_not_found"})
+                  selected = base._text(payload.selected_image_url)
+                  allowed = {base._text(url) for url in [*(target.image_urls or []), target.image_url] if base._text(url)}
+                  if selected not in allowed:
+                      raise HTTPException(status_code=422, detail={"code": "image_not_in_product_gallery", "message": "اختر صورة من صور هذا المنتج."})
+
+                  workflow = await db[base.WORKFLOWS].find_one({"user_id": user_id, "order_number": order.order_number}, {"_id": 0})
+                  if (workflow or {}).get("stage") in base.REVIEW_COMPLETED_STAGES:
+                      raise HTTPException(status_code=409, detail={"code": "review_already_completed"})
+                  revision = int((workflow or {}).get("revision") or 0)
+                  if revision != payload.expected_revision:
+                      raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+
+                  states = base._state_map(workflow)
+                  current = states.get(order_item_id, {"order_item_id": order_item_id, "review_status": "pending_review", "revision": 0})
+                  current.update({
+                      "selected_image_url": selected,
+                      "selected_image_source": "manual",
+                      "order_item_id": order_item_id,
+                      "review_status": "pending_review",
+                      "revision": int(current.get("revision") or 0) + 1,
+                      "updated_at": base._now(),
+                      "updated_by": actor_id,
+                      "updated_by_name": base._text(reviewer.get("name") or reviewer.get("email")),
+                  })
+                  states[order_item_id] = current
+                  new_doc = {**(workflow or {}), "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id, "stage": "pending_review", "revision": revision + 1, "items": list(states.values()), "updated_at": base._now(), "updated_by": actor_id}
+                  new_doc.pop("_id", None)
+                  if workflow:
+                      result = await db[base.WORKFLOWS].replace_one({"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc)
+                      if not result.matched_count:
+                          raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
+                  else:
+                      new_doc["created_at"] = new_doc["updated_at"]
+                      try:
+                          await db[base.WORKFLOWS].insert_one(new_doc)
+                      except DuplicateKeyError as exc:
+                          raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+
+                  product_key, _, _ = base.build_image_preference_identity(target)
+                  if payload.mode == "options":
+                      all_values = _selected_values(target)
+                      selected_keys = {base._normalized(key) for key in payload.selected_spec_keys if base._text(key)}
+                      option_values = {key: all_values[key] for key in sorted(selected_keys) if key in all_values}
+                      if not option_values:
+                          raise HTTPException(status_code=422, detail={"code": "image_choice_options_required", "message": "اختر خيارًا واحدًا على الأقل."})
+                      preference_signature = _signature(product_key, option_values)
+                      mode = "options"
+                  elif payload.mode == "default":
+                      option_values = {}
+                      preference_signature = "__default__"
+                      mode = "default"
+                  else:
+                      option_values = None
+                      preference_signature = None
+                      mode = "order_only"
+
+                  if preference_signature:
+                      await db[base.PREFERENCES].update_one(
+                          {"user_id": user_id, "product_key": product_key, "option_signature": preference_signature},
+                          {"$set": {"selected_image_url": selected, "option_values": option_values, "mode": mode, "source_order_number": order.order_number, "source_order_item_id": order_item_id, "updated_at": base._now(), "updated_by": actor_id}, "$setOnInsert": {"created_at": base._now()}},
+                          upsert=True,
+                      )
+                  await db[base.EVENTS].insert_one({"user_id": user_id, "order_number": order.order_number, "order_item_id": order_item_id, "event_type": "review_image_choice_saved", "mode": mode, "selected_spec_keys": sorted(payload.selected_spec_keys), "occurred_at": base._now(), "actor_id": actor_id})
+                  return await base._detail(db, user_id, order)
+
+              return router
+          '''
+          Path('backend/order_review_image_modes.py').write_text(backend, encoding='utf-8')
+
+          server = Path('backend/server.py')
+          text = server.read_text(encoding='utf-8')
+          text = text.replace('from order_review_routes import make_order_review_router', 'from order_review_image_modes import make_order_review_router')
+          server.write_text(text, encoding='utf-8')
+
+          service = Path('frontend/src/services/orderReviewEngine.js')
+          text = service.read_text(encoding='utf-8')
+          if 'saveOrderReviewImageChoice' not in text:
+              text += '''\n\nexport async function saveOrderReviewImageChoice(orderNumber, orderItemId, payload) {\n    try {\n        const { data } = await api.post(\n            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/image-choice`,\n            payload,\n        );\n        return data;\n    } catch (error) {\n        throw new Error(message(error, "تعذّر حفظ اختيار صورة التجهيز."));\n    }\n}\n'''
+          service.write_text(text, encoding='utf-8')
+
+          page = Path('frontend/src/pages/OrderReview.jsx')
+          text = page.read_text(encoding='utf-8')
+          text = text.replace('    updateOrderReviewOperationalItemStatus,\n', '    updateOrderReviewOperationalItemStatus,\n    saveOrderReviewImageChoice,\n')
+          text = text.replace('    const [visibleSelectedImage, setVisibleSelectedImage] = useState(item.selected_image_url || item.image_url || "");\n', '    const [visibleSelectedImage, setVisibleSelectedImage] = useState(item.selected_image_url || item.image_url || "");\n    const [imageDialog, setImageDialog] = useState(null);\n    const [selectedImageSpecKeys, setSelectedImageSpecKeys] = useState([]);\n')
+          marker = '    const selectedIdentity = imageIdentity(visibleSelectedImage);\n'
+          insert = '''    const openImageDialog = (url) => {\n        setImageDialog(url);\n        setSelectedImageSpecKeys(specs.map((spec) => spec.key));\n    };\n    const saveImageChoice = async (mode) => {\n        if (!imageDialog) return;\n        if (mode === "options" && !selectedImageSpecKeys.length) {\n            toast.error("اختر خيارًا واحدًا على الأقل");\n            return;\n        }\n        setBusy(true);\n        try {\n            const next = await saveOrderReviewImageChoice(orderNumber, item.order_item_id, {\n                expected_revision: workflowRevision,\n                selected_image_url: imageDialog,\n                mode,\n                selected_spec_keys: mode === "options" ? selectedImageSpecKeys : [],\n            });\n            setVisibleSelectedImage(imageDialog);\n            setImageDialog(null);\n            onChanged(next);\n            toast.success(mode === "order_only" ? "تم حفظ الصورة لهذا الطلب فقط." : mode === "default" ? "تم حفظ الصورة كرئيسية للمنتج في ميزان." : "تم حفظ الصورة مع الخيارات المحددة.");\n        } catch (error) {\n            toast.error(error.message);\n        } finally {\n            setBusy(false);\n        }\n    };\n'''
+          text = text.replace(marker, marker + insert)
+          old = '''                                        onClick={() => {\n                                            setVisibleSelectedImage(url);\n                                            save({ selected_image_url: url }, "تم حفظ الصورة لهذه الخيارات وستُستخدم تلقائيًا لاحقًا.");\n                                        }}'''
+          text = text.replace(old, '                                        onClick={() => openImageDialog(url)}')
+          article = '        <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">\n'
+          modal = '''        <article data-testid="order-review-product-card" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">\n            {imageDialog && (\n                <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-3" dir="rtl">\n                    <div className="max-h-[92vh] w-full max-w-xl overflow-auto rounded-3xl bg-white shadow-2xl">\n                        <div className="flex items-center justify-between border-b p-4"><div><h3 className="font-extrabold">حفظ صورة التجهيز</h3><p className="text-xs text-slate-500">اختر طريقة استخدام الصورة داخل ميزان.</p></div><button type="button" onClick={() => setImageDialog(null)} className="rounded-xl border p-2"><X /></button></div>\n                        <div className="space-y-4 p-4">\n                            <img src={imageDialog} alt="" className="mx-auto h-40 w-40 rounded-2xl border object-cover" />\n                            {specs.length > 0 && <div><div className="mb-2 text-sm font-extrabold">الخيارات التي تُحفظ معها الصورة</div><div className="space-y-2">{specs.map((spec) => <label key={spec.key} className="flex items-start gap-2 rounded-xl bg-violet-50 p-3 text-sm"><input type="checkbox" checked={selectedImageSpecKeys.includes(spec.key)} onChange={(event) => setSelectedImageSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} /><span><b>{spec.name}:</b> {spec.value}</span></label>)}</div></div>}\n                            <div className="grid gap-2">\n                                <button type="button" disabled={busy} onClick={() => saveImageChoice("order_only")} className="rounded-xl border px-4 py-3 font-extrabold">حفظ لهذا الطلب فقط</button>\n                                <button type="button" disabled={busy || !selectedImageSpecKeys.length} onClick={() => saveImageChoice("options")} className="rounded-xl bg-violet-700 px-4 py-3 font-extrabold text-white disabled:opacity-40">حفظ مع الخيارات المحددة</button>\n                                <button type="button" disabled={busy} onClick={() => saveImageChoice("default")} className="rounded-xl bg-emerald-700 px-4 py-3 font-extrabold text-white">حفظ كصورة رئيسية في ميزان</button>\n                            </div>\n                            {selectedImageSpecKeys.length > 0 && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs"><b>سيتم ربطها بـ:</b> {specs.filter((spec) => selectedImageSpecKeys.includes(spec.key)).map((spec) => `${spec.name} = ${spec.value}`).join(" · ")}</div>}\n                        </div>\n                    </div>\n                </div>\n            )}\n'''
+          text = text.replace(article, modal, 1)
+          page.write_text(text, encoding='utf-8')
+          PY
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          rm .github/workflows/agent-apply-review-image-modes.yml
+          git config user.name "AMASI-SA Agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/order_review_image_modes.py backend/server.py frontend/src/services/orderReviewEngine.js frontend/src/pages/OrderReview.jsx .github/workflows/agent-apply-review-image-modes.yml
+          git commit -m "feat(fulfillment): add selectable preparation image save modes"
+          git push origin HEAD:feat/review-image-save-modes
