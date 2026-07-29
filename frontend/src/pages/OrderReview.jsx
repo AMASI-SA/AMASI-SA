@@ -208,6 +208,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
     const specs = reviewProductSpecs(item);
     const selectedIdentity = imageIdentity(visibleSelectedImage);
     const openImageDialog = (url) => {
+        setVisibleSelectedImage(url);
         setImageDialog(url);
         setSelectedImageSpecKeys(specs.map((spec) => spec.key));
     };
