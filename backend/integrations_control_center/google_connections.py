@@ -1,10 +1,14 @@
 """Owner-only Google OAuth routes for Apps & Integrations V2."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+import os
 import uuid
 from typing import Any, Callable
+from urllib.parse import parse_qs, urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from .google_discovery import _discover_google_accounts, _userinfo
@@ -15,11 +19,47 @@ from .google_oauth_security import (
     _consume_state,
     _exchange_code,
     _iso,
+    _redirect_uri,
+    _state_secret,
     ensure_google_connection_indexes,
     google_oauth_configured,
     start_google_connection,
 )
 from .google_projection import _persist_google_projection
+
+GOOGLE_BINDING_COOKIE = "mezan_google_oauth_binding"
+GOOGLE_BINDING_MAX_AGE = 15 * 60
+GOOGLE_CALLBACK_PATH = "/api/integrations-v2/google/callback"
+
+
+def _browser_binding(state_token: str) -> str:
+    return hmac.new(
+        _state_secret().encode("utf-8"),
+        f"google-browser:{state_token}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _state_from_authorization_url(value: str) -> str:
+    try:
+        rows = parse_qs(urlsplit(value).query).get("state") or []
+        return str(rows[0]).strip() if rows else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _secure_cookie() -> bool:
+    return _redirect_uri().lower().startswith("https://")
+
+
+def _clear_binding_cookie(response: RedirectResponse) -> None:
+    response.delete_cookie(
+        GOOGLE_BINDING_COOKIE,
+        path=GOOGLE_CALLBACK_PATH,
+        secure=_secure_cookie(),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 async def handle_google_callback(
@@ -28,6 +68,7 @@ async def handle_google_callback(
     code: str | None,
     state_token: str | None,
     provider_error: str | None,
+    browser_binding: str | None,
 ) -> RedirectResponse:
     if provider_error:
         return RedirectResponse(
@@ -36,6 +77,14 @@ async def handle_google_callback(
     if not code or not state_token:
         return RedirectResponse(
             _callback_redirect(outcome="error", code="missing_code_or_state"),
+            status_code=302,
+        )
+    expected_binding = _browser_binding(state_token)
+    if not browser_binding or not hmac.compare_digest(
+        expected_binding, str(browser_binding)
+    ):
+        return RedirectResponse(
+            _callback_redirect(outcome="error", code="browser_binding_mismatch"),
             status_code=302,
         )
     try:
@@ -194,18 +243,52 @@ def attach_google_connection_routes(
     install_google_connection_actions()
 
     @router.post("/google/connect/start")
-    async def google_connect_start(user: dict = Depends(current_user)) -> dict:
+    async def google_connect_start(
+        response: Response,
+        user: dict = Depends(current_user),
+    ) -> dict:
         owner = require_owner(user)
-        return await start_google_connection(db, str(owner["id"]))
+        if not os.environ.get("FRONTEND_URL", "").strip():
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "google_oauth_frontend_url_missing",
+                    "message": "يجب ضبط FRONTEND_URL في بيئة Backend أولًا.",
+                    "missing": ["FRONTEND_URL"],
+                },
+            )
+        result = await start_google_connection(db, str(owner["id"]))
+        state_token = _state_from_authorization_url(result["authorization_url"])
+        if not state_token:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "google_oauth_state_generation_failed",
+                    "message": "تعذر إنشاء جلسة ربط Google الآمنة.",
+                },
+            )
+        response.set_cookie(
+            GOOGLE_BINDING_COOKIE,
+            _browser_binding(state_token),
+            max_age=GOOGLE_BINDING_MAX_AGE,
+            secure=_secure_cookie(),
+            httponly=True,
+            samesite="lax",
+            path=GOOGLE_CALLBACK_PATH,
+        )
+        return result
 
     @router.get("/google/callback", include_in_schema=False)
     async def google_callback(request: Request) -> RedirectResponse:
-        return await handle_google_callback(
+        response = await handle_google_callback(
             db,
             code=request.query_params.get("code"),
             state_token=request.query_params.get("state"),
             provider_error=request.query_params.get("error"),
+            browser_binding=request.cookies.get(GOOGLE_BINDING_COOKIE),
         )
+        _clear_binding_cookie(response)
+        return response
 
     def make_google_local_test(provider_id: str) -> Callable:
         async def google_local_test(user: dict = Depends(current_user)) -> dict:
