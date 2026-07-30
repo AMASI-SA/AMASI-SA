@@ -18,6 +18,8 @@ from .meta_catalog_native import install_meta_native_catalog
 from .meta_connections import attach_meta_connection_routes
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
+from .snapchat_native_data_routes import attach_snapchat_native_data_routes
+from .snapchat_oauth_security import snapchat_oauth_configured
 from .tiktok_catalog_native import install_tiktok_native_catalog
 from .tiktok_connections import attach_tiktok_connection_routes
 from .models import (
@@ -50,6 +52,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     )
     attach_meta_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_connection_routes(router, db, current_user, _require_owner)
+    attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
 
     exact_test_routes = [
@@ -72,6 +75,41 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
             len(router.routes),
         )
         router.routes[generic_index:generic_index] = exact_test_routes
+
+    # The base router still carries a transitional analytics endpoint for old
+    # environments. Once the platform OAuth app is configured, remove that
+    # endpoint and expose only the native V2 data plane at the same URL.
+    if snapchat_oauth_configured():
+        native_sync_route = next(
+            (
+                route
+                for route in router.routes
+                if str(getattr(route, "name", "")) == "sync_snapchat_native_data"
+            ),
+            None,
+        )
+        if native_sync_route is not None:
+            insertion_index = next(
+                (
+                    index
+                    for index, route in enumerate(router.routes)
+                    if str(getattr(route, "path", ""))
+                    == "/integrations-v2/snapchat_ads/sync"
+                ),
+                len(router.routes),
+            )
+            router.routes[:] = [
+                route
+                for route in router.routes
+                if not (
+                    str(getattr(route, "path", ""))
+                    == "/integrations-v2/snapchat_ads/sync"
+                    and route is not native_sync_route
+                )
+            ]
+            if native_sync_route in router.routes:
+                router.routes.remove(native_sync_route)
+            router.routes.insert(min(insertion_index, len(router.routes)), native_sync_route)
     return router
 
 
