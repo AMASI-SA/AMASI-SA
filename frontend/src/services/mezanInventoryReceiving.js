@@ -10,6 +10,14 @@ export async function postPurchaseInventoryReceipt(payload) {
     return response.data;
 }
 
+export async function loadPurchaseReceivingLocationSuggestions(payload) {
+    const response = await api.post(
+        "/inventory-v2/purchase-receiving/location-suggestions",
+        payload,
+    );
+    return response.data;
+}
+
 export async function loadStockPreparationCatalog() {
     const response = await api.get("/inventory-v2/stock-preparation-orders/catalog");
     return response.data;

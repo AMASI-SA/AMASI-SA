@@ -21,6 +21,7 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
     const [roleKey, setRoleKey] = useState(assignment.role_key || (user.is_owner ? "owner" : "product_operator"));
     const [enabled, setEnabled] = useState(assignment.enabled !== false);
     const [warehouseIds, setWarehouseIds] = useState(assignment.warehouse_ids || []);
+    const [workplaceWarehouseId, setWorkplaceWarehouseId] = useState(assignment.workplace_warehouse_id || "");
     const [responsibilities, setResponsibilities] = useState(assignment.fulfillment_responsibilities || []);
     const [extraPermissions, setExtraPermissions] = useState(assignment.extra_permissions || []);
     const [busy, setBusy] = useState(false);
@@ -29,9 +30,10 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
         setRoleKey(assignment.role_key || (user.is_owner ? "owner" : "product_operator"));
         setEnabled(assignment.enabled !== false);
         setWarehouseIds(assignment.warehouse_ids || []);
+        setWorkplaceWarehouseId(assignment.workplace_warehouse_id || "");
         setResponsibilities(assignment.fulfillment_responsibilities || []);
         setExtraPermissions(assignment.extra_permissions || []);
-    }, [assignment.role_key, assignment.enabled, assignment.warehouse_ids, assignment.fulfillment_responsibilities, assignment.extra_permissions, user.is_owner]);
+    }, [assignment.role_key, assignment.enabled, assignment.warehouse_ids, assignment.workplace_warehouse_id, assignment.fulfillment_responsibilities, assignment.extra_permissions, user.is_owner]);
 
     async function save() {
         setBusy(true);
@@ -42,6 +44,7 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
                 extra_permissions: extraPermissions,
                 denied_permissions: assignment.denied_permissions || [],
                 warehouse_ids: warehouseIds,
+                workplace_warehouse_id: workplaceWarehouseId || null,
                 fulfillment_responsibilities: responsibilities,
             });
             toast.success(`تم حفظ صلاحيات ${user.name || user.email}`);
@@ -51,6 +54,17 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
     }
 
     const effective = user.effective_permissions || [];
+    const toggleWarehouse = (value) => {
+        const next = warehouseIds.includes(value)
+            ? warehouseIds.filter((item) => item !== value)
+            : [...warehouseIds, value];
+        setWarehouseIds(next);
+        if (!next.includes(workplaceWarehouseId)) {
+            setWorkplaceWarehouseId(next.length === 1 ? next[0] : "");
+        } else if (!workplaceWarehouseId && next.length === 1) {
+            setWorkplaceWarehouseId(next[0]);
+        }
+    };
     const toggle = (values, value, setter) => setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
     return (
         <article className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -80,9 +94,25 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
                 <section className="rounded-xl border bg-slate-50 p-3">
                     <div className="text-xs font-black text-slate-700">الفروع والمخازن المسؤولة</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                        {(warehouses || []).map((warehouse) => <label key={warehouse.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${warehouseIds.includes(warehouse.id) ? "border-violet-400 bg-violet-50 text-violet-900" : "bg-white"}`}><input type="checkbox" checked={warehouseIds.includes(warehouse.id)} onChange={() => toggle(warehouseIds, warehouse.id, setWarehouseIds)} />{warehouse.name}{warehouse.city ? ` — ${warehouse.city}` : ""}</label>)}
+                        {(warehouses || []).map((warehouse) => <label key={warehouse.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${warehouseIds.includes(warehouse.id) ? "border-violet-400 bg-violet-50 text-violet-900" : "bg-white"}`}><input type="checkbox" checked={warehouseIds.includes(warehouse.id)} onChange={() => toggleWarehouse(warehouse.id)} />{warehouse.name}{warehouse.city ? ` — ${warehouse.city}` : ""}</label>)}
                         {!(warehouses || []).length && <span className="text-xs text-slate-400">أنشئ فرعًا أو مخزنًا أولًا.</span>}
                     </div>
+                    {!user.is_owner && warehouseIds.length > 0 && (
+                        <label className="mt-3 block text-xs font-black text-slate-700">
+                            مقر العمل الافتراضي
+                            <select
+                                value={workplaceWarehouseId}
+                                onChange={(event) => setWorkplaceWarehouseId(event.target.value)}
+                                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm"
+                            >
+                                <option value="">اختر مقر العمل</option>
+                                {(warehouses || []).filter((warehouse) => warehouseIds.includes(warehouse.id)).map((warehouse) => (
+                                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.city ? ` — ${warehouse.city}` : ""}</option>
+                                ))}
+                            </select>
+                            <span className="mt-1 block font-normal text-slate-500">يظهر هذا الفرع تلقائيًا عند استلام المخزون وتنفيذ المهام.</span>
+                        </label>
+                    )}
                 </section>
                 <section className="rounded-xl border bg-slate-50 p-3">
                     <div className="text-xs font-black text-slate-700">مسؤوليات التنفيذ</div>

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Barcode,
+    Camera,
     CheckCircle,
     ClipboardText,
     Cube,
     MagnifyingGlass,
+    MapPin,
     Package,
     Plus,
     SpinnerGap,
@@ -18,11 +20,13 @@ import StockPreparationOrders from "../components/inventory/StockPreparationOrde
 import SallaInventorySync from "../components/inventory/SallaInventorySync";
 import {
     loadInventoryReceivingCatalog,
+    loadPurchaseReceivingLocationSuggestions,
     newInventoryReceiptIdempotencyKey,
     postPurchaseInventoryReceipt,
 } from "../services/mezanInventoryReceiving";
 
 const EMPTY_CATALOG = {
+    actor_workplace: {},
     purchase_invoices: [],
     products: [],
     warehouses: [],
@@ -41,6 +45,8 @@ const ERROR_MESSAGES = {
     inventory_location_not_found: "خانة المخزن غير موجودة.",
     inventory_warehouse_not_assigned: "هذا المخزن غير مسند إلى الموظف الحالي.",
     inventory_location_disabled: "خانة المخزن متوقفة.",
+    inventory_location_not_permanent: "هذه الخانة ليست مخصصة للتخزين الدائم.",
+    inventory_location_product_mismatch: "الخانة تحتوي منتجًا أو تجهيزًا مختلفًا. استخدم الخانة المقترحة أو خانة فارغة.",
     inventory_location_barcode_mismatch: "الباركود المدخل لا يطابق الخانة المختارة.",
     purchase_invoice_quantity_exceeded: "الكمية تتجاوز المتبقي في بند فاتورة الشراء.",
     inventory_location_capacity_exceeded: "الخانة لا تتسع لهذه الكمية.",
@@ -82,6 +88,84 @@ function inventoryHealthLabel(value) {
     return labels[value] || value;
 }
 
+function CameraBarcodeScanner({ onDetected, onClose }) {
+    const videoRef = useRef(null);
+    const [cameraError, setCameraError] = useState("");
+
+    useEffect(() => {
+        let stopped = false;
+        let stream;
+        let animationFrame;
+
+        async function start() {
+            if (!navigator.mediaDevices?.getUserMedia || !globalThis.BarcodeDetector) {
+                setCameraError("هذا المتصفح لا يدعم قراءة الباركود بالكاميرا. استخدم قارئ الباركود.");
+                return;
+            }
+            try {
+                const supported = await globalThis.BarcodeDetector.getSupportedFormats();
+                const formats = ["code_39", "code_128", "qr_code"].filter((value) => supported.includes(value));
+                const detector = new globalThis.BarcodeDetector(formats.length ? { formats } : undefined);
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false,
+                });
+                if (stopped || !videoRef.current) return;
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+
+                const detect = async () => {
+                    if (stopped || !videoRef.current) return;
+                    try {
+                        const rows = await detector.detect(videoRef.current);
+                        const value = String(rows?.[0]?.rawValue || "").trim();
+                        if (value) {
+                            onDetected(value);
+                            return;
+                        }
+                    } catch {
+                        // Keep scanning; transient frames may not contain a barcode.
+                    }
+                    animationFrame = requestAnimationFrame(detect);
+                };
+                animationFrame = requestAnimationFrame(detect);
+            } catch (error) {
+                setCameraError(
+                    error?.name === "NotAllowedError"
+                        ? "يجب السماح للكاميرا حتى يتم مسح باركود الخانة."
+                        : "تعذر تشغيل الكاميرا. استخدم قارئ الباركود.",
+                );
+            }
+        }
+
+        start();
+        return () => {
+            stopped = true;
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            for (const track of stream?.getTracks?.() || []) track.stop();
+        };
+    }, [onDetected]);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" dir="rtl">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-4 shadow-2xl">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 className="font-black text-slate-950">تصوير باركود الخانة</h3>
+                        <p className="mt-1 text-xs text-slate-500">وجّه الكاميرا إلى الباركود المثبت على الخانة المقترحة.</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-xl border px-3 py-2 text-sm font-bold">إغلاق</button>
+                </div>
+                {cameraError ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">{cameraError}</div>
+                ) : (
+                    <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full rounded-2xl bg-black object-cover" />
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function InventoryReceivingWorkspace() {
     const [activeSection, setActiveSection] = useState("purchase_receiving");
     const [catalog, setCatalog] = useState(EMPTY_CATALOG);
@@ -94,7 +178,10 @@ export default function InventoryReceivingWorkspace() {
     const [productSearch, setProductSearch] = useState("");
     const [warehouseId, setWarehouseId] = useState("");
     const [locationId, setLocationId] = useState("");
+    const [locationSuggestions, setLocationSuggestions] = useState([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     const [scannedBarcode, setScannedBarcode] = useState("");
+    const [cameraOpen, setCameraOpen] = useState(false);
     const [quantity, setQuantity] = useState(1);
     const [preparationState, setPreparationState] = useState("requires_preparation");
     const [specifications, setSpecifications] = useState([{ name: "", value: "" }]);
@@ -140,13 +227,16 @@ export default function InventoryReceivingWorkspace() {
             || String(row.barcode || "").toLocaleLowerCase("ar").includes(query)
         ));
     }, [catalog.products, productSearch]);
-    const locations = useMemo(
-        () => catalog.locations.filter((row) => row.warehouse_id === warehouseId),
-        [catalog.locations, warehouseId],
-    );
     const selectedLocation = useMemo(
-        () => catalog.locations.find((row) => row.id === locationId),
-        [catalog.locations, locationId],
+        () => locationSuggestions.find((row) => row.id === locationId)
+            || catalog.locations.find((row) => row.id === locationId),
+        [locationSuggestions, catalog.locations, locationId],
+    );
+    const receiptSpecifications = useMemo(
+        () => specifications
+            .map((row) => ({ name: row.name.trim(), value: row.value.trim() }))
+            .filter((row) => row.name && row.value),
+        [specifications],
     );
 
     useEffect(() => {
@@ -154,9 +244,12 @@ export default function InventoryReceivingWorkspace() {
         setQuantity(1);
         const invoiceSku = String(line.sku || "").trim().toUpperCase();
         if (!invoiceSku) return;
-        const matchingProduct = catalog.products.find(
-            (row) => String(row.sku || "").trim().toUpperCase() === invoiceSku,
-        );
+        const matchingProduct = catalog.products.find((row) => (
+            String(row.sku || "").trim().toUpperCase() === invoiceSku
+            || (row.variants || []).some(
+                (variant) => String(variant.sku || "").trim().toUpperCase() === invoiceSku,
+            )
+        ));
         if (matchingProduct) {
             setProductId(matchingProduct.mezan_product_id);
             setProductSearch(matchingProduct.name || matchingProduct.sku || "");
@@ -174,9 +267,82 @@ export default function InventoryReceivingWorkspace() {
     }, [product, line]);
 
     useEffect(() => {
+        const defaultWarehouseId = catalog.actor_workplace?.warehouse_id;
+        if (
+            defaultWarehouseId
+            && !warehouseId
+            && catalog.warehouses.some((row) => row.id === defaultWarehouseId)
+        ) {
+            setWarehouseId(defaultWarehouseId);
+        }
+    }, [catalog.actor_workplace, catalog.warehouses, warehouseId]);
+
+    useEffect(() => {
         setLocationId("");
+        setLocationSuggestions([]);
         setScannedBarcode("");
     }, [warehouseId]);
+
+    useEffect(() => {
+        if (
+            !invoice?.id
+            || !line?.id
+            || !product?.mezan_product_id
+            || !warehouseId
+            || Number(quantity) < 1
+            || ((product.variants || []).length > 0 && !selectedVariant)
+        ) {
+            setLocationSuggestions([]);
+            setLocationId("");
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setLoadingSuggestions(true);
+            try {
+                const data = await loadPurchaseReceivingLocationSuggestions({
+                    purchase_invoice_id: invoice.id,
+                    purchase_invoice_line_id: line.id,
+                    product_id: product.mezan_product_id,
+                    variant_id: selectedVariant?.id ? String(selectedVariant.id) : null,
+                    warehouse_id: warehouseId,
+                    quantity: Number(quantity),
+                    preparation_state: preparationState,
+                    specifications: receiptSpecifications,
+                });
+                if (cancelled) return;
+                const suggestions = data?.suggestions || [];
+                setLocationSuggestions(suggestions);
+                setLocationId((current) => (
+                    suggestions.some((row) => row.id === current)
+                        ? current
+                        : data?.recommended_location_id || ""
+                ));
+                setScannedBarcode("");
+            } catch (error) {
+                if (cancelled) return;
+                setLocationSuggestions([]);
+                setLocationId("");
+                toast.error(errorMessage(error, "تعذر اقتراح خانة التخزين."));
+            } finally {
+                if (!cancelled) setLoadingSuggestions(false);
+            }
+        }, 350);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [
+        invoice?.id,
+        line?.id,
+        product?.mezan_product_id,
+        product?.variants,
+        selectedVariant,
+        warehouseId,
+        quantity,
+        preparationState,
+        receiptSpecifications,
+    ]);
 
     const setSpecification = (index, key, value) => {
         setSpecifications((current) => current.map(
@@ -202,13 +368,17 @@ export default function InventoryReceivingWorkspace() {
             toast.error("امسح أو أدخل باركود الخانة.");
             return;
         }
+        if (
+            String(selectedLocation.barcode_value || selectedLocation.code || "").trim().toUpperCase()
+            !== scannedBarcode.trim().toUpperCase()
+        ) {
+            toast.error("الباركود المصوّر لا يطابق الخانة المقترحة.");
+            return;
+        }
         if (Number(quantity) > Number(line.remaining_quantity || 0)) {
             toast.error("الكمية أكبر من المتبقي في بند الفاتورة.");
             return;
         }
-        const cleanSpecifications = specifications
-            .map((row) => ({ name: row.name.trim(), value: row.value.trim() }))
-            .filter((row) => row.name && row.value);
         setSaving(true);
         try {
             const result = await postPurchaseInventoryReceipt({
@@ -221,7 +391,7 @@ export default function InventoryReceivingWorkspace() {
                 scanned_barcode: scannedBarcode.trim(),
                 quantity: Number(quantity),
                 preparation_state: preparationState,
-                specifications: cleanSpecifications,
+                specifications: receiptSpecifications,
             });
             toast.success(result?.duplicate ? "هذه العملية مسجلة مسبقًا." : "تم استلام الكمية وربطها بخانة المخزن.");
             setScannedBarcode("");
@@ -362,49 +532,73 @@ export default function InventoryReceivingWorkspace() {
                                     ))}
                                 </select>
                             </Field>
-                            <Field label="بند الفاتورة">
-                                <select
-                                    value={lineId}
-                                    onChange={(event) => setLineId(event.target.value)}
-                                    disabled={!invoice}
-                                    className={controlClass}
-                                >
-                                    <option value="">اختر البند</option>
-                                    {(invoice?.lines || []).filter((row) => Number(row.remaining_quantity) > 0).map((row) => (
-                                        <option key={row.id} value={row.id}>
-                                            {row.product_name} {row.sku ? `(${row.sku})` : ""} — متبقي {row.remaining_quantity}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            <Field label="البحث عن المنتج" hint="يُختار تلقائيًا عند تطابق SKU مع بند الفاتورة.">
-                                <div className="relative">
-                                    <MagnifyingGlass size={19} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        value={productSearch}
-                                        onChange={(event) => setProductSearch(event.target.value)}
-                                        placeholder="اسم المنتج أو SKU أو الباركود"
-                                        className={`${controlClass} pr-10`}
-                                    />
+                            {invoice && (
+                                <div className="md:col-span-2">
+                                    <div className="mb-2 text-sm font-extrabold text-slate-800">منتجات الفاتورة</div>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {(invoice.lines || []).filter((row) => Number(row.remaining_quantity) > 0).map((row) => (
+                                            <button
+                                                key={row.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setLineId(row.id);
+                                                    setProductId("");
+                                                    setVariantId("");
+                                                    setProductSearch(row.product_name || row.sku || "");
+                                                }}
+                                                className={`rounded-2xl border p-3 text-right transition ${lineId === row.id ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:bg-slate-50"}`}
+                                            >
+                                                <span className="block font-black text-slate-950">{row.product_name}</span>
+                                                <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                                                    <span className="font-mono">{row.sku || "بدون SKU"}</span>
+                                                    <span>كمية الفاتورة {row.quantity}</span>
+                                                    <span className="font-bold text-violet-700">متبقي {row.remaining_quantity}</span>
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </Field>
-                            <Field label="منتج ميزان">
-                                <select
-                                    value={productId}
-                                    onChange={(event) => {
-                                        setProductId(event.target.value);
-                                        setVariantId("");
-                                    }}
-                                    className={controlClass}
-                                >
-                                    <option value="">اختر المنتج</option>
-                                    {filteredProducts.slice(0, 250).map((row) => (
-                                        <option key={row.mezan_product_id} value={row.mezan_product_id}>
-                                            {row.name} {row.sku ? `— ${row.sku}` : ""}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
+                            )}
+                            {line && product ? (
+                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 md:col-span-2">
+                                    <div className="flex items-center gap-2 text-sm font-black text-emerald-950">
+                                        <CheckCircle size={20} /> تم ربط بند الفاتورة بمنتج ميزان
+                                    </div>
+                                    <div className="mt-2 font-black text-slate-950">{product.name}</div>
+                                    <div className="mt-1 font-mono text-xs text-slate-600">{selectedVariant?.sku || product.sku || line.sku || "بدون SKU"}</div>
+                                </div>
+                            ) : line ? (
+                                <>
+                                    <Field label="البحث عن منتج ميزان" hint="لم نجد تطابقًا تلقائيًا؛ اختر المنتج الصحيح مرة واحدة.">
+                                        <div className="relative">
+                                            <MagnifyingGlass size={19} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                value={productSearch}
+                                                onChange={(event) => setProductSearch(event.target.value)}
+                                                placeholder="اسم المنتج أو SKU أو الباركود"
+                                                className={`${controlClass} pr-10`}
+                                            />
+                                        </div>
+                                    </Field>
+                                    <Field label="مطابقة المنتج">
+                                        <select
+                                            value={productId}
+                                            onChange={(event) => {
+                                                setProductId(event.target.value);
+                                                setVariantId("");
+                                            }}
+                                            className={controlClass}
+                                        >
+                                            <option value="">اختر المنتج</option>
+                                            {filteredProducts.slice(0, 250).map((row) => (
+                                                <option key={row.mezan_product_id} value={row.mezan_product_id}>
+                                                    {row.name} {row.sku ? `— ${row.sku}` : ""}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                </>
+                            ) : null}
                             {(product?.variants || []).length > 0 && (
                                 <Field label="خيار المنتج" hint="الكمية ستُحفظ وتُزامن لهذا الخيار فقط.">
                                     <select value={variantId} onChange={(event) => setVariantId(event.target.value)} className={controlClass}>
@@ -433,35 +627,21 @@ export default function InventoryReceivingWorkspace() {
                             <h2 className="text-lg font-black text-slate-950">2. مخزن الفرع والخانة</h2>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
-                            <Field label="المخزن">
-                                <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className={controlClass}>
+                            <Field
+                                label="مخزن / فرع الموظف"
+                                hint={catalog.actor_workplace?.warehouse_id === warehouseId ? "تم اختياره تلقائيًا من مقر عمل الموظف." : "لا يمكن للموظف الاستلام إلا في الفروع المسندة إليه."}
+                            >
+                                <select
+                                    value={warehouseId}
+                                    onChange={(event) => setWarehouseId(event.target.value)}
+                                    className={controlClass}
+                                    disabled={catalog.warehouses.length === 1}
+                                >
                                     <option value="">اختر المخزن</option>
                                     {catalog.warehouses.map((row) => (
                                         <option key={row.id} value={row.id}>{row.name} — {row.code} — {row.city}</option>
                                     ))}
                                 </select>
-                            </Field>
-                            <Field label="الخانة">
-                                <select value={locationId} onChange={(event) => setLocationId(event.target.value)} disabled={!warehouseId} className={controlClass}>
-                                    <option value="">اختر الخانة</option>
-                                    {locations.map((row) => (
-                                        <option key={row.id} value={row.id}>
-                                            {row.code} {row.cabinet_name ? `— ${row.cabinet_name}` : ""} — حاليًا {row.current_quantity}
-                                        </option>
-                                    ))}
-                                </select>
-                            </Field>
-                            <Field label="مسح باركود الخانة" hint="لن يُسجل المخزون إذا لم يطابق الباركود الخانة المختارة.">
-                                <div className="relative">
-                                    <Barcode size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-600" />
-                                    <input
-                                        value={scannedBarcode}
-                                        onChange={(event) => setScannedBarcode(event.target.value)}
-                                        placeholder={selectedLocation?.barcode_value || "امسح الباركود هنا"}
-                                        autoComplete="off"
-                                        className={`${controlClass} pr-10 font-mono`}
-                                    />
-                                </div>
                             </Field>
                             <Field label="الكمية" hint={line ? `المتبقي في بند الفاتورة: ${line.remaining_quantity}` : ""}>
                                 <input
@@ -474,6 +654,90 @@ export default function InventoryReceivingWorkspace() {
                                     className={controlClass}
                                 />
                             </Field>
+                            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 md:col-span-2">
+                                <div className="text-xs font-bold text-sky-700">نوع الاستخدام</div>
+                                <div className="mt-1 flex items-center gap-2 font-black text-sky-950">
+                                    <Warehouse size={20} /> تخزين دائم
+                                </div>
+                                <p className="mt-1 text-xs leading-5 text-sky-800">فواتير الشراء لا تُستلم في خانات التجميع المؤقت أو المرتجعات أو التالف.</p>
+                            </div>
+                            <div className="md:col-span-2">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="text-sm font-extrabold text-slate-800">الموقع المقترح من النظام</div>
+                                        <p className="mt-1 text-xs text-slate-500">الأولوية لخانة فيها نفس المنتج والتجهيز، ثم خانة تخزين دائم فارغة.</p>
+                                    </div>
+                                    {loadingSuggestions && <SpinnerGap size={22} className="animate-spin text-violet-700" />}
+                                </div>
+                                {!loadingSuggestions && product && warehouseId && locationSuggestions.length === 0 && (
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                                        لا توجد خانة تخزين دائم مناسبة لهذه الكمية. أنشئ خانة جديدة أو فرّغ مساحة داخل مخزن الفرع.
+                                    </div>
+                                )}
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    {locationSuggestions.slice(0, 6).map((row, index) => (
+                                        <button
+                                            key={row.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setLocationId(row.id);
+                                                setScannedBarcode("");
+                                            }}
+                                            className={`rounded-2xl border p-4 text-right transition ${locationId === row.id ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:bg-slate-50"}`}
+                                        >
+                                            <span className="flex items-start justify-between gap-3">
+                                                <span>
+                                                    <span className="block font-black text-slate-950">
+                                                        {row.section_name || row.section_code || "القسم العام"}
+                                                        {" · "}
+                                                        {row.cabinet_name || `دولاب ${row.cabinet_code || "—"}`}
+                                                    </span>
+                                                    <span className="mt-1 block font-mono text-xs text-slate-500">الخانة {row.code}</span>
+                                                </span>
+                                                {index === 0 && <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">الأفضل</span>}
+                                            </span>
+                                            <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${row.recommendation === "same_configuration" ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"}`}>
+                                                {row.recommendation_label}
+                                            </span>
+                                            <span className="mt-2 block text-xs text-slate-600">
+                                                حاليًا {row.current_quantity}
+                                                {row.remaining_capacity === null ? " · السعة غير محددة" : ` · متاح ${row.remaining_capacity}`}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <Field label="تأكيد وضع المنتج بتصوير باركود الخانة" hint="لن يُسجل المخزون إلا إذا طابق الباركود الخانة المقترحة.">
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <div className="relative flex-1">
+                                            <Barcode size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-600" />
+                                            <input
+                                                value={scannedBarcode}
+                                                onChange={(event) => setScannedBarcode(event.target.value)}
+                                                placeholder="امسح باركود الخانة هنا"
+                                                autoComplete="off"
+                                                disabled={!selectedLocation}
+                                                className={`${controlClass} pr-10 font-mono`}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCameraOpen(true)}
+                                            disabled={!selectedLocation}
+                                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800 disabled:opacity-40"
+                                        >
+                                            <Camera size={20} /> فتح الكاميرا
+                                        </button>
+                                    </div>
+                                </Field>
+                                {selectedLocation && (
+                                    <div className="mt-2 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-700">
+                                        <MapPin size={18} className="shrink-0 text-violet-700" />
+                                        توجّه إلى {selectedLocation.section_name || "القسم العام"}، {selectedLocation.cabinet_name || `الدولاب ${selectedLocation.cabinet_code || "—"}`}، الخانة <b className="font-mono">{selectedLocation.code}</b> ثم امسح باركودها.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </section>
 
@@ -542,7 +806,7 @@ export default function InventoryReceivingWorkspace() {
 
                     <button
                         type="submit"
-                        disabled={saving}
+                        disabled={saving || loadingSuggestions || !selectedLocation}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-violet-800 disabled:cursor-wait disabled:opacity-60"
                     >
                         {saving ? <SpinnerGap size={22} className="animate-spin" /> : <CheckCircle size={22} weight="duotone" />}
@@ -593,6 +857,21 @@ export default function InventoryReceivingWorkspace() {
                 </aside>
             </div>
                 </>
+            )}
+            {cameraOpen && (
+                <CameraBarcodeScanner
+                    onDetected={(value) => {
+                        setScannedBarcode(value);
+                        setCameraOpen(false);
+                        const expected = String(selectedLocation?.barcode_value || selectedLocation?.code || "").trim().toUpperCase();
+                        if (value.trim().toUpperCase() === expected) {
+                            toast.success("تم تأكيد باركود الخانة.");
+                        } else {
+                            toast.error("الباركود المصوّر لا يطابق الخانة المقترحة.");
+                        }
+                    }}
+                    onClose={() => setCameraOpen(false)}
+                />
             )}
         </div>
     );
