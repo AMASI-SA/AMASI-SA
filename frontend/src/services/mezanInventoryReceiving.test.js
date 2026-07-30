@@ -2,6 +2,7 @@ import api from "../lib/api";
 
 import {
     loadInventoryReceivingCatalog,
+    loadPurchaseReceivingLocationSuggestions,
     loadStockPreparationCatalog,
     newInventoryReceiptIdempotencyKey,
     postPurchaseInventoryReceipt,
@@ -48,6 +49,31 @@ describe("Mezan inventory receiving API", () => {
 
         expect(api.post).toHaveBeenCalledWith("/inventory-v2/purchase-receipts", payload);
         expect(result).toEqual({ ok: true });
+    });
+
+    test("loads governed permanent-location suggestions", async () => {
+        const payload = {
+            purchase_invoice_id: "invoice-1",
+            purchase_invoice_line_id: "line-1",
+            product_id: "product-1",
+            quantity: 5,
+            preparation_state: "requires_preparation",
+            specifications: [],
+        };
+        api.post.mockResolvedValueOnce({
+            data: {
+                recommended_location_id: "location-1",
+                suggestions: [{ id: "location-1" }],
+            },
+        });
+
+        const result = await loadPurchaseReceivingLocationSuggestions(payload);
+
+        expect(api.post).toHaveBeenCalledWith(
+            "/inventory-v2/purchase-receiving/location-suggestions",
+            payload,
+        );
+        expect(result.recommended_location_id).toBe("location-1");
     });
 
     test("creates receipt-specific idempotency keys", () => {

@@ -44,6 +44,7 @@ from warehouse_location_routes import (
     LOCATIONS,
     WAREHOUSES,
 )
+from warehouse_room_routes import ROOMS
 
 
 PURCHASE_INVOICES = "purchase_invoices"
@@ -86,6 +87,25 @@ class PurchaseInventoryReceiptRequest(BaseModel):
     )
 
 
+class PurchaseLocationSuggestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    purchase_invoice_id: str = Field(min_length=1, max_length=120)
+    purchase_invoice_line_id: str = Field(min_length=1, max_length=120)
+    product_id: str = Field(min_length=1, max_length=160)
+    variant_id: str | None = Field(default=None, max_length=160)
+    warehouse_id: str | None = Field(default=None, max_length=120)
+    quantity: int = Field(ge=1, le=100000)
+    preparation_state: Literal[
+        "requires_preparation",
+        "ready_complete",
+    ]
+    specifications: list[InventorySpecification] = Field(
+        default_factory=list,
+        max_length=30,
+    )
+
+
 def _receipt_fingerprint(payload: PurchaseInventoryReceiptRequest) -> str:
     value = {
         **payload.model_dump(),
@@ -110,6 +130,162 @@ def _public_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         for key, value in receipt.items()
         if key not in {"_id", "payload_fingerprint", "user_id"}
     }
+
+
+def resolve_default_receiving_warehouse(
+    *,
+    context: dict[str, Any],
+    warehouses: list[dict[str, Any]],
+) -> str | None:
+    """Resolve the actor's physical workplace without trusting UI order."""
+    accessible_ids = {
+        _text(row.get("id")) for row in warehouses if _text(row.get("id"))
+    }
+    workplace_id = _text(context.get("workplace_warehouse_id"))
+    if workplace_id and workplace_id in accessible_ids:
+        return workplace_id
+    if len(accessible_ids) == 1:
+        return next(iter(accessible_ids))
+    primary = next(
+        (
+            _text(row.get("id"))
+            for row in warehouses
+            if row.get("is_primary") and _text(row.get("id"))
+        ),
+        None,
+    )
+    if primary:
+        return primary
+    return _text((warehouses[0] if warehouses else {}).get("id")) or None
+
+
+def _location_current_quantity(location: dict[str, Any]) -> int:
+    occupancy = location.get("occupancy") or {}
+    return int(
+        occupancy.get("total_quantity")
+        if occupancy.get("total_quantity") is not None
+        else location.get("current_quantity") or 0
+    )
+
+
+def _location_remaining_capacity(
+    location: dict[str, Any],
+    *,
+    current_quantity: int,
+) -> int | None:
+    max_items = location.get("max_items")
+    if max_items is None:
+        return None
+    return max(0, int(max_items) - current_quantity)
+
+
+def _stored_item_configuration_key(
+    item: dict[str, Any],
+) -> str | None:
+    existing_key = _text(item.get("configuration_key"))
+    if existing_key:
+        return existing_key
+    sku = _text(item.get("sku"))
+    if not sku:
+        return None
+    preparation_state = _text(item.get("preparation_state"))
+    if preparation_state not in {
+        PREPARATION_STATE_REQUIRES_PREPARATION,
+        PREPARATION_STATE_READY_COMPLETE,
+    }:
+        preparation_state = PREPARATION_STATE_REQUIRES_PREPARATION
+    return build_inventory_configuration_key(
+        sku=sku,
+        preparation_state=preparation_state,
+        specifications=item.get("specifications") or {},
+    )
+
+
+def rank_purchase_receiving_locations(
+    *,
+    locations: list[dict[str, Any]],
+    configuration_key: str,
+    quantity: int,
+) -> list[dict[str, Any]]:
+    """Prefer the same exact stock configuration, then an empty permanent bin."""
+    suggestions: list[dict[str, Any]] = []
+    for location in locations:
+        purpose = _text(
+            location.get("purpose")
+            or location.get("cabinet_purpose")
+        )
+        if purpose != "permanent_storage":
+            continue
+        if location.get("state") == "disabled":
+            continue
+        current_quantity = _location_current_quantity(location)
+        remaining_capacity = _location_remaining_capacity(
+            location,
+            current_quantity=current_quantity,
+        )
+        if remaining_capacity is not None and remaining_capacity < quantity:
+            continue
+
+        items = [
+            row
+            for row in ((location.get("occupancy") or {}).get("items") or [])
+            if isinstance(row, dict) and int(row.get("quantity") or 0) > 0
+        ]
+        item_keys = [_stored_item_configuration_key(row) for row in items]
+        if items and all(key == configuration_key for key in item_keys):
+            recommendation = "same_configuration"
+            matching_quantity = sum(
+                int(row.get("quantity") or 0) for row in items
+            )
+            rank = 0
+        elif not items and current_quantity == 0:
+            recommendation = "empty_location"
+            matching_quantity = 0
+            rank = 1
+        else:
+            continue
+
+        suggestions.append({
+            "id": location.get("id"),
+            "warehouse_id": location.get("warehouse_id"),
+            "section_id": (
+                location.get("section_id") or location.get("room_id")
+            ),
+            "section_name": location.get("section_name"),
+            "section_code": location.get("section_code"),
+            "cabinet_id": location.get("cabinet_id"),
+            "cabinet_name": location.get("cabinet_name"),
+            "cabinet_code": location.get("cabinet_code"),
+            "code": location.get("code"),
+            "barcode_value": (
+                location.get("barcode_value") or location.get("code")
+            ),
+            "purpose": purpose,
+            "current_quantity": current_quantity,
+            "matching_quantity": matching_quantity,
+            "max_items": location.get("max_items"),
+            "remaining_capacity": remaining_capacity,
+            "recommendation": recommendation,
+            "recommendation_label": (
+                "يوجد فيها نفس المنتج والتجهيز"
+                if recommendation == "same_configuration"
+                else "خانة فارغة"
+            ),
+            "_rank": rank,
+        })
+    suggestions.sort(
+        key=lambda row: (
+            row["_rank"],
+            int(row.get("matching_quantity") or 0),
+            _text(row.get("section_code") or row.get("section_name")),
+            _text(row.get("cabinet_code") or row.get("cabinet_name")),
+            _text(row.get("code")),
+        )
+    )
+    return [
+        {key: value for key, value in row.items() if key != "_rank"}
+        for row in suggestions
+    ]
 
 
 def build_inventory_health_rows(
@@ -314,6 +490,113 @@ async def _purchase_catalog(
     return result
 
 
+async def _resolve_purchase_receiving_selection(
+    db: Any,
+    *,
+    merchant_id: str,
+    purchase_invoice_id: str,
+    purchase_invoice_line_id: str,
+    product_id: str,
+    variant_id: str | None,
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any] | None,
+    str,
+]:
+    invoice = await db[PURCHASE_INVOICES].find_one(
+        {
+            "id": purchase_invoice_id,
+            "user_id": merchant_id,
+        },
+        {"_id": 0},
+    )
+    if not invoice:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "purchase_invoice_not_found"},
+        )
+    invoice_line = next(
+        (
+            row for row in invoice.get("lines") or []
+            if _text(row.get("id")) == purchase_invoice_line_id
+        ),
+        None,
+    )
+    if not invoice_line:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "purchase_invoice_line_not_found"},
+        )
+    product = await db[PRODUCTS].find_one(
+        {
+            "user_id": merchant_id,
+            "$or": [
+                {"mezan_product_id": product_id},
+                {"salla_product_id": product_id},
+            ],
+            "archived": {"$ne": True},
+        },
+        {"_id": 0},
+    )
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "mezan_product_not_found"},
+        )
+    variants = [
+        row
+        for row in product.get("variants") or []
+        if isinstance(row, dict) and _text(row.get("id"))
+    ]
+    if int(product.get("variants_count") or 0) > 0 and not variants:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "inventory_variants_not_loaded"},
+        )
+    selected_variant = next(
+        (
+            row
+            for row in variants
+            if _text(row.get("id")) == _text(variant_id)
+        ),
+        None,
+    )
+    if variants and not _text(variant_id):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "inventory_variant_required"},
+        )
+    if _text(variant_id) and not selected_variant:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "inventory_variant_not_found"},
+        )
+    inventory_sku = _text(
+        (selected_variant or {}).get("sku")
+        or product.get("sku")
+    )
+    line_sku = _text(invoice_line.get("sku")).upper()
+    product_sku = inventory_sku.upper()
+    if line_sku and product_sku and line_sku != product_sku:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "purchase_line_product_sku_mismatch",
+                "invoice_sku": line_sku,
+                "product_sku": product_sku,
+            },
+        )
+    return (
+        invoice,
+        invoice_line,
+        product,
+        selected_variant,
+        inventory_sku,
+    )
+
+
 def make_product_inventory_receipt_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -363,10 +646,40 @@ def make_product_inventory_receipt_router(
                 "warehouse_id": 1,
                 "name": 1,
                 "code": 1,
+                "room_id": 1,
+                "section_id": 1,
+                "room_code": 1,
+                "section_code": 1,
+                "purpose": 1,
             },
         ).to_list(length=5000)
         cabinet_map = {
             _text(row.get("id")): row for row in cabinets
+        }
+        section_ids = {
+            _text(
+                row.get("section_id") or row.get("room_id")
+            )
+            for row in cabinets
+            if _text(row.get("section_id") or row.get("room_id"))
+        }
+        sections = await db[ROOMS].find(
+            {
+                "user_id": merchant_id,
+                "id": {"$in": sorted(section_ids)},
+                "status": {"$ne": "disabled"},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "room_number": 1,
+                "section_number": 1,
+            },
+        ).to_list(length=5000)
+        section_map = {
+            _text(row.get("id")): row for row in sections
         }
         locations = await db[LOCATIONS].find(
             {
@@ -379,22 +692,47 @@ def make_product_inventory_receipt_router(
                 "id": 1,
                 "warehouse_id": 1,
                 "cabinet_id": 1,
+                "cabinet_code": 1,
+                "room_id": 1,
+                "section_id": 1,
                 "code": 1,
                 "barcode_value": 1,
                 "state": 1,
+                "purpose": 1,
+                "row": 1,
+                "column": 1,
                 "max_items": 1,
                 "occupancy.total_quantity": 1,
             },
         ).sort("code", 1).to_list(length=20000)
-        locations = [{
-            **row,
-            "cabinet_name": (
-                cabinet_map.get(_text(row.get("cabinet_id")), {}).get("name")
-            ),
-            "current_quantity": int(
-                ((row.get("occupancy") or {}).get("total_quantity")) or 0
-            ),
-        } for row in locations]
+        hydrated_locations = []
+        for row in locations:
+            cabinet = cabinet_map.get(_text(row.get("cabinet_id")), {})
+            section_id = _text(
+                row.get("section_id")
+                or row.get("room_id")
+                or cabinet.get("section_id")
+                or cabinet.get("room_id")
+            )
+            section = section_map.get(section_id, {})
+            hydrated_locations.append({
+                **row,
+                "section_id": section_id or None,
+                "section_name": section.get("name"),
+                "section_code": section.get("code"),
+                "cabinet_name": cabinet.get("name"),
+                "cabinet_code": (
+                    row.get("cabinet_code") or cabinet.get("code")
+                ),
+                "purpose": (
+                    row.get("purpose")
+                    or cabinet.get("purpose")
+                ),
+                "current_quantity": int(
+                    ((row.get("occupancy") or {}).get("total_quantity")) or 0
+                ),
+            })
+        locations = hydrated_locations
         products = await db[PRODUCTS].find(
             {
                 "user_id": merchant_id,
@@ -465,8 +803,17 @@ def make_product_inventory_receipt_router(
             },
             {"_id": 0, "payload_fingerprint": 0, "user_id": 0},
         ).sort("posted_at", -1).limit(30).to_list(length=30)
+        default_warehouse_id = resolve_default_receiving_warehouse(
+            context=context,
+            warehouses=warehouses,
+        )
         return {
             "ok": True,
+            "actor_workplace": {
+                "warehouse_id": default_warehouse_id,
+                "is_owner": context["is_owner"],
+                "assigned_warehouse_ids": warehouse_ids,
+            },
             "purchase_invoices": await _purchase_catalog(
                 db,
                 merchant_id=merchant_id,
@@ -490,6 +837,202 @@ def make_product_inventory_receipt_router(
                     "label": "جاهز كامل",
                 },
             ],
+            "receiving_storage_purpose": {
+                "value": "permanent_storage",
+                "label": "تخزين دائم",
+            },
+        }
+
+    @router.post("/purchase-receiving/location-suggestions")
+    async def receiving_location_suggestions(
+        payload: PurchaseLocationSuggestionRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, "inventory.receipts.read")
+        merchant_id = context["merchant_id"]
+        (
+            _invoice,
+            _invoice_line,
+            product,
+            selected_variant,
+            inventory_sku,
+        ) = await _resolve_purchase_receiving_selection(
+            db,
+            merchant_id=merchant_id,
+            purchase_invoice_id=payload.purchase_invoice_id,
+            purchase_invoice_line_id=payload.purchase_invoice_line_id,
+            product_id=payload.product_id,
+            variant_id=payload.variant_id,
+        )
+
+        warehouse_query: dict[str, Any] = {
+            "user_id": merchant_id,
+            "status": {"$ne": "disabled"},
+        }
+        if not context["is_owner"]:
+            warehouse_query["id"] = {
+                "$in": sorted(context["warehouse_ids"])
+            }
+        warehouses = await db[WAREHOUSES].find(
+            warehouse_query,
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "city": 1,
+                "is_primary": 1,
+            },
+        ).sort([("is_primary", -1), ("created_at", 1)]).to_list(500)
+        default_warehouse_id = resolve_default_receiving_warehouse(
+            context=context,
+            warehouses=warehouses,
+        )
+        warehouse_id = _text(
+            payload.warehouse_id or default_warehouse_id
+        )
+        warehouse = next(
+            (
+                row for row in warehouses
+                if _text(row.get("id")) == warehouse_id
+            ),
+            None,
+        )
+        if not warehouse:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "inventory_warehouse_not_assigned"},
+            )
+
+        cabinets = await db[CABINETS].find(
+            {
+                "user_id": merchant_id,
+                "warehouse_id": warehouse_id,
+                "status": {"$ne": "disabled"},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "room_id": 1,
+                "section_id": 1,
+                "room_code": 1,
+                "section_code": 1,
+                "purpose": 1,
+            },
+        ).to_list(length=5000)
+        cabinet_map = {
+            _text(row.get("id")): row for row in cabinets
+        }
+        section_ids = {
+            _text(row.get("section_id") or row.get("room_id"))
+            for row in cabinets
+            if _text(row.get("section_id") or row.get("room_id"))
+        }
+        sections = await db[ROOMS].find(
+            {
+                "user_id": merchant_id,
+                "id": {"$in": sorted(section_ids)},
+                "status": {"$ne": "disabled"},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "room_number": 1,
+                "section_number": 1,
+            },
+        ).to_list(length=5000)
+        section_map = {
+            _text(row.get("id")): row for row in sections
+        }
+        raw_locations = await db[LOCATIONS].find(
+            {
+                "user_id": merchant_id,
+                "warehouse_id": warehouse_id,
+                "state": {"$ne": "disabled"},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "warehouse_id": 1,
+                "cabinet_id": 1,
+                "cabinet_code": 1,
+                "room_id": 1,
+                "section_id": 1,
+                "code": 1,
+                "barcode_value": 1,
+                "state": 1,
+                "purpose": 1,
+                "row": 1,
+                "column": 1,
+                "max_items": 1,
+                "occupancy": 1,
+            },
+        ).to_list(length=20000)
+        hydrated_locations = []
+        for row in raw_locations:
+            cabinet = cabinet_map.get(_text(row.get("cabinet_id")), {})
+            section_id = _text(
+                row.get("section_id")
+                or row.get("room_id")
+                or cabinet.get("section_id")
+                or cabinet.get("room_id")
+            )
+            section = section_map.get(section_id, {})
+            hydrated_locations.append({
+                **row,
+                "section_id": section_id or None,
+                "section_name": section.get("name"),
+                "section_code": section.get("code"),
+                "cabinet_name": cabinet.get("name"),
+                "cabinet_code": (
+                    row.get("cabinet_code") or cabinet.get("code")
+                ),
+                "purpose": (
+                    row.get("purpose") or cabinet.get("purpose")
+                ),
+            })
+
+        specifications = canonical_specifications(
+            [row.model_dump() for row in payload.specifications]
+        )
+        configuration_key = build_inventory_configuration_key(
+            sku=inventory_sku or product.get("mezan_product_id"),
+            preparation_state=payload.preparation_state,
+            specifications=specifications,
+        )
+        suggestions = rank_purchase_receiving_locations(
+            locations=hydrated_locations,
+            configuration_key=configuration_key,
+            quantity=payload.quantity,
+        )
+        return {
+            "ok": True,
+            "warehouse": warehouse,
+            "default_warehouse_id": default_warehouse_id,
+            "storage_purpose": {
+                "value": "permanent_storage",
+                "label": "تخزين دائم",
+            },
+            "product": {
+                "mezan_product_id": product.get("mezan_product_id"),
+                "salla_product_id": product.get("salla_product_id"),
+                "name": product.get("name"),
+                "sku": inventory_sku or None,
+                "variant_id": (
+                    _text((selected_variant or {}).get("id")) or None
+                ),
+            },
+            "configuration_key": configuration_key,
+            "suggestions": suggestions[:20],
+            "recommended_location_id": (
+                suggestions[0]["id"] if suggestions else None
+            ),
+            "scan_required": True,
         }
 
     @router.post("/purchase-receipts", status_code=201)
@@ -524,89 +1067,20 @@ def make_product_inventory_receipt_router(
                 "receipt": _public_receipt(existing),
             }
 
-        invoice = await db[PURCHASE_INVOICES].find_one(
-            {
-                "id": payload.purchase_invoice_id,
-                "user_id": merchant_id,
-            },
-            {"_id": 0},
+        (
+            invoice,
+            invoice_line,
+            product,
+            selected_variant,
+            inventory_sku,
+        ) = await _resolve_purchase_receiving_selection(
+            db,
+            merchant_id=merchant_id,
+            purchase_invoice_id=payload.purchase_invoice_id,
+            purchase_invoice_line_id=payload.purchase_invoice_line_id,
+            product_id=payload.product_id,
+            variant_id=payload.variant_id,
         )
-        if not invoice:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "purchase_invoice_not_found"},
-            )
-        invoice_line = next(
-            (
-                row for row in invoice.get("lines") or []
-                if _text(row.get("id")) == payload.purchase_invoice_line_id
-            ),
-            None,
-        )
-        if not invoice_line:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "purchase_invoice_line_not_found"},
-            )
-        product = await db[PRODUCTS].find_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"mezan_product_id": payload.product_id},
-                    {"salla_product_id": payload.product_id},
-                ],
-                "archived": {"$ne": True},
-            },
-            {"_id": 0},
-        )
-        if not product:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "mezan_product_not_found"},
-            )
-        variants = [
-            row
-            for row in product.get("variants") or []
-            if isinstance(row, dict) and _text(row.get("id"))
-        ]
-        if int(product.get("variants_count") or 0) > 0 and not variants:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "inventory_variants_not_loaded"},
-            )
-        selected_variant = next(
-            (
-                row
-                for row in variants
-                if _text(row.get("id")) == _text(payload.variant_id)
-            ),
-            None,
-        )
-        if variants and not _text(payload.variant_id):
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "inventory_variant_required"},
-            )
-        if _text(payload.variant_id) and not selected_variant:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "inventory_variant_not_found"},
-            )
-        inventory_sku = _text(
-            (selected_variant or {}).get("sku")
-            or product.get("sku")
-        )
-        line_sku = _text(invoice_line.get("sku")).upper()
-        product_sku = inventory_sku.upper()
-        if line_sku and product_sku and line_sku != product_sku:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "purchase_line_product_sku_mismatch",
-                    "invoice_sku": line_sku,
-                    "product_sku": product_sku,
-                },
-            )
         location = await db[LOCATIONS].find_one(
             {
                 "id": payload.location_id,
@@ -619,6 +1093,32 @@ def make_product_inventory_receipt_router(
                 status_code=404,
                 detail={"code": "inventory_location_not_found"},
             )
+        cabinet = await db[CABINETS].find_one(
+            {
+                "id": location.get("cabinet_id"),
+                "user_id": merchant_id,
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "code": 1,
+                "purpose": 1,
+                "room_id": 1,
+                "section_id": 1,
+            },
+        ) or {}
+        location = {
+            **location,
+            "cabinet_name": cabinet.get("name"),
+            "cabinet_code": (
+                location.get("cabinet_code") or cabinet.get("code")
+            ),
+            "cabinet_purpose": cabinet.get("purpose"),
+            "purpose": (
+                location.get("purpose") or cabinet.get("purpose")
+            ),
+        }
         warehouse_id = _text(location.get("warehouse_id"))
         if not _warehouse_allowed(context, [warehouse_id]):
             raise HTTPException(
@@ -629,6 +1129,11 @@ def make_product_inventory_receipt_router(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "inventory_location_disabled"},
+            )
+        if _text(location.get("purpose")) != "permanent_storage":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "inventory_location_not_permanent"},
             )
         expected_barcode = _text(
             location.get("barcode_value") or location.get("code")
@@ -652,6 +1157,36 @@ def make_product_inventory_receipt_router(
             preparation_state=payload.preparation_state,
             specifications=specifications,
         )
+        compatible_locations = rank_purchase_receiving_locations(
+            locations=[location],
+            configuration_key=configuration_key,
+            quantity=payload.quantity,
+        )
+        if not compatible_locations:
+            remaining_capacity = _location_remaining_capacity(
+                location,
+                current_quantity=_location_current_quantity(location),
+            )
+            if (
+                remaining_capacity is not None
+                and remaining_capacity < payload.quantity
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "inventory_location_capacity_exceeded"
+                    },
+                )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "inventory_location_product_mismatch",
+                    "message": (
+                        "الخانة تحتوي منتجًا أو تجهيزًا مختلفًا؛ "
+                        "اختر الخانة المقترحة أو خانة فارغة."
+                    ),
+                },
+            )
         now = _now()
         receipt_id = _text((existing or {}).get("id")) or uuid.uuid4().hex
         receipt = {
@@ -680,8 +1215,18 @@ def make_product_inventory_receipt_router(
             "specifications": specifications,
             "configuration_key": configuration_key,
             "warehouse_id": warehouse_id,
+            "section_id": (
+                location.get("section_id")
+                or location.get("room_id")
+                or cabinet.get("section_id")
+                or cabinet.get("room_id")
+            ),
+            "cabinet_id": location.get("cabinet_id"),
+            "cabinet_name": cabinet.get("name"),
             "location_id": payload.location_id,
             "location_code": expected_barcode,
+            "storage_purpose": "permanent_storage",
+            "location_scan_verified": True,
             "received_by": actor_id,
             "created_at": (existing or {}).get("created_at") or now,
             "updated_at": now,
@@ -879,7 +1424,11 @@ def make_product_inventory_receipt_router(
             "purchase_invoice_id": payload.purchase_invoice_id,
             "purchase_invoice_line_id": payload.purchase_invoice_line_id,
             "warehouse_id": warehouse_id,
+            "section_id": receipt.get("section_id"),
+            "cabinet_id": receipt.get("cabinet_id"),
             "location_id": payload.location_id,
+            "storage_purpose": "permanent_storage",
+            "location_scan_verified": True,
             "product_id": product.get("mezan_product_id"),
             "salla_variant_id": (
                 _text((selected_variant or {}).get("id")) or None

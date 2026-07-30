@@ -13,6 +13,29 @@ def test_validate_assignment_normalizes_permissions():
     assert result["role_key"] == "product_operator"
     assert result["extra_permissions"] == ["products.media.ai_edit"]
     assert result["denied_permissions"] == ["products.media.reorder"]
+    assert result["workplace_warehouse_id"] is None
+
+
+def test_validate_assignment_requires_workplace_to_be_assigned():
+    with pytest.raises(
+        ValueError,
+        match="workplace_warehouse_not_assigned",
+    ):
+        validate_assignment({
+            "role_key": "warehouse_operator",
+            "warehouse_ids": ["wh-1"],
+            "workplace_warehouse_id": "wh-2",
+        })
+
+
+def test_validate_assignment_keeps_employee_workplace():
+    assignment = validate_assignment({
+        "role_key": "warehouse_operator",
+        "warehouse_ids": ["wh-2", "wh-1"],
+        "workplace_warehouse_id": "wh-2",
+    })
+
+    assert assignment["workplace_warehouse_id"] == "wh-2"
 
 
 def test_unknown_role_is_rejected():

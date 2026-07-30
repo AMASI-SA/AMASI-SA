@@ -953,6 +953,7 @@ async def _actor_context(
             "is_owner": True,
             "permissions": set(PERMISSIONS),
             "warehouse_ids": None,
+            "workplace_warehouse_id": None,
             "responsibilities": {
                 "instant_ready",
                 "packing",
@@ -976,6 +977,9 @@ async def _actor_context(
         "is_owner": False,
         "permissions": set(effective_permissions(assignment)),
         "warehouse_ids": set((assignment or {}).get("warehouse_ids") or []),
+        "workplace_warehouse_id": _text(
+            (assignment or {}).get("workplace_warehouse_id")
+        ) or None,
         "responsibilities": set(
             (assignment or {}).get("fulfillment_responsibilities") or []
         ),

@@ -6,6 +6,8 @@ from product_inventory_receipt_routes import (
     _public_receipt,
     _receipt_fingerprint,
     build_inventory_health_rows,
+    rank_purchase_receiving_locations,
+    resolve_default_receiving_warehouse,
 )
 
 
@@ -111,3 +113,128 @@ def test_zero_available_uses_product_preorder_policy():
     assert result[0]["health_status"] == "preorder"
     assert result[0]["catalog_action_required"] == "show_preorder"
     assert result[0]["external_catalog_write_performed"] is False
+
+
+def test_employee_workplace_is_the_default_receiving_warehouse():
+    warehouses = [
+        {"id": "wh-primary", "is_primary": True},
+        {"id": "wh-workplace", "is_primary": False},
+    ]
+
+    assert resolve_default_receiving_warehouse(
+        context={
+            "is_owner": False,
+            "workplace_warehouse_id": "wh-workplace",
+        },
+        warehouses=warehouses,
+    ) == "wh-workplace"
+
+
+def test_owner_uses_primary_receiving_warehouse_by_default():
+    warehouses = [
+        {"id": "wh-secondary", "is_primary": False},
+        {"id": "wh-primary", "is_primary": True},
+    ]
+
+    assert resolve_default_receiving_warehouse(
+        context={"is_owner": True, "workplace_warehouse_id": None},
+        warehouses=warehouses,
+    ) == "wh-primary"
+
+
+def test_location_suggestions_prefer_low_quantity_same_configuration():
+    configuration_key = "SKU-1|state=ready_complete|specs=abc"
+    result = rank_purchase_receiving_locations(
+        locations=[
+            {
+                "id": "same-more",
+                "purpose": "permanent_storage",
+                "state": "occupied",
+                "code": "BIN-2",
+                "max_items": 20,
+                "occupancy": {
+                    "total_quantity": 8,
+                    "items": [{
+                        "configuration_key": configuration_key,
+                        "quantity": 8,
+                    }],
+                },
+            },
+            {
+                "id": "empty",
+                "purpose": "permanent_storage",
+                "state": "empty",
+                "code": "BIN-3",
+                "max_items": 20,
+                "occupancy": None,
+            },
+            {
+                "id": "same-few",
+                "purpose": "permanent_storage",
+                "state": "occupied",
+                "code": "BIN-1",
+                "max_items": 20,
+                "occupancy": {
+                    "total_quantity": 2,
+                    "items": [{
+                        "configuration_key": configuration_key,
+                        "quantity": 2,
+                    }],
+                },
+            },
+        ],
+        configuration_key=configuration_key,
+        quantity=5,
+    )
+
+    assert [row["id"] for row in result] == [
+        "same-few",
+        "same-more",
+        "empty",
+    ]
+    assert result[0]["recommendation"] == "same_configuration"
+    assert result[2]["recommendation"] == "empty_location"
+
+
+def test_location_suggestions_reject_temporary_mixed_and_full_bins():
+    configuration_key = "SKU-1|state=requires_preparation|specs=abc"
+    result = rank_purchase_receiving_locations(
+        locations=[
+            {
+                "id": "temporary",
+                "purpose": "temporary_staging",
+                "state": "empty",
+                "occupancy": None,
+            },
+            {
+                "id": "mixed",
+                "purpose": "permanent_storage",
+                "state": "occupied",
+                "max_items": 100,
+                "occupancy": {
+                    "total_quantity": 1,
+                    "items": [{
+                        "configuration_key": "OTHER",
+                        "quantity": 1,
+                    }],
+                },
+            },
+            {
+                "id": "full",
+                "purpose": "permanent_storage",
+                "state": "occupied",
+                "max_items": 5,
+                "occupancy": {
+                    "total_quantity": 4,
+                    "items": [{
+                        "configuration_key": configuration_key,
+                        "quantity": 4,
+                    }],
+                },
+            },
+        ],
+        configuration_key=configuration_key,
+        quantity=2,
+    )
+
+    assert result == []

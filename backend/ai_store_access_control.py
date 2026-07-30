@@ -62,6 +62,11 @@ def validate_assignment(payload: dict[str, Any]) -> dict[str, Any]:
         for value in payload.get("warehouse_ids") or []
         if str(value).strip()
     })
+    workplace_warehouse_id = str(
+        payload.get("workplace_warehouse_id") or ""
+    ).strip()
+    if workplace_warehouse_id and workplace_warehouse_id not in warehouse_ids:
+        raise ValueError("workplace_warehouse_not_assigned")
     responsibilities = sorted({
         str(value).strip()
         for value in payload.get("fulfillment_responsibilities") or []
@@ -81,6 +86,7 @@ def validate_assignment(payload: dict[str, Any]) -> dict[str, Any]:
         "denied_permissions": denied,
         "enabled": bool(payload.get("enabled", True)),
         "warehouse_ids": warehouse_ids,
+        "workplace_warehouse_id": workplace_warehouse_id or None,
         "fulfillment_responsibilities": responsibilities,
     }
 
