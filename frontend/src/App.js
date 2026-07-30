@@ -63,6 +63,7 @@ import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
+import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
@@ -328,6 +329,10 @@ function AppRoutes() {
             <Route
                 path="/fulfillment-v2"
                 element={<ProtectedRoute><Layout><FulfillmentV2 /></Layout></ProtectedRoute>}
+            />
+            <Route
+                path="/inventory-receiving-v2"
+                element={<ProtectedRoute><Layout><InventoryReceivingWorkspace /></Layout></ProtectedRoute>}
             />
             <Route
                 path="/order-review"
