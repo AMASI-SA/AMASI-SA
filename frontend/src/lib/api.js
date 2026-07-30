@@ -1,7 +1,10 @@
 import axios from "axios";
 import {
+    isSnapchatAsyncSyncResponse,
     isSnapchatSyncRequest,
+    pollSnapchatAsyncSyncJob,
     recoverSnapchatSyncAfterTransportFailure,
+    rewriteSnapchatSyncRequest,
 } from "./snapchatSyncRecovery";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -20,6 +23,11 @@ function currentAccessToken() {
     }
 }
 
+function directRequestHeaders() {
+    const token = currentAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 api.interceptors.request.use((config) => {
     const token = currentAccessToken();
     if (token) {
@@ -28,24 +36,46 @@ api.interceptors.request.use((config) => {
     }
     if (isSnapchatSyncRequest(config)) {
         config._mezanSyncStartedAt = Date.now();
+        return rewriteSnapchatSyncRequest(config);
     }
     return config;
 });
 
 api.interceptors.response.use(
-    (response) => response,
+    async (response) => {
+        if (!isSnapchatAsyncSyncResponse(response)) return response;
+
+        const payload = await pollSnapchatAsyncSyncJob({
+            accepted: response.data,
+            loadJob: async (runId) => {
+                const jobResponse = await axios.get(
+                    `${API_BASE}/integrations-v2/snapchat_ads/sync-async/${encodeURIComponent(runId)}`,
+                    {
+                        withCredentials: true,
+                        headers: directRequestHeaders(),
+                    },
+                );
+                return jobResponse.data;
+            },
+        });
+
+        return {
+            ...response,
+            data: payload,
+            status: 200,
+            statusText: "Snapchat asynchronous sync completed",
+        };
+    },
     async (error) => {
         const recovered = await recoverSnapchatSyncAfterTransportFailure({
             error,
             loadRuns: async () => {
-                const token = currentAccessToken();
-                const headers = token ? { Authorization: `Bearer ${token}` } : {};
                 const response = await axios.get(
                     `${API_BASE}/integrations-v2/sync-runs`,
                     {
                         params: { provider: "snapchat_ads", limit: 10 },
                         withCredentials: true,
-                        headers,
+                        headers: directRequestHeaders(),
                     },
                 );
                 return Array.isArray(response.data?.items)
