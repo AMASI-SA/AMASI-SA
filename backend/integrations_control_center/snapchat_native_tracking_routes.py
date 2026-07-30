@@ -1,6 +1,7 @@
 """Owner-only routes and card action for Snapchat tracking diagnostics."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -85,6 +86,27 @@ def _failure_detail(
     }
 
 
+async def _mark_needs_reauth(db: Any, user_id: str) -> None:
+    checked_at = datetime.now(timezone.utc).isoformat()
+    await db.mezan_integrations_v2.update_one(
+        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        {"$set": {
+            "connection_status": "needs_reauth",
+            "connection_provenance": "api_connection",
+            "checked_at": checked_at,
+            "updated_at": checked_at,
+        }},
+        upsert=True,
+    )
+    await db.mezan_integration_accounts_v2.update_many(
+        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        {"$set": {
+            "connection_status": "needs_reauth",
+            "last_observed_at": checked_at,
+        }},
+    )
+
+
 def attach_snapchat_native_tracking_routes(
     router: APIRouter,
     db: Any,
@@ -103,13 +125,16 @@ def attach_snapchat_native_tracking_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
+        owner_id = str(owner["id"])
         try:
             return await execute_snapchat_tracking_diagnostics(
                 db,
-                str(owner["id"]),
+                owner_id,
                 payload,
             )
         except SnapchatNativeSyncError as exc:
+            if exc.code == "snapchat_needs_reauth":
+                await _mark_needs_reauth(db, owner_id)
             raise HTTPException(
                 status_code=exc.status_code,
                 detail=_failure_detail(exc, payload),
