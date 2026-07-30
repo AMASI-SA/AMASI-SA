@@ -25,6 +25,10 @@ from product_fulfillment_rules import (
     classify_line_fulfillment,
     evaluate_order_fulfillment,
 )
+from product_inventory_rules import (
+    choose_inventory_rows,
+    order_item_specifications,
+)
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_routes import PRODUCTS
 from warehouse_location_routes import LOCATIONS
@@ -33,6 +37,7 @@ from warehouse_location_routes import LOCATIONS
 WORKFLOWS = "order_review_workflows"
 BATCHES = "mezan_fulfillment_batches_v2"
 EVENTS = "mezan_fulfillment_events_v2"
+INVENTORY_RESERVATIONS = "mezan_inventory_reservations_v2"
 TERMINAL_WORKFLOW_STAGES = {
     "completed",
     "delivering",
@@ -85,6 +90,23 @@ async def ensure_fulfillment_indexes(db: Any) -> None:
         ],
         name="ix_fulfillment_events_v2",
     )
+    await db[INVENTORY_RESERVATIONS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("order_number", ASCENDING),
+            ("line_key", ASCENDING),
+        ],
+        unique=True,
+        name="uq_inventory_reservation_order_line_v2",
+    )
+    await db[INVENTORY_RESERVATIONS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("status", ASCENDING),
+            ("updated_at", DESCENDING),
+        ],
+        name="ix_inventory_reservation_status_v2",
+    )
 
 
 def _product_id(item: Any) -> str:
@@ -99,6 +121,9 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for location in locations:
         if location.get("state") == "disabled":
             continue
+        warehouse_id = _text(location.get("warehouse_id"))
+        if not warehouse_id:
+            continue
         occupancy = location.get("occupancy") or {}
         for index, item in enumerate(occupancy.get("items") or []):
             quantity = float(item.get("quantity") or 0)
@@ -106,16 +131,373 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
             identifiers = {
                 _text(item.get("product_id")),
+                _text(item.get("mezan_product_id")),
+                _text(item.get("salla_variant_id")),
                 _text(item.get("sku")),
             }
             identifiers.discard("")
+            receipt_id = _text(item.get("receipt_id"))
+            row_key = (
+                f"receipt:{receipt_id}"
+                if receipt_id
+                else f"{location.get('id') or location.get('code')}:{index}"
+            )
             rows.append({
-                "key": f"{location.get('id') or location.get('code')}:{index}",
-                "warehouse_id": _text(location.get("warehouse_id")),
+                "key": row_key,
+                "item_index": index,
+                "location_id": _text(location.get("id")),
+                "warehouse_id": warehouse_id,
                 "identifiers": identifiers,
+                "on_hand": quantity,
                 "remaining": quantity,
+                "receipt_id": receipt_id or None,
+                "salla_variant_id": (
+                    _text(item.get("salla_variant_id")) or None
+                ),
+                "preparation_state": item.get("preparation_state"),
+                "specifications": item.get("specifications") or {},
+                "configuration_key": item.get("configuration_key"),
+                "lot_id": item.get("lot_id"),
             })
     return rows
+
+
+def _apply_inventory_reservations(
+    stock_rows: list[dict[str, Any]],
+    reservations: list[dict[str, Any]],
+    *,
+    current_order_number: str,
+) -> None:
+    """Subtract active order holds from current physical stock."""
+    rows_by_key = {
+        _text(row.get("key")): row
+        for row in stock_rows
+        if _text(row.get("key"))
+    }
+    for reservation in reservations:
+        status_value = _text(reservation.get("status"))
+        if status_value != "active":
+            continue
+        if (
+            _text(reservation.get("order_number"))
+            == current_order_number
+        ):
+            continue
+        for allocation in reservation.get("allocations") or []:
+            row = rows_by_key.get(
+                _text(allocation.get("inventory_row_key"))
+            )
+            if not row:
+                continue
+            row["remaining"] = max(
+                0.0,
+                float(row.get("remaining") or 0)
+                - float(allocation.get("quantity") or 0),
+            )
+            quantity = float(allocation.get("quantity") or 0)
+            row["reserved_quantity"] = (
+                float(row.get("reserved_quantity") or 0)
+                + quantity
+            )
+
+
+async def _release_order_inventory_reservations(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+    reason: str,
+) -> None:
+    await db[INVENTORY_RESERVATIONS].update_many(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "status": "active",
+        },
+        {
+            "$set": {
+                "status": "released",
+                "release_reason": reason,
+                "released_at": _now(),
+                "updated_at": _now(),
+            },
+        },
+    )
+
+
+def _inventory_reservation_blockers(blockers: list[str]) -> list[str]:
+    """Preparation progress may wait while its physical stock stays held."""
+    return [
+        blocker for blocker in blockers
+        if blocker != "operational_items_not_ready"
+    ]
+
+
+async def _persist_order_inventory_reservations(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+    lines: list[dict[str, Any]],
+) -> list[str]:
+    now = _now()
+    desired_keys: list[str] = []
+    reservation_ids: list[str] = []
+    for index, line in enumerate(lines):
+        if line.get("requires_branch_inventory") is not True:
+            continue
+        allocations = list(line.get("inventory_allocations") or [])
+        if line.get("inventory_available") is not True or not allocations:
+            continue
+        line_key = _text(
+            line.get("order_item_id")
+            or line.get("inventory_reservation_key")
+            or f"line-{index}"
+        )
+        desired_keys.append(line_key)
+        selector = {
+            "user_id": user_id,
+            "order_number": order_number,
+            "line_key": line_key,
+        }
+        existing = await db[INVENTORY_RESERVATIONS].find_one(
+            selector,
+            {"_id": 0, "id": 1, "status": 1},
+        )
+        if existing and existing.get("status") == "consumed":
+            reservation_ids.append(_text(existing.get("id")))
+            continue
+        reservation_id = (
+            _text((existing or {}).get("id")) or uuid.uuid4().hex
+        )
+        reservation_ids.append(reservation_id)
+        await db[INVENTORY_RESERVATIONS].update_one(
+            selector,
+            {
+                "$set": {
+                    **selector,
+                    "id": reservation_id,
+                    "status": "active",
+                    "allocations": allocations,
+                    "quantity": float(line.get("quantity") or 0),
+                    "product_id": line.get("salla_product_id"),
+                    "mezan_product_id": line.get("mezan_product_id"),
+                    "sku": line.get("sku"),
+                    "warehouse_ids": line.get("warehouse_ids") or [],
+                    "configuration_keys": (
+                        line.get("inventory_configuration_keys") or []
+                    ),
+                    "updated_at": now,
+                },
+                "$unset": {
+                    "release_reason": "",
+                    "released_at": "",
+                },
+                "$setOnInsert": {
+                    "created_at": now,
+                },
+            },
+            upsert=True,
+        )
+    stale_filter: dict[str, Any] = {
+        "user_id": user_id,
+        "order_number": order_number,
+        "status": "active",
+    }
+    if desired_keys:
+        stale_filter["line_key"] = {"$nin": desired_keys}
+    await db[INVENTORY_RESERVATIONS].update_many(
+        stale_filter,
+        {
+            "$set": {
+                "status": "released",
+                "release_reason": "order_inventory_reallocated",
+                "released_at": now,
+                "updated_at": now,
+            },
+        },
+    )
+    return reservation_ids
+
+
+async def _consume_order_inventory_reservations(
+    db: Any,
+    *,
+    user_id: str,
+    order_numbers: list[str],
+    actor_id: str,
+    batch_id: str,
+) -> int:
+    """Deduct reserved units from their physical locations once handed off."""
+    reservations = await db[INVENTORY_RESERVATIONS].find(
+        {
+            "user_id": user_id,
+            "order_number": {"$in": order_numbers},
+            "status": "active",
+        },
+        {"_id": 0},
+    ).to_list(length=10000)
+    targets = _inventory_consumption_targets(reservations)
+
+    location_ids = sorted({
+        row["location_id"] for row in targets.values()
+    })
+    locations = await db[LOCATIONS].find(
+        {
+            "user_id": user_id,
+            "id": {"$in": location_ids},
+        },
+        {"_id": 0, "id": 1, "occupancy": 1},
+    ).to_list(length=max(1, len(location_ids)))
+    locations_by_id = {
+        _text(row.get("id")): row for row in locations
+    }
+    for target in targets.values():
+        location = locations_by_id.get(target["location_id"])
+        items = list(
+            ((location or {}).get("occupancy") or {}).get("items") or []
+        )
+        if target["receipt_id"]:
+            item = next(
+                (
+                    row for row in items
+                    if _text(row.get("receipt_id"))
+                    == target["receipt_id"]
+                ),
+                None,
+            )
+        else:
+            index = int(target["item_index"])
+            item = items[index] if 0 <= index < len(items) else None
+        if (
+            not item
+            or float(item.get("quantity") or 0) < target["quantity"]
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "reserved_inventory_changed_reconciliation_required",
+                    "location_id": target["location_id"],
+                },
+            )
+
+    now = _now()
+    for target in targets.values():
+        quantity = float(target["quantity"])
+        if target["receipt_id"]:
+            result = await db[LOCATIONS].update_one(
+                {
+                    "user_id": user_id,
+                    "id": target["location_id"],
+                    "occupancy.items": {
+                        "$elemMatch": {
+                            "receipt_id": target["receipt_id"],
+                            "quantity": {"$gte": quantity},
+                        },
+                    },
+                },
+                {
+                    "$inc": {
+                        "occupancy.items.$[stock].quantity": -quantity,
+                        "occupancy.total_quantity": -quantity,
+                    },
+                    "$set": {"updated_at": now},
+                },
+                array_filters=[{
+                    "stock.receipt_id": target["receipt_id"],
+                }],
+            )
+        else:
+            item_index = int(target["item_index"])
+            quantity_path = (
+                f"occupancy.items.{item_index}.quantity"
+            )
+            result = await db[LOCATIONS].update_one(
+                {
+                    "user_id": user_id,
+                    "id": target["location_id"],
+                    quantity_path: {"$gte": quantity},
+                },
+                {
+                    "$inc": {
+                        quantity_path: -quantity,
+                        "occupancy.total_quantity": -quantity,
+                    },
+                    "$set": {"updated_at": now},
+                },
+            )
+        if not result.modified_count:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "inventory_consumption_conflict",
+                    "location_id": target["location_id"],
+                },
+            )
+    if location_ids:
+        await db[LOCATIONS].update_many(
+            {
+                "user_id": user_id,
+                "id": {"$in": location_ids},
+                "occupancy.total_quantity": {"$lte": 0},
+            },
+            {
+                "$set": {
+                    "state": "empty",
+                    "occupancy.total_quantity": 0,
+                    "updated_at": now,
+                },
+            },
+        )
+    await db[INVENTORY_RESERVATIONS].update_many(
+        {
+            "user_id": user_id,
+            "order_number": {"$in": order_numbers},
+            "status": "active",
+        },
+        {
+            "$set": {
+                "status": "consumed",
+                "consumed_at": now,
+                "consumed_by": actor_id,
+                "consumed_batch_id": batch_id,
+                "updated_at": now,
+            },
+        },
+    )
+    return len(reservations)
+
+
+def _inventory_consumption_targets(
+    reservations: list[dict[str, Any]],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    targets: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for reservation in reservations:
+        for allocation in reservation.get("allocations") or []:
+            location_id = _text(allocation.get("location_id"))
+            receipt_id = _text(allocation.get("receipt_id"))
+            item_index = allocation.get("item_index")
+            if not location_id or (not receipt_id and item_index is None):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "inventory_reservation_target_missing",
+                        "reservation_id": reservation.get("id"),
+                    },
+                )
+            target_type = "receipt" if receipt_id else "index"
+            target_value = receipt_id or str(item_index)
+            key = (location_id, target_type, target_value)
+            target = targets.setdefault(key, {
+                "location_id": location_id,
+                "receipt_id": receipt_id or None,
+                "item_index": item_index,
+                "quantity": 0.0,
+            })
+            target["quantity"] += float(
+                allocation.get("quantity") or 0
+            )
+    return targets
 
 
 def _reserve_inventory_for_line(
@@ -127,6 +509,7 @@ def _reserve_inventory_for_line(
     matches = [
         row for row in stock_rows
         if row["remaining"] > 0
+        and _text(row.get("warehouse_id"))
         and not identifiers.isdisjoint(row["identifiers"])
     ]
     available = sum(float(row["remaining"]) for row in matches)
@@ -143,6 +526,23 @@ def _reserve_inventory_for_line(
         if needed <= 0:
             break
     return True, available, sorted(warehouse_ids)
+
+
+def _satisfy_preparation_with_ready_stock(
+    classification: dict[str, Any],
+) -> dict[str, Any]:
+    """A fully prepared exact unit has already completed its services."""
+    satisfied_services = list(
+        classification.get("forcing_services") or []
+    )
+    return {
+        **classification,
+        "resolved_type": FULFILLMENT_TYPE_INSTANT,
+        "requires_preparation": False,
+        "forcing_services": [],
+        "forcing_services_satisfied_by_inventory": satisfied_services,
+        "supplier_export_eligible": False,
+    }
 
 
 async def build_order_fulfillment_decision(
@@ -228,9 +628,21 @@ async def build_order_fulfillment_decision(
         {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
     ).to_list(length=20000)
     stock_rows = _inventory_rows(locations)
+    existing_reservations = await db[INVENTORY_RESERVATIONS].find(
+        {
+            "user_id": user_id,
+            "status": "active",
+        },
+        {"_id": 0},
+    ).to_list(length=50000)
+    _apply_inventory_reservations(
+        stock_rows,
+        existing_reservations,
+        current_order_number=_text(order.order_number),
+    )
 
     lines = []
-    for item in order.items:
+    for item_index, item in enumerate(order.items):
         product_id = _product_id(item)
         product = products_by_salla.get(product_id, {})
         profile = profiles_by_product.get(product_id)
@@ -263,16 +675,36 @@ async def build_order_fulfillment_decision(
         inventory_available = None
         available_quantity = None
         warehouse_ids: list[str] = []
-        if classification["resolved_type"] == FULFILLMENT_TYPE_INSTANT:
-            (
-                inventory_available,
-                available_quantity,
-                warehouse_ids,
-            ) = _reserve_inventory_for_line(
-                stock_rows=stock_rows,
+        inventory_match_type = None
+        inventory_configuration_keys: list[str] = []
+        inventory_allocations: list[dict[str, Any]] = []
+        preparation_satisfied_by_ready_stock = False
+        specifications = order_item_specifications(item)
+        if classification["requires_branch_inventory"]:
+            selection = choose_inventory_rows(
+                rows=stock_rows,
                 identifiers=identifiers,
                 quantity=quantity,
+                order_specifications=specifications,
+                preparation_required=classification[
+                    "requires_preparation"
+                ],
             )
+            inventory_available = selection["available"]
+            available_quantity = selection["available_quantity"]
+            warehouse_ids = selection["warehouse_ids"]
+            inventory_match_type = selection["match_type"]
+            inventory_configuration_keys = selection[
+                "configuration_keys"
+            ]
+            inventory_allocations = selection["allocations"]
+            preparation_satisfied_by_ready_stock = selection[
+                "preparation_satisfied_by_ready_stock"
+            ]
+            if preparation_satisfied_by_ready_stock:
+                classification = _satisfy_preparation_with_ready_stock(
+                    classification
+                )
         lines.append({
             "order_item_id": getattr(item, "order_item_id", None),
             "salla_product_id": product_id or None,
@@ -284,10 +716,24 @@ async def build_order_fulfillment_decision(
             "inventory_available": inventory_available,
             "available_quantity": available_quantity,
             "warehouse_ids": warehouse_ids,
+            "order_specifications": specifications,
+            "inventory_match_type": inventory_match_type,
+            "inventory_configuration_keys": inventory_configuration_keys,
+            "inventory_allocations": inventory_allocations,
+            "inventory_reservation_key": _text(
+                getattr(item, "order_item_id", None)
+            ) or f"line-{item_index}",
+            "preparation_satisfied_by_ready_stock": (
+                preparation_satisfied_by_ready_stock
+            ),
             "warehouse_resolution_source": (
                 "inventory_location"
                 if warehouse_ids
-                else "employee_assignment_pending"
+                else (
+                    "inventory_location_missing"
+                    if classification["requires_branch_inventory"]
+                    else "not_required"
+                )
             ),
         })
 
@@ -310,6 +756,24 @@ async def build_order_fulfillment_decision(
             row.get("operational_item_id")
             for row in unready_operational_items
         ]
+    inventory_eligibility_blockers = _inventory_reservation_blockers(
+        decision.get("blockers") or []
+    )
+    if inventory_eligibility_blockers:
+        await _release_order_inventory_reservations(
+            db,
+            user_id=user_id,
+            order_number=_text(order.order_number),
+            reason="order_not_inventory_eligible",
+        )
+        reservation_ids: list[str] = []
+    else:
+        reservation_ids = await _persist_order_inventory_reservations(
+            db,
+            user_id=user_id,
+            order_number=_text(order.order_number),
+            lines=lines,
+        )
     decision.update({
         "id": uuid.uuid4().hex,
         "user_id": user_id,
@@ -317,6 +781,10 @@ async def build_order_fulfillment_decision(
         "evaluated_at": _now(),
         "inventory_authority": "mezan_operational_inventory_v2",
         "external_calls_made": False,
+        "inventory_reservation_ids": reservation_ids,
+        "inventory_reservation_status": (
+            "active" if reservation_ids else "not_reserved"
+        ),
     })
     await db[FULFILLMENT_DECISIONS].update_one(
         {"user_id": user_id, "order_number": order.order_number},
@@ -346,6 +814,18 @@ async def auto_route_instant_order(
         {"user_id": user_id, "order_number": order.order_number},
         {"_id": 0},
     )
+    current_stage = _text((workflow or {}).get("stage")) or "pending_review"
+    if workflow and (
+        current_stage in TERMINAL_WORKFLOW_STAGES
+        or workflow.get("claim_batch_id")
+    ):
+        return {
+            "promoted": False,
+            "reverted": False,
+            "stage": current_stage,
+            "decision": workflow.get("fulfillment_decision"),
+            "reason": "workflow_locked",
+        }
     decision = await build_order_fulfillment_decision(
         db,
         user_id=user_id,
@@ -354,7 +834,6 @@ async def auto_route_instant_order(
             (workflow or {}).get("operational_items") or []
         ),
     )
-    current_stage = _text((workflow or {}).get("stage")) or "pending_review"
     if decision.get("ready_to_ship") is not True:
         if (
             workflow
@@ -397,18 +876,6 @@ async def auto_route_instant_order(
             "reverted": False,
             "stage": current_stage,
             "decision": decision,
-        }
-
-    if workflow and (
-        current_stage in TERMINAL_WORKFLOW_STAGES
-        or workflow.get("claim_batch_id")
-    ):
-        return {
-            "promoted": False,
-            "reverted": False,
-            "stage": current_stage,
-            "decision": decision,
-            "reason": "workflow_locked",
         }
 
     now = _now()
@@ -544,35 +1011,12 @@ def _warehouse_allowed(
     context: dict[str, Any],
     warehouse_ids: list[str],
 ) -> bool:
+    required = {str(value) for value in warehouse_ids if value}
+    if not required:
+        return False
     if context["is_owner"]:
         return True
-    required = {str(value) for value in warehouse_ids if value}
-    if required:
-        return required.issubset(context["warehouse_ids"])
-    # No inventory location was recorded. An employee may take the order only
-    # when their own branch/warehouse assignment can provide the fallback.
-    return bool(context["warehouse_ids"])
-
-
-def _resolve_claim_warehouse_ids(
-    context: dict[str, Any],
-    warehouse_ids: list[str],
-) -> tuple[list[str], str]:
-    inventory_ids = sorted({
-        str(value) for value in warehouse_ids if value
-    })
-    if inventory_ids:
-        return inventory_ids, "inventory_location"
-    if context["is_owner"]:
-        return [], "owner_assignment_pending"
-    employee_ids = sorted({
-        str(value) for value in context["warehouse_ids"] if value
-    })
-    return employee_ids, (
-        "employee_assignment"
-        if employee_ids
-        else "employee_assignment_pending"
-    )
+    return required.issubset(context["warehouse_ids"])
 
 
 async def _order_view(
@@ -615,7 +1059,7 @@ async def _order_view(
             (workflow.get("fulfillment_decision") or {}).get(
                 "warehouse_resolution_source"
             )
-            or "employee_assignment_pending"
+            or "inventory_location_missing"
         ),
         "claimed": bool(workflow.get("claim_batch_id")),
         "claim_batch_id": workflow.get("claim_batch_id"),
@@ -718,33 +1162,49 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "ready_orders_changed_refresh_required"},
             )
-        inventory_warehouse_ids = sorted({
-            str(warehouse_id)
+        inventory_by_order = {
+            _text(workflow.get("order_number")): sorted({
+                str(warehouse_id)
+                for warehouse_id in (
+                    (workflow.get("fulfillment_decision") or {}).get(
+                        "warehouse_ids"
+                    )
+                    or []
+                )
+                if warehouse_id
+            })
             for workflow in workflows
-            for warehouse_id in (
-                (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
-                or []
+        }
+        missing_inventory_orders = sorted(
+            order_number
+            for order_number, warehouse_ids in inventory_by_order.items()
+            if not warehouse_ids
+        )
+        if missing_inventory_orders:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ready_order_inventory_location_missing",
+                    "order_numbers": missing_inventory_orders,
+                },
             )
-            if warehouse_id
-        })
-        if not _warehouse_allowed(context, inventory_warehouse_ids):
+        unauthorized_orders = sorted(
+            order_number
+            for order_number, warehouse_ids in inventory_by_order.items()
+            if not _warehouse_allowed(context, warehouse_ids)
+        )
+        if unauthorized_orders:
             raise HTTPException(
                 status_code=403,
-                detail={"code": "ready_orders_outside_assigned_warehouses"},
-            )
-        resolved_warehouses = {}
-        for workflow in workflows:
-            decision = workflow.get("fulfillment_decision") or {}
-            resolved_warehouses[_text(workflow.get("order_number"))] = (
-                _resolve_claim_warehouse_ids(
-                    context,
-                    decision.get("warehouse_ids") or [],
-                )
+                detail={
+                    "code": "ready_orders_outside_assigned_warehouses",
+                    "order_numbers": unauthorized_orders,
+                },
             )
         warehouse_ids = sorted({
             warehouse_id
-            for resolved_ids, _source in resolved_warehouses.values()
-            for warehouse_id in resolved_ids
+            for inventory_ids in inventory_by_order.values()
+            for warehouse_id in inventory_ids
         })
         batch_id = f"ship_{uuid.uuid4().hex}"
         now = _now()
@@ -784,33 +1244,13 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "ready_orders_claim_conflict"},
             )
-        for order_number, (resolved_ids, source) in resolved_warehouses.items():
-            if source != "employee_assignment":
-                continue
-            await db[WORKFLOWS].update_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "order_number": order_number,
-                    "claim_batch_id": batch_id,
-                },
-                {"$set": {
-                    "fulfillment_decision.warehouse_ids": resolved_ids,
-                    "fulfillment_decision.warehouse_resolution_source": source,
-                    "fulfillment_decision.warehouse_resolved_by": (
-                        context["actor_id"]
-                    ),
-                    "fulfillment_decision.warehouse_resolved_at": now,
-                }},
-            )
         batch = {
             "id": batch_id,
             "user_id": context["merchant_id"],
             "status": "claimed",
             "order_numbers": order_numbers,
             "warehouse_ids": warehouse_ids,
-            "warehouse_resolution_sources": sorted({
-                source for _ids, source in resolved_warehouses.values()
-            }),
+            "warehouse_resolution_sources": ["inventory_location"],
             "claimed_by": context["actor_id"],
             "claimed_by_name": _text(user.get("name") or user.get("email")),
             "claimed_at": now,
@@ -1029,15 +1469,61 @@ def make_fulfillment_v2_router(
                 detail={"code": "batch_must_be_packed_before_handoff"},
             )
         now = _now()
-        await db[BATCHES].update_one(
+        lock = await db[BATCHES].update_one(
             query,
             {"$set": {
-                "status": "handed_off",
-                "handed_off_at": now,
-                "handed_off_by": context["actor_id"],
-                "handoff_note": _text(payload.note) or None,
+                "status": "inventory_consuming",
                 "updated_at": now,
             }},
+        )
+        if not lock.modified_count:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "batch_handoff_conflict_refresh_required"},
+            )
+        try:
+            consumed_reservations = (
+                await _consume_order_inventory_reservations(
+                    db,
+                    user_id=context["merchant_id"],
+                    order_numbers=list(batch.get("order_numbers") or []),
+                    actor_id=context["actor_id"],
+                    batch_id=batch_id,
+                )
+            )
+        except Exception:
+            await db[BATCHES].update_one(
+                {
+                    "id": batch_id,
+                    "user_id": context["merchant_id"],
+                    "status": "inventory_consuming",
+                },
+                {
+                    "$set": {
+                        "status": "inventory_reconciliation_required",
+                        "inventory_reconciliation_required_at": _now(),
+                        "updated_at": _now(),
+                    },
+                },
+            )
+            raise
+        handed_off_at = _now()
+        await db[BATCHES].update_one(
+            {
+                "id": batch_id,
+                "user_id": context["merchant_id"],
+                "status": "inventory_consuming",
+            },
+            {
+                "$set": {
+                    "status": "handed_off",
+                    "handed_off_at": handed_off_at,
+                    "handed_off_by": context["actor_id"],
+                    "handoff_note": _text(payload.note) or None,
+                    "inventory_reservations_consumed": consumed_reservations,
+                    "updated_at": handed_off_at,
+                },
+            },
         )
         await db[WORKFLOWS].update_many(
             {
@@ -1047,9 +1533,9 @@ def make_fulfillment_v2_router(
             },
             {"$set": {
                 "stage": "completed",
-                "completed_at": now,
-                "carrier_handoff_at": now,
-                "updated_at": now,
+                "completed_at": handed_off_at,
+                "carrier_handoff_at": handed_off_at,
+                "updated_at": handed_off_at,
             }},
         )
         return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
@@ -1060,5 +1546,6 @@ def make_fulfillment_v2_router(
 __all__ = [
     "build_order_fulfillment_decision",
     "ensure_fulfillment_indexes",
+    "INVENTORY_RESERVATIONS",
     "make_fulfillment_v2_router",
 ]

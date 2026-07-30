@@ -146,8 +146,8 @@ export default function ReadyToShipOrders() {
                             <p className="mt-1 text-sm text-slate-600">{order.customer_name || "—"} · {order.customer_mobile || "—"} · {order.city || "—"}</p>
                             <p className="mt-1 text-xs text-slate-400">
                                 {order.items_count} منتجات · {(order.warehouse_ids || []).length
-                                    ? `${order.warehouse_ids.length} فرع/مخزن ${order.warehouse_resolution_source === "employee_assignment" ? "من ارتباط الموظف" : "من المخزون"}`
-                                    : "يُحدد الفرع/المخزن من الموظف عند الاستلام"}
+                                    ? `${order.warehouse_ids.length} فرع/مخزن من المخزون`
+                                    : "المخزون غير مرتبط بفرع — لا يمكن الاستلام"}
                             </p>
                         </div>
                         <div className="rounded-xl bg-white p-3 text-xs"><div className="font-black">{order.shipping_company || "شركة الشحن غير محددة"}</div><div className="mt-1 text-slate-500">{order.claimed_by_name ? `المستلم: ${order.claimed_by_name}` : "بانتظار استلام الموظف"}</div></div>

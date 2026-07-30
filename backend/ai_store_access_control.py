@@ -32,6 +32,7 @@ RESPONSIBILITY_TYPES = {
     "packing",
     "shipping_labeling",
     "carrier_handoff",
+    "stock_preparation",
 }
 
 

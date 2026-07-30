@@ -13,6 +13,7 @@ const RESPONSIBILITY_LABELS = {
     packing: "التغليف",
     shipping_labeling: "الشحن والعنونة",
     carrier_handoff: "التسليم لشركة الشحن",
+    stock_preparation: "تجهيز مخزون جاهز",
 };
 
 function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTypes, onSave }) {

@@ -19,6 +19,21 @@ FULFILLMENT_TYPES = {
     FULFILLMENT_TYPE_INSTANT,
     FULFILLMENT_TYPE_PREPARATION,
 }
+INVENTORY_POLICY_BRANCH_STOCK = "branch_stock_required"
+INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED = (
+    "finished_goods_inventory_not_tracked"
+)
+INVENTORY_POLICIES = {
+    INVENTORY_POLICY_BRANCH_STOCK,
+    INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+}
+STOCKOUT_POLICY_CLOSE = "close_when_out_of_stock"
+STOCKOUT_POLICY_PREORDER = "allow_preorder"
+STOCKOUT_POLICIES = {
+    STOCKOUT_POLICY_CLOSE,
+    STOCKOUT_POLICY_PREORDER,
+}
+DEFAULT_LOW_STOCK_THRESHOLD = 3
 
 _COD_MARKERS = {
     "cod",
@@ -84,6 +99,97 @@ def normalize_fulfillment_type(value: Any) -> str:
     return result
 
 
+def normalize_inventory_policy(value: Any) -> str:
+    normalized = _norm(value)
+    aliases = {
+        "branch stock required": INVENTORY_POLICY_BRANCH_STOCK,
+        "tracked": INVENTORY_POLICY_BRANCH_STOCK,
+        "track inventory": INVENTORY_POLICY_BRANCH_STOCK,
+        "يتتبع المخزون": INVENTORY_POLICY_BRANCH_STOCK,
+        "مخزون الفروع": INVENTORY_POLICY_BRANCH_STOCK,
+        (
+            "finished goods inventory not tracked"
+        ): INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+        "not tracked": INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+        "unlimited": INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+        "لا يتتبع المخزون": INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+    }
+    result = aliases.get(normalized)
+    if not result:
+        raise ValueError("invalid_inventory_policy")
+    return result
+
+
+def normalize_stockout_policy(value: Any) -> str:
+    normalized = _norm(value)
+    aliases = {
+        "close when out of stock": STOCKOUT_POLICY_CLOSE,
+        "close": STOCKOUT_POLICY_CLOSE,
+        "block": STOCKOUT_POLICY_CLOSE,
+        "يغلق عند النفاد": STOCKOUT_POLICY_CLOSE,
+        "إيقاف البيع": STOCKOUT_POLICY_CLOSE,
+        "allow preorder": STOCKOUT_POLICY_PREORDER,
+        "preorder": STOCKOUT_POLICY_PREORDER,
+        "حجز مسبق": STOCKOUT_POLICY_PREORDER,
+        "السماح بالحجز المسبق": STOCKOUT_POLICY_PREORDER,
+    }
+    result = aliases.get(normalized)
+    if not result:
+        raise ValueError("invalid_stockout_policy")
+    return result
+
+
+def normalize_low_stock_threshold(value: Any) -> int:
+    try:
+        threshold = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("invalid_low_stock_threshold") from exc
+    if threshold < 0 or threshold > 100000:
+        raise ValueError("invalid_low_stock_threshold")
+    return threshold
+
+
+def inventory_policy_details(value: Any) -> dict[str, Any]:
+    """Return inventory behavior without deriving it from preparation.
+
+    Products remain global to the merchant catalog. Only operational stock
+    records carry a warehouse/branch, so this policy never returns or accepts
+    a product-level warehouse identifier.
+    """
+    inventory_policy = normalize_inventory_policy(value)
+    if inventory_policy == INVENTORY_POLICY_BRANCH_STOCK:
+        return {
+            "mode": INVENTORY_POLICY_BRANCH_STOCK,
+            "requires_branch_inventory": True,
+            "sell_without_finished_goods_inventory": False,
+            "initial_salla_status": "out",
+            "unlimited_quantity": False,
+        }
+    return {
+        "mode": INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
+        "requires_branch_inventory": False,
+        "sell_without_finished_goods_inventory": True,
+        "initial_salla_status": "sale",
+        "unlimited_quantity": True,
+    }
+
+
+def inventory_policy_for_fulfillment(value: Any) -> dict[str, Any]:
+    """Infer the old coupled policy for legacy rows only.
+
+    New writes must store inventory_policy explicitly. This compatibility
+    helper keeps already-saved product profiles deterministic until they are
+    edited under the independent inventory/preparation model.
+    """
+    fulfillment_type = normalize_fulfillment_type(value)
+    mode = (
+        INVENTORY_POLICY_BRANCH_STOCK
+        if fulfillment_type == FULFILLMENT_TYPE_INSTANT
+        else INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED
+    )
+    return inventory_policy_details(mode)
+
+
 def resource_requires_preparation(resource: dict[str, Any] | None) -> bool:
     """Only an explicit service rule forces preparation.
 
@@ -110,6 +216,29 @@ def classify_line_fulfillment(
         if explicit
         else FULFILLMENT_TYPE_PREPARATION
     )
+    explicit_inventory_policy = (
+        profile.get("inventory_policy") in INVENTORY_POLICIES
+    )
+    inventory_policy = (
+        profile.get("inventory_policy")
+        if explicit_inventory_policy
+        else inventory_policy_for_fulfillment(configured_type)["mode"]
+    )
+    inventory = inventory_policy_details(inventory_policy)
+    stockout_policy = (
+        profile.get("stockout_policy")
+        if profile.get("stockout_policy") in STOCKOUT_POLICIES
+        else STOCKOUT_POLICY_CLOSE
+    )
+    try:
+        low_stock_threshold = normalize_low_stock_threshold(
+            profile.get(
+                "low_stock_threshold",
+                DEFAULT_LOW_STOCK_THRESHOLD,
+            )
+        )
+    except ValueError:
+        low_stock_threshold = DEFAULT_LOW_STOCK_THRESHOLD
     resources = [
         *(product_resources or []),
         *(selected_option_resources or []),
@@ -133,6 +262,20 @@ def classify_line_fulfillment(
         "configured_type": configured_type,
         "resolved_type": resolved,
         "requires_preparation": resolved == FULFILLMENT_TYPE_PREPARATION,
+        "inventory_policy": inventory["mode"],
+        "inventory_policy_configured": explicit_inventory_policy,
+        "requires_branch_inventory": inventory[
+            "requires_branch_inventory"
+        ],
+        "sell_without_finished_goods_inventory": inventory[
+            "sell_without_finished_goods_inventory"
+        ],
+        "stockout_policy": stockout_policy,
+        "preorder_when_out_of_stock": (
+            inventory["requires_branch_inventory"]
+            and stockout_policy == STOCKOUT_POLICY_PREORDER
+        ),
+        "low_stock_threshold": low_stock_threshold,
         "forcing_services": forcing_services,
         "supplier_export_eligible": resolved == FULFILLMENT_TYPE_PREPARATION,
     }
@@ -205,13 +348,17 @@ def evaluate_order_fulfillment(
     lines: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Return the fail-closed routing decision for a canonical order."""
-    instant_lines = [
+    direct_lines = [
         row for row in lines
         if row.get("resolved_type") == FULFILLMENT_TYPE_INSTANT
     ]
     preparation_lines = [
         row for row in lines
         if row.get("resolved_type") == FULFILLMENT_TYPE_PREPARATION
+    ]
+    inventory_tracked_lines = [
+        row for row in lines
+        if row.get("requires_branch_inventory") is True
     ]
     unconfigured = [row for row in lines if not row.get("configured")]
     blockers: list[str] = []
@@ -227,13 +374,26 @@ def evaluate_order_fulfillment(
         blockers.append("shipping_address_incomplete")
 
     inventory_blocked = [
-        row for row in instant_lines
-        if row.get("inventory_available") is not True
+        row for row in inventory_tracked_lines
+        if (
+            row.get("inventory_available") is not True
+            or not row.get("warehouse_ids")
+        )
     ]
-    if inventory_blocked:
+    preorder_blocked = [
+        row for row in inventory_blocked
+        if row.get("preorder_when_out_of_stock") is True
+    ]
+    strict_inventory_blocked = [
+        row for row in inventory_blocked
+        if row.get("preorder_when_out_of_stock") is not True
+    ]
+    if strict_inventory_blocked:
         blockers.append("operational_inventory_not_available")
+    if preorder_blocked:
+        blockers.append("preorder_waiting_for_stock")
 
-    if instant_lines and preparation_lines:
+    if direct_lines and preparation_lines:
         order_type = "mixed"
     elif preparation_lines:
         order_type = FULFILLMENT_TYPE_PREPARATION
@@ -243,7 +403,7 @@ def evaluate_order_fulfillment(
     ready = (
         order_type == FULFILLMENT_TYPE_INSTANT
         and not blockers
-        and len(instant_lines) == len(lines)
+        and len(direct_lines) == len(lines)
     )
     warehouse_ids = sorted({
         str(warehouse_id)
@@ -258,13 +418,22 @@ def evaluate_order_fulfillment(
         "ready_to_ship": ready,
         "preparation_stages_required": not ready,
         "supplier_export_order_required": bool(preparation_lines),
-        "instant_items_excluded_from_supplier_export": bool(instant_lines),
+        "instant_items_excluded_from_supplier_export": bool(direct_lines),
         "blockers": list(dict.fromkeys(blockers)),
+        "preorder_required": bool(preorder_blocked),
+        "preorder_line_ids": [
+            row.get("order_item_id")
+            for row in preorder_blocked
+        ],
         "warehouse_ids": warehouse_ids,
         "warehouse_resolution_source": (
             "inventory_location"
             if warehouse_ids
-            else "employee_assignment_pending"
+            else (
+                "inventory_location_missing"
+                if inventory_tracked_lines
+                else "not_required"
+            )
         ),
         "lines": lines,
     }

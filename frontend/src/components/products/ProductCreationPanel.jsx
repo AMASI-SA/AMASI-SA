@@ -16,11 +16,13 @@ const EMPTY_FORM = {
     name: "",
     sku: "",
     price: "",
-    quantity: "0",
     description: "",
     product_type: "product",
     image_url: "",
-    fulfillment_type: "requires_preparation",
+    fulfillment_type: "",
+    inventory_policy: "",
+    stockout_policy: "close_when_out_of_stock",
+    low_stock_threshold: 3,
 };
 
 const STATUS_LABELS = {
@@ -40,6 +42,9 @@ function errorMessage(error) {
         salla_product_write_scope_required: "اتصال سلة يحتاج صلاحية products.read_write. أعد ربط سلة بعد تفعيل الصلاحية.",
         sku_exists_in_salla: "رمز SKU موجود أصلًا في سلة؛ لم يتم إنشاء نسخة مكررة.",
         salla_product_creation_uncertain: "لم يصل رد نهائي من سلة. احتفظنا بالطلب للمصالحة الآمنة قبل أي إعادة.",
+        salla_product_inventory_policy_uncertain: "أُنشئ المنتج في سلة، لكن لم نتأكد من تطبيق سياسة المخزون. احتفظنا بالطلب للمصالحة الآمنة.",
+        invalid_stockout_policy: "اختر ماذا يحدث عند نفاد المخزون.",
+        invalid_low_stock_threshold: "حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.",
     };
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";
 }
@@ -67,6 +72,16 @@ export default function ProductCreationPanel({ onCreated }) {
         form.name.trim().length >= 2
         && form.sku.trim()
         && form.price !== ""
+        && form.fulfillment_type
+        && form.inventory_policy
+        && (
+            form.inventory_policy !== "branch_stock_required"
+            || (
+                form.stockout_policy
+                && Number.isInteger(Number(form.low_stock_threshold))
+                && Number(form.low_stock_threshold) >= 0
+            )
+        )
     ), [form]);
 
     function update(key, value) {
@@ -82,12 +97,14 @@ export default function ProductCreationPanel({ onCreated }) {
                 name: form.name,
                 sku: form.sku,
                 price: Number(form.price),
-                quantity: Number(form.quantity || 0),
                 description: form.description || null,
                 product_type: "product",
                 category_ids: [],
                 image_urls: form.image_url.trim() ? [form.image_url.trim()] : [],
                 fulfillment_type: form.fulfillment_type,
+                inventory_policy: form.inventory_policy,
+                stockout_policy: form.stockout_policy,
+                low_stock_threshold: Number(form.low_stock_threshold),
             });
             setActiveDraft(result.draft);
             setPreview(null);
@@ -131,8 +148,16 @@ export default function ProductCreationPanel({ onCreated }) {
 
     async function publishDraft() {
         if (!activeDraft) return;
+        const inventoryNotice = activeDraft.inventory_policy === "branch_stock_required"
+            ? activeDraft.stockout_policy === "allow_preorder"
+                ? "سيُنشأ بحالة نفد المخزون، ويحفظ ميزان سياسة الحجز المسبق حتى تُدخل مخزون فرع. عرض الحجز للعميل في سلة ليس نشرًا تلقائيًا بعد."
+                : "سيُنشأ بحالة نفد المخزون حتى تُدخل كمية في أحد الفروع."
+            : "سيُنشأ دون تتبع مخزون للمنتج النهائي.";
+        const preparationNotice = activeDraft.fulfillment_type === "requires_preparation"
+            ? "مساره الافتراضي يحتاج تجهيزًا."
+            : "مساره الافتراضي مباشر، وأي خدمة مرتبطة به يمكن أن تدخله التجهيز.";
         const confirmed = window.confirm(
-            `سيتم الآن إنشاء المنتج "${activeDraft.name}" في سلة كمنتج مخفي. هل تريد المتابعة؟`,
+            `سيتم الآن إنشاء المنتج "${activeDraft.name}" في سلة. ${inventoryNotice} ${preparationNotice} هل تريد المتابعة؟`,
         );
         if (!confirmed) return;
         setBusy(true);
@@ -224,17 +249,43 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => update("price", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" required />
                             </label>
                             <label className="space-y-1 text-sm font-bold">
-                                <span>الكمية الأولية</span>
-                                <input type="number" min="0" step="1" value={form.quantity} onChange={(event) => update("quantity", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
+                                <span>المسار الافتراضي للتنفيذ</span>
+                                <select value={form.fulfillment_type} onChange={(event) => update("fulfillment_type", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
+                                    <option value="" disabled>اختر نوع التنفيذ</option>
+                                    <option value="requires_preparation">يحتاج تجهيز</option>
+                                    <option value="instant">مباشر للشحن ما لم توجد خدمة</option>
+                                </select>
+                                <span className="block text-xs font-normal leading-5 text-slate-500">الخدمة المرتبطة بالمنتج كله تُدخل جميع طلباته التجهيز، والخدمة المرتبطة بخيار تُطبق عند اختياره.</span>
                             </label>
                             <label className="space-y-1 text-sm font-bold">
-                                <span>نوع التجهيز في ميزان</span>
-                                <select value={form.fulfillment_type} onChange={(event) => update("fulfillment_type", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
-                                    <option value="requires_preparation">يحتاج تجهيز</option>
-                                    <option value="instant">جاهز للشحن الفوري</option>
+                                <span>سياسة مخزون المنتج النهائي</span>
+                                <select value={form.inventory_policy} onChange={(event) => update("inventory_policy", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
+                                    <option value="" disabled>اختر سياسة المخزون</option>
+                                    <option value="branch_stock_required">يتتبع مخزون الفروع</option>
+                                    <option value="finished_goods_inventory_not_tracked">لا يتتبع مخزون المنتج النهائي</option>
                                 </select>
-                                <span className="block text-xs font-normal leading-5 text-slate-500">المخزن لا يرتبط بالمنتج؛ يُحدد من إدخال المخزون أو من الموظف المرتبط بالفرع/المخزن.</span>
+                                <span className="block text-xs font-normal leading-5 text-slate-500">تتبع المخزون مستقل عن التجهيز؛ يمكن حجز السلسال من المخزون ثم إرساله لخدمة كتابة الاسم.</span>
                             </label>
+                            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-6 text-sky-950">
+                                لا تُدخل الكمية هنا. بعد إنشاء المنتج، تُسجل كل كمية من صفحة المخزون داخل الفرع الذي توجد فيه فعليًا.
+                            </div>
+                            {form.inventory_policy === "branch_stock_required" && (
+                                <>
+                                    <label className="space-y-1 text-sm font-bold">
+                                        <span>عند نفاد المخزون</span>
+                                        <select value={form.stockout_policy} onChange={(event) => update("stockout_policy", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
+                                            <option value="close_when_out_of_stock">إيقاف البيع والتنبيه</option>
+                                            <option value="allow_preorder">السماح بالحجز المسبق</option>
+                                        </select>
+                                        <span className="block text-xs font-normal leading-5 text-slate-500">الحجز المسبق ينتظر المخزون ولا ينتقل إلى الشحن دون كمية.</span>
+                                    </label>
+                                    <label className="space-y-1 text-sm font-bold">
+                                        <span>حد التنبيه بقرب النفاد</span>
+                                        <input type="number" min="0" max="100000" step="1" value={form.low_stock_threshold} onChange={(event) => update("low_stock_threshold", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
+                                        <span className="block text-xs font-normal leading-5 text-slate-500">مثال: 3 يعني يبدأ التحذير عندما يصبح المتاح 3 قطع أو أقل.</span>
+                                    </label>
+                                </>
+                            )}
                             <label className="space-y-1 text-sm font-bold lg:col-span-2">
                                 <span>رابط صورة HTTPS (اختياري)</span>
                                 <input value={form.image_url} onChange={(event) => update("image_url", event.target.value)} dir="ltr" className="h-11 w-full rounded-xl border px-3 text-left outline-none focus:border-indigo-400" placeholder="https://…" />
@@ -253,17 +304,30 @@ export default function ProductCreationPanel({ onCreated }) {
 
                     {activeDraft && (
                         <div className="space-y-4">
-                            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-6">
                                 <div><div className="text-xs text-slate-500">SKU</div><div className="font-black">{activeDraft.sku}</div></div>
                                 <div><div className="text-xs text-slate-500">السعر</div><div className="font-black">{activeDraft.price} ر.س</div></div>
-                                <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">{activeDraft.fulfillment_type === "instant" ? "شحن فوري" : "يحتاج تجهيز"}</div></div>
+                                <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">{activeDraft.fulfillment_type === "instant" ? "مباشر افتراضيًا" : "يحتاج تجهيز"}</div></div>
+                                <div><div className="text-xs text-slate-500">المخزون</div><div className="font-black">{activeDraft.inventory_policy === "branch_stock_required" ? "يتتبع الفروع" : "لا يتتبع النهائي"}</div></div>
+                                <div><div className="text-xs text-slate-500">عند النفاد</div><div className="font-black">{activeDraft.inventory_policy !== "branch_stock_required" ? "غير مطبق" : activeDraft.stockout_policy === "allow_preorder" ? "حجز مسبق" : "إيقاف البيع"}</div></div>
                                 <div><div className="text-xs text-slate-500">الحالة</div><div className="font-black">{STATUS_LABELS[activeDraft.status] || activeDraft.status}</div></div>
                             </div>
 
                             {preview && (
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
                                     <div className="flex items-center gap-2 font-black"><CheckCircle /> المعاينة سليمة ولم تُجرِ أي كتابة خارجية</div>
-                                    <div className="mt-2">سينشأ المنتج في سلة بالحالة <b>مخفي</b>، ونوعه <b>منتج فعلي</b> لا يمكن تغييره بعد الإنشاء.</div>
+                                    <div className="mt-2">
+                                        {activeDraft.inventory_policy === "branch_stock_required"
+                                            ? activeDraft.stockout_policy === "allow_preorder"
+                                                ? <>سينشأ بحالة <b>نفد المخزون</b>، ويحفظ ميزان سياسة <b>الحجز المسبق</b> لمسار الطلب. عرض الحجز للعميل في سلة يحتاج خطوة نشر مستقلة ولم تنفذها هذه المعاينة.</>
+                                                : <>سينشأ المنتج بحالة <b>نفد المخزون</b>، ولن يُباع حتى تُدخل مخزونًا في أحد الفروع.</>
+                                            : <>سينشأ المنتج <b>قابلًا للبيع دون تتبع مخزون المنتج النهائي</b>.</>}
+                                        {" "}
+                                        {activeDraft.fulfillment_type === "requires_preparation"
+                                            ? <>مساره الافتراضي <b>يحتاج تجهيزًا</b>.</>
+                                            : <>مساره الافتراضي <b>مباشر للشحن</b>، لكن الخدمات المرتبطة به تظل قادرة على إدخاله التجهيز.</>}
+                                        {!activeDraft.image_urls?.length && <> سيبقى مخفيًا في سلة حتى تُضاف له صورة.</>}
+                                    </div>
                                 </div>
                             )}
 

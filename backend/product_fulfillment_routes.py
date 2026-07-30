@@ -9,9 +9,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING
 
 from product_fulfillment_rules import (
+    DEFAULT_LOW_STOCK_THRESHOLD,
     FULFILLMENT_TYPES,
+    INVENTORY_POLICIES,
     PRODUCT_OPERATION_PROFILES,
     PRODUCT_RESOURCE_BINDINGS,
+    STOCKOUT_POLICIES,
+    STOCKOUT_POLICY_CLOSE,
+    inventory_policy_for_fulfillment,
+    normalize_low_stock_threshold,
+    normalize_inventory_policy,
+    normalize_stockout_policy,
     normalize_fulfillment_type,
 )
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, _serialize
@@ -21,6 +29,13 @@ from product_v2_routes import PRODUCTS, _number
 class ProductOperationProfileRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     fulfillment_type: str
+    inventory_policy: str
+    stockout_policy: str = STOCKOUT_POLICY_CLOSE
+    low_stock_threshold: int = Field(
+        default=DEFAULT_LOW_STOCK_THRESHOLD,
+        ge=0,
+        le=100000,
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -143,8 +158,35 @@ async def _operations_view(
 
     serialized_profile = _serialize(profile) or {
         "fulfillment_type": None,
+        "inventory_policy": None,
         "configured": False,
     }
+    if (
+        serialized_profile.get("fulfillment_type") in FULFILLMENT_TYPES
+        and serialized_profile.get("inventory_policy") not in INVENTORY_POLICIES
+    ):
+        serialized_profile["inventory_policy"] = (
+            inventory_policy_for_fulfillment(
+                serialized_profile["fulfillment_type"]
+            )["mode"]
+        )
+        serialized_profile["inventory_policy_inferred_from_legacy"] = True
+    if serialized_profile.get("stockout_policy") not in STOCKOUT_POLICIES:
+        serialized_profile["stockout_policy"] = STOCKOUT_POLICY_CLOSE
+        serialized_profile["stockout_policy_inferred_from_legacy"] = True
+    try:
+        serialized_profile["low_stock_threshold"] = (
+            normalize_low_stock_threshold(
+                serialized_profile.get(
+                    "low_stock_threshold",
+                    DEFAULT_LOW_STOCK_THRESHOLD,
+                )
+            )
+        )
+    except ValueError:
+        serialized_profile["low_stock_threshold"] = (
+            DEFAULT_LOW_STOCK_THRESHOLD
+        )
     # Legacy product-level warehouse values are intentionally hidden and
     # ignored. Warehouse resolution belongs to inventory/order-item routing.
     serialized_profile.pop("warehouse_id", None)
@@ -168,10 +210,13 @@ async def _operations_view(
             "component_alone_requires_preparation": False,
             "service_can_force_preparation": True,
             "default_when_unconfigured": "requires_preparation",
+            "inventory_and_preparation_are_independent": True,
+            "stockout_policy_applies_to_tracked_products_only": True,
+            "product_service_applies_to_every_order": True,
             "warehouse_resolution": [
                 "inventory_location",
-                "employee_assignment",
             ],
+            "employee_assignment_role": "visibility_and_permissions_only",
         },
     }
 
@@ -220,6 +265,35 @@ def make_product_fulfillment_router(
                     "allowed": sorted(FULFILLMENT_TYPES),
                 },
             ) from exc
+        try:
+            stockout_policy = normalize_stockout_policy(
+                payload.stockout_policy
+            )
+            low_stock_threshold = normalize_low_stock_threshold(
+                payload.low_stock_threshold
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": str(exc),
+                    "allowed_stockout_policies": sorted(
+                        STOCKOUT_POLICIES
+                    ),
+                },
+            ) from exc
+        try:
+            inventory_policy = normalize_inventory_policy(
+                payload.inventory_policy
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "invalid_inventory_policy",
+                    "allowed": sorted(INVENTORY_POLICIES),
+                },
+            ) from exc
         salla_id = _product_key(product)
         selector = {
             "user_id": user_id,
@@ -236,6 +310,9 @@ def make_product_fulfillment_router(
                 product.get("mezan_product_id") or product.get("id")
             ),
             "fulfillment_type": fulfillment_type,
+            "inventory_policy": inventory_policy,
+            "stockout_policy": stockout_policy,
+            "low_stock_threshold": low_stock_threshold,
             "configured": True,
             "updated_at": now,
             "updated_by": str(user.get("id") or ""),

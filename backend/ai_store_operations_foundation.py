@@ -52,6 +52,15 @@ PERMISSIONS = {
     "fulfillment.labels.reprint",
     "fulfillment.pack.confirm",
     "fulfillment.carrier.handoff",
+    "inventory.receipts.read",
+    "inventory.receipts.write",
+    "inventory.preparation.read",
+    "inventory.preparation.create",
+    "inventory.preparation.work",
+    "inventory.preparation.receive",
+    "inventory.salla_sync.read",
+    "inventory.salla_sync.manage_mappings",
+    "inventory.salla_sync.publish",
 }
 
 ROLE_CATALOG = {
@@ -69,11 +78,19 @@ ROLE_CATALOG = {
     }),
     "cost_manager": sorted({
         "products.read", "products.cost.read", "products.cost.write", "audit.read",
+        "inventory.receipts.read", "inventory.receipts.write",
+        "inventory.preparation.read", "inventory.preparation.create",
+        "inventory.preparation.receive",
+        "inventory.salla_sync.read",
     }),
     "warehouse_operator": sorted({
         "products.read", "products.cost.read",
         "fulfillment.ready.read", "fulfillment.batch.claim",
         "fulfillment.pack.confirm",
+        "inventory.receipts.read", "inventory.receipts.write",
+        "inventory.preparation.read", "inventory.preparation.create",
+        "inventory.preparation.work", "inventory.preparation.receive",
+        "inventory.salla_sync.read",
     }),
     "shipping_operator": sorted({
         "products.read",
