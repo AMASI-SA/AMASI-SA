@@ -8,6 +8,7 @@ import {
     XCircle,
 } from "@phosphor-icons/react";
 import ProviderMark from "./ProviderMark";
+import SnapchatAccountScope from "./SnapchatAccountScope";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATUS = {
@@ -59,11 +60,14 @@ const PROVENANCE_DESCRIPTION = {
 };
 
 const DATA_QUALITY = {
+    complete: "مكتملة",
     good: "جيدة",
     healthy: "جيدة",
+    partial: "جزئية",
     stale: "متأخرة",
     degraded: "تحتاج مراجعة",
     missing: "لا توجد بيانات",
+    unavailable: "غير متاحة",
     unknown: "غير معروفة",
     planned: "مستقبلاً",
 };
@@ -83,6 +87,22 @@ function formatDelay(value) {
     if (value < 60) return `${Math.round(value)} دقيقة`;
     if (value < 1440) return `${Math.round(value / 60)} ساعة`;
     return `${Math.round(value / 1440)} يوم`;
+}
+
+function isTrackingDiagnostic(error) {
+    const code = String(error?.code || "").trim().toLowerCase();
+    return code.startsWith("snapchat_tracking_");
+}
+
+function trackingDiagnosticMessage(error) {
+    const code = String(error?.code || "").trim().toLowerCase();
+    if (code === "snapchat_tracking_diagnostics_partial") {
+        return "اكتملت مزامنة الحملات والمصروفات، لكن بعض نقاط تشخيص Pixel غير متاحة. أبقى ميزان القيم غير المعروفة فارغة بدل تحويلها إلى صفر.";
+    }
+    if (code === "snapchat_tracking_http_400") {
+        return "تعذر فحص إحدى نقاط Pixel لهذا الحساب. لا يؤثر ذلك في مزامنة الحملات أو المصروفات، وتبقى القيمة غير المعروفة فارغة.";
+    }
+    return "توجد ملاحظة محدودة في تشخيص Pixel، ولا تعني فشل مزامنة الحملات أو المصروفات.";
 }
 
 function ScoreBar({ label, score, testid }) {
@@ -195,6 +215,7 @@ export default function IntegrationCard({
     testing = false,
     syncing = false,
     settingsAvailable = false,
+    snapchatScope = null,
     onTest,
     onSync,
     onSettings,
@@ -212,6 +233,12 @@ export default function IntegrationCard({
     const canRelink = settingsAvailable && Boolean(integration.actions?.reconnect?.enabled);
     const canOpenSettings = settingsAvailable && Boolean(integration.actions?.settings?.enabled);
     const primaryAccount = integration.accounts?.[0];
+    const trackingDiagnostic = showSync && isTrackingDiagnostic(integration.latest_error);
+    const syncComplete = showSync
+        && Boolean(integration.last_sync_at)
+        && ["complete", "good", "healthy"].includes(
+            String(integration.health?.data_quality || "").toLowerCase(),
+        );
     const showOperationalStatus = ![
         "connected",
         "data_available",
@@ -267,11 +294,13 @@ export default function IntegrationCard({
                 <div>
                     <div className="text-slate-400">الحساب أو المتجر</div>
                     <div className="mt-1 truncate font-bold text-slate-800">
-                        {primaryAccount?.display_name || integration.accounts?.length
-                            ? primaryAccount?.display_name || `${integration.accounts.length} حساب`
-                            : integration.connection_provenance === "data_feed"
-                                ? "تصل بيانات دون حساب API مرتبط"
-                                : "لا يوجد حساب مرتبط"}
+                        {showSync
+                            ? `${integration.accounts?.length || 0} حسابات مكتشفة`
+                            : primaryAccount?.display_name || integration.accounts?.length
+                                ? primaryAccount?.display_name || `${integration.accounts.length} حساب`
+                                : integration.connection_provenance === "data_feed"
+                                    ? "تصل بيانات دون حساب API مرتبط"
+                                    : "لا يوجد حساب مرتبط"}
                     </div>
                 </div>
                 <div>
@@ -296,7 +325,13 @@ export default function IntegrationCard({
                 </div>
             </div>
 
-            {(integration.accounts || []).length > 0 && (
+            {showSync ? (
+                <SnapchatAccountScope
+                    accounts={integration.accounts}
+                    initialSelection={snapchatScope?.selection || null}
+                    initialSummary={snapchatScope?.summary || null}
+                />
+            ) : (integration.accounts || []).length > 0 && (
                 <div className="mt-3 space-y-2" data-testid={`integration-accounts-${integration.provider}`}>
                     {integration.accounts.slice(0, 3).map((account, index) => (
                         <div
@@ -339,14 +374,66 @@ export default function IntegrationCard({
                 </div>
             </div>
 
-            {integration.latest_error && (
-                <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs text-rose-800">
-                    <WarningCircle size={18} className="mt-0.5 shrink-0" weight="fill" />
-                    <div className="min-w-0">
-                        <div className="font-extrabold">آخر خطأ</div>
-                        <div className="mt-1 break-words leading-5">
-                            {integration.latest_error.message || integration.latest_error.code}
+            {showSync && (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2" data-testid="snapchat-status-separation">
+                    <div className={`rounded-xl border p-3 ${
+                        syncComplete
+                            ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                            : "border-slate-200 bg-slate-50 text-slate-700"
+                    }`}>
+                        <div className="flex items-center justify-between gap-2 text-xs font-extrabold">
+                            <span>مزامنة الحملات والمصروفات</span>
+                            <span>{syncComplete ? "مكتملة" : "تحتاج تحقق"}</span>
                         </div>
+                        <div className="mt-1 text-[11px] leading-5 opacity-80">
+                            {syncComplete
+                                ? "تم تحديث بيانات الحسابات المحددة دون كتابة محاسبية."
+                                : "لا توجد مزامنة مكتملة حديثة مثبتة في البطاقة."}
+                        </div>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${
+                        trackingDiagnostic
+                            ? "border-amber-200 bg-amber-50 text-amber-900"
+                            : "border-emerald-100 bg-emerald-50 text-emerald-800"
+                    }`}>
+                        <div className="flex items-center justify-between gap-2 text-xs font-extrabold">
+                            <span>تشخيص Pixel</span>
+                            <span>{trackingDiagnostic ? "جزئي" : "لا توجد ملاحظة حديثة"}</span>
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 opacity-80">
+                            {trackingDiagnostic
+                                ? "حالة مستقلة عن مزامنة الحملات والمصروفات."
+                                : "لم تُسجل ملاحظة تشخيص محدودة في آخر حالة معروضة."}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {integration.latest_error && (
+                <div className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-xs ${
+                    trackingDiagnostic
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
+                        : "border-rose-100 bg-rose-50 text-rose-800"
+                }`} data-testid={trackingDiagnostic ? "snapchat-tracking-notice" : "integration-latest-error"}>
+                    <WarningCircle
+                        size={18}
+                        className={`mt-0.5 shrink-0 ${trackingDiagnostic ? "text-amber-600" : "text-rose-600"}`}
+                        weight="fill"
+                    />
+                    <div className="min-w-0">
+                        <div className="font-extrabold">
+                            {trackingDiagnostic ? "ملاحظة تشخيص Pixel" : "آخر خطأ"}
+                        </div>
+                        <div className="mt-1 break-words leading-5">
+                            {trackingDiagnostic
+                                ? trackingDiagnosticMessage(integration.latest_error)
+                                : integration.latest_error.message || integration.latest_error.code}
+                        </div>
+                        {trackingDiagnostic && (
+                            <div className="mt-1 font-mono text-[10px] text-amber-700">
+                                {integration.latest_error.code}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
