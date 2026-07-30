@@ -6,9 +6,14 @@ import {
     rewriteSnapchatSyncRequest,
     shouldRecoverSnapchatSyncFailure,
 } from "../lib/snapchatSyncRecovery";
-import { startSnapchatConnection } from "./snapchatIntegrationsV2";
+import {
+    getSnapchatAccountSelection,
+    getSnapchatSelectedPerformanceSummary,
+    startSnapchatConnection,
+} from "./snapchatIntegrationsV2";
 
 jest.mock("../lib/api", () => ({
+    get: jest.fn(),
     post: jest.fn(),
 }));
 
@@ -20,6 +25,7 @@ const syncConfig = {
 
 describe("Snapchat Integrations V2 client", () => {
     beforeEach(() => {
+        api.get.mockReset();
         api.post.mockReset();
     });
 
@@ -56,6 +62,116 @@ describe("Snapchat Integrations V2 client", () => {
         });
         await expect(startSnapchatConnection()).rejects.toThrow(
             "snapchat_authorization_url_untrusted",
+        );
+    });
+
+    test("reads the explicit owner-selected Snapchat account scope", async () => {
+        api.get.mockResolvedValueOnce({
+            data: {
+                discovered_count: 9,
+                selected_count: 2,
+                selection_required: false,
+                accounts: [
+                    {
+                        account_id: "usd-account",
+                        display_name: "متجر أماسي Self Service",
+                        currency: "USD",
+                        timezone: "America/Los_Angeles",
+                        selected: true,
+                        selection_status: "selected",
+                    },
+                    {
+                        account_id: "unused-account",
+                        display_name: "حساب غير مستخدم",
+                        selected: false,
+                        selection_status: "discovered",
+                    },
+                ],
+            },
+        });
+
+        const result = await getSnapchatAccountSelection();
+
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/accounts-selection",
+        );
+        expect(result).toMatchObject({
+            discovered_count: 9,
+            selected_count: 2,
+            selection_required: false,
+        });
+        expect(result.accounts[0]).toMatchObject({
+            account_id: "usd-account",
+            selected: true,
+            currency: "USD",
+        });
+    });
+
+    test("reads only the selected-account performance summary", async () => {
+        api.get.mockResolvedValueOnce({
+            data: {
+                provider: "snapchat_ads",
+                date_from: "2026-07-30",
+                date_to: "2026-07-30",
+                selected_account_ids: ["usd-account", "sar-account"],
+                selected_account_count: 2,
+                rows_included: 2,
+                unselected_rows_excluded: 7,
+                spend_sar: 384.44,
+                purchase_value_sar: 1920.6,
+                accounts: [
+                    {
+                        account_id: "usd-account",
+                        display_name: "متجر أماسي Self Service",
+                        currency: "USD",
+                        spend_native: 100.223069,
+                        spend_sar: 375.84,
+                    },
+                    {
+                        account_id: "sar-account",
+                        display_name: "متجر أماسي سعودي",
+                        currency: "SAR",
+                        spend_native: 8.6,
+                        spend_sar: 8.6,
+                    },
+                ],
+                source_only: true,
+                accounting_write_reached: false,
+                qoyod_write_reached: false,
+            },
+        });
+
+        const result = await getSnapchatSelectedPerformanceSummary({
+            fromDate: "2026-07-30",
+            toDate: "2026-07-30",
+        });
+
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/performance-summary",
+            { params: { from_date: "2026-07-30", to_date: "2026-07-30" } },
+        );
+        expect(result).toMatchObject({
+            selected_account_count: 2,
+            unselected_rows_excluded: 7,
+            spend_sar: 384.44,
+            source_only: true,
+            accounting_write_reached: false,
+            qoyod_write_reached: false,
+        });
+        expect(result.accounts).toHaveLength(2);
+    });
+
+    test("fails closed when the selected-account summary reaches protected writes", async () => {
+        api.get.mockResolvedValueOnce({
+            data: {
+                source_only: false,
+                accounting_write_reached: true,
+                qoyod_write_reached: false,
+            },
+        });
+
+        await expect(getSnapchatSelectedPerformanceSummary()).rejects.toThrow(
+            "snapchat_summary_safety_contract_failed",
         );
     });
 
