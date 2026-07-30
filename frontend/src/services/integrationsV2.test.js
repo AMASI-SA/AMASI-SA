@@ -17,10 +17,6 @@ jest.mock("../lib/api", () => ({
     },
 }));
 
-beforeEach(() => {
-    jest.clearAllMocks();
-});
-
 test("overview always contains the eleven providers in the fixed order", () => {
     const overview = normalizeIntegrationOverview({
         providers: [{ provider: "qoyod", connection_status: "connected", connection_provenance: "legacy_integration" }],
@@ -131,20 +127,10 @@ test("Snapchat sync normalization fails closed if the analytics-only contract is
     expect(result.accounting_write_reached).toBe(true);
 });
 
-test("Snapchat sync uses a background job and polls its bounded status route", async () => {
+test("Snapchat sync calls only the V2-owned endpoint with a bounded day count", async () => {
     api.post.mockResolvedValueOnce({
         data: {
-            run_id: "job-2",
-            provider: "snapchat_ads",
-            status: "queued",
-            source_only: true,
-            accounting_write_reached: false,
-            qoyod_write_reached: false,
-        },
-    });
-    api.get.mockResolvedValueOnce({
-        data: {
-            run_id: "job-2",
+            run_id: "run-2",
             provider: "snapchat_ads",
             status: "complete",
             accounts_attempted: 2,
@@ -157,53 +143,14 @@ test("Snapchat sync uses a background job and polls its bounded status route", a
         },
     });
 
-    const result = await syncIntegrationData("snapchat_ads", {
-        days: 30,
-        pollIntervalMs: 0,
-        maxPolls: 2,
-    });
+    const result = await syncIntegrationData("snapchat_ads", { days: 30 });
 
     expect(api.post).toHaveBeenCalledWith(
-        "/integrations-v2/snapchat_ads/sync-async",
+        "/integrations-v2/snapchat_ads/sync",
         { days: 30 },
-    );
-    expect(api.get).toHaveBeenCalledWith(
-        "/integrations-v2/snapchat_ads/sync-async/job-2",
     );
     expect(result.status).toBe("complete");
     expect(result.rows_saved).toBe(60);
-});
-
-test("Snapchat background sync keeps polling queued and running jobs", async () => {
-    api.post.mockResolvedValueOnce({
-        data: { run_id: "job-3", status: "queued" },
-    });
-    api.get
-        .mockResolvedValueOnce({ data: { run_id: "job-3", status: "queued" } })
-        .mockResolvedValueOnce({ data: { run_id: "job-3", status: "running" } })
-        .mockResolvedValueOnce({
-            data: {
-                run_id: "job-3",
-                status: "partial",
-                accounts_attempted: 2,
-                accounts_complete: 1,
-                rows_saved: 40,
-                errors_count: 1,
-                source_only: true,
-                accounting_write_reached: false,
-                qoyod_write_reached: false,
-            },
-        });
-
-    const result = await syncIntegrationData("snapchat_ads", {
-        days: 2,
-        pollIntervalMs: 0,
-        maxPolls: 3,
-    });
-
-    expect(api.get).toHaveBeenCalledTimes(3);
-    expect(result.status).toBe("partial");
-    expect(result.accounts_complete).toBe(1);
 });
 
 test("filters and capability summaries support the control-centre tabs", () => {
