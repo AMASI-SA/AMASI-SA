@@ -37,7 +37,10 @@ from product_inventory_rules import (
     PREPARATION_STATE_READY_COMPLETE,
     build_inventory_configuration_key,
     canonical_specifications,
+    normalize_specification_name,
+    normalize_specification_text,
 )
+from product_field_cost_support import readable_variant_label
 from product_v2_routes import PRODUCTS
 from warehouse_location_routes import EVENTS, LOCATIONS, WAREHOUSES
 
@@ -65,6 +68,193 @@ def _now() -> str:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+class StockPreparationSpecificationError(ValueError):
+    def __init__(
+        self,
+        code: str,
+        *,
+        field: str | None = None,
+        value: str | None = None,
+    ) -> None:
+        super().__init__(code)
+        self.code = code
+        self.field = field
+        self.value = value
+
+
+def stock_preparation_product_fields(
+    product: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return the option/custom-field contract loaded from Salla."""
+    fields: list[dict[str, Any]] = []
+    for source_key, source_kind in (
+        ("options", "option"),
+        ("custom_fields", "custom_field"),
+    ):
+        rows = product.get(source_key) or []
+        if not isinstance(rows, list):
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            name = _text(
+                row.get("name")
+                or row.get("label")
+                or row.get("title")
+            )
+            if not name:
+                continue
+            values = []
+            raw_values = row.get("values") or row.get("options") or []
+            for value_index, value in enumerate(
+                raw_values if isinstance(raw_values, list) else []
+            ):
+                if isinstance(value, dict):
+                    value_id = _text(
+                        value.get("id")
+                        or value.get("value")
+                        or value.get("key")
+                    ) or str(value_index)
+                    value_name = _text(
+                        value.get("name")
+                        or value.get("label")
+                        or value.get("value")
+                    ) or value_id
+                else:
+                    value_id = _text(value) or str(value_index)
+                    value_name = _text(value) or value_id
+                values.append({
+                    "id": value_id,
+                    "name": value_name,
+                    "normalized_name": normalize_specification_text(
+                        value_name
+                    ),
+                })
+            field_id = _text(
+                row.get("id")
+                or row.get("field_id")
+                or row.get("key")
+            ) or str(index)
+            fields.append({
+                "source": source_kind,
+                "id": field_id,
+                "name": name,
+                "canonical_name": normalize_specification_name(name),
+                "type": _text(
+                    row.get("type")
+                    or row.get("input_type")
+                    or row.get("field_type")
+                ).lower() or ("select" if values else "text"),
+                "required": bool(
+                    row.get("required") or row.get("is_required")
+                ),
+                "values": values,
+            })
+    return fields
+
+
+def validate_stock_preparation_specifications(
+    *,
+    product: dict[str, Any],
+    specifications: Any,
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """Validate employee choices against the live Salla product contract."""
+    if not product.get("details_loaded"):
+        raise StockPreparationSpecificationError(
+            "inventory_product_details_required",
+        )
+
+    canonical = canonical_specifications(specifications)
+    fields = stock_preparation_product_fields(product)
+    fields_by_name: dict[str, list[dict[str, Any]]] = {}
+    for field in fields:
+        fields_by_name.setdefault(field["canonical_name"], []).append(field)
+        if field["required"] and field["canonical_name"] not in canonical:
+            raise StockPreparationSpecificationError(
+                "inventory_required_specification_missing",
+                field=field["name"],
+            )
+
+    selected: list[dict[str, Any]] = []
+    for name, value in canonical.items():
+        candidates = fields_by_name.get(name) or []
+        if not candidates:
+            raise StockPreparationSpecificationError(
+                "inventory_specification_not_in_salla",
+                field=name,
+                value=value,
+            )
+        matched_field = None
+        matched_value = None
+        for field in candidates:
+            allowed_values = field.get("values") or []
+            if not allowed_values:
+                matched_field = field
+                break
+            matched_value = next(
+                (
+                    row
+                    for row in allowed_values
+                    if row["normalized_name"] == value
+                    or normalize_specification_text(row["id"]) == value
+                ),
+                None,
+            )
+            if matched_value:
+                matched_field = field
+                break
+        if not matched_field:
+            raise StockPreparationSpecificationError(
+                "inventory_specification_value_not_in_salla",
+                field=name,
+                value=value,
+            )
+        selected.append({
+            "source": matched_field["source"],
+            "field_id": matched_field["id"],
+            "field_name": matched_field["name"],
+            "value_id": (
+                matched_value.get("id")
+                if matched_value
+                else None
+            ),
+            "value_name": (
+                matched_value.get("name")
+                if matched_value
+                else value
+            ),
+        })
+    return canonical, selected
+
+
+def validate_stock_preparation_variant(
+    *,
+    product: dict[str, Any],
+    variant: dict[str, Any] | None,
+    specifications: dict[str, str],
+) -> None:
+    if not variant:
+        return
+    _, selections = readable_variant_label(
+        variant,
+        product.get("options") or [],
+    )
+    variant_specifications = canonical_specifications([
+        {
+            "name": row.get("option_name"),
+            "value": row.get("value_name"),
+        }
+        for row in selections
+    ])
+    for name, value in variant_specifications.items():
+        if specifications.get(name) != value:
+            raise StockPreparationSpecificationError(
+                "inventory_variant_specification_mismatch",
+                field=name,
+                value=specifications.get(name),
+            )
 
 
 def _public_order(order: dict[str, Any]) -> dict[str, Any]:
@@ -659,6 +849,9 @@ def make_stock_preparation_order_router(
                 "sku": 1,
                 "barcode": 1,
                 "main_image": 1,
+                "options": 1,
+                "custom_fields": 1,
+                "details_loaded": 1,
                 "variants": 1,
                 "variants_count": 1,
             },
@@ -683,12 +876,6 @@ def make_stock_preparation_order_router(
                         "product_id": requested.product_id,
                     },
                 )
-            specifications = canonical_specifications(
-                [
-                    row.model_dump()
-                    for row in requested.specifications
-                ]
-            )
             variants = [
                 row
                 for row in product.get("variants") or []
@@ -718,6 +905,33 @@ def make_stock_preparation_order_router(
                     status_code=404,
                     detail={"code": "inventory_variant_not_found"},
                 )
+            try:
+                specifications, salla_selections = (
+                    validate_stock_preparation_specifications(
+                        product=product,
+                        specifications=[
+                            row.model_dump()
+                            for row in requested.specifications
+                        ],
+                    )
+                )
+                validate_stock_preparation_variant(
+                    product=product,
+                    variant=selected_variant,
+                    specifications=specifications,
+                )
+            except StockPreparationSpecificationError as exc:
+                raise HTTPException(
+                    status_code=422
+                    if exc.code
+                    != "inventory_product_details_required"
+                    else 409,
+                    detail={
+                        "code": exc.code,
+                        "field": exc.field,
+                        "value": exc.value,
+                    },
+                ) from exc
             inventory_sku = _text(
                 (selected_variant or {}).get("sku")
                 or product.get("sku")
@@ -743,6 +957,7 @@ def make_stock_preparation_order_router(
                 "main_image": product.get("main_image"),
                 "quantity": requested.quantity,
                 "specifications": specifications,
+                "salla_option_selections": salla_selections,
                 "target_preparation_state": (
                     PREPARATION_STATE_READY_COMPLETE
                 ),

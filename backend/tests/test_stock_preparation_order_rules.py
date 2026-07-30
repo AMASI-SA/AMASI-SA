@@ -5,10 +5,13 @@ from stock_preparation_order_routes import (
     STOCK_PREPARATION_STATUS_CANCELLED,
     STOCK_PREPARATION_STATUS_IN_PROGRESS,
     STOCK_PREPARATION_STATUS_READY,
+    StockPreparationSpecificationError,
     StockPreparationOrderCreateRequest,
     apply_received_quantities,
     next_stock_preparation_status,
     stock_preparation_order_fingerprint,
+    validate_stock_preparation_specifications,
+    validate_stock_preparation_variant,
 )
 
 
@@ -144,4 +147,134 @@ def test_cannot_skip_from_reviewed_to_ready_for_receipt():
         next_stock_preparation_status(
             current_status="reviewed",
             action="mark_ready_for_receipt",
+        )
+
+
+def _salla_product():
+    return {
+        "details_loaded": True,
+        "options": [{
+            "id": "color",
+            "name": "اللون",
+            "type": "select",
+            "required": True,
+            "values": [
+                {"id": "gold", "name": "ذهبي"},
+                {"id": "silver", "name": "فضي"},
+            ],
+        }],
+        "custom_fields": [{
+            "id": "customer-name",
+            "name": "الاسم",
+            "type": "text",
+            "required": True,
+            "values": [],
+        }],
+    }
+
+
+def test_salla_product_options_accept_dynamic_color_and_name():
+    specifications, selections = (
+        validate_stock_preparation_specifications(
+            product=_salla_product(),
+            specifications=[
+                {"name": "اللون", "value": "ذهبي"},
+                {"name": "الاسم", "value": "عبير"},
+            ],
+        )
+    )
+
+    assert specifications == {
+        "الاسم": "عبير",
+        "اللون": "ذهبي",
+    }
+    assert selections == [
+        {
+            "source": "custom_field",
+            "field_id": "customer-name",
+            "field_name": "الاسم",
+            "value_id": None,
+            "value_name": "عبير",
+        },
+        {
+            "source": "option",
+            "field_id": "color",
+            "field_name": "اللون",
+            "value_id": "gold",
+            "value_name": "ذهبي",
+        },
+    ]
+
+
+def test_salla_product_options_reject_unknown_value():
+    with pytest.raises(
+        StockPreparationSpecificationError,
+        match="inventory_specification_value_not_in_salla",
+    ):
+        validate_stock_preparation_specifications(
+            product=_salla_product(),
+            specifications=[
+                {"name": "اللون", "value": "أزرق"},
+                {"name": "الاسم", "value": "عبير"},
+            ],
+        )
+
+
+def test_salla_product_options_require_product_specific_fields():
+    product = {
+        "details_loaded": True,
+        "options": [{
+            "id": "size",
+            "name": "المقاس",
+            "required": True,
+            "values": [{"id": "45", "name": "45 سم"}],
+        }],
+        "custom_fields": [{
+            "id": "name",
+            "name": "الاسم",
+            "required": True,
+        }],
+    }
+
+    with pytest.raises(
+        StockPreparationSpecificationError,
+        match="inventory_required_specification_missing",
+    ) as exc:
+        validate_stock_preparation_specifications(
+            product=product,
+            specifications=[{"name": "الاسم", "value": "سارة"}],
+        )
+
+    assert exc.value.field == "المقاس"
+
+
+def test_salla_variant_must_match_selected_product_options():
+    product = _salla_product()
+    variant = {
+        "id": "silver",
+        "selections": [{
+            "option_name": "اللون",
+            "value_name": "فضي",
+        }],
+    }
+
+    with pytest.raises(
+        StockPreparationSpecificationError,
+        match="inventory_variant_specification_mismatch",
+    ):
+        validate_stock_preparation_variant(
+            product=product,
+            variant=variant,
+            specifications={"اللون": "ذهبي", "الاسم": "عبير"},
+        )
+
+
+def test_product_details_must_be_loaded_from_salla():
+    with pytest.raises(
+        StockPreparationSpecificationError,
+        match="inventory_product_details_required",
+    ):
+        validate_stock_preparation_specifications(
+            product={"details_loaded": False},
+            specifications=[],
         )
