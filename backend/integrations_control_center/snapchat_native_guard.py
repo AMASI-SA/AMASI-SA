@@ -29,6 +29,9 @@ def assert_snapchat_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "snapchat_native_performance_sync.py",
         base / "snapchat_native_data_sync.py",
         base / "snapchat_native_data_routes.py",
+        base / "snapchat_native_tracking_diagnostics.py",
+        base / "snapchat_native_tracking_models.py",
+        base / "snapchat_native_tracking_routes.py",
     )
     violations = []
     for path in native_paths:

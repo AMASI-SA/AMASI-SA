@@ -19,6 +19,7 @@ from .meta_connections import attach_meta_connection_routes
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
 from .snapchat_native_data_routes import attach_snapchat_native_data_routes
+from .snapchat_native_tracking_routes import attach_snapchat_native_tracking_routes
 from .snapchat_oauth_security import snapchat_oauth_configured
 from .tiktok_catalog_native import install_tiktok_native_catalog
 from .tiktok_connections import attach_tiktok_connection_routes
@@ -53,6 +54,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_meta_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
+    attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
 
     exact_test_routes = [
