@@ -27,8 +27,8 @@ The first scope grants read/write access to Snapchat Marketing APIs. The second
 covers Conversions API workflows. Provider writes remain blocked by Mezan's
 proposal/preview/approval/verification/audit/rollback policy.
 
-` snapchat-profile-api ` is intentionally not requested. Public Profile API is
-a separate allowlisted product and is not required for advertising, pixels,
+`snapchat-profile-api` is intentionally not requested. Public Profile API is a
+separate allowlisted product and is not required for advertising, pixels,
 reporting, catalogs, audiences, campaigns, or billing diagnostics.
 
 ## Production secrets
@@ -45,6 +45,7 @@ Optional rotation/settings:
 - `SNAPCHAT_TOKEN_ENC_KEY_OLD`
 - `SNAPCHAT_OAUTH_STATE_SECRET`
 - `SNAPCHAT_MARKETING_SCOPES`
+- `MEZAN_SNAPCHAT_NATIVE_SYNC_V2_ENABLED=true`
 
 Generate the Fernet encryption key:
 
@@ -67,13 +68,41 @@ roles for every asset Mezan must manage.
   `mezan_snapchat_oauth_credentials_v2`.
 - V2 public projections contain no token, Client Secret, or authorization code.
 - The native connector does not read or write `snapchat_connections`,
-  `snapchat_ad_accounts`, or `snapchat_account_daily`.
-- Legacy settings/pages remain untouched during migration.
+  `snapchat_ad_accounts`, `snapchat_account_daily`, or the old analytics engine.
+- Provider campaign writes, accounting writes, and Qoyod writes remain blocked.
 
-## Current delivery boundary
+## Native data synchronization
 
-This delivery provides OAuth, encrypted credentials, account discovery,
-permission evidence, health, and local connection tests. Native reporting,
-pixel/CAPI diagnostics, billing/funding-source reads, and campaign mutation
-execution are separate bounded deliveries. The V2 card does not invoke the
-legacy analytics backfill.
+The **مزامنة 30 يوم** action reads the authorized V2 accounts and synchronizes:
+
+- campaigns;
+- ad squads;
+- ads;
+- creatives;
+- campaign-level daily performance;
+- account-level daily aggregates.
+
+The bounded data plane uses Snapchat pagination and a provider-call budget. It
+stores only V2 analytical collections:
+
+- `mezan_snapchat_entities_v2`
+- `mezan_snapchat_performance_daily_v2`
+
+Performance rows preserve account currency and SAR-normalized values. The first
+metrics include impressions, swipes, spend, video views, view completion,
+purchases, purchase value, CTR, CPC, CPM, ROAS, and cost per purchase. Missing
+conversion fields remain unknown and are never converted into false zeros.
+
+The current attribution label is:
+
+`swipe_28d_view_1d_conversion_time`
+
+This sync is source-only: it cannot create, pause, resume, or edit campaigns and
+cannot post to accounting or Qoyod.
+
+## Remaining bounded deliveries
+
+The next deliveries add detailed Pixel/Conversions API diagnostics,
+billing/invoice/funding-source reads, product/order/profit identity mapping, and
+finally campaign mutations behind proposal, preview, approval, verification,
+audit, limits, and rollback.
