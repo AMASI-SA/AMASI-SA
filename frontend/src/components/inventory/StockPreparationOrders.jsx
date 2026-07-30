@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowCounterClockwise,
     Barcode,
@@ -7,9 +7,7 @@ import {
     Gear,
     MagnifyingGlass,
     Package,
-    Plus,
     SpinnerGap,
-    Trash,
     UserCircle,
     Warehouse,
     WarningCircle,
@@ -23,6 +21,16 @@ import {
     receiveStockPreparationOrder,
     transitionStockPreparationOrder,
 } from "../../services/mezanInventoryReceiving";
+import {
+    refreshProductV2Details,
+    syncRecentProductsV2,
+} from "../../services/mezanProductsV2";
+import {
+    buildStockPreparationFields,
+    buildStockPreparationSpecifications,
+    findStockPreparationVariant,
+    missingRequiredStockPreparationFields,
+} from "../../services/stockPreparationProductOptions";
 
 const EMPTY_DATA = {
     suppliers: [],
@@ -61,12 +69,20 @@ const ERROR_MESSAGES = {
     inventory_variant_required: "اختر خيار المنتج الذي سيُجهّز.",
     inventory_variant_not_found: "خيار المنتج غير موجود أو لم تُحمّل تفاصيله.",
     inventory_variants_not_loaded: "حمّل تفاصيل المنتج وخياراته أولًا قبل إنشاء أمر التجهيز.",
+    inventory_product_details_required: "يجب تحميل المنتج وخياراته مباشرة من سلة أولًا.",
+    inventory_required_specification_missing: "أكمل الخيار الإلزامي في سلة.",
+    inventory_specification_not_in_salla: "هذه المواصفة غير موجودة في خيارات المنتج داخل سلة.",
+    inventory_specification_value_not_in_salla: "القيمة المختارة غير موجودة في خيارات المنتج داخل سلة.",
+    inventory_variant_specification_mismatch: "الخيارات المختارة لا تطابق تركيبة المنتج في سلة.",
 };
 
 function errorMessage(error, fallback = "تعذر إتمام العملية.") {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string") return detail;
-    return ERROR_MESSAGES[detail?.code] || detail?.message || fallback;
+    const message = ERROR_MESSAGES[detail?.code] || detail?.message;
+    return message
+        ? `${message}${detail?.field ? ` (${detail.field})` : ""}`
+        : fallback;
 }
 
 const controlClass = "h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-100 disabled:text-slate-400";
@@ -140,15 +156,16 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
     const [productSearch, setProductSearch] = useState("");
     const [productId, setProductId] = useState("");
     const [variantId, setVariantId] = useState("");
+    const [productDetails, setProductDetails] = useState(null);
+    const [productDetailsLoading, setProductDetailsLoading] = useState(false);
+    const [productDetailsError, setProductDetailsError] = useState("");
+    const [optionSelections, setOptionSelections] = useState({});
     const [supplierId, setSupplierId] = useState("");
     const [warehouseId, setWarehouseId] = useState("");
     const [employeeId, setEmployeeId] = useState("");
     const [quantity, setQuantity] = useState(1);
     const [note, setNote] = useState("");
-    const [specifications, setSpecifications] = useState([
-        { name: "الاسم", value: "" },
-        { name: "اللون", value: "" },
-    ]);
+    const recentSallaSyncStarted = useRef(false);
 
     const load = useCallback(async ({ quiet = false } = {}) => {
         if (!quiet) setLoading(true);
@@ -162,6 +179,21 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (recentSallaSyncStarted.current) return;
+        recentSallaSyncStarted.current = true;
+        syncRecentProductsV2()
+            .then((result) => {
+                if (Number(result?.created || 0) + Number(result?.updated || 0) > 0) {
+                    return onInventoryChanged?.();
+                }
+                return null;
+            })
+            .catch(() => {
+                // The saved Salla catalogue remains available when the light refresh fails.
+            });
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const products = useMemo(() => {
         const query = productSearch.trim().toLocaleLowerCase("ar");
@@ -184,28 +216,72 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
         )),
         [data.operators, warehouseId],
     );
-    const selectedProduct = useMemo(
+    const catalogProduct = useMemo(
         () => (inventoryCatalog.products || []).find(
             (row) => row.mezan_product_id === productId,
         ),
         [inventoryCatalog.products, productId],
     );
+    const selectedProduct = useMemo(
+        () => (
+            productDetails?.mezan_product_id === productId
+                ? productDetails
+                : catalogProduct
+        ),
+        [catalogProduct, productDetails, productId],
+    );
+    const productFields = useMemo(
+        () => buildStockPreparationFields(selectedProduct),
+        [selectedProduct],
+    );
+    const matchedVariant = useMemo(
+        () => findStockPreparationVariant(
+            selectedProduct,
+            productFields,
+            optionSelections,
+        ),
+        [optionSelections, productFields, selectedProduct],
+    );
     const selectedVariant = useMemo(
-        () => (selectedProduct?.variants || []).find(
+        () => matchedVariant || (selectedProduct?.variants || []).find(
             (row) => String(row.id) === variantId,
         ),
-        [selectedProduct, variantId],
+        [matchedVariant, selectedProduct, variantId],
     );
 
     useEffect(() => {
         if (!eligibleOperators.some((row) => row.id === employeeId)) setEmployeeId("");
     }, [eligibleOperators, employeeId]);
 
-    const setSpecification = (index, key, value) => {
-        setSpecifications((current) => current.map(
-            (row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row,
-        ));
-    };
+    async function selectProduct(nextProductId) {
+        setProductId(nextProductId);
+        setVariantId("");
+        setProductDetails(null);
+        setProductDetailsError("");
+        setOptionSelections({});
+        if (!nextProductId) return;
+        setProductDetailsLoading(true);
+        try {
+            const result = await refreshProductV2Details(nextProductId);
+            if (!result?.product) throw new Error("salla_product_details_empty");
+            setProductDetails(result.product);
+        } catch (error) {
+            setProductDetailsError(errorMessage(
+                error,
+                "تعذر جلب خيارات المنتج من سلة.",
+            ));
+        } finally {
+            setProductDetailsLoading(false);
+        }
+    }
+
+    function setProductOption(field, value) {
+        setVariantId("");
+        setOptionSelections((current) => ({
+            ...current,
+            [field.key]: value,
+        }));
+    }
 
     async function create(event) {
         event.preventDefault();
@@ -213,17 +289,30 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
             toast.error("اختر المنتج والمورد والمخزن والموظف.");
             return;
         }
+        if (productDetailsLoading || !selectedProduct?.details_loaded) {
+            toast.error("انتظر تحميل المنتج وخياراته من سلة.");
+            return;
+        }
+        const missingFields = missingRequiredStockPreparationFields(
+            productFields,
+            optionSelections,
+        );
+        if (missingFields.length) {
+            toast.error(`أكمل الخيار الإلزامي: ${missingFields[0].name}`);
+            return;
+        }
         if ((selectedProduct?.variants || []).length > 0 && !selectedVariant) {
-            toast.error("اختر خيار المنتج الذي سيُجهّز ويُحفظ في المخزون.");
+            toast.error("أكمل خيارات المنتج حتى تتحدد تركيبة سلة المطابقة.");
             return;
         }
         if (Number(selectedProduct?.variants_count || 0) > 0 && !(selectedProduct?.variants || []).length) {
             toast.error("حمّل تفاصيل المنتج وخياراته أولًا قبل إنشاء أمر التجهيز.");
             return;
         }
-        const cleanSpecifications = specifications
-            .map((row) => ({ name: row.name.trim(), value: row.value.trim() }))
-            .filter((row) => row.name && row.value);
+        const cleanSpecifications = buildStockPreparationSpecifications(
+            productFields,
+            optionSelections,
+        );
         setBusy("create");
         try {
             const result = await createStockPreparationOrder({
@@ -242,10 +331,12 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
             toast.success(result?.duplicate ? "أمر التجهيز مسجل مسبقًا." : `تم إنشاء وإسناد الأمر ${result?.order?.reference || ""}`);
             setProductId("");
             setVariantId("");
+            setProductDetails(null);
+            setProductDetailsError("");
+            setOptionSelections({});
             setProductSearch("");
             setQuantity(1);
             setNote("");
-            setSpecifications([{ name: "الاسم", value: "" }, { name: "اللون", value: "" }]);
             await load({ quiet: true });
         } catch (error) {
             toast.error(errorMessage(error));
@@ -316,16 +407,16 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
                                 <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="الاسم أو SKU" className={`${controlClass} pr-10`} />
                             </div>
                         </Field>
-                        <Field label="منتج ميزان">
-                            <select value={productId} onChange={(event) => { setProductId(event.target.value); setVariantId(""); }} className={controlClass}>
+                        <Field label="منتج سلة" hint="عند اختيار المنتج تُجلب خياراته الحالية مباشرة من سلة.">
+                            <select value={productId} onChange={(event) => selectProduct(event.target.value)} className={controlClass}>
                                 <option value="">اختر المنتج</option>
                                 {products.slice(0, 250).map((row) => <option key={row.mezan_product_id} value={row.mezan_product_id}>{row.name} {row.sku ? `— ${row.sku}` : ""}</option>)}
                             </select>
                         </Field>
-                        {(selectedProduct?.variants || []).length > 0 && (
-                            <Field label="خيار المنتج" hint="اللون أو المقاس الذي سيُضاف مخزونه.">
+                        {(selectedProduct?.variants || []).length > 0 && !matchedVariant && !productDetailsLoading && (
+                            <Field label="تركيبة سلة المطابقة" hint="تظهر فقط إذا تعذر تحديد التركيبة تلقائيًا من الخيارات.">
                                 <select value={variantId} onChange={(event) => setVariantId(event.target.value)} className={controlClass}>
-                                    <option value="">اختر الخيار</option>
+                                    <option value="">اختر التركيبة</option>
                                     {(selectedProduct.variants || []).map((row) => (
                                         <option key={row.id} value={row.id}>
                                             {row.display_name || row.name || row.sku || `خيار ${row.id}`}
@@ -359,19 +450,47 @@ export default function StockPreparationOrders({ inventoryCatalog, onInventoryCh
                     </div>
 
                     <section className="rounded-2xl border bg-slate-50 p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                            <div><div className="font-black">المواصفات المطلوب تجهيزها</div><div className="mt-1 text-xs text-slate-500">كل تركيبة مختلفة تُنشأ في أمر مستقل حتى يبقى المخزون دقيقًا.</div></div>
-                            <button type="button" onClick={() => setSpecifications((current) => [...current, { name: "", value: "" }])} className="inline-flex items-center gap-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-black text-violet-700"><Plus /> إضافة</button>
+                        <div className="mb-3">
+                            <div className="font-black">خيارات المنتج من سلة</div>
+                            <div className="mt-1 text-xs text-slate-500">تتغير الحقول تلقائيًا حسب المنتج: لون، مقاس، اسم، أو أي خيارات أخرى مسجلة في سلة.</div>
                         </div>
-                        <div className="space-y-2">
-                            {specifications.map((row, index) => (
-                                <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2">
-                                    <input value={row.name} onChange={(event) => setSpecification(index, "name", event.target.value)} placeholder="الاسم / اللون / المقاس" className={controlClass} />
-                                    <input value={row.value} onChange={(event) => setSpecification(index, "value", event.target.value)} placeholder="عبير / ذهبي" className={controlClass} />
-                                    <button type="button" onClick={() => setSpecifications((current) => current.length === 1 ? [{ name: "", value: "" }] : current.filter((_, rowIndex) => rowIndex !== index))} className="rounded-xl border border-rose-200 bg-white px-3 text-rose-600"><Trash /></button>
-                                </div>
-                            ))}
-                        </div>
+                        {!productId && <div className="rounded-xl border border-dashed bg-white p-5 text-center text-sm text-slate-400">اختر المنتج أولًا لعرض خياراته.</div>}
+                        {productId && productDetailsLoading && <div className="flex items-center justify-center gap-2 rounded-xl border bg-white p-5 text-sm font-bold text-violet-700"><SpinnerGap className="animate-spin" /> جارٍ جلب المنتج وخياراته من سلة…</div>}
+                        {productId && !productDetailsLoading && productDetailsError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">{productDetailsError}</div>}
+                        {productId && !productDetailsLoading && !productDetailsError && productFields.length === 0 && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800">هذا المنتج لا يحتوي خيارات أو حقولًا مخصصة في سلة.</div>}
+                        {productId && !productDetailsLoading && !productDetailsError && productFields.length > 0 && (
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                {productFields.map((field) => (
+                                    <Field
+                                        key={field.key}
+                                        label={`${field.name}${field.required ? " *" : ""}`}
+                                        hint={field.source === "custom_field" ? "حقل مخصص من سلة" : "خيار منتج من سلة"}
+                                    >
+                                        {(field.values || []).length > 0 ? (
+                                            <select value={optionSelections[field.key] || ""} onChange={(event) => setProductOption(field, event.target.value)} className={controlClass}>
+                                                <option value="">اختر {field.name}</option>
+                                                {field.values.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
+                                            </select>
+                                        ) : ["textarea", "long_text"].includes(field.type) ? (
+                                            <textarea value={optionSelections[field.key] || ""} onChange={(event) => setProductOption(field, event.target.value)} rows={3} placeholder={field.placeholder || `أدخل ${field.name}`} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-violet-500" />
+                                        ) : (
+                                            <input
+                                                type={["number", "date", "time"].includes(field.type) ? field.type : "text"}
+                                                value={optionSelections[field.key] || ""}
+                                                onChange={(event) => setProductOption(field, event.target.value)}
+                                                placeholder={field.placeholder || `أدخل ${field.name}`}
+                                                className={controlClass}
+                                            />
+                                        )}
+                                    </Field>
+                                ))}
+                            </div>
+                        )}
+                        {matchedVariant && (
+                            <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold text-violet-800">
+                                تركيبة سلة المطابقة: {matchedVariant.display_name || matchedVariant.name || matchedVariant.sku || matchedVariant.id}
+                            </div>
+                        )}
                     </section>
                     <Field label="تعليمات الموظف">
                         <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="تعليمات المورد أو التجهيز…" className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-violet-500" />
