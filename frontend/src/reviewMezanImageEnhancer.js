@@ -4,6 +4,7 @@ const ROOT_ID = "mezan-review-image-enhancer-root";
 let activeOrder = null;
 let detail = null;
 let refreshing = false;
+let decorateScheduled = false;
 
 function text(value) { return String(value || "").trim(); }
 function orderNumberFromPage() {
@@ -44,6 +45,14 @@ function toast(message, error = false) {
     document.body.appendChild(node);
     setTimeout(() => node.remove(), 3500);
 }
+function scheduleDecorate() {
+    if (decorateScheduled) return;
+    decorateScheduled = true;
+    window.requestAnimationFrame(() => {
+        decorateScheduled = false;
+        decorateCards();
+    });
+}
 async function loadDetail(orderNumber) {
     const { data } = await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`);
     detail = data;
@@ -54,7 +63,7 @@ async function refresh() {
     const number = orderNumberFromPage();
     if (!number || refreshing) return;
     refreshing = true;
-    try { await loadDetail(number); decorateCards(); }
+    try { await loadDetail(number); scheduleDecorate(); }
     catch { /* regular page owns load errors */ }
     finally { refreshing = false; }
 }
@@ -70,7 +79,7 @@ async function uploadImage(item, file, button) {
     try {
         const data_base64 = await fileToBase64(file);
         const { data } = await api.post(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/mezan-images`, { filename: file.name, content_type: file.type, data_base64 });
-        detail = data; toast("تمت إضافة صورة ميزان لهذا المنتج"); decorateCards();
+        detail = data; toast("تمت إضافة صورة ميزان لهذا المنتج"); scheduleDecorate();
     } catch (error) { toast(error?.response?.data?.detail?.message || "تعذر رفع صورة ميزان", true); }
     finally { button.disabled = false; button.textContent = "إضافة صورة ميزان"; }
 }
@@ -95,7 +104,7 @@ function showChoiceModal(item, imageUrl) {
         panel.querySelectorAll("button").forEach((node) => { node.disabled = true; }); button.textContent = "جارٍ الحفظ…";
         try {
             const { data } = await api.post(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/image-choice`, { expected_revision: detail.revision, selected_image_url: imageUrl, mode, selected_spec_keys: mode === "options" ? [...selected] : [] });
-            detail = data; overlay.remove(); toast(mode === "default" ? "تم حفظها كصورة رئيسية في ميزان" : mode === "options" ? "تم حفظها مع الخيارات المحددة" : "تم حفظها لهذا الطلب فقط"); decorateCards();
+            detail = data; overlay.remove(); toast(mode === "default" ? "تم حفظها كصورة رئيسية في ميزان" : mode === "options" ? "تم حفظها مع الخيارات المحددة" : "تم حفظها لهذا الطلب فقط"); scheduleDecorate();
         } catch (error) { toast(error?.response?.data?.detail?.message || "تعذر حفظ الصورة", true); panel.querySelectorAll("button").forEach((node) => { node.disabled = false; }); }
     });
     overlay.appendChild(panel); document.body.appendChild(overlay);
@@ -103,7 +112,7 @@ function showChoiceModal(item, imageUrl) {
 async function deleteImage(item, imageUrl) {
     const id = imageUrl.split("/").pop();
     if (!window.confirm("حذف صورة ميزان؟ لن يؤثر ذلك على صور سلة.")) return;
-    try { const { data } = await api.delete(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/mezan-images/${encodeURIComponent(id)}`); detail = data; toast("تم حذف صورة ميزان"); decorateCards(); }
+    try { const { data } = await api.delete(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/mezan-images/${encodeURIComponent(id)}`); detail = data; toast("تم حذف صورة ميزان"); scheduleDecorate(); }
     catch (error) { toast(error?.response?.data?.detail?.message || "تعذر حذف صورة ميزان", true); }
 }
 function decorateCards() {
@@ -111,7 +120,10 @@ function decorateCards() {
     document.querySelectorAll('[data-testid="order-review-product-card"]').forEach((card) => {
         const item = itemForCard(card); if (!item) return;
         let host = card.querySelector("[data-mezan-image-tools]");
+        const signature = JSON.stringify({ orderItemId: item.order_item_id, images: item.mezan_images || [] });
+        if (host?.dataset.mezanImageSignature === signature) return;
         if (!host) { host = document.createElement("div"); host.dataset.mezanImageTools = "1"; host.style.cssText = "border-top:1px solid #e2e8f0;padding:12px;background:#f0fdfa"; card.appendChild(host); }
+        host.dataset.mezanImageSignature = signature;
         host.innerHTML = "";
         const top = document.createElement("div"); top.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap";
         const title = document.createElement("b"); title.textContent = "صور ميزان — تظهر في انتظار المراجعة فقط";
@@ -131,7 +143,12 @@ function decorateCards() {
 function start() {
     if (document.getElementById(ROOT_ID)) return;
     const marker = document.createElement("div"); marker.id = ROOT_ID; marker.hidden = true; document.body.appendChild(marker);
-    const observer = new MutationObserver(() => { const number = orderNumberFromPage(); if (!number) return; if (number !== activeOrder || !detail) refresh(); else decorateCards(); });
+    const observer = new MutationObserver(() => {
+        const number = orderNumberFromPage();
+        if (!number) return;
+        if (number !== activeOrder || !detail) refresh();
+        else scheduleDecorate();
+    });
     observer.observe(document.body, { childList: true, subtree: true }); refresh();
 }
 
