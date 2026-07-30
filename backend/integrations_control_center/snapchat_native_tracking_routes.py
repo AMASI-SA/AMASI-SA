@@ -5,13 +5,13 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .models import SnapchatTrackingDiagnosticsResponse
 from .snapchat_native_data_common import SnapchatNativeSyncError
 from .snapchat_native_data_sync import snapchat_native_sync_enabled
 from .snapchat_native_tracking_diagnostics import (
     SnapchatTrackingDiagnosticsInput,
     execute_snapchat_tracking_diagnostics,
 )
+from .snapchat_native_tracking_models import SnapchatTrackingDiagnosticsResponse
 from .snapchat_oauth_security import SNAPCHAT_PROVIDER_ID, snapchat_oauth_configured
 
 
