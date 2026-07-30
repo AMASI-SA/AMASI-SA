@@ -14,6 +14,9 @@ from .snapchat_native_tracking_diagnostics import (
 )
 from .snapchat_native_tracking_models import SnapchatTrackingDiagnosticsResponse
 from .snapchat_oauth_security import SNAPCHAT_PROVIDER_ID, snapchat_oauth_configured
+from .snapchat_tracking_error_details import (
+    install_snapchat_tracking_error_detail_persistence,
+)
 
 
 def install_snapchat_native_tracking_actions() -> None:
@@ -113,6 +116,7 @@ def attach_snapchat_native_tracking_routes(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    install_snapchat_tracking_error_detail_persistence()
     install_snapchat_native_tracking_actions()
 
     @router.post(
