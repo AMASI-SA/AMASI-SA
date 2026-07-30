@@ -1,5 +1,11 @@
 import axios from "axios";
 import {
+    isAiAnalysisAsyncResponse,
+    isAiAnalysisRequest,
+    pollAiAnalysisJob,
+    rewriteAiAnalysisRequest,
+} from "./aiAnalysisAsync";
+import {
     isSnapchatAsyncSyncResponse,
     isSnapchatSyncRequest,
     pollSnapchatAsyncSyncJob,
@@ -34,37 +40,72 @@ api.interceptors.request.use((config) => {
         config.headers = config.headers || {};
         config.headers["Authorization"] = `Bearer ${token}`;
     }
-    if (isSnapchatSyncRequest(config)) {
-        config._mezanSyncStartedAt = Date.now();
-        return rewriteSnapchatSyncRequest(config);
+
+    let nextConfig = config;
+    if (isSnapchatSyncRequest(nextConfig)) {
+        nextConfig._mezanSyncStartedAt = Date.now();
+        nextConfig = rewriteSnapchatSyncRequest(nextConfig);
     }
-    return config;
+    if (isAiAnalysisRequest(nextConfig)) {
+        nextConfig = rewriteAiAnalysisRequest(nextConfig);
+    }
+    return nextConfig;
 });
 
 api.interceptors.response.use(
     async (response) => {
-        if (!isSnapchatAsyncSyncResponse(response)) return response;
+        if (isSnapchatAsyncSyncResponse(response)) {
+            const payload = await pollSnapchatAsyncSyncJob({
+                accepted: response.data,
+                loadJob: async (runId) => {
+                    const jobResponse = await axios.get(
+                        `${API_BASE}/integrations-v2/snapchat_ads/sync-async/${encodeURIComponent(runId)}`,
+                        {
+                            withCredentials: true,
+                            headers: directRequestHeaders(),
+                        },
+                    );
+                    return jobResponse.data;
+                },
+            });
 
-        const payload = await pollSnapchatAsyncSyncJob({
-            accepted: response.data,
-            loadJob: async (runId) => {
-                const jobResponse = await axios.get(
-                    `${API_BASE}/integrations-v2/snapchat_ads/sync-async/${encodeURIComponent(runId)}`,
-                    {
-                        withCredentials: true,
-                        headers: directRequestHeaders(),
-                    },
-                );
-                return jobResponse.data;
-            },
-        });
+            return {
+                ...response,
+                data: payload,
+                status: 200,
+                statusText: "Snapchat asynchronous sync completed",
+            };
+        }
 
-        return {
-            ...response,
-            data: payload,
-            status: 200,
-            statusText: "Snapchat asynchronous sync completed",
-        };
+        if (isAiAnalysisAsyncResponse(response)) {
+            const job = await pollAiAnalysisJob({
+                accepted: response.data,
+                loadJob: async (runId) => {
+                    const jobResponse = await axios.get(
+                        `${API_BASE}/ai/analyze-async/${encodeURIComponent(runId)}`,
+                        {
+                            withCredentials: true,
+                            headers: directRequestHeaders(),
+                        },
+                    );
+                    return jobResponse.data;
+                },
+            });
+
+            return {
+                ...response,
+                data: {
+                    ok: true,
+                    mode: job.mode || "read_only_analysis",
+                    writes_performed: false,
+                    analysis: job.analysis,
+                },
+                status: 200,
+                statusText: "Mezan AI asynchronous analysis completed",
+            };
+        }
+
+        return response;
     },
     async (error) => {
         const recovered = await recoverSnapchatSyncAfterTransportFailure({

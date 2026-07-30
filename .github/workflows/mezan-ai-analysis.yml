@@ -1,0 +1,80 @@
+name: Mezan AI Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/ai_analysis_routes.py"
+      - "backend/tests/test_ai_analysis_routes.py"
+      - "backend/tests/test_ai_analysis_async_routes.py"
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/aiAnalysisAsync.js"
+      - "frontend/src/lib/aiAnalysisAsync.test.js"
+      - ".github/workflows/mezan-ai-analysis.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: AI backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          motor==3.3.1
+          openai==1.99.9
+          openpyxl==3.1.5
+          pydantic==2.13.4
+          pymongo==4.5.0
+          pytest==9.0.3
+          pytest-asyncio
+      - name: Compile analyzer backend
+        run: >-
+          python -m py_compile
+          ai_provider_status.py
+          ai_analysis_routes.py
+          tests/test_ai_analysis_routes.py
+          tests/test_ai_analysis_async_routes.py
+      - name: Run analyzer backend tests
+        run: >-
+          python -m pytest
+          tests/test_ai_analysis_routes.py
+          tests/test_ai_analysis_async_routes.py
+          -q
+          --tb=short
+
+  frontend-tests:
+    name: AI frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run asynchronous transport tests
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/lib/aiAnalysisAsync.test.js
