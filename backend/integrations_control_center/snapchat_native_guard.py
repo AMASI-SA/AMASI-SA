@@ -10,6 +10,7 @@ FORBIDDEN_SNAPCHAT_V2_PATTERNS = (
     '["snapchat_ad_accounts"]',
     ".snapchat_account_daily",
     '["snapchat_account_daily"]',
+    "snapchat_analytics_backfill",
     "/api/snapchat/",
     "/snapchat-accounts",
 )
@@ -23,6 +24,11 @@ def assert_snapchat_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "snapchat_discovery.py",
         base / "snapchat_projection.py",
         base / "snapchat_connections.py",
+        base / "snapchat_native_data_common.py",
+        base / "snapchat_native_entities_sync.py",
+        base / "snapchat_native_performance_sync.py",
+        base / "snapchat_native_data_sync.py",
+        base / "snapchat_native_data_routes.py",
     )
     violations = []
     for path in native_paths:
