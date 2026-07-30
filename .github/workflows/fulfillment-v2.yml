@@ -86,16 +86,21 @@ jobs:
           cryptography
           reportlab
           python-multipart
-      - name: Run review and fulfillment contracts
+      - name: Run backend review and fulfillment tests
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_order_review_stage_one.py
+          tests/test_order_engine_mapper.py
+          tests/test_order_engine_repository.py
+          tests/test_order_engine_salla_refresh.py
+          tests/test_fulfillment_v2_contract.py
+          -q --tb=short
+      - name: Run root image-mode contracts
         env:
           PYTHONPATH: backend
         run: >-
           python -m pytest
-          backend/tests/test_order_review_stage_one.py
-          backend/tests/test_order_engine_mapper.py
-          backend/tests/test_order_engine_repository.py
-          backend/tests/test_order_engine_salla_refresh.py
-          backend/tests/test_fulfillment_v2_contract.py
           tests/test_order_review_image_modes_contract.py
           tests/test_order_review_mezan_image_upload_contract.py
           -q --tb=short
