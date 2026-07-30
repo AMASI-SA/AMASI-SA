@@ -96,6 +96,7 @@ jobs:
           backend/tests/test_fulfillment_v2_contract.py
           tests/test_order_review_image_modes_contract.py
           tests/test_order_review_mezan_image_upload_contract.py
+          --import-mode=importlib
           -q --tb=short
 
   frontend-test-and-build:
