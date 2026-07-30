@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "backend/order_review_routes.py"
+      - "backend/order_review_image_modes.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
@@ -13,7 +14,11 @@ on:
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "tests/test_order_review_image_modes_contract.py"
+      - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
+      - "frontend/src/index.js"
+      - "frontend/src/reviewMezanImageEnhancer.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
@@ -22,12 +27,14 @@ on:
       - "frontend/src/pages/OrderReview.test.jsx"
       - "frontend/src/pages/OrderDetailsV2.jsx"
       - "frontend/src/services/orderEngine.js"
+      - "frontend/src/services/orderReviewEngine.js"
       - ".github/workflows/fulfillment-v2.yml"
   push:
     branches:
       - main
     paths:
       - "backend/order_review_routes.py"
+      - "backend/order_review_image_modes.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
@@ -37,7 +44,11 @@ on:
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "tests/test_order_review_image_modes_contract.py"
+      - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
+      - "frontend/src/index.js"
+      - "frontend/src/reviewMezanImageEnhancer.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
@@ -46,6 +57,7 @@ on:
       - "frontend/src/pages/OrderReview.test.jsx"
       - "frontend/src/pages/OrderDetailsV2.jsx"
       - "frontend/src/services/orderEngine.js"
+      - "frontend/src/services/orderReviewEngine.js"
       - ".github/workflows/fulfillment-v2.yml"
   workflow_dispatch:
 
@@ -55,9 +67,6 @@ permissions:
 jobs:
   backend-contract:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -77,7 +86,8 @@ jobs:
           cryptography
           reportlab
           python-multipart
-      - name: Run review and fulfillment contracts
+      - name: Run backend review and fulfillment tests
+        working-directory: backend
         run: >-
           python -m pytest
           tests/test_order_review_stage_one.py
@@ -85,6 +95,14 @@ jobs:
           tests/test_order_engine_repository.py
           tests/test_order_engine_salla_refresh.py
           tests/test_fulfillment_v2_contract.py
+          -q --tb=short
+      - name: Run root image-mode contracts
+        env:
+          PYTHONPATH: backend
+        run: >-
+          python -m pytest
+          tests/test_order_review_image_modes_contract.py
+          tests/test_order_review_mezan_image_upload_contract.py
           -q --tb=short
 
   frontend-test-and-build:

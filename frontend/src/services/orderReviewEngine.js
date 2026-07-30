@@ -14,103 +14,58 @@ export async function listPendingOrderReviews({ limit = 15, cursor = null } = {}
         const params = { limit };
         if (cursor) params.cursor = cursor;
         const { data } = await api.get("/order-reviews-v1", { params });
-        return {
-            items: Array.isArray(data?.items) ? data.items : [],
-            nextCursor: data?.next_cursor || null,
-        };
-    } catch (error) {
-        throw new Error(message(error, "تعذّر تحميل الطلبات بانتظار المراجعة."));
-    }
+        return { items: Array.isArray(data?.items) ? data.items : [], nextCursor: data?.next_cursor || null };
+    } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات بانتظار المراجعة.")); }
 }
 
 export async function listReviewedOrderReviews({ limit = 50 } = {}) {
     try {
         const { data } = await api.get("/order-reviews-v1/reviewed", { params: { limit } });
         return { items: Array.isArray(data?.items) ? data.items : [] };
-    } catch (error) {
-        throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها."));
-    }
+    } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها.")); }
 }
 
 export async function getOrderReview(orderNumber) {
-    try {
-        const { data } = await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`);
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر تحميل بيانات المراجعة."));
-    }
+    try { return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر تحميل بيانات المراجعة.")); }
 }
 
 export async function updateOrderReviewItem(orderNumber, orderItemId, payload) {
-    try {
-        const { data } = await api.patch(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}`,
-            payload,
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر حفظ إعدادات المنتج."));
-    }
+    try { return (await api.patch(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}`, payload)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر حفظ إعدادات المنتج.")); }
 }
 
 export async function completeOrderReview(orderNumber, expectedRevision) {
-    try {
-        const { data } = await api.post(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
-            { expected_revision: expectedRevision },
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
-    }
+    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, { expected_revision: expectedRevision })).data; }
+    catch (error) { throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب.")); }
 }
 
 export async function createOrderReviewOperationalItem(orderNumber, payload) {
-    try {
-        const { data } = await api.post(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items`,
-            payload,
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر إضافة المنتج التشغيلي."));
-    }
+    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items`, payload)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر إضافة المنتج التشغيلي.")); }
 }
 
 export async function updateOrderReviewOperationalItemStatus(orderNumber, operationalItemId, payload) {
-    try {
-        const { data } = await api.patch(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`,
-            payload,
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر تحديث حالة المنتج التشغيلي."));
-    }
+    try { return (await api.patch(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`, payload)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر تحديث حالة المنتج التشغيلي.")); }
 }
-
 
 export async function unlinkOrderReviewOperationalItem(orderNumber, operationalItemId, expectedRevision) {
-    try {
-        const { data } = await api.delete(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`,
-            { params: { expected_revision: expectedRevision } },
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر إلغاء ربط المنتج التشغيلي."));
-    }
+    try { return (await api.delete(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/operational-items/${encodeURIComponent(operationalItemId)}`, { params: { expected_revision: expectedRevision } })).data; }
+    catch (error) { throw new Error(message(error, "تعذّر إلغاء ربط المنتج التشغيلي.")); }
 }
 
-
 export async function saveOrderReviewImageChoice(orderNumber, orderItemId, payload) {
-    try {
-        const { data } = await api.post(
-            `/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/image-choice`,
-            payload,
-        );
-        return data;
-    } catch (error) {
-        throw new Error(message(error, "تعذّر حفظ اختيار صورة التجهيز."));
-    }
+    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/image-choice`, payload)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر حفظ اختيار صورة التجهيز.")); }
+}
+
+export async function uploadOrderReviewMezanImage(orderNumber, orderItemId, payload) {
+    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/mezan-images`, payload)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر رفع صورة ميزان.")); }
+}
+
+export async function deleteOrderReviewMezanImage(orderNumber, orderItemId, imageId) {
+    try { return (await api.delete(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/mezan-images/${encodeURIComponent(imageId)}`)).data; }
+    catch (error) { throw new Error(message(error, "تعذّر حذف صورة ميزان.")); }
 }
