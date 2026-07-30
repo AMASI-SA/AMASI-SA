@@ -6,8 +6,6 @@ from typing import Any
 import httpx
 
 from .snapchat_native_data_common import (
-    MAX_ENTITY_ROWS_PER_TYPE,
-    MAX_PAGES,
     SNAPCHAT_API_BASE,
     SNAPCHAT_ENTITY_COLLECTION,
     SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
@@ -18,6 +16,10 @@ from .snapchat_native_data_common import (
     _collection,
     _safe_next_url,
 )
+
+ENTITY_PAGE_SIZE = 1000
+MAX_ENTITY_PAGES = 50
+MAX_ENTITY_ROWS_PER_TYPE = 50_000
 
 ENTITY_ENDPOINTS = (
     ("campaign", "campaigns", "campaign", {}),
@@ -36,15 +38,26 @@ def _safe_provider_value(value: Any, *, depth: int = 0) -> Any:
             if index >= 200:
                 break
             normalized = str(key or "").lower().replace("-", "_")
-            if any(fragment in normalized for fragment in (
-                "access_token", "refresh_token", "client_secret", "authorization",
-                "password", "credential", "ciphertext",
-            )):
+            if any(
+                fragment in normalized
+                for fragment in (
+                    "access_token",
+                    "refresh_token",
+                    "client_secret",
+                    "authorization",
+                    "password",
+                    "credential",
+                    "ciphertext",
+                )
+            ):
                 continue
             safe[str(key)] = _safe_provider_value(item, depth=depth + 1)
         return safe
     if isinstance(value, (list, tuple)):
-        return [_safe_provider_value(item, depth=depth + 1) for item in list(value)[:200]]
+        return [
+            _safe_provider_value(item, depth=depth + 1)
+            for item in list(value)[:200]
+        ]
     if isinstance(value, str):
         return value[:4000]
     if isinstance(value, (int, float, bool)) or value is None:
@@ -52,58 +65,21 @@ def _safe_provider_value(value: Any, *, depth: int = 0) -> Any:
     return str(value)[:1000]
 
 
-def _identity(entity_type: str, entity: dict[str, Any]) -> tuple[str, str | None, str | None]:
+def _identity(
+    entity_type: str,
+    entity: dict[str, Any],
+) -> tuple[str, str | None, str | None]:
     external_id = str(entity.get("id") or "").strip()
     campaign_id = str(entity.get("campaign_id") or "").strip() or None
-    ad_squad_id = str(entity.get("ad_squad_id") or entity.get("adsquad_id") or "").strip() or None
+    ad_squad_id = (
+        str(entity.get("ad_squad_id") or entity.get("adsquad_id") or "").strip()
+        or None
+    )
     if entity_type == "campaign":
         campaign_id = external_id or campaign_id
     if entity_type == "ad_squad":
         ad_squad_id = external_id or ad_squad_id
     return external_id, campaign_id, ad_squad_id
-
-
-async def _fetch_entities(
-    context: SnapchatSyncContext,
-    client: httpx.AsyncClient,
-    access_token: str,
-    account_id: str,
-    *,
-    plural_key: str,
-    singular_key: str,
-    extra_params: dict[str, Any],
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
-    url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/{plural_key}"
-    params: dict[str, Any] | None = {"limit": 1000, "sort": "updated_at-desc", **extra_params}
-    rows: list[dict[str, Any]] = []
-    errors: list[dict[str, str]] = []
-    for _ in range(MAX_PAGES):
-        payload = await context.get_json(client, url, headers=headers, params=params)
-        wrapped_rows = payload.get(plural_key) or []
-        if not isinstance(wrapped_rows, list):
-            raise SnapchatNativeSyncError(
-                "snapchat_entity_payload_invalid",
-                f"Snapchat returned invalid {plural_key} data.",
-                status_code=502, retryable=True,
-            )
-        for wrapped in wrapped_rows:
-            if not isinstance(wrapped, dict):
-                continue
-            status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
-            if "FAIL" in status or "ERROR" in status:
-                errors.append({"kind": plural_key, "error": status[:80]})
-                continue
-            entity = wrapped.get(singular_key, wrapped)
-            if isinstance(entity, dict) and entity.get("id"):
-                rows.append(entity)
-                if len(rows) >= MAX_ENTITY_ROWS_PER_TYPE:
-                    return rows[:MAX_ENTITY_ROWS_PER_TYPE], errors
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
-        if not next_url:
-            break
-        url, params = next_url, None
-    return rows[:MAX_ENTITY_ROWS_PER_TYPE], errors
 
 
 async def _upsert_entity(
@@ -129,7 +105,9 @@ async def _upsert_entity(
                 "user_id": context.user_id,
                 "provider": SNAPCHAT_PROVIDER_ID,
                 "ad_account_id": account["ad_account_id"],
-                "mezan_integration_account_id": account.get("mezan_integration_account_id"),
+                "mezan_integration_account_id": account.get(
+                    "mezan_integration_account_id"
+                ),
                 "entity_type": entity_type,
                 "external_id": external_id,
                 "campaign_id": campaign_id,
@@ -140,9 +118,13 @@ async def _upsert_entity(
                 "delivery_status": entity.get("delivery_status"),
                 "review_status": entity.get("review_status"),
                 "objective": entity.get("objective"),
-                "objective_v2_properties": _safe_provider_value(entity.get("objective_v2_properties")),
+                "objective_v2_properties": _safe_provider_value(
+                    entity.get("objective_v2_properties")
+                ),
                 "daily_budget_micro": _as_number(entity.get("daily_budget_micro")),
-                "lifetime_spend_cap_micro": _as_number(entity.get("lifetime_spend_cap_micro")),
+                "lifetime_spend_cap_micro": _as_number(
+                    entity.get("lifetime_spend_cap_micro")
+                ),
                 "bid_micro": _as_number(entity.get("bid_micro")),
                 "bid_strategy": entity.get("bid_strategy"),
                 "optimization_goal": entity.get("optimization_goal"),
@@ -165,6 +147,114 @@ async def _upsert_entity(
     return True
 
 
+async def _sync_entity_type(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    account: dict[str, Any],
+    *,
+    entity_type: str,
+    plural_key: str,
+    singular_key: str,
+    extra_params: dict[str, Any],
+) -> tuple[int, int, list[dict[str, str]]]:
+    """Stream provider pages and persist each unique entity immediately."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+    url = f"{SNAPCHAT_API_BASE}/adaccounts/{account['ad_account_id']}/{plural_key}"
+    params: dict[str, Any] | None = {
+        "limit": ENTITY_PAGE_SIZE,
+        "sort": "updated_at-desc",
+        **extra_params,
+    }
+    saved = 0
+    observed = 0
+    errors: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    next_url: str | None = None
+
+    for page_number in range(1, MAX_ENTITY_PAGES + 1):
+        payload = await context.get_json(client, url, headers=headers, params=params)
+        wrapped_rows = payload.get(plural_key) or []
+        if not isinstance(wrapped_rows, list):
+            raise SnapchatNativeSyncError(
+                "snapchat_entity_payload_invalid",
+                f"Snapchat returned invalid {plural_key} data.",
+                status_code=502,
+                retryable=True,
+            )
+
+        row_limit_reached = False
+        for wrapped in wrapped_rows:
+            if not isinstance(wrapped, dict):
+                continue
+            status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
+            if "FAIL" in status or "ERROR" in status:
+                errors.append({"kind": plural_key, "error": status[:80]})
+                continue
+            entity = wrapped.get(singular_key, wrapped)
+            if not isinstance(entity, dict):
+                continue
+            external_id = str(entity.get("id") or "").strip()
+            if not external_id or external_id in seen_ids:
+                continue
+            if observed >= MAX_ENTITY_ROWS_PER_TYPE:
+                row_limit_reached = True
+                break
+            seen_ids.add(external_id)
+            observed += 1
+            saved += int(
+                await _upsert_entity(
+                    context,
+                    account=account,
+                    entity_type=entity_type,
+                    entity=entity,
+                )
+            )
+
+        raw_next = (payload.get("paging") or {}).get("next_link")
+        next_url = _safe_next_url(raw_next)
+        if raw_next and not next_url:
+            errors.append(
+                {
+                    "kind": plural_key,
+                    "error": "entity_paging_untrusted",
+                    "page": str(page_number),
+                }
+            )
+            break
+        if row_limit_reached or (
+            observed >= MAX_ENTITY_ROWS_PER_TYPE and next_url is not None
+        ):
+            errors.append(
+                {
+                    "kind": plural_key,
+                    "error": "entity_row_limit_reached",
+                    "rows_observed": str(observed),
+                    "row_limit": str(MAX_ENTITY_ROWS_PER_TYPE),
+                    "next_page_present": str(next_url is not None).lower(),
+                }
+            )
+            break
+        if not next_url:
+            return saved, observed, errors
+        url, params = next_url, None
+    else:
+        if next_url:
+            errors.append(
+                {
+                    "kind": plural_key,
+                    "error": "entity_page_limit_reached",
+                    "pages_fetched": str(MAX_ENTITY_PAGES),
+                    "next_page_present": "true",
+                }
+            )
+
+    return saved, observed, errors
+
+
 async def sync_snapchat_entities(
     context: SnapchatSyncContext,
     client: httpx.AsyncClient,
@@ -176,17 +266,19 @@ async def sync_snapchat_entities(
     errors: list[dict[str, str]] = []
     for entity_type, plural_key, singular_key, extra_params in ENTITY_ENDPOINTS:
         try:
-            entities, entity_errors = await _fetch_entities(
-                context, client, access_token, account["ad_account_id"],
-                plural_key=plural_key, singular_key=singular_key,
+            entity_saved, observed, entity_errors = await _sync_entity_type(
+                context,
+                client,
+                access_token,
+                account,
+                entity_type=entity_type,
+                plural_key=plural_key,
+                singular_key=singular_key,
                 extra_params=extra_params,
             )
-            counts[entity_type] = len(entities)
+            saved += entity_saved
+            counts[entity_type] = observed
             errors.extend(entity_errors)
-            for entity in entities:
-                saved += int(await _upsert_entity(
-                    context, account=account, entity_type=entity_type, entity=entity
-                ))
         except SnapchatNativeSyncError as exc:
             if exc.code == "snapchat_needs_reauth":
                 raise
@@ -195,4 +287,10 @@ async def sync_snapchat_entities(
     return saved, counts, errors
 
 
-__all__ = ["ENTITY_ENDPOINTS", "sync_snapchat_entities"]
+__all__ = [
+    "ENTITY_ENDPOINTS",
+    "ENTITY_PAGE_SIZE",
+    "MAX_ENTITY_PAGES",
+    "MAX_ENTITY_ROWS_PER_TYPE",
+    "sync_snapchat_entities",
+]
