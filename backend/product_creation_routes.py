@@ -23,9 +23,16 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from ai_store_access_control import effective_permissions
 from ai_store_operations_foundation import ROLE_ASSIGNMENTS
 from product_fulfillment_rules import (
+    DEFAULT_LOW_STOCK_THRESHOLD,
     FULFILLMENT_TYPES,
-    FULFILLMENT_TYPE_PREPARATION,
+    INVENTORY_POLICIES,
     PRODUCT_OPERATION_PROFILES,
+    STOCKOUT_POLICY_CLOSE,
+    inventory_policy_details,
+    inventory_policy_for_fulfillment,
+    normalize_low_stock_threshold,
+    normalize_inventory_policy,
+    normalize_stockout_policy,
     normalize_fulfillment_type,
 )
 from product_fulfillment_routes import ensure_product_fulfillment_indexes
@@ -82,23 +89,30 @@ class ProductCreationDraftRequest(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     sku: str = Field(min_length=1, max_length=100)
     price: float = Field(ge=0, le=100000000)
-    quantity: float = Field(default=0, ge=0, le=100000000)
     description: str | None = Field(default=None, max_length=50000)
     product_type: str = Field(default="product", max_length=40)
     category_ids: list[int] = Field(default_factory=list, max_length=50)
     image_urls: list[str] = Field(default_factory=list, max_length=20)
-    fulfillment_type: str = Field(
-        default=FULFILLMENT_TYPE_PREPARATION,
-        max_length=40,
+    fulfillment_type: str = Field(max_length=40)
+    inventory_policy: str = Field(max_length=60)
+    stockout_policy: str = Field(
+        default=STOCKOUT_POLICY_CLOSE,
+        max_length=60,
+    )
+    low_stock_threshold: int = Field(
+        default=DEFAULT_LOW_STOCK_THRESHOLD,
+        ge=0,
+        le=100000,
     )
 
     @model_validator(mode="before")
     @classmethod
-    def discard_legacy_product_warehouse(cls, value: Any) -> Any:
-        if not isinstance(value, dict) or "warehouse_id" not in value:
+    def discard_legacy_product_inventory_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
             return value
         sanitized = dict(value)
         sanitized.pop("warehouse_id", None)
+        sanitized.pop("quantity", None)
         return sanitized
 
 
@@ -111,6 +125,11 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
     if product_type not in ALLOWED_PRODUCT_TYPES:
         raise ValueError("unsupported_product_type")
     fulfillment_type = normalize_fulfillment_type(payload.fulfillment_type)
+    inventory_policy = normalize_inventory_policy(payload.inventory_policy)
+    stockout_policy = normalize_stockout_policy(payload.stockout_policy)
+    low_stock_threshold = normalize_low_stock_threshold(
+        payload.low_stock_threshold
+    )
     image_urls: list[str] = []
     for value in payload.image_urls:
         url = _text(value)
@@ -123,24 +142,61 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
         "name": name,
         "sku": sku,
         "price": float(payload.price),
-        "quantity": float(payload.quantity),
         "description": _text(payload.description) or None,
         "product_type": product_type,
         "category_ids": list(dict.fromkeys(payload.category_ids)),
         "image_urls": list(dict.fromkeys(image_urls)),
         "fulfillment_type": fulfillment_type,
+        "inventory_policy": inventory_policy,
+        "stockout_policy": stockout_policy,
+        "low_stock_threshold": low_stock_threshold,
     }
+
+
+def _serialize_draft(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    result = _serialize(row)
+    if result:
+        result.pop("warehouse_id", None)
+        result.pop("quantity", None)
+        if (
+            result.get("inventory_policy") not in INVENTORY_POLICIES
+            and result.get("fulfillment_type") in FULFILLMENT_TYPES
+        ):
+            result["inventory_policy"] = inventory_policy_for_fulfillment(
+                result["fulfillment_type"]
+            )["mode"]
+            result["inventory_policy_inferred_from_legacy"] = True
+        if not result.get("stockout_policy"):
+            result["stockout_policy"] = STOCKOUT_POLICY_CLOSE
+            result["stockout_policy_inferred_from_legacy"] = True
+        try:
+            result["low_stock_threshold"] = normalize_low_stock_threshold(
+                result.get(
+                    "low_stock_threshold",
+                    DEFAULT_LOW_STOCK_THRESHOLD,
+                )
+            )
+        except ValueError:
+            result["low_stock_threshold"] = DEFAULT_LOW_STOCK_THRESHOLD
+    return result
+
+
+def _draft_inventory_policy(draft: dict[str, Any]) -> dict[str, Any]:
+    value = draft.get("inventory_policy")
+    if value in INVENTORY_POLICIES:
+        return inventory_policy_details(value)
+    return inventory_policy_for_fulfillment(draft["fulfillment_type"])
 
 
 def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
     """Build the bounded payload accepted by Salla's create-product API."""
+    inventory_policy = _draft_inventory_policy(draft)
     payload: dict[str, Any] = {
         "name": draft["name"],
         "sku": draft["sku"],
         "price": float(draft["price"]),
-        "quantity": float(draft.get("quantity") or 0),
         "product_type": draft.get("product_type") or "product",
-        "status": "hidden",
+        "status": inventory_policy["initial_salla_status"],
         "require_shipping": True,
     }
     if draft.get("description"):
@@ -159,6 +215,48 @@ def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
             for index, url in enumerate(draft["image_urls"])
         ]
     return payload
+
+
+async def _apply_salla_inventory_policy(
+    db: Any,
+    *,
+    merchant_id: str,
+    salla_product_id: str,
+    inventory_policy: str,
+) -> dict[str, Any]:
+    """Apply the documented zero-stock policy after product creation.
+
+    Tracked products remain out of stock until branch inventory is entered.
+    Products explicitly configured not to track finished goods are switched
+    to unlimited quantity. Preparation services do not change either policy.
+    """
+    policy = inventory_policy_details(inventory_policy)
+    if not policy["unlimited_quantity"]:
+        return {
+            **policy,
+            "external_update_required": False,
+            "external_update_queued": False,
+        }
+    await call_salla(
+        db,
+        merchant_id,
+        "POST",
+        "/products/quantities/bulk",
+        json={
+            "products": [{
+                "identifer_type": "id",
+                "identifer": salla_product_id,
+                "quantity": 0,
+                "mode": "overwrite",
+                "unlimited_quantity": True,
+            }],
+        },
+    )
+    return {
+        **policy,
+        "external_update_required": True,
+        "external_update_queued": True,
+    }
 
 
 async def ensure_product_creation_indexes(db: Any) -> None:
@@ -355,8 +453,6 @@ async def _save_created_product(
         normalized_raw["product_type"] = draft.get("product_type") or "product"
     if normalized_raw.get("price") in (None, ""):
         normalized_raw["price"] = draft["price"]
-    if normalized_raw.get("quantity") is None:
-        normalized_raw["quantity"] = draft.get("quantity") or 0
     product = normalize_salla_product(
         normalized_raw,
         user_id=merchant_id,
@@ -395,6 +491,15 @@ async def _save_created_product(
                 "salla_product_id": product["salla_product_id"],
                 "mezan_product_id": product["mezan_product_id"],
                 "fulfillment_type": draft["fulfillment_type"],
+                "inventory_policy": _draft_inventory_policy(draft)["mode"],
+                "stockout_policy": draft.get(
+                    "stockout_policy",
+                    STOCKOUT_POLICY_CLOSE,
+                ),
+                "low_stock_threshold": draft.get(
+                    "low_stock_threshold",
+                    DEFAULT_LOW_STOCK_THRESHOLD,
+                ),
                 "configured": True,
                 "updated_at": now,
                 "updated_by": actor_id,
@@ -437,17 +542,22 @@ def make_product_creation_router(
         ).sort("updated_at", -1).limit(limit).to_list(limit)
         return {
             "ok": True,
-            "items": [_serialize(row) for row in rows],
+            "items": [_serialize_draft(row) for row in rows],
             "rules": {
                 "direction": "mezan_to_salla",
                 "mode": "create_only",
                 "bulk_import_used": False,
                 "publish_confirmation": PUBLISH_CONFIRMATION,
                 "product_type_immutable_after_creation": True,
+                "product_catalog_scope": "store",
+                "inventory_scope": "branch_location",
                 "warehouse_resolution": [
                     "inventory_location",
-                    "employee_assignment",
                 ],
+                "employee_assignment_role": "visibility_and_permissions_only",
+                "inventory_and_preparation_are_independent": True,
+                "product_service_applies_to_every_order": True,
+                "allowed_inventory_policies": sorted(INVENTORY_POLICIES),
             },
         }
 
@@ -468,6 +578,7 @@ def make_product_creation_router(
                     "code": str(exc),
                     "allowed_product_types": sorted(ALLOWED_PRODUCT_TYPES),
                     "allowed_fulfillment_types": sorted(FULFILLMENT_TYPES),
+                    "allowed_inventory_policies": sorted(INVENTORY_POLICIES),
                 },
             ) from exc
         await _validate_unique_sku(
@@ -494,7 +605,7 @@ def make_product_creation_router(
             draft_id=row["id"],
             event_type="product_creation_draft_created",
         )
-        return {"ok": True, "draft": _serialize(row)}
+        return {"ok": True, "draft": _serialize_draft(row)}
 
     @router.get("/{draft_id}")
     async def get_creation_draft(
@@ -510,7 +621,7 @@ def make_product_creation_router(
         )
         return {
             "ok": True,
-            "draft": _serialize(row),
+            "draft": _serialize_draft(row),
             "preview": build_salla_product_payload(row),
         }
 
@@ -548,14 +659,20 @@ def make_product_creation_router(
         now = _now()
         updated = await db[DRAFTS].find_one_and_update(
             {"user_id": context["merchant_id"], "id": draft_id},
-            {"$set": {
-                **values,
-                "status": "draft",
-                "approved_at": None,
-                "approved_by": None,
-                "updated_at": now,
-                "updated_by": context["actor_id"],
-            }},
+            {
+                "$set": {
+                    **values,
+                    "status": "draft",
+                    "approved_at": None,
+                    "approved_by": None,
+                    "updated_at": now,
+                    "updated_by": context["actor_id"],
+                },
+                "$unset": {
+                    "warehouse_id": "",
+                    "quantity": "",
+                },
+            },
             return_document=ReturnDocument.AFTER,
         )
         await _event(
@@ -564,7 +681,7 @@ def make_product_creation_router(
             draft_id=draft_id,
             event_type="product_creation_draft_updated",
         )
-        return {"ok": True, "draft": _serialize(updated)}
+        return {"ok": True, "draft": _serialize_draft(updated)}
 
     @router.post("/{draft_id}/preview")
     async def preview_draft(
@@ -586,7 +703,9 @@ def make_product_creation_router(
                 "valid": True,
                 "sku_idempotency": True,
                 "product_type_locked_after_publish": True,
-                "initial_salla_status": "hidden",
+                "inventory_policy": _draft_inventory_policy(row),
+                "inventory_and_preparation_are_independent": True,
+                "image_required_for_salla_visibility": True,
             },
             "external_calls_made": False,
             "writes_made": False,
@@ -624,7 +743,7 @@ def make_product_creation_router(
             draft_id=draft_id,
             event_type="product_creation_draft_approved",
         )
-        return {"ok": True, "draft": _serialize(row)}
+        return {"ok": True, "draft": _serialize_draft(row)}
 
     @router.post("/{draft_id}/publish")
     async def publish_draft(
@@ -652,7 +771,7 @@ def make_product_creation_router(
             return {
                 "ok": True,
                 "idempotent": True,
-                "draft": _serialize(current),
+                "draft": _serialize_draft(current),
                 "salla_product_id": current.get("salla_product_id"),
             }
         if current.get("status") not in {"approved", "publish_unknown"}:
@@ -781,6 +900,33 @@ def make_product_creation_router(
                 ) from exc
 
         salla_id = _text(raw_created.get("id"))
+        try:
+            inventory_policy = await _apply_salla_inventory_policy(
+                db,
+                merchant_id=context["merchant_id"],
+                salla_product_id=salla_id,
+                inventory_policy=_draft_inventory_policy(locked)["mode"],
+            )
+        except (SallaError, httpx.TimeoutException, httpx.NetworkError) as exc:
+            await db[DRAFTS].update_one(
+                {"user_id": context["merchant_id"], "id": draft_id},
+                {"$set": {
+                    "status": "publish_unknown",
+                    "salla_product_id": salla_id,
+                    "updated_at": _now(),
+                    "last_error": str(exc)[:500],
+                }},
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "salla_product_inventory_policy_uncertain",
+                    "safe_to_retry": False,
+                    "reconciliation_required": True,
+                    "product_created": True,
+                    "salla_product_id": salla_id,
+                },
+            ) from exc
         verified = False
         verify_error = None
         try:
@@ -822,6 +968,7 @@ def make_product_creation_router(
                 "verified": verified,
                 "verify_error": verify_error,
                 "reconciled_after_unknown": reconciled,
+                "inventory_policy": inventory_policy,
             }},
         )
         await _event(
@@ -833,6 +980,7 @@ def make_product_creation_router(
                 "salla_product_id": salla_id,
                 "verified": verified,
                 "reconciled_after_unknown": reconciled,
+                "inventory_policy": inventory_policy,
             },
         )
         saved = await _draft(
@@ -842,11 +990,12 @@ def make_product_creation_router(
         )
         return {
             "ok": True,
-            "draft": _serialize(saved),
+            "draft": _serialize_draft(saved),
             "product": _serialize(product),
             "salla_product_id": salla_id,
             "verified": verified,
             "reconciled_after_unknown": reconciled,
+            "inventory_policy": inventory_policy,
             "bulk_import_used": False,
         }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-    Cube, LinkSimple, MagnifyingGlass, Package, SpinnerGap, Trash, Wrench,
+    Cube, LinkSimple, MagnifyingGlass, Package, SpinnerGap, Trash,
+    WarningCircle, Wrench,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -17,6 +18,9 @@ function errorCode(error, fallback) {
     const labels = {
         resource_already_linked_to_option: "هذه الخدمة أو المكوّن مرتبط بأحد خيارات المنتج. أزل ربط الخيار أولًا.",
         invalid_fulfillment_type: "اختر نوع تنفيذ المنتج.",
+        invalid_inventory_policy: "اختر هل المنتج يتتبع مخزون الفروع.",
+        invalid_stockout_policy: "اختر ماذا يحدث عند نفاد المخزون.",
+        invalid_low_stock_threshold: "حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.",
     };
     return labels[code] || detail?.message || code || fallback;
 }
@@ -54,6 +58,9 @@ function ResourcePicker({ title, Icon, rows, query, setQuery, onLink, busy }) {
 export default function ProductOperationsEditor({ productId }) {
     const [data, setData] = useState({ profile: {}, product_links: [], resources: [] });
     const [fulfillmentType, setFulfillmentType] = useState("");
+    const [inventoryPolicy, setInventoryPolicy] = useState("");
+    const [stockoutPolicy, setStockoutPolicy] = useState("close_when_out_of_stock");
+    const [lowStockThreshold, setLowStockThreshold] = useState(3);
     const [serviceQuery, setServiceQuery] = useState("");
     const [componentQuery, setComponentQuery] = useState("");
     const [loading, setLoading] = useState(true);
@@ -66,6 +73,9 @@ export default function ProductOperationsEditor({ productId }) {
             const result = await getProductOperations(productId);
             setData(result);
             setFulfillmentType(result?.profile?.fulfillment_type || "");
+            setInventoryPolicy(result?.profile?.inventory_policy || "");
+            setStockoutPolicy(result?.profile?.stockout_policy || "close_when_out_of_stock");
+            setLowStockThreshold(result?.profile?.low_stock_threshold ?? 3);
         } catch (error) {
             toast.error(errorCode(error, "تعذر تحميل إعدادات تشغيل المنتج"));
         } finally {
@@ -94,14 +104,27 @@ export default function ProductOperationsEditor({ productId }) {
     const components = filterRows("component", componentQuery);
 
     async function saveProfile() {
-        if (!fulfillmentType) {
-            toast.error("اختر شحن فوري أو يحتاج تجهيز.");
+        if (!fulfillmentType || !inventoryPolicy) {
+            toast.error("اختر مسار التنفيذ وسياسة المخزون.");
+            return;
+        }
+        if (
+            inventoryPolicy === "branch_stock_required"
+            && (
+                !Number.isInteger(Number(lowStockThreshold))
+                || Number(lowStockThreshold) < 0
+            )
+        ) {
+            toast.error("حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.");
             return;
         }
         setBusy(true);
         try {
             const result = await saveProductOperationProfile(productId, {
                 fulfillment_type: fulfillmentType,
+                inventory_policy: inventoryPolicy,
+                stockout_policy: stockoutPolicy,
+                low_stock_threshold: Number(lowStockThreshold),
             });
             setData(result);
             toast.success("تم حفظ نوع تنفيذ المنتج");
@@ -150,18 +173,63 @@ export default function ProductOperationsEditor({ productId }) {
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                <div>
-                    <div className="mb-2 text-xs font-bold text-slate-600">نوع تنفيذ المنتج</div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => setFulfillmentType("instant")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "instant" ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "bg-white"}`}><Package className="ml-1 inline" /> شحن فوري</button>
-                        <button type="button" onClick={() => setFulfillmentType("requires_preparation")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "requires_preparation" ? "border-violet-500 bg-violet-100 text-violet-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> يحتاج تجهيز</button>
+                <div className="grid gap-4 xl:grid-cols-2">
+                    <div>
+                        <div className="mb-2 text-xs font-bold text-slate-600">المسار الافتراضي للتنفيذ</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setFulfillmentType("instant")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "instant" ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "bg-white"}`}><Package className="ml-1 inline" /> مباشر للشحن</button>
+                            <button type="button" onClick={() => setFulfillmentType("requires_preparation")} className={`rounded-xl border p-3 text-sm font-black ${fulfillmentType === "requires_preparation" ? "border-violet-500 bg-violet-100 text-violet-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> يحتاج تجهيز</button>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-5 text-slate-500">أي خدمة تجهيز مرتبطة بالمنتج تطبق على جميع طلباته، والخدمة المرتبطة بخيار تطبق عند اختيار ذلك الخيار فقط.</p>
                     </div>
-                    <p className="mt-2 text-[11px] leading-5 text-slate-500">يُحدد الفرع أو المخزن من موقع المخزون، ثم من الموظف المسؤول عند الاستلام إذا لم يكن الموقع مسجلًا.</p>
+                    <div>
+                        <div className="mb-2 text-xs font-bold text-slate-600">سياسة مخزون المنتج النهائي</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setInventoryPolicy("branch_stock_required")} className={`rounded-xl border p-3 text-sm font-black ${inventoryPolicy === "branch_stock_required" ? "border-sky-500 bg-sky-50 text-sky-950" : "bg-white"}`}><Package className="ml-1 inline" /> يتتبع المخزون</button>
+                            <button type="button" onClick={() => setInventoryPolicy("finished_goods_inventory_not_tracked")} className={`rounded-xl border p-3 text-sm font-black ${inventoryPolicy === "finished_goods_inventory_not_tracked" ? "border-amber-500 bg-amber-50 text-amber-950" : "bg-white"}`}><Wrench className="ml-1 inline" /> لا يتتبع النهائي</button>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-5 text-slate-500">تتبع المخزون مستقل عن التجهيز. يمكن للسلسال أن يُحجز من مخزون الفرع ثم يدخل خدمة كتابة الاسم.</p>
+                    </div>
+                    <p className="text-[11px] leading-5 text-slate-500 xl:col-span-2">المنتج يتبع المتجر كله ولا يرتبط بفرع. الكميات وحدها تُسجل داخل الفروع، وارتباط الموظف يحدد العرض والصلاحيات فقط.</p>
                 </div>
-                <button type="button" disabled={busy || !fulfillmentType} onClick={saveProfile} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ التشغيل"}</button>
+                <button type="button" disabled={busy || !fulfillmentType || !inventoryPolicy} onClick={saveProfile} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ التشغيل"}</button>
             </div>
 
-            {fulfillmentType === "instant" && linked.some((row) => row.requires_preparation) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">الخدمة التي تتطلب تجهيزًا تتغلب على «شحن فوري» للطلب الذي يستخدم هذا المنتج.</div>}
+            {inventoryPolicy === "branch_stock_required" && (
+                <section className="rounded-2xl border border-amber-200 bg-white p-4">
+                    <div className="flex items-center gap-2 font-black text-slate-950">
+                        <WarningCircle size={21} className="text-amber-600" />
+                        التنبيه والتصرف عند نفاد المخزون
+                    </div>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+                        <div>
+                            <div className="mb-2 text-xs font-bold text-slate-600">عند وصول الرصيد المتاح إلى صفر</div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <button type="button" onClick={() => setStockoutPolicy("close_when_out_of_stock")} className={`rounded-xl border p-3 text-right text-sm font-black ${stockoutPolicy === "close_when_out_of_stock" ? "border-rose-400 bg-rose-50 text-rose-950" : "bg-white"}`}>
+                                    إيقاف البيع
+                                    <span className="mt-1 block text-[11px] font-normal leading-5 text-slate-500">يظهر تنبيه لإغلاق المنتج ولا يُسمح للطلب بتجاوز نقص المخزون.</span>
+                                </button>
+                                <button type="button" onClick={() => setStockoutPolicy("allow_preorder")} className={`rounded-xl border p-3 text-right text-sm font-black ${stockoutPolicy === "allow_preorder" ? "border-violet-400 bg-violet-50 text-violet-950" : "bg-white"}`}>
+                                    حجز مسبق
+                                    <span className="mt-1 block text-[11px] font-normal leading-5 text-slate-500">يُقبل الطلب داخل ميزان كحجز مسبق وينتظر وصول المخزون، ولا ينتقل للشحن.</span>
+                                </button>
+                            </div>
+                        </div>
+                        <label className="block">
+                            <span className="mb-2 block text-xs font-bold text-slate-600">حذّرني عندما يصل الرصيد إلى</span>
+                            <input type="number" min="0" max="100000" step="1" value={lowStockThreshold} onChange={(event) => setLowStockThreshold(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-black outline-none focus:border-amber-400" />
+                            <span className="mt-2 block text-[11px] leading-5 text-slate-500">يُحسب من الكمية المتاحة بعد خصم حجوزات الطلبات.</span>
+                        </label>
+                    </div>
+                </section>
+            )}
+
+            {inventoryPolicy === "branch_stock_required" && linked.some((row) => row.requires_preparation) && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold leading-6 text-sky-950">
+                    سيحجز ميزان كمية المنتج من الفرع أولًا، ثم يرسل الطلب إلى خدمات التجهيز المرتبطة به.
+                </div>
+            )}
+            {fulfillmentType === "instant" && linked.some((row) => row.requires_preparation) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">الخدمة التي تتطلب تجهيزًا تتغلب على المسار المباشر لهذا الطلب، ولا تلغي تتبع مخزون المنتج.</div>}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-3">
                 <h3 className="font-black">المرتبط بالمنتج مباشرة ({linked.length})</h3>

@@ -64,3 +64,63 @@ def test_shipping_assignment_scopes_employee_to_warehouses_and_responsibilities(
     assert "fulfillment.ready.read" in permissions
     assert "fulfillment.labels.print" in permissions
     assert "fulfillment.labels.reprint" not in permissions
+
+
+def test_warehouse_and_cost_roles_can_receive_purchase_inventory():
+    warehouse_permissions = effective_permissions({
+        "role_key": "warehouse_operator",
+        "enabled": True,
+    })
+    cost_permissions = effective_permissions({
+        "role_key": "cost_manager",
+        "enabled": True,
+    })
+
+    for permissions in (warehouse_permissions, cost_permissions):
+        assert "inventory.receipts.read" in permissions
+        assert "inventory.receipts.write" in permissions
+
+
+def test_stock_preparation_permissions_follow_operational_roles():
+    warehouse_permissions = effective_permissions({
+        "role_key": "warehouse_operator",
+        "enabled": True,
+    })
+
+    assert "inventory.preparation.create" in warehouse_permissions
+    assert "inventory.preparation.work" in warehouse_permissions
+    assert "inventory.preparation.receive" in warehouse_permissions
+
+
+def test_stock_preparation_responsibility_is_assignable():
+    assignment = validate_assignment({
+        "role_key": "warehouse_operator",
+        "warehouse_ids": ["wh-1"],
+        "fulfillment_responsibilities": ["stock_preparation"],
+    })
+
+    assert assignment["fulfillment_responsibilities"] == [
+        "stock_preparation"
+    ]
+
+
+def test_salla_inventory_sync_is_read_only_for_operational_roles():
+    warehouse_permissions = effective_permissions({
+        "role_key": "warehouse_operator",
+        "enabled": True,
+    })
+    cost_permissions = effective_permissions({
+        "role_key": "cost_manager",
+        "enabled": True,
+    })
+    owner_permissions = effective_permissions({
+        "role_key": "owner",
+        "enabled": True,
+    })
+
+    for permissions in (warehouse_permissions, cost_permissions):
+        assert "inventory.salla_sync.read" in permissions
+        assert "inventory.salla_sync.manage_mappings" not in permissions
+        assert "inventory.salla_sync.publish" not in permissions
+    assert "inventory.salla_sync.manage_mappings" in owner_permissions
+    assert "inventory.salla_sync.publish" in owner_permissions

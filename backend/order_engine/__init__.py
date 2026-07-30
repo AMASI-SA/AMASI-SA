@@ -60,6 +60,15 @@ def make_order_engine_router(*args, **kwargs):
     from product_fulfillment_routes import make_product_fulfillment_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
     from fulfillment_v2_routes import make_fulfillment_v2_router
+    from product_inventory_receipt_routes import (
+        make_product_inventory_receipt_router,
+    )
+    from stock_preparation_order_routes import (
+        make_stock_preparation_order_router,
+    )
+    from salla_inventory_sync_routes import (
+        make_salla_inventory_sync_router,
+    )
     from product_control_center_routes import make_product_control_center_router
     from product_media_draft_routes import make_product_media_draft_router
     from product_media_upload_routes import make_product_media_upload_router
@@ -116,6 +125,9 @@ def make_order_engine_router(*args, **kwargs):
         make_product_fulfillment_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),
+        make_stock_preparation_order_router(db, current_user),
+        make_product_inventory_receipt_router(db, current_user),
+        make_salla_inventory_sync_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
