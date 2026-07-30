@@ -12,6 +12,7 @@ on:
       - "backend/tests/test_snapchat_entity_pagination_v2.py"
       - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
       - "backend/tests/test_snapchat_tracking_error_details_v2.py"
+      - "backend/tests/test_snapchat_account_selection_v2.py"
       - "frontend/src/services/snapchatIntegrationsV2.js"
       - "frontend/src/services/snapchatIntegrationsV2.test.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
@@ -55,17 +56,19 @@ jobs:
           python -m py_compile tests/test_snapchat_entity_pagination_v2.py
           python -m py_compile tests/test_snapchat_native_tracking_diagnostics_v2.py
           python -m py_compile tests/test_snapchat_tracking_error_details_v2.py
+          python -m py_compile tests/test_snapchat_account_selection_v2.py
       - name: Enforce legacy isolation
         run: >-
           python -c "from integrations_control_center.snapchat_native_guard import assert_snapchat_v2_is_legacy_independent; assert_snapchat_v2_is_legacy_independent()"
       - name: Run Snapchat V2 tests
         run: >-
           python -m pytest
-          tests/test_snapchat_native_integrations_v2.py
           tests/test_snapchat_native_data_sync_v2.py
           tests/test_snapchat_entity_pagination_v2.py
           tests/test_snapchat_native_tracking_diagnostics_v2.py
           tests/test_snapchat_tracking_error_details_v2.py
+          tests/test_snapchat_native_integrations_v2.py
+          tests/test_snapchat_account_selection_v2.py
           -q
           --tb=short
 
