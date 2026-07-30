@@ -85,6 +85,10 @@ class PaginatedContext:
         raise AssertionError(f"unexpected Snapchat URL: {url}")
 
 
+def _ad_page_calls(context: PaginatedContext) -> int:
+    return sum(urlsplit(url).path.endswith("/ads") for url in context.calls)
+
+
 ACCOUNT = {
     "ad_account_id": "account-1",
     "mezan_integration_account_id": "mezan-account-1",
@@ -116,7 +120,7 @@ async def test_entity_sync_streams_all_pages_and_deduplicates_ids():
         "ad-3",
         "ad-4",
     }
-    assert sum("/ads" in url for url in context.calls) == 2
+    assert _ad_page_calls(context) == 2
 
 
 @pytest.mark.asyncio
@@ -138,7 +142,7 @@ async def test_row_limit_marks_sync_partial_instead_of_silent_complete(monkeypat
         and error.get("next_page_present") == "true"
         for error in errors
     )
-    assert sum("/ads" in url for url in context.calls) == 1
+    assert _ad_page_calls(context) == 1
 
 
 @pytest.mark.asyncio
