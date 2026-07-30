@@ -33,6 +33,19 @@ function failureFromJob(job) {
     );
 }
 
+function terminalResult(job) {
+    if (job?.status === "complete") {
+        if (!job?.analysis) {
+            throw analysisError("اكتملت مهمة التحليل دون نتيجة صالحة.", 502);
+        }
+        return job;
+    }
+    if (job?.status === "failed") {
+        throw failureFromJob(job);
+    }
+    return null;
+}
+
 export function isAiAnalysisRequest(config) {
     return (
         String(config?.method || "").toLowerCase() === "post"
@@ -73,15 +86,8 @@ export async function pollAiAnalysisJob({
 
     let current = accepted;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-        if (current?.status === "complete") {
-            if (!current?.analysis) {
-                throw analysisError("اكتملت مهمة التحليل دون نتيجة صالحة.", 502);
-            }
-            return current;
-        }
-        if (current?.status === "failed") {
-            throw failureFromJob(current);
-        }
+        const acceptedTerminal = terminalResult(current);
+        if (acceptedTerminal) return acceptedTerminal;
         if (!ACTIVE_STATUSES.has(current?.status)) {
             throw analysisError(
                 `عاد خادم ميزان بحالة تحليل غير معروفة: ${current?.status || "فارغة"}.`,
@@ -90,8 +96,13 @@ export async function pollAiAnalysisJob({
         }
 
         current = await loadJob(runId);
-        if (current?.status === "complete" || current?.status === "failed") {
-            continue;
+        const loadedTerminal = terminalResult(current);
+        if (loadedTerminal) return loadedTerminal;
+        if (!ACTIVE_STATUSES.has(current?.status)) {
+            throw analysisError(
+                `عاد خادم ميزان بحالة تحليل غير معروفة: ${current?.status || "فارغة"}.`,
+                502,
+            );
         }
         if (attempt < attempts - 1) {
             await wait(intervalMs);
