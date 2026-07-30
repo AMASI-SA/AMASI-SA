@@ -6,13 +6,22 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 
 from .models import SnapchatAnalyticsSyncResponse
+from .snapchat_native_async_routes import (
+    attach_snapchat_native_async_routes,
+)
 from .snapchat_native_data_sync import (
     SnapchatNativeSyncError,
     SnapchatNativeSyncInput,
     execute_snapchat_native_sync,
     snapchat_native_sync_enabled,
 )
-from .snapchat_oauth_security import SNAPCHAT_PROVIDER_ID, snapchat_oauth_configured
+from .snapchat_native_selected_reads import (
+    attach_snapchat_native_selected_read_routes,
+)
+from .snapchat_oauth_security import (
+    SNAPCHAT_PROVIDER_ID,
+    snapchat_oauth_configured,
+)
 
 
 def install_snapchat_native_data_actions() -> None:
@@ -38,11 +47,18 @@ def install_snapchat_native_data_actions() -> None:
         if enabled:
             reason = None
         elif not connected:
-            reason = "اربط Snapchat Marketing API واكتشف حسابًا إعلانيًا واحدًا على الأقل."
+            reason = (
+                "اربط Snapchat Marketing API واكتشف حسابًا "
+                "إعلانيًا واحدًا على الأقل."
+            )
         elif not configured:
-            reason = "إعدادات Snapchat Marketing API في Backend غير مكتملة."
+            reason = (
+                "إعدادات Snapchat Marketing API في Backend غير مكتملة."
+            )
         else:
-            reason = "مزامنة Snapchat الأصلية متوقفة بمفتاح الأمان التشغيلي."
+            reason = (
+                "مزامنة Snapchat الأصلية متوقفة بمفتاح الأمان التشغيلي."
+            )
         actions["sync_data"] = {
             "enabled": enabled,
             "reason": reason,
@@ -85,6 +101,12 @@ def attach_snapchat_native_data_routes(
     require_owner: Callable[[Any], dict],
 ) -> None:
     install_snapchat_native_data_actions()
+    attach_snapchat_native_async_routes(
+        router, db, current_user, require_owner
+    )
+    attach_snapchat_native_selected_read_routes(
+        router, db, current_user, require_owner
+    )
 
     @router.post(
         f"/{SNAPCHAT_PROVIDER_ID}/sync",

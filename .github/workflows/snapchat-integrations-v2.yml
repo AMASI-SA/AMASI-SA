@@ -9,6 +9,7 @@ on:
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_snapchat_native_integrations_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"
+      - "backend/tests/test_snapchat_native_async_selected_reads.py"
       - "backend/tests/test_snapchat_entity_pagination_v2.py"
       - "backend/tests/test_snapchat_native_tracking_diagnostics_v2.py"
       - "backend/tests/test_snapchat_tracking_error_details_v2.py"
@@ -53,6 +54,7 @@ jobs:
           python -m compileall -q integrations_control_center
           python -m py_compile tests/test_snapchat_native_integrations_v2.py
           python -m py_compile tests/test_snapchat_native_data_sync_v2.py
+          python -m py_compile tests/test_snapchat_native_async_selected_reads.py
           python -m py_compile tests/test_snapchat_entity_pagination_v2.py
           python -m py_compile tests/test_snapchat_native_tracking_diagnostics_v2.py
           python -m py_compile tests/test_snapchat_tracking_error_details_v2.py
@@ -64,6 +66,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_snapchat_native_data_sync_v2.py
+          tests/test_snapchat_native_async_selected_reads.py
           tests/test_snapchat_entity_pagination_v2.py
           tests/test_snapchat_native_tracking_diagnostics_v2.py
           tests/test_snapchat_tracking_error_details_v2.py
