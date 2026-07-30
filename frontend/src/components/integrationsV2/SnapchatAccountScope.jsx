@@ -143,6 +143,7 @@ export default function SnapchatAccountScope({
                 <span
                     className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-emerald-700"
                     data-testid="snapchat-selected-count"
+                    aria-label={`${selectedCount} محدد`}
                 >
                     <CheckCircle size={14} weight="fill" />
                     {selectedCount} محدد
