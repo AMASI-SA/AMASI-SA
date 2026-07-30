@@ -36,6 +36,14 @@ function formatDateRange(summary) {
     return `${summary.date_from} — ${summary.date_to}`;
 }
 
+function accountSpendLabel(performance, account) {
+    const currency = performance?.currency || account?.currency || "—";
+    const native = `${formatNumber(performance?.spend_native)} ${currency}`;
+    return currency === "SAR"
+        ? native
+        : `${native} · ${formatNumber(performance?.spend_sar)} SAR`;
+}
+
 function mergeAccounts(accounts, selection, summary) {
     const rows = new Map();
     for (const account of accounts || []) {
@@ -188,7 +196,10 @@ export default function SnapchatAccountScope({
                             {account.selected && performance && (
                                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-emerald-100 pt-2 text-[11px]">
                                     <span className="text-slate-500">المصروف في {formatDateRange(summary)}</span>
-                                    <span className="font-mono font-extrabold text-slate-800">
+                                    <span
+                                        className="font-mono font-extrabold text-slate-800"
+                                        aria-label={accountSpendLabel(performance, account)}
+                                    >
                                         {formatNumber(performance.spend_native)} {performance.currency || account.currency}
                                         {performance.currency !== "SAR" && (
                                             <> · {formatNumber(performance.spend_sar)} SAR</>
@@ -214,14 +225,25 @@ export default function SnapchatAccountScope({
                             <CurrencyCircleDollar size={15} weight="fill" />
                             إجمالي مصروف الحسابات المحددة
                         </div>
-                        <div className="mt-1 font-mono text-lg font-black text-emerald-800">
+                        <div
+                            className="mt-1 font-mono text-lg font-black text-emerald-800"
+                            aria-label={`${formatNumber(summary.spend_sar)} SAR`}
+                        >
                             {formatNumber(summary.spend_sar)} SAR
                         </div>
                     </div>
                     <div className="text-[11px] leading-5 text-slate-500 sm:text-left">
-                        <div>{summary.rows_included || 0} صف مجمع مستخدم</div>
-                        <div>{summary.unselected_rows_excluded || 0} صف لحسابات غير محددة تم استبعاده</div>
-                        {unselectedCount > 0 && <div>{unselectedCount} حساب مكتشف غير داخل في الإجمالي</div>}
+                        <div aria-label={`${summary.rows_included || 0} صف مجمع مستخدم`}>
+                            {summary.rows_included || 0} صف مجمع مستخدم
+                        </div>
+                        <div aria-label={`${summary.unselected_rows_excluded || 0} صف لحسابات غير محددة تم استبعاده`}>
+                            {summary.unselected_rows_excluded || 0} صف لحسابات غير محددة تم استبعاده
+                        </div>
+                        {unselectedCount > 0 && (
+                            <div aria-label={`${unselectedCount} حساب مكتشف غير داخل في الإجمالي`}>
+                                {unselectedCount} حساب مكتشف غير داخل في الإجمالي
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
