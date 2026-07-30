@@ -24,6 +24,8 @@ const SECRET_KEY_RE = /(?:^|[_-])(?:access[_-]?token|refresh[_-]?token|token|sec
 const SECRET_TEXT_RE = /(bearer\s+[a-z0-9._~+/=-]{8,}|access[\s_-]*token|refresh[\s_-]*token|client[\s_-]*secret|app[\s_-]*secret|api[\s_-]*key|(?:token|secret|authorization|password|cookie|credential)\s*[:=])/i;
 const SAFE_CAPABILITY_STATES = new Set(["available", "approval_required", "blocked_missing_permission", "blocked_missing_data", "not_connected", "planned", "unknown"]);
 const SAFE_CONNECTION_PROVENANCE = new Set(["api_connection", "legacy_integration", "data_feed", "disconnected", "planned", "unknown"]);
+const FINAL_SYNC_STATUSES = new Set(["complete", "partial", "failed"]);
+const ACTIVE_SYNC_STATUSES = new Set(["queued", "running"]);
 
 export const CONNECTION_PROVENANCE_LABELS = Object.freeze({
     api_connection: "ربط API مباشر", legacy_integration: "تكامل قائم سابقًا",
@@ -254,6 +256,11 @@ export function normalizeIntegrationSyncResult(payload) {
     };
 }
 
+function wait(milliseconds) {
+    if (!milliseconds || milliseconds <= 0) return Promise.resolve();
+    return new Promise((resolve) => { setTimeout(resolve, milliseconds); });
+}
+
 export async function getIntegrationsOverview() { const response = await api.get("/integrations-v2/overview"); return normalizeIntegrationOverview(response.data); }
 export async function getIntegrationsActivity({ provider = "", limit = 50 } = {}) {
     const params = { limit }; if (provider) params.provider = provider;
@@ -261,15 +268,60 @@ export async function getIntegrationsActivity({ provider = "", limit = 50 } = {}
     return { runs: Array.isArray(runs.data?.items) ? redactIntegrationValue(runs.data.items) : [], errors: Array.isArray(errors.data?.items) ? redactIntegrationValue(errors.data.items) : [] };
 }
 export async function testIntegrationConnection(provider) { if (!PROVIDER_ORDER.includes(provider)) throw new Error("unsupported_provider"); const response = await api.post(`/integrations-v2/${encodeURIComponent(provider)}/test-connection`); return redactIntegrationValue(response.data); }
-export async function syncIntegrationData(provider, { days = 30 } = {}) {
+export async function getIntegrationSyncJob(provider, runId) {
+    if (provider !== "snapchat_ads") throw new Error("unsupported_sync_provider");
+    const safeRunId = nullableText(runId);
+    if (!safeRunId) throw new Error("invalid_sync_run_id");
+    const response = await api.get(
+        `/integrations-v2/${encodeURIComponent(provider)}/sync-async/${encodeURIComponent(safeRunId)}`,
+    );
+    return redactIntegrationValue(response.data);
+}
+export async function syncIntegrationData(
+    provider,
+    {
+        days = 30,
+        pollIntervalMs = 2000,
+        maxPolls = 360,
+    } = {},
+) {
     if (provider !== "snapchat_ads") throw new Error("unsupported_sync_provider");
     const parsedDays = Number(days);
     if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 62) {
         throw new Error("invalid_sync_days");
     }
-    const response = await api.post(
-        `/integrations-v2/${encodeURIComponent(provider)}/sync`,
+    const parsedPollInterval = Number(pollIntervalMs);
+    const parsedMaxPolls = Number(maxPolls);
+    if (!Number.isFinite(parsedPollInterval) || parsedPollInterval < 0) {
+        throw new Error("invalid_sync_poll_interval");
+    }
+    if (!Number.isInteger(parsedMaxPolls) || parsedMaxPolls < 1 || parsedMaxPolls > 1000) {
+        throw new Error("invalid_sync_poll_limit");
+    }
+
+    const acceptedResponse = await api.post(
+        `/integrations-v2/${encodeURIComponent(provider)}/sync-async`,
         { days: parsedDays },
     );
-    return normalizeIntegrationSyncResult(response.data);
+    const accepted = redactIntegrationValue(acceptedResponse.data || {});
+    const runId = nullableText(accepted.run_id);
+    if (!runId) throw new Error("invalid_sync_run_id");
+
+    for (let attempt = 0; attempt < parsedMaxPolls; attempt += 1) {
+        const job = await getIntegrationSyncJob(provider, runId);
+        const status = text(job?.status).toLowerCase();
+        if (FINAL_SYNC_STATUSES.has(status)) {
+            return normalizeIntegrationSyncResult(job);
+        }
+        if (!ACTIVE_SYNC_STATUSES.has(status)) {
+            throw new Error("invalid_sync_job_status");
+        }
+        if (attempt < parsedMaxPolls - 1) {
+            await wait(parsedPollInterval);
+        }
+    }
+
+    const timeoutError = new Error("snapchat_async_sync_timeout");
+    timeoutError.code = "snapchat_async_sync_timeout";
+    throw timeoutError;
 }
