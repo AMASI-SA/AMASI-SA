@@ -24,10 +24,10 @@ def test_review_mezan_images_are_review_only_and_selectable():
 
 
 def test_review_customer_history_and_ai_loyalty_are_read_only():
-    frontend = (ROOT / "frontend" / "src" / "reviewCustomerHistoryEnhancer.js").read_text(encoding="utf-8")
+    frontend = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
     index = (ROOT / "frontend" / "src" / "index.js").read_text(encoding="utf-8")
 
-    assert 'reviewCustomerHistoryEnhancer' in index
+    assert 'reviewCustomerHistoryFast' in index
     assert 'سجل العميل السابق' in frontend
     assert 'الدفع عند الاستلام' in frontend
     assert 'decision_mode: "ai_policy_v1"' in frontend
