@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
+import SnapchatTrackingDiagnosticsAction from "../components/integrationsV2/SnapchatTrackingDiagnosticsAction";
 import {
     filterIntegrationProviders,
     getIntegrationsActivity,
@@ -21,6 +22,7 @@ import {
     syncIntegrationData,
     testIntegrationConnection,
 } from "../services/integrationsV2";
+import { diagnoseSnapchatTracking } from "../services/snapchatTrackingDiagnosticsV2";
 
 const TABS = [
     { id: "apps", label: "التطبيقات", Icon: Plug },
@@ -96,6 +98,7 @@ export default function AppsIntegrationsControlCenter() {
     const [query, setQuery] = useState("");
     const [testingProvider, setTestingProvider] = useState("");
     const [syncingProvider, setSyncingProvider] = useState("");
+    const [diagnosingProvider, setDiagnosingProvider] = useState("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
@@ -201,6 +204,47 @@ export default function AppsIntegrationsControlCenter() {
         }
     }
 
+    async function handleTrackingDiagnostics(provider) {
+        if (provider !== "snapchat_ads") return;
+        setDiagnosingProvider(provider);
+        try {
+            const result = await diagnoseSnapchatTracking({ days: 7 });
+            if (result.status === "complete") {
+                toast.success(
+                    `اكتمل فحص التتبع: ${result.pixels_found} Pixel، ${result.domains_observed} نطاق، ${result.recommendations_count} توصية`,
+                    { duration: 9000 },
+                );
+            } else if (result.status === "partial") {
+                toast.warning(
+                    `اكتمل فحص التتبع جزئيًا: ${result.pixels_complete}/${result.pixels_found} Pixel، ${result.errors_count} ملاحظة`,
+                    { duration: 10000 },
+                );
+            } else {
+                toast.error("لم يكتمل فحص Pixel وConversions API.");
+            }
+            await load({ silent: true });
+        } catch (diagnosticError) {
+            const status = diagnosticError?.response?.status;
+            const detail = diagnosticError?.response?.data?.detail;
+            const code = detail?.code;
+            const knownMessages = {
+                snapchat_tracking_diagnostics_in_progress: "يوجد فحص Pixel وCAPI قيد التشغيل بالفعل.",
+                snapchat_provider_call_budget_exceeded: "تجاوز الفحص ميزانية اتصالات Snapchat الآمنة.",
+                snapchat_accounts_not_selected: "لا توجد حسابات Snapchat أصلية متصلة للفحص.",
+                snapchat_needs_reauth: "يجب إعادة توثيق Snapchat قبل فحص التتبع.",
+            };
+            const message = knownMessages[code]
+                || (typeof detail === "string" ? detail : detail?.message)
+                || (status === 403
+                    ? "فحص التتبع متاح لمالك الحساب فقط."
+                    : "تعذر فحص Pixel وConversions API. راجع سجل المزامنة والأخطاء.");
+            toast.error(message, { duration: 9000 });
+            await load({ silent: true });
+        } finally {
+            setDiagnosingProvider("");
+        }
+    }
+
     function openSettings(provider) {
         const integration = overview.providers.find((row) => row.provider === provider);
         const target = (
@@ -234,7 +278,7 @@ export default function AppsIntegrationsControlCenter() {
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-100">
                             مركز واحد لقياس صحة الربط وجودة البيانات والصلاحيات، وتجهيز ميزان
                             لإدارة المتجر والإعلانات مستقبلًا ضمن دورة اعتماد وتحقق كاملة.
-                            مزامنة سناب التحليلية تتم هنا داخل V2 ولا تعتمد على صفحات القديم.
+                            مزامنة سناب وفحص Pixel وCAPI يتمان داخل V2 ولا يعتمدان على صفحات القديم.
                         </p>
                     </div>
                     <button
@@ -248,10 +292,10 @@ export default function AppsIntegrationsControlCenter() {
                     </button>
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
-                    التصنيف مبني على أدلة محلية محفوظة، وزر الفحص لا يتصل بالمنصة ولا يغيّر
-                    الربط. زر مزامنة سناب يحدّث الحقائق التحليلية فقط؛ لا ينشئ المركز حملات،
-                    ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة أو قيود. أي تعديل حساس
-                    مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ← تحقق ← سجل ← رجوع.
+                    التصنيف مبني على أدلة محلية محفوظة، وزر الفحص المحلي لا يتصل بالمنصة.
+                    مزامنة سناب وفحص التتبع يقرآن الحقائق فقط؛ لا ينشئ المركز حملات، ولا يغيّر
+                    ميزانيات، ولا يرسل أحداث CAPI، ولا يحذف Tokens أو ربط سلة أو قيود. أي تعديل
+                    حساس مستقبلًا يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ← تحقق ← سجل ← رجوع.
                 </div>
             </header>
 
@@ -387,19 +431,26 @@ export default function AppsIntegrationsControlCenter() {
                     {visibleProviders.length ? (
                         <section className="grid gap-4 xl:grid-cols-2" aria-label="بطاقات التطبيقات">
                             {visibleProviders.map((integration) => (
-                                <IntegrationCard
-                                    key={integration.provider}
-                                    integration={integration}
-                                    testing={testingProvider === integration.provider}
-                                    syncing={syncingProvider === integration.provider}
-                                    settingsAvailable={Boolean(
-                                        integration.actions?.settings?.href
-                                        || integration.actions?.reconnect?.href
-                                    )}
-                                    onTest={handleTest}
-                                    onSync={handleSync}
-                                    onSettings={openSettings}
-                                />
+                                <div key={integration.provider} className="flex min-h-0 flex-col gap-2">
+                                    <IntegrationCard
+                                        integration={integration}
+                                        testing={testingProvider === integration.provider}
+                                        syncing={syncingProvider === integration.provider}
+                                        settingsAvailable={Boolean(
+                                            integration.actions?.settings?.href
+                                            || integration.actions?.reconnect?.href
+                                        )}
+                                        onTest={handleTest}
+                                        onSync={handleSync}
+                                        onSettings={openSettings}
+                                    />
+                                    <SnapchatTrackingDiagnosticsAction
+                                        integration={integration}
+                                        diagnosing={diagnosingProvider === integration.provider}
+                                        syncing={syncingProvider === integration.provider}
+                                        onDiagnose={handleTrackingDiagnostics}
+                                    />
+                                </div>
                             ))}
                         </section>
                     ) : (
