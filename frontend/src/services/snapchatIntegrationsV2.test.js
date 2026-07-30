@@ -1,4 +1,7 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import api from "../lib/api";
+import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
+import IntegrationCard from "../components/integrationsV2/IntegrationCard";
 import {
     findTerminalSnapchatSyncRun,
     pollSnapchatAsyncSyncJob,
@@ -173,6 +176,186 @@ describe("Snapchat Integrations V2 client", () => {
         await expect(getSnapchatSelectedPerformanceSummary()).rejects.toThrow(
             "snapchat_summary_safety_contract_failed",
         );
+    });
+
+    test("renders the selected accounts first with scoped spend and an amber Pixel notice", () => {
+        const rawDiagnostic = "Snapchat tracking diagnostics completed with bounded unavailable endpoints";
+        const markup = renderToStaticMarkup(
+            <IntegrationCard
+                integration={{
+                    provider: "snapchat_ads",
+                    name: "Snapchat Ads",
+                    name_ar: "إعلانات سناب شات",
+                    connection_status: "connected",
+                    connection_provenance: "api_connection",
+                    accounts: [
+                        {
+                            mezan_integration_account_id: "unused-mezan",
+                            display_name: "حساب غير مستخدم",
+                            external_account_id: "unused-account",
+                            currency: "USD",
+                            timezone: "America/Los_Angeles",
+                        },
+                        {
+                            mezan_integration_account_id: "usd-mezan",
+                            display_name: "متجر أماسي Self Service",
+                            external_account_id: "usd-account",
+                            currency: "USD",
+                            timezone: "America/Los_Angeles",
+                        },
+                        {
+                            mezan_integration_account_id: "sar-mezan",
+                            display_name: "متجر أماسي سعودي",
+                            external_account_id: "sar-account",
+                            currency: "SAR",
+                            timezone: "Asia/Riyadh",
+                        },
+                    ],
+                    permissions: {
+                        current: ["snapchat-marketing-api"],
+                        missing: [],
+                        unknown: false,
+                    },
+                    last_sync_at: "2026-07-30T20:06:37+00:00",
+                    data_delay_minutes: 0,
+                    health: { score: 100, data_quality: "complete" },
+                    latest_error: {
+                        code: "snapchat_tracking_diagnostics_partial",
+                        message: rawDiagnostic,
+                    },
+                    ai: { can: ["تحليل الإنفاق"], cannot: ["تعديل الحملات"] },
+                    actions: {
+                        test_connection: { enabled: true },
+                        sync_data: { enabled: true },
+                        reconnect: { enabled: true },
+                        settings: { enabled: true },
+                        disconnect: { enabled: false },
+                    },
+                }}
+                snapchatScope={{
+                    selection: {
+                        discovered_count: 3,
+                        selected_count: 2,
+                        selection_required: false,
+                        accounts: [
+                            {
+                                account_id: "usd-account",
+                                display_name: "متجر أماسي Self Service",
+                                currency: "USD",
+                                timezone: "America/Los_Angeles",
+                                selected: true,
+                            },
+                            {
+                                account_id: "sar-account",
+                                display_name: "متجر أماسي سعودي",
+                                currency: "SAR",
+                                timezone: "Asia/Riyadh",
+                                selected: true,
+                            },
+                            {
+                                account_id: "unused-account",
+                                display_name: "حساب غير مستخدم",
+                                currency: "USD",
+                                timezone: "America/Los_Angeles",
+                                selected: false,
+                            },
+                        ],
+                    },
+                    summary: {
+                        date_from: "2026-07-30",
+                        date_to: "2026-07-30",
+                        selected_account_count: 2,
+                        selected_account_ids: ["usd-account", "sar-account"],
+                        rows_included: 2,
+                        unselected_rows_excluded: 7,
+                        spend_sar: 384.44,
+                        accounts: [
+                            {
+                                account_id: "usd-account",
+                                currency: "USD",
+                                spend_native: 100.223069,
+                                spend_sar: 375.84,
+                            },
+                            {
+                                account_id: "sar-account",
+                                currency: "SAR",
+                                spend_native: 8.6,
+                                spend_sar: 8.6,
+                            },
+                        ],
+                    },
+                }}
+                onTest={() => {}}
+                onSync={() => {}}
+                onSettings={() => {}}
+            />,
+        );
+
+        expect(markup).toContain("2 محدد");
+        expect((markup.match(/محدد للمزامنة/g) || [])).toHaveLength(2);
+        expect(markup).toContain("384.44 SAR");
+        expect(markup).toContain("100.22 USD");
+        expect(markup).toContain("375.84 SAR");
+        expect(markup).toContain("7 صف لحسابات غير محددة تم استبعاده");
+        expect(markup).toContain("1 حساب مكتشف غير داخل في الإجمالي");
+        expect(markup).toContain("مزامنة الحملات والمصروفات");
+        expect(markup).toContain("مكتملة");
+        expect(markup).toContain("تشخيص Pixel");
+        expect(markup).toContain("جزئي");
+        expect(markup).toContain('data-testid="snapchat-tracking-notice"');
+        expect(markup).toContain("القيم غير المعروفة فارغة");
+        expect(markup).not.toContain(rawDiagnostic);
+        expect(markup).not.toContain(">آخر خطأ<");
+    });
+
+    test("renders completed background syncs green and Pixel diagnostics amber", () => {
+        const rawDiagnostic = "Pixel endpoint returned 400 for c1bb1dae";
+        const markup = renderToStaticMarkup(
+            <IntegrationActivityPanel
+                runs={[
+                    {
+                        run_id: "async-1",
+                        provider: "snapchat_ads",
+                        run_type: "analytics_refresh_async",
+                        status: "complete",
+                        finished_at: "2026-07-30T20:06:37+00:00",
+                    },
+                    {
+                        run_id: "tracking-1",
+                        provider: "snapchat_ads",
+                        run_type: "tracking_diagnostics",
+                        status: "partial",
+                        finished_at: "2026-07-30T20:07:00+00:00",
+                    },
+                ]}
+                errors={[
+                    {
+                        error_id: "tracking-error",
+                        provider: "snapchat_ads",
+                        code: "snapchat_tracking_http_400",
+                        message: rawDiagnostic,
+                        occurred_at: "2026-07-30T20:07:00+00:00",
+                    },
+                    {
+                        error_id: "real-error",
+                        provider: "meta_ads",
+                        code: "provider_unavailable",
+                        safe_message: "تعذر الاتصال بالمنصة",
+                        occurred_at: "2026-07-30T20:08:00+00:00",
+                    },
+                ]}
+            />,
+        );
+
+        expect(markup).toContain("مهمة مزامنة Snapchat الخلفية");
+        expect(markup).toContain("مكتمل");
+        expect(markup).toContain("تشخيص Pixel");
+        expect(markup).toContain("جزئي");
+        expect(markup).toContain('data-testid="tracking-diagnostic-notice"');
+        expect(markup).toContain("لا يؤثر ذلك في مزامنة الحملات أو المصروفات");
+        expect(markup).not.toContain(rawDiagnostic);
+        expect(markup).toContain('data-testid="integration-error-item"');
+        expect(markup).toContain("تعذر الاتصال بالمنصة");
     });
 
     test("rewrites only the native sync request to the asynchronous endpoint", () => {
