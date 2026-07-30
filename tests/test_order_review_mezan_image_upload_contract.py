@@ -19,3 +19,5 @@ def test_review_mezan_images_are_review_only_and_selectable():
     assert 'حفظ كصورة رئيسية في ميزان' in frontend
     assert 'حفظ مع الخيارات المحددة' in frontend
     assert 'image/jpeg,image/png,image/webp' in frontend
+    assert 'selected_image_url: imageUrl' in frontend
+    assert 'window.location.reload()' in frontend

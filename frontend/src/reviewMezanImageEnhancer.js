@@ -104,7 +104,10 @@ function showChoiceModal(item, imageUrl) {
         panel.querySelectorAll("button").forEach((node) => { node.disabled = true; }); button.textContent = "جارٍ الحفظ…";
         try {
             const { data } = await api.post(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/image-choice`, { expected_revision: detail.revision, selected_image_url: imageUrl, mode, selected_spec_keys: mode === "options" ? [...selected] : [] });
-            detail = data; overlay.remove(); toast(mode === "default" ? "تم حفظها كصورة رئيسية في ميزان" : mode === "options" ? "تم حفظها مع الخيارات المحددة" : "تم حفظها لهذا الطلب فقط"); scheduleDecorate();
+            detail = data;
+            overlay.remove();
+            toast(mode === "default" ? "تم حفظها كصورة رئيسية في ميزان" : mode === "options" ? "تم حفظها مع الخيارات المحددة" : "تم حفظها لهذا الطلب فقط");
+            window.setTimeout(() => window.location.reload(), 250);
         } catch (error) { toast(error?.response?.data?.detail?.message || "تعذر حفظ الصورة", true); panel.querySelectorAll("button").forEach((node) => { node.disabled = false; }); }
     });
     overlay.appendChild(panel); document.body.appendChild(overlay);
