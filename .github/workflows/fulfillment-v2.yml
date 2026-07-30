@@ -87,6 +87,8 @@ jobs:
           reportlab
           python-multipart
       - name: Run review and fulfillment contracts
+        env:
+          PYTHONPATH: backend
         run: >-
           python -m pytest
           backend/tests/test_order_review_stage_one.py
@@ -96,7 +98,6 @@ jobs:
           backend/tests/test_fulfillment_v2_contract.py
           tests/test_order_review_image_modes_contract.py
           tests/test_order_review_mezan_image_upload_contract.py
-          --import-mode=importlib
           -q --tb=short
 
   frontend-test-and-build:
