@@ -48,16 +48,12 @@ jobs:
           )
 
           yaml_indent = " " * 10
-          extracted = []
-          for line in lines[start:end]:
-              if not line:
-                  extracted.append("")
-                  continue
-              if not line.startswith(yaml_indent):
-                  raise SystemExit(
-                      f"Unexpected payload indentation: {line[:40]!r}"
-                  )
-              extracted.append(line[len(yaml_indent):])
+          extracted = [
+              line[len(yaml_indent):]
+              if line.startswith(yaml_indent)
+              else line
+              for line in lines[start:end]
+          ]
 
           script = "\n".join(extracted)
           if not script.startswith("from pathlib import Path"):
