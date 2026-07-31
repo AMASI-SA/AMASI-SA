@@ -12,6 +12,7 @@ from .address_diagnostic import build_order_address_diagnostic
 from .campaign_enrichment import enrich_order_campaigns
 from .city_enrichment import enrich_order_cities
 from .commerce_diagnostic import build_order_commerce_diagnostic
+from .customer_history import get_customer_history
 from .filter_summary import (
     build_order_filter_summary,
     build_order_status_diagnostic,
@@ -44,6 +45,17 @@ class OrderListResponse(BaseModel):
     next_cursor: Optional[str] = None
     limit: int
     skipped_invalid: int = 0
+
+
+class CustomerHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    customer_found: bool
+    normalized_mobile: Optional[str] = None
+    current_order: OrderDTO
+    previous_orders: list[OrderDTO]
+    previous_order_count: int = 0
+    scanned_orders: int = 0
+    scan_complete: bool = False
 
 
 class ExactStatusCard(BaseModel):
@@ -144,6 +156,40 @@ def make_order_engine_router(
             next_cursor=page.next_cursor,
             limit=limit,
             skipped_invalid=page.skipped_invalid,
+        )
+
+    @router.get(
+        "/{order_number}/customer-history",
+        response_model=CustomerHistoryResponse,
+    )
+    async def get_order_customer_history(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> CustomerHistoryResponse:
+        owner = _require_owner(user)
+        try:
+            result = await get_customer_history(
+                repository(),
+                user_id=str(owner["id"]),
+                order_number=str(order_number),
+            )
+        except OrderNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "order_not_found",
+                    "order_number": str(order_number),
+                },
+            ) from exc
+
+        return CustomerHistoryResponse(
+            customer_found=result.customer_found,
+            normalized_mobile=result.normalized_mobile,
+            current_order=result.current_order,
+            previous_orders=result.previous_orders,
+            previous_order_count=len(result.previous_orders),
+            scanned_orders=result.scanned_orders,
+            scan_complete=result.scan_complete,
         )
 
     @router.get(
