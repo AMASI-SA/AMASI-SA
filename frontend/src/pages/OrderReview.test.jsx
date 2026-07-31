@@ -11,6 +11,10 @@ jest.mock("sonner", () => ({
     toast: { success: jest.fn(), error: jest.fn(), warning: jest.fn() },
 }));
 
+import {
+    formatSaudiMobileInternational,
+    shouldLoadCustomerHistory,
+} from "../reviewCustomerHistoryFast";
 import { PaymentReceiptCard, reviewProductSpecs } from "./OrderReview";
 
 
@@ -45,4 +49,18 @@ test("bank transfer receipt renders a clickable image and full-size link", () =>
 
 test("unsafe receipt URLs are not rendered", () => {
     expect(renderToStaticMarkup(<PaymentReceiptCard receiptUrl="javascript:alert(1)" />)).toBe("");
+});
+
+
+test("Saudi customer mobile is shown in international WhatsApp format", () => {
+    expect(formatSaudiMobileInternational("570076958")).toBe("+966 57 007 6958");
+    expect(formatSaudiMobileInternational("0570076958")).toBe("+966 57 007 6958");
+    expect(formatSaudiMobileInternational("+966570076958")).toBe("+966 57 007 6958");
+});
+
+
+test("customer history reloads when the same order is reopened without its card", () => {
+    expect(shouldLoadCustomerHistory("272897129", "272897129", false, false)).toBe(true);
+    expect(shouldLoadCustomerHistory("272897129", "272897129", false, true)).toBe(false);
+    expect(shouldLoadCustomerHistory("272897129", "272897129", true, false)).toBe(false);
 });

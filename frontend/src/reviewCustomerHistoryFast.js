@@ -1,10 +1,47 @@
 import api from "./lib/api";
+import { normalize_saudi_mobile } from "./lib/normalizeSaudiMobile";
 
 const ROOT_ID = "mezan-review-customer-history-fast-root";
 let activeOrder = null;
 let loading = false;
 
 const text = (value) => String(value || "").trim();
+
+export function formatSaudiMobileInternational(value) {
+  const normalized = normalize_saudi_mobile(value);
+  if (/^9665\d{8}$/.test(normalized)) {
+    return `+966 ${normalized.slice(3, 5)} ${normalized.slice(5, 8)} ${normalized.slice(8)}`;
+  }
+  return text(value);
+}
+
+export function shouldLoadCustomerHistory(orderNumber, activeOrderNumber, loadingNow, cardPresent) {
+  return Boolean(orderNumber) && !loadingNow && (orderNumber !== activeOrderNumber || !cardPresent);
+}
+
+function syncCustomerMobile() {
+  if (typeof document === "undefined" || !document) return;
+  const label = [...document.querySelectorAll("div")].find(
+    (node) => node.childElementCount === 0 && node.textContent?.trim() === "رقم الجوال",
+  );
+  const row = label?.parentElement?.querySelector("div[dir='ltr']");
+  const valueNode = row?.querySelector("span");
+  if (!valueNode) return;
+
+  const rawMobile = valueNode.textContent;
+  const normalized = normalize_saudi_mobile(rawMobile);
+  const display = formatSaudiMobileInternational(rawMobile);
+  if (display && valueNode.textContent !== display) valueNode.textContent = display;
+
+  const whatsapp = /^\d{8,15}$/.test(normalized) ? normalized : "";
+  const whatsappLink = row.querySelector("a[href*='wa.me']");
+  if (whatsappLink && whatsapp) {
+    whatsappLink.href = `https://wa.me/${whatsapp}`;
+    whatsappLink.title = "مراسلة العميل على واتساب";
+    whatsappLink.setAttribute("aria-label", "مراسلة العميل على واتساب");
+  }
+}
+
 function orderNumberFromPage() {
   const heading = [...document.querySelectorAll("h2")].find((node) => node.textContent?.includes("مراجعة الطلب #"));
   return heading?.textContent?.match(/#(\d+)/)?.[1] || null;
@@ -42,7 +79,7 @@ function recommendation(history, currentOrder) {
 }
 function render(currentOrder, history) {
   const heading = [...document.querySelectorAll("h2,h3")].find((node) => node.textContent?.trim() === "منتجات الطلب");
-  if (!heading) return;
+  if (!heading) return false;
   let host = document.querySelector("[data-customer-history-card]");
   if (!host) {
     host = document.createElement("section");
@@ -63,18 +100,21 @@ function render(currentOrder, history) {
   host.innerHTML = `<div style="padding:14px 16px;background:#f8fafc"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b style="font-size:18px">سجل العميل السابق</b><div style="color:#64748b;margin-top:3px">مطابقة بالجوال الموحّد ثم البريد الإلكتروني</div></div><button data-toggle style="border:1px solid #94a3b8;background:white;border-radius:12px;padding:9px 13px;font-weight:800">${history.length} طلبات سابقة</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span>${counts.completed} مكتملة</span><span>${counts.cancelled} ملغاة</span><span>${counts.returned} مرتجعة</span><span>مشتريات مكتملة: ${money(completedSpend)}</span></div></div>${codMessage ? `<div style="padding:11px 16px;background:#fffbeb;color:#92400e;font-weight:900">${codMessage}</div>` : ""}<div style="padding:14px 16px;background:#f5f3ff"><b>${rec.title}</b><div style="margin-top:5px">${rec.reason}</div><div style="margin-top:7px"><b>الاقتراح:</b> ${rec.reward}${rec.max ? ` — تكلفة قصوى ${money(rec.max)}` : ""}</div><div style="font-size:12px;color:#6b7280;margin-top:5px">توصية فقط وتحتاج اعتمادًا بشريًا.</div></div><div data-table hidden style="overflow:auto;padding:12px"><table style="width:100%;min-width:680px;border-collapse:collapse"><thead><tr><th>رقم الطلب</th><th>التاريخ</th><th>الإجمالي</th><th>الدفع</th><th>الحالة</th></tr></thead><tbody>${rows || `<tr><td colspan="5" style="padding:18px;text-align:center">لا توجد طلبات سابقة مطابقة ضمن السجل المحمّل.</td></tr>`}</tbody></table></div>`;
   const table = host.querySelector("[data-table]");
   host.querySelector("[data-toggle]").onclick = () => { table.hidden = !table.hidden; };
+  return true;
 }
 async function load() {
+  if (typeof document === "undefined" || !document) return;
+  syncCustomerMobile();
   const orderNumber = orderNumberFromPage();
-  if (!orderNumber || loading || orderNumber === activeOrder) return;
+  const cardPresent = Boolean(document.querySelector("[data-customer-history-card]"));
+  if (!shouldLoadCustomerHistory(orderNumber, activeOrder, loading, cardPresent)) return;
   loading = true;
   try {
     const { data } = await api.get(`/orders-v2/${encodeURIComponent(orderNumber)}/customer-history`);
     const currentOrder = data?.current_order;
     const history = Array.isArray(data?.previous_orders) ? data.previous_orders : [];
     if (!currentOrder) throw new Error("customer_history_current_order_missing");
-    render(currentOrder, history);
-    activeOrder = orderNumber;
+    if (render(currentOrder, history)) activeOrder = orderNumber;
   } catch (error) {
     console.warn("Customer history unavailable", error);
   } finally {
@@ -88,4 +128,7 @@ function start() {
   observer.observe(document.body, { childList: true, subtree: true });
   load();
 }
-if (typeof window !== "undefined") window.addEventListener("DOMContentLoaded", start, { once: true });
+if (typeof window !== "undefined") {
+  if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
+}
