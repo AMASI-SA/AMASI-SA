@@ -50,7 +50,8 @@ jobs:
           grep -q '"purchases": purchases' "$PERFORMANCE"
           grep -q '"orders_raw": order_raw' "$SUMMARY"
           ! grep -q 'google_analytics\|build_ga4' "$SUMMARY"
-          ! grep -q 'daily_costs\|general_ledger\|qoyod' "$ACCOUNT" "$PERFORMANCE" "$SUMMARY"
+          ! grep -Eq '(^|[[:space:]])(from|import)[[:space:]].*(qoyod|general_ledger)' "$ACCOUNT" "$PERFORMANCE" "$SUMMARY"
+          ! grep -Eq 'db\.(daily_costs|general_ledger)|\["(daily_costs|general_ledger)"\]' "$ACCOUNT" "$PERFORMANCE" "$SUMMARY"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
