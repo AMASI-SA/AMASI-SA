@@ -1,0 +1,43 @@
+name: Meta Reporting Control Entrypoints
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+      - main
+    paths:
+      - "frontend/src/components/integrationsV2/IntegrationCard.js"
+      - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCardV2.jsx"
+      - "frontend/src/components/integrationsV2/MetaReportingControl.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx"
+      - ".github/workflows/meta-reporting-control-entrypoints.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    name: Meta card entrypoints test and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run focused entrypoint test
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx
+      - name: Build production frontend
+        run: CI=false yarn build
