@@ -1,0 +1,46 @@
+name: Meta Card V2 Reporting Control
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/integrationsV2/IntegrationCardV2.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCard.js"
+      - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCardV2MetaControl.test.jsx"
+      - ".github/workflows/meta-card-v2-control.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install dependencies
+        run: yarn install --non-interactive
+      - name: Verify direct mount contract
+        run: |
+          grep -q 'MetaReportingControl from "./MetaReportingControl"' src/components/integrationsV2/IntegrationCardV2.jsx
+          grep -q 'meta-reporting-control-host' src/components/integrationsV2/IntegrationCardV2.jsx
+          grep -q 'export { default } from "./IntegrationCardV2"' src/components/integrationsV2/IntegrationCard.js
+          grep -q 'export { default } from "./IntegrationCardV2"' src/components/integrationsV2/IntegrationCard.jsx
+      - name: Run focused test
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/components/integrationsV2/IntegrationCardV2MetaControl.test.jsx
+      - name: Build production frontend
+        run: CI=false yarn build
