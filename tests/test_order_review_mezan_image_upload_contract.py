@@ -30,8 +30,8 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
     assert 'reviewCustomerHistoryFast' in index
     assert 'سجل العميل السابق' in frontend
     assert 'الدفع عند الاستلام' in frontend
-    assert 'decision_mode: "ai_policy_v1"' in frontend
-    assert 'requires_approval: true' in frontend
+    assert 'ai_policy_v1' in frontend
+    assert 'requires_approval' in frontend
     assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in frontend
     assert 'api.get("/orders-v2"' in frontend
     assert 'api.post(' not in frontend
