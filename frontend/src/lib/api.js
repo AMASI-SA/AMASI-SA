@@ -1,5 +1,13 @@
 import axios from "axios";
 import {
+    dashboardAuthoritativeParams,
+    isDashboardAuthoritativeResponse,
+    isSnapDailyCompatibilityResponse,
+    mergeDashboardAuthoritativeSummary,
+    rewriteDashboardMezanV2Request,
+    toLegacySnapDailySpend,
+} from "./dashboardMezanV2Adapter";
+import {
     isAiAnalysisAsyncResponse,
     isAiAnalysisRequest,
     pollAiAnalysisJob,
@@ -40,6 +48,21 @@ function directRequestHeaders() {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function loadSnapDailyCompatibility(config = {}) {
+    const date = String(config?._mezanSnapDailyDate || "").trim();
+    const summaryResponse = await axios.get(
+        `${API_BASE}/integrations-v2/snapchat_ads/performance-summary`,
+        {
+            params: {
+                ...(date ? { from_date: date, to_date: date } : {}),
+            },
+            withCredentials: true,
+            headers: directRequestHeaders(),
+        },
+    );
+    return toLegacySnapDailySpend(summaryResponse.data, date);
+}
+
 api.interceptors.request.use((config) => {
     const token = currentAccessToken();
     if (token) {
@@ -47,7 +70,7 @@ api.interceptors.request.use((config) => {
         config.headers["Authorization"] = `Bearer ${token}`;
     }
 
-    let nextConfig = config;
+    let nextConfig = rewriteDashboardMezanV2Request(config);
     if (isSnapchatSyncRequest(nextConfig)) {
         nextConfig._mezanSyncStartedAt = Date.now();
         nextConfig = rewriteSnapchatSyncRequest(nextConfig);
@@ -111,12 +134,45 @@ api.interceptors.response.use(
                 },
             });
 
+            if (isSnapDailyCompatibilityResponse(response)) {
+                return {
+                    ...response,
+                    data: await loadSnapDailyCompatibility(response.config),
+                    status: 200,
+                    statusText: "Snapchat V2 daily compatibility completed",
+                };
+            }
             return {
                 ...response,
                 data: payload,
                 status: 200,
                 statusText: "Snapchat asynchronous sync completed",
             };
+        }
+
+        if (isDashboardAuthoritativeResponse(response)) {
+            try {
+                const authoritativeResponse = await axios.get(
+                    `${API_BASE}/integrations-v2/dashboard/authoritative-summary`,
+                    {
+                        params: dashboardAuthoritativeParams(response.config),
+                        withCredentials: true,
+                        headers: directRequestHeaders(),
+                    },
+                );
+                return {
+                    ...response,
+                    data: mergeDashboardAuthoritativeSummary(
+                        response.data,
+                        authoritativeResponse.data,
+                    ),
+                    statusText: "Dashboard merged with Mezan V2 sources",
+                };
+            } catch {
+                // Preserve the legacy Dashboard response if the read-only
+                // enrichment endpoint is temporarily unavailable.
+                return response;
+            }
         }
 
         if (isAiAnalysisAsyncResponse(response)) {
@@ -167,6 +223,16 @@ api.interceptors.response.use(
             },
         });
         if (!recovered) return Promise.reject(error);
+        if (error?.config?._mezanSnapDailyCompatibility === true) {
+            return {
+                data: await loadSnapDailyCompatibility(error.config),
+                status: 200,
+                statusText: "Recovered Snapchat V2 daily compatibility",
+                headers: {},
+                config: error.config,
+                request: error?.request,
+            };
+        }
         return {
             data: recovered.payload,
             status: 200,
