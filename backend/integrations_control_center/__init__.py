@@ -73,6 +73,14 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     )
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
 
+    # Lazy import keeps focused V2 modules importable in lightweight test
+    # environments that intentionally omit Motor/PyMongo. In Production this
+    # registers a server-side task that refreshes Meta and selected Snapchat
+    # account totals every five minutes even when no browser is open.
+    from .ads_auto_sync_scheduler import attach_ads_auto_sync_scheduler
+
+    attach_ads_auto_sync_scheduler(router, db, current_user, _require_owner)
+
     exact_test_routes = [
         route
         for route in router.routes
