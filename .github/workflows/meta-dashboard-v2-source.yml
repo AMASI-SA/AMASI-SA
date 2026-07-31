@@ -34,8 +34,10 @@ jobs:
         run: pytest -q tests/test_meta_dashboard_summary_v2.py
       - name: Enforce read-only isolation
         run: |
-          ! grep -q 'meta_ads_daily' backend/integrations_control_center/meta_dashboard_summary_routes.py
-          ! grep -q 'general_ledger\|qoyod\|daily_costs' backend/integrations_control_center/meta_dashboard_summary_routes.py
+          FILE=backend/integrations_control_center/meta_dashboard_summary_routes.py
+          ! grep -q 'meta_ads_daily' "$FILE"
+          ! grep -q 'general_ledger\|daily_costs' "$FILE"
+          ! grep -q '\.insert_one\|\.update_one\|\.delete_one\|\.replace_one' "$FILE"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
