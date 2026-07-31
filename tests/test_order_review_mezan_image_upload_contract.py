@@ -26,6 +26,7 @@ def test_review_mezan_images_are_review_only_and_selectable():
 def test_review_customer_history_and_ai_loyalty_are_read_only():
     fast = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
     enhancer = (ROOT / "frontend" / "src" / "reviewCustomerHistoryEnhancer.js").read_text(encoding="utf-8")
+    normalizer = (ROOT / "frontend" / "src" / "lib" / "normalizeSaudiMobile.js").read_text(encoding="utf-8")
     index = (ROOT / "frontend" / "src" / "index.js").read_text(encoding="utf-8")
 
     assert 'reviewCustomerHistoryFast' in index
@@ -36,6 +37,10 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
     assert 'requires_approval' in enhancer
     assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in enhancer
 
+    assert 'normalize_saudi_mobile' in fast
+    assert 'export function normalize_saudi_mobile' in normalizer
+    assert 'const params = { limit: 50 }' in fast
+    assert 'limit: 100' not in fast
     assert 'api.get("/orders-v2"' in fast
     assert 'api.post(' not in fast
     assert 'api.patch(' not in fast
