@@ -9,8 +9,11 @@ This connector is native to Mezan OS V2. It does not read `tiktok_connections`,
 - Every merchant authorizes their own TikTok for Business account through OAuth.
 - Access tokens are encrypted and stored per Mezan `user_id`.
 - Advertiser accounts are discovered directly through Marketing API v1.3.
-- Make.com remains a legacy source only and is not projected into the V2 card.
-- Provider mutations remain blocked until the approval and rollback lifecycle is complete.
+- Native daily reporting is stored in a dedicated V2 analytical collection.
+- Make.com remains a legacy source during reconciliation and is not projected
+  into the V2 card or native reporting collection.
+- Provider mutations remain blocked until the approval and rollback lifecycle is
+  complete.
 
 ## TikTok developer app
 
@@ -34,7 +37,7 @@ Configure the account-holder callback URL exactly as:
 https://mezansalla.com/api/integrations-v2/tiktok/callback
 ```
 
-## Production secrets
+## Production secrets and settings
 
 Add these values in Emergent Production Custom Secrets. Never commit their
 values to GitHub.
@@ -61,26 +64,46 @@ other secret:
 python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
+Native reporting has a separate operational kill switch. Keep it disabled until
+OAuth authorization succeeds and the first advertiser account is verified:
+
+```text
+TIKTOK_NATIVE_REPORTING_SYNC_ENABLED=true
+TIKTOK_USD_TO_SAR_RATE=3.75
+```
+
+`TIKTOK_USD_TO_SAR_RATE` is operational configuration, not a secret. Accounts in
+SAR use an implicit rate of `1`. Other currencies remain without a fabricated
+SAR value until a verified rate is configured.
+
 ## Routes
 
 ```text
 POST /api/integrations-v2/tiktok/connect/start
 GET  /api/integrations-v2/tiktok/callback
 POST /api/integrations-v2/tiktok_ads/test-connection
+POST /api/integrations-v2/tiktok_ads/sync-async
+GET  /api/integrations-v2/tiktok_ads/sync-async/{run_id}
 ```
 
-All start and test operations are owner-only. The callback is protected by:
+All start, test, and reporting operations are owner-only. The callback is
+protected by:
 
 - signed, short-lived state
 - one-time state consumption
 - browser-bound HttpOnly SameSite cookie
 - encrypted credential persistence
 
+The reporting job returns immediately, then moves through
+`queued → running → complete/partial/failed`. It cannot write to TikTok,
+campaigns, accounting, or Qoyod.
+
 ## Collections owned by V2
 
 ```text
 mezan_tiktok_oauth_credentials_v2
 mezan_tiktok_oauth_states_v2
+mezan_tiktok_performance_daily_v2
 mezan_integrations_v2
 mezan_integration_accounts_v2
 mezan_integration_permissions_v2
@@ -89,16 +112,20 @@ mezan_integration_sync_runs_v2
 mezan_integration_errors_v2
 ```
 
-No TikTok token is copied into public V2 collections or API responses.
+No TikTok token is copied into public V2 collections or API responses. Daily
+performance rows are marked `source_only=true` and `accounting_eligible=false`.
 
 ## Migration from Make
 
 1. Deploy the native connector and configure the TikTok developer app.
 2. Authorize the production TikTok account from the V2 integrations page.
 3. Verify advertiser IDs, currency, timezone, permissions, and health.
-4. Add direct reporting sync in V2 and reconcile it with Make for a bounded window.
-5. Disable the Make TikTok scenario after reconciliation.
-6. Retain legacy rows for audit until the old Mezan pages are retired.
+4. Enable native reporting for a bounded 7-day window.
+5. Reconcile native spend, impressions, clicks, and conversions against TikTok
+   Ads Manager and the Make feed.
+6. Expand to 30 days only after the bounded reconciliation passes.
+7. Disable the Make TikTok scenario after sustained reconciliation.
+8. Retain legacy rows for audit until the old Mezan pages are retired.
 
-The Make endpoint may continue receiving data during the transition, but V2 does
-not read it after this connector is deployed.
+The Make endpoint may continue receiving data during the transition, but native
+V2 reporting does not read or modify it.
