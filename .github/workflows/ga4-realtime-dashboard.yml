@@ -44,23 +44,19 @@ jobs:
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
       - name: Enable Yarn Classic
-        run: corepack enable
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
-        working-directory: frontend
-        run: yarn install --frozen-lockfile
+        run: yarn install --non-interactive
       - name: Run GA4 card test
-        working-directory: frontend
-        run: yarn test GoogleAnalyticsRealtimeCards.test.jsx --watchAll=false
+        run: CI=true yarn test --watchAll=false --runInBand src/components/GoogleAnalyticsRealtimeCards.test.jsx
       - name: Build Production frontend
-        working-directory: frontend
-        env:
-          CI: "false"
-        run: yarn build
+        run: CI=false yarn build
