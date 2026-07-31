@@ -22,7 +22,7 @@ from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDE
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
 from order_option_cost_snapshot_routes import (
     binding_matches,
-    resolve_base_unit_cost,
+    classify_base_unit_cost,
     selected_option_tokens,
 )
 from order_status_policy import effective_product_cost, get_policy_map
@@ -105,7 +105,9 @@ def calculate_mezan_v2_line_cost(
     """Calculate one order line without mutating any operational record."""
     quantity = _number(item.get("quantity"))
     quantity = quantity if quantity is not None and quantity > 0 else 1.0
-    base, source = resolve_base_unit_cost(item, profile, product)
+    base_status = classify_base_unit_cost(item, profile, product)
+    base = base_status["unit_cost"]
+    source = base_status["source"]
     base_unit = base if base is not None else 0.0
 
     product_resource_unit = 0.0
@@ -144,6 +146,8 @@ def calculate_mezan_v2_line_cost(
         "quantity": quantity,
         "base_cost_source": source,
         "base_complete": base is not None,
+        "mezan_cost_complete": base_status["mezan_cost_complete"],
+        "uses_salla_fallback": base_status["uses_salla_fallback"],
         "base_total": round(base_unit * quantity, 4),
         "product_components_total": round(product_resource_unit * quantity, 4),
         "selected_options_total": round(option_resource_unit * quantity, 4),
@@ -198,7 +202,9 @@ async def build_mezan_v2_product_cost(
                 "_id": 0,
                 "salla_product_id": 1,
                 "mezan_product_id": 1,
+                "name": 1,
                 "sku": 1,
+                "main_image": 1,
                 "cost_price_from_salla": 1,
                 "variants": 1,
             },
@@ -272,8 +278,11 @@ async def build_mezan_v2_product_cost(
     totals = defaultdict(float)
     source_lines = defaultdict(int)
     linked_products: set[str] = set()
-    missing_products: set[str] = set()
+    missing_products: dict[str, dict[str, Any]] = {}
+    salla_fallback_products: set[str] = set()
+    missing_all_cost_products: set[str] = set()
     missing_lines = 0
+    missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
 
@@ -303,19 +312,51 @@ async def build_mezan_v2_product_cost(
                 resources=resources,
             )
             identity = str(
-                item.get("sku")
-                or item.get("variant_id")
+                product_id
+                or item.get("parent_product_id")
                 or item.get("product_id")
+                or item.get("sku")
+                or item.get("variant_id")
                 or item.get("name")
                 or "unknown"
             ).strip().casefold()
             source_lines[result["base_cost_source"]] += 1
-            if result["base_complete"]:
+            if result["mezan_cost_complete"]:
                 linked_products.add(identity)
             else:
                 missing_lines += 1
-                missing_products.add(identity)
                 order_incomplete = True
+                current_missing = missing_products.setdefault(identity, {
+                    "identity": identity,
+                    "salla_product_id": product_id or str(
+                        item.get("parent_product_id")
+                        or item.get("product_id")
+                        or ""
+                    ).strip(),
+                    "mezan_product_id": str(
+                        (product or {}).get("mezan_product_id") or ""
+                    ).strip(),
+                    "catalog_product_found": bool(product),
+                    "name": (product or {}).get("name") or item.get("name") or "منتج بدون اسم",
+                    "sku": item.get("sku") or (product or {}).get("sku") or "",
+                    "uses_salla_fallback": False,
+                    "missing_everywhere": False,
+                    "fallback_sources": set(),
+                })
+                current_missing["uses_salla_fallback"] = bool(
+                    current_missing["uses_salla_fallback"]
+                    or result["uses_salla_fallback"]
+                )
+                current_missing["missing_everywhere"] = bool(
+                    current_missing["missing_everywhere"]
+                    or not result["base_complete"]
+                )
+                if result["uses_salla_fallback"]:
+                    salla_fallback_products.add(identity)
+                    current_missing["fallback_sources"].add(result["base_cost_source"])
+                if not result["base_complete"]:
+                    missing_all_cost_lines += 1
+                    missing_all_cost_products.add(identity)
             raw_order_total += result["line_total"]
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
@@ -332,6 +373,14 @@ async def build_mezan_v2_product_cost(
         if order_incomplete:
             incomplete_orders += 1
 
+    missing_product_rows = []
+    for row in missing_products.values():
+        missing_product_rows.append({
+            **row,
+            "fallback_sources": sorted(row["fallback_sources"]),
+        })
+    missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
+
     return {
         "total": round(totals["total"], 2),
         "breakdown": {
@@ -343,9 +392,13 @@ async def build_mezan_v2_product_cost(
             "selected_options": round(totals["selected_options"], 2),
         },
         "source_lines": dict(source_lines),
-        "linked_products_count": len(linked_products),
+        "linked_products_count": len(linked_products - set(missing_products)),
         "missing_products_count": len(missing_products),
         "missing_product_cost_count": missing_lines,
+        "missing_all_cost_products_count": len(missing_all_cost_products),
+        "missing_all_cost_lines_count": missing_all_cost_lines,
+        "salla_fallback_products_count": len(salla_fallback_products),
+        "missing_products": missing_product_rows,
         "no_products_orders_count": no_products_orders,
         "incomplete_orders_count": incomplete_orders,
         "source_contract": {
@@ -356,6 +409,8 @@ async def build_mezan_v2_product_cost(
                 "salla_product_fallback",
             ],
             "always_added": ["product_components", "selected_option_components"],
+            "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
+            "salla_fallback_is_missing_mezan_cost": True,
         },
     }
 
@@ -662,6 +717,10 @@ def make_dashboard_v2_router(
             "month_total": month["total"],
             "linked_products_count": month["linked_products_count"],
             "missing_products_count": month["missing_products_count"],
+            "missing_all_cost_products_count": month["missing_all_cost_products_count"],
+            "salla_fallback_products_count": month["salla_fallback_products_count"],
+            "missing_products": month["missing_products"],
+            "period": {"from": month_start, "to": today_s},
             "breakdown": month["breakdown"],
             "source_contract": month["source_contract"],
             "source_only": True,

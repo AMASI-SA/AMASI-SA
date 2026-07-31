@@ -21,13 +21,33 @@ export async function listProductsV2({ page = 1, perPage = 30, query = "", statu
     return (await api.get("/products-v2", { params })).data;
 }
 
-export async function listWorkspaceProducts({ page = 1, perPage = 30, query = "", status = "", sort = "newest", missingSku = false } = {}) {
+export async function listWorkspaceProducts({
+    page = 1,
+    perPage = 30,
+    query = "",
+    status = "",
+    sort = "newest",
+    missingSku = false,
+    missingMezanCost = false,
+    soldOnly = false,
+    fromDate = "",
+    toDate = "",
+} = {}) {
     if (page === 1 && sort === "newest" && !query.trim()) {
         try { await syncRecentProductsV2(); } catch { /* keep local listing available */ }
     }
-    const params = { page, per_page: perPage, sort, missing_sku: missingSku };
+    const params = {
+        page,
+        per_page: perPage,
+        sort,
+        missing_sku: missingSku,
+        missing_mezan_cost: missingMezanCost,
+        sold_only: soldOnly,
+    };
     if (query.trim()) params.q = query.trim();
     if (status) params.status = status;
+    if (fromDate) params.from = fromDate;
+    if (toDate) params.to = toDate;
     return (await api.get("/products-v2/workspace/products", { params })).data;
 }
 

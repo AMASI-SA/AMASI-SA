@@ -79,6 +79,22 @@ def test_missing_mezan_cost_falls_back_to_salla_variant_then_product():
     assert (product_cost, product_source) == (30, "salla_product_fallback")
 
 
+def test_salla_fallback_calculates_cost_but_stays_missing_in_mezan():
+    result = calculate_mezan_v2_line_cost(
+        {"product_id": "p-1", "quantity": 1},
+        product={"cost_price_from_salla": 30},
+        profile=None,
+        product_bindings=[],
+        option_bindings=[],
+        resources={},
+    )
+
+    assert result["line_total"] == 30
+    assert result["base_complete"] is True
+    assert result["mezan_cost_complete"] is False
+    assert result["uses_salla_fallback"] is True
+
+
 def test_explicit_zero_in_mezan_does_not_fall_back_to_salla():
     base_cost, base_source = resolve_base_unit_cost(
         {"variant_id": "unknown"},

@@ -10,11 +10,15 @@ import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
+from auth import ensure_user_settings
+from order_option_cost_snapshot_routes import classify_base_unit_cost
+from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, ensure_product_v2_indexes
 from salla_integration.service import SallaError, call_salla
 
@@ -90,6 +94,154 @@ def _serialize_dates(row: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
+def _matches_any(value: str, allowed: list[str]) -> bool:
+    if not allowed:
+        return True
+    normalized = str(value or "").strip().casefold()
+    return any(
+        candidate and (
+            candidate == normalized
+            or candidate in normalized
+            or normalized in candidate
+        )
+        for candidate in (str(item).strip().casefold() for item in allowed)
+    )
+
+
+def _line_product(
+    item: dict[str, Any],
+    *,
+    products_by_id: dict[str, dict[str, Any]],
+    products_by_variant: dict[str, dict[str, Any]],
+    products_by_sku: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    for key in (item.get("parent_product_id"), item.get("product_id")):
+        identity = str(key or "").strip()
+        if identity and identity in products_by_id:
+            return products_by_id[identity]
+    variant_id = str(item.get("variant_id") or "").strip()
+    if variant_id and variant_id in products_by_variant:
+        return products_by_variant[variant_id]
+    sku = str(item.get("sku") or "").strip().casefold()
+    return products_by_sku.get(sku) if sku else None
+
+
+async def _sold_missing_mezan_cost_products(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: str,
+    to_date: str,
+) -> dict[str, dict[str, Any]]:
+    """Return sold V2 products whose sold lines lack an explicit Mezan cost."""
+    products = await db[PRODUCTS].find(
+        {"user_id": user_id, "archived": {"$ne": True}},
+        {
+            "_id": 0,
+            "id": 1,
+            "mezan_product_id": 1,
+            "salla_product_id": 1,
+            "name": 1,
+            "sku": 1,
+            "cost_price_from_salla": 1,
+            "variants": 1,
+        },
+    ).to_list(length=100000)
+    products_by_id: dict[str, dict[str, Any]] = {}
+    products_by_variant: dict[str, dict[str, Any]] = {}
+    products_by_sku: dict[str, dict[str, Any]] = {}
+    for product in products:
+        for key in (
+            product.get("salla_product_id"),
+            product.get("mezan_product_id"),
+            product.get("id"),
+        ):
+            identity = str(key or "").strip()
+            if identity:
+                products_by_id[identity] = product
+        sku = str(product.get("sku") or "").strip().casefold()
+        if sku:
+            products_by_sku[sku] = product
+        for variant in product.get("variants") or []:
+            if not isinstance(variant, dict):
+                continue
+            variant_id = str(variant.get("id") or "").strip()
+            if variant_id:
+                products_by_variant[variant_id] = product
+            variant_sku = str(variant.get("sku") or "").strip().casefold()
+            if variant_sku:
+                products_by_sku[variant_sku] = product
+
+    product_ids = [
+        str(product.get("salla_product_id") or "").strip()
+        for product in products
+        if product.get("salla_product_id") not in (None, "")
+    ]
+    profiles = await db[COST_PROFILES].find(
+        {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+        {"_id": 0},
+    ).to_list(length=max(1, len(product_ids)))
+    profile_map = {str(row.get("salla_product_id") or ""): row for row in profiles}
+
+    order_query: dict[str, Any] = {
+        "user_id": user_id,
+        "order_date": {"$gte": from_date, "$lte": to_date},
+    }
+    settings = await ensure_user_settings(db, user_id)
+    if settings.get("hide_inferred_date_orders"):
+        order_query["order_date_inferred"] = {"$ne": True}
+    orders = await db["unified_orders"].find(
+        order_query,
+        {"_id": 0, "order_status": 1, "products": 1},
+    ).to_list(length=100000)
+    included_statuses = settings.get("report_included_statuses") or []
+
+    missing: dict[str, dict[str, Any]] = {}
+    for order in orders:
+        if not _matches_any(order.get("order_status", ""), included_statuses):
+            continue
+        for item in order.get("products") or []:
+            if not isinstance(item, dict):
+                continue
+            product = _line_product(
+                item,
+                products_by_id=products_by_id,
+                products_by_variant=products_by_variant,
+                products_by_sku=products_by_sku,
+            )
+            if not product:
+                continue
+            salla_id = str(product.get("salla_product_id") or "").strip()
+            if not salla_id:
+                continue
+            status = classify_base_unit_cost(item, profile_map.get(salla_id), product)
+            if status["mezan_cost_complete"]:
+                continue
+            row = missing.setdefault(salla_id, {
+                "salla_product_id": salla_id,
+                "mezan_product_id": str(product.get("mezan_product_id") or product.get("id") or ""),
+                "name": product.get("name") or item.get("name") or "منتج بدون اسم",
+                "uses_salla_fallback": False,
+                "missing_everywhere": False,
+                "fallback_sources": set(),
+                "sold_lines": 0,
+            })
+            row["sold_lines"] += 1
+            row["uses_salla_fallback"] = bool(
+                row["uses_salla_fallback"] or status["uses_salla_fallback"]
+            )
+            row["missing_everywhere"] = bool(
+                row["missing_everywhere"] or not status["cost_available"]
+            )
+            if status["uses_salla_fallback"]:
+                row["fallback_sources"].add(status["source"])
+
+    return {
+        product_id: {**row, "fallback_sources": sorted(row["fallback_sources"])}
+        for product_id, row in missing.items()
+    }
+
+
 class SkuApplyRequest(BaseModel):
     prefix: str = Field(default=DEFAULT_PREFIX, min_length=1, max_length=12, pattern=r"^[A-Za-z]+$")
     width: int = Field(default=DEFAULT_WIDTH, ge=3, le=10)
@@ -109,6 +261,10 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
         product_status: str | None = Query(default=None, alias="status"),
         sort: str = Query(default="newest"),
         missing_sku: bool = Query(default=False),
+        missing_mezan_cost: bool = Query(default=False),
+        sold_only: bool = Query(default=False),
+        from_date: str | None = Query(default=None, alias="from"),
+        to_date: str | None = Query(default=None, alias="to"),
     ) -> dict[str, Any]:
         await ensure_product_v2_indexes(db)
         user_id = str(user["id"])
@@ -117,6 +273,20 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
             query["status"] = product_status
         if missing_sku:
             query.update({k: v for k, v in _missing_sku_query(user_id).items() if k != "user_id"})
+        missing_cost_rows: dict[str, dict[str, Any]] = {}
+        effective_from = from_date
+        effective_to = to_date
+        if missing_mezan_cost and sold_only:
+            today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh")).date()
+            effective_from = effective_from or today.replace(day=1).isoformat()
+            effective_to = effective_to or today.isoformat()
+            missing_cost_rows = await _sold_missing_mezan_cost_products(
+                db,
+                user_id,
+                from_date=effective_from,
+                to_date=effective_to,
+            )
+            query["salla_product_id"] = {"$in": list(missing_cost_rows)}
         if q and q.strip():
             pattern = q.strip()
             query["$and"] = query.get("$and", []) + [{"$or": [
@@ -148,6 +318,11 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
             .limit(per_page)
         )
         items = [_serialize_dates(row) for row in await cursor.to_list(length=per_page)]
+        for row in items:
+            cost_status = missing_cost_rows.get(str(row.get("salla_product_id") or ""))
+            if cost_status:
+                row["mezan_cost_missing"] = True
+                row["mezan_cost_status"] = cost_status
         return {
             "items": items,
             "pagination": {
@@ -156,7 +331,15 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "total": total,
                 "total_pages": max(1, (total + per_page - 1) // per_page),
             },
-            "meta": {"sort": sort, "legacy_dependency": False, "source": PRODUCTS},
+            "meta": {
+                "sort": sort,
+                "legacy_dependency": False,
+                "source": PRODUCTS,
+                "missing_mezan_cost": missing_mezan_cost,
+                "sold_only": sold_only,
+                "from": effective_from,
+                "to": effective_to,
+            },
         }
 
     @router.get("/sku/preview")
