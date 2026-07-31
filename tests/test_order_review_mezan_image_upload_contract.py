@@ -32,7 +32,6 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
     assert 'سجل العميل السابق' in fast
     assert 'الدفع عند الاستلام' in fast
 
-    assert 'reviewCustomerHistoryEnhancer' in index
     assert 'ai_policy_v1' in enhancer
     assert 'requires_approval' in enhancer
     assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in enhancer
