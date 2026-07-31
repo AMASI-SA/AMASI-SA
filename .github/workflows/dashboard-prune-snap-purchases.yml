@@ -1,0 +1,75 @@
+name: Dashboard Prune and Snapchat Purchases
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/DashboardAnalyticsPlacement.jsx"
+      - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
+      - "frontend/src/components/DashboardLegacySectionsPruned.test.js"
+      - "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
+      - "backend/integrations_control_center/snapchat_native_performance_sync.py"
+      - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
+      - "backend/tests/test_snapchat_dashboard_summary_v2.py"
+      - "backend/tests/test_snapchat_purchase_reporting_contract_v2.py"
+      - ".github/workflows/dashboard-prune-snap-purchases.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl
+      - name: Compile Snapchat reporting modules
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/snapchat_account_hourly_refresh.py \
+            integrations_control_center/snapchat_native_performance_sync.py \
+            integrations_control_center/snapchat_dashboard_summary_routes.py
+      - name: Run focused Snapchat tests
+        working-directory: backend
+        run: |
+          pytest -q \
+            tests/test_snapchat_dashboard_summary_v2.py \
+            tests/test_snapchat_purchase_reporting_contract_v2.py
+      - name: Enforce provider attribution and isolation
+        run: |
+          ACCOUNT=backend/integrations_control_center/snapchat_account_hourly_refresh.py
+          PERFORMANCE=backend/integrations_control_center/snapchat_native_performance_sync.py
+          SUMMARY=backend/integrations_control_center/snapchat_dashboard_summary_routes.py
+          grep -q '"conversion_source_types": CONVERSION_SOURCE_TYPES' "$ACCOUNT"
+          grep -q 'CONVERSION_SOURCE_TYPES = "total"' "$ACCOUNT"
+          grep -q '"purchases": purchases' "$PERFORMANCE"
+          grep -q '"orders_raw": order_raw' "$SUMMARY"
+          ! grep -q 'google_analytics\|build_ga4' "$SUMMARY"
+          ! grep -q 'daily_costs\|general_ledger\|qoyod' "$ACCOUNT" "$PERFORMANCE" "$SUMMARY"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run dashboard placement and pruning tests
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand
+          src/components/DashboardAnalyticsPlacement.test.js
+          src/components/DashboardLegacySectionsPruned.test.js
+      - name: Build Production frontend
+        run: CI=false yarn build
