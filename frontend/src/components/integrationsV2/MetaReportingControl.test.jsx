@@ -59,7 +59,9 @@ describe("MetaReportingControl", () => {
         expect(markup).toContain("1 حساب Meta محدد");
         expect(markup).toContain("مزامنة 7 أيام");
         expect(markup).toContain('data-testid="meta-reporting-sync-seven-days"');
-        expect(markup).not.toContain('data-testid="meta-reporting-sync-seven-days" disabled');
+        expect(markup).not.toMatch(
+            /disabled=""[^>]*data-testid="meta-reporting-sync-seven-days"/,
+        );
     });
 
     test("keeps reporting disabled when no account is selected", () => {
@@ -80,6 +82,8 @@ describe("MetaReportingControl", () => {
             />,
         );
         expect(markup).toContain("0 حساب Meta محدد");
-        expect(markup).toMatch(/data-testid="meta-reporting-sync-seven-days"[^>]*disabled/);
+        expect(markup).toMatch(
+            /disabled=""[^>]*data-testid="meta-reporting-sync-seven-days"/,
+        );
     });
 });
