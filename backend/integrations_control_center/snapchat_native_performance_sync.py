@@ -193,6 +193,9 @@ async def _upsert_performance(
     currency = str(account.get("currency") or "").strip().upper()
     spend_micro = _as_number(metrics.get("spend"))
     value_micro = _as_number(metrics.get("conversion_purchases_value"))
+    purchases = _as_number(metrics.get("conversion_purchases"))
+    impressions = _as_number(metrics.get("impressions"))
+    clicks = _as_number(metrics.get("swipes"))
     spend_native = (
         round(float(spend_micro) / 1_000_000, 6)
         if spend_micro is not None
@@ -221,6 +224,9 @@ async def _upsert_performance(
         "metrics": metrics,
         "spend_native": spend_native,
         "spend_sar": await context.to_sar(spend_native, currency),
+        "purchases": purchases,
+        "impressions": impressions,
+        "clicks": clicks,
         "purchase_value_native": value_native,
         "purchase_value_sar": await context.to_sar(value_native, currency),
         "computed": _computed(metrics),
