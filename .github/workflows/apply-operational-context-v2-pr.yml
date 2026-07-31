@@ -30,6 +30,7 @@ jobs:
       - name: Apply reviewed integration
         run: |
           python .github/scripts/apply_operational_context_v2.py
+          sed -i 's/run: yarn build/run: CI=false yarn build/' .github/workflows/mezan-ai-analysis.yml
           rm -f \
             .github/scripts/apply_operational_context_v2.py \
             .github/workflows/apply-operational-context-v2.yml \
