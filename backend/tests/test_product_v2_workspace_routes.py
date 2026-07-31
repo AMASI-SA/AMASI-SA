@@ -48,7 +48,7 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
         return {"report_included_statuses": ["تم التنفيذ"]}
 
     monkeypatch.setattr(
-        "product_v2_workspace_routes.ensure_user_settings",
+        "product_v2_workspace_routes._user_reporting_settings",
         settings,
     )
     db = _Db({

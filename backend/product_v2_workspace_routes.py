@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
-from auth import ensure_user_settings
 from order_option_cost_snapshot_routes import classify_base_unit_cost
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, ensure_product_v2_indexes
@@ -126,6 +125,13 @@ def _line_product(
     return products_by_sku.get(sku) if sku else None
 
 
+async def _user_reporting_settings(db: Any, user_id: str) -> dict[str, Any]:
+    """Load report settings without making product-only imports require auth extras."""
+    from auth import ensure_user_settings
+
+    return await ensure_user_settings(db, user_id)
+
+
 async def _sold_missing_mezan_cost_products(
     db: Any,
     user_id: str,
@@ -187,7 +193,7 @@ async def _sold_missing_mezan_cost_products(
         "user_id": user_id,
         "order_date": {"$gte": from_date, "$lte": to_date},
     }
-    settings = await ensure_user_settings(db, user_id)
+    settings = await _user_reporting_settings(db, user_id)
     if settings.get("hide_inferred_date_orders"):
         order_query["order_date_inferred"] = {"$ne": True}
     orders = await db["unified_orders"].find(
