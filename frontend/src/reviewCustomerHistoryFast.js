@@ -20,6 +20,7 @@ export function shouldLoadCustomerHistory(orderNumber, activeOrderNumber, loadin
 }
 
 function syncCustomerMobile() {
+  if (typeof document === "undefined" || !document) return;
   const label = [...document.querySelectorAll("div")].find(
     (node) => node.childElementCount === 0 && node.textContent?.trim() === "رقم الجوال",
   );
@@ -102,6 +103,7 @@ function render(currentOrder, history) {
   return true;
 }
 async function load() {
+  if (typeof document === "undefined" || !document) return;
   syncCustomerMobile();
   const orderNumber = orderNumberFromPage();
   const cardPresent = Boolean(document.querySelector("[data-customer-history-card]"));
