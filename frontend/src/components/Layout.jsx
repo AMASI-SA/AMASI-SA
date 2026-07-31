@@ -7,8 +7,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
-import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards";
-import GoogleAnalyticsTrafficSourcesCard from "./GoogleAnalyticsTrafficSourcesCard";
+import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
@@ -159,12 +158,7 @@ export default function Layout({ children }) {
                 <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
                     <MezanV2Navigation location={location} />
                     {pageContent}
-                    {isMainDashboard && (
-                        <div className="mt-6 space-y-6" data-testid="dashboard-ga4-analytics-wrap">
-                            <GoogleAnalyticsRealtimeCards />
-                            <GoogleAnalyticsTrafficSourcesCard />
-                        </div>
-                    )}
+                    <DashboardAnalyticsPlacement active={isMainDashboard} />
                 </div>
             </main>
             <Toaster richColors position="top-center" />
