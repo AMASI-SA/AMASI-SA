@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "@/index.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewCustomerHistoryFast";
+import "@/reviewExportControlsEnhancer";
 import App from "@/App";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
