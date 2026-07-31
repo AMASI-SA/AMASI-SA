@@ -30,7 +30,6 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
           payload_path = Path(
               ".github/workflows/apply-mezan-ai-incomplete-fix.yml"
@@ -47,10 +46,23 @@ jobs:
               for index in range(start, len(lines))
               if lines[index].strip() == "PY"
           )
-          script = textwrap.dedent("\n".join(lines[start:end]))
-          if not script.lstrip().startswith("from pathlib import Path"):
+
+          yaml_indent = " " * 10
+          extracted = []
+          for line in lines[start:end]:
+              if not line:
+                  extracted.append("")
+                  continue
+              if not line.startswith(yaml_indent):
+                  raise SystemExit(
+                      f"Unexpected payload indentation: {line[:40]!r}"
+                  )
+              extracted.append(line[len(yaml_indent):])
+
+          script = "\n".join(extracted)
+          if not script.startswith("from pathlib import Path"):
               raise SystemExit("Unexpected patch payload start")
-          exec(compile(script, str(payload_path), "exec"))
+          exec(compile(script, "ai_incomplete_patch.py", "exec"))
 
           Path(
               ".github/workflows/apply-mezan-ai-incomplete-fix-pr.yml"
