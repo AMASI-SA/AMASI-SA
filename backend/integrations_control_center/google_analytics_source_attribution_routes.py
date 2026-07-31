@@ -1,8 +1,11 @@
-"""GA4 session-source traffic and purchase attribution for Mezan Dashboard.
+"""GA4 session-source traffic and order attribution for Mezan Dashboard.
 
 Realtime Data API does not expose traffic-source dimensions. This module uses
 Core Reporting ``runReport`` with ``sessionSource`` and reads only store-side
-facts: sessions, active users, ecommerce purchases, and purchase revenue.
+facts: sessions, active users, transactions, and purchase revenue.
+
+These figures are an independent GA4 attribution view. They never replace the
+provider-native conversions shown on Snapchat or Meta cards.
 """
 from __future__ import annotations
 
@@ -96,7 +99,7 @@ def _empty_bucket(key: str, label: str, platform: str) -> dict[str, Any]:
         "label": label,
         "sessions": 0,
         "active_users": 0,
-        "ecommerce_purchases": 0,
+        "orders": 0,
         "purchase_revenue": 0.0,
         "source_rows": 0,
         "raw_sources": set(),
@@ -127,9 +130,7 @@ def compose_source_period(
         metrics = row.get("metrics", {})
         bucket["sessions"] += _integer(metrics.get("sessions"))
         bucket["active_users"] += _integer(metrics.get("activeUsers"))
-        bucket["ecommerce_purchases"] += _integer(
-            metrics.get("ecommercePurchases")
-        )
+        bucket["orders"] += _integer(metrics.get("transactions"))
         bucket["purchase_revenue"] += _number(metrics.get("purchaseRevenue"))
         bucket["source_rows"] += 1
         if raw_source:
@@ -149,6 +150,7 @@ def compose_source_period(
     rows.sort(
         key=lambda item: (
             -int(item.get("sessions") or 0),
+            -int(item.get("orders") or 0),
             priority_rank.get(str(item.get("platform")), 99),
             str(item.get("label") or ""),
         )
@@ -175,9 +177,7 @@ def compose_source_period(
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
         "sessions": sum(int(item.get("sessions") or 0) for item in rows),
-        "ecommerce_purchases": sum(
-            int(item.get("ecommerce_purchases") or 0) for item in rows
-        ),
+        "orders": sum(int(item.get("orders") or 0) for item in rows),
         "purchase_revenue": round(
             sum(float(item.get("purchase_revenue") or 0) for item in rows),
             2,
@@ -219,7 +219,7 @@ async def _run_source_report(
         "metrics": [
             {"name": "sessions"},
             {"name": "activeUsers"},
-            {"name": "ecommercePurchases"},
+            {"name": "transactions"},
             {"name": "purchaseRevenue"},
         ],
         "orderBys": [{"metric": {"metricName": "sessions"}, "desc": True}],
