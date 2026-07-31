@@ -6,4 +6,16 @@
  * focused V2 implementation can be validated independently and the shim can
  * be removed after the historical Ads Manager workflow guard is repaired.
  */
-export { default } from "./IntegrationCardV2";
+import IntegrationCardV2 from "./IntegrationCardV2";
+import MetaReportingControl from "./MetaReportingControl";
+
+export default function IntegrationCard(props) {
+    const isMeta = props.integration?.provider === "meta_ads";
+    if (!isMeta) return <IntegrationCardV2 {...props} />;
+    return (
+        <div className="space-y-2">
+            <IntegrationCardV2 {...props} />
+            <MetaReportingControl integration={props.integration} />
+        </div>
+    );
+}
