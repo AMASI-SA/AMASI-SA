@@ -17,6 +17,7 @@ from .google_merchant_registration import (
 from .meta_account_selection import attach_meta_account_selection_routes
 from .meta_catalog_native import install_meta_native_catalog
 from .meta_connections import attach_meta_connection_routes
+from .meta_dashboard_summary_routes import attach_meta_dashboard_summary_routes
 from .meta_native_reporting_routes import attach_meta_native_reporting_routes
 from .snapchat_account_selection import attach_snapchat_account_selection_routes
 from .snapchat_catalog_native import install_snapchat_native_catalog
@@ -57,6 +58,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_meta_connection_routes(router, db, current_user, _require_owner)
     attach_meta_account_selection_routes(router, db, current_user, _require_owner)
     attach_meta_native_reporting_routes(router, db, current_user, _require_owner)
+    attach_meta_dashboard_summary_routes(router, db, current_user, _require_owner)
     attach_snapchat_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
