@@ -4,11 +4,15 @@ import "@/index.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewCustomerHistoryEnhancer";
 import App from "@/App";
+import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
+const RootComponent = isPublicLegalPath(window.location.pathname)
+  ? PublicLegalApp
+  : App;
 
 root.render(
   <React.StrictMode>
-    <App />
+    <RootComponent />
   </React.StrictMode>,
 );
