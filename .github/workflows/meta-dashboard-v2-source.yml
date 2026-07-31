@@ -56,4 +56,4 @@ jobs:
       - name: Run Meta dashboard transport tests
         run: CI=true yarn test --watchAll=false --runInBand src/lib/metaDashboardV2Adapter.test.js
       - name: Build production frontend
-        run: yarn build
+        run: CI=false yarn build
