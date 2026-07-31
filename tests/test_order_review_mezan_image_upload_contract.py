@@ -27,6 +27,7 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
     fast = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
     enhancer = (ROOT / "frontend" / "src" / "reviewCustomerHistoryEnhancer.js").read_text(encoding="utf-8")
     history_service = (ROOT / "backend" / "order_engine" / "customer_history.py").read_text(encoding="utf-8")
+    history_store = (ROOT / "backend" / "order_engine" / "customer_history_store.py").read_text(encoding="utf-8")
     history_routes = (ROOT / "backend" / "order_engine" / "routes.py").read_text(encoding="utf-8")
     index = (ROOT / "frontend" / "src" / "index.js").read_text(encoding="utf-8")
 
@@ -40,6 +41,9 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
 
     assert 'def normalize_saudi_mobile' in history_service
     assert 'customer_matches(current_order, candidate)' in history_service
+    assert 'class MongoCustomerHistoryStore' in history_store
+    assert 'self._collection.find(query, projection)' in history_store
+    assert 'raw_by_source.salla_direct.customer.mobile' in history_store
     assert '/{order_number}/customer-history' in history_routes
     assert 'customer_found=result.customer_found' in history_routes
     assert '/customer-history`' in fast
