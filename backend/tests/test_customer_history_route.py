@@ -5,8 +5,10 @@ from copy import deepcopy
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from order_engine import (
+    _original_make_order_engine_router as make_order_engine_router,
+)
 from order_engine.repository import OrderDiscoveryRow
-from order_engine.routes import make_order_engine_router
 
 
 def make_raw(order_number: str, created_at: str, mobile: str) -> dict:
