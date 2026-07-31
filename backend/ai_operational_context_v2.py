@@ -10,11 +10,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from order_engine.repository import MongoOrderRepository, OrderRepository
-from order_engine.service import get_order, list_orders
-from order_item_engine.repository import OrderEngineItemRepository
-from order_item_engine.service import OrderItemService
-
 DEFAULT_ORDER_SAMPLE_LIMIT = 8
 MAX_ORDER_SAMPLE_LIMIT = 12
 MAX_ITEMS_PER_ORDER = 12
@@ -207,7 +202,17 @@ def _collect_paths(value: Any, prefix: str = "") -> set[str]:
     return paths
 
 
-def _default_item_service(db: Any) -> OrderItemService:
+def _default_repository_factory(db: Any) -> Any:
+    from order_engine.repository import MongoOrderRepository
+
+    return MongoOrderRepository(db)
+
+
+def _default_item_service(db: Any) -> Any:
+    from order_engine.repository import MongoOrderRepository
+    from order_item_engine.repository import OrderEngineItemRepository
+    from order_item_engine.service import OrderItemService
+
     order_repository = MongoOrderRepository(db)
     item_repository = OrderEngineItemRepository(order_repository)
     return OrderItemService(item_repository)
@@ -218,12 +223,22 @@ async def build_orders_v2_operational_context(
     *,
     user_id: str,
     sample_limit: int = DEFAULT_ORDER_SAMPLE_LIMIT,
-    repository_factory: Callable[[Any], OrderRepository] = MongoOrderRepository,
-    item_service_factory: Callable[[Any], OrderItemService] = _default_item_service,
-    list_loader: OrderListLoader = list_orders,
-    detail_loader: OrderDetailLoader = get_order,
+    repository_factory: Callable[[Any], Any] | None = None,
+    item_service_factory: Callable[[Any], Any] | None = None,
+    list_loader: OrderListLoader | None = None,
+    detail_loader: OrderDetailLoader | None = None,
 ) -> dict[str, Any]:
     """Build a bounded Orders V2 context without direct customer identifiers."""
+
+    if repository_factory is None:
+        repository_factory = _default_repository_factory
+    if item_service_factory is None:
+        item_service_factory = _default_item_service
+    if list_loader is None or detail_loader is None:
+        from order_engine.service import get_order, list_orders
+
+        list_loader = list_loader or list_orders
+        detail_loader = detail_loader or get_order
 
     normalized_limit = max(1, min(int(sample_limit), MAX_ORDER_SAMPLE_LIMIT))
     repository = repository_factory(db)
