@@ -9,9 +9,13 @@ on:
       - "backend/integrations_control_center/catalog.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_tiktok_integrations_v2.py"
+      - "backend/tests/test_tiktok_native_reporting.py"
       - "frontend/src/services/tiktokIntegrationsV2.js"
       - "frontend/src/services/tiktokIntegrationsV2.test.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCard.js"
+      - "frontend/src/components/integrationsV2/TikTokReportingSyncControl.jsx"
+      - "frontend/src/components/integrationsV2/TikTokReportingSyncControl.test.jsx"
       - "docs/TIKTOK_INTEGRATIONS_V2_SETUP.md"
       - "docs/TIKTOK_NATIVE_V2_IMPLEMENTATION_NOTE.md"
       - ".github/workflows/tiktok-integrations-v2.yml"
@@ -22,7 +26,7 @@ permissions:
 
 jobs:
   backend-tests:
-    name: TikTok OAuth backend tests
+    name: TikTok OAuth and reporting backend tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,7 +50,9 @@ jobs:
       - name: Compile TikTok V2 connector
         run: |
           python -m compileall -q integrations_control_center
-          python -m py_compile tests/test_tiktok_integrations_v2.py
+          python -m py_compile \
+            tests/test_tiktok_integrations_v2.py \
+            tests/test_tiktok_native_reporting.py
       - name: Enforce legacy isolation
         run: >-
           python -c
@@ -55,6 +61,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_tiktok_integrations_v2.py
+          tests/test_tiktok_native_reporting.py
           -q
           --tb=short
 
@@ -80,5 +87,6 @@ jobs:
           --watchAll=false
           --runInBand
           src/services/tiktokIntegrationsV2.test.js
+          src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
       - name: Build frontend
         run: CI=false yarn build

@@ -18,6 +18,8 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "tiktok_discovery.py",
         base / "tiktok_projection.py",
         base / "tiktok_connections.py",
+        base / "tiktok_native_reporting.py",
+        base / "tiktok_native_reporting_routes.py",
     )
     violations = []
     for path in native_paths:

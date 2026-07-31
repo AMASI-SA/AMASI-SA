@@ -6,4 +6,16 @@
  * focused V2 implementation can be validated independently and the shim can
  * be removed after the historical Ads Manager workflow guard is repaired.
  */
-export { default } from "./IntegrationCardV2";
+import IntegrationCardV2 from "./IntegrationCardV2";
+import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
+
+export default function IntegrationCard(props) {
+    const isTikTok = props.integration?.provider === "tiktok_ads";
+    if (!isTikTok) return <IntegrationCardV2 {...props} />;
+    return (
+        <div className="space-y-2">
+            <IntegrationCardV2 {...props} />
+            <TikTokReportingSyncControl integration={props.integration} />
+        </div>
+    );
+}
