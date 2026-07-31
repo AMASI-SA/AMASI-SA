@@ -14,11 +14,16 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
+from ai_operational_context_v2 import (
+    DEFAULT_ORDER_SAMPLE_LIMIT,
+    MAX_ORDER_SAMPLE_LIMIT,
+    build_orders_v2_operational_context,
+)
 from ai_provider_status import openai_runtime_status
 
 MAX_LIST_ITEMS = 30
@@ -41,6 +46,7 @@ ALLOWED_CONTEXT_KEYS = {
     "errors",
     "anomalies",
     "recommendations",
+    "operational_context_v2",
 }
 FORBIDDEN_KEY_FRAGMENTS = {
     "email",
@@ -95,7 +101,7 @@ def _is_forbidden_key(key: str) -> bool:
 
 
 def _sanitize(value: Any, *, depth: int = 0) -> Any:
-    if depth > 4:
+    if depth > 7:
         return None
     if value is None or isinstance(value, (bool, int, float)):
         return value
@@ -309,12 +315,20 @@ async def _run_openai_analysis(
             client.responses.create(
                 model=os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini"),
                 instructions=(
-                    "أنت محلل تشغيل ومحاسبة داخل نظام Mezan OS. أجب "
-                    "بالعربية وبالاعتماد حصراً على السياق المرسل. لا تخترع "
-                    "بيانات، ولا تطلب بيانات شخصية أو أسراراً، ولا تدّعي "
-                    "تنفيذ أي تعديل. رتّب المشاكل حسب الأثر. safe_to_act "
-                    "يكون false إذا كان الدليل غير كافٍ أو توجد بوابة حرجة. "
-                    "اقترح خطوات تحقق قابلة للقياس وقراءة فقط."
+                    "أنت العقل التشغيلي التحليلي داخل Mezan OS. أجب بالعربية "
+                    "وبالاعتماد حصراً على السياق المرسل، ولا تدّعي تنفيذ أي "
+                    "تعديل. إذا وجد operational_context_v2 فاعتبره المصدر "
+                    "المرجعي لحقائق الطلبات؛ فهو عينة آمنة من نفس عقد Orders "
+                    "V2 وعناصر الطلب الذي تستخدمه واجهة ميزان 2. استنتج بنفسك "
+                    "المفاهيم التجارية مثل الإجمالي والضريبة والخصم والشحن "
+                    "والدفع وربط الحملات من المسارات والقيم والعلاقات، ولا تعتمد "
+                    "على أسماء حقول متوقعة أو أحكام coverage/gates القديمة. لا "
+                    "تعتبر المفهوم مفقوداً لمجرد غياب اسم حقل واحد؛ قارن ملخص "
+                    "الطلب مع سطور المنتجات وابحث عن المسارات البديلة. اذكر في "
+                    "كل دليل المسارات التي اكتشفتها والقيم أو العلاقات الداعمة. "
+                    "رتّب المشاكل حسب الأثر، واجعل safe_to_act=false إذا كانت "
+                    "العينة أو الأدلة غير كافية. اقترح خطوات تحقق قابلة للقياس "
+                    "وقراءة فقط، ولا تطلب بيانات شخصية أو أسراراً."
                 ),
                 input=json.dumps(
                     {
@@ -725,6 +739,21 @@ def make_ai_analysis_router(
             "model": status["analysis"]["model"],
             "writes_enabled": False,
         }
+
+    @router.get("/operational-context-v2")
+    async def operational_context_v2(
+        sample_limit: int = Query(
+            default=DEFAULT_ORDER_SAMPLE_LIMIT,
+            ge=1,
+            le=MAX_ORDER_SAMPLE_LIMIT,
+        ),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await build_orders_v2_operational_context(
+            job_db_factory(),
+            user_id=_user_id(user),
+            sample_limit=sample_limit,
+        )
 
     @router.post("/analyze")
     async def analyze(
