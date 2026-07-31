@@ -15,11 +15,15 @@ export default function ProductCostCard({
     recomputeEndpoint = "/product-costs/recompute",
     sourceLabel = "من جدول product_costs • SKU/Product ID",
     missingHref = "/product-costs?tab=missing",
+    missingLabel = "بدون تكلفة",
 }) {
     const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(true);
     const [recomputing, setRecomputing] = useState(false);
     const [updatedAt, setUpdatedAt] = useState(null);
+    const resolvedMissingHref = typeof missingHref === "function"
+        ? missingHref(summary)
+        : missingHref;
 
     const load = async () => {
         try {
@@ -146,12 +150,12 @@ export default function ProductCostCard({
                     testid="product-cost-card-linked"
                 />
                 <Cell
-                    label="بدون تكلفة"
+                    label={missingLabel}
                     value={loading ? "…" : formatInt(summary?.missing_products_count)}
                     suffix={!loading && "منتج"}
                     accent={summary?.missing_products_count > 0 ? "amber" : "neutral"}
                     testid="product-cost-card-missing"
-                    href={summary?.missing_products_count > 0 ? missingHref : null}
+                    href={summary?.missing_products_count > 0 ? resolvedMissingHref : null}
                 />
             </div>
 

@@ -135,6 +135,34 @@ def resolve_base_unit_cost(
     return None, "missing"
 
 
+MEZAN_V2_COST_SOURCES = frozenset({"mezan_v2_variant", "mezan_v2_base"})
+SALLA_FALLBACK_COST_SOURCES = frozenset({
+    "salla_variant_fallback",
+    "salla_product_fallback",
+})
+
+
+def classify_base_unit_cost(
+    item: Any,
+    profile: dict[str, Any] | None,
+    product: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Describe both calculation availability and Mezan V2 completeness.
+
+    Salla remains a valid temporary fallback for profitability calculations,
+    but it never marks the product as having an explicit Mezan V2 cost.  This
+    distinction drives the actionable dashboard warning and product filter.
+    """
+    unit_cost, source = resolve_base_unit_cost(item, profile, product)
+    return {
+        "unit_cost": unit_cost,
+        "source": source,
+        "cost_available": unit_cost is not None,
+        "mezan_cost_complete": source in MEZAN_V2_COST_SOURCES,
+        "uses_salla_fallback": source in SALLA_FALLBACK_COST_SOURCES,
+    }
+
+
 async def ensure_indexes(db: Any) -> None:
     await db[SNAPSHOTS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING), ("order_item_id", ASCENDING)],

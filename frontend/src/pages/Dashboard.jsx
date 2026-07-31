@@ -30,6 +30,7 @@ import { todaySA } from "../lib/dates";
 import { SalaryAccrualSummaryCard } from "../components/EmployeeBalanceCard";
 import { useAuth } from "../context/AuthContext";
 import { ALL_KPI_CARDS } from "../lib/dashboardCards";
+import { buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import ProductCostCard from "../components/ProductCostCard";
 import ProfitSummaryCard from "../components/ProfitSummaryCard";
 import SnapchatOfficialCard from "../components/SnapchatOfficialCard";
@@ -179,6 +180,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
     const [snapAccountsBreakdown, setSnapAccountsBreakdown] = useState(null);
     const [metaSummary, setMetaSummary] = useState(null);
     const [tiktokSummary, setTiktokSummary] = useState(null);
+    const [adsAutoSyncStatus, setAdsAutoSyncStatus] = useState(null);
     const [refreshingAll, setRefreshingAll] = useState(false);
     // Iter-204 — bump this counter to force the per-account ad cards
     // to refetch their data without a full page reload.
@@ -227,6 +229,16 @@ export default function Dashboard({ sourceMode = "legacy" }) {
             setTiktokSummary(data);
         } catch {
             /* non-critical */
+        }
+    };
+
+    const fetchAdsAutoSyncStatus = async () => {
+        if (!isMezanV2) return;
+        try {
+            const { data } = await api.get("/integrations-v2/ads-auto-sync/status");
+            setAdsAutoSyncStatus(data);
+        } catch {
+            /* the dashboard remains usable if scheduler status is unavailable */
         }
     };
 
@@ -373,6 +385,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
             fetchSnapAccountsBreakdown();
             fetchMetaSummary();
             fetchTiktokSummary();
+            fetchAdsAutoSyncStatus();
         } finally {
             setLoading(false);
         }
@@ -389,6 +402,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
             fetchSnapAccountsBreakdown();
             fetchMetaSummary();
             fetchTiktokSummary();
+            fetchAdsAutoSyncStatus();
         } catch {
             /* swallow; next tick will retry */
         }
@@ -495,6 +509,14 @@ export default function Dashboard({ sourceMode = "legacy" }) {
     const totals = data?.totals || {};
     const monthly = data?.monthly || [];
     const recent = data?.recent_analyses || [];
+    const missingMezanCostHref = isMezanV2
+        ? buildMissingMezanCostHref(data?.product_cost_v2, filters)
+        : "/product-costs?tab=missing";
+    const missingMezanProducts = data?.product_cost_v2?.missing_products || [];
+    const sallaFallbackProducts = Number(
+        data?.product_cost_v2?.salla_fallback_products_count || 0,
+    );
+    const opensSingleMissingMezanProduct = missingMezanCostHref.includes("product=");
 
     return (
         <div className="space-y-6 sm:space-y-8 animate-fade-in-up" data-testid="dashboard-page">
@@ -560,8 +582,17 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                 </div>
             </div>
             {lastUpdated && (
-                <div className="text-xs text-muted-foreground -mt-2" data-testid="dashboard-last-updated">
-                    آخر تحديث: {formatRelative(nowTick - lastUpdated)} • يحدِّث تلقائياً كل دقيقة
+                <div className="-mt-2 space-y-1 text-xs text-muted-foreground">
+                    <div data-testid="dashboard-last-updated">
+                        آخر تحديث للعرض: {formatRelative(nowTick - lastUpdated)} • يحدِّث تلقائياً كل دقيقة
+                    </div>
+                    {isMezanV2 && adsAutoSyncStatus && (
+                        <div className={adsAutoSyncStatus.enabled ? "text-emerald-700" : "text-rose-700"} data-testid="dashboard-v2-ads-auto-sync-status">
+                            {adsAutoSyncStatus.enabled
+                                ? `مزامنة الإعلانات من الخادم كل ${adsAutoSyncStatus.interval_minutes || 5} دقائق حتى والمتصفح مغلق • TikTok عبر Webhook`
+                                : "مزامنة الإعلانات التلقائية متوقفة في إعدادات الخادم"}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -598,15 +629,26 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                         so the merchant knows real profit may be off. */}
                     {totals.missing_product_cost_count > 0 && (
                         <Link
-                            to={isMezanV2 ? "/products-v2" : "/product-costs?tab=missing"}
+                            to={missingMezanCostHref}
                             className="block rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm hover:bg-amber-100 transition-colors"
                             data-testid="dashboard-missing-product-costs-alert"
                         >
                             <div className="flex items-center gap-2 flex-wrap text-amber-900">
                                 <span className="text-base">⚠️</span>
-                                <strong>{totals.missing_product_cost_count} منتج بدون تكلفة</strong>
-                                <span className="text-amber-800/80">— صافي الربح غير دقيق حتى تُحدِّد تكلفة هذه المنتجات.</span>
-                                <span className="ms-auto text-xs font-bold text-amber-800 underline">إدارة التكاليف ←</span>
+                                <strong>
+                                    {totals.missing_product_cost_count} منتج
+                                    {isMezanV2 ? " مباع بدون تكلفة ميزان" : " بدون تكلفة"}
+                                </strong>
+                                <span className="text-amber-800/80">
+                                    {isMezanV2 && sallaFallbackProducts > 0
+                                        ? `— ${sallaFallbackProducts} منها محسوب مؤقتًا بتكلفة سلة؛ أضف تكلفة ميزان لاعتماد الربح.`
+                                        : "— صافي الربح غير دقيق حتى تُحدِّد تكلفة هذه المنتجات."}
+                                </span>
+                                <span className="ms-auto text-xs font-bold text-amber-800 underline">
+                                    {isMezanV2 && opensSingleMissingMezanProduct
+                                        ? "فتح المنتج وإضافة التكلفة ←"
+                                        : "عرض المنتجات الناقصة ←"}
+                                </span>
                             </div>
                         </Link>
                     )}
@@ -640,7 +682,16 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                             sourceLabel={isMezanV2
                                 ? "ميزان 2 + المكونات والخدمات • سلة احتياطياً"
                                 : "من جدول product_costs • SKU/Product ID"}
-                            missingHref={isMezanV2 ? "/products-v2" : "/product-costs?tab=missing"}
+                            missingHref={isMezanV2
+                                ? (summary) => buildMissingMezanCostHref(
+                                    summary,
+                                    {
+                                        from: summary?.period?.from,
+                                        to: summary?.period?.to,
+                                    },
+                                )
+                                : "/product-costs?tab=missing"}
+                            missingLabel={isMezanV2 ? "بدون تكلفة ميزان" : "بدون تكلفة"}
                         />
                     )}
                     {/* iter-56 — Salla wallet reconciliation alert: if the
