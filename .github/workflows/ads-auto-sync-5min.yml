@@ -6,8 +6,10 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
+      - "backend/integrations_control_center/snapchat_native_performance_sync.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
+      - "backend/tests/test_snapchat_riyadh_day_boundary_v2.py"
       - ".github/workflows/ads-auto-sync-5min.yml"
 
 jobs:
@@ -27,10 +29,14 @@ jobs:
         run: |
           python -m py_compile \
             integrations_control_center/ads_auto_sync_scheduler.py \
+            integrations_control_center/snapchat_native_performance_sync.py \
             integrations_control_center/__init__.py
-      - name: Run focused scheduler tests
+      - name: Run focused scheduler and Riyadh boundary tests
         working-directory: backend
-        run: pytest -q tests/test_ads_auto_sync_scheduler_v2.py
+        run: >-
+          pytest -q
+          tests/test_ads_auto_sync_scheduler_v2.py
+          tests/test_snapchat_riyadh_day_boundary_v2.py
       - name: Enforce provider-only isolation
         run: |
           FILE=backend/integrations_control_center/ads_auto_sync_scheduler.py
@@ -39,3 +45,7 @@ jobs:
           ! grep -q 'meta_ads_daily' "$FILE"
           ! grep -q 'snapchat_daily_stats' "$FILE"
           ! grep -q '/meta/sync\|/snapchat/daily-spend' "$FILE"
+          grep -q 'granularity.*SOURCE_GRANULARITY' \
+            backend/integrations_control_center/snapchat_native_performance_sync.py
+          grep -q 'DAY_BOUNDARY_MODE = "riyadh_midnight_hourly_aggregate"' \
+            backend/integrations_control_center/snapchat_native_performance_sync.py
