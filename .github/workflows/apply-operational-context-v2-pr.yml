@@ -63,7 +63,7 @@ jobs:
           corepack prepare yarn@1.22.22 --activate
           yarn install --non-interactive
           CI=true yarn test --watchAll=false --runInBand src/lib/aiAnalysisAsync.test.js
-          yarn build
+          CI=false yarn build
       - name: Commit validated implementation
         run: |
           git config user.name "github-actions[bot]"
