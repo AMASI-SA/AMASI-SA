@@ -8,6 +8,7 @@ import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards";
+import GoogleAnalyticsTrafficSourcesCard from "./GoogleAnalyticsTrafficSourcesCard";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
@@ -158,8 +159,9 @@ export default function Layout({ children }) {
                     <MezanV2Navigation location={location} />
                     {pageContent}
                     {isMainDashboard && (
-                        <div className="mt-6" data-testid="dashboard-ga4-realtime-wrap">
+                        <div className="mt-6 space-y-6" data-testid="dashboard-ga4-analytics-wrap">
                             <GoogleAnalyticsRealtimeCards />
+                            <GoogleAnalyticsTrafficSourcesCard />
                         </div>
                     )}
                 </div>
