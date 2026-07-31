@@ -1,0 +1,56 @@
+name: Ads Auto Sync 5 Minutes V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
+      - "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
+      - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
+      - "backend/tests/test_snapchat_account_hourly_refresh_v2.py"
+      - ".github/workflows/ads-auto-sync-5min-v2.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl
+      - name: Compile scheduler and Snapchat adapters
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/ads_auto_sync_scheduler.py \
+            integrations_control_center/snapchat_account_hourly_refresh.py \
+            integrations_control_center/snapchat_dashboard_summary_routes.py \
+            integrations_control_center/__init__.py
+      - name: Run focused tests
+        working-directory: backend
+        run: >-
+          pytest -q
+          tests/test_ads_auto_sync_scheduler_v2.py
+          tests/test_snapchat_account_hourly_refresh_v2.py
+          tests/test_snapchat_dashboard_summary_v2.py
+      - name: Enforce provider-only isolation
+        run: |
+          FILE=backend/integrations_control_center/ads_auto_sync_scheduler.py
+          ! grep -q 'general_ledger' "$FILE"
+          ! grep -q 'daily_costs' "$FILE"
+          ! grep -q 'meta_ads_daily' "$FILE"
+          ! grep -q 'snapchat_daily_stats' "$FILE"
+          ! grep -q '/meta/sync\|/snapchat/daily-spend' "$FILE"
+          grep -q 'DEFAULT_INTERVAL_SECONDS = 300' "$FILE"
+          grep -q 'runs_without_browser' "$FILE"
+          grep -q 'granularity.*"HOUR"' \
+            backend/integrations_control_center/snapchat_account_hourly_refresh.py
+          grep -q 'day_start.*"00:00"' \
+            backend/integrations_control_center/snapchat_dashboard_summary_routes.py

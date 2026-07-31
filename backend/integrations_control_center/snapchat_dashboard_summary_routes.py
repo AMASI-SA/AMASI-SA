@@ -16,12 +16,13 @@ from fastapi import APIRouter, Depends
 
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_native_data_common import (
+    BUSINESS_TIMEZONE,
     SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
 )
 
-RIYADH_TZ = ZoneInfo("Asia/Riyadh")
+RIYADH_TZ = ZoneInfo(BUSINESS_TIMEZONE)
 MAX_DASHBOARD_ROWS = 31 * 20 + 20
 
 
@@ -42,6 +43,13 @@ def _number(value: Any) -> float:
     except (TypeError, ValueError, OverflowError):
         return 0.0
     return parsed if parsed >= 0 else 0.0
+
+
+def _row_metric(row: dict[str, Any], top_level: str, nested: str) -> Any:
+    if row.get(top_level) is not None:
+        return row.get(top_level)
+    metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+    return metrics.get(nested)
 
 
 def _metric(spend: float, orders: float, revenue: float) -> dict[str, Any]:
@@ -106,9 +114,14 @@ def summarize_snapchat_dashboard_rows(
             continue
         if parsed_date < query_start or parsed_date > today_value:
             continue
-        bucket = daily.setdefault(row_date, {"spend": 0.0, "orders": 0.0, "revenue": 0.0})
+        bucket = daily.setdefault(
+            row_date,
+            {"spend": 0.0, "orders": 0.0, "revenue": 0.0},
+        )
         bucket["spend"] += _number(row.get("spend_sar"))
-        bucket["orders"] += _number(row.get("purchases"))
+        bucket["orders"] += _number(
+            _row_metric(row, "purchases", "conversion_purchases")
+        )
         bucket["revenue"] += _number(row.get("purchase_value_sar"))
         if parsed_date == today_value:
             account_id = str(row.get("ad_account_id") or "").strip()
@@ -151,6 +164,9 @@ def summarize_snapchat_dashboard_rows(
         })
         cursor += timedelta(days=1)
 
+    # Always return every selected account, even when the provider confirms
+    # zero spend.  The Dashboard can therefore restore the old two-account
+    # presentation instead of collapsing into one aggregate card.
     accounts = []
     for account in selected_accounts:
         account_id = str(account.get("ad_account_id") or "").strip()
@@ -160,6 +176,9 @@ def summarize_snapchat_dashboard_rows(
             "name": account.get("display_name") or account.get("name") or account_id,
             "currency_native": account.get("currency") or "SAR",
             "timezone": account.get("timezone"),
+            "report_timezone": BUSINESS_TIMEZONE,
+            "day_start": "00:00",
+            "day_end": "23:59",
             "today": {
                 "spend_sar": round(_number(today_bucket.get("spend_sar")), 2),
                 "spend_native": round(_number(today_bucket.get("spend_native")), 6),
@@ -178,6 +197,9 @@ def summarize_snapchat_dashboard_rows(
         "last_error_message": error_message,
         "last_fetched_at": last_sync_at,
         "selected_account_count": len(selected_accounts),
+        "business_timezone": BUSINESS_TIMEZONE,
+        "day_start": "00:00",
+        "day_end": "23:59",
         "source": "snapchat_v2",
         "today": {"date": today_value.isoformat(), **today_metrics},
         "month": {"start": month_start.isoformat(), **month_metrics},
@@ -253,6 +275,7 @@ async def build_snapchat_dashboard_summary(
                 "spend_native": 1,
                 "spend_sar": 1,
                 "purchases": 1,
+                "metrics": 1,
                 "purchase_value_sar": 1,
                 "observed_at": 1,
                 "updated_at": 1,
@@ -291,6 +314,9 @@ def attach_snapchat_dashboard_summary_routes(
         return {
             "count": len(summary["accounts"]),
             "accounts": summary["accounts"],
+            "business_timezone": BUSINESS_TIMEZONE,
+            "day_start": "00:00",
+            "day_end": "23:59",
             "source": "snapchat_v2",
             "source_only": True,
             "accounting_write_reached": False,
