@@ -24,6 +24,8 @@ on:
       - "frontend/src/reviewMezanImageEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.test.js"
+      - "frontend/src/reviewCompactActionLabels.js"
+      - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
@@ -59,6 +61,8 @@ on:
       - "frontend/src/reviewMezanImageEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.test.js"
+      - "frontend/src/reviewCompactActionLabels.js"
+      - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
@@ -136,7 +140,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewCompactActionLabels.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
