@@ -1,0 +1,62 @@
+name: GA4 Realtime Dashboard
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/google_analytics_realtime_routes.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_google_analytics_realtime_dashboard_v2.py"
+      - "frontend/src/components/GoogleAnalyticsRealtimeCards.jsx"
+      - "frontend/src/components/GoogleAnalyticsRealtimeCards.test.jsx"
+      - "frontend/src/components/Layout.jsx"
+      - ".github/workflows/ga4-realtime-dashboard.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl
+      - name: Compile GA4 route
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/google_analytics_realtime_routes.py \
+            integrations_control_center/__init__.py
+      - name: Run focused GA4 tests
+        working-directory: backend
+        run: pytest -q tests/test_google_analytics_realtime_dashboard_v2.py
+      - name: Enforce exact Amasi property and read-only isolation
+        run: |
+          FILE=backend/integrations_control_center/google_analytics_realtime_routes.py
+          grep -q 'DEFAULT_AMASI_GA4_PROPERTY_ID = "353865193"' "$FILE"
+          grep -q 'runRealtimeReport' "$FILE"
+          ! grep -q 'general_ledger\|daily_costs\|qoyod' "$FILE"
+          ! grep -q 'campaigns.create\|campaigns.update' "$FILE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run GA4 card test
+        run: CI=true yarn test --watchAll=false --runInBand src/components/GoogleAnalyticsRealtimeCards.test.jsx
+      - name: Build Production frontend
+        run: CI=false yarn build

@@ -7,6 +7,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
+import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
@@ -113,6 +114,7 @@ export default function Layout({ children }) {
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
+    const isMainDashboard = location.pathname === "/";
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />
         : isProductIntake
@@ -155,6 +157,11 @@ export default function Layout({ children }) {
                 <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
                     <MezanV2Navigation location={location} />
                     {pageContent}
+                    {isMainDashboard && (
+                        <div className="mt-6" data-testid="dashboard-ga4-realtime-wrap">
+                            <GoogleAnalyticsRealtimeCards />
+                        </div>
+                    )}
                 </div>
             </main>
             <Toaster richColors position="top-center" />
