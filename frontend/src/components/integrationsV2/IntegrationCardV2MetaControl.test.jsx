@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import IntegrationCardV2 from "./IntegrationCardV2";
 
 jest.mock("../../services/metaIntegrationsV2", () => ({
@@ -25,28 +25,28 @@ const base = {
     },
 };
 
-test("renders the Meta account selection and reporting control inside IntegrationCardV2", () => {
-    render(
+function renderProvider(provider, extra = {}) {
+    return renderToStaticMarkup(
         <IntegrationCardV2
-            integration={{ ...base, provider: "meta_ads" }}
+            integration={{ ...base, provider }}
             onTest={() => {}}
             onSync={() => {}}
             onSettings={() => {}}
+            {...extra}
         />,
     );
-    expect(screen.getByTestId("meta-reporting-control-host")).toBeInTheDocument();
-    expect(screen.getByTestId("meta-reporting-control")).toBeInTheDocument();
+}
+
+test("renders the Meta account selection and reporting control inside IntegrationCardV2", () => {
+    const html = renderProvider("meta_ads");
+    expect(html).toContain('data-testid="meta-reporting-control-host"');
+    expect(html).toContain('data-testid="meta-reporting-control"');
+    expect(html).toContain("حسابات وتقارير Meta المباشرة");
 });
 
 test("does not render the Meta control for Snapchat", () => {
-    render(
-        <IntegrationCardV2
-            integration={{ ...base, provider: "snapchat_ads" }}
-            snapchatScope={{ selection: { accounts: [] }, summary: null }}
-            onTest={() => {}}
-            onSync={() => {}}
-            onSettings={() => {}}
-        />,
-    );
-    expect(screen.queryByTestId("meta-reporting-control-host")).not.toBeInTheDocument();
+    const html = renderProvider("snapchat_ads", {
+        snapchatScope: { selection: { accounts: [] }, summary: null },
+    });
+    expect(html).not.toContain('data-testid="meta-reporting-control-host"');
 });
