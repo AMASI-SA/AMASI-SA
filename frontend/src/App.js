@@ -257,6 +257,16 @@ function AppRoutes() {
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
             <Route
+                path="/dashboard-v2"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><Dashboard sourceMode="mezan_v2" /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
                 path="/orders-v2"
                 element={
                     <ProtectedRoute>

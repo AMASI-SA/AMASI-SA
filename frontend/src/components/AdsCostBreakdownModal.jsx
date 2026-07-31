@@ -32,6 +32,7 @@ const provLabel = (p) => PROVIDER_LABEL[p?.toLowerCase()] || p || "—";
 
 export default function AdsCostBreakdownModal({
     open, onClose, fromDate, toDate,
+    endpoint = "/dashboard/ads-cost-breakdown",
 }) {
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState(null);
@@ -46,7 +47,7 @@ export default function AdsCostBreakdownModal({
                 if (fromDate) params.set("from_date", fromDate);
                 if (toDate) params.set("to_date", toDate);
                 const { data } = await api.get(
-                    `/dashboard/ads-cost-breakdown?${params.toString()}`,
+                    `${endpoint}?${params.toString()}`,
                 );
                 if (!cancel) setData(data);
             } catch (e) {
@@ -59,7 +60,7 @@ export default function AdsCostBreakdownModal({
             }
         })();
         return () => { cancel = true; };
-    }, [open, fromDate, toDate]);
+    }, [open, fromDate, toDate, endpoint]);
 
     if (!open) return null;
 
@@ -232,10 +233,8 @@ export default function AdsCostBreakdownModal({
                             </div>
 
                             <p className="text-xs text-gray-500 leading-relaxed">
-                                المصدر: <code>ad_account_ledger</code> (Iter-160 SSOT) —
-                                نفس المصدر الذي يحتسب منه إجمالي تكاليف الإعلانات في
-                                الملخص التنفيذي. أي اختلاف بين المجموع هنا والقيمة في
-                                البطاقة يعني تعارضاً يجب فحصه.
+                                المصدر الظاهر في كل صف هو نفس المصدر المستخدم في
+                                إجمالي بطاقة الملخص، والنافذة للقراءة فقط.
                             </p>
                         </>
                     )}
