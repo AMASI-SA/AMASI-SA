@@ -15,6 +15,8 @@ on:
       - "frontend/src/components/GoogleAnalyticsRealtimeCards.test.jsx"
       - "frontend/src/components/GoogleAnalyticsTrafficSourcesCard.jsx"
       - "frontend/src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx"
+      - "frontend/src/components/DashboardAnalyticsPlacement.jsx"
+      - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
       - "frontend/src/components/Layout.jsx"
       - ".github/workflows/ga4-realtime-dashboard.yml"
 
@@ -71,10 +73,11 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Run GA4 card tests
+      - name: Run GA4 card and placement tests
         run: >-
           CI=true yarn test --watchAll=false --runInBand
           src/components/GoogleAnalyticsRealtimeCards.test.jsx
           src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
         run: CI=false yarn build
