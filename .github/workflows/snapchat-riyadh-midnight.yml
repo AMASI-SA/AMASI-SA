@@ -1,0 +1,55 @@
+name: Snapchat Riyadh Midnight
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/snapchat_native_performance_sync.py"
+      - "backend/tests/test_snapchat_riyadh_business_day.py"
+      - "frontend/src/lib/snapchatSyncRecovery.js"
+      - "frontend/src/lib/snapchatSyncRecovery.active.test.js"
+      - ".github/workflows/snapchat-riyadh-midnight.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused backend dependencies
+        run: pip install pytest fastapi "pydantic>=2" httpx
+      - name: Compile Snapchat Riyadh aggregation
+        working-directory: backend
+        run: python -m py_compile integrations_control_center/snapchat_native_performance_sync.py
+      - name: Test Riyadh business-day boundaries
+        working-directory: backend
+        run: pytest -q tests/test_snapchat_riyadh_business_day.py
+      - name: Enforce hourly source and Riyadh storage
+        run: |
+          FILE=backend/integrations_control_center/snapchat_native_performance_sync.py
+          grep -q '"granularity": "HOUR"' "$FILE"
+          grep -q '"date_timezone": BUSINESS_TIMEZONE' "$FILE"
+          grep -q '"stored_granularity": "RIYADH_DAY"' "$FILE"
+          ! grep -q '"granularity": "DAY"' "$FILE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test active-run joining
+        run: CI=true yarn test --watchAll=false --runInBand src/lib/snapchatSyncRecovery.active.test.js
+      - name: Build production frontend
+        run: CI=false yarn build
