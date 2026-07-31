@@ -155,8 +155,13 @@ import AdvancedFilters, { filtersToQueryString, defaultFilters } from "../compon
 import UnifiedPaymentGatewaysCard from "../components/UnifiedPaymentGatewaysCard";
 import PendingOrdersCard from "../components/PendingOrdersCard";
 
-export default function Dashboard() {
+export default function Dashboard({ sourceMode = "legacy" }) {
     const { user } = useAuth();
+    const isMezanV2 = sourceMode === "mezan_v2";
+    const dashboardEndpoint = isMezanV2 ? "/dashboard-v2" : "/dashboard";
+    const providerEndpoint = (provider) => isMezanV2
+        ? `/dashboard-v2/${provider}-summary`
+        : `/dashboard/${provider}-summary`;
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(defaultFilters("today"));
@@ -183,7 +188,7 @@ export default function Dashboard() {
 
     const fetchSnapSummary = async () => {
         try {
-            const { data } = await api.get("/dashboard/snapchat-summary");
+            const { data } = await api.get(providerEndpoint("snapchat"));
             setSnapSummary(data);
         } catch {
             /* non-critical */
@@ -195,6 +200,10 @@ export default function Dashboard() {
     // enabled ad account (replacing the "monthly" block per merchant
     // request).
     const fetchSnapAccountsBreakdown = async () => {
+        if (isMezanV2) {
+            setSnapAccountsBreakdown(null);
+            return;
+        }
         try {
             const { data } = await api.get("/snapchat/accounts-summary");
             setSnapAccountsBreakdown(data);
@@ -205,7 +214,7 @@ export default function Dashboard() {
 
     const fetchMetaSummary = async () => {
         try {
-            const { data } = await api.get("/dashboard/meta-summary");
+            const { data } = await api.get(providerEndpoint("meta"));
             setMetaSummary(data);
         } catch {
             /* non-critical */
@@ -214,7 +223,7 @@ export default function Dashboard() {
 
     const fetchTiktokSummary = async () => {
         try {
-            const { data } = await api.get("/dashboard/tiktok-summary");
+            const { data } = await api.get(providerEndpoint("tiktok"));
             setTiktokSummary(data);
         } catch {
             /* non-critical */
@@ -230,6 +239,18 @@ export default function Dashboard() {
         if (refreshingAll) return;
         setRefreshingAll(true);
         toast.loading("جاري تحديث جميع منصات الإعلانات…", { id: "refresh-all" });
+        if (isMezanV2) {
+            await Promise.all([
+                fetchSnapSummary(), fetchMetaSummary(), fetchTiktokSummary(),
+                refreshSilently(),
+            ]);
+            setAdCardsRefreshSignal((n) => n + 1);
+            setRefreshingAll(false);
+            toast.success("تمت إعادة قراءة بيانات الإعلانات من ميزان 2", {
+                id: "refresh-all",
+            });
+            return;
+        }
         const todayStr = snapSummary?.today?.date
             || metaSummary?.today?.date
             || tiktokSummary?.today?.date
@@ -282,7 +303,7 @@ export default function Dashboard() {
         const runTiktok = async () => {
             // No external API yet — re-aggregate local webhook data.
             try {
-                await api.get("/dashboard/tiktok-summary");
+                await api.get(providerEndpoint("tiktok"));
                 return { platform: "TikTok", ok: true, msg: "تم تحديث البيانات المحلية" };
             } catch (e) {
                 return { platform: "TikTok", ok: false, msg: "فشل" };
@@ -330,6 +351,7 @@ export default function Dashboard() {
     // Best-effort daily auto-sync — fires once on dashboard mount.
     // Idempotent: the backend skips if the last sync was within 23h.
     const autoSyncMetaIfStale = async () => {
+        if (isMezanV2) return;
         try {
             const { data } = await api.post("/meta/auto-sync-if-stale");
             if (data?.synced && data?.upserted) {
@@ -344,7 +366,7 @@ export default function Dashboard() {
         setLoading(true);
         try {
             const qs = filtersToQueryString(f);
-            const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
+            const { data } = await api.get(`${dashboardEndpoint}${qs ? "?" + qs : ""}`);
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();  // refresh Snapchat card alongside
@@ -360,7 +382,7 @@ export default function Dashboard() {
     const refreshSilently = async () => {
         try {
             const qs = filtersToQueryString(filters);
-            const { data } = await api.get(`/dashboard${qs ? "?" + qs : ""}`);
+            const { data } = await api.get(`${dashboardEndpoint}${qs ? "?" + qs : ""}`);
             setData(data);
             setLastUpdated(Date.now());
             fetchSnapSummary();
@@ -438,7 +460,7 @@ export default function Dashboard() {
 
     useEffect(() => { fetchDashboard(filters); /* eslint-disable-next-line */ }, [filters]);
     // Trigger Meta auto-sync once on mount (idempotent — backend skips if recent)
-    useEffect(() => { autoSyncMetaIfStale(); /* eslint-disable-next-line */ }, []);
+    useEffect(() => { if (!isMezanV2) autoSyncMetaIfStale(); /* eslint-disable-next-line */ }, [isMezanV2]);
 
     const openReprocessPicker = (id) => {
         pendingReprocessId.current = id;
@@ -490,6 +512,11 @@ export default function Dashboard() {
                     <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-extrabold tracking-tight text-foreground" style={{ fontFamily: "Tajawal" }}>
                         لوحة التحكم
                     </h1>
+                    {isMezanV2 && (
+                        <div className="mt-2 inline-flex rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-bold text-violet-800" data-testid="dashboard-v2-source-badge">
+                            مصادر الطلبات والمنتجات والإعلانات: ميزان 2
+                        </div>
+                    )}
                     <p className="text-muted-foreground mt-1.5 text-xs sm:text-sm md:text-base leading-relaxed">
                         {(filters.from || filters.to)
                             ? `عرض البيانات من ${filters.from || "البداية"} إلى ${filters.to || "الآن"}`
@@ -571,7 +598,7 @@ export default function Dashboard() {
                         so the merchant knows real profit may be off. */}
                     {totals.missing_product_cost_count > 0 && (
                         <Link
-                            to="/product-costs?tab=missing"
+                            to={isMezanV2 ? "/products-v2" : "/product-costs?tab=missing"}
                             className="block rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm hover:bg-amber-100 transition-colors"
                             data-testid="dashboard-missing-product-costs-alert"
                         >
@@ -606,7 +633,15 @@ export default function Dashboard() {
                         Refreshes whenever filter range changes.
                         iter-54: hideable via Settings → "بطاقات خاصة". */}
                     {!hiddenCards.includes("product_cost_card") && (
-                        <ProductCostCard refreshKey={`${filters.from || ""}-${filters.to || ""}`} />
+                        <ProductCostCard
+                            refreshKey={`${filters.from || ""}-${filters.to || ""}`}
+                            endpoint={isMezanV2 ? "/dashboard-v2/product-cost-summary" : "/product-costs/summary"}
+                            recomputeEndpoint={isMezanV2 ? null : "/product-costs/recompute"}
+                            sourceLabel={isMezanV2
+                                ? "ميزان 2 + المكونات والخدمات • سلة احتياطياً"
+                                : "من جدول product_costs • SKU/Product ID"}
+                            missingHref={isMezanV2 ? "/products-v2" : "/product-costs?tab=missing"}
+                        />
                     )}
                     {/* iter-56 — Salla wallet reconciliation alert: if the
                         merchant's reference (entered manually from Salla's
@@ -643,8 +678,12 @@ export default function Dashboard() {
                     <ProfitSummaryCard
                         totals={totals}
                         shippingBreakdown={data?.shipping_breakdown || []}
-                        fromDate={filters.from_date}
-                        toDate={filters.to_date}
+                        fromDate={filters.from}
+                        toDate={filters.to}
+                        productCostBreakdown={isMezanV2 ? data?.product_cost_v2 : null}
+                        adsBreakdownEndpoint={isMezanV2
+                            ? "/dashboard-v2/ads-cost-breakdown"
+                            : "/dashboard/ads-cost-breakdown"}
                     />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
@@ -707,8 +746,8 @@ export default function Dashboard() {
                     <UnifiedPaymentGatewaysCard
                         qs={filtersToQueryString(filters)}
                         testid="dashboard-unified-gateways"
-                        fromDate={filters.from_date}
-                        toDate={filters.to_date}
+                        fromDate={filters.from}
+                        toDate={filters.to}
                     />
 
                     {/* Iter-83 — Pending orders callout (separate from net). */}
@@ -734,7 +773,9 @@ export default function Dashboard() {
                                     <div className="min-w-0">
                                         <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Snapchat Ads</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            {snapSummary.source === "snapchat_pixel"
+                                            {isMezanV2
+                                                ? "قراءة مباشرة من حسابات Snapchat المحددة داخل ميزان 2"
+                                                : snapSummary.source === "snapchat_pixel"
                                                 ? "الطلبات والعائد من Snapchat Pixel — تحديث تلقائي مع زر التحديث"
                                                 : "الطلبات والعائد من المتجر (لا يوجد Pixel نشط بعد) — اضغط تحديث لجلب بيانات Snapchat"}
                                             {snapSummary.last_fetched_at && (
@@ -746,6 +787,11 @@ export default function Dashboard() {
                                 <button
                                     type="button"
                                     onClick={async () => {
+                                        if (isMezanV2) {
+                                            await fetchSnapSummary();
+                                            toast.success("تمت إعادة قراءة بيانات Snapchat من ميزان 2");
+                                            return;
+                                        }
                                         try {
                                             // Use the EXACT same flow as DailyCosts page's
                                             // working "جلب من سناب" button: hit the single-date
@@ -836,7 +882,7 @@ export default function Dashboard() {
                                     data-testid="snap-refresh-today-btn"
                                 >
                                     <ArrowsClockwise size={16} weight="bold" />
-                                    تحديث فوري للصرف اليوم
+                                    {isMezanV2 ? "إعادة القراءة من ميزان 2" : "تحديث فوري للصرف اليوم"}
                                 </button>
                             </div>
 
@@ -1000,18 +1046,23 @@ export default function Dashboard() {
                                 NATIVE timezone (PDT/PT) into an isolated collection
                                 `snapchat_reference_stats`. Never feeds any system
                                 calculation — purely for visual comparison. */}
-                            <SnapchatOfficialCard />
+                            {!isMezanV2 && <SnapchatOfficialCard />}
 
                             {/* Iter-159j — Per-Snapchat-ad-account cards.
                                 Only renders when the user has ≥2 Snapchat accounts.
                                 Shows month spend / orders / avg cost / sales /
                                 credit-limit per account. */}
-                            <SnapchatAccountsCards refreshSignal={adCardsRefreshSignal} />
+                            <SnapchatAccountsCards
+                                refreshSignal={adCardsRefreshSignal}
+                                endpoint={isMezanV2
+                                    ? "/dashboard-v2/snapchat-accounts-summary"
+                                    : "/dashboard/snapchat-accounts-summary"}
+                            />
 
                             {/* Footer: link to detailed report */}
                             <div className="mt-4 flex justify-end">
                                 <Link
-                                    to="/reports/ads"
+                                    to={isMezanV2 ? "/ads-manager" : "/reports/ads"}
                                     className="text-xs font-semibold text-yellow-800 hover:text-yellow-900 hover:underline inline-flex items-center gap-1"
                                     data-testid="snap-card-details-link"
                                     style={{ fontFamily: "Tajawal" }}
@@ -1161,7 +1212,7 @@ export default function Dashboard() {
                             {/* Footer: link to detailed report */}
                             <div className="mt-4 flex justify-end">
                                 <Link
-                                    to="/reports/ads"
+                                    to={isMezanV2 ? "/ads-manager" : "/reports/ads"}
                                     className="text-xs font-semibold text-pink-800 hover:text-pink-900 hover:underline inline-flex items-center gap-1"
                                     data-testid="tiktok-card-details-link"
                                     style={{ fontFamily: "Tajawal" }}
@@ -1187,7 +1238,9 @@ export default function Dashboard() {
                                     <div className="min-w-0">
                                         <h2 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "Tajawal" }}>Meta Ads (Facebook + Instagram)</h2>
                                         <p className="text-xs text-muted-foreground">
-                                            ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري لصرف اليوم
+                                            {isMezanV2
+                                                ? "قراءة مباشرة من حسابات Meta المحددة داخل ميزان 2"
+                                                : "ربط مباشر مع Meta Marketing API — اضغط الزر للتحديث الفوري لصرف اليوم"}
                                             {metaSummary.last_sync_at && (
                                                 <span className="ms-2 text-blue-700">• آخر مزامنة: {new Date(metaSummary.last_sync_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}</span>
                                             )}
@@ -1197,6 +1250,11 @@ export default function Dashboard() {
                                 <button
                                     type="button"
                                     onClick={async () => {
+                                        if (isMezanV2) {
+                                            await fetchMetaSummary();
+                                            toast.success("تمت إعادة قراءة بيانات Meta من ميزان 2");
+                                            return;
+                                        }
                                         try {
                                             toast.loading("جاري تحديث صرف Meta لليوم…", { id: "meta-sync" });
                                             const { data } = await api.post("/meta/sync", { days: 1 });
@@ -1230,7 +1288,7 @@ export default function Dashboard() {
                                     data-testid="meta-sync-now-btn"
                                 >
                                     <ArrowsClockwise size={16} weight="bold" />
-                                    تحديث فوري للصرف اليوم
+                                    {isMezanV2 ? "إعادة القراءة من ميزان 2" : "تحديث فوري للصرف اليوم"}
                                 </button>
                             </div>
 

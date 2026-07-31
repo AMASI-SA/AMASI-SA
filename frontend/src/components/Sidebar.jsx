@@ -184,6 +184,12 @@ const SECTIONS = [
         ownerOnly: true,
         items: [
             {
+                to: "/dashboard-v2",
+                label: "لوحة التحكم",
+                icon: House,
+                testid: "nav-mezan-os-dashboard",
+            },
+            {
                 to: "/orders-v2",
                 label: "الطلبات",
                 icon: Package,
