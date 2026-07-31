@@ -64,6 +64,7 @@ import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
+import MezanV2CompletionCenter from "./pages/MezanV2CompletionCenter";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
@@ -333,6 +334,16 @@ function AppRoutes() {
             <Route
                 path="/inventory-receiving-v2"
                 element={<ProtectedRoute><Layout><InventoryReceivingWorkspace /></Layout></ProtectedRoute>}
+            />
+            <Route
+                path="/mezan-v2-plan"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><MezanV2CompletionCenter /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
             />
             <Route
                 path="/order-review"
