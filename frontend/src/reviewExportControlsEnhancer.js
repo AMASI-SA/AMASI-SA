@@ -15,7 +15,8 @@ const text = (value) => String(value || "").trim();
 export function canonicalReviewSpecKey(value) {
   const normalized = text(value)
     .toLocaleLowerCase("ar")
-    .replace(/[ـ:：\s_-]+/g, " ");
+    .replace(/[ـ:：\s_-]+/g, " ")
+    .trim();
   if (["لون", "اللون", "لون المنتج", "اللون المنتج"].includes(normalized)) return "color";
   if (["مقاس", "المقاس", "مقاس المنتج", "المقاس المنتج"].includes(normalized)) return "size";
   return normalized;
