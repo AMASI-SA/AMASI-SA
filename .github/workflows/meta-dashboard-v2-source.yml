@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install focused backend dependencies
-        run: pip install pytest fastapi "pydantic>=2" httpx
+        run: pip install pytest fastapi "pydantic>=2" httpx openpyxl
       - name: Compile V2 dashboard adapter
         working-directory: backend
         run: |
