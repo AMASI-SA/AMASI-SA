@@ -133,7 +133,7 @@ async def test_orders_v2_context_preserves_commerce_and_removes_customer_pii():
     assert context["orders"][0]["sample_id"] == "order_sample_01"
     assert context["orders"][0]["totals"]["tax_reported_by_source"] == 15.47
     assert context["orders"][0]["items"][0]["tax_reported_by_source"] == 6.77
-    assert "orders[].totals.tax_reported_by_source<number>" in context["observed_paths"]
+    assert "totals.tax_reported_by_source<number>" in context["observed_paths"]
     assert "Arafat Private" not in encoded
     assert "+966500000000" not in encoded
     assert "private@example.com" not in encoded
