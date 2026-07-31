@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";
 import "@/reviewMezanImageEnhancer";
-import "@/reviewCustomerHistoryEnhancer";
+import "@/reviewCustomerHistoryFast";
 import App from "@/App";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 
