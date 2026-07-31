@@ -33,7 +33,7 @@ def _local_today_date():
     """Same as _local_today_iso but returns a date object."""
     return datetime.now(RIYADH_TZ).date()
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1827,6 +1827,8 @@ async def dashboard(
     to_date: Optional[str] = None,
     payment_methods: Optional[str] = None,
     shipping_companies: Optional[str] = None,
+    include_legacy_analyses: bool = Query(default=True, include_in_schema=False),
+    allow_self_heal: bool = Query(default=True, include_in_schema=False),
 ):
     """Return aggregated totals from unified_orders (single source of truth).
 
@@ -1882,22 +1884,23 @@ async def dashboard(
     # contains any Make write. This corrects historical bucketing
     # WITHOUT requiring a manual recompute or migration script.
     ds_promoted = 0
-    for o in all_orders:
-        if o.get("data_source") == "excel":
-            history = o.get("data_sources") or []
-            if any((s or {}).get("source") == "make" for s in history):
-                o["data_source"] = "make"
-                ds_promoted += 1
-                # Persist for next request so we don't repeat the work.
-                try:
-                    await db.unified_orders.update_one(
-                        {"user_id": user["id"], "order_number": o["order_number"]},
-                        {"$set": {"data_source": "make"}},
-                    )
-                except Exception:
-                    pass  # never fail dashboard on heal
-    if ds_promoted:
-        logger.info("Dashboard: promoted %d orders excel→make", ds_promoted)
+    if allow_self_heal:
+        for o in all_orders:
+            if o.get("data_source") == "excel":
+                history = o.get("data_sources") or []
+                if any((s or {}).get("source") == "make" for s in history):
+                    o["data_source"] = "make"
+                    ds_promoted += 1
+                    # Persist for next request so we don't repeat the work.
+                    try:
+                        await db.unified_orders.update_one(
+                            {"user_id": user["id"], "order_number": o["order_number"]},
+                            {"$set": {"data_source": "make"}},
+                        )
+                    except Exception:
+                        pass  # never fail dashboard on heal
+        if ds_promoted:
+            logger.info("Dashboard: promoted %d orders excel→make", ds_promoted)
 
     # Iteration 27: lazy self-heal. Any order in the filtered range
     # whose `total_product_cost` is still null/missing → re-run
@@ -1906,22 +1909,23 @@ async def dashboard(
     # before a cost was added (or on environments without the
     # iteration-26 auto-recompute hooks). Idempotent + only touches
     # stale rows so it's effectively free when data is healthy.
-    try:
-        from product_costs import attach_cost_to_order_doc as _attach_pc
-        stale_indexes: list[int] = []
-        for i, o in enumerate(all_orders):
-            if o.get("total_product_cost") is None:
-                stale_indexes.append(i)
-        for i in stale_indexes[:500]:  # cap heal-per-request for safety
-            o = all_orders[i]
-            patch = await _attach_pc(db, user["id"], o)
-            await db.unified_orders.update_one(
-                {"user_id": user["id"], "order_number": o["order_number"]},
-                {"$set": patch},
-            )
-            o.update(patch)  # refresh in-memory copy so totals use new values
-    except Exception as _exc:
-        logger.warning("Dashboard cost self-heal skipped: %s", _exc)
+    if allow_self_heal:
+        try:
+            from product_costs import attach_cost_to_order_doc as _attach_pc
+            stale_indexes: list[int] = []
+            for i, o in enumerate(all_orders):
+                if o.get("total_product_cost") is None:
+                    stale_indexes.append(i)
+            for i in stale_indexes[:500]:  # cap heal-per-request for safety
+                o = all_orders[i]
+                patch = await _attach_pc(db, user["id"], o)
+                await db.unified_orders.update_one(
+                    {"user_id": user["id"], "order_number": o["order_number"]},
+                    {"$set": patch},
+                )
+                o.update(patch)  # refresh in-memory copy so totals use new values
+        except Exception as _exc:
+            logger.warning("Dashboard cost self-heal skipped: %s", _exc)
 
     if pm_list or ship_list:
         all_orders = [
@@ -2135,7 +2139,7 @@ async def dashboard(
         "تحويل بنكي", "حوالة بنكية", "تحويل البنك", "تحويل بنوك",
         "bank transfer", "bank_transfer", "wire transfer",
     )
-    if not included_statuses:
+    if include_legacy_analyses and not included_statuses:
         legacy_q: dict = {
             "user_id": user["id"],
             "$or": [
@@ -3924,6 +3928,10 @@ attach_payment_gateway_metrics_routes(api, db)
 attach_order_status_policy_routes(api, db)
 attach_shipping_ledger_routes(api, db, current_user)
 attach_orders_explorer_routes(api, db)
+from dashboard_v2_routes import make_dashboard_v2_router
+api.include_router(
+    make_dashboard_v2_router(db, current_user, dashboard, _require_owner)
+)
 api.include_router(make_order_engine_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)

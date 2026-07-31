@@ -9,7 +9,13 @@ import { toast } from "sonner";
 import api from "../lib/api";
 import { formatMoney, formatInt } from "../lib/format";
 
-export default function ProductCostCard({ refreshKey = 0 }) {
+export default function ProductCostCard({
+    refreshKey = 0,
+    endpoint = "/product-costs/summary",
+    recomputeEndpoint = "/product-costs/recompute",
+    sourceLabel = "من جدول product_costs • SKU/Product ID",
+    missingHref = "/product-costs?tab=missing",
+}) {
     const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(true);
     const [recomputing, setRecomputing] = useState(false);
@@ -17,7 +23,7 @@ export default function ProductCostCard({ refreshKey = 0 }) {
 
     const load = async () => {
         try {
-            const { data } = await api.get("/product-costs/summary");
+            const { data } = await api.get(endpoint);
             setSummary(data);
             setUpdatedAt(new Date());
         } catch { /* silent — card just stays empty */ }
@@ -37,7 +43,8 @@ export default function ProductCostCard({ refreshKey = 0 }) {
     const recompute = async (days, label) => {
         setRecomputing(true);
         try {
-            const { data } = await api.post(`/product-costs/recompute?days=${days}`);
+            if (!recomputeEndpoint) return;
+            const { data } = await api.post(`${recomputeEndpoint}?days=${days}`);
             await load();
             const ok = data.orders_updated || 0;
             const complete = data.complete_orders || 0;
@@ -74,13 +81,13 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                     <div>
                         <div className="text-base font-extrabold leading-tight">تكلفة المنتجات</div>
                         <div className="text-[10px] text-muted-foreground">
-                            من جدول product_costs • SKU/Product ID
+                            {sourceLabel}
                         </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Iteration 27: manual recompute of last 2 days. */}
-                    <button
+                    {recomputeEndpoint && <button
                         type="button"
                         onClick={recomputeNow}
                         disabled={recomputing}
@@ -90,10 +97,10 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                     >
                         <Lightning size={14} weight="fill" className={recomputing ? "animate-pulse" : ""} />
                         {recomputing ? "جارٍ التحديث…" : "تحديث آخر يومين"}
-                    </button>
+                    </button>}
                     {/* Iteration 28: manual recompute of the WHOLE month
                         (30 days). Heavier but covers stale older orders. */}
-                    <button
+                    {recomputeEndpoint && <button
                         type="button"
                         onClick={recomputeMonth}
                         disabled={recomputing}
@@ -103,7 +110,7 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                     >
                         <Lightning size={14} weight="fill" className={recomputing ? "animate-pulse" : ""} />
                         {recomputing ? "جارٍ…" : "تحديث الشهر بالكامل"}
-                    </button>
+                    </button>}
                     <button
                         type="button"
                         onClick={load}
@@ -144,7 +151,7 @@ export default function ProductCostCard({ refreshKey = 0 }) {
                     suffix={!loading && "منتج"}
                     accent={summary?.missing_products_count > 0 ? "amber" : "neutral"}
                     testid="product-cost-card-missing"
-                    href={summary?.missing_products_count > 0 ? "/product-costs?tab=missing" : null}
+                    href={summary?.missing_products_count > 0 ? missingHref : null}
                 />
             </div>
 

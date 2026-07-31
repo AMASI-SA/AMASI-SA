@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, NavLink } from "react-router-dom";
-import { List, MagnifyingGlass, Package, Queue, Cube, Warehouse, Plug, Robot, UsersThree, ChartLineUp, ChatsCircle, ClipboardText } from "@phosphor-icons/react";
+import { List, MagnifyingGlass, House, Package, Queue, Cube, Warehouse, Plug, Robot, UsersThree, ChartLineUp, ChatsCircle, ClipboardText } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
@@ -35,6 +35,7 @@ function GlobalOrderSearch({ compact = false }) {
 }
 
 const V2_LINKS = [
+    { to: "/dashboard-v2", label: "لوحة التحكم", Icon: House },
     { to: "/orders-v2", label: "الطلبات", Icon: Package },
     { to: "/fulfillment-v2", label: "إدارة التجهيز", Icon: Queue },
     { to: "/inventory-receiving-v2", label: "استلام المخزون", Icon: ClipboardText },
@@ -49,7 +50,7 @@ const V2_LINKS = [
 ];
 
 function MezanV2Navigation({ location }) {
-    const isV2 = ["/orders-v2", "/fulfillment-v2", "/inventory-receiving-v2", "/products-v2", "/components-v2", "/integrations-v2", "/customer-intelligence", "/ads-manager"].some((prefix) => location.pathname.startsWith(prefix));
+    const isV2 = ["/dashboard-v2", "/orders-v2", "/fulfillment-v2", "/inventory-receiving-v2", "/products-v2", "/components-v2", "/integrations-v2", "/customer-intelligence", "/ads-manager"].some((prefix) => location.pathname.startsWith(prefix));
     if (!isV2) return null;
     return (
         <nav className="mb-5 flex flex-wrap gap-2 rounded-xl border border-violet-100 bg-white p-2 shadow-sm" aria-label="صفحات Mezan OS V2">

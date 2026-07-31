@@ -32,10 +32,21 @@ def _norm(value: Any) -> str:
     return " ".join(str(value or "").replace("_", " ").strip().casefold().split())
 
 
+def _item_value(item: Any, key: str, default: Any = None) -> Any:
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
 def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
     """Extract selected (option, value) identities from canonical order item."""
     tokens: set[tuple[str, str]] = set()
-    for row in getattr(item, "options_raw", None) or []:
+    raw_rows = (
+        _item_value(item, "options_raw")
+        or _item_value(item, "options")
+        or []
+    )
+    for row in raw_rows:
         if not isinstance(row, dict):
             continue
         option = row.get("option") if isinstance(row.get("option"), dict) else {}
@@ -49,7 +60,7 @@ def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
         if option_name not in (None, "") and value_name not in (None, "", {}):
             tokens.add((f"name:{_norm(option_name)}", f"name:{_norm(value_name)}"))
 
-    normalized = getattr(item, "options_normalized", None) or {}
+    normalized = _item_value(item, "options_normalized") or {}
     if isinstance(normalized, dict):
         for key, value in normalized.items():
             if isinstance(value, list):
@@ -61,9 +72,67 @@ def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
 
 
 def binding_matches(binding: dict[str, Any], tokens: set[tuple[str, str]]) -> bool:
-    id_token = (f"id:{binding.get('option_id')}", f"id:{binding.get('value_id')}")
-    name_token = (f"name:{_norm(binding.get('option_name'))}", f"name:{_norm(binding.get('value_name'))}")
-    return id_token in tokens or name_token in tokens
+    option_id = binding.get("option_id")
+    value_id = binding.get("value_id")
+    option_name = _norm(binding.get("option_name"))
+    value_name = _norm(binding.get("value_name"))
+    id_match = (
+        option_id not in (None, "")
+        and value_id not in (None, "")
+        and (f"id:{option_id}", f"id:{value_id}") in tokens
+    )
+    name_match = (
+        bool(option_name)
+        and bool(value_name)
+        and (f"name:{option_name}", f"name:{value_name}") in tokens
+    )
+    return id_match or name_match
+
+
+def resolve_base_unit_cost(
+    item: Any,
+    profile: dict[str, Any] | None,
+    product: dict[str, Any] | None,
+) -> tuple[float | None, str]:
+    """Resolve a line's base cost with the Mezan V2 → Salla fallback rule.
+
+    An explicit zero is a real Mezan cost and must never fall back to Salla.
+    Variant costs take precedence over their corresponding product base cost.
+    """
+    profile = profile or {}
+    product = product or {}
+    variant_id = str(_item_value(item, "variant_id") or "").strip()
+    sku = str(_item_value(item, "sku") or "").strip().casefold()
+
+    variant_costs = profile.get("variant_costs")
+    if isinstance(variant_costs, dict) and variant_id:
+        if variant_id in variant_costs:
+            parsed = _number(variant_costs.get(variant_id))
+            if parsed is not None:
+                return parsed, "mezan_v2_variant"
+
+    if "base_cost" in profile and profile.get("base_cost") not in (None, ""):
+        parsed = _number(profile.get("base_cost"))
+        if parsed is not None:
+            return parsed, "mezan_v2_base"
+
+    for variant in product.get("variants") or []:
+        if not isinstance(variant, dict):
+            continue
+        same_variant = variant_id and str(variant.get("id") or "").strip() == variant_id
+        same_sku = sku and str(variant.get("sku") or "").strip().casefold() == sku
+        if not (same_variant or same_sku):
+            continue
+        if variant.get("cost_price_from_salla") not in (None, ""):
+            parsed = _number(variant.get("cost_price_from_salla"))
+            if parsed is not None:
+                return parsed, "salla_variant_fallback"
+
+    if product.get("cost_price_from_salla") not in (None, ""):
+        parsed = _number(product.get("cost_price_from_salla"))
+        if parsed is not None:
+            return parsed, "salla_product_fallback"
+    return None, "missing"
 
 
 async def ensure_indexes(db: Any) -> None:
@@ -76,11 +145,18 @@ async def ensure_indexes(db: Any) -> None:
 
 async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) -> dict[str, Any]:
     await ensure_indexes(db)
-    product_ids = {str(item.product_id or item.parent_product_id or "").strip() for item in order.items}
+    product_ids = {str(item.parent_product_id or item.product_id or "").strip() for item in order.items}
     product_ids.discard("")
     products = await db[PRODUCTS].find(
         {"user_id": user_id, "salla_product_id": {"$in": list(product_ids)}},
-        {"_id": 0, "salla_product_id": 1, "mezan_product_id": 1, "name": 1},
+        {
+            "_id": 0,
+            "salla_product_id": 1,
+            "mezan_product_id": 1,
+            "name": 1,
+            "cost_price_from_salla": 1,
+            "variants": 1,
+        },
     ).to_list(length=max(1, len(product_ids)))
     product_map = {str(row.get("salla_product_id")): row for row in products}
 
@@ -122,13 +198,22 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
     rows = []
     order_total_cost = 0.0
     for item in order.items:
-        product_id = str(item.product_id or item.parent_product_id or "").strip()
+        product_id = str(item.parent_product_id or item.product_id or "").strip()
         quantity = float(item.quantity or 1)
         profile = profile_map.get(product_id, {})
-        base_unit_cost = _number(profile.get("base_cost")) or 0.0
+        resolved_base_cost, base_cost_source = resolve_base_unit_cost(
+            item,
+            profile,
+            product_map.get(product_id),
+        )
+        base_unit_cost = resolved_base_cost if resolved_base_cost is not None else 0.0
         applied_product_resources = []
         product_resource_unit_cost = 0.0
+        seen_product_binding_ids: set[str] = set()
         for binding in product_bindings_by_product.get(product_id, []):
+            binding_id = str(binding.get("id") or "")
+            if binding_id and binding_id in seen_product_binding_ids:
+                continue
             resource = resource_map.get(str(binding.get("resource_id")), {})
             unit_cost = _number(resource.get("unit_cost")) or 0.0
             amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
@@ -145,11 +230,17 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
                     "unit_cost": unit_cost,
                 },
             })
+            if binding_id:
+                seen_product_binding_ids.add(binding_id)
         tokens = selected_option_tokens(item)
         applied = []
         option_unit_cost = 0.0
+        seen_option_binding_ids: set[str] = set()
         for binding in bindings_by_product.get(product_id, []):
             if not binding_matches(binding, tokens):
+                continue
+            binding_id = str(binding.get("id") or "")
+            if binding_id and binding_id in seen_option_binding_ids:
                 continue
             amount = _number(binding.get("direct_amount")) or 0.0
             resource_snapshot = None
@@ -169,6 +260,8 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
                 "mode": binding.get("mode"), "quantity": binding.get("quantity") or 1,
                 "resolved_amount": round(amount, 4), "resource": resource_snapshot,
             })
+            if binding_id:
+                seen_option_binding_ids.add(binding_id)
         unit_cost = (
             base_unit_cost
             + product_resource_unit_cost
@@ -189,6 +282,8 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             "sku": item.sku,
             "quantity": quantity,
             "base_unit_cost": round(base_unit_cost, 4),
+            "base_cost_source": base_cost_source,
+            "cost_complete": resolved_base_cost is not None,
             "product_resource_unit_cost": round(
                 product_resource_unit_cost,
                 4,

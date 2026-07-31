@@ -158,7 +158,15 @@ function Line({ icon: Icon, label, value, share = null, color = "amber", isFirst
     );
 }
 
-export default function ProfitSummaryCard({ totals, shippingBreakdown = [], fromDate, toDate, periodLabel }) {
+export default function ProfitSummaryCard({
+    totals,
+    shippingBreakdown = [],
+    fromDate,
+    toDate,
+    periodLabel,
+    productCostBreakdown = null,
+    adsBreakdownEndpoint = "/dashboard/ads-cost-breakdown",
+}) {
     const t = totals || {};
     const [excludedOpen, setExcludedOpen] = useState(false);
     const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
@@ -492,12 +500,80 @@ export default function ProfitSummaryCard({ totals, shippingBreakdown = [], from
                 onClose={() => setAdsBreakdownOpen(false)}
                 fromDate={fromDate}
                 toDate={toDate}
+                endpoint={adsBreakdownEndpoint}
             />
-            <DailyProductCostModal
-                open={productCostOpen}
-                onClose={() => setProductCostOpen(false)}
-                onSaved={() => setProductCostOpen(false)}
-            />
+            {productCostBreakdown ? (
+                <MezanV2ProductCostModal
+                    open={productCostOpen}
+                    onClose={() => setProductCostOpen(false)}
+                    data={productCostBreakdown}
+                />
+            ) : (
+                <DailyProductCostModal
+                    open={productCostOpen}
+                    onClose={() => setProductCostOpen(false)}
+                    onSaved={() => setProductCostOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+function MezanV2ProductCostModal({ open, onClose, data }) {
+    if (!open) return null;
+    const breakdown = data?.breakdown || {};
+    const rows = [
+        ["تكلفة المتغير من ميزان 2", breakdown.mezan_v2_variant],
+        ["تكلفة المنتج من ميزان 2", breakdown.mezan_v2_base],
+        ["تكلفة المتغير من سلة (احتياطي)", breakdown.salla_variant_fallback],
+        ["تكلفة المنتج من سلة (احتياطي)", breakdown.salla_product_fallback],
+        ["مكونات وخدمات مرتبطة بالمنتج", breakdown.product_components],
+        ["مكونات وخدمات الخيارات المختارة", breakdown.selected_options],
+    ];
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={onClose}
+            data-testid="mezan-v2-product-cost-overlay"
+        >
+            <div
+                className="w-full max-w-xl rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+                dir="rtl"
+                data-testid="mezan-v2-product-cost-modal"
+            >
+                <div className="flex items-center justify-between rounded-t-2xl border-b bg-amber-50 px-5 py-4">
+                    <div>
+                        <h2 className="font-extrabold text-amber-900">تفاصيل تكلفة المنتجات — ميزان 2</h2>
+                        <p className="mt-1 text-xs text-amber-800">
+                            ميزان أولاً، ثم سلة عند غياب تكلفة ميزان، مع إضافة المكونات والخدمات.
+                        </p>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-lg border bg-white px-3 py-1 text-sm font-bold">إغلاق ✕</button>
+                </div>
+                <div className="space-y-2 p-5">
+                    {rows.map(([label, value]) => (
+                        <div key={label} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                            <span className="font-semibold text-slate-700">{label}</span>
+                            <span className="num font-extrabold text-amber-800">{fmtSar(value)} ر.س</span>
+                        </div>
+                    ))}
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-lg bg-emerald-50 p-3 text-emerald-900">
+                            <div className="font-bold">منتجات مرتبطة</div>
+                            <div className="mt-1 text-lg font-extrabold">{fmtInt(data?.linked_products_count)}</div>
+                        </div>
+                        <div className="rounded-lg bg-amber-50 p-3 text-amber-900">
+                            <div className="font-bold">أسطر بدون تكلفة أساسية</div>
+                            <div className="mt-1 text-lg font-extrabold">{fmtInt(data?.missing_product_cost_count)}</div>
+                        </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t pt-3 font-extrabold">
+                        <span>الإجمالي المحتسب</span>
+                        <span className="num text-lg text-amber-800">{fmtSar(data?.total)} ر.س</span>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
