@@ -7,15 +7,21 @@
  * be removed after the historical Ads Manager workflow guard is repaired.
  */
 import IntegrationCardV2 from "./IntegrationCardV2";
+import MetaReportingControl from "./MetaReportingControl";
 import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
 
 export default function IntegrationCard(props) {
-    const isTikTok = props.integration?.provider === "tiktok_ads";
-    if (!isTikTok) return <IntegrationCardV2 {...props} />;
+    const provider = props.integration?.provider;
+    const extra = provider === "tiktok_ads"
+        ? <TikTokReportingSyncControl integration={props.integration} />
+        : provider === "meta_ads"
+            ? <MetaReportingControl integration={props.integration} />
+            : null;
+    if (!extra) return <IntegrationCardV2 {...props} />;
     return (
         <div className="space-y-2">
             <IntegrationCardV2 {...props} />
-            <TikTokReportingSyncControl integration={props.integration} />
+            {extra}
         </div>
     );
 }

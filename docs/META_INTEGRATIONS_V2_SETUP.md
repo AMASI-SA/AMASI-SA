@@ -57,12 +57,60 @@ Optional configuration/rotation:
 - `META_BUSINESS_SCOPES`
 - `META_TOKEN_ENC_KEY_OLD`
 - `META_OAUTH_STATE_SECRET`
+- `META_USD_TO_SAR_RATE=3.75`
+
+The direct reporting data plane is disabled by default. Enable it only after the
+OAuth connection and owner account selection are verified:
+
+- `META_NATIVE_REPORTING_SYNC_ENABLED=true`
 
 Generate the Fernet encryption key:
 
 ```bash
 python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
+
+## Native reporting routes
+
+```text
+GET  /api/integrations-v2/meta_ads/accounts-selection
+PUT  /api/integrations-v2/meta_ads/accounts-selection
+POST /api/integrations-v2/meta_ads/sync-async
+GET  /api/integrations-v2/meta_ads/sync-async/{run_id}
+```
+
+When OAuth discovers exactly one Meta ad account, Mezan selects it
+automatically. When more than one account is discovered, the owner must select
+the Amasi accounts explicitly before reporting can run.
+
+The reporting request uses account-level Insights with:
+
+- the ad account's configured attribution setting;
+- Meta's unified attribution setting;
+- one daily bucket per account;
+- spend, impressions, clicks, purchase count, and purchase value.
+
+Daily rows are stored only in:
+
+```text
+mezan_meta_performance_daily_v2
+```
+
+Each row is marked `source_only=true` and `accounting_eligible=false`. The
+reporting connector does not write campaigns, `ads_daily`, `general_ledger`,
+Qoyod, or legacy Meta collections.
+
+## Safe rollout
+
+1. Authorize Meta and confirm the discovered Business and ad accounts.
+2. Select only the Amasi ad accounts.
+3. Enable `META_NATIVE_REPORTING_SYNC_ENABLED=true`.
+4. Run a 7-day sync from the Meta card.
+5. Compare spend, purchases, and purchase value with Meta Ads Manager using the
+   same account attribution setting and date window.
+6. Expand to 30 days only after the bounded comparison succeeds.
+7. Keep any existing legacy feed available for audit until the direct data is
+   stable.
 
 ## App Review evidence
 
@@ -73,8 +121,9 @@ Prepare a reviewer flow that shows:
 3. Merchant grants access to their Business and ad account.
 4. Mezan displays only the merchant's authorized ad accounts, businesses,
    pixels, catalogs, and Instagram professional accounts.
-5. Mezan reads campaigns/reporting and diagnoses tracking; no mutation occurs
-   without owner approval.
+5. The merchant selects the accounts to include in reporting.
+6. Mezan runs a read-only daily report and displays the audited result.
+7. No campaign or accounting mutation occurs.
 
 For `ads_management`, explain the future approval-gated campaign management
 workflow. For catalog, Page, Instagram, or lead permissions, include a working
@@ -93,15 +142,17 @@ screen and exact reviewer navigation for each permission requested.
   funding-source details.
 - The native connector does not read or write `meta_connections` or
   `meta_ads_daily`.
+- Reporting is owner-scoped, selected-account-only, asynchronous, and disabled
+  by default.
 
 ## Current delivery boundary
 
 This delivery provides OAuth, long-lived encrypted credentials, token
 validation, direct discovery of Businesses/ad accounts/pixels/catalogs/
-Instagram accounts, safe balance/spend-cap fields, permission evidence, health,
-and local tests.
+Instagram accounts, safe balance/spend-cap fields, owner account selection, and
+read-only daily reporting.
 
-Native campaign/reporting sync, Events Manager diagnostics, Conversions API,
-billing document retrieval, and provider mutations are separate bounded
-releases. Mutations remain blocked behind proposal, preview, approval,
-verification, audit, and rollback controls.
+Events Manager diagnostics, Conversions API event sending, billing document
+retrieval, and provider mutations remain separate bounded releases. Mutations
+stay blocked behind proposal, preview, approval, verification, audit, and
+rollback controls.

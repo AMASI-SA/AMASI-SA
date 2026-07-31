@@ -8,9 +8,13 @@ on:
       - "backend/integrations_control_center/meta_*.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/tests/test_meta_native_integrations_v2.py"
+      - "backend/tests/test_meta_native_reporting.py"
       - "frontend/src/services/metaIntegrationsV2.js"
       - "frontend/src/services/metaIntegrationsV2.test.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCard.js"
+      - "frontend/src/components/integrationsV2/MetaReportingControl.jsx"
+      - "frontend/src/components/integrationsV2/MetaReportingControl.test.jsx"
       - "docs/META_INTEGRATIONS_V2_SETUP.md"
       - ".github/workflows/meta-integrations-v2.yml"
   workflow_dispatch:
@@ -20,7 +24,7 @@ permissions:
 
 jobs:
   backend-tests:
-    name: Meta OAuth backend tests
+    name: Meta OAuth and reporting backend tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,7 +48,9 @@ jobs:
       - name: Compile Meta V2 connector
         run: |
           python -m compileall -q integrations_control_center
-          python -m py_compile tests/test_meta_native_integrations_v2.py
+          python -m py_compile \
+            tests/test_meta_native_integrations_v2.py \
+            tests/test_meta_native_reporting.py
       - name: Enforce legacy isolation
         run: >-
           python -c "from integrations_control_center.meta_native_guard import assert_meta_v2_is_legacy_independent; assert_meta_v2_is_legacy_independent()"
@@ -52,6 +58,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_meta_native_integrations_v2.py
+          tests/test_meta_native_reporting.py
           -q
           --tb=short
 
@@ -77,5 +84,6 @@ jobs:
           --watchAll=false
           --runInBand
           src/services/metaIntegrationsV2.test.js
+          src/components/integrationsV2/MetaReportingControl.test.jsx
       - name: Build frontend
         run: CI=false yarn build
