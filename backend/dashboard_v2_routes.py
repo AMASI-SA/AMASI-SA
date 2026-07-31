@@ -1,0 +1,771 @@
+"""Owner-only Mezan V2 dashboard backed by V2 operational sources.
+
+The response intentionally preserves the legacy dashboard contract so the same
+UI can be reused. Orders/sales come from ``unified_orders``; product costs are
+recalculated from Mezan V2 products, cost profiles, components and selected
+options; ad spend comes from the native V2 reporting facts (with Google kept as
+an explicitly labelled transitional read). Salaries, shipping configuration and
+payment fee formulae stay inherited from the legacy dashboard response.
+"""
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Callable
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, Query
+
+from auth import ensure_user_settings
+from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
+from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
+from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
+from order_option_cost_snapshot_routes import (
+    binding_matches,
+    resolve_base_unit_cost,
+    selected_option_tokens,
+)
+from order_status_policy import effective_product_cost, get_policy_map
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
+from product_option_cost_routes import BINDINGS, RESOURCES
+from product_v2_details_routes import COST_PROFILES
+from product_v2_routes import PRODUCTS, _number
+
+
+SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
+META_FACTS = "mezan_meta_performance_daily_v2"
+TIKTOK_FACTS = "mezan_tiktok_performance_daily_v2"
+RIYADH_TZ = ZoneInfo("Asia/Riyadh")
+PROVIDER_IDS = {
+    "snapchat": SNAPCHAT_PROVIDER_ID,
+    "meta": META_PROVIDER_ID,
+    "tiktok": TIKTOK_PROVIDER_ID,
+}
+
+
+def _today_riyadh() -> date:
+    return datetime.now(timezone.utc).astimezone(RIYADH_TZ).date()
+
+
+def _float(value: Any) -> float:
+    try:
+        parsed = float(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return parsed
+
+
+def _matches_any(value: str, allowed: list[str]) -> bool:
+    if not allowed:
+        return True
+    normalized = str(value or "").strip().casefold()
+    return any(
+        candidate and (
+            candidate == normalized
+            or candidate in normalized
+            or normalized in candidate
+        )
+        for candidate in (str(item).strip().casefold() for item in allowed)
+    )
+
+
+async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
+    if hasattr(cursor, "to_list"):
+        return await cursor.to_list(length=length)
+    return [row async for row in cursor]
+
+
+def _line_product(
+    item: dict[str, Any],
+    *,
+    products_by_id: dict[str, dict[str, Any]],
+    products_by_variant: dict[str, dict[str, Any]],
+    products_by_sku: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    for key in (item.get("parent_product_id"), item.get("product_id")):
+        value = str(key or "").strip()
+        if value and value in products_by_id:
+            return products_by_id[value]
+    variant_id = str(item.get("variant_id") or "").strip()
+    if variant_id and variant_id in products_by_variant:
+        return products_by_variant[variant_id]
+    sku = str(item.get("sku") or "").strip().casefold()
+    return products_by_sku.get(sku) if sku else None
+
+
+def calculate_mezan_v2_line_cost(
+    item: dict[str, Any],
+    *,
+    product: dict[str, Any] | None,
+    profile: dict[str, Any] | None,
+    product_bindings: list[dict[str, Any]],
+    option_bindings: list[dict[str, Any]],
+    resources: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Calculate one order line without mutating any operational record."""
+    quantity = _number(item.get("quantity"))
+    quantity = quantity if quantity is not None and quantity > 0 else 1.0
+    base, source = resolve_base_unit_cost(item, profile, product)
+    base_unit = base if base is not None else 0.0
+
+    product_resource_unit = 0.0
+    applied_product_binding_ids: set[str] = set()
+    for binding in product_bindings:
+        binding_id = str(binding.get("id") or "")
+        if binding_id and binding_id in applied_product_binding_ids:
+            continue
+        resource = resources.get(str(binding.get("resource_id") or ""), {})
+        unit_cost = _number(resource.get("unit_cost")) or 0.0
+        multiplier = _number(binding.get("quantity")) or 1.0
+        product_resource_unit += unit_cost * multiplier
+        if binding_id:
+            applied_product_binding_ids.add(binding_id)
+
+    option_resource_unit = 0.0
+    applied_option_binding_ids: set[str] = set()
+    tokens = selected_option_tokens(item)
+    for binding in option_bindings:
+        if not binding_matches(binding, tokens):
+            continue
+        binding_id = str(binding.get("id") or "")
+        if binding_id and binding_id in applied_option_binding_ids:
+            continue
+        amount = _number(binding.get("direct_amount")) or 0.0
+        if binding.get("mode") == "resource":
+            resource = resources.get(str(binding.get("resource_id") or ""), {})
+            unit_cost = _number(resource.get("unit_cost")) or 0.0
+            amount = unit_cost * (_number(binding.get("quantity")) or 1.0)
+        option_resource_unit += amount
+        if binding_id:
+            applied_option_binding_ids.add(binding_id)
+
+    component_unit = product_resource_unit + option_resource_unit
+    return {
+        "quantity": quantity,
+        "base_cost_source": source,
+        "base_complete": base is not None,
+        "base_total": round(base_unit * quantity, 4),
+        "product_components_total": round(product_resource_unit * quantity, 4),
+        "selected_options_total": round(option_resource_unit * quantity, 4),
+        "components_total": round(component_unit * quantity, 4),
+        "line_total": round((base_unit + component_unit) * quantity, 4),
+    }
+
+
+async def _filtered_orders(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: str | None,
+    to_date: str | None,
+    payment_methods: str | None,
+    shipping_companies: str | None,
+) -> list[dict[str, Any]]:
+    settings = await ensure_user_settings(db, user_id)
+    query: dict[str, Any] = {"user_id": user_id}
+    if from_date or to_date:
+        query["order_date"] = {}
+        if from_date:
+            query["order_date"]["$gte"] = from_date
+        if to_date:
+            query["order_date"]["$lte"] = to_date
+    if settings.get("hide_inferred_date_orders"):
+        query["order_date_inferred"] = {"$ne": True}
+    orders = await _to_list(
+        db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
+        100000,
+    )
+    pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
+    ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
+    included_statuses = settings.get("report_included_statuses") or []
+    return [
+        order for order in orders
+        if _matches_any(order.get("payment_method", ""), pm_list)
+        and _matches_any(order.get("shipping_company", ""), ship_list)
+        and _matches_any(order.get("order_status", ""), included_statuses)
+    ]
+
+
+async def build_mezan_v2_product_cost(
+    db: Any,
+    user_id: str,
+    orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    products = await _to_list(
+        db[PRODUCTS].find(
+            {"user_id": user_id},
+            {
+                "_id": 0,
+                "salla_product_id": 1,
+                "mezan_product_id": 1,
+                "sku": 1,
+                "cost_price_from_salla": 1,
+                "variants": 1,
+            },
+        ),
+        100000,
+    )
+    products_by_id: dict[str, dict[str, Any]] = {}
+    products_by_variant: dict[str, dict[str, Any]] = {}
+    products_by_sku: dict[str, dict[str, Any]] = {}
+    for product in products:
+        product_id = str(product.get("salla_product_id") or "").strip()
+        if product_id:
+            products_by_id[product_id] = product
+        sku = str(product.get("sku") or "").strip().casefold()
+        if sku:
+            products_by_sku[sku] = product
+        for variant in product.get("variants") or []:
+            if not isinstance(variant, dict):
+                continue
+            variant_id = str(variant.get("id") or "").strip()
+            if variant_id:
+                products_by_variant[variant_id] = product
+            variant_sku = str(variant.get("sku") or "").strip().casefold()
+            if variant_sku:
+                products_by_sku[variant_sku] = product
+
+    product_ids = list(products_by_id)
+    profiles = await _to_list(
+        db[COST_PROFILES].find(
+            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"_id": 0},
+        ),
+        max(1, len(product_ids)),
+    )
+    option_bindings = await _to_list(
+        db[BINDINGS].find(
+            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"_id": 0},
+        ),
+        100000,
+    )
+    product_bindings = await _to_list(
+        db[PRODUCT_RESOURCE_BINDINGS].find(
+            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+            {"_id": 0},
+        ),
+        100000,
+    )
+    resource_ids = {
+        str(binding.get("resource_id"))
+        for binding in option_bindings + product_bindings
+        if binding.get("resource_id")
+    }
+    resource_rows = await _to_list(
+        db[RESOURCES].find(
+            {"user_id": user_id, "id": {"$in": list(resource_ids)}},
+            {"_id": 0},
+        ),
+        max(1, len(resource_ids)),
+    )
+    profile_map = {str(row.get("salla_product_id")): row for row in profiles}
+    option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in option_bindings:
+        option_map[str(row.get("salla_product_id"))].append(row)
+    for row in product_bindings:
+        product_binding_map[str(row.get("salla_product_id"))].append(row)
+    resources = {str(row.get("id")): row for row in resource_rows}
+    policy = await get_policy_map(db, user_id)
+
+    totals = defaultdict(float)
+    source_lines = defaultdict(int)
+    linked_products: set[str] = set()
+    missing_products: set[str] = set()
+    missing_lines = 0
+    no_products_orders = 0
+    incomplete_orders = 0
+
+    for order in orders:
+        raw_order_total = 0.0
+        order_parts = defaultdict(float)
+        items = order.get("products") or []
+        order_incomplete = not bool(items)
+        if not items:
+            no_products_orders += 1
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            product = _line_product(
+                item,
+                products_by_id=products_by_id,
+                products_by_variant=products_by_variant,
+                products_by_sku=products_by_sku,
+            )
+            product_id = str((product or {}).get("salla_product_id") or "")
+            result = calculate_mezan_v2_line_cost(
+                item,
+                product=product,
+                profile=profile_map.get(product_id),
+                product_bindings=product_binding_map.get(product_id, []),
+                option_bindings=option_map.get(product_id, []),
+                resources=resources,
+            )
+            identity = str(
+                item.get("sku")
+                or item.get("variant_id")
+                or item.get("product_id")
+                or item.get("name")
+                or "unknown"
+            ).strip().casefold()
+            source_lines[result["base_cost_source"]] += 1
+            if result["base_complete"]:
+                linked_products.add(identity)
+            else:
+                missing_lines += 1
+                missing_products.add(identity)
+                order_incomplete = True
+            raw_order_total += result["line_total"]
+            order_parts[result["base_cost_source"]] += result["base_total"]
+            order_parts["product_components"] += result["product_components_total"]
+            order_parts["selected_options"] += result["selected_options_total"]
+
+        adjusted_total = effective_product_cost(
+            {**order, "total_product_cost": raw_order_total},
+            policy,
+        )
+        scale = adjusted_total / raw_order_total if raw_order_total > 0 else 0.0
+        totals["total"] += adjusted_total
+        for key, amount in order_parts.items():
+            totals[key] += amount * scale
+        if order_incomplete:
+            incomplete_orders += 1
+
+    return {
+        "total": round(totals["total"], 2),
+        "breakdown": {
+            "mezan_v2_base": round(totals["mezan_v2_base"], 2),
+            "mezan_v2_variant": round(totals["mezan_v2_variant"], 2),
+            "salla_product_fallback": round(totals["salla_product_fallback"], 2),
+            "salla_variant_fallback": round(totals["salla_variant_fallback"], 2),
+            "product_components": round(totals["product_components"], 2),
+            "selected_options": round(totals["selected_options"], 2),
+        },
+        "source_lines": dict(source_lines),
+        "linked_products_count": len(linked_products),
+        "missing_products_count": len(missing_products),
+        "missing_product_cost_count": missing_lines,
+        "no_products_orders_count": no_products_orders,
+        "incomplete_orders_count": incomplete_orders,
+        "source_contract": {
+            "base_precedence": [
+                "mezan_v2_variant",
+                "mezan_v2_base",
+                "salla_variant_fallback",
+                "salla_product_fallback",
+            ],
+            "always_added": ["product_components", "selected_option_components"],
+        },
+    }
+
+
+async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[str]:
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "provider": PROVIDER_IDS[provider],
+        "connection_status": "connected",
+        "connection_provenance": "api_connection",
+    }
+    if provider in {"snapchat", "meta"}:
+        query["mezan_selected"] = True
+    rows = await _to_list(
+        db.mezan_integration_accounts_v2.find(
+            query,
+            {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "display_name": 1},
+        ),
+        100,
+    )
+    return [
+        str(row.get("ad_account_id") or row.get("external_account_id"))
+        for row in rows
+        if row.get("ad_account_id") or row.get("external_account_id")
+    ]
+
+
+async def _provider_rows(
+    db: Any,
+    user_id: str,
+    provider: str,
+    start: str,
+    end: str,
+) -> list[dict[str, Any]]:
+    collections = {"snapchat": SNAP_FACTS, "meta": META_FACTS, "tiktok": TIKTOK_FACTS}
+    account_ids = await _selected_account_ids(db, user_id, provider)
+    if not account_ids:
+        return []
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "provider": PROVIDER_IDS[provider],
+        "ad_account_id": {"$in": account_ids},
+        "date": {"$gte": start, "$lte": end},
+    }
+    if provider == "snapchat":
+        query["entity_type"] = "ad_account"
+    return await _to_list(db[collections[provider]].find(query, {"_id": 0}), 100000)
+
+
+def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -> dict[str, Any]:
+    selected = [row for row in rows if start <= str(row.get("date") or "") <= end]
+    spend = sum(_float(row.get("spend_sar")) for row in selected)
+    orders = sum(
+        _float(
+            row.get("purchases")
+            if row.get("purchases") is not None
+            else row.get("conversions")
+            if row.get("conversions") is not None
+            else (row.get("metrics") or {}).get("conversion_purchases")
+        )
+        for row in selected
+    )
+    revenue = sum(_float(row.get("purchase_value_sar")) for row in selected)
+    impressions = sum(
+        int(_float(row.get("impressions") if row.get("impressions") is not None else (row.get("metrics") or {}).get("impressions")))
+        for row in selected
+    )
+    clicks = sum(
+        int(_float(row.get("clicks") if row.get("clicks") is not None else (row.get("metrics") or {}).get("swipes")))
+        for row in selected
+    )
+    return {
+        "spend": round(spend, 2),
+        "orders": int(round(orders)),
+        "revenue": round(revenue, 2),
+        "impressions": impressions,
+        "clicks": clicks,
+        "roas": round(revenue / spend, 2) if spend > 0 else 0.0,
+        "cpa": round(spend / orders, 2) if orders > 0 else 0.0,
+        "cost_per_order": round(spend / orders, 2) if spend > 0 and orders > 0 else None,
+        "cpc": round(spend / clicks, 2) if clicks > 0 else 0.0,
+        "cpm": round(spend / impressions * 1000, 2) if impressions > 0 else 0.0,
+        "ctr": round(clicks / impressions * 100, 2) if impressions > 0 else 0.0,
+    }
+
+
+async def build_mezan_v2_ads(
+    db: Any,
+    user_id: str,
+    *,
+    from_date: str | None,
+    to_date: str | None,
+) -> dict[str, Any]:
+    today = _today_riyadh().isoformat()
+    start = from_date or today
+    end = to_date or start
+    platform_rows = {
+        provider: await _provider_rows(db, user_id, provider, start, end)
+        for provider in ("snapchat", "meta", "tiktok")
+    }
+    breakdown = {
+        provider: round(sum(_float(row.get("spend_sar")) for row in rows), 2)
+        for provider, rows in platform_rows.items()
+    }
+    google_rows = await _to_list(
+        db.daily_costs.find(
+            {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
+            {"_id": 0, "google_ads": 1},
+        ),
+        100000,
+    )
+    breakdown["google_transitional"] = round(
+        sum(_float(row.get("google_ads")) for row in google_rows),
+        2,
+    )
+    return {
+        "total": round(sum(breakdown.values()), 2),
+        "breakdown": breakdown,
+        "providers": {
+            provider: _aggregate_provider_rows(rows, start, end)
+            for provider, rows in platform_rows.items()
+        },
+        "source_contract": {
+            "snapchat": f"{SNAP_FACTS}:selected_accounts:ad_account_rows",
+            "meta": f"{META_FACTS}:selected_accounts",
+            "tiktok": f"{TIKTOK_FACTS}:connected_accounts",
+            "google": "daily_costs.google_ads:transitional_read_only",
+            "excluded": ["legacy_ad_ledger", "daily_costs.snapchat_ads", "daily_costs.instagram_ads"],
+        },
+    }
+
+
+async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[str, Any]:
+    today = _today_riyadh()
+    today_s = today.isoformat()
+    month_start = today.replace(day=1).isoformat()
+    d30_start = (today - timedelta(days=29)).isoformat()
+    rows = await _provider_rows(db, user_id, provider, d30_start, today_s)
+    by_date = defaultdict(float)
+    for row in rows:
+        by_date[str(row.get("date") or "")] += _float(row.get("spend_sar"))
+    return {
+        "today": {"date": today_s, **_aggregate_provider_rows(rows, today_s, today_s)},
+        "month": {"start": month_start, **_aggregate_provider_rows(rows, month_start, today_s)},
+        "last_30d": {"start": d30_start, **_aggregate_provider_rows(rows, d30_start, today_s)},
+        "history": [
+            {"date": (today - timedelta(days=offset)).isoformat(), "spend": round(by_date[(today - timedelta(days=offset)).isoformat()], 2)}
+            for offset in range(29, -1, -1)
+        ],
+        "source": f"mezan_v2_{provider}_native",
+        "has_data": bool(rows),
+        "connection_status": "ok" if rows else "unavailable",
+        "source_only": True,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    }
+
+
+def make_dashboard_v2_router(
+    db: Any,
+    current_user: Callable[..., Any],
+    legacy_dashboard: Callable[..., Any],
+    require_owner: Callable[[dict[str, Any]], Any],
+) -> APIRouter:
+    router = APIRouter(tags=["Mezan Dashboard V2"])
+
+    def owner(user: dict[str, Any]) -> dict[str, Any]:
+        require_owner(user)
+        return user
+
+    @router.get("/dashboard-v2")
+    async def dashboard_v2(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        user_id = str(current["id"])
+        response = await legacy_dashboard(
+            user=current,
+            from_date=from_date,
+            to_date=to_date,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+            include_legacy_analyses=False,
+            allow_self_heal=False,
+        )
+        orders = await _filtered_orders(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+            payment_methods=payment_methods,
+            shipping_companies=shipping_companies,
+        )
+        product_cost = await build_mezan_v2_product_cost(db, user_id, orders)
+        ads = await build_mezan_v2_ads(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        totals = response["totals"]
+        previous_product = _float(totals.get("total_product_cost"))
+        previous_ads = _float(totals.get("total_ads_cost"))
+        previous_operating = _float(totals.get("operating_expenses_total"))
+        salary_total = _float(totals.get("operating_salaries_total"))
+        product_total = product_cost["total"]
+        ads_total = ads["total"]
+        totals["net_profit"] = round(
+            _float(totals.get("net_profit"))
+            + previous_product - product_total
+            + previous_ads - ads_total
+            + previous_operating - salary_total,
+            2,
+        )
+        config = response.get("net_sales_config") or {}
+        if config.get("deduct_product_costs", True):
+            totals["net_sales"] = round(
+                _float(totals.get("net_sales")) + previous_product - product_total,
+                2,
+            )
+        if config.get("deduct_ads", True):
+            totals["net_sales"] = round(
+                _float(totals.get("net_sales")) + previous_ads - ads_total,
+                2,
+            )
+        if config.get("deduct_operating_expenses", True):
+            totals["net_sales"] = round(
+                _float(totals.get("net_sales")) + previous_operating - salary_total,
+                2,
+            )
+        totals.update({
+            "total_product_cost": product_total,
+            "computed_product_cost": product_total,
+            "manual_product_cost": 0.0,
+            "missing_product_cost_count": product_cost["missing_products_count"],
+            "incomplete_profit_orders_count": product_cost["incomplete_orders_count"],
+            "no_products_orders_count": product_cost["no_products_orders_count"],
+            "excel_no_products_count": 0,
+            "total_ads_cost": ads_total,
+            "daily_ads_total": ads_total,
+            "daily_products_total": product_total,
+            "daily_costs_total": round(product_total + ads_total, 2),
+            "daily_expenses_total": product_total,
+            "operating_expenses_total": round(salary_total, 2),
+            "operating_rentals_total": 0.0,
+            "operating_prepaid_total": 0.0,
+            "operating_prepaid_by_type": {},
+            "operating_daily_other_total": 0.0,
+            "overall_roas": round(_float(totals.get("total_sales")) / ads_total, 2) if ads_total > 0 else None,
+            "avg_cost_per_order": round(ads_total / int(totals.get("total_orders") or 0), 2) if ads_total > 0 and int(totals.get("total_orders") or 0) > 0 else None,
+            "tiktok_spend": ads["providers"]["tiktok"]["spend"],
+            "tiktok_purchases": ads["providers"]["tiktok"]["orders"],
+            "tiktok_revenue": ads["providers"]["tiktok"]["revenue"],
+            "tiktok_roas": ads["providers"]["tiktok"]["roas"],
+            "meta_spend": ads["providers"]["meta"]["spend"],
+            "meta_purchases": ads["providers"]["meta"]["orders"],
+            "meta_revenue": ads["providers"]["meta"]["revenue"],
+            "meta_roas": ads["providers"]["meta"]["roas"],
+            "legacy_analyses_count": 0,
+            "analyses_count": 0,
+        })
+        response.update({
+            "recent_analyses": [],
+            "product_cost_v2": product_cost,
+            "ads_v2": ads,
+            "dashboard_source": "mezan_v2",
+            "source_contract": {
+                "orders_sales_payment_methods": "unified_orders:mezan_v2",
+                "product_cost": product_cost["source_contract"],
+                "advertising": ads["source_contract"],
+                "employee_salaries": "legacy_operating_expense_settings",
+                "shipping_partners": "legacy_shipping_cost_ssot",
+                "payment_gateway_fees": "legacy_payment_method_settings",
+            },
+            "source_only": True,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        })
+        return response
+
+    @router.get("/dashboard-v2/product-cost-summary")
+    async def product_cost_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
+        current = owner(user)
+        user_id = str(current["id"])
+        today = _today_riyadh()
+        month_start = today.replace(day=1).isoformat()
+        today_s = today.isoformat()
+        month_orders = await _filtered_orders(
+            db, user_id, from_date=month_start, to_date=today_s,
+            payment_methods=None, shipping_companies=None,
+        )
+        month = await build_mezan_v2_product_cost(db, user_id, month_orders)
+        today_cost = await build_mezan_v2_product_cost(
+            db,
+            user_id,
+            [order for order in month_orders if str(order.get("order_date") or "")[:10] == today_s],
+        )
+        return {
+            "today_total": today_cost["total"],
+            "month_total": month["total"],
+            "linked_products_count": month["linked_products_count"],
+            "missing_products_count": month["missing_products_count"],
+            "breakdown": month["breakdown"],
+            "source_contract": month["source_contract"],
+            "source_only": True,
+        }
+
+    @router.get("/dashboard-v2/snapchat-accounts-summary")
+    async def snapchat_accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
+        current = owner(user)
+        user_id = str(current["id"])
+        today = _today_riyadh()
+        start = today.replace(day=1).isoformat()
+        end = today.isoformat()
+        rows = await _provider_rows(db, user_id, "snapchat", start, end)
+        accounts_meta = await _to_list(
+            db.mezan_integration_accounts_v2.find(
+                {
+                    "user_id": user_id,
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "mezan_selected": True,
+                },
+                {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "display_name": 1},
+            ),
+            100,
+        )
+        by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            by_account[str(row.get("ad_account_id") or "")].append(row)
+        total_spend = sum(_float(row.get("spend_sar")) for row in rows)
+        accounts = []
+        for meta in accounts_meta:
+            account_id = str(meta.get("ad_account_id") or meta.get("external_account_id") or "")
+            metrics = _aggregate_provider_rows(by_account.get(account_id, []), start, end)
+            accounts.append({
+                "id": account_id,
+                "external_account_id": account_id,
+                "name": meta.get("display_name") or account_id,
+                "spend": metrics["spend"],
+                "orders": metrics["orders"],
+                "revenue": metrics["revenue"],
+                "roas": metrics["roas"],
+                "cost_per_order": metrics["cost_per_order"],
+                "spend_share_pct": round(metrics["spend"] / total_spend * 100, 2) if total_spend > 0 else 0.0,
+                "credit_limit": None,
+                "open_debt": 0,
+            })
+        return {
+            "month_start": start,
+            "accounts": accounts,
+            "source": SNAP_FACTS,
+            "source_only": True,
+        }
+
+    @router.get("/dashboard-v2/{provider}-summary")
+    async def provider_summary(
+        provider: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        if provider not in {"snapchat", "meta", "tiktok"}:
+            return {"today": {}, "month": {}, "last_30d": {}, "history": [], "has_data": False}
+        return await build_provider_summary(db, str(current["id"]), provider)
+
+    @router.get("/dashboard-v2/ads-cost-breakdown")
+    async def ads_cost_breakdown(
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        current = owner(user)
+        ads = await build_mezan_v2_ads(
+            db, str(current["id"]), from_date=from_date, to_date=to_date,
+        )
+        items = [
+            {
+                "id": provider,
+                "date": f"{from_date or _today_riyadh().isoformat()} → {to_date or from_date or _today_riyadh().isoformat()}",
+                "ad_account_name": "حسابات ميزان 2 المحددة",
+                "ad_provider": provider.replace("_transitional", ""),
+                "amount": amount,
+                "covered_from_balance": 0,
+                "created_debt": 0,
+                "source": ads["source_contract"].get(provider.replace("_transitional", ""), "mezan_v2"),
+                "description": "قراءة فقط من مصدر لوحة ميزان 2",
+            }
+            for provider, amount in ads["breakdown"].items()
+            if amount > 0
+        ]
+        return {
+            "total_amount": ads["total"],
+            "total_entries": len(items),
+            "items": items,
+            "by_provider": {key.replace("_transitional", ""): value for key, value in ads["breakdown"].items() if value > 0},
+            "by_account": {},
+            "source_only": True,
+        }
+
+    return router
+
+
+__all__ = [
+    "build_mezan_v2_ads",
+    "build_mezan_v2_product_cost",
+    "calculate_mezan_v2_line_cost",
+    "make_dashboard_v2_router",
+]

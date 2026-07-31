@@ -26,14 +26,17 @@ function fmt(n) {
 }
 
 
-export default function SnapchatAccountsCards({ refreshSignal = 0 }) {
+export default function SnapchatAccountsCards({
+    refreshSignal = 0,
+    endpoint = "/dashboard/snapchat-accounts-summary",
+}) {
     const [data, setData] = useState(null);
     const [busy, setBusy] = useState(true);
     const [lastFetched, setLastFetched] = useState(null);
 
     const fetchData = async () => {
         try {
-            const { data } = await api.get("/dashboard/snapchat-accounts-summary");
+            const { data } = await api.get(endpoint);
             setData(data);
             setLastFetched(Date.now());
         } catch (_) { /* silent */ }
@@ -48,7 +51,7 @@ export default function SnapchatAccountsCards({ refreshSignal = 0 }) {
             if (!mounted) return;
         })();
         return () => { mounted = false; };
-    }, [refreshSignal]);
+    }, [refreshSignal, endpoint]);
 
     // Iter-204 — Silent auto-poll every 30 minutes so card numbers
     // refresh on their own without a page reload (mirrors the
