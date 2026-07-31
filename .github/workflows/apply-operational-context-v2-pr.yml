@@ -30,11 +30,7 @@ jobs:
       - name: Apply reviewed integration
         run: |
           python .github/scripts/apply_operational_context_v2.py
-          sed -i 's/run: yarn build/run: CI=false yarn build/' .github/workflows/mezan-ai-analysis.yml
-          rm -f \
-            .github/scripts/apply_operational_context_v2.py \
-            .github/workflows/apply-operational-context-v2.yml \
-            .github/workflows/apply-operational-context-v2-pr.yml
+          git checkout -- .github/workflows/mezan-ai-analysis.yml
           git diff --check
       - name: Install backend dependencies
         run: >-
@@ -67,8 +63,14 @@ jobs:
           CI=false yarn build
       - name: Commit validated implementation
         run: |
+          rm -f frontend/yarn.lock
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add \
+            backend/ai_analysis_routes.py \
+            backend/ai_operational_context_v2.py \
+            backend/tests/test_ai_operational_context_v2.py \
+            frontend/src/pages/AIControlCenter.jsx \
+            frontend/src/pages/aiControl/fields.js
           git commit -m "feat(ai): derive analysis from privacy-safe Orders V2 context"
           git push origin HEAD:feat/mezan-ai-operational-context-v2
