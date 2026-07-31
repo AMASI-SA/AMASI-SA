@@ -1,6 +1,7 @@
 """Apps & Integrations Control Center V2 public API."""
 from typing import Any, Callable
 
+from .ads_auto_sync_scheduler import attach_ads_auto_sync_scheduler
 from .catalog import (
     AD_CAPABILITY_KEYS,
     AD_MUTATION_CAPABILITIES,
@@ -72,6 +73,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
+    # Server-side scheduler: continues Meta/Snapchat V2 performance refreshes
+    # every five minutes even when no Dashboard browser tab is open.
+    attach_ads_auto_sync_scheduler(router, db, current_user, _require_owner)
 
     exact_test_routes = [
         route
