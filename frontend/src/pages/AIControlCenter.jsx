@@ -125,13 +125,14 @@ export default function AIControlCenter() {
     const [aiQuestion, setAiQuestion] = useState("حلّل حالة ميزان وحدد أهم مشكلة والخطوة التالية.");
     const [aiLoading, setAiLoading] = useState(false);
     const [aiResult, setAiResult] = useState(null);
+    const [aiContextInfo, setAiContextInfo] = useState(null);
 
     const load = async () => {
         setLoading(true);
         const range = { from_date: fromDate, to_date: toDate };
         const endpoints = [
             ["dashboard", `/dashboard${buildQuery(range)}`],
-            ["orders", `/orders${buildQuery({ ...range, page: 1, limit: 500 })}`],
+            ["orders", "/orders-v2?limit=50"],
             ["statusSummary", `/orders/status-summary${buildQuery(range)}`],
             ["adsBreakdown", `/dashboard/ads-cost-breakdown${buildQuery(range)}`],
             ["qoyodStats", "/integrations/qoyod/first-sync-monitor/stats/summary"],
@@ -199,41 +200,38 @@ export default function AIControlCenter() {
     const runAiAnalysis = async () => {
         setAiLoading(true);
         try {
+            const operationalContextResponse = await api.get(
+                "/ai/operational-context-v2",
+                { params: { sample_limit: 8 } },
+            );
+            const operationalContext = operationalContextResponse.data;
+            setAiContextInfo({
+                sampleCount: Number(operationalContext?.sample_count || 0),
+                source: operationalContext?.source || "mezan_orders_v2_canonical",
+            });
             const context = {
                 period: { from_date: fromDate, to_date: toDate },
-                readiness: statusLabel(overall),
+                operational_context_v2: operationalContext,
                 metrics: {
-                    api_orders: Number(data.orders?.data?.total || model.orders.length || 0),
                     dashboard_orders: Number(model.dashboardSummary.total_orders || 0),
                     total_sales: Number(model.dashboardSummary.total_sales || 0),
                     ad_spend: Number(model.dashboardSummary.daily_ads_total || model.adsBreakdown.total_amount || 0),
                     qoyod_failed: Number(model.qoyodStats?.stats?.failed || model.qoyodStats?.failed || 0),
-                    duplicate_orders: model.duplicates.length,
-                    missing_critical_fields: model.missingOrders.length,
                 },
-                gates: model.gates.map((gate) => ({
-                    title: gate.title,
-                    status: statusLabel(gate.status),
-                    evidence: gate.text,
-                })),
-                coverage: model.coverage.map((row) => ({
-                    field: row.label,
-                    present: row.present,
-                    total: row.total,
-                    percent: Number(row.pct.toFixed(1)),
-                    status: statusLabel(row.status),
-                })),
                 errors: Object.entries(data)
                     .filter(([, result]) => !result?.ok)
                     .map(([source, result]) => ({ source, message: result?.error || "فشل المصدر" })),
-                anomalies: model.duplicates.map(([order, count]) => ({ type: "duplicate_order", order, count })),
-                recommendations: model.recommendations,
             };
             const response = await api.post("/ai/analyze", { question: aiQuestion, context });
             setAiResult(response.data?.analysis || null);
-            toast.success("اكتمل التحليل بالقراءة فقط");
+            toast.success("اكتمل التحليل من بيانات طلبات ميزان 2 بالقراءة فقط");
         } catch (error) {
-            toast.error(error?.response?.data?.detail || "تعذر تشغيل محلل ميزان");
+            const detail = error?.response?.data?.detail;
+            toast.error(
+                typeof detail === "string"
+                    ? detail
+                    : detail?.message || "تعذر تشغيل محلل ميزان",
+            );
         } finally {
             setAiLoading(false);
         }
@@ -245,7 +243,7 @@ export default function AIControlCenter() {
                 <div>
                     <div className="inline-flex bg-slate-900 text-white rounded-full px-3 py-1 text-xs font-bold mb-3">🧠 AI Preflight · قراءة فقط</div>
                     <h1 className="text-3xl font-extrabold">مركز الذكاء والتحقق</h1>
-                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">تفحص الصفحة اكتمال البيانات وتكشف الفروقات، ثم يقرأ محلل ميزان النتائج ويشرح السبب والخطوة التالية دون تعديل أو إرسال أي بيانات.</p>
+                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">يقرأ محلل ميزان عينة آمنة من نفس بيانات طلبات ميزان 2 وعناصرها، ويستنتج الحقول والعلاقات بنفسه دون الاعتماد على أسماء حقول ثابتة أو إرسال بيانات العملاء.</p>
                 </div>
                 <div className="rounded-xl border bg-white p-3 flex flex-wrap items-end gap-3">
                     <label className="text-xs font-bold text-slate-600">من<input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="block mt-1 border rounded-lg px-3 py-2 text-sm" /></label>
@@ -265,10 +263,11 @@ export default function AIControlCenter() {
                 loading={aiLoading}
                 result={aiResult}
                 onAnalyze={runAiAnalysis}
+                aiContextInfo={aiContextInfo}
             />
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <Kpi title="طلبات API" value={fmtInt(data.orders?.data?.total || model.orders.length)} />
+                <Kpi title="عينة Orders V2" value={fmtInt(model.orders.length)} />
                 <Kpi title="طلبات Dashboard" value={fmtInt(model.dashboardSummary.total_orders)} />
                 <Kpi title="مبيعات" value={fmtMoney(model.dashboardSummary.total_sales)} />
                 <Kpi title="صرف إعلاني" value={fmtMoney(model.dashboardSummary.daily_ads_total || model.adsBreakdown.total_amount)} />
@@ -282,7 +281,7 @@ export default function AIControlCenter() {
                 <Tab active={tab === "contract"} onClick={() => setTab("contract")}>عقد البيانات</Tab>
             </div>
 
-            {tab === "readiness" && <div className="space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{model.gates.map((gate) => <Gate key={gate.title} gate={gate} />)}</div><CoverageTable rows={model.coverage} /><Recommendations items={model.recommendations} /></div>}
+            {tab === "readiness" && <div className="space-y-5"><div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-7 text-violet-900"><strong>ملاحظة:</strong> جدول الجاهزية فحص حتمي سريع لعقد Orders V2، لكنه ليس دليلاً يلقّن OpenAI. محلل ميزان يقرأ العينة الآمنة ويستنتج الضريبة والخصومات والشحن والعلاقات المالية بنفسه.</div><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{model.gates.map((gate) => <Gate key={gate.title} gate={gate} />)}</div><CoverageTable rows={model.coverage} /><Recommendations items={model.recommendations} /></div>}
             {tab === "reconciliation" && <Reconciliation model={model} />}
             {tab === "errors" && <Errors data={data} model={model} />}
             {tab === "contract" && <Contract />}
@@ -290,7 +289,7 @@ export default function AIControlCenter() {
     );
 }
 
-function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
+function AIAnalyst({ question, setQuestion, loading, result, onAnalyze, aiContextInfo }) {
     const severityTone = {
         ok: "bg-emerald-50 border-emerald-200 text-emerald-900",
         info: "bg-blue-50 border-blue-200 text-blue-900",
@@ -302,7 +301,7 @@ function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
             <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                     <h2 className="text-xl font-extrabold">✨ محلل ميزان</h2>
-                    <p className="text-sm text-slate-600 mt-1">OpenAI · قراءة وتحليل فقط · لا يملك أدوات تعديل أو إرسال إلى قيود</p>
+                    <p className="text-sm text-slate-600 mt-1">OpenAI · يكتشف عقد Orders V2 ديناميكياً · قراءة فقط · لا يملك أدوات تعديل أو إرسال إلى قيود</p>
                 </div>
                 <span className="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-bold">🔒 قراءة فقط</span>
             </div>
@@ -324,6 +323,11 @@ function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
                     {loading ? "جارٍ التحليل…" : "حلّل الآن"}
                 </button>
             </div>
+            {aiContextInfo && (
+                <p className="mt-3 text-xs text-slate-500">
+                    المصدر: Orders V2 canonical · العينة الآمنة: {aiContextInfo.sampleCount} طلبات · دون أسماء أو جوالات أو عناوين
+                </p>
+            )}
             {result && (
                 <div className={`mt-5 rounded-xl border p-4 ${severityTone[result.severity] || severityTone.info}`}>
                     <div className="flex justify-between gap-2 flex-wrap">
@@ -376,7 +380,7 @@ function Reconciliation({ model }) {
         <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><Kpi title="تكرار رقم الطلب" value={fmtInt(model.duplicates.length)} /><Kpi title="طلبات ناقصة حقول حرجة" value={fmtInt(model.missingOrders.length)} /><Kpi title="فرق Dashboard vs Status" value={fmtInt(gap)} hint="قد يكون بسبب فلاتر الحالات؛ لا يُتجاهل قبل التفسير." /></div>
             <SimpleList title="طلبات مكررة" rows={model.duplicates.map(([order, count]) => ({ order, count }))} />
-            <SimpleList title="عينة طلبات ناقصة" rows={model.missingOrders.map((order) => ({ order: getAny(order, ["order_number", "reference_id", "order_id"]) || "—", date: getAny(order, ["order_date", "created_at", "date"]) || "—", amount: getAny(order, ["total_amount", "amount", "total"]) || 0 }))} />
+            <SimpleList title="عينة طلبات ناقصة" rows={model.missingOrders.map((order) => ({ order: getAny(order, ["order_number", "reference_id", "order_id"]) || "—", date: getAny(order, ["order_date", "created_at", "date"]) || "—", amount: getAny(order, ["totals.total"]) || 0 }))} />
         </div>
     );
 }
