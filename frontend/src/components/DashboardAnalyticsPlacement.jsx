@@ -1,10 +1,45 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards";
 import GoogleAnalyticsTrafficSourcesCard from "./GoogleAnalyticsTrafficSourcesCard";
 
 const PROFIT_SUMMARY_SELECTOR = '[data-testid="profit-summary-card"]';
 const HOST_TEST_ID = "dashboard-ga4-analytics-wrap";
+const LEGACY_SECTION_SELECTORS = [
+    '[data-testid="dashboard-salary-accrual-section"]',
+];
+const LEGACY_SECTION_HEADINGS = new Set([
+    "الأداء الشهري",
+    "آخر التحاليل",
+]);
+
+function hideDashboardSection(node) {
+    if (!(node instanceof HTMLElement)) return;
+    node.setAttribute("data-dashboard-pruned", "true");
+    node.setAttribute("aria-hidden", "true");
+    node.style.setProperty("display", "none", "important");
+}
+
+/**
+ * Remove obsolete legacy-only cards from the merchant Dashboard surface.
+ *
+ * These blocks duplicate information already available in dedicated pages or
+ * in the executive profit summary.  We hide their outer card before paint and
+ * re-apply the rule whenever Dashboard refreshes replace DOM nodes.
+ */
+export function pruneLegacyDashboardSections(root = document) {
+    LEGACY_SECTION_SELECTORS.forEach((selector) => {
+        root.querySelectorAll(selector).forEach(hideDashboardSection);
+    });
+
+    root.querySelectorAll("h2").forEach((heading) => {
+        const title = String(heading.textContent || "").trim();
+        if (!LEGACY_SECTION_HEADINGS.has(title)) return;
+        const card = heading.closest("div.rounded-xl")
+            || heading.parentElement?.parentElement;
+        hideDashboardSection(card);
+    });
+}
 
 /**
  * Mount the Google Analytics cards immediately after the executive profit
@@ -17,7 +52,7 @@ const HOST_TEST_ID = "dashboard-ga4-analytics-wrap";
 export default function DashboardAnalyticsPlacement({ active = false }) {
     const [host, setHost] = useState(null);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!active) {
             setHost(null);
             return undefined;
@@ -35,6 +70,8 @@ export default function DashboardAnalyticsPlacement({ active = false }) {
 
         const ensurePlacement = () => {
             if (disposed) return;
+            pruneLegacyDashboardSections(document);
+
             const profitSummary = document.querySelector(PROFIT_SUMMARY_SELECTOR);
             if (!profitSummary?.parentElement) {
                 frame = window.requestAnimationFrame(ensurePlacement);
@@ -77,4 +114,9 @@ export default function DashboardAnalyticsPlacement({ active = false }) {
     );
 }
 
-export { HOST_TEST_ID, PROFIT_SUMMARY_SELECTOR };
+export {
+    HOST_TEST_ID,
+    LEGACY_SECTION_HEADINGS,
+    LEGACY_SECTION_SELECTORS,
+    PROFIT_SUMMARY_SELECTOR,
+};

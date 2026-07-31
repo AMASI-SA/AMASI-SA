@@ -9,6 +9,7 @@ used by this module.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,12 @@ from .snapchat_native_data_common import (
     SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SNAPCHAT_PROVIDER_ID,
+)
+from .snapchat_native_performance_sync import (
+    ACTION_REPORT_TIME,
+    CONVERSION_SOURCE_TYPES,
+    SWIPE_ATTRIBUTION_WINDOW,
+    VIEW_ATTRIBUTION_WINDOW,
 )
 
 RIYADH_TZ = ZoneInfo(BUSINESS_TIMEZONE)
@@ -52,16 +59,28 @@ def _row_metric(row: dict[str, Any], top_level: str, nested: str) -> Any:
     return metrics.get(nested)
 
 
+def _round_purchase_count(value: float) -> int:
+    """Match provider/UI half-up rounding for modeled fractional conversions."""
+    return int(
+        Decimal(str(max(0.0, float(value or 0)))).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+
 def _metric(spend: float, orders: float, revenue: float) -> dict[str, Any]:
     spend_value = round(spend, 2)
-    order_value = int(round(orders))
+    order_raw = round(max(0.0, float(orders or 0)), 4)
+    order_value = _round_purchase_count(order_raw)
     revenue_value = round(revenue, 2)
     return {
         "spend": spend_value,
         "orders": order_value,
+        "orders_raw": order_raw,
         "revenue": revenue_value,
         "roas": round(revenue_value / spend_value, 2) if spend_value > 0 else 0.0,
-        "cost_per_order": round(spend_value / order_value, 2) if order_value > 0 else None,
+        "cost_per_order": round(spend_value / order_raw, 2) if order_raw > 0 else None,
     }
 
 
@@ -210,6 +229,14 @@ def summarize_snapchat_dashboard_rows(
         },
         "history": history,
         "accounts": accounts,
+        "conversion_reporting": {
+            "metric": "conversion_purchases",
+            "source_types": [CONVERSION_SOURCE_TYPES],
+            "action_report_time": ACTION_REPORT_TIME,
+            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "today_is_provisional": True,
+        },
         "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
         "source_only": True,
         "provider_write_reached": False,
@@ -277,6 +304,7 @@ async def build_snapchat_dashboard_summary(
                 "purchases": 1,
                 "metrics": 1,
                 "purchase_value_sar": 1,
+                "conversion_reporting": 1,
                 "observed_at": 1,
                 "updated_at": 1,
             },

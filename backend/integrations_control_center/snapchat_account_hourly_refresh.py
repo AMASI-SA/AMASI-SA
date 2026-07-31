@@ -34,6 +34,10 @@ from .snapchat_native_performance_sync import (
 )
 
 ACCOUNT_REFRESH_SOURCE_MODE = "snapchat_account_hourly_riyadh_refresh_v2"
+CONVERSION_SOURCE_TYPES = "total"
+ACTION_REPORT_TIME = "conversion"
+SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
+VIEW_ATTRIBUTION_WINDOW = "1_DAY"
 
 
 async def _fetch_account_hours(
@@ -58,9 +62,13 @@ async def _fetch_account_hours(
         "fields": ",".join(STAT_FIELDS),
         "limit": 200,
         "omit_empty": "false",
-        "swipe_up_attribution_window": "28_DAY",
-        "view_attribution_window": "1_DAY",
-        "action_report_time": "conversion",
+        # Be explicit instead of relying on provider defaults.  ``total`` is
+        # Snapchat's all-conversion-events bucket and prevents the Dashboard
+        # purchase count from silently representing only one source subtype.
+        "conversion_source_types": CONVERSION_SOURCE_TYPES,
+        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "action_report_time": ACTION_REPORT_TIME,
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -105,6 +113,12 @@ async def _fetch_account_hours(
                             "start_time": point.get("start_time"),
                             "end_time": point.get("end_time"),
                             "metrics": point["stats"],
+                            "conversion_data_processed_end_time": stat.get(
+                                "conversion_data_processed_end_time"
+                            ),
+                            "finalized_data_end_time": stat.get(
+                                "finalized_data_end_time"
+                            ),
                         }
                     )
         next_url = _safe_next_url(
@@ -214,6 +228,11 @@ async def refresh_snapchat_account_hours(
         "provider_calls": context.provider_calls,
         "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
         "business_timezone": BUSINESS_TIMEZONE,
+        "conversion_metric": "conversion_purchases",
+        "conversion_source_types": [CONVERSION_SOURCE_TYPES],
+        "action_report_time": ACTION_REPORT_TIME,
+        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         "source_only": True,
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
@@ -222,6 +241,10 @@ async def refresh_snapchat_account_hours(
 
 __all__ = [
     "ACCOUNT_REFRESH_SOURCE_MODE",
+    "ACTION_REPORT_TIME",
+    "CONVERSION_SOURCE_TYPES",
+    "SWIPE_ATTRIBUTION_WINDOW",
+    "VIEW_ATTRIBUTION_WINDOW",
     "aggregate_account_hours_by_riyadh_day",
     "refresh_snapchat_account_hours",
 ]

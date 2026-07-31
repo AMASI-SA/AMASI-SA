@@ -34,6 +34,10 @@ STAT_FIELDS = (
     "impressions", "swipes", "spend", "video_views", "view_completion",
     "conversion_purchases", "conversion_purchases_value",
 )
+CONVERSION_SOURCE_TYPES = "total"
+ACTION_REPORT_TIME = "conversion"
+SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
+VIEW_ATTRIBUTION_WINDOW = "1_DAY"
 
 
 def _computed(metrics: dict[str, Any]) -> dict[str, float | None]:
@@ -167,6 +171,7 @@ async def _upsert_performance(
     currency = str(account.get("currency") or "").strip().upper()
     spend_micro = _as_number(metrics.get("spend"))
     value_micro = _as_number(metrics.get("conversion_purchases_value"))
+    purchases = _as_number(metrics.get("conversion_purchases"))
     spend_native = (
         round(float(spend_micro) / 1_000_000, 6)
         if spend_micro is not None else None
@@ -192,11 +197,22 @@ async def _upsert_performance(
         "account_timezone": str(account.get("timezone") or "UTC"),
         "attribution_model": ATTRIBUTION_MODEL,
         "metrics": metrics,
+        # Keep the provider's raw purchase count at the document top level so
+        # Dashboard reads the exact account fact instead of reconstructing it
+        # from unrelated order sources.
+        "purchases": purchases,
         "spend_native": spend_native,
         "spend_sar": await context.to_sar(spend_native, currency),
         "purchase_value_native": value_native,
         "purchase_value_sar": await context.to_sar(value_native, currency),
         "computed": _computed(metrics),
+        "conversion_reporting": {
+            "metric": "conversion_purchases",
+            "source_types": [CONVERSION_SOURCE_TYPES],
+            "action_report_time": ACTION_REPORT_TIME,
+            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        },
         "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
         "accounting_eligible": False,
         "provider_window_start": provider_start,
@@ -243,9 +259,10 @@ async def sync_snapchat_performance(
         "fields": ",".join(STAT_FIELDS),
         "limit": 200,
         "omit_empty": "false",
-        "swipe_up_attribution_window": "28_DAY",
-        "view_attribution_window": "1_DAY",
-        "action_report_time": "conversion",
+        "conversion_source_types": CONVERSION_SOURCE_TYPES,
+        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "action_report_time": ACTION_REPORT_TIME,
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
@@ -372,7 +389,11 @@ async def sync_snapchat_performance(
 
 
 __all__ = [
+    "ACTION_REPORT_TIME",
+    "CONVERSION_SOURCE_TYPES",
     "STAT_FIELDS",
+    "SWIPE_ATTRIBUTION_WINDOW",
+    "VIEW_ATTRIBUTION_WINDOW",
     "riyadh_business_window",
     "riyadh_date_for_point",
     "sync_snapchat_performance",
