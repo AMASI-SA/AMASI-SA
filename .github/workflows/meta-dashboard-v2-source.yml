@@ -1,0 +1,57 @@
+name: Meta Dashboard V2 Source
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/meta_dashboard_summary_routes.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_meta_dashboard_summary_v2.py"
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/metaDashboardV2Adapter.js"
+      - "frontend/src/lib/metaDashboardV2Adapter.test.js"
+      - ".github/workflows/meta-dashboard-v2-source.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused backend dependencies
+        run: pip install pytest fastapi "pydantic>=2" httpx
+      - name: Compile V2 dashboard adapter
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/meta_dashboard_summary_routes.py \
+            integrations_control_center/__init__.py
+      - name: Run focused backend tests
+        working-directory: backend
+        run: pytest -q tests/test_meta_dashboard_summary_v2.py
+      - name: Enforce read-only isolation
+        run: |
+          ! grep -q 'meta_ads_daily' backend/integrations_control_center/meta_dashboard_summary_routes.py
+          ! grep -q 'general_ledger\|qoyod\|daily_costs' backend/integrations_control_center/meta_dashboard_summary_routes.py
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run Meta dashboard transport tests
+        run: CI=true yarn test --watchAll=false --runInBand src/lib/metaDashboardV2Adapter.test.js
+      - name: Build production frontend
+        run: yarn build
