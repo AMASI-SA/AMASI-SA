@@ -1,0 +1,415 @@
+name: Apply Mezan AI incomplete-response fix
+
+on:
+  push:
+    branches:
+      - fix/mezan-ai-incomplete-response
+    paths:
+      - ".github/workflows/apply-mezan-ai-incomplete-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mezan-ai-incomplete-response
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Patch analyzer and regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          route_path = Path("backend/ai_analysis_routes.py")
+          source = route_path.read_text(encoding="utf-8")
+
+          replacements = [
+              (
+                  "DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 20.0\n",
+                  "DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 45.0\n",
+              ),
+              (
+                  "MAX_ANALYSIS_OUTPUT_TOKENS = 1200\n",
+                  "MAX_ANALYSIS_OUTPUT_TOKENS = 2400\n"
+                  "DEFAULT_ANALYSIS_REASONING_EFFORT = \"low\"\n"
+                  "ALLOWED_ANALYSIS_REASONING_EFFORTS = {\"low\", \"medium\", \"high\"}\n",
+              ),
+              (
+                  "AI_ANALYSIS_JOB_STALE_SECONDS = 120\n",
+                  "AI_ANALYSIS_JOB_STALE_SECONDS = 180\n",
+              ),
+              (
+                  "def _default_client() -> AsyncOpenAI:\n",
+                  "def _analysis_reasoning_effort() -> str:\n"
+                  "    raw_value = os.environ.get(\n"
+                  "        \"MEZAN_OPENAI_REASONING_EFFORT\",\n"
+                  "        DEFAULT_ANALYSIS_REASONING_EFFORT,\n"
+                  "    ).strip().lower()\n"
+                  "    if raw_value in ALLOWED_ANALYSIS_REASONING_EFFORTS:\n"
+                  "        return raw_value\n"
+                  "    return DEFAULT_ANALYSIS_REASONING_EFFORT\n\n\n"
+                  "def _response_usage(response: Any) -> dict[str, int | None]:\n"
+                  "    usage = getattr(response, \"usage\", None)\n"
+                  "    output_details = (\n"
+                  "        getattr(usage, \"output_tokens_details\", None)\n"
+                  "        if usage is not None\n"
+                  "        else None\n"
+                  "    )\n"
+                  "    return {\n"
+                  "        \"output_tokens\": (\n"
+                  "            getattr(usage, \"output_tokens\", None)\n"
+                  "            if usage is not None\n"
+                  "            else None\n"
+                  "        ),\n"
+                  "        \"reasoning_tokens\": (\n"
+                  "            getattr(output_details, \"reasoning_tokens\", None)\n"
+                  "            if output_details is not None\n"
+                  "            else None\n"
+                  "        ),\n"
+                  "    }\n\n\n"
+                  "def _default_client() -> AsyncOpenAI:\n",
+              ),
+              (
+                  "                max_output_tokens=MAX_ANALYSIS_OUTPUT_TOKENS,\n"
+                  "                text={\n",
+                  "                max_output_tokens=MAX_ANALYSIS_OUTPUT_TOKENS,\n"
+                  "                reasoning={\"effort\": _analysis_reasoning_effort()},\n"
+                  "                store=False,\n"
+                  "                text={\n",
+              ),
+              (
+                  "        output_text = getattr(response, \"output_text\", None)\n"
+                  "        if not isinstance(output_text, str) or not output_text.strip():\n"
+                  "            raise ValueError(\"empty_openai_output\")\n"
+                  "        return AIAnalysisResult.model_validate_json(output_text).model_dump()\n",
+                  "        response_status = str(\n"
+                  "            getattr(response, \"status\", \"\") or \"\"\n"
+                  "        ).strip().lower()\n"
+                  "        incomplete_details = getattr(response, \"incomplete_details\", None)\n"
+                  "        incomplete_reason = (\n"
+                  "            str(getattr(incomplete_details, \"reason\", \"\") or \"\").strip()\n"
+                  "            or None\n"
+                  "        )\n"
+                  "        usage = _response_usage(response)\n\n"
+                  "        if response_status == \"incomplete\":\n"
+                  "            logger.warning(\n"
+                  "                \"Mezan OpenAI response incomplete reason=%s \"\n"
+                  "                \"output_tokens=%s reasoning_tokens=%s\",\n"
+                  "                incomplete_reason,\n"
+                  "                usage[\"output_tokens\"],\n"
+                  "                usage[\"reasoning_tokens\"],\n"
+                  "            )\n"
+                  "            if incomplete_reason == \"max_output_tokens\":\n"
+                  "                raise HTTPException(\n"
+                  "                    status_code=502,\n"
+                  "                    detail={\n"
+                  "                        \"code\": \"ai_analysis_output_limit\",\n"
+                  "                        \"message\": (\n"
+                  "                            \"لم يكتمل إخراج محلل ميزان ضمن حد الرموز الآمن. \"\n"
+                  "                            \"لم يتم تعديل أو إرسال أي بيانات؛ حاول مرة أخرى.\"\n"
+                  "                        ),\n"
+                  "                        \"retryable\": True,\n"
+                  "                        \"upstream_status\": response_status,\n"
+                  "                        \"incomplete_reason\": incomplete_reason,\n"
+                  "                    },\n"
+                  "                )\n"
+                  "            raise HTTPException(\n"
+                  "                status_code=502,\n"
+                  "                detail={\n"
+                  "                    \"code\": \"ai_analysis_incomplete\",\n"
+                  "                    \"message\": (\n"
+                  "                        \"لم تكتمل استجابة محلل ميزان. لم يتم تعديل أو إرسال \"\n"
+                  "                        \"أي بيانات؛ حاول مرة أخرى.\"\n"
+                  "                    ),\n"
+                  "                    \"retryable\": incomplete_reason != \"content_filter\",\n"
+                  "                    \"upstream_status\": response_status,\n"
+                  "                    \"incomplete_reason\": incomplete_reason,\n"
+                  "                },\n"
+                  "            )\n\n"
+                  "        if response_status == \"failed\":\n"
+                  "            upstream_error = getattr(response, \"error\", None)\n"
+                  "            upstream_code = getattr(upstream_error, \"code\", None)\n"
+                  "            logger.warning(\n"
+                  "                \"Mezan OpenAI response failed code=%s\",\n"
+                  "                upstream_code,\n"
+                  "            )\n"
+                  "            raise HTTPException(\n"
+                  "                status_code=502,\n"
+                  "                detail={\n"
+                  "                    \"code\": \"ai_analysis_upstream_failed\",\n"
+                  "                    \"message\": (\n"
+                  "                        \"تعذر على مزود الذكاء إنشاء نتيجة التحليل. لم يتم \"\n"
+                  "                        \"تعديل أو إرسال أي بيانات؛ حاول مرة أخرى.\"\n"
+                  "                    ),\n"
+                  "                    \"retryable\": True,\n"
+                  "                    \"upstream_status\": response_status,\n"
+                  "                },\n"
+                  "            )\n\n"
+                  "        output_text = getattr(response, \"output_text\", None)\n"
+                  "        if not isinstance(output_text, str) or not output_text.strip():\n"
+                  "            logger.warning(\n"
+                  "                \"Mezan OpenAI returned empty output status=%s \"\n"
+                  "                \"output_tokens=%s reasoning_tokens=%s\",\n"
+                  "                response_status or None,\n"
+                  "                usage[\"output_tokens\"],\n"
+                  "                usage[\"reasoning_tokens\"],\n"
+                  "            )\n"
+                  "            raise HTTPException(\n"
+                  "                status_code=502,\n"
+                  "                detail={\n"
+                  "                    \"code\": \"ai_analysis_empty_output\",\n"
+                  "                    \"message\": (\n"
+                  "                        \"عاد محلل الذكاء دون نتيجة قابلة للعرض. لم يتم تعديل \"\n"
+                  "                        \"أو إرسال أي بيانات؛ حاول مرة أخرى.\"\n"
+                  "                    ),\n"
+                  "                    \"retryable\": True,\n"
+                  "                    \"upstream_status\": response_status or None,\n"
+                  "                },\n"
+                  "            )\n"
+                  "        return AIAnalysisResult.model_validate_json(output_text).model_dump()\n",
+              ),
+              (
+                  "    except (\n"
+                  "        ValidationError,\n"
+                  "        json.JSONDecodeError,\n"
+                  "        ValueError,\n"
+                  "        TypeError,\n"
+                  "        AttributeError,\n"
+                  "    ) as exc:\n"
+                  "        raise HTTPException(\n"
+                  "            status_code=502,\n"
+                  "            detail=(\n"
+                  "                \"عاد محلل الذكاء بنتيجة غير صالحة. لم يتم تعديل أو إرسال \"\n"
+                  "                \"أي بيانات.\"\n"
+                  "            ),\n"
+                  "        ) from exc\n",
+                  "    except (\n"
+                  "        ValidationError,\n"
+                  "        json.JSONDecodeError,\n"
+                  "        ValueError,\n"
+                  "        TypeError,\n"
+                  "        AttributeError,\n"
+                  "    ) as exc:\n"
+                  "        logger.warning(\n"
+                  "            \"Mezan OpenAI structured output validation failed: %s\",\n"
+                  "            type(exc).__name__,\n"
+                  "        )\n"
+                  "        raise HTTPException(\n"
+                  "            status_code=502,\n"
+                  "            detail={\n"
+                  "                \"code\": \"ai_analysis_schema_invalid\",\n"
+                  "                \"message\": (\n"
+                  "                    \"عاد محلل الذكاء بنتيجة لا تطابق عقد ميزان. لم يتم \"\n"
+                  "                    \"تعديل أو إرسال أي بيانات؛ حاول مرة أخرى.\"\n"
+                  "                ),\n"
+                  "                \"retryable\": True,\n"
+                  "            },\n"
+                  "        ) from exc\n",
+              ),
+              (
+                  "def _job_error(exc: HTTPException) -> dict[str, Any]:\n"
+                  "    detail = exc.detail\n"
+                  "    if isinstance(detail, dict):\n"
+                  "        message = str(detail.get(\"message\") or detail.get(\"detail\") or detail)\n"
+                  "    else:\n"
+                  "        message = str(detail)\n"
+                  "    code_by_status = {\n"
+                  "        422: \"ai_analysis_invalid_request\",\n"
+                  "        502: \"ai_analysis_upstream_failed\",\n"
+                  "        503: \"ai_analysis_not_configured\",\n"
+                  "        504: \"ai_analysis_timeout\",\n"
+                  "    }\n"
+                  "    return {\n"
+                  "        \"code\": code_by_status.get(exc.status_code, \"ai_analysis_failed\"),\n"
+                  "        \"message\": message,\n"
+                  "        \"http_status\": exc.status_code,\n"
+                  "        \"retryable\": exc.status_code >= 500,\n"
+                  "    }\n",
+                  "def _job_error(exc: HTTPException) -> dict[str, Any]:\n"
+                  "    detail = exc.detail\n"
+                  "    code_by_status = {\n"
+                  "        422: \"ai_analysis_invalid_request\",\n"
+                  "        502: \"ai_analysis_upstream_failed\",\n"
+                  "        503: \"ai_analysis_not_configured\",\n"
+                  "        504: \"ai_analysis_timeout\",\n"
+                  "    }\n"
+                  "    if isinstance(detail, dict):\n"
+                  "        message = str(detail.get(\"message\") or detail.get(\"detail\") or detail)\n"
+                  "        code = str(\n"
+                  "            detail.get(\"code\")\n"
+                  "            or code_by_status.get(exc.status_code, \"ai_analysis_failed\")\n"
+                  "        )\n"
+                  "        retryable = bool(\n"
+                  "            detail.get(\"retryable\", exc.status_code >= 500)\n"
+                  "        )\n"
+                  "        safe_metadata = {\n"
+                  "            key: detail.get(key)\n"
+                  "            for key in (\"upstream_status\", \"incomplete_reason\")\n"
+                  "            if detail.get(key) is not None\n"
+                  "        }\n"
+                  "    else:\n"
+                  "        message = str(detail)\n"
+                  "        code = code_by_status.get(exc.status_code, \"ai_analysis_failed\")\n"
+                  "        retryable = exc.status_code >= 500\n"
+                  "        safe_metadata = {}\n"
+                  "    return {\n"
+                  "        \"code\": code,\n"
+                  "        \"message\": message,\n"
+                  "        \"http_status\": exc.status_code,\n"
+                  "        \"retryable\": retryable,\n"
+                  "        **safe_metadata,\n"
+                  "    }\n",
+              ),
+              (
+                  "        safe_error = {\n"
+                  "            \"code\": error.get(\"code\"),\n"
+                  "            \"message\": error.get(\"message\"),\n"
+                  "            \"http_status\": int(error.get(\"http_status\") or 502),\n"
+                  "            \"retryable\": bool(error.get(\"retryable\")),\n"
+                  "        }\n",
+                  "        safe_error = {\n"
+                  "            \"code\": error.get(\"code\"),\n"
+                  "            \"message\": error.get(\"message\"),\n"
+                  "            \"http_status\": int(error.get(\"http_status\") or 502),\n"
+                  "            \"retryable\": bool(error.get(\"retryable\")),\n"
+                  "            \"upstream_status\": error.get(\"upstream_status\"),\n"
+                  "            \"incomplete_reason\": error.get(\"incomplete_reason\"),\n"
+                  "        }\n",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in source:
+                  raise SystemExit(f"Expected source block not found: {old[:80]!r}")
+              source = source.replace(old, new, 1)
+
+          required_markers = (
+              "MAX_ANALYSIS_OUTPUT_TOKENS = 2400",
+              "reasoning={\"effort\": _analysis_reasoning_effort()}",
+              "store=False",
+              "ai_analysis_output_limit",
+              "incomplete_reason",
+          )
+          for marker in required_markers:
+              if marker not in source:
+                  raise SystemExit(f"Missing patched marker: {marker}")
+          route_path.write_text(source, encoding="utf-8")
+
+          test_path = Path("backend/tests/test_ai_analysis_routes.py")
+          tests = test_path.read_text(encoding="utf-8")
+          marker = "# ai-response-contract-regression"
+          if marker not in tests:
+              tests += r'''
+
+# ai-response-contract-regression
+class ResponseContractFake:
+    def __init__(self, *, status="completed", output_text="", incomplete_reason=None,
+                 output_tokens=0, reasoning_tokens=0):
+        self.status = status
+        self.output_text = output_text
+        self.incomplete_details = (
+            type("Incomplete", (), {"reason": incomplete_reason})()
+            if incomplete_reason else None
+        )
+        self.usage = type(
+            "Usage", (), {
+                "output_tokens": output_tokens,
+                "output_tokens_details": type(
+                    "OutputDetails", (), {"reasoning_tokens": reasoning_tokens}
+                )(),
+            }
+        )()
+        self.error = None
+
+
+class ResponseContractResponses:
+    def __init__(self, response):
+        self.response = response
+        self.kwargs = None
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        return self.response
+
+
+class ResponseContractClient:
+    def __init__(self, response):
+        self.responses = ResponseContractResponses(response)
+
+
+@pytest.mark.asyncio
+async def test_response_contract_uses_low_reasoning_and_no_storage(monkeypatch):
+    monkeypatch.delenv("MEZAN_OPENAI_REASONING_EFFORT", raising=False)
+    response = ResponseContractFake(
+        output_text=FakeResponse.output_text,
+        output_tokens=500,
+        reasoning_tokens=120,
+    )
+    client = ResponseContractClient(response)
+    result = await ai_analysis_routes._run_openai_analysis(
+        {"question": "حلل", "context": {"metrics": {"failed": 1}}},
+        lambda: client,
+    )
+    assert result["severity"] == "warning"
+    assert client.responses.kwargs["max_output_tokens"] == 2400
+    assert client.responses.kwargs["reasoning"] == {"effort": "low"}
+    assert client.responses.kwargs["store"] is False
+
+
+@pytest.mark.asyncio
+async def test_incomplete_output_limit_is_preserved_in_safe_job_error():
+    response = ResponseContractFake(
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+        output_tokens=2400,
+        reasoning_tokens=2100,
+    )
+    client = ResponseContractClient(response)
+    with pytest.raises(HTTPException) as captured:
+        await ai_analysis_routes._run_openai_analysis(
+            {"question": "حلل", "context": {"metrics": {"failed": 1}}},
+            lambda: client,
+        )
+    assert captured.value.detail["code"] == "ai_analysis_output_limit"
+    saved = ai_analysis_routes._job_error(captured.value)
+    assert saved["upstream_status"] == "incomplete"
+    assert saved["incomplete_reason"] == "max_output_tokens"
+    safe = ai_analysis_routes._safe_job({"status": "failed", "error": saved})
+    assert safe["error"]["code"] == "ai_analysis_output_limit"
+    assert safe["error"]["incomplete_reason"] == "max_output_tokens"
+
+
+def test_reasoning_effort_is_allow_listed(monkeypatch):
+    monkeypatch.setenv("MEZAN_OPENAI_REASONING_EFFORT", "medium")
+    assert ai_analysis_routes._analysis_reasoning_effort() == "medium"
+    monkeypatch.setenv("MEZAN_OPENAI_REASONING_EFFORT", "invalid")
+    assert ai_analysis_routes._analysis_reasoning_effort() == "low"
+'''
+              test_path.write_text(tests, encoding="utf-8")
+
+          Path(".github/workflows/apply-mezan-ai-incomplete-fix.yml").unlink()
+          PY
+
+          python -m py_compile \
+            backend/ai_analysis_routes.py \
+            backend/tests/test_ai_analysis_routes.py
+          git diff --check
+
+      - name: Commit patched files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/ai_analysis_routes.py backend/tests/test_ai_analysis_routes.py \
+            .github/workflows/apply-mezan-ai-incomplete-fix.yml
+          git commit -m "fix(ai): handle incomplete OpenAI responses safely"
+          git push origin HEAD:fix/mezan-ai-incomplete-response
