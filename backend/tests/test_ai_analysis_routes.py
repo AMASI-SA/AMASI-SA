@@ -1,7 +1,7 @@
 import json
 import asyncio
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient, Request
 from openai import APITimeoutError
 import ai_analysis_routes
@@ -31,7 +31,7 @@ async def test_analysis_is_authenticated_structured_and_read_only(monkeypatch):
     assert "customer_email" not in sent["operational_context"]["metrics"]
     assert "token" not in sent["operational_context"]["errors"][0]
     assert fake.responses.kwargs["text"]["format"]["strict"] is True
-    assert fake.responses.kwargs["max_output_tokens"] == 1200
+    assert fake.responses.kwargs["max_output_tokens"] == 2400
 
 def test_sanitizer_bounds_lists_and_removes_sensitive_fields():
     safe = sanitize_context({"anomalies":[{"message":"x"*900,"authorization":"Bearer secret"} for _ in range(60)],"unknown":{"value":"ignored"}})
@@ -161,7 +161,9 @@ async def test_invalid_model_output_returns_controlled_json():
         )
     assert response.status_code == 502
     assert response.headers["content-type"].startswith("application/json")
-    assert "نتيجة غير صالحة" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "ai_analysis_schema_invalid"
+    assert "لا تطابق عقد ميزان" in detail["message"]
 
 
 # ai-response-contract-regression
