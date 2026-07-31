@@ -26,7 +26,8 @@ def test_review_mezan_images_are_review_only_and_selectable():
 def test_review_customer_history_and_ai_loyalty_are_read_only():
     fast = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
     enhancer = (ROOT / "frontend" / "src" / "reviewCustomerHistoryEnhancer.js").read_text(encoding="utf-8")
-    normalizer = (ROOT / "frontend" / "src" / "lib" / "normalizeSaudiMobile.js").read_text(encoding="utf-8")
+    history_service = (ROOT / "backend" / "order_engine" / "customer_history.py").read_text(encoding="utf-8")
+    history_routes = (ROOT / "backend" / "order_engine" / "routes.py").read_text(encoding="utf-8")
     index = (ROOT / "frontend" / "src" / "index.js").read_text(encoding="utf-8")
 
     assert 'reviewCustomerHistoryFast' in index
@@ -37,11 +38,12 @@ def test_review_customer_history_and_ai_loyalty_are_read_only():
     assert 'requires_approval' in enhancer
     assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in enhancer
 
-    assert 'normalize_saudi_mobile' in fast
-    assert 'export function normalize_saudi_mobile' in normalizer
-    assert 'const params = { limit: 50 }' in fast
+    assert 'def normalize_saudi_mobile' in history_service
+    assert 'customer_matches(current_order, candidate)' in history_service
+    assert '/{order_number}/customer-history' in history_routes
+    assert 'customer_found=result.customer_found' in history_routes
+    assert '/customer-history`' in fast
     assert 'limit: 100' not in fast
-    assert 'api.get("/orders-v2"' in fast
     assert 'api.post(' not in fast
     assert 'api.patch(' not in fast
     assert 'api.delete(' not in fast
