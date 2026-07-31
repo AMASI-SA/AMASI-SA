@@ -1,4 +1,5 @@
 import api from "./lib/api";
+import { normalize_saudi_mobile } from "./lib/normalizeSaudiMobile";
 
 const ROOT_ID = "mezan-review-customer-history-fast-root";
 let activeOrder = null;
@@ -6,16 +7,9 @@ let loading = false;
 
 const text = (value) => String(value || "").trim();
 const normalizeEmail = (value) => text(value).toLowerCase();
-function normalizeMobile(value) {
-  let digits = text(value).replace(/\D/g, "");
-  if (digits.startsWith("00966")) digits = digits.slice(2);
-  if (digits.startsWith("966")) digits = `0${digits.slice(3)}`;
-  if (digits.startsWith("5") && digits.length === 9) digits = `0${digits}`;
-  return digits;
-}
 function customerMatches(current, candidate) {
-  const mobile = normalizeMobile(current?.mobile);
-  const otherMobile = normalizeMobile(candidate?.mobile);
+  const mobile = normalize_saudi_mobile(current?.mobile);
+  const otherMobile = normalize_saudi_mobile(candidate?.mobile);
   if (mobile && otherMobile) return mobile === otherMobile;
   const email = normalizeEmail(current?.email);
   const otherEmail = normalizeEmail(candidate?.email);
@@ -88,14 +82,14 @@ async function load() {
     const { data: currentOrder } = await api.get(`/orders-v2/${encodeURIComponent(orderNumber)}`);
     let cursor = null;
     const all = [];
-    for (let page = 0; page < 3; page += 1) {
-      const params = { limit: 100 };
+    for (let page = 0; page < 6; page += 1) {
+      const params = { limit: 50 };
       if (cursor) params.cursor = cursor;
       const { data } = await api.get("/orders-v2", { params });
       all.push(...(Array.isArray(data?.items) ? data.items : []));
       const history = all.filter((row) => row.order_number !== currentOrder.order_number && customerMatches(currentOrder.customer, row.customer));
       history.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-      render(currentOrder, history, Boolean(data?.next_cursor && page < 2));
+      render(currentOrder, history, Boolean(data?.next_cursor && page < 5));
       cursor = data?.next_cursor || null;
       if (!cursor) break;
     }
