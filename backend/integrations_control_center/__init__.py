@@ -72,13 +72,23 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)
+
     # Lazy import keeps focused read-only modules importable in lightweight
     # test environments that intentionally do not install Motor/PyMongo.
-    from .ads_auto_sync_scheduler import attach_ads_auto_sync_scheduler
+    from . import ads_auto_sync_scheduler as auto_sync_module
+    from .snapchat_native_performance_sync import (
+        sync_snapchat_account_performance_riyadh,
+    )
 
-    # Server-side scheduler: continues Meta/Snapchat V2 performance refreshes
-    # every five minutes even when no Dashboard browser tab is open.
-    attach_ads_auto_sync_scheduler(router, db, current_user, _require_owner)
+    # The five-minute scheduler needs only account totals.  Preserve campaign
+    # DAY detail for manual/wider syncs and bind the scheduled worker to the
+    # lightweight Riyadh-midnight account refresh.
+    auto_sync_module.sync_snapchat_performance = (
+        sync_snapchat_account_performance_riyadh
+    )
+    auto_sync_module.attach_ads_auto_sync_scheduler(
+        router, db, current_user, _require_owner
+    )
 
     exact_test_routes = [
         route
