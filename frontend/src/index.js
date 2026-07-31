@@ -4,6 +4,7 @@ import "@/index.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewCustomerHistoryFast";
 import "@/reviewExportControlsEnhancer";
+import "@/reviewCompactActionLabels";
 import App from "@/App";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
