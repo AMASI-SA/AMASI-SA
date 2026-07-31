@@ -15,6 +15,8 @@ jobs:
   validate:
     name: Snap Meta isolated production validation
     runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: snap-meta-isolated-validation-secret
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,7 +43,13 @@ jobs:
           python -m py_compile \
             tests/test_meta_native_integrations_v2.py \
             tests/test_meta_native_reporting.py \
-            tests/test_snapchat_integrations_v2.py
+            tests/test_snapchat_native_integrations_v2.py \
+            tests/test_snapchat_native_data_sync_v2.py \
+            tests/test_snapchat_native_async_selected_reads.py \
+            tests/test_snapchat_entity_pagination_v2.py \
+            tests/test_snapchat_native_tracking_diagnostics_v2.py \
+            tests/test_snapchat_tracking_error_details_v2.py \
+            tests/test_snapchat_account_selection_v2.py
       - name: Enforce provider isolation
         working-directory: backend
         run: |
@@ -53,7 +61,13 @@ jobs:
           python -m pytest
           tests/test_meta_native_integrations_v2.py
           tests/test_meta_native_reporting.py
-          tests/test_snapchat_integrations_v2.py
+          tests/test_snapchat_native_data_sync_v2.py
+          tests/test_snapchat_native_async_selected_reads.py
+          tests/test_snapchat_entity_pagination_v2.py
+          tests/test_snapchat_native_tracking_diagnostics_v2.py
+          tests/test_snapchat_tracking_error_details_v2.py
+          tests/test_snapchat_native_integrations_v2.py
+          tests/test_snapchat_account_selection_v2.py
           -q
           --tb=short
       - uses: actions/setup-node@v4
