@@ -6,6 +6,12 @@ import {
     rewriteAiAnalysisRequest,
 } from "./aiAnalysisAsync";
 import {
+    isMetaDashboardAsyncSyncResponse,
+    pollMetaDashboardSyncJob,
+    rewriteMetaDashboardRequest,
+    toLegacyMetaSyncPayload,
+} from "./metaDashboardV2Adapter";
+import {
     isSnapchatAsyncSyncResponse,
     isSnapchatSyncRequest,
     pollSnapchatAsyncSyncJob,
@@ -49,11 +55,47 @@ api.interceptors.request.use((config) => {
     if (isAiAnalysisRequest(nextConfig)) {
         nextConfig = rewriteAiAnalysisRequest(nextConfig);
     }
+    nextConfig = rewriteMetaDashboardRequest(nextConfig);
     return nextConfig;
 });
 
 api.interceptors.response.use(
     async (response) => {
+        if (isMetaDashboardAsyncSyncResponse(response)) {
+            const job = await pollMetaDashboardSyncJob({
+                accepted: response.data,
+                loadJob: async (runId) => {
+                    const jobResponse = await axios.get(
+                        `${API_BASE}/integrations-v2/meta_ads/sync-async/${encodeURIComponent(runId)}`,
+                        {
+                            withCredentials: true,
+                            headers: directRequestHeaders(),
+                        },
+                    );
+                    return jobResponse.data;
+                },
+            });
+            if (job.status === "failed") {
+                const failure = new Error(job.error?.message || "تعذر تحديث Meta V2.");
+                failure.response = {
+                    status: 502,
+                    data: {
+                        detail: job.error || {
+                            code: "meta_dashboard_v2_sync_failed",
+                            message: "تعذر تحديث Meta V2.",
+                        },
+                    },
+                };
+                throw failure;
+            }
+            return {
+                ...response,
+                data: toLegacyMetaSyncPayload(job),
+                status: 200,
+                statusText: "Meta V2 dashboard sync completed",
+            };
+        }
+
         if (isSnapchatAsyncSyncResponse(response)) {
             const payload = await pollSnapchatAsyncSyncJob({
                 accepted: response.data,
