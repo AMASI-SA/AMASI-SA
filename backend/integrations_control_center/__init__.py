@@ -15,6 +15,9 @@ from .dashboard_authoritative_summary_routes import (
 from .google_analytics_realtime_routes import (
     attach_google_analytics_realtime_routes,
 )
+from .google_analytics_source_attribution_routes import (
+    attach_google_analytics_source_routes,
+)
 from .google_connections import attach_google_connection_routes
 from .google_error_resolution import install_google_stale_error_filter
 from .google_merchant_registration import (
@@ -63,6 +66,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
     attach_google_analytics_realtime_routes(
+        router, db, current_user, _require_owner
+    )
+    attach_google_analytics_source_routes(
         router, db, current_user, _require_owner
     )
     attach_meta_connection_routes(router, db, current_user, _require_owner)
