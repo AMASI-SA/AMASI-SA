@@ -1,4 +1,11 @@
-"""Campaign-level DAY performance ingestion for native Snapchat V2."""
+"""Hourly Snapchat V2 ingestion aggregated to the Riyadh business day.
+
+Snapchat ad accounts can use different native timezones.  A DAY request for
+an America/Los_Angeles account therefore starts around midday in Riyadh.  The
+merchant-facing Mezan day is always Asia/Riyadh 00:00-23:59, so this module
+requests HOUR buckets and folds every bucket into the matching Riyadh date
+before persisting campaign and ad-account daily rows.
+"""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -8,6 +15,7 @@ import httpx
 
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
+    BUSINESS_TIMEZONE,
     MAX_PAGES,
     SNAPCHAT_API_BASE,
     SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
@@ -50,6 +58,106 @@ def _computed(metrics: dict[str, Any]) -> dict[str, float | None]:
     }
 
 
+def _new_bucket() -> dict[str, Any]:
+    return {
+        "sums": {key: 0.0 for key in STAT_FIELDS},
+        "seen": {key: 0 for key in STAT_FIELDS},
+        "rows": 0,
+        "provider_start": None,
+        "provider_end": None,
+    }
+
+
+def _earlier(left: Any, right: Any) -> Any:
+    if not left:
+        return right
+    if not right:
+        return left
+    left_dt = _parse_datetime(left)
+    right_dt = _parse_datetime(right)
+    if left_dt is None or right_dt is None:
+        return min(str(left), str(right))
+    return left if left_dt <= right_dt else right
+
+
+def _later(left: Any, right: Any) -> Any:
+    if not left:
+        return right
+    if not right:
+        return left
+    left_dt = _parse_datetime(left)
+    right_dt = _parse_datetime(right)
+    if left_dt is None or right_dt is None:
+        return max(str(left), str(right))
+    return left if left_dt >= right_dt else right
+
+
+def _add_to_bucket(
+    bucket: dict[str, Any],
+    metrics: dict[str, Any],
+    *,
+    provider_start: Any = None,
+    provider_end: Any = None,
+) -> None:
+    bucket["rows"] += 1
+    bucket["provider_start"] = _earlier(
+        bucket.get("provider_start"), provider_start
+    )
+    bucket["provider_end"] = _later(
+        bucket.get("provider_end"), provider_end
+    )
+    for key in STAT_FIELDS:
+        value = metrics.get(key)
+        if value is not None:
+            bucket["sums"][key] += float(value)
+            bucket["seen"][key] += 1
+
+
+def _finalize_bucket(bucket: dict[str, Any]) -> dict[str, int | float | None]:
+    row_count = int(bucket.get("rows") or 0)
+    metrics: dict[str, int | float | None] = {}
+    for key in STAT_FIELDS:
+        if row_count and int(bucket["seen"].get(key) or 0) == row_count:
+            value = float(bucket["sums"].get(key) or 0)
+            metrics[key] = int(value) if value.is_integer() else value
+        else:
+            metrics[key] = None
+    return metrics
+
+
+def riyadh_business_window(
+    start_date: date,
+    end_date: date,
+) -> tuple[datetime, datetime]:
+    """Return the exact inclusive-date window in Asia/Riyadh.
+
+    The returned end is exclusive, so a one-day request is Riyadh 00:00 of
+    that date through Riyadh 00:00 of the following date.
+    """
+    business_tz = _timezone(BUSINESS_TIMEZONE)
+    start = datetime(
+        start_date.year,
+        start_date.month,
+        start_date.day,
+        tzinfo=business_tz,
+    )
+    exclusive_end = end_date + timedelta(days=1)
+    end = datetime(
+        exclusive_end.year,
+        exclusive_end.month,
+        exclusive_end.day,
+        tzinfo=business_tz,
+    )
+    return start, end
+
+
+def riyadh_date_for_point(value: Any) -> str | None:
+    point = _parse_datetime(value)
+    if point is None:
+        return None
+    return point.astimezone(_timezone(BUSINESS_TIMEZONE)).date().isoformat()
+
+
 async def _upsert_performance(
     context: SnapchatSyncContext,
     *, account: dict[str, Any], entity_type: str, external_id: str,
@@ -59,17 +167,27 @@ async def _upsert_performance(
     currency = str(account.get("currency") or "").strip().upper()
     spend_micro = _as_number(metrics.get("spend"))
     value_micro = _as_number(metrics.get("conversion_purchases_value"))
-    spend_native = round(float(spend_micro) / 1_000_000, 6) if spend_micro is not None else None
-    value_native = round(float(value_micro) / 1_000_000, 6) if value_micro is not None else None
+    spend_native = (
+        round(float(spend_micro) / 1_000_000, 6)
+        if spend_micro is not None else None
+    )
+    value_native = (
+        round(float(value_micro) / 1_000_000, 6)
+        if value_micro is not None else None
+    )
     now_iso = context.now_iso()
     document = {
         "user_id": context.user_id,
         "provider": SNAPCHAT_PROVIDER_ID,
         "ad_account_id": account["ad_account_id"],
-        "mezan_integration_account_id": account.get("mezan_integration_account_id"),
+        "mezan_integration_account_id": account.get(
+            "mezan_integration_account_id"
+        ),
         "entity_type": entity_type,
         "external_id": external_id,
         "date": date_string,
+        "date_timezone": BUSINESS_TIMEZONE,
+        "business_timezone": BUSINESS_TIMEZONE,
         "currency": currency or None,
         "account_timezone": str(account.get("timezone") or "UTC"),
         "attribution_model": ATTRIBUTION_MODEL,
@@ -83,6 +201,8 @@ async def _upsert_performance(
         "accounting_eligible": False,
         "provider_window_start": provider_start,
         "provider_window_end": provider_end,
+        "provider_granularity": "HOUR",
+        "stored_granularity": "RIYADH_DAY",
         "updated_at": now_iso,
     }
     if entity_type == "campaign":
@@ -109,16 +229,16 @@ async def sync_snapchat_performance(
     *, start_date: date, end_date: date,
 ) -> tuple[int, list[dict[str, str]]]:
     account_id = account["ad_account_id"]
-    account_tz = _timezone(account.get("timezone"))
-    start = datetime(start_date.year, start_date.month, start_date.day, tzinfo=account_tz)
-    exclusive_end = end_date + timedelta(days=1)
-    end = datetime(exclusive_end.year, exclusive_end.month, exclusive_end.day, tzinfo=account_tz)
-    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+    start, end = riyadh_business_window(start_date, end_date)
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     params: dict[str, Any] | None = {
         "start_time": start.isoformat(timespec="seconds"),
         "end_time": end.isoformat(timespec="seconds"),
-        "granularity": "DAY",
+        "granularity": "HOUR",
         "breakdown": "campaign",
         "fields": ",".join(STAT_FIELDS),
         "limit": 200,
@@ -130,17 +250,23 @@ async def sync_snapchat_performance(
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     for _ in range(MAX_PAGES):
-        payload = await context.get_json(client, url, headers=headers, params=params)
+        payload = await context.get_json(
+            client, url, headers=headers, params=params
+        )
         wrapped_stats = payload.get("timeseries_stats") or []
         if not isinstance(wrapped_stats, list):
             raise SnapchatNativeSyncError(
                 "snapchat_stats_payload_invalid",
-                "Snapchat returned invalid performance data.", status_code=502, retryable=True,
+                "Snapchat returned invalid performance data.",
+                status_code=502,
+                retryable=True,
             )
         for wrapped in wrapped_stats:
             if not isinstance(wrapped, dict):
                 continue
-            status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
+            status = str(
+                wrapped.get("sub_request_status") or "SUCCESS"
+            ).upper()
             if "FAIL" in status or "ERROR" in status:
                 errors.append({"kind": "stats", "error": status[:80]})
                 continue
@@ -149,8 +275,15 @@ async def sync_snapchat_performance(
                 continue
             entities: list[dict[str, Any]] = []
             breakdown = stat.get("breakdown_stats")
-            if isinstance(breakdown, dict) and isinstance(breakdown.get("campaign"), list):
-                entities.extend(item for item in breakdown["campaign"] if isinstance(item, dict))
+            if (
+                isinstance(breakdown, dict)
+                and isinstance(breakdown.get("campaign"), list)
+            ):
+                entities.extend(
+                    item
+                    for item in breakdown["campaign"]
+                    if isinstance(item, dict)
+                )
             if not entities and stat.get("id"):
                 entities = [stat]
             for entity in entities:
@@ -159,58 +292,88 @@ async def sync_snapchat_performance(
                 if not external_id or not isinstance(points, list):
                     continue
                 for point in points:
-                    if isinstance(point, dict) and isinstance(point.get("stats"), dict):
+                    if (
+                        isinstance(point, dict)
+                        and isinstance(point.get("stats"), dict)
+                    ):
                         rows.append({
                             "external_id": external_id,
                             "start_time": point.get("start_time"),
                             "end_time": point.get("end_time"),
                             "metrics": point["stats"],
                         })
-        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
+        next_url = _safe_next_url(
+            (payload.get("paging") or {}).get("next_link")
+        )
         if not next_url:
             break
         url, params = next_url, None
 
+    campaign_daily: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        date_string = riyadh_date_for_point(row.get("start_time"))
+        if date_string is None:
+            continue
+        if date_string < start_date.isoformat() or date_string > end_date.isoformat():
+            continue
+        metrics = {
+            key: _as_number((row.get("metrics") or {}).get(key))
+            for key in STAT_FIELDS
+        }
+        bucket = campaign_daily.setdefault(
+            (row["external_id"], date_string),
+            _new_bucket(),
+        )
+        _add_to_bucket(
+            bucket,
+            metrics,
+            provider_start=row.get("start_time"),
+            provider_end=row.get("end_time"),
+        )
+
     saved = 0
     account_daily: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        point_start = _parse_datetime(row.get("start_time"))
-        if point_start is None:
-            continue
-        date_string = point_start.astimezone(account_tz).date().isoformat()
-        metrics = {key: _as_number((row.get("metrics") or {}).get(key)) for key in STAT_FIELDS}
+    for (external_id, date_string), bucket in sorted(
+        campaign_daily.items()
+    ):
+        metrics = _finalize_bucket(bucket)
         await _upsert_performance(
-            context, account=account, entity_type="campaign",
-            external_id=row["external_id"], date_string=date_string, metrics=metrics,
-            provider_start=row.get("start_time"), provider_end=row.get("end_time"),
+            context,
+            account=account,
+            entity_type="campaign",
+            external_id=external_id,
+            date_string=date_string,
+            metrics=metrics,
+            provider_start=bucket.get("provider_start"),
+            provider_end=bucket.get("provider_end"),
         )
         saved += 1
-        aggregate = account_daily.setdefault(date_string, {
-            "sums": {key: 0.0 for key in STAT_FIELDS},
-            "seen": {key: 0 for key in STAT_FIELDS},
-            "rows": 0,
-        })
-        aggregate["rows"] += 1
-        for key, value in metrics.items():
-            if value is not None:
-                aggregate["sums"][key] += float(value)
-                aggregate["seen"][key] += 1
+        aggregate = account_daily.setdefault(date_string, _new_bucket())
+        _add_to_bucket(
+            aggregate,
+            metrics,
+            provider_start=bucket.get("provider_start"),
+            provider_end=bucket.get("provider_end"),
+        )
 
-    for date_string, aggregate in account_daily.items():
-        row_count = int(aggregate["rows"] or 0)
-        metrics: dict[str, int | float | None] = {}
-        for key in STAT_FIELDS:
-            if row_count and aggregate["seen"][key] == row_count:
-                value = aggregate["sums"][key]
-                metrics[key] = int(value) if float(value).is_integer() else value
-            else:
-                metrics[key] = None
+    for date_string, aggregate in sorted(account_daily.items()):
         await _upsert_performance(
-            context, account=account, entity_type="ad_account",
-            external_id=account_id, date_string=date_string, metrics=metrics,
+            context,
+            account=account,
+            entity_type="ad_account",
+            external_id=account_id,
+            date_string=date_string,
+            metrics=_finalize_bucket(aggregate),
+            provider_start=aggregate.get("provider_start"),
+            provider_end=aggregate.get("provider_end"),
         )
         saved += 1
     return saved, errors
 
 
-__all__ = ["STAT_FIELDS", "sync_snapchat_performance"]
+__all__ = [
+    "STAT_FIELDS",
+    "riyadh_business_window",
+    "riyadh_date_for_point",
+    "sync_snapchat_performance",
+]
