@@ -1,7 +1,7 @@
 import json
 import asyncio
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient, Request
 from openai import APITimeoutError
 import ai_analysis_routes
@@ -31,7 +31,7 @@ async def test_analysis_is_authenticated_structured_and_read_only(monkeypatch):
     assert "customer_email" not in sent["operational_context"]["metrics"]
     assert "token" not in sent["operational_context"]["errors"][0]
     assert fake.responses.kwargs["text"]["format"]["strict"] is True
-    assert fake.responses.kwargs["max_output_tokens"] == 1200
+    assert fake.responses.kwargs["max_output_tokens"] == 2400
 
 def test_sanitizer_bounds_lists_and_removes_sensitive_fields():
     safe = sanitize_context({"anomalies":[{"message":"x"*900,"authorization":"Bearer secret"} for _ in range(60)],"unknown":{"value":"ignored"}})
@@ -161,4 +161,91 @@ async def test_invalid_model_output_returns_controlled_json():
         )
     assert response.status_code == 502
     assert response.headers["content-type"].startswith("application/json")
-    assert "نتيجة غير صالحة" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "ai_analysis_schema_invalid"
+    assert "لا تطابق عقد ميزان" in detail["message"]
+
+
+# ai-response-contract-regression
+class ResponseContractFake:
+    def __init__(self, *, status="completed", output_text="", incomplete_reason=None,
+       output_tokens=0, reasoning_tokens=0):
+        self.status = status
+        self.output_text = output_text
+        self.incomplete_details = (
+  type("Incomplete", (), {"reason": incomplete_reason})()
+  if incomplete_reason else None
+        )
+        self.usage = type(
+  "Usage", (), {
+      "output_tokens": output_tokens,
+      "output_tokens_details": type(
+          "OutputDetails", (), {"reasoning_tokens": reasoning_tokens}
+      )(),
+  }
+        )()
+        self.error = None
+
+
+class ResponseContractResponses:
+    def __init__(self, response):
+        self.response = response
+        self.kwargs = None
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        return self.response
+
+
+class ResponseContractClient:
+    def __init__(self, response):
+        self.responses = ResponseContractResponses(response)
+
+
+@pytest.mark.asyncio
+async def test_response_contract_uses_low_reasoning_and_no_storage(monkeypatch):
+    monkeypatch.delenv("MEZAN_OPENAI_REASONING_EFFORT", raising=False)
+    response = ResponseContractFake(
+        output_text=FakeResponse.output_text,
+        output_tokens=500,
+        reasoning_tokens=120,
+    )
+    client = ResponseContractClient(response)
+    result = await ai_analysis_routes._run_openai_analysis(
+        {"question": "حلل", "context": {"metrics": {"failed": 1}}},
+        lambda: client,
+    )
+    assert result["severity"] == "warning"
+    assert client.responses.kwargs["max_output_tokens"] == 2400
+    assert client.responses.kwargs["reasoning"] == {"effort": "low"}
+    assert client.responses.kwargs["store"] is False
+
+
+@pytest.mark.asyncio
+async def test_incomplete_output_limit_is_preserved_in_safe_job_error():
+    response = ResponseContractFake(
+        status="incomplete",
+        incomplete_reason="max_output_tokens",
+        output_tokens=2400,
+        reasoning_tokens=2100,
+    )
+    client = ResponseContractClient(response)
+    with pytest.raises(HTTPException) as captured:
+        await ai_analysis_routes._run_openai_analysis(
+  {"question": "حلل", "context": {"metrics": {"failed": 1}}},
+  lambda: client,
+        )
+    assert captured.value.detail["code"] == "ai_analysis_output_limit"
+    saved = ai_analysis_routes._job_error(captured.value)
+    assert saved["upstream_status"] == "incomplete"
+    assert saved["incomplete_reason"] == "max_output_tokens"
+    safe = ai_analysis_routes._safe_job({"status": "failed", "error": saved})
+    assert safe["error"]["code"] == "ai_analysis_output_limit"
+    assert safe["error"]["incomplete_reason"] == "max_output_tokens"
+
+
+def test_reasoning_effort_is_allow_listed(monkeypatch):
+    monkeypatch.setenv("MEZAN_OPENAI_REASONING_EFFORT", "medium")
+    assert ai_analysis_routes._analysis_reasoning_effort() == "medium"
+    monkeypatch.setenv("MEZAN_OPENAI_REASONING_EFFORT", "invalid")
+    assert ai_analysis_routes._analysis_reasoning_effort() == "low"
