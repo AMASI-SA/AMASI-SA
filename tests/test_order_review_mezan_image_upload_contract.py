@@ -24,16 +24,20 @@ def test_review_mezan_images_are_review_only_and_selectable():
 
 
 def test_review_customer_history_and_ai_loyalty_are_read_only():
-    frontend = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
+    fast = (ROOT / "frontend" / "src" / "reviewCustomerHistoryFast.js").read_text(encoding="utf-8")
+    enhancer = (ROOT / "frontend" / "src" / "reviewCustomerHistoryEnhancer.js").read_text(encoding="utf-8")
     index = (ROOT / "frontend" / "src" / "index.js").read_text(encoding="utf-8")
 
     assert 'reviewCustomerHistoryFast' in index
-    assert 'سجل العميل السابق' in frontend
-    assert 'الدفع عند الاستلام' in frontend
-    assert 'ai_policy_v1' in frontend
-    assert 'requires_approval' in frontend
-    assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in frontend
-    assert 'api.get("/orders-v2"' in frontend
-    assert 'api.post(' not in frontend
-    assert 'api.patch(' not in frontend
-    assert 'api.delete(' not in frontend
+    assert 'سجل العميل السابق' in fast
+    assert 'الدفع عند الاستلام' in fast
+
+    assert 'reviewCustomerHistoryEnhancer' in index
+    assert 'ai_policy_v1' in enhancer
+    assert 'requires_approval' in enhancer
+    assert 'لا تُضاف هدية أو خصم دون اعتماد بشري' in enhancer
+
+    assert 'api.get("/orders-v2"' in fast
+    assert 'api.post(' not in fast
+    assert 'api.patch(' not in fast
+    assert 'api.delete(' not in fast
