@@ -11,12 +11,11 @@ import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
 
 export default function IntegrationCard(props) {
     const isTikTok = props.integration?.provider === "tiktok_ads";
+    if (!isTikTok) return <IntegrationCardV2 {...props} />;
     return (
         <div className="space-y-2">
             <IntegrationCardV2 {...props} />
-            {isTikTok && (
-                <TikTokReportingSyncControl integration={props.integration} />
-            )}
+            <TikTokReportingSyncControl integration={props.integration} />
         </div>
     );
 }
