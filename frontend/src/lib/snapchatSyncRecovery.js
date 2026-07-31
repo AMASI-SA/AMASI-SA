@@ -3,6 +3,7 @@ const ACTIVE_SYNC_STATUSES = new Set(["queued", "running"]);
 const RECOVERABLE_HTTP_STATUSES = new Set([408, 499, 502, 504, 522, 524]);
 const RECOVERABLE_TRANSPORT_CODES = new Set(["ECONNABORTED", "ERR_NETWORK"]);
 const RETRYABLE_POLL_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504, 522, 524]);
+const ACTIVE_SYNC_CONFLICT_CODE = "snapchat_analytics_sync_in_progress";
 
 function syncPath(config = {}) {
     const rawUrl = typeof config?.url === "string" ? config.url : "";
@@ -25,6 +26,16 @@ function shouldRetryPollFailure(error) {
     return status === 0
         || RETRYABLE_POLL_HTTP_STATUSES.has(status)
         || RECOVERABLE_TRANSPORT_CODES.has(transportCode);
+}
+
+function activeSyncConflict(error) {
+    const detail = error?.response?.data?.detail;
+    if (!detail || typeof detail !== "object") return null;
+    if (String(detail.code || "").trim() !== ACTIVE_SYNC_CONFLICT_CODE) {
+        return null;
+    }
+    const runId = String(detail.run_id || "").trim();
+    return runId ? { ...detail, run_id: runId } : null;
 }
 
 export function isSnapchatSyncRequest(config = {}) {
@@ -80,12 +91,10 @@ export async function pollSnapchatAsyncSyncJob({
     }
 
     const boundedAttempts = Math.min(
-        Math.max(Number(attempts) || 1, 1),
-        1_000,
+        Math.max(Number(attempts) || 1, 1), 1_000,
     );
     const boundedInterval = Math.min(
-        Math.max(Number(intervalMs) || 0, 0),
-        30_000,
+        Math.max(Number(intervalMs) || 0, 0), 30_000,
     );
 
     for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
@@ -112,7 +121,12 @@ export async function pollSnapchatAsyncSyncJob({
 export function shouldRecoverSnapchatSyncFailure(error) {
     if (!isSnapchatSyncRequest(error?.config)) return false;
 
-    // A structured Backend error is authoritative and must be shown directly.
+    // A duplicate click or a scheduled refresh may meet an already-running
+    // V2 job. This is not a failure: join that run and return its result.
+    if (activeSyncConflict(error)) return true;
+
+    // Any other structured Backend error is authoritative and should be
+    // presented directly instead of being hidden by transport recovery.
     const detailCode = error?.response?.data?.detail?.code;
     if (typeof detailCode === "string" && detailCode.trim()) return false;
 
@@ -128,14 +142,26 @@ export function findTerminalSnapchatSyncRun(runs, startedAfterMs) {
     return (Array.isArray(runs) ? runs : [])
         .filter((run) => {
             if (run?.provider !== "snapchat_ads") return false;
-            if (run?.run_type !== "analytics_refresh") return false;
-            if (!TERMINAL_SYNC_STATUSES.has(run?.status)) return false;
+            if (!["analytics_refresh", "analytics_refresh_async"].includes(run?.run_type)) {
+                return false;
+            }
+            if (!TERMINAL_SYNC_STATUSES.has(syncStatus(run?.status))) return false;
             const startedAt = Date.parse(run?.started_at || "");
             return Number.isFinite(startedAt) && startedAt >= threshold;
         })
         .sort((left, right) => (
             Date.parse(right?.started_at || "") - Date.parse(left?.started_at || "")
         ))[0] || null;
+}
+
+function findTerminalRunById(runs, runId) {
+    const target = String(runId || "").trim();
+    if (!target) return null;
+    return (Array.isArray(runs) ? runs : []).find((run) => (
+        String(run?.run_id || "").trim() === target
+        && run?.provider === "snapchat_ads"
+        && TERMINAL_SYNC_STATUSES.has(syncStatus(run?.status))
+    )) || null;
 }
 
 function recoveredPayload(run) {
@@ -160,15 +186,19 @@ export async function recoverSnapchatSyncAfterTransportFailure({
     if (!shouldRecoverSnapchatSyncFailure(error)) return null;
     if (typeof loadRuns !== "function") return null;
 
+    const conflict = activeSyncConflict(error);
+    const targetRunId = conflict?.run_id || null;
     const startedAfterMs = Number(
         error?.config?._mezanSyncStartedAt || Date.now(),
     );
-    const boundedAttempts = Math.min(Math.max(Number(attempts) || 1, 1), 60);
+    const boundedAttempts = Math.min(Math.max(Number(attempts) || 1, 1), 120);
 
     for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
         try {
             const runs = await loadRuns();
-            const run = findTerminalSnapchatSyncRun(runs, startedAfterMs);
+            const run = targetRunId
+                ? findTerminalRunById(runs, targetRunId)
+                : findTerminalSnapchatSyncRun(runs, startedAfterMs);
             if (run) {
                 return { run, payload: recoveredPayload(run) };
             }
