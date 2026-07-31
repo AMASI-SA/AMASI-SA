@@ -5,9 +5,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from .customer_history_store import MongoCustomerHistoryStore
+from .mapper import OrderMappingError
 from .models import OrderDTO
 from .repository import OrderRepository
-from .service import MAX_LIMIT, get_order, list_orders
+from .service import MAX_LIMIT, _map_row, get_order, list_orders
 
 CUSTOMER_HISTORY_MAX_PAGES = 6
 
@@ -68,21 +70,59 @@ class CustomerHistoryResult:
         return bool(self.previous_orders)
 
 
-async def get_customer_history(
+def _mongo_history_store(repository: OrderRepository) -> Optional[MongoCustomerHistoryStore]:
+    collection = getattr(repository, "_collection", None)
+    if collection is None:
+        return None
+    return MongoCustomerHistoryStore(collection)
+
+
+async def _load_complete_history(
     repository: OrderRepository,
     *,
+    current_order: OrderDTO,
     user_id: str,
-    order_number: str,
-    max_pages: int = CUSTOMER_HISTORY_MAX_PAGES,
-) -> CustomerHistoryResult:
-    """Load the current order and match prior orders without any writes."""
+    normalized_mobile: Optional[str],
+    normalized_email: Optional[str],
+) -> Optional[tuple[list[OrderDTO], int]]:
+    store = _mongo_history_store(repository)
+    if store is None:
+        return None
 
-    current_order = await get_order(
-        repository,
+    rows = await store.find_customer_orders(
         user_id=str(user_id),
-        order_number=str(order_number),
+        normalized_mobile=normalized_mobile,
+        normalized_email=normalized_email,
+        exclude_order_number=current_order.order_number,
     )
 
+    previous_orders: list[OrderDTO] = []
+    seen_order_numbers: set[str] = set()
+    for row in rows:
+        if row.order_number in seen_order_numbers:
+            continue
+        try:
+            candidate = _map_row(
+                row.salla_raw,
+                current_status=row.current_status,
+            )
+        except OrderMappingError:
+            continue
+        if customer_matches(current_order, candidate):
+            previous_orders.append(candidate)
+            seen_order_numbers.add(candidate.order_number)
+
+    previous_orders.sort(key=lambda order: order.created_at, reverse=True)
+    return previous_orders, len(rows)
+
+
+async def _load_paginated_fallback(
+    repository: OrderRepository,
+    *,
+    current_order: OrderDTO,
+    user_id: str,
+    max_pages: int,
+) -> tuple[list[OrderDTO], int, bool]:
     previous_orders: list[OrderDTO] = []
     seen_order_numbers: set[str] = set()
     cursor: Optional[str] = None
@@ -113,10 +153,62 @@ async def get_customer_history(
             break
 
     previous_orders.sort(key=lambda order: order.created_at, reverse=True)
+    return previous_orders, scanned_orders, scan_complete
+
+
+async def get_customer_history(
+    repository: OrderRepository,
+    *,
+    user_id: str,
+    order_number: str,
+    max_pages: int = CUSTOMER_HISTORY_MAX_PAGES,
+) -> CustomerHistoryResult:
+    """Load the current order and all matching prior orders without writes."""
+
+    current_order = await get_order(
+        repository,
+        user_id=str(user_id),
+        order_number=str(order_number),
+    )
+    normalized_mobile = normalize_saudi_mobile(current_order.customer.mobile)
+    normalized_email = _normalize_email(current_order.customer.email)
+
+    if not normalized_mobile and not normalized_email:
+        return CustomerHistoryResult(
+            current_order=current_order,
+            previous_orders=[],
+            normalized_mobile=None,
+            scanned_orders=0,
+            scan_complete=True,
+        )
+
+    complete = await _load_complete_history(
+        repository,
+        current_order=current_order,
+        user_id=str(user_id),
+        normalized_mobile=normalized_mobile,
+        normalized_email=normalized_email,
+    )
+    if complete is not None:
+        previous_orders, scanned_orders = complete
+        return CustomerHistoryResult(
+            current_order=current_order,
+            previous_orders=previous_orders,
+            normalized_mobile=normalized_mobile,
+            scanned_orders=scanned_orders,
+            scan_complete=True,
+        )
+
+    previous_orders, scanned_orders, scan_complete = await _load_paginated_fallback(
+        repository,
+        current_order=current_order,
+        user_id=str(user_id),
+        max_pages=max_pages,
+    )
     return CustomerHistoryResult(
         current_order=current_order,
         previous_orders=previous_orders,
-        normalized_mobile=normalize_saudi_mobile(current_order.customer.mobile),
+        normalized_mobile=normalized_mobile,
         scanned_orders=scanned_orders,
         scan_complete=scan_complete,
     )
