@@ -16,6 +16,9 @@ on:
       - "backend/product_category_variant_support.py"
       - "backend/product_category_publish_support.py"
       - "backend/product_option_cost_routes.py"
+      - "backend/product_creation_routes.py"
+      - "backend/product_fulfillment_routes.py"
+      - "backend/product_fulfillment_rules.py"
       - "backend/product_field_cost_support.py"
       - "backend/product_sale_schedule.py"
       - "backend/product_sale_schedule_support.py"
@@ -47,6 +50,8 @@ on:
       - "backend/tests/test_product_sale_schedule.py"
       - "backend/tests/test_product_control_center_policy.py"
       - "backend/tests/test_product_option_shared_cost_engine.py"
+      - "backend/tests/test_product_creation_rules.py"
+      - "backend/tests/test_product_fulfillment_rules.py"
       - "backend/tests/test_ai_store_operations_foundation.py"
       - "backend/tests/test_product_intelligence_foundation.py"
       - "backend/tests/test_ai_store_access_control.py"
@@ -66,6 +71,10 @@ on:
       - "frontend/src/components/products/ProductMediaAiProposalPanel.jsx"
       - "frontend/src/components/products/VisualHtmlEditor.jsx"
       - "frontend/src/components/products/ProductOptionCostEditor.jsx"
+      - "frontend/src/components/products/ProductCreationPanel.jsx"
+      - "frontend/src/components/products/ProductOperationsEditor.jsx"
+      - "frontend/src/lib/productOperationFreeze.js"
+      - "frontend/src/lib/productOperationFreeze.test.js"
       - "frontend/src/services/aiStoreOperations.js"
       - "frontend/src/services/mezanProductsV2.js"
       - "frontend/src/services/mezanComponentCatalog.js"
@@ -112,6 +121,8 @@ jobs:
             tests/test_product_sale_schedule.py \
             tests/test_product_control_center_policy.py \
             tests/test_product_option_shared_cost_engine.py \
+            tests/test_product_creation_rules.py \
+            tests/test_product_fulfillment_rules.py \
             tests/test_ai_store_operations_foundation.py \
             tests/test_product_intelligence_foundation.py \
             tests/test_ai_store_access_control.py \
