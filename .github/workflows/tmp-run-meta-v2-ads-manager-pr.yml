@@ -27,6 +27,36 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Align deterministic patch with current source shape
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/tmp_apply_meta_v2_ads_manager.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    provider_source_count = service.count(provider_source_old)
+    if provider_source_count != 2:
+        raise SystemExit(
+            "provider source key: expected two matches, "
+            f"found {provider_source_count}"
+        )
+    service = service.replace(provider_source_old, provider_source_new)
+'''
+          new = '''    provider_source_count = service.count(provider_source_old)
+    if provider_source_count != 1:
+        raise SystemExit(
+            "provider source key: expected one match, "
+            f"found {provider_source_count}"
+        )
+    service = service.replace(provider_source_old, provider_source_new, 1)
+    if provider_source_old in service:
+        raise SystemExit("legacy provider source expression remains")
+'''
+          if text.count(old) != 1:
+              raise SystemExit('Temporary patch source-count guard is missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Apply reviewed Meta V2 source patch
         run: python scripts/tmp_apply_meta_v2_ads_manager.py
 
