@@ -216,61 +216,83 @@ export default function Layout({ children }) {
             <OrderUiEnhancements />
             <GoogleAdsAllPlatformsCard location={location} />
 
-            <header
-                className="sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur lg:hidden"
-                data-testid="mobile-header"
-            >
-                <div className="flex h-14 items-center justify-between px-4">
-                    <div className="flex items-center gap-2.5" data-testid="mobile-header-brand">
-                        <LogoIcon size={32} />
-                        <div>
-                            <div
-                                className="text-brand text-base font-extrabold leading-tight tracking-wider"
-                                style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }}
-                            >
-                                <span>MEZ</span><span className="text-accent-green">AN</span>
-                            </div>
-                            <div className="text-[10px] font-bold leading-tight text-muted-foreground">
-                                ميزان · تحليلات
+            {!isMezanV2 && (
+                <header
+                    className="sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur lg:hidden"
+                    data-testid="mobile-header"
+                >
+                    <div className="flex h-14 items-center justify-between px-4">
+                        <div className="flex items-center gap-2.5" data-testid="mobile-header-brand">
+                            <LogoIcon size={32} />
+                            <div>
+                                <div
+                                    className="text-brand text-base font-extrabold leading-tight tracking-wider"
+                                    style={{ fontFamily: "Tajawal", letterSpacing: "0.08em" }}
+                                >
+                                    <span>MEZ</span><span className="text-accent-green">AN</span>
+                                </div>
+                                <div className="text-[10px] font-bold leading-tight text-muted-foreground">
+                                    ميزان · تحليلات
+                                </div>
                             </div>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setLegacyMenuOpen(true)}
+                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-bold text-foreground transition-colors hover:bg-accent"
+                            data-testid="mobile-menu-btn"
+                            aria-label="فتح قائمة كل صفحات ميزان"
+                        >
+                            <List size={22} weight="bold" />
+                            الكل
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setLegacyMenuOpen(true)}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-bold text-foreground transition-colors hover:bg-accent"
-                        data-testid="mobile-menu-btn"
-                        aria-label="فتح قائمة كل صفحات ميزان"
-                    >
-                        <List size={22} weight="bold" />
-                        الكل
-                    </button>
-                </div>
-                <div className="px-4 pb-3">
-                    <GlobalOrderSearch compact />
-                </div>
-            </header>
+                    <div className="px-4 pb-3">
+                        <GlobalOrderSearch compact />
+                    </div>
+                </header>
+            )}
 
-            <div
-                className="fixed top-3 end-3 z-40 hidden lg:block"
-                data-testid="desktop-notification-bell-wrap"
-            >
-                <NotificationBell />
-            </div>
-            <div
-                className="fixed top-2 end-24 z-40 lg:hidden"
-                data-testid="mobile-notification-bell-wrap"
-            >
-                <NotificationBell />
-            </div>
+            {!isMezanV2 && (
+                <>
+                    <div
+                        className="fixed top-3 end-3 z-40 hidden lg:block"
+                        data-testid="desktop-notification-bell-wrap"
+                    >
+                        <NotificationBell />
+                    </div>
+                    <div
+                        className="fixed top-2 end-24 z-40 lg:hidden"
+                        data-testid="mobile-notification-bell-wrap"
+                    >
+                        <NotificationBell />
+                    </div>
+                </>
+            )}
+
+            {isMezanV2 && (
+                <div
+                    className="relative z-30 border-b border-slate-200/70 bg-background/95 sm:px-4 sm:py-2 lg:px-6"
+                    data-testid="mezan-v2-unified-header"
+                >
+                    <div className="mx-auto max-w-[1900px]">
+                        <MezanV2NavigationShell
+                            location={location}
+                            onOpenAll={() => setLegacyMenuOpen(true)}
+                            searchForm={<GlobalOrderSearch compact />}
+                            notificationControl={<NotificationBell />}
+                        />
+                    </div>
+                </div>
+            )}
 
             <main
                 className="min-h-screen"
                 data-testid="main-content"
                 data-v2-specific-child={hasLegacySpecificChild ? "true" : "false"}
             >
-                <div className="relative sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur lg:flex lg:items-center lg:justify-center">
-                    {!isMezanV2 && (
+                {!isMezanV2 && (
+                    <div className="relative sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur lg:flex lg:items-center lg:justify-center">
                         <button
                             type="button"
                             onClick={() => setLegacyMenuOpen(true)}
@@ -280,17 +302,11 @@ export default function Layout({ children }) {
                             <List size={22} weight="bold" />
                             الكل
                         </button>
-                    )}
-                    <GlobalOrderSearch />
-                </div>
+                        <GlobalOrderSearch />
+                    </div>
+                )}
 
                 <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
-                    {isMezanV2 && (
-                        <MezanV2NavigationShell
-                            location={location}
-                            onOpenAll={() => setLegacyMenuOpen(true)}
-                        />
-                    )}
                     {pageContent}
                     <DashboardAnalyticsPlacement active={showsDashboardAnalytics} />
                     <DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics} />
