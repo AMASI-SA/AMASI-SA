@@ -199,7 +199,7 @@ export default function MezanV2NavigationShell({ location, onOpenAll }) {
             dir="rtl"
             data-testid="mezan-v2-navigation-shell"
         >
-            <div className="flex min-h-16 items-center gap-2 overflow-x-auto px-3 py-2 scrollbar-thin sm:px-4">
+            <div className="flex min-h-16 flex-wrap items-center gap-2 overflow-visible px-3 py-2 sm:px-4">
                 <div className="flex shrink-0 items-center gap-2 border-l border-white/10 pl-3">
                     <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-200 text-slate-950">
                         <Storefront size={24} weight="duotone" />
