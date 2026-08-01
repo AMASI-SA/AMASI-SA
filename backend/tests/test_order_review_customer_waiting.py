@@ -7,6 +7,7 @@ from order_review_customer_waiting import (
     customer_waiting_summary,
     make_order_review_customer_waiting_router,
 )
+from order_review_routes import REVIEW_COMPLETED_STAGES
 
 
 class FakeOrder:
@@ -45,6 +46,10 @@ def test_waiting_transition_preserves_review_data_and_increments_revision():
     assert next_doc["operational_items"] == workflow["operational_items"]
     assert next_doc["waiting_customer_review_by"] == "employee-1"
     assert next_doc["waiting_customer_review_by_name"] == "موظف المراجعة"
+
+
+def test_customer_waiting_is_not_completed_and_can_be_completed_directly():
+    assert WAITING_CUSTOMER_REVIEW_STAGE not in REVIEW_COMPLETED_STAGES
 
 
 def test_resume_transition_returns_to_pending_without_deleting_waiting_history():
