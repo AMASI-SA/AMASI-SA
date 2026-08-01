@@ -19,8 +19,8 @@ const PRODUCTS_LOCATION = {
 };
 
 const MARKETING_LOCATION = {
-    pathname: "/integrations-v2",
-    search: "?provider=meta_ads",
+    pathname: "/ads-manager",
+    search: "?provider=meta",
 };
 
 const FULFILLMENT_LOCATION = {
@@ -111,16 +111,17 @@ test("inventory receiving belongs to products rather than orders", () => {
     expect(section?.id).toBe("products");
 });
 
-test("marketing section exposes all platforms and activates the selected platform", () => {
+test("marketing report routes are separate from app integration routes", () => {
     const section = activeNavigationSection(MARKETING_LOCATION);
     expect(section?.id).toBe("marketing");
     expect(section.items.map((item) => item.to)).toEqual([
         "/ads-manager",
-        "/integrations-v2?provider=snapchat_ads",
-        "/integrations-v2?provider=tiktok_ads",
-        "/integrations-v2?provider=meta_ads",
-        "/integrations-v2?provider=google_ads",
+        "/ads-manager?provider=snapchat",
+        "/ads-manager?provider=tiktok",
+        "/ads-manager?provider=meta",
+        "/ads-manager?provider=google",
     ]);
+    expect(section.items.some((item) => item.to.startsWith("/integrations-v2"))).toBe(false);
 
     const activeItems = section.items.filter(
         (item) => isNavigationItemActive(MARKETING_LOCATION, item),
