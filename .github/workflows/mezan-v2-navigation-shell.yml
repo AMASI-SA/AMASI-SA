@@ -5,6 +5,9 @@ on:
     branches:
       - main
     paths:
+      - "frontend/src/App.js"
+      - "frontend/src/components/Sidebar.jsx"
+      - "frontend/src/defaultDashboardRoute.test.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/MezanV2NavigationShell.jsx"
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
@@ -41,6 +44,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
+          src/defaultDashboardRoute.test.js
           src/components/MezanV2NavigationShell.test.jsx
           src/components/GoogleAdsAllPlatformsCard.test.jsx
           src/pages/MarketingPlatformWorkspace.test.jsx
@@ -54,12 +58,17 @@ jobs:
       - name: Enforce legacy isolation contract
         working-directory: .
         run: |
+          APP=frontend/src/App.js
+          SIDEBAR=frontend/src/components/Sidebar.jsx
           SHELL=frontend/src/components/MezanV2NavigationShell.jsx
           LAYOUT=frontend/src/components/Layout.jsx
           GOOGLE_CARD=frontend/src/components/GoogleAdsAllPlatformsCard.jsx
           PLATFORM=frontend/src/pages/MarketingPlatformWorkspace.jsx
           SERVICE=frontend/src/services/marketingPerformance.js
 
+          grep -q 'path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>}' "$APP"
+          grep -q 'path="/legacy-dashboard"' "$APP"
+          grep -q 'to: "/legacy-dashboard", label: "لوحة التحكم القديمة"' "$SIDEBAR"
           grep -q 'data-testid="mezan-v2-navigation-shell"' "$SHELL"
           grep -q 'data-testid="mezan-v2-open-all"' "$SHELL"
           grep -q 'provider=google' "$SHELL"
