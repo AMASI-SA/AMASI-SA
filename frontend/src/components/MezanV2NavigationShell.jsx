@@ -2,18 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     CaretDown,
-    ChartLineUp,
-    ChatsCircle,
     Cube,
     House,
     List,
     Megaphone,
     Package,
     Plug,
-    Queue,
     Robot,
     Storefront,
-    Warehouse,
 } from "@phosphor-icons/react";
 
 const FULFILLMENT_ITEMS = [
