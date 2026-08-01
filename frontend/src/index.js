@@ -5,6 +5,7 @@ import "@/reviewMezanImageEnhancer";
 import "@/reviewCustomerHistoryFast";
 import "@/reviewExportControlsEnhancer";
 import "@/reviewCompactActionLabels";
+import "@/reviewInternalPreparationRouteEnhancer";
 import App from "@/App";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
