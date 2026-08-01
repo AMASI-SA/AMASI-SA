@@ -12,9 +12,11 @@
  */
 import {
     Coins, Package, Megaphone, Truck, Receipt, TrendUp, Equals, Briefcase,
-    ShoppingCart, ChartBar,
+    ShoppingCart, ChartBar, CaretLeft, CaretRight,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { buildMezanProductCostHref } from "../lib/mezanV2CostLinks";
 import ExcludedOrdersModal from "./ExcludedOrdersModal";
 import AdsCostBreakdownModal from "./AdsCostBreakdownModal";
 import DailyProductCostModal from "./DailyProductCostModal";
@@ -507,6 +509,8 @@ export default function ProfitSummaryCard({
                     open={productCostOpen}
                     onClose={() => setProductCostOpen(false)}
                     data={productCostBreakdown}
+                    fromDate={fromDate}
+                    toDate={toDate}
                 />
             ) : (
                 <DailyProductCostModal
@@ -519,17 +523,25 @@ export default function ProfitSummaryCard({
     );
 }
 
-function MezanV2ProductCostModal({ open, onClose, data }) {
+export function MezanV2ProductCostModal({ open, onClose, data, fromDate, toDate }) {
+    const [page, setPage] = useState(1);
     if (!open) return null;
-    const breakdown = data?.breakdown || {};
-    const rows = [
-        ["تكلفة المتغير من ميزان 2", breakdown.mezan_v2_variant],
-        ["تكلفة المنتج من ميزان 2", breakdown.mezan_v2_base],
-        ["تكلفة المتغير من سلة (احتياطي)", breakdown.salla_variant_fallback],
-        ["تكلفة المنتج من سلة (احتياطي)", breakdown.salla_product_fallback],
-        ["مكونات وخدمات مرتبطة بالمنتج", breakdown.product_components],
-        ["مكونات وخدمات الخيارات المختارة", breakdown.selected_options],
-    ];
+    const rows = Array.isArray(data?.product_rows)
+        ? [...data.product_rows].sort((left, right) => (
+            Number(right.units_sold || 0) - Number(left.units_sold || 0)
+            || Number(right.total_sales || 0) - Number(left.total_sales || 0)
+            || String(left.name || "").localeCompare(String(right.name || ""), "ar")
+        ))
+        : [];
+    const summary = data?.product_profit_summary || {};
+    const filters = { from: fromDate, to: toDate };
+    const pageSize = 10;
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const visibleRows = rows.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize,
+    );
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -537,43 +549,158 @@ function MezanV2ProductCostModal({ open, onClose, data }) {
             data-testid="mezan-v2-product-cost-overlay"
         >
             <div
-                className="w-full max-w-xl rounded-2xl bg-white shadow-xl"
+                className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
                 onClick={(event) => event.stopPropagation()}
                 dir="rtl"
                 data-testid="mezan-v2-product-cost-modal"
             >
-                <div className="flex items-center justify-between rounded-t-2xl border-b bg-amber-50 px-5 py-4">
+                <div className="flex shrink-0 items-start justify-between gap-4 border-b bg-amber-50 px-4 py-4 sm:px-6">
                     <div>
-                        <h2 className="font-extrabold text-amber-900">تفاصيل تكلفة المنتجات — ميزان 2</h2>
-                        <p className="mt-1 text-xs text-amber-800">
-                            ميزان أولاً، ثم سلة عند غياب تكلفة ميزان، مع إضافة المكونات والخدمات.
+                        <h2 className="text-lg font-extrabold text-amber-900 sm:text-xl">ربحية المنتجات — ميزان 2</h2>
+                        <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                            المبيعات والتكلفة والربح لكل منتج. التكلفة تشمل تكلفة ميزان والمكونات والخدمات؛ سلة احتياطيًا فقط.
                         </p>
                     </div>
-                    <button type="button" onClick={onClose} className="rounded-lg border bg-white px-3 py-1 text-sm font-bold">إغلاق ✕</button>
+                    <button type="button" onClick={onClose} className="shrink-0 rounded-lg border bg-white px-3 py-1.5 text-sm font-bold">إغلاق ✕</button>
                 </div>
-                <div className="space-y-2 p-5">
-                    {rows.map(([label, value]) => (
-                        <div key={label} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
-                            <span className="font-semibold text-slate-700">{label}</span>
-                            <span className="num font-extrabold text-amber-800">{fmtSar(value)} ر.س</span>
+                <div className="grid shrink-0 grid-cols-2 gap-2 border-b bg-white px-4 py-3 text-xs sm:grid-cols-4 sm:px-6">
+                    <ProductSummaryTile label="عدد المنتجات" value={fmtInt(summary.product_count)} />
+                    <ProductSummaryTile label="الكمية المباعة" value={fmtInt(summary.total_units)} />
+                    <ProductSummaryTile label="إجمالي المبيعات" value={`${fmtSar(summary.total_sales)} ر.س`} tone="emerald" />
+                    <ProductSummaryTile label="إجمالي التكلفة" value={`${fmtSar(data?.total)} ر.س`} tone="amber" />
+                </div>
+                <div className="min-h-0 flex-1 overflow-auto">
+                    {rows.length === 0 ? (
+                        <div className="p-12 text-center text-sm text-slate-500" data-testid="mezan-v2-product-profit-empty">
+                            لا توجد منتجات مباعة في الفترة المحددة.
                         </div>
-                    ))}
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                        <div className="rounded-lg bg-emerald-50 p-3 text-emerald-900">
-                            <div className="font-bold">منتجات مرتبطة</div>
-                            <div className="mt-1 text-lg font-extrabold">{fmtInt(data?.linked_products_count)}</div>
-                        </div>
-                        <div className="rounded-lg bg-amber-50 p-3 text-amber-900">
-                            <div className="font-bold">أسطر بدون تكلفة أساسية</div>
-                            <div className="mt-1 text-lg font-extrabold">{fmtInt(data?.missing_product_cost_count)}</div>
+                    ) : (
+                        <table className="w-full min-w-[920px] text-sm" data-testid="mezan-v2-product-profit-table">
+                            <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600 shadow-sm">
+                                <tr>
+                                    <th className="px-4 py-3 text-right font-extrabold">المنتج</th>
+                                    <th className="px-3 py-3 text-center font-extrabold">الكمية</th>
+                                    <th className="px-3 py-3 text-left font-extrabold">تكلفة القطعة</th>
+                                    <th className="px-3 py-3 text-left font-extrabold">إجمالي المبيعات</th>
+                                    <th className="px-3 py-3 text-left font-extrabold">إجمالي التكلفة</th>
+                                    <th className="px-4 py-3 text-left font-extrabold">صافي الأرباح</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {visibleRows.map((row) => (
+                                    <ProductProfitRow
+                                        key={row.identity || row.mezan_product_id || row.salla_product_id || row.sku}
+                                        row={row}
+                                        href={buildMezanProductCostHref(row, filters)}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                {rows.length > 0 && (
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-white px-4 py-2.5 text-xs sm:px-6">
+                        <span className="font-bold text-slate-500">10 منتجات في الصفحة · الأعلى كمية مباعة أولًا</span>
+                        <div
+                            className="flex items-center gap-2"
+                            data-testid="mezan-v2-product-pagination"
+                            data-current-page={currentPage}
+                            data-total-pages={totalPages}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setPage((value) => Math.max(1, Math.min(value, totalPages) - 1))}
+                                disabled={currentPage <= 1}
+                                aria-label="الصفحة السابقة"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
+                                data-testid="mezan-v2-product-page-previous"
+                            >
+                                <CaretRight size={16} weight="bold" />
+                            </button>
+                            <span className="min-w-[88px] text-center font-extrabold text-slate-700">
+                                الصفحة {currentPage} من {totalPages}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setPage((value) => Math.min(totalPages, Math.min(value, totalPages) + 1))}
+                                disabled={currentPage >= totalPages}
+                                aria-label="الصفحة التالية"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
+                                data-testid="mezan-v2-product-page-next"
+                            >
+                                <CaretLeft size={16} weight="bold" />
+                            </button>
                         </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between border-t pt-3 font-extrabold">
-                        <span>الإجمالي المحتسب</span>
-                        <span className="num text-lg text-amber-800">{fmtSar(data?.total)} ر.س</span>
+                )}
+                <div className="shrink-0 border-t bg-slate-50 px-4 py-3 text-[11px] text-slate-600 sm:px-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>صافي ربح المنتج = مبيعات المنتج − تكلفته، دون توزيع الإعلان أو الشحن أو رسوم الدفع على المنتجات.</span>
+                        {summary.has_unpriced_products && (
+                            <span className="font-bold text-amber-800">توجد منتجات بلا تكلفة؛ أرباحها مخفية حتى تُضاف التكلفة.</span>
+                        )}
                     </div>
                 </div>
             </div>
         </div>
+    );
+}
+
+
+function ProductSummaryTile({ label, value, tone = "slate" }) {
+    const color = tone === "emerald"
+        ? "text-emerald-700"
+        : tone === "amber" ? "text-amber-800" : "text-slate-800";
+    return (
+        <div className="rounded-xl border bg-slate-50/70 p-2.5">
+            <div className="font-bold text-slate-500">{label}</div>
+            <div className={`num mt-1 text-base font-extrabold ${color}`}>{value}</div>
+        </div>
+    );
+}
+
+
+function ProductProfitRow({ row, href }) {
+    const isMissing = row.cost_status === "missing";
+    const isFallback = row.cost_status === "salla_fallback";
+    const profit = row.net_profit == null ? null : Number(row.net_profit);
+    return (
+        <tr
+            className={`border-t align-middle ${isMissing || isFallback ? "bg-amber-50/50" : "bg-white"}`}
+            data-testid={`mezan-v2-product-profit-row-${row.identity}`}
+        >
+            <td className="px-4 py-3">
+                <Link to={href} className="group flex min-w-[300px] items-center gap-3" data-testid="mezan-v2-product-cost-link">
+                    {row.image_url ? (
+                        <img src={row.image_url} alt={row.name || ""} className="h-14 w-14 shrink-0 rounded-xl border bg-white object-cover" />
+                    ) : (
+                        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border bg-slate-50 text-slate-300">
+                            <Package size={24} />
+                        </span>
+                    )}
+                    <span className="min-w-0">
+                        <span className="block max-w-[420px] truncate font-extrabold text-slate-800 group-hover:text-emerald-700 group-hover:underline">{row.name}</span>
+                        <span className="mt-1 block text-xs text-slate-500">{row.sku || "بدون SKU"}</span>
+                        {(isMissing || isFallback) && (
+                            <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-900">
+                                {isMissing ? "بدون تكلفة — أضف التكلفة" : "تكلفة سلة فقط — أضف تكلفة ميزان"}
+                            </span>
+                        )}
+                    </span>
+                </Link>
+            </td>
+            <td className="num px-3 py-3 text-center font-extrabold text-slate-700">{fmtInt(row.units_sold)}</td>
+            <td className={`num px-3 py-3 text-left font-bold ${isMissing || isFallback ? "text-amber-800" : "text-slate-700"}`}>
+                {row.average_unit_cost == null ? "—" : `${fmtSar(row.average_unit_cost)} ر.س`}
+            </td>
+            <td className="num px-3 py-3 text-left font-extrabold text-emerald-700">{fmtSar(row.total_sales)} ر.س</td>
+            <td className={`num px-3 py-3 text-left font-extrabold ${isMissing || isFallback ? "text-amber-800" : "text-slate-800"}`}>
+                {row.total_cost == null ? "—" : `${fmtSar(row.total_cost)} ر.س`}
+            </td>
+            <td className={`num px-4 py-3 text-left font-extrabold ${profit == null ? "text-amber-800" : profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                {profit == null ? "—" : `${fmtSar(profit)} ر.س`}
+                {isFallback && profit != null && <span className="ms-1 text-[10px] font-bold">تقديري</span>}
+            </td>
+        </tr>
     );
 }

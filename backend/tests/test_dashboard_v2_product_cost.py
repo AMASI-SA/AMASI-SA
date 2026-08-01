@@ -1,4 +1,10 @@
-from dashboard_v2_routes import _aggregate_provider_rows, calculate_mezan_v2_line_cost
+from dashboard_v2_routes import (
+    _aggregate_provider_rows,
+    _build_snapchat_account_summaries,
+    _finalize_product_profit_rows,
+    _line_sales_total,
+    calculate_mezan_v2_line_cost,
+)
 from order_option_cost_snapshot_routes import resolve_base_unit_cost
 
 
@@ -109,6 +115,145 @@ def test_explicit_zero_in_mezan_does_not_fall_back_to_salla():
 
     assert (base_cost, base_source) == (0, "mezan_v2_base")
     assert (variant_cost, variant_source) == (0, "mezan_v2_variant")
+
+
+def test_product_line_sales_prefers_source_total_then_uses_normalized_fallback():
+    assert _line_sales_total({
+        "total": 230,
+        "price": 100,
+        "quantity": 2,
+        "tax": 30,
+    }, 2) == 230
+    assert _line_sales_total({
+        "price": 100,
+        "discount": 10,
+        "tax": 30,
+    }, 2) == 220
+
+
+def test_product_profit_rows_show_complete_fallback_and_missing_costs_safely():
+    rows, summary = _finalize_product_profit_rows({
+        "complete": {
+            "identity": "complete",
+            "name": "منتج مكتمل",
+            "units_sold": 2,
+            "orders_count": 1,
+            "total_sales": 200,
+            "total_cost": 80,
+            "mezan_cost_complete": True,
+            "uses_salla_fallback": False,
+            "missing_everywhere": False,
+            "catalog_product_found": True,
+            "cost_sources": {"mezan_v2_base"},
+        },
+        "fallback": {
+            "identity": "fallback",
+            "name": "تكلفة سلة فقط",
+            "units_sold": 3,
+            "orders_count": 2,
+            "total_sales": 300,
+            "total_cost": 90,
+            "mezan_cost_complete": False,
+            "uses_salla_fallback": True,
+            "missing_everywhere": False,
+            "catalog_product_found": True,
+            "cost_sources": {"salla_product_fallback"},
+        },
+        "missing": {
+            "identity": "missing",
+            "name": "بدون تكلفة",
+            "units_sold": 1,
+            "orders_count": 1,
+            "total_sales": 150,
+            "total_cost": 5,
+            "mezan_cost_complete": False,
+            "uses_salla_fallback": False,
+            "missing_everywhere": True,
+            "catalog_product_found": True,
+            "cost_sources": {"missing"},
+        },
+    })
+
+    assert [row["units_sold"] for row in rows] == [3.0, 2.0, 1.0]
+    by_status = {row["cost_status"]: row for row in rows}
+    missing = by_status["missing"]
+    fallback = by_status["salla_fallback"]
+    complete = by_status["complete"]
+    assert missing["average_unit_cost"] is None
+    assert missing["total_cost"] is None
+    assert missing["net_profit"] is None
+    assert fallback["average_unit_cost"] == 30
+    assert fallback["net_profit"] == 210
+    assert complete["average_unit_cost"] == 40
+    assert complete["net_profit"] == 120
+    assert summary == {
+        "product_count": 3,
+        "total_units": 6.0,
+        "total_sales": 650.0,
+        "total_cost": 175.0,
+        "net_profit": None,
+        "has_unpriced_products": True,
+        "uses_salla_fallback": True,
+    }
+
+
+def test_snapchat_v2_cards_keep_today_and_month_metrics_separate_per_account():
+    rows = [
+        {
+            "ad_account_id": "snap-a",
+            "date": "2026-08-01",
+            "spend_sar": 100,
+            "purchases": 2,
+            "purchase_value_sar": 300,
+            "currency": "USD",
+            "account_timezone": "America/Los_Angeles",
+            "updated_at": "2026-08-01T10:00:00+00:00",
+        },
+        {
+            "ad_account_id": "snap-a",
+            "date": "2026-08-02",
+            "spend_sar": 50,
+            "purchases": 1,
+            "purchase_value_sar": 120,
+            "currency": "USD",
+            "account_timezone": "America/Los_Angeles",
+            "updated_at": "2026-08-02T10:00:00+00:00",
+        },
+        {
+            "ad_account_id": "snap-b",
+            "date": "2026-08-02",
+            "spend_sar": 20,
+            "purchases": 4,
+            "purchase_value_sar": 200,
+            "currency": "SAR",
+            "account_timezone": "Asia/Riyadh",
+            "updated_at": "2026-08-02T10:05:00+00:00",
+        },
+    ]
+    accounts = _build_snapchat_account_summaries(
+        rows,
+        [
+            {"ad_account_id": "snap-a", "display_name": "حساب أ"},
+            {"ad_account_id": "snap-b", "display_name": "حساب ب"},
+        ],
+        month_start="2026-08-01",
+        today="2026-08-02",
+    )
+
+    by_id = {row["id"]: row for row in accounts}
+    account_a = by_id["snap-a"]
+    account_b = by_id["snap-b"]
+    assert account_a["today"]["spend"] == 50
+    assert account_a["today"]["orders"] == 1
+    assert account_a["month"]["spend"] == 150
+    assert account_a["month"]["orders"] == 3
+    assert account_b["today"]["spend"] == 20
+    assert account_b["month"]["spend"] == 20
+    assert account_b["month"]["orders"] == 4
+    assert account_a["currency"] == "USD"
+    assert account_b["timezone"] == "Asia/Riyadh"
+    assert account_a["spend_share_pct"] == 88.24
+    assert account_b["spend_share_pct"] == 11.76
 
 
 def test_missing_everywhere_is_reported_instead_of_inventing_a_cost():
