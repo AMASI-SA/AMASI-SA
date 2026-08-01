@@ -153,6 +153,19 @@ def _country_code(value: Any) -> str:
     return mapping.get(text, "")
 
 
+def _country_iso(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    mapping = {
+        "sa": "sa", "sau": "sa", "saudi arabia": "sa",
+        "السعودية": "sa", "المملكة العربية السعودية": "sa",
+        "ye": "ye", "yem": "ye", "yemen": "ye", "اليمن": "ye",
+        "qa": "qa", "qat": "qa", "qatar": "qa", "قطر": "qa",
+        "ae": "ae", "are": "ae", "uae": "ae",
+        "united arab emirates": "ae", "الإمارات": "ae",
+    }
+    return mapping.get(text, text[:2] if len(text) == 2 and text.isascii() else "")
+
+
 def normalize_phone(value: Any, *, country: Any = None) -> str | None:
     digits = re.sub(r"\D+", "", str(value or ""))
     if digits.startswith("00"):
@@ -418,16 +431,14 @@ def build_snapchat_purchase_event(
         user_data["external_id"] = _sha256(customer_id.lower())
 
     city = _normalise_hash_text(order.get("shipping_city") or address.get("city"))
-    country = _normalise_hash_text(
-        address.get("country_code") or country_raw
-    )
+    country = _country_iso(address.get("country_code") or country_raw)
     postal = _normalise_hash_text(
         order.get("shipping_postal_code") or address.get("postal_code")
     )
     if city:
         user_data["ct"] = _sha256(city)
     if country:
-        user_data["country"] = _sha256(country[:2] if len(country) == 2 else country)
+        user_data["country"] = _sha256(country)
     if postal:
         user_data["zp"] = _sha256(postal)
 
@@ -723,9 +734,16 @@ def _safe_provider_summary(payload: Any) -> dict[str, Any]:
     return result
 
 
-async def _claim_event(db: Any, *, worker_id: str, now: datetime) -> dict[str, Any] | None:
+async def _claim_event(
+    db: Any,
+    *,
+    user_id: str,
+    worker_id: str,
+    now: datetime,
+) -> dict[str, Any] | None:
     return await _collection(db, OUTBOX_COLLECTION).find_one_and_update(
         {
+            "user_id": str(user_id),
             "status": {"$in": list(PENDING_STATUSES)},
             "next_attempt_at": {"$lte": now},
             "$or": [
@@ -822,7 +840,12 @@ async def drain_snapchat_capi_outbox(
     async with httpx.AsyncClient(timeout=25.0) as client:
         for _ in range(maximum):
             current = now().astimezone(timezone.utc)
-            event = await _claim_event(db, worker_id=worker_id, now=current)
+            event = await _claim_event(
+                db,
+                user_id=str(user_id),
+                worker_id=worker_id,
+                now=current,
+            )
             if not event:
                 break
             if str(event.get("user_id")) != str(user_id):
