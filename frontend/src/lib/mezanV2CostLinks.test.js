@@ -12,7 +12,7 @@ test("one missing product opens its Mezan V2 editor directly", () => {
     }, { from: "2026-08-01", to: "2026-08-01" });
 
     expect(href).toContain("/products-v2?");
-    expect(href).toContain("workspace=intake");
+    expect(href).not.toContain("workspace=intake");
     expect(href).toContain("missing_mezan_cost=1");
     expect(href).toContain("sold_only=1");
     expect(href).toContain("product=m-1");
@@ -34,7 +34,7 @@ test("multiple missing products open the filtered sold-products list with dashbo
         shipping_companies: ["سمسا"],
     });
 
-    expect(href).toContain("workspace=intake");
+    expect(href).not.toContain("workspace=intake");
     expect(href).toContain("missing_mezan_cost=1");
     expect(href).toContain("sold_only=1");
     expect(href).toContain("view=list");
@@ -65,7 +65,7 @@ test("a fallback-cost product opens its Mezan editor with the sold-missing filte
         cost_status: "salla_fallback",
     }, { from: "2026-08-01", to: "2026-08-02" });
 
-    expect(href).toContain("workspace=intake");
+    expect(href).not.toContain("workspace=intake");
     expect(href).toContain("missing_mezan_cost=1");
     expect(href).toContain("sold_only=1");
     expect(href).toContain("product=m-fallback");
@@ -90,7 +90,7 @@ test("a costed product can still open its product cost editor without a missing 
 
 
 test("sold-missing list ignores the previously stored product", () => {
-    const search = "?workspace=intake&missing_mezan_cost=1&sold_only=1&view=list";
+    const search = "?missing_mezan_cost=1&sold_only=1&view=list";
 
     expect(resolveInitialSelectedProduct(search, "old-product")).toBe("");
     expect(resolveInitialProductsView(search, "old-product")).toBe("list");
@@ -98,7 +98,7 @@ test("sold-missing list ignores the previously stored product", () => {
 
 
 test("a direct cost link still opens the requested product details", () => {
-    const search = "?workspace=intake&product=m-7&focus=cost";
+    const search = "?product=m-7&focus=cost";
 
     expect(resolveInitialSelectedProduct(search, "old-product")).toBe("m-7");
     expect(resolveInitialProductsView(search, "old-product")).toBe("detail");

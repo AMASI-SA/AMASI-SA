@@ -30,7 +30,9 @@ export function resolveInitialProductsView(search = "", storedProduct = "") {
 
 export function buildMezanProductCostHref(product, filters = {}) {
     const missingMezanCost = product?.cost_status !== "complete";
-    const params = new URLSearchParams({ workspace: "intake" });
+    // `workspace=intake` is reserved by Layout for ProductIntakeWorkspace.
+    // Cost links must stay on the main MezanProductsWorkspace route.
+    const params = new URLSearchParams();
     if (missingMezanCost) {
         params.set("missing_mezan_cost", "1");
         params.set("sold_only", "1");
@@ -48,7 +50,6 @@ export function buildMezanProductCostHref(product, filters = {}) {
 
 export function buildMissingMezanCostHref(productCost, filters = {}) {
     const params = new URLSearchParams({
-        workspace: "intake",
         missing_mezan_cost: "1",
         sold_only: "1",
         view: "list",
