@@ -8,21 +8,10 @@ import {
     Megaphone,
     Package,
     Plug,
+    Queue,
     Robot,
     Storefront,
 } from "@phosphor-icons/react";
-
-const FULFILLMENT_ITEMS = [
-    { to: "/fulfillment-v2?stage=pending_review", label: "بانتظار المراجعة" },
-    { to: "/fulfillment-v2?stage=reviewed", label: "تم المراجعة" },
-    { to: "/fulfillment-v2?stage=in_progress", label: "قيد التنفيذ" },
-    { to: "/fulfillment-v2?stage=preparation", label: "التجهيز" },
-    { to: "/fulfillment-v2?stage=assembly", label: "الاستلام والتجميع" },
-    { to: "/fulfillment-v2?stage=ready_to_ship", label: "جاهز للشحن" },
-    { to: "/fulfillment-v2?stage=completed", label: "تم التنفيذ" },
-    { to: "/fulfillment-v2?stage=delivering", label: "جاري التوصيل" },
-    { to: "/fulfillment-v2?stage=delivered", label: "تم التوصيل" },
-];
 
 export const MEZAN_V2_NAV_SECTIONS = [
     {
@@ -38,9 +27,15 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "الطلبات",
         Icon: Package,
         items: [
-            { to: "/orders-v2", label: "كل الطلبات", pathPrefix: "/orders-v2", exactSearch: true },
-            ...FULFILLMENT_ITEMS,
-            { to: "/inventory-receiving-v2", label: "استلام المخزون" },
+            { to: "/orders-v2", label: "كل الطلبات", pathPrefix: "/orders-v2" },
+        ],
+    },
+    {
+        id: "fulfillment",
+        label: "إدارة التجهيز",
+        Icon: Queue,
+        items: [
+            { to: "/fulfillment-v2", label: "إدارة التجهيز", pathPrefix: "/fulfillment-v2" },
         ],
     },
     {
@@ -50,6 +45,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         items: [
             { to: "/products-v2", label: "إدارة المنتجات", exactSearch: true },
             { to: "/products-v2?workspace=intake", label: "استقبال المنتجات" },
+            { to: "/inventory-receiving-v2", label: "استلام المخزون" },
             { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات" },
             { to: "/components-v2", label: "مكونات المنتجات", exactSearch: true },
             { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن" },

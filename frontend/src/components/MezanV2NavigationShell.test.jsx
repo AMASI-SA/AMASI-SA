@@ -23,11 +23,17 @@ const MARKETING_LOCATION = {
     search: "?provider=meta_ads",
 };
 
+const FULFILLMENT_LOCATION = {
+    pathname: "/fulfillment-v2",
+    search: "?stage=reviewed",
+};
+
 test("Mezan 2 shell is limited to Mezan 2 routes", () => {
     [
         "/dashboard-v2",
         "/orders-v2/280001234",
         "/fulfillment-v2",
+        "/inventory-receiving-v2",
         "/products-v2",
         "/components-v2",
         "/integrations-v2",
@@ -44,6 +50,29 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
     ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(false));
 });
 
+test("orders and fulfillment are independent top-level sections", () => {
+    const orders = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "orders");
+    const fulfillment = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "fulfillment");
+
+    expect(orders.items.map((item) => item.to)).toEqual(["/orders-v2"]);
+    expect(fulfillment.items.map((item) => item.to)).toEqual(["/fulfillment-v2"]);
+    expect(orders.items.some((item) => item.to.startsWith("/fulfillment-v2"))).toBe(false);
+    expect(orders.items.some((item) => item.to === "/inventory-receiving-v2")).toBe(false);
+
+    const active = activeNavigationSection(FULFILLMENT_LOCATION);
+    expect(active?.id).toBe("fulfillment");
+
+    const markup = renderToStaticMarkup(
+        <MezanV2NavigationShell
+            location={FULFILLMENT_LOCATION}
+            onOpenAll={() => {}}
+        />,
+    );
+    expect(markup).toContain('data-testid="mezan-v2-primary-orders"');
+    expect(markup).toContain('data-testid="mezan-v2-primary-fulfillment"');
+    expect(markup).not.toContain('data-testid="mezan-v2-secondary-fulfillment"');
+});
+
 test("products section exposes a Salla-style primary group and secondary page rail", () => {
     const markup = renderToStaticMarkup(
         <MezanV2NavigationShell
@@ -57,6 +86,7 @@ test("products section exposes a Salla-style primary group and secondary page ra
     expect(markup).toContain('data-testid="mezan-v2-secondary-products"');
     expect(markup).toContain("إدارة المنتجات");
     expect(markup).toContain("استقبال المنتجات");
+    expect(markup).toContain("استلام المخزون");
     expect(markup).toContain("الفريق والصلاحيات");
     expect(markup).toContain("مكونات المنتجات");
     expect(markup).toContain("الفروع والمخازن");
@@ -71,6 +101,14 @@ test("query-specific product page is the active child", () => {
         (item) => isNavigationItemActive(PRODUCTS_LOCATION, item),
     );
     expect(activeItems.map((item) => item.label)).toEqual(["استقبال المنتجات"]);
+});
+
+test("inventory receiving belongs to products rather than orders", () => {
+    const section = activeNavigationSection({
+        pathname: "/inventory-receiving-v2",
+        search: "",
+    });
+    expect(section?.id).toBe("products");
 });
 
 test("marketing section exposes all platforms and activates the selected platform", () => {
