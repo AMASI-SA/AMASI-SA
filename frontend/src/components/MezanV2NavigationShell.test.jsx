@@ -18,6 +18,11 @@ const PRODUCTS_LOCATION = {
     search: "?workspace=intake",
 };
 
+const MARKETING_LOCATION = {
+    pathname: "/integrations-v2",
+    search: "?provider=meta_ads",
+};
+
 test("Mezan 2 shell is limited to Mezan 2 routes", () => {
     [
         "/dashboard-v2",
@@ -52,6 +57,7 @@ test("products section exposes a Salla-style primary group and secondary page ra
     expect(markup).toContain('data-testid="mezan-v2-secondary-products"');
     expect(markup).toContain("إدارة المنتجات");
     expect(markup).toContain("استقبال المنتجات");
+    expect(markup).toContain("الفريق والصلاحيات");
     expect(markup).toContain("مكونات المنتجات");
     expect(markup).toContain("الفروع والمخازن");
     expect(markup).toContain('data-testid="mezan-v2-open-all"');
@@ -65,6 +71,23 @@ test("query-specific product page is the active child", () => {
         (item) => isNavigationItemActive(PRODUCTS_LOCATION, item),
     );
     expect(activeItems.map((item) => item.label)).toEqual(["استقبال المنتجات"]);
+});
+
+test("marketing section exposes all platforms and activates the selected platform", () => {
+    const section = activeNavigationSection(MARKETING_LOCATION);
+    expect(section?.id).toBe("marketing");
+    expect(section.items.map((item) => item.to)).toEqual([
+        "/ads-manager",
+        "/integrations-v2?provider=snapchat_ads",
+        "/integrations-v2?provider=tiktok_ads",
+        "/integrations-v2?provider=meta_ads",
+        "/integrations-v2?provider=google_ads",
+    ]);
+
+    const activeItems = section.items.filter(
+        (item) => isNavigationItemActive(MARKETING_LOCATION, item),
+    );
+    expect(activeItems.map((item) => item.label)).toEqual(["ميتا"]);
 });
 
 test("new navigation does not route to legacy Mezan pages", () => {

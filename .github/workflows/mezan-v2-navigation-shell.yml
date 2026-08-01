@@ -8,6 +8,8 @@ on:
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/MezanV2NavigationShell.jsx"
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
+      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+      - "frontend/src/pages/MarketingPlatformWorkspace.test.jsx"
       - ".github/workflows/mezan-v2-navigation-shell.yml"
 
 jobs:
@@ -36,6 +38,7 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/MezanV2NavigationShell.test.jsx
+          src/pages/MarketingPlatformWorkspace.test.jsx
 
       - name: Build frontend
         env:
@@ -47,9 +50,14 @@ jobs:
         run: |
           SHELL=frontend/src/components/MezanV2NavigationShell.jsx
           LAYOUT=frontend/src/components/Layout.jsx
+          PLATFORM=frontend/src/pages/MarketingPlatformWorkspace.jsx
 
           grep -q 'data-testid="mezan-v2-navigation-shell"' "$SHELL"
           grep -q 'data-testid="mezan-v2-open-all"' "$SHELL"
+          grep -q 'provider=google_ads' "$SHELL"
+          grep -q 'workspace=access' "$SHELL"
           grep -q 'isMezanV2Route' "$LAYOUT"
+          grep -q 'isMarketingPlatformProvider' "$LAYOUT"
+          grep -q 'data-testid="marketing-platform-workspace"' "$PLATFORM"
           grep -q 'legacyMenuOpen &&' "$LAYOUT"
           ! grep -q 'lg:ps-64' "$LAYOUT"

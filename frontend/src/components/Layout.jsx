@@ -24,6 +24,9 @@ import OrderUiEnhancements from "./OrderUiEnhancements";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
+import MarketingPlatformWorkspace, {
+    isMarketingPlatformProvider,
+} from "../pages/MarketingPlatformWorkspace";
 import MezanV2NavigationShell, {
     isMezanV2Route,
 } from "./MezanV2NavigationShell";
@@ -138,7 +141,9 @@ function WarehouseSidebarLink({ location, onNavigate }) {
 export default function Layout({ children }) {
     const [legacyMenuOpen, setLegacyMenuOpen] = useState(false);
     const location = useLocation();
-    const workspace = new URLSearchParams(location.search).get("workspace");
+    const searchParams = new URLSearchParams(location.search);
+    const workspace = searchParams.get("workspace");
+    const marketingProvider = searchParams.get("provider");
     const isV2 = [
         "/dashboard-v2",
         "/orders-v2",
@@ -155,13 +160,17 @@ export default function Layout({ children }) {
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
+    const isMarketingPlatform = location.pathname === "/integrations-v2"
+        && isMarketingPlatformProvider(marketingProvider);
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />
         : isProductIntake
             ? <ProductIntakeWorkspace />
             : isStoreAccess
                 ? <StoreOperationsAccessWorkspace />
-                : children;
+                : isMarketingPlatform
+                    ? <MarketingPlatformWorkspace provider={marketingProvider} />
+                    : children;
 
     useEffect(() => {
         setLegacyMenuOpen(false);
