@@ -94,7 +94,7 @@ def test_waiting_summary_exposes_countable_stage_and_revision():
 
 def test_customer_waiting_router_registers_list_wait_and_resume_routes():
     router = make_order_review_customer_waiting_router(
-        SimpleNamespace(),
+        SimpleNamespace(unified_orders=object()),
         lambda: {"id": "owner-1", "role": "owner"},
     )
     routes = {
