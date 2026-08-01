@@ -1,0 +1,151 @@
+name: Apply Root Dashboard V2 Fix
+
+on:
+  push:
+    branches:
+      - fix/root-default-dashboard-v2
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/root-default-dashboard-v2
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Apply exact route and sidebar changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app_path = Path("frontend/src/App.js")
+          sidebar_path = Path("frontend/src/components/Sidebar.jsx")
+          workflow_path = Path(".github/workflows/mezan-v2-navigation-shell.yml")
+          test_path = Path("frontend/src/defaultDashboardRoute.test.js")
+
+          app = app_path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  'if (user) return <Navigate to="/" replace />;',
+                  'if (user) return <Navigate to="/dashboard-v2" replace />;',
+              ),
+              (
+                  '<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />',
+                  '<Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />\n'
+                  '            <Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />',
+              ),
+              (
+                  '<Route path="*" element={<Navigate to="/" replace />} />',
+                  '<Route path="*" element={<Navigate to="/dashboard-v2" replace />} />',
+              ),
+          ]
+          for old, new in replacements:
+              count = app.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one App.js match for {old!r}, found {count}")
+              app = app.replace(old, new, 1)
+          app_path.write_text(app, encoding="utf-8")
+
+          sidebar = sidebar_path.read_text(encoding="utf-8")
+          old_sidebar = '{ to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" }'
+          new_sidebar = '{ to: "/legacy-dashboard", label: "لوحة التحكم القديمة", icon: House, testid: "nav-dashboard" }'
+          count = sidebar.count(old_sidebar)
+          if count != 1:
+              raise SystemExit(f"Expected one legacy dashboard sidebar entry, found {count}")
+          sidebar = sidebar.replace(old_sidebar, new_sidebar, 1)
+          sidebar_path.write_text(sidebar, encoding="utf-8")
+
+          test_path.write_text('''const fs = require("fs");\nconst path = require("path");\n\nfunction read(relativePath) {\n    return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");\n}\n\ntest("root and authenticated public redirects land on Mezan 2 dashboard", () => {\n    const app = read("src/App.js");\n    expect(app).toContain('if (user) return <Navigate to="/dashboard-v2" replace />;');\n    expect(app).toContain('<Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />');\n    expect(app).toContain('<Route path="*" element={<Navigate to="/dashboard-v2" replace />} />');\n    expect(app).not.toContain('<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');\n});\n\ntest("legacy dashboard remains reachable only through its explicit legacy route", () => {\n    const app = read("src/App.js");\n    const sidebar = read("src/components/Sidebar.jsx");\n    expect(app).toContain('<Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');\n    expect(sidebar).toContain('{ to: "/legacy-dashboard", label: "لوحة التحكم القديمة", icon: House, testid: "nav-dashboard" }');\n    expect(sidebar).not.toContain('{ to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" }');\n});\n''', encoding="utf-8")
+
+          workflow = workflow_path.read_text(encoding="utf-8")
+          path_anchor = '      - "frontend/src/components/Layout.jsx"\n'
+          path_insert = (
+              '      - "frontend/src/App.js"\n'
+              '      - "frontend/src/components/Sidebar.jsx"\n'
+              '      - "frontend/src/defaultDashboardRoute.test.js"\n'
+              + path_anchor
+          )
+          if 'frontend/src/defaultDashboardRoute.test.js' not in workflow:
+              if workflow.count(path_anchor) != 1:
+                  raise SystemExit("Navigation workflow path anchor missing or duplicated")
+              workflow = workflow.replace(path_anchor, path_insert, 1)
+
+          test_anchor = '          src/components/MezanV2NavigationShell.test.jsx\n'
+          test_insert = (
+              '          src/defaultDashboardRoute.test.js\n'
+              + test_anchor
+          )
+          if 'src/defaultDashboardRoute.test.js' not in workflow:
+              if workflow.count(test_anchor) != 1:
+                  raise SystemExit("Navigation workflow test anchor missing or duplicated")
+              workflow = workflow.replace(test_anchor, test_insert, 1)
+
+          guard_anchor = '          SHELL=frontend/src/components/MezanV2NavigationShell.jsx\n'
+          guard_insert = (
+              '          APP=frontend/src/App.js\n'
+              '          SIDEBAR=frontend/src/components/Sidebar.jsx\n'
+              + guard_anchor
+          )
+          if 'APP=frontend/src/App.js' not in workflow:
+              if workflow.count(guard_anchor) != 1:
+                  raise SystemExit("Navigation workflow guard anchor missing or duplicated")
+              workflow = workflow.replace(guard_anchor, guard_insert, 1)
+
+          guard_checks_anchor = '          grep -q \'data-testid="mezan-v2-navigation-shell"\' "$SHELL"\n'
+          guard_checks_insert = (
+              '          grep -q \'path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>}\' "$APP"\n'
+              '          grep -q \'path="/legacy-dashboard"\' "$APP"\n'
+              '          grep -q \'to: "/legacy-dashboard", label: "لوحة التحكم القديمة"\' "$SIDEBAR"\n'
+              + guard_checks_anchor
+          )
+          if 'path="/legacy-dashboard"' not in workflow:
+              if workflow.count(guard_checks_anchor) != 1:
+                  raise SystemExit("Navigation workflow checks anchor missing or duplicated")
+              workflow = workflow.replace(guard_checks_anchor, guard_checks_insert, 1)
+
+          workflow_path.write_text(workflow, encoding="utf-8")
+          PY
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Test root dashboard and navigation contracts
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/defaultDashboardRoute.test.js
+          src/components/MezanV2NavigationShell.test.jsx
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Commit verified fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/App.js \
+                  frontend/src/components/Sidebar.jsx \
+                  frontend/src/defaultDashboardRoute.test.js \
+                  .github/workflows/mezan-v2-navigation-shell.yml
+          git diff --cached --check
+          git commit -m "fix(navigation): open Mezan 2 dashboard at root"
+          git push origin HEAD:fix/root-default-dashboard-v2
