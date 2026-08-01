@@ -57,10 +57,10 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Megaphone,
         items: [
             { to: "/ads-manager", label: "جميع المنصات", exactSearch: true },
-            { to: "/integrations-v2?provider=snapchat_ads", label: "سناب شات" },
-            { to: "/integrations-v2?provider=tiktok_ads", label: "تيك توك" },
-            { to: "/integrations-v2?provider=meta_ads", label: "ميتا" },
-            { to: "/integrations-v2?provider=google_ads", label: "إعلانات Google" },
+            { to: "/ads-manager?provider=snapchat", label: "سناب شات" },
+            { to: "/ads-manager?provider=tiktok", label: "تيك توك" },
+            { to: "/ads-manager?provider=meta", label: "ميتا" },
+            { to: "/ads-manager?provider=google", label: "إعلانات Google" },
         ],
     },
     {
