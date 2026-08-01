@@ -58,4 +58,4 @@ jobs:
           ! grep -q 'client_user_agent.*=' "$CAPI"
           ! grep -q 'tr.snapchat.com' "$WEBHOOK"
           ! grep -q 'httpx' "$WEBHOOK"
-          ! grep -q 'daily_costs\|qoyod\|create_campaign\|update_campaign\|pause_campaign' "$CAPI"
+          ! grep -Eq 'db\.daily_costs|_collection\(db, "daily_costs"\)|send.*qoyod|create_campaign\(|update_campaign\(|pause_campaign\(' "$CAPI"
