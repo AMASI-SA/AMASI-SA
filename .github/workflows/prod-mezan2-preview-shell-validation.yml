@@ -1,0 +1,102 @@
+name: Production Mezan 2 Preview Shell Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-mezan2-shell-validation-base
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-mezan2-shell-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/prod-mezan2-preview-shell
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply controlled production shell patch
+        run: python scripts/apply_prod_mezan2_preview_shell.py
+
+      - name: Verify exact production UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/App.js
+          frontend/src/components/GoogleAdsAllPlatformsCard.jsx
+          frontend/src/components/GoogleAdsAllPlatformsCard.test.jsx
+          frontend/src/components/Layout.jsx
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/components/MezanV2NavigationShell.test.jsx
+          frontend/src/components/Sidebar.jsx
+          frontend/src/defaultDashboardRoute.test.js
+          frontend/src/pages/MarketingPlatformWorkspace.jsx
+          frontend/src/pages/MarketingPlatformWorkspace.test.jsx
+          frontend/src/services/marketingPerformance.js
+          frontend/src/services/marketingPerformance.test.js
+          scripts/apply_prod_mezan2_preview_shell.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "PROD_MEZAN2_SHELL_SCOPE_OK"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run Mezan 2 shell and marketing tests
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true yarn test \
+            --watchAll=false \
+            --runInBand \
+            --runTestsByPath \
+            src/components/MezanV2NavigationShell.test.jsx \
+            src/pages/MarketingPlatformWorkspace.test.jsx \
+            src/services/marketingPerformance.test.js \
+            src/components/GoogleAdsAllPlatformsCard.test.jsx \
+            src/defaultDashboardRoute.test.js \
+            src/pages/AdsManager.test.jsx \
+            src/services/adsManager.test.js \
+            src/services/integrationsV2.test.js
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Commit verified generated production shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_prod_mezan2_preview_shell.py
+          git add \
+            frontend/src/App.js \
+            frontend/src/components/Layout.jsx \
+            frontend/src/components/Sidebar.jsx
+          git diff --cached --check
+          git commit -m 'feat(prod-ui): match Mezan 2 preview navigation shell'
+          git push origin HEAD:hotfix/prod-mezan2-preview-shell
