@@ -1,12 +1,13 @@
 name: Apply Root Dashboard V2 Fix
 
 on:
-  push:
-    branches:
-      - fix/root-default-dashboard-v2
   pull_request:
     branches:
       - main
+
+concurrency:
+  group: root-dashboard-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -109,4 +110,6 @@ jobs:
             exit 0
           fi
           git commit -m "fix(navigation): open Mezan 2 dashboard at root"
+          git fetch origin fix/root-default-dashboard-v2
+          git rebase origin/fix/root-default-dashboard-v2
           git push origin HEAD:fix/root-default-dashboard-v2
