@@ -50,6 +50,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         items: [
             { to: "/products-v2", label: "إدارة المنتجات", exactSearch: true },
             { to: "/products-v2?workspace=intake", label: "استقبال المنتجات" },
+            { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات" },
             { to: "/components-v2", label: "مكونات المنتجات", exactSearch: true },
             { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن" },
         ],
@@ -59,11 +60,11 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "التسويق",
         Icon: Megaphone,
         items: [
-            { to: "/ads-manager", label: "الرئيسية الإعلانية", exactSearch: true },
+            { to: "/ads-manager", label: "جميع المنصات", exactSearch: true },
             { to: "/integrations-v2?provider=snapchat_ads", label: "سناب شات" },
             { to: "/integrations-v2?provider=tiktok_ads", label: "تيك توك" },
             { to: "/integrations-v2?provider=meta_ads", label: "ميتا" },
-            { to: "/integrations-v2?provider=google_analytics", label: "جوجل" },
+            { to: "/integrations-v2?provider=google_ads", label: "إعلانات Google" },
         ],
     },
     {
