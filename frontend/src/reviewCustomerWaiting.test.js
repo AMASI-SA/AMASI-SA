@@ -1,5 +1,4 @@
 import {
-  REVIEW_QUEUE_TAB_VISIBILITY,
   WAITING_CUSTOMER_REVIEW_CSS,
   reviewQueueTabVisibility,
   waitingCustomerActionLabel,
