@@ -27,33 +27,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Execute reviewed patch embedded in the push workflow
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          workflow = Path(
-              '.github/workflows/tmp-apply-meta-v2-ads-manager.yml'
-          ).read_text(encoding='utf-8')
-          section_marker = (
-              "      - name: Apply source selection and regression tests\n"
-              "        run: |\n"
-              "          python - <<'PY'\n"
-          )
-          end_marker = "\n          PY\n\n      - name: Compile changed backend files"
-          if workflow.count(section_marker) != 1:
-              raise SystemExit('Reviewed Meta V2 patch section is missing or duplicated')
-          tail = workflow.split(section_marker, 1)[1]
-          if end_marker not in tail:
-              raise SystemExit('Reviewed Meta V2 patch end marker is missing')
-          block = tail.split(end_marker, 1)[0]
-          prefix = '          '
-          normalized = '\n'.join(
-              line[len(prefix):] if line.startswith(prefix) else line
-              for line in block.splitlines()
-          )
-          exec(compile(normalized, '<meta-v2-patch>', 'exec'))
-          PY
+      - name: Apply reviewed Meta V2 source patch
+        run: python scripts/tmp_apply_meta_v2_ads_manager.py
 
       - name: Compile changed backend files
         run: |
