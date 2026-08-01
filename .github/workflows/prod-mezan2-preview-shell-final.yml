@@ -1,0 +1,99 @@
+name: Production Mezan 2 Preview Shell Final
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-mezan2-shell-final-validation
+
+permissions:
+  contents: read
+
+jobs:
+  final-validation:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/prod-mezan2-preview-shell-clean
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify exact final production UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/App.js
+          frontend/src/components/GoogleAdsAllPlatformsCard.jsx
+          frontend/src/components/GoogleAdsAllPlatformsCard.test.jsx
+          frontend/src/components/Layout.jsx
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/components/MezanV2NavigationShell.test.jsx
+          frontend/src/components/Sidebar.jsx
+          frontend/src/defaultDashboardRoute.test.js
+          frontend/src/pages/MarketingPlatformWorkspace.jsx
+          frontend/src/pages/MarketingPlatformWorkspace.test.jsx
+          frontend/src/services/marketingPerformance.js
+          frontend/src/services/marketingPerformance.test.js
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "PROD_MEZAN2_FINAL_SCOPE_OK"
+
+      - name: Verify shell and Production analytics preservation
+        shell: bash
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          const app = fs.readFileSync('frontend/src/App.js', 'utf8');
+          const layout = fs.readFileSync('frontend/src/components/Layout.jsx', 'utf8');
+          const sidebar = fs.readFileSync('frontend/src/components/Sidebar.jsx', 'utf8');
+          const required = [
+            [app, 'Navigate to="/dashboard-v2" replace', 'root/auth redirect'],
+            [app, 'path="/legacy-dashboard"', 'legacy dashboard route'],
+            [layout, 'MezanV2NavigationShell', 'Preview shell'],
+            [layout, 'MarketingPlatformWorkspace', 'platform pages'],
+            [layout, 'GoogleAdsAllPlatformsCard', 'Google Ads readiness'],
+            [layout, 'DashboardAnalyticsPlacement', 'Production analytics'],
+            [layout, 'DashboardSnapchatAccountsPlacement', 'Production Snapchat placement'],
+            [sidebar, 'to: "/legacy-dashboard"', 'legacy sidebar link'],
+          ];
+          const missing = required.filter(([source, marker]) => !source.includes(marker));
+          if (missing.length) {
+            throw new Error(`Missing contracts: ${missing.map(([, , label]) => label).join(', ')}`);
+          }
+          if (layout.includes('min-h-screen lg:ps-64')) throw new Error('Permanent old sidebar remains');
+          if (layout.includes('function MezanV2Navigation(')) throw new Error('Purple legacy navigation remains');
+          console.log('PROD_MEZAN2_FINAL_CONTRACT_OK');
+          JS
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run Mezan 2 and marketing tests
+        working-directory: frontend
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          --runTestsByPath
+          src/components/MezanV2NavigationShell.test.jsx
+          src/pages/MarketingPlatformWorkspace.test.jsx
+          src/services/marketingPerformance.test.js
+          src/components/GoogleAdsAllPlatformsCard.test.jsx
+          src/defaultDashboardRoute.test.js
+          src/pages/AdsManager.test.jsx
+          src/services/adsManager.test.js
+          src/services/integrationsV2.test.js
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: CI=false yarn build
