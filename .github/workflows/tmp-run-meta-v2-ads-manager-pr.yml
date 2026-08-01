@@ -31,7 +31,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path(
               '.github/workflows/tmp-apply-meta-v2-ads-manager.yml'
@@ -48,7 +47,12 @@ jobs:
           if end_marker not in tail:
               raise SystemExit('Reviewed Meta V2 patch end marker is missing')
           block = tail.split(end_marker, 1)[0]
-          exec(compile(textwrap.dedent(block), '<meta-v2-patch>', 'exec'))
+          prefix = '          '
+          normalized = '\n'.join(
+              line[len(prefix):] if line.startswith(prefix) else line
+              for line in block.splitlines()
+          )
+          exec(compile(normalized, '<meta-v2-patch>', 'exec'))
           PY
 
       - name: Compile changed backend files
