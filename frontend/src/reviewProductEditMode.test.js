@@ -107,7 +107,8 @@ test("pencil opens all product editing controls and save closes them again", asy
   expect(toggle.textContent).toContain("حفظ");
 
   toggle.click();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  // The central save gives React one tick to submit any open note editor first.
+  await new Promise((resolve) => setTimeout(resolve, 160));
 
   expect(isReviewProductCardEditing(card)).toBe(false);
   expect(card.querySelector('[data-review-edit-toggle="1"]')?.getAttribute("aria-label"))
