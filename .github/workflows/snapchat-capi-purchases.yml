@@ -10,6 +10,7 @@ on:
       - "backend/integrations_control_center/snapchat_oauth_security.py"
       - "backend/salla_integration/webhook_event_capture.py"
       - "backend/tests/test_snapchat_capi_purchases_v3.py"
+      - "backend/tests/test_snapchat_capi_cancellation_v3.py"
       - ".github/workflows/snapchat-capi-purchases.yml"
 
 jobs:
@@ -34,9 +35,12 @@ jobs:
             integrations_control_center/__init__.py \
             salla_integration/webhook_event_capture.py
 
-      - name: Run privacy, deduplication, and tenant-isolation tests
+      - name: Run privacy, deduplication, cancellation, and tenant tests
         working-directory: backend
-        run: pytest -q tests/test_snapchat_capi_purchases_v3.py
+        run: |
+          pytest -q \
+            tests/test_snapchat_capi_purchases_v3.py \
+            tests/test_snapchat_capi_cancellation_v3.py
 
       - name: Enforce CAPI v3 safety contract
         run: |
@@ -50,6 +54,8 @@ jobs:
           grep -q 'SNAPCHAT_CAPI_PIXEL_ID' "$CAPI"
           grep -q '"user_id": str(user_id)' "$CAPI"
           grep -q 'plaintext_customer_contact_stored_in_outbox' "$CAPI"
+          grep -q 'source_order_cancelled_before_delivery' "$CAPI"
+          grep -q 'provider_status in {"VALID", "SUCCESS", "OK"}' "$CAPI"
           grep -q 'snapchat-offline-conversions-api' "$OAUTH"
           grep -q 'attach_snapchat_capi_purchase_routes' "$INIT"
           grep -q 'enqueue_snapchat_purchase_from_salla_event' "$WEBHOOK"
