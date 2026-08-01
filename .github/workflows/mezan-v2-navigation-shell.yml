@@ -1,0 +1,55 @@
+name: Mezan V2 Navigation Shell
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/src/components/Layout.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.test.jsx"
+      - ".github/workflows/mezan-v2-navigation-shell.yml"
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test navigation shell contract
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/MezanV2NavigationShell.test.jsx
+
+      - name: Build frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce legacy isolation contract
+        working-directory: .
+        run: |
+          SHELL=frontend/src/components/MezanV2NavigationShell.jsx
+          LAYOUT=frontend/src/components/Layout.jsx
+
+          grep -q 'data-testid="mezan-v2-navigation-shell"' "$SHELL"
+          grep -q 'data-testid="mezan-v2-open-all"' "$SHELL"
+          grep -q 'isMezanV2Route' "$LAYOUT"
+          grep -q 'legacyMenuOpen &&' "$LAYOUT"
+          ! grep -q 'lg:ps-64' "$LAYOUT"
