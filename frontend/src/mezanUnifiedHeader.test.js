@@ -26,15 +26,24 @@ test("Mezan 2 navigation and order search share one responsive header", () => {
     expect(navigation).not.toContain('flex min-h-16 flex-wrap items-center');
 });
 
-test("the unified Mezan 2 header scrolls with the page rather than staying fixed", () => {
+test("the unified Mezan 2 header stays visible while the page scrolls", () => {
     const layout = read("src/components/Layout.jsx");
     const headerStart = layout.indexOf('data-testid="mezan-v2-unified-header"');
     expect(headerStart).toBeGreaterThan(-1);
 
-    const headerContext = layout.slice(Math.max(0, headerStart - 220), headerStart + 100);
-    expect(headerContext).toContain('className="relative z-30');
-    expect(headerContext).not.toContain('sticky top-0');
+    const headerContext = layout.slice(Math.max(0, headerStart - 280), headerStart + 100);
+    expect(headerContext).toContain('className="sticky top-0 z-40');
+    expect(headerContext).toContain('backdrop-blur');
     expect(headerContext).not.toContain('fixed top-0');
+});
+
+test("the unified header uses the established Mezan green identity", () => {
+    const navigation = read("src/components/MezanV2NavigationShell.jsx");
+
+    expect(navigation).toContain('border-emerald-950 bg-brand shadow-xl');
+    expect(navigation).toContain('border-emerald-950 bg-[#0B4938]');
+    expect(navigation).toContain('border-t border-white/10 bg-[#0B4938]');
+    expect(navigation).not.toContain('border-y border-slate-800 bg-slate-950 shadow-xl');
 });
 
 test("the search field stays collapsed until its header icon is activated", () => {
