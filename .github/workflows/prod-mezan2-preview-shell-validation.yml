@@ -38,7 +38,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          {
+            git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD
+            git diff --name-only
+          } | sort -u > /tmp/changed.txt
           cat > /tmp/expected.txt <<'EOF'
           frontend/src/App.js
           frontend/src/components/GoogleAdsAllPlatformsCard.jsx
