@@ -116,6 +116,8 @@ export default function Layout({ children }) {
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
     const isMainDashboard = location.pathname === "/";
+    const isMezanV2Dashboard = location.pathname === "/dashboard-v2";
+    const showsDashboardAnalytics = isMainDashboard || isMezanV2Dashboard;
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />
         : isProductIntake
@@ -158,7 +160,7 @@ export default function Layout({ children }) {
                 <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
                     <MezanV2Navigation location={location} />
                     {pageContent}
-                    <DashboardAnalyticsPlacement active={isMainDashboard} />
+                    <DashboardAnalyticsPlacement active={showsDashboardAnalytics} />
                 </div>
             </main>
             <Toaster richColors position="top-center" />

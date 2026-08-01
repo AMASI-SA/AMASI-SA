@@ -608,7 +608,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                         data as المركز المالي / مركز الإدخال المالي /
                         لوحة العمليات).  Hide-able from Settings ↦
                         بطاقات خاصة via 'salary_accrual_card'. */}
-                    {!hiddenCards.includes("salary_accrual_card") && (
+                    {!isMezanV2 && !hiddenCards.includes("salary_accrual_card") && (
                         <section
                             className="rounded-xl border-2 border-emerald-200 bg-emerald-50/30 p-4"
                             data-testid="dashboard-salary-accrual-section"
@@ -1496,8 +1496,12 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                         </div>
                     )}
 
+                    {/* The monthly Excel-analysis chart and recent analysis
+                        history belong to the legacy dashboard only. Mezan 2
+                        is driven by live unified orders and provider facts. */}
+                    {!isMezanV2 && (<>
                     {/* Monthly chart */}
-                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
+                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6" data-testid="dashboard-monthly-performance-section">
                         <div className="flex items-center justify-between mb-6">
                             <div>
                                 <h2 className="text-xl sm:text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>الأداء الشهري</h2>
@@ -1526,7 +1530,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                     </div>
 
                     {/* Recent analyses */}
-                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6">
+                    <div className="rounded-xl border border-border bg-white p-4 sm:p-6" data-testid="dashboard-recent-analyses-section">
                         <div className="flex items-center justify-between mb-2">
                             <h2 className="text-xl sm:text-2xl font-bold text-foreground" style={{ fontFamily: "Tajawal" }}>آخر التحاليل</h2>
                             <Link to="/history" className="text-brand text-sm font-semibold hover:underline inline-flex items-center gap-1" data-testid="see-all-history">
@@ -1588,6 +1592,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                             </div>
                         )}
                     </div>
+                    </>)}
                 </>
             )}
             {/* iter-45 — Electronic Net audit modal */}
