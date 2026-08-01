@@ -1,0 +1,119 @@
+name: Main Mezan 2 Unified Header Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/main-mezan2-unified-header-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: main-mezan2-unified-header-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/main-mezan2-unified-header
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reuse and adapt the verified production patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 53654a65c3aa14e43d94c5f8763970d409031d85:scripts/apply_prod_mezan2_unified_header.py > scripts/.apply_main_mezan2_unified_header.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/.apply_main_mezan2_unified_header.py")
+          source = path.read_text(encoding="utf-8")
+          source = source.replace(
+              "    'DashboardAnalyticsPlacement active={showsDashboardAnalytics}',\n"
+              "    'DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics}',\n",
+              "",
+          )
+          path.write_text(source, encoding="utf-8")
+          PY
+          python scripts/.apply_main_mezan2_unified_header.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("frontend/src/components/Layout.jsx")
+          source = path.read_text(encoding="utf-8")
+          old = 'className="sticky top-0 z-30 border-b border-slate-200/70 bg-background/95 backdrop-blur sm:px-4 sm:py-2 lg:px-6"'
+          new = 'className="relative z-30 border-b border-slate-200/70 bg-background/95 sm:px-4 sm:py-2 lg:px-6"'
+          if source.count(old) != 1:
+              raise SystemExit("main unified header sticky marker not found exactly once")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          print("MAIN_MEZAN2_HEADER_SCROLLS_WITH_PAGE")
+          PY
+          rm scripts/.apply_main_mezan2_unified_header.py
+
+      - name: Verify exact UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            git diff --name-only origin/main...HEAD
+            git diff --name-only
+          } | sort -u > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/components/Layout.jsx
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/mezanUnifiedHeader.test.js
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "MAIN_MEZAN2_UNIFIED_HEADER_SCOPE_OK"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run header and navigation tests
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true yarn test \
+            --watchAll=false \
+            --runInBand \
+            --runTestsByPath \
+            src/mezanUnifiedHeader.test.js \
+            src/components/MezanV2NavigationShell.test.jsx \
+            src/defaultDashboardRoute.test.js \
+            src/pages/MarketingPlatformWorkspace.test.jsx \
+            src/components/GoogleAdsAllPlatformsCard.test.jsx
+
+      - name: Build Preview frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Commit verified generated header
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            frontend/src/components/Layout.jsx \
+            frontend/src/components/MezanV2NavigationShell.jsx
+          git diff --cached --check
+          git commit -m 'fix(ui): unify navigation and search header'
+          git push origin HEAD:fix/main-mezan2-unified-header
