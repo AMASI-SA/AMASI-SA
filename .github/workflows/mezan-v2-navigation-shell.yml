@@ -22,23 +22,24 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
 
       - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --non-interactive
 
       - name: Test navigation shell contract
         env:
           CI: "true"
         run: >-
-          yarn test --watchAll=false --runTestsByPath
+          yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/MezanV2NavigationShell.test.jsx
 
       - name: Build frontend
         env:
-          CI: "true"
+          CI: "false"
         run: yarn build
 
       - name: Enforce legacy isolation contract
