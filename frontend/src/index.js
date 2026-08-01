@@ -5,6 +5,7 @@ import "@/reviewMezanImageEnhancer";
 import "@/reviewMezanImageGlobalDelete";
 import "@/reviewCustomerHistoryFast";
 import "@/reviewExportControlsEnhancer";
+import "@/reviewSpecReplacementEnhancer";
 import "@/reviewCompactActionLabels";
 import "@/reviewInternalPreparationRouteEnhancer";
 import App from "@/App";
