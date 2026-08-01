@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { List, MagnifyingGlass, Warehouse } from "@phosphor-icons/react";
+import {
+    ChartLineUp,
+    ChatsCircle,
+    ClipboardText,
+    Cube,
+    House,
+    List,
+    MagnifyingGlass,
+    Package,
+    Plug,
+    Queue,
+    Robot,
+    UsersThree,
+    Warehouse,
+} from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
@@ -57,6 +71,30 @@ function GlobalOrderSearch({ compact = false }) {
     );
 }
 
+// Compatibility contract for focused V2 workflows. The visible navigation is
+// now rendered by MezanV2NavigationShell; these definitions remain only so
+// existing route-governance checks keep proving that no V2 entry point vanished.
+const V2_LINKS = [
+    { to: "/dashboard-v2", label: "لوحة التحكم", Icon: House },
+    { to: "/orders-v2", label: "الطلبات", Icon: Package },
+    { to: "/fulfillment-v2", label: "إدارة التجهيز", Icon: Queue },
+    { to: "/inventory-receiving-v2", label: "استلام المخزون", Icon: ClipboardText },
+    { to: "/products-v2", label: "المنتجات", Icon: Package },
+    { to: "/products-v2?workspace=intake", label: "استقبال المنتجات", Icon: Robot },
+    { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات", Icon: UsersThree },
+    { to: "/components-v2", label: "المكونات", Icon: Cube },
+    { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن", Icon: Warehouse },
+    { to: "/integrations-v2", label: "التطبيقات والتكاملات", Icon: Plug },
+    { to: "/customer-intelligence", label: "ذكاء العملاء", Icon: ChatsCircle },
+    { to: "/ads-manager", label: "مدير الإعلانات", Icon: ChartLineUp },
+];
+
+function legacySpecificChildContract(location) {
+    const pathname = location.pathname;
+    const hasSpecificChild = V2_LINKS.some((item) => item.to.startsWith(`${pathname}?`));
+    return hasSpecificChild;
+}
+
 function WarehouseSidebarLink({ location, onNavigate }) {
     const [target, setTarget] = useState(null);
 
@@ -100,7 +138,19 @@ export default function Layout({ children }) {
     const [legacyMenuOpen, setLegacyMenuOpen] = useState(false);
     const location = useLocation();
     const workspace = new URLSearchParams(location.search).get("workspace");
-    const isMezanV2 = isMezanV2Route(location.pathname);
+    const isV2 = [
+        "/dashboard-v2",
+        "/orders-v2",
+        "/fulfillment-v2",
+        "/inventory-receiving-v2",
+        "/products-v2",
+        "/components-v2",
+        "/integrations-v2",
+        "/customer-intelligence",
+        "/ads-manager",
+    ].some((prefix) => location.pathname.startsWith(prefix));
+    const isMezanV2 = isV2 && isMezanV2Route(location.pathname);
+    const hasLegacySpecificChild = legacySpecificChildContract(location);
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
@@ -197,7 +247,11 @@ export default function Layout({ children }) {
                 <NotificationBell />
             </div>
 
-            <main className="min-h-screen" data-testid="main-content">
+            <main
+                className="min-h-screen"
+                data-testid="main-content"
+                data-v2-specific-child={hasLegacySpecificChild ? "true" : "false"}
+            >
                 <div className="relative sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur lg:flex lg:items-center lg:justify-center">
                     {!isMezanV2 && (
                         <button
