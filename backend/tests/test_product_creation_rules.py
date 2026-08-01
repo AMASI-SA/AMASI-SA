@@ -28,8 +28,10 @@ def _request(**overrides):
 def test_creation_input_normalizes_sku_and_fulfillment():
     result = normalize_creation_input(_request())
     assert result["sku"] == "RING-100"
-    assert result["fulfillment_type"] == "instant"
-    assert result["inventory_policy"] == "branch_stock_required"
+    assert result["fulfillment_type"] == "requires_preparation"
+    assert result["inventory_policy"] == (
+        "finished_goods_inventory_not_tracked"
+    )
     assert result["stockout_policy"] == "close_when_out_of_stock"
     assert result["low_stock_threshold"] == 3
     assert "warehouse_id" not in result
@@ -70,12 +72,12 @@ def test_legacy_operation_profile_warehouse_input_is_ignored():
     }
 
 
-def test_instant_salla_payload_is_out_until_branch_inventory_exists():
+def test_frozen_creation_payload_is_sellable_and_requires_preparation():
     draft = normalize_creation_input(_request())
     payload = build_salla_product_payload(draft)
     assert payload["name"] == "خاتم جاهز"
     assert payload["sku"] == "RING-100"
-    assert payload["status"] == "out"
+    assert payload["status"] == "sale"
     assert payload["product_type"] == "product"
     assert "quantity" not in payload
     assert "unlimited_quantity" not in payload
@@ -83,7 +85,7 @@ def test_instant_salla_payload_is_out_until_branch_inventory_exists():
     assert "salla_product_id" not in payload
 
 
-def test_preparation_product_can_still_track_branch_inventory():
+def test_frozen_creation_ignores_branch_inventory_choice():
     draft = normalize_creation_input(_request(
         fulfillment_type="requires_preparation",
         inventory_policy="branch_stock_required",
@@ -91,11 +93,11 @@ def test_preparation_product_can_still_track_branch_inventory():
     payload = build_salla_product_payload(draft)
     policy = inventory_policy_details(draft["inventory_policy"])
 
-    assert payload["status"] == "out"
+    assert payload["status"] == "sale"
     assert "quantity" not in payload
-    assert policy["requires_branch_inventory"] is True
-    assert policy["sell_without_finished_goods_inventory"] is False
-    assert policy["unlimited_quantity"] is False
+    assert policy["requires_branch_inventory"] is False
+    assert policy["sell_without_finished_goods_inventory"] is True
+    assert policy["unlimited_quantity"] is True
 
 
 def test_untracked_finished_goods_policy_is_independent_from_fulfillment():

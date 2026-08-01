@@ -82,12 +82,14 @@ def test_explicit_preparation_service_overrides_instant_product():
     )
 
     assert result["resolved_type"] == FULFILLMENT_TYPE_PREPARATION
-    assert result["requires_branch_inventory"] is True
+    assert result["configured_type"] == FULFILLMENT_TYPE_PREPARATION
+    assert result["requires_branch_inventory"] is False
+    assert result["operation_choices_frozen"] is True
     assert result["forcing_services"][0]["name"] == "قص"
     assert result["supplier_export_eligible"] is True
 
 
-def test_stock_component_alone_does_not_override_instant_product():
+def test_stock_component_keeps_frozen_preparation_without_forcing_service():
     result = classify_line_fulfillment(
         profile={"fulfillment_type": "instant"},
         product_resources=[{
@@ -97,11 +99,12 @@ def test_stock_component_alone_does_not_override_instant_product():
         }],
     )
 
-    assert result["resolved_type"] == FULFILLMENT_TYPE_INSTANT
+    assert result["resolved_type"] == FULFILLMENT_TYPE_PREPARATION
+    assert result["requires_preparation"] is True
     assert result["forcing_services"] == []
 
 
-def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
+def test_product_service_metadata_is_preserved_during_operation_freeze():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -118,7 +121,7 @@ def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
     )
 
     assert classification["requires_preparation"] is True
-    assert classification["requires_branch_inventory"] is True
+    assert classification["requires_branch_inventory"] is False
     assert classification["forcing_services"] == [{
         "id": "svc-name",
         "name": "كتابة الاسم",
@@ -140,7 +143,7 @@ def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
     assert "operational_inventory_not_available" not in decision["blockers"]
 
 
-def test_product_service_still_blocks_when_branch_stock_is_missing():
+def test_frozen_preparation_does_not_require_finished_goods_stock():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -164,13 +167,11 @@ def test_product_service_still_blocks_when_branch_stock_is_missing():
     )
 
     assert decision["ready_to_ship"] is False
-    assert "operational_inventory_not_available" in decision["blockers"]
-    assert decision["warehouse_resolution_source"] == (
-        "inventory_location_missing"
-    )
+    assert "operational_inventory_not_available" not in decision["blockers"]
+    assert decision["warehouse_resolution_source"] == "not_required"
 
 
-def test_preorder_product_waits_for_stock_without_becoming_ready_to_ship():
+def test_frozen_preparation_ignores_preorder_and_stock_threshold_choices():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -189,12 +190,12 @@ def test_preorder_product_waits_for_stock_without_becoming_ready_to_ship():
         }],
     )
 
-    assert classification["preorder_when_out_of_stock"] is True
-    assert classification["low_stock_threshold"] == 5
+    assert classification["preorder_when_out_of_stock"] is False
+    assert classification["low_stock_threshold"] == 3
     assert decision["ready_to_ship"] is False
-    assert decision["preorder_required"] is True
-    assert decision["preorder_line_ids"] == ["item-1"]
-    assert "preorder_waiting_for_stock" in decision["blockers"]
+    assert decision["preorder_required"] is False
+    assert decision["preorder_line_ids"] == []
+    assert "preorder_waiting_for_stock" not in decision["blockers"]
     assert "operational_inventory_not_available" not in decision["blockers"]
 
 
