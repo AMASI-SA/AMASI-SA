@@ -1,0 +1,2 @@
+Trigger the temporary CI patch for symmetric Snapchat route normalization.
+This file has no runtime behavior and is deleted before merge.
