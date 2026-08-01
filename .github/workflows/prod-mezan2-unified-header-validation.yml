@@ -1,0 +1,92 @@
+name: Production Mezan 2 Unified Header Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-mezan2-unified-header-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-mezan2-unified-header-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/prod-mezan2-unified-header
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply controlled unified-header patch
+        run: python scripts/apply_prod_mezan2_unified_header.py
+
+      - name: Verify exact UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD
+            git diff --name-only
+          } | sort -u > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/components/Layout.jsx
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/mezanUnifiedHeader.test.js
+          scripts/apply_prod_mezan2_unified_header.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "PROD_MEZAN2_UNIFIED_HEADER_SCOPE_OK"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run header and navigation tests
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true yarn test \
+            --watchAll=false \
+            --runInBand \
+            --runTestsByPath \
+            src/mezanUnifiedHeader.test.js \
+            src/components/MezanV2NavigationShell.test.jsx \
+            src/defaultDashboardRoute.test.js \
+            src/pages/MarketingPlatformWorkspace.test.jsx \
+            src/components/GoogleAdsAllPlatformsCard.test.jsx
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Commit verified generated header
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_prod_mezan2_unified_header.py
+          git add \
+            frontend/src/components/Layout.jsx \
+            frontend/src/components/MezanV2NavigationShell.jsx
+          git diff --cached --check
+          git commit -m 'fix(prod-ui): unify navigation and search header'
+          git push origin HEAD:hotfix/prod-mezan2-unified-header
