@@ -162,7 +162,6 @@ def split_legacy_replacement_text(
         candidate_name = _text(left) or None
         candidate_value = _text(right) or None
     else:
-        # A legacy line with no recognizable label is safest as a value override.
         candidate_value = visible
 
     return {
@@ -182,9 +181,13 @@ def replacement_components(
     spec: dict[str, str],
 ) -> dict[str, Optional[str]]:
     raw = raw or {}
-    name_present = "replacement_name" in raw
-    value_present = "replacement_value" in raw
-    if not name_present and not value_present and _text(raw.get("replacement_text")):
+    # Legacy rows may already have empty new keys after being read through the
+    # compatibility map. The legacy full line still wins when both are blank.
+    if (
+        _text(raw.get("replacement_text"))
+        and not _text(raw.get("replacement_name"))
+        and not _text(raw.get("replacement_value"))
+    ):
         return split_legacy_replacement_text(
             raw.get("replacement_text"),
             original_name=spec["name"],
@@ -275,7 +278,6 @@ def effective_spec_rows(
             "file_name": file_name,
             "file_value": file_value,
             "file_text": f"{file_name}: {file_value}",
-            # Backward-compatible response for a cached pre-migration frontend.
             "replacement_text": (
                 f"{file_name}: {file_value}" if has_replacement else None
             ),
