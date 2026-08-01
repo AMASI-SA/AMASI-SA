@@ -2,7 +2,9 @@
 
 Every event is stored in sanitized form for audit. order.created/order.updated are
 persisted directly into unified_orders, and shipment events enrich shipment fields
-from the webhook payload only. No outbound Salla API or Qoyod calls occur here.
+from the webhook payload only. Snapchat purchase delivery is decoupled through an
+idempotent outbox; this webhook never waits for a Snapchat provider call. No
+outbound Salla API or Qoyod calls occur here.
 """
 from __future__ import annotations
 
@@ -90,6 +92,10 @@ async def capture_unknown_event(
         "attempted": False,
         "reason": "not_shipment_event",
     }
+    snapchat_capi: dict[str, Any] = {
+        "queued": False,
+        "reason": "order_not_synced",
+    }
 
     try:
         order_sync = await sync_order_from_verified_webhook(db, event_body)
@@ -103,6 +109,31 @@ async def capture_unknown_event(
             "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }
+
+    # Provider delivery is never performed inside the webhook.  This call only
+    # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
+    if order_sync.get("synced"):
+        try:
+            from integrations_control_center.snapchat_capi_purchases import (
+                enqueue_snapchat_purchase_from_salla_event,
+            )
+
+            snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(
+                db,
+                event_body,
+            )
+        except Exception as exc:  # webhook acknowledgement remains independent
+            log.exception(
+                "snapchat_capi.enqueue_failed event=%s order=%s",
+                event_name or "<none>",
+                order_sync.get("order_number"),
+            )
+            snapchat_capi = {
+                "queued": False,
+                "reason": "enqueue_failed",
+                "error": str(exc)[:300],
+                "provider_call_reached": False,
+            }
 
     try:
         shipment_sync = await sync_shipment_payload_from_verified_webhook(
@@ -122,10 +153,11 @@ async def capture_unknown_event(
 
     log.info(
         "salla_webhook.result event=%s order_synced=%s shipment_synced=%s "
-        "order_number=%s shipment_id=%s reason=%s",
+        "snapchat_capi_queued=%s order_number=%s shipment_id=%s reason=%s",
         event_name or "<none>",
         order_sync.get("synced"),
         shipment_sync.get("synced"),
+        snapchat_capi.get("queued"),
         order_sync.get("order_number") or shipment_sync.get("order_reference_id"),
         shipment_sync.get("shipment_id"),
         shipment_sync.get("reason") or order_sync.get("reason"),
@@ -151,6 +183,7 @@ async def capture_unknown_event(
             "updated_at": now,
             "order_sync": order_sync,
             "shipment_sync": shipment_sync,
+            "snapchat_capi": snapchat_capi,
             "order_mutation_scope": (
                 "full_order_from_webhook"
                 if order_sync.get("synced")
@@ -174,6 +207,7 @@ async def capture_unknown_event(
         "event_hash_prefix": event_hash[:12],
         "order_sync": order_sync,
         "shipment_sync": shipment_sync,
+        "snapchat_capi": snapchat_capi,
         "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }

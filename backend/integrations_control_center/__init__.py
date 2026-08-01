@@ -80,6 +80,12 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
     attach_snapchat_account_selection_routes(router, db, current_user, _require_owner)
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)
+
+    # Keep package imports lightweight for focused Dashboard tests.  PyMongo
+    # and the CAPI worker are loaded only when the full V2 router is composed.
+    from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes
+
+    attach_snapchat_capi_purchase_routes(router, db, current_user, _require_owner)
     attach_dashboard_authoritative_summary_routes(
         router, db, current_user, _require_owner
     )

@@ -1,0 +1,70 @@
+name: Snapchat CAPI Purchases
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/snapchat_capi_purchases.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_oauth_security.py"
+      - "backend/salla_integration/webhook_event_capture.py"
+      - "backend/tests/test_snapchat_capi_purchases_v3.py"
+      - "backend/tests/test_snapchat_capi_cancellation_v3.py"
+      - ".github/workflows/snapchat-capi-purchases.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused dependencies
+        run: >-
+          pip install pytest pytest-asyncio fastapi "pydantic>=2" httpx
+          pymongo motor cryptography openpyxl
+
+      - name: Compile CAPI and webhook modules
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/snapchat_capi_purchases.py \
+            integrations_control_center/__init__.py \
+            salla_integration/webhook_event_capture.py
+
+      - name: Run privacy, deduplication, cancellation, and tenant tests
+        working-directory: backend
+        run: |
+          pytest -q \
+            tests/test_snapchat_capi_purchases_v3.py \
+            tests/test_snapchat_capi_cancellation_v3.py
+
+      - name: Enforce CAPI v3 safety contract
+        run: |
+          # This check also verifies that CAPI stays lazily registered so
+          # focused Dashboard tests can import the package without PyMongo.
+          CAPI=backend/integrations_control_center/snapchat_capi_purchases.py
+          WEBHOOK=backend/salla_integration/webhook_event_capture.py
+          INIT=backend/integrations_control_center/__init__.py
+          OAUTH=backend/integrations_control_center/snapchat_oauth_security.py
+
+          grep -q 'https://tr.snapchat.com/v3/{pixel_id}/events' "$CAPI"
+          grep -q 'MEZAN_SNAPCHAT_CAPI_ENABLED' "$CAPI"
+          grep -q 'SNAPCHAT_CAPI_PIXEL_ID' "$CAPI"
+          grep -q '"user_id": str(user_id)' "$CAPI"
+          grep -q 'plaintext_customer_contact_stored_in_outbox' "$CAPI"
+          grep -q 'source_order_cancelled_before_delivery' "$CAPI"
+          grep -q 'provider_status in {"VALID", "SUCCESS", "OK"}' "$CAPI"
+          grep -q 'snapchat-offline-conversions-api' "$OAUTH"
+          grep -q 'from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes' "$INIT"
+          grep -q 'enqueue_snapchat_purchase_from_salla_event' "$WEBHOOK"
+
+          ! grep -q '^from \.snapchat_capi_purchases' "$INIT"
+          ! grep -q 'client_ip_address.*=' "$CAPI"
+          ! grep -q 'client_user_agent.*=' "$CAPI"
+          ! grep -q 'tr.snapchat.com' "$WEBHOOK"
+          ! grep -q 'httpx' "$WEBHOOK"
+          ! grep -Eq 'db\.daily_costs|_collection\(db, "daily_costs"\)|send.*qoyod|create_campaign\(|update_campaign\(|pause_campaign\(' "$CAPI"
