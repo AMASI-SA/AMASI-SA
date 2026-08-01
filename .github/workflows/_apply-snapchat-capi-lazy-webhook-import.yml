@@ -1,0 +1,54 @@
+name: Apply Snapchat CAPI Lazy Webhook Import
+
+on:
+  push:
+    branches:
+      - feat/snapchat-capi-purchase-attribution
+    paths:
+      - ".github/workflows/_apply-snapchat-capi-lazy-webhook-import.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/snapchat-capi-purchase-attribution
+          fetch-depth: 0
+
+      - name: Move CAPI import to successful order path
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/salla_integration/webhook_event_capture.py")
+          text = path.read_text(encoding="utf-8")
+          top = '''from integrations_control_center.snapchat_capi_purchases import (\n    enqueue_snapchat_purchase_from_salla_event,\n)\n\n'''
+          text = text.replace(top, "", 1)
+          marker = '''        try:\n            snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(\n'''
+          replacement = '''        try:\n            from integrations_control_center.snapchat_capi_purchases import (\n                enqueue_snapchat_purchase_from_salla_event,\n            )\n\n            snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(\n'''
+          if marker in text:
+              text = text.replace(marker, replacement, 1)
+          elif replacement not in text:
+              raise SystemExit("webhook enqueue marker missing")
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify webhook stays provider-call free
+        run: |
+          python -m py_compile backend/salla_integration/webhook_event_capture.py
+          grep -q 'from integrations_control_center.snapchat_capi_purchases import' backend/salla_integration/webhook_event_capture.py
+          ! grep -q 'tr.snapchat.com' backend/salla_integration/webhook_event_capture.py
+          ! grep -q 'httpx' backend/salla_integration/webhook_event_capture.py
+
+      - name: Commit and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/_apply-snapchat-capi-lazy-webhook-import.yml
+          git add backend/salla_integration/webhook_event_capture.py
+          git commit -m "fix(snapchat): isolate CAPI enqueue from Salla webhook imports"
+          git push origin HEAD:feat/snapchat-capi-purchase-attribution
