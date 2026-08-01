@@ -10,6 +10,7 @@ from integrations_control_center.routes import _require_owner
 
 from .models import AdsManagerOverview
 from .service import AdsManagerService
+from .snapchat_workspace import SnapchatMarketingWorkspaceService
 
 
 _ERROR_MESSAGES = {
@@ -47,9 +48,20 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
                 },
             )
 
+        @router.get("/snapchat-workspace", include_in_schema=False)
+        async def snapchat_workspace_disabled() -> None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "feature_disabled",
+                    "message": "تقارير Snapchat للقراءة غير مفعّلة.",
+                },
+            )
+
         return router
 
     service = AdsManagerService(db)
+    snapchat_workspace_service = SnapchatMarketingWorkspaceService(db)
 
     @router.get("/overview", response_model=AdsManagerOverview)
     async def overview(
@@ -79,6 +91,35 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
                 detail={
                     "code": code,
                     "message": _ERROR_MESSAGES.get(code, "تعذر قراءة نطاق التقرير."),
+                },
+            ) from exc
+
+    @router.get("/snapchat-workspace")
+    async def snapchat_workspace(
+        date_from: str | None = Query(default=None),
+        date_to: str | None = Query(default=None),
+        campaign_query: str | None = Query(default=None, max_length=120),
+        page: int = Query(default=1, ge=1),
+        limit: int = Query(default=25, ge=10, le=100),
+        user: dict = Depends(current_user),
+    ) -> dict:
+        owner = _require_owner(user)
+        try:
+            return await snapchat_workspace_service.overview(
+                str(owner["id"]),
+                date_from=date_from,
+                date_to=date_to,
+                campaign_query=campaign_query,
+                page=page,
+                limit=limit,
+            )
+        except ValueError as exc:
+            code = str(exc)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": code,
+                    "message": _ERROR_MESSAGES.get(code, "تعذر قراءة تقرير Snapchat."),
                 },
             ) from exc
 
