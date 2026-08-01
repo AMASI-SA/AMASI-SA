@@ -267,7 +267,7 @@ export default function Layout({ children }) {
 
             {isMezanV2 && (
                 <div
-                    className="relative z-30 border-b border-slate-200/70 bg-background/95 sm:px-4 sm:py-2 lg:px-6"
+                    className="sticky top-0 z-40 border-b border-emerald-900/20 bg-background/95 backdrop-blur sm:px-4 sm:py-2 lg:px-6"
                     data-testid="mezan-v2-unified-header"
                 >
                     <div className="mx-auto max-w-[1900px]">
