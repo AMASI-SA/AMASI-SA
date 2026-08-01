@@ -355,12 +355,14 @@ def patch_service(service: str) -> str:
             )
 '''
     provider_source_count = service.count(provider_source_old)
-    if provider_source_count != 2:
+    if provider_source_count != 1:
         raise SystemExit(
-            "provider source key: expected two matches, "
+            "provider source key: expected one match, "
             f"found {provider_source_count}"
         )
-    service = service.replace(provider_source_old, provider_source_new)
+    service = service.replace(provider_source_old, provider_source_new, 1)
+    if provider_source_old in service:
+        raise SystemExit("legacy provider source expression remains")
     return service
 
 
