@@ -6,7 +6,6 @@ import {
 
 
 const ROOT_ID = "mezan-review-manual-navigation-root";
-const HOST_ATTRIBUTE = "data-review-manual-navigation";
 let scheduled = false;
 
 const text = (value) => String(value || "").trim();
@@ -22,7 +21,6 @@ export function adjacentReviewOrder(
     (row) => text(row.orderNumber) === normalizedCurrent,
   );
   if (currentIndex < 0) return null;
-
   const offset = direction === "previous" ? -1 : direction === "next" ? 1 : 0;
   if (!offset) return null;
   return normalizedRows[currentIndex + offset] || null;
@@ -47,7 +45,6 @@ export function navigateReviewManually(direction, root = document) {
   const state = reviewManualNavigationState(root);
   const target = direction === "previous" ? state.previous : state.next;
   if (!target?.button) return null;
-
   clearPendingReviewAdvance();
   target.button.click();
   return target.orderNumber;
@@ -87,6 +84,18 @@ function createNavigationButton(direction) {
   return button;
 }
 
+function createNavigationHost(location) {
+  const host = document.createElement("div");
+  host.dataset.reviewManualNavigation = "1";
+  host.dataset.reviewManualNavigationLocation = location;
+  host.style.cssText = "display:flex;align-items:center;gap:7px";
+  host.append(
+    createNavigationButton("previous"),
+    createNavigationButton("next"),
+  );
+  return host;
+}
+
 function drawerHeader(root = document) {
   const heading = [...root.querySelectorAll("h2")].find((node) =>
     text(node.textContent).includes("مراجعة الطلب #"),
@@ -94,29 +103,49 @@ function drawerHeader(root = document) {
   return heading?.closest("header") || null;
 }
 
-function navigationHost(header) {
-  let host = header.querySelector(`[${HOST_ATTRIBUTE}]`);
+function headerNavigationHost(header) {
+  let host = header.querySelector(
+    '[data-review-manual-navigation-location="header"]',
+  );
   if (host) return host;
-
-  host = document.createElement("div");
-  host.setAttribute(HOST_ATTRIBUTE, "1");
-  host.style.cssText = [
-    "display:flex",
-    "align-items:center",
-    "gap:7px",
-    "margin-inline-start:auto",
-    "margin-inline-end:8px",
-  ].join(";");
-
-  const previous = createNavigationButton("previous");
-  const next = createNavigationButton("next");
-  host.append(previous, next);
-
+  host = createNavigationHost("header");
+  host.style.marginInlineStart = "auto";
+  host.style.marginInlineEnd = "8px";
   const directCloseButton = [...header.children].find(
     (node) => node.tagName === "BUTTON",
   );
   if (directCloseButton) header.insertBefore(host, directCloseButton);
   else header.appendChild(host);
+  return host;
+}
+
+function completeReviewButton(root = document) {
+  return [...root.querySelectorAll("button")].find((button) =>
+    text(button.textContent).replace(/\s+/g, " ").includes("تمت المراجعة"),
+  ) || null;
+}
+
+function footerNavigationHost(root = document) {
+  const completeButton = completeReviewButton(root);
+  const card = completeButton?.parentElement;
+  if (!completeButton || !card) return null;
+  let host = card.querySelector(
+    '[data-review-manual-navigation-location="footer"]',
+  );
+  if (!host) {
+    host = createNavigationHost("footer");
+    host.setAttribute("aria-label", "التنقل بين طلبات المراجعة");
+    card.appendChild(host);
+  }
+  card.style.display = "flex";
+  card.style.flexWrap = "wrap";
+  card.style.alignItems = "center";
+  card.style.justifyContent = "space-between";
+  card.style.gap = "12px";
+  const description = [...card.children].find((node) => node.tagName === "P");
+  if (description) description.style.flexBasis = "100%";
+  completeButton.style.marginTop = "0";
+  host.style.marginTop = "0";
   return host;
 }
 
@@ -134,31 +163,35 @@ function updateButton(button, target, label) {
   button.style.color = available ? "#6d28d9" : "#64748b";
 }
 
-export function decorateReviewManualNavigation(root = document) {
-  const header = drawerHeader(root);
-  const currentOrderNumber = reviewOrderNumberFromHeading(root);
-  if (!header || !currentOrderNumber) return null;
-
-  const host = navigationHost(header);
-  const state = reviewManualNavigationState(root);
+function updateHost(host, state, root) {
+  if (!host) return;
   const previousButton = host.querySelector(
     '[data-review-navigation-direction="previous"]',
   );
   const nextButton = host.querySelector(
     '[data-review-navigation-direction="next"]',
   );
-
   updateButton(previousButton, state.previous, "الطلب السابق");
   updateButton(nextButton, state.next, "الطلب التالي");
-
   previousButton.onclick = () => navigateReviewManually("previous", root);
   nextButton.onclick = () => navigateReviewManually("next", root);
-  host.dataset.currentOrderNumber = currentOrderNumber;
+  host.dataset.currentOrderNumber = state.currentOrderNumber;
   host.dataset.currentPosition = state.currentIndex >= 0
     ? String(state.currentIndex + 1)
     : "";
   host.dataset.totalOrders = String(state.rows.length);
-  return host;
+}
+
+export function decorateReviewManualNavigation(root = document) {
+  const header = drawerHeader(root);
+  const currentOrderNumber = reviewOrderNumberFromHeading(root);
+  if (!header || !currentOrderNumber) return null;
+  const state = reviewManualNavigationState(root);
+  const headerHost = headerNavigationHost(header);
+  const footerHost = footerNavigationHost(root);
+  updateHost(headerHost, state, root);
+  updateHost(footerHost, state, root);
+  return { headerHost, footerHost, state };
 }
 
 function scheduleDecorate() {
@@ -173,12 +206,10 @@ function scheduleDecorate() {
 function start() {
   if (typeof document === "undefined" || !document.body) return;
   if (document.getElementById(ROOT_ID)) return;
-
   const marker = document.createElement("div");
   marker.id = ROOT_ID;
   marker.hidden = true;
   document.body.appendChild(marker);
-
   const observer = new MutationObserver(scheduleDecorate);
   observer.observe(document.body, {
     childList: true,
