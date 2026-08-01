@@ -14,10 +14,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from integrations_control_center.snapchat_capi_purchases import (
-    enqueue_snapchat_purchase_from_salla_event,
-)
-
 from .webhook_order_sync import (
     sync_order_from_verified_webhook,
     sync_shipment_payload_from_verified_webhook,
@@ -118,6 +114,10 @@ async def capture_unknown_event(
     # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
     if order_sync.get("synced"):
         try:
+            from integrations_control_center.snapchat_capi_purchases import (
+                enqueue_snapchat_purchase_from_salla_event,
+            )
+
             snapchat_capi = await enqueue_snapchat_purchase_from_salla_event(
                 db,
                 event_body,
