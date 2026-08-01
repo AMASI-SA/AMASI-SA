@@ -198,11 +198,18 @@ async function patchReplacement(item, spec, selection) {
 
 function renderSpecTools(row, item, spec) {
   let tools = row.querySelector("[data-spec-replacement-tools]");
+  const signature = JSON.stringify({
+    specKey: text(spec?.spec_key),
+    replacementText: text(spec?.replacement_text),
+    replacementSource: text(spec?.replacement_source),
+  });
+  if (tools?.dataset.specReplacementSignature === signature) return;
   if (!tools) {
     tools = document.createElement("div");
     tools.dataset.specReplacementTools = "1";
     row.appendChild(tools);
   }
+  tools.dataset.specReplacementSignature = signature;
   tools.style.cssText = [
     "grid-column:1/-1",
     "display:flex",
