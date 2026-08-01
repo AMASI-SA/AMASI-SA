@@ -1,2 +1,0 @@
-Trigger generation and persisted verification status for the fixed Ads Manager workflow blob.
-This file has no runtime behavior and is deleted before merge.
