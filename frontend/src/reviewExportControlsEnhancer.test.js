@@ -3,6 +3,10 @@ import {
   isInternalPreparationRoute,
   nextManualHiddenKeys,
 } from "./reviewExportControlsEnhancer";
+import {
+  findOperationalProductButton,
+  internalPreparationActionLabel,
+} from "./reviewInternalPreparationRouteEnhancer";
 
 
 describe("review export controls", () => {
@@ -34,5 +38,34 @@ describe("review export controls", () => {
       preparation_route: "supplier_file",
       supplier_export: true,
     })).toBe(false);
+  });
+
+  test("finds the operational product action after its visible label is compacted", () => {
+    const card = document.createElement("article");
+    card.innerHTML = `
+      <div data-actions>
+        <button
+          type="button"
+          data-review-full-label="إضافة منتج تشغيلي"
+          aria-label="إضافة منتج تشغيلي"
+        >منتج</button>
+      </div>
+    `;
+
+    const button = findOperationalProductButton(card);
+    expect(button).not.toBeNull();
+    expect(button.textContent.trim()).toBe("منتج");
+    expect(button.parentElement).toBe(card.querySelector("[data-actions]"));
+  });
+
+  test("uses compact labels for the internal preparation route action", () => {
+    expect(internalPreparationActionLabel({
+      preparation_route: "supplier_file",
+      supplier_export: true,
+    })).toBe("توجيه للتجهيز");
+    expect(internalPreparationActionLabel({
+      preparation_route: "internal_preparation",
+      supplier_export: false,
+    })).toBe("إرجاع للملف");
   });
 });
