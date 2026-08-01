@@ -509,6 +509,166 @@ async def test_every_read_is_tenant_scoped_and_other_tenant_facts_never_leak():
 
 
 @pytest.mark.asyncio
+async def test_meta_v2_is_authoritative_and_filters_to_selected_accounts():
+    db = FakeDB(
+        {
+            "mezan_meta_performance_daily_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "ad_account_id": "act-selected",
+                    "display_name": "Selected Meta",
+                    "date": "2026-07-10",
+                    "spend_native": 10,
+                    "spend_sar": 37.5,
+                    "currency_native": "USD",
+                    "fx_rate_to_sar": 3.75,
+                    "purchases": 2,
+                    "purchase_value_native": 20,
+                    "purchase_value_sar": 75,
+                    "impressions": 1000,
+                    "clicks": 50,
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "ad_account_id": "act-not-selected",
+                    "display_name": "Old Meta",
+                    "date": "2026-07-10",
+                    "spend_native": 1000,
+                    "spend_sar": 3750,
+                    "currency_native": "USD",
+                    "fx_rate_to_sar": 3.75,
+                    "purchases": 100,
+                    "purchase_value_native": 2000,
+                    "purchase_value_sar": 7500,
+                    "impressions": 100000,
+                    "clicks": 5000,
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                },
+                {
+                    "user_id": OTHER_OWNER_ID,
+                    "provider": "meta_ads",
+                    "ad_account_id": "act-other-owner",
+                    "date": "2026-07-10",
+                    "spend_native": 999,
+                    "currency_native": "SAR",
+                    "fx_rate_to_sar": 1,
+                    "purchases": 99,
+                    "purchase_value_native": 999,
+                    "impressions": 9999,
+                    "clicks": 999,
+                },
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "act-selected",
+                    "display_name": "Selected Meta",
+                    "mezan_selected": True,
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "act-not-selected",
+                    "display_name": "Old Meta",
+                    "mezan_selected": False,
+                },
+            ],
+            "meta_ads_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "account_id": "act-legacy",
+                    "campaign_id": "legacy-campaign",
+                    "campaign_name": "Legacy Meta",
+                    "spend": 999,
+                    "currency": "SAR",
+                    "purchase_value": 999,
+                    "purchases": 99,
+                    "impressions": 9999,
+                    "clicks": 999,
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="meta",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 37.5
+    assert provider["metrics"]["platform_attributed_revenue_sar"] == 75
+    assert provider["metrics"]["platform_reported_purchases"] == 2
+    assert provider["campaign_coverage"]["status"] == "aggregate_only"
+    assert result["campaign_pagination"]["total"] == 1
+    assert result["campaigns"][0]["campaign_id"] == "_default"
+    assert result["campaigns"][0]["data_source"] == (
+        "mezan_meta_performance_daily_v2"
+    )
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert "legacy-campaign" not in serialized
+    assert "act-not-selected" not in serialized
+    assert OTHER_OWNER_ID not in serialized
+    assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
+async def test_meta_v2_selection_without_rows_does_not_fall_back_to_legacy():
+    db = FakeDB(
+        {
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "act-selected",
+                    "display_name": "Selected Meta",
+                    "mezan_selected": True,
+                }
+            ],
+            "meta_ads_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "account_id": "act-legacy",
+                    "campaign_id": "legacy-campaign",
+                    "campaign_name": "Legacy Meta",
+                    "spend": 50,
+                    "currency": "SAR",
+                    "purchase_value": 100,
+                    "purchases": 2,
+                    "impressions": 500,
+                    "clicks": 20,
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="meta",
+    )
+
+    assert result["metrics"]["provider_reported_spend_sar"] is None
+    assert result["campaigns"] == []
+    assert result["providers"][0]["campaign_coverage"]["status"] == (
+        "unavailable"
+    )
+    assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
 async def test_provider_fact_and_booked_accounting_fact_stay_distinct():
     db = FakeDB(_seeded_rows())
     result = await _service(db).overview(
