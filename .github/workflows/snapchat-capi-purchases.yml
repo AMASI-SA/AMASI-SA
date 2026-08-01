@@ -44,6 +44,8 @@ jobs:
 
       - name: Enforce CAPI v3 safety contract
         run: |
+          # This check also verifies that CAPI stays lazily registered so
+          # focused Dashboard tests can import the package without PyMongo.
           CAPI=backend/integrations_control_center/snapchat_capi_purchases.py
           WEBHOOK=backend/salla_integration/webhook_event_capture.py
           INIT=backend/integrations_control_center/__init__.py
@@ -57,9 +59,10 @@ jobs:
           grep -q 'source_order_cancelled_before_delivery' "$CAPI"
           grep -q 'provider_status in {"VALID", "SUCCESS", "OK"}' "$CAPI"
           grep -q 'snapchat-offline-conversions-api' "$OAUTH"
-          grep -q 'attach_snapchat_capi_purchase_routes' "$INIT"
+          grep -q 'from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes' "$INIT"
           grep -q 'enqueue_snapchat_purchase_from_salla_event' "$WEBHOOK"
 
+          ! grep -q '^from \.snapchat_capi_purchases' "$INIT"
           ! grep -q 'client_ip_address.*=' "$CAPI"
           ! grep -q 'client_user_agent.*=' "$CAPI"
           ! grep -q 'tr.snapchat.com' "$WEBHOOK"
