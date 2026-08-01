@@ -1,2 +1,0 @@
-Trigger the reviewed Meta V2 Ads Manager verification workflow.
-No runtime or application behavior is defined by this file.
