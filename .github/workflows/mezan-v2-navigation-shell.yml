@@ -8,6 +8,8 @@ on:
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/MezanV2NavigationShell.jsx"
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
+      - "frontend/src/components/GoogleAdsAllPlatformsCard.jsx"
+      - "frontend/src/components/GoogleAdsAllPlatformsCard.test.jsx"
       - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
       - "frontend/src/pages/MarketingPlatformWorkspace.test.jsx"
       - "frontend/src/services/marketingPerformance.js"
@@ -40,6 +42,7 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/MezanV2NavigationShell.test.jsx
+          src/components/GoogleAdsAllPlatformsCard.test.jsx
           src/pages/MarketingPlatformWorkspace.test.jsx
           src/services/marketingPerformance.test.js
 
@@ -53,6 +56,7 @@ jobs:
         run: |
           SHELL=frontend/src/components/MezanV2NavigationShell.jsx
           LAYOUT=frontend/src/components/Layout.jsx
+          GOOGLE_CARD=frontend/src/components/GoogleAdsAllPlatformsCard.jsx
           PLATFORM=frontend/src/pages/MarketingPlatformWorkspace.jsx
           SERVICE=frontend/src/services/marketingPerformance.js
 
@@ -63,6 +67,9 @@ jobs:
           grep -q 'workspace=access' "$SHELL"
           grep -q 'isMezanV2Route' "$LAYOUT"
           grep -q 'isMarketingPlatformProvider' "$LAYOUT"
+          grep -q 'GoogleAdsAllPlatformsCard' "$LAYOUT"
+          grep -q 'data-testid="ads-provider-google"' "$GOOGLE_CARD"
+          grep -q 'تقارير الأداء غير مفعّلة بعد' "$GOOGLE_CARD"
           grep -q 'data-testid="marketing-platform-workspace"' "$PLATFORM"
           grep -q '/integrations-v2/snapchat_ads/campaign-report' "$SERVICE"
           grep -q 'campaign_creation_enabled: false' "$SERVICE"
