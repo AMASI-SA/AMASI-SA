@@ -5,6 +5,7 @@ import "@/reviewMezanImageEnhancer";
 import "@/reviewCustomerHistoryFast";
 import "@/reviewExportControlsEnhancer";
 import "@/reviewCompactActionLabels";
+import "@/reviewInternalPreparationRouteEnhancer";
 import App from "@/App";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
