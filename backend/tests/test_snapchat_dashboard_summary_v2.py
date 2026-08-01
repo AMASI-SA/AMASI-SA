@@ -26,6 +26,15 @@ def test_snapchat_dashboard_summary_uses_selected_account_rows():
     rows = [
         {
             "ad_account_id": "snap-1",
+            "date": "2026-07-30",
+            "spend_sar": 40.0,
+            "spend_native": 10.666667,
+            "purchases": 1,
+            "purchase_value_sar": 150.0,
+            "observed_at": "2026-07-30T18:00:00+00:00",
+        },
+        {
+            "ad_account_id": "snap-1",
             "date": "2026-07-31",
             "spend_sar": 100.0,
             "spend_native": 26.666667,
@@ -57,8 +66,26 @@ def test_snapchat_dashboard_summary_uses_selected_account_rows():
     assert result["today"]["orders_raw"] == 3.0
     assert result["today"]["revenue"] == 600.0
     assert result["today"]["roas"] == 4.8
+    assert result["month"]["spend"] == 165.0
+    assert result["month"]["orders"] == 4
     assert result["selected_account_count"] == 2
-    assert result["accounts"][0]["today"]["spend_sar"] == 100.0
+
+    usd_account = result["accounts"][0]
+    sar_account = result["accounts"][1]
+    assert usd_account["isolated_account"] is True
+    assert usd_account["today"]["spend"] == 100.0
+    assert usd_account["today"]["spend_sar"] == 100.0
+    assert usd_account["today"]["orders"] == 2
+    assert usd_account["today"]["revenue"] == 500.0
+    assert usd_account["month"]["spend"] == 140.0
+    assert usd_account["month"]["orders"] == 3
+    assert usd_account["month"]["revenue"] == 650.0
+    assert sar_account["today"]["spend"] == 25.0
+    assert sar_account["today"]["orders"] == 1
+    assert sar_account["today"]["revenue"] == 100.0
+    assert sar_account["month"]["spend"] == 25.0
+    assert sar_account["month"]["orders"] == 1
+
     assert result["conversion_reporting"] == {
         "metric": "conversion_purchases",
         "source_types": ["total"],
@@ -90,6 +117,8 @@ def test_snapchat_dashboard_prefers_top_level_provider_purchase_count():
 
     assert result["today"]["orders"] == 8
     assert result["today"]["orders_raw"] == 8.0
+    assert result["accounts"][0]["today"]["orders"] == 8
+    assert result["accounts"][1]["today"]["orders"] == 0
 
 
 def test_modeled_half_purchase_uses_half_up_not_bankers_rounding():
@@ -111,3 +140,5 @@ def test_modeled_half_purchase_uses_half_up_not_bankers_rounding():
     assert result["today"]["orders_raw"] == 6.5
     assert result["today"]["orders"] == 7
     assert result["today"]["cost_per_order"] == 15.38
+    assert result["accounts"][0]["today"]["orders_raw"] == 6.5
+    assert result["accounts"][0]["today"]["orders"] == 7
