@@ -1,4 +1,6 @@
 import {
+  REVIEW_QUEUE_TAB_VISIBILITY,
+  WAITING_CUSTOMER_REVIEW_CSS,
   reviewQueueTabVisibility,
   waitingCustomerActionLabel,
   waitingCustomerCount,
@@ -28,4 +30,14 @@ test("red customer-review badge uses the waiting order count", () => {
     { order_number: "99" },
   ])).toBe(2);
   expect(waitingCustomerCount(null)).toBe(0);
+});
+
+test("customer waiting drawer hides edit controls but keeps complete action available", () => {
+  expect(WAITING_CUSTOMER_REVIEW_CSS).toContain(
+    '[data-testid="order-review-product-card"] button',
+  );
+  expect(WAITING_CUSTOMER_REVIEW_CSS).toContain("[data-review-edit-control]");
+  expect(WAITING_CUSTOMER_REVIEW_CSS).not.toContain(
+    "data-review-customer-complete-action",
+  );
 });
