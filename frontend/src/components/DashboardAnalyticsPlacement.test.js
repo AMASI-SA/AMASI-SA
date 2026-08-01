@@ -10,6 +10,10 @@ const placementSource = fs.readFileSync(
     path.join(componentsDir, "DashboardAnalyticsPlacement.jsx"),
     "utf8",
 );
+const dashboardSource = fs.readFileSync(
+    path.join(componentsDir, "../pages/Dashboard.jsx"),
+    "utf8",
+);
 
 
 test("Layout delegates GA4 cards to the profit-summary placement", () => {
@@ -17,7 +21,13 @@ test("Layout delegates GA4 cards to the profit-summary placement", () => {
         'import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement"',
     );
     expect(layoutSource).toContain(
-        "<DashboardAnalyticsPlacement active={isMainDashboard} />",
+        'const isMezanV2Dashboard = location.pathname === "/dashboard-v2"',
+    );
+    expect(layoutSource).toContain(
+        "const showsDashboardAnalytics = isMainDashboard || isMezanV2Dashboard",
+    );
+    expect(layoutSource).toContain(
+        "<DashboardAnalyticsPlacement active={showsDashboardAnalytics} />",
     );
     expect(layoutSource).not.toContain(
         'import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards"',
@@ -37,4 +47,20 @@ test("GA4 cards are inserted immediately after the executive profit summary", ()
     );
     expect(placementSource).toContain("<GoogleAnalyticsRealtimeCards />");
     expect(placementSource).toContain("<GoogleAnalyticsTrafficSourcesCard />");
+});
+
+
+test("Mezan V2 hides legacy-only salary and analysis sections", () => {
+    expect(dashboardSource).toContain(
+        '!isMezanV2 && !hiddenCards.includes("salary_accrual_card")',
+    );
+    expect(dashboardSource).toContain(
+        "{!isMezanV2 && (<>",
+    );
+    expect(dashboardSource).toContain(
+        'data-testid="dashboard-monthly-performance-section"',
+    );
+    expect(dashboardSource).toContain(
+        'data-testid="dashboard-recent-analyses-section"',
+    );
 });
