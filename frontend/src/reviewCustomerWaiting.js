@@ -2,6 +2,7 @@ import api from "./lib/api";
 import {
   armReviewAutoAdvance,
   attemptReviewAutoAdvance,
+  clearPendingReviewAdvance,
   pendingReviewOrderRows,
   reviewOrderNumberFromHeading,
 } from "./reviewAutoAdvance";
@@ -443,6 +444,41 @@ function captureWaitingCompletion(event) {
   });
 }
 
+async function completeWaitingSummary(item, overlay, button) {
+  const orderNumber = text(item.order_number);
+  if (!orderNumber || button.disabled) return;
+  if (!window.confirm("اعتماد الطلب ونقله مباشرة إلى تمت المراجعة؟")) return;
+  button.disabled = true;
+  button.textContent = "جارٍ الاعتماد…";
+  try {
+    const detail = await fetchReviewDetail(orderNumber);
+    armReviewAutoAdvance(orderNumber, pendingReviewOrderRows());
+    await api.post(
+      `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
+      { expected_revision: Number(detail?.revision || 0) },
+    );
+    waitingByNumber.delete(orderNumber);
+    waitingItems = waitingItems.filter(
+      (row) => text(row.order_number) !== orderNumber,
+    );
+    applyQueueVisibility();
+    overlay.remove();
+    toast("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
+    window.setTimeout(loadWaiting, 250);
+    window.setTimeout(() => attemptReviewAutoAdvance(), 180);
+  } catch (error) {
+    clearPendingReviewAdvance();
+    button.disabled = false;
+    button.textContent = "تمت المراجعة";
+    toast(
+      error?.response?.data?.detail?.message
+        || error?.message
+        || "تعذر اعتماد مراجعة الطلب.",
+      true,
+    );
+  }
+}
+
 async function resumeAndOpen(item, overlay) {
   const orderNumber = text(item.order_number);
   try {
@@ -480,7 +516,12 @@ function showWaitingSummary(item) {
     info.appendChild(row);
   });
   const actions = document.createElement("div");
-  actions.style.cssText = "display:flex;gap:9px;justify-content:flex-start;margin-top:18px";
+  actions.style.cssText = "display:flex;gap:9px;justify-content:flex-start;flex-wrap:wrap;margin-top:18px";
+  const complete = document.createElement("button");
+  complete.type = "button";
+  complete.textContent = "تمت المراجعة";
+  complete.style.cssText = "border:0;border-radius:12px;padding:11px 16px;background:#059669;color:white;font-weight:900";
+  complete.onclick = () => completeWaitingSummary(item, overlay, complete);
   const resume = document.createElement("button");
   resume.type = "button";
   resume.textContent = "إرجاع وفتح المراجعة";
@@ -491,7 +532,7 @@ function showWaitingSummary(item) {
   close.textContent = "إغلاق";
   close.style.cssText = "border:1px solid #cbd5e1;border-radius:12px;padding:11px 16px;background:white;font-weight:900";
   close.onclick = () => overlay.remove();
-  actions.append(resume, close);
+  actions.append(complete, resume, close);
   panel.append(title, info, actions);
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
