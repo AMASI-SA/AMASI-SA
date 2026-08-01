@@ -1,0 +1,61 @@
+name: Apply Snapchat CAPI Lazy Router Import
+
+on:
+  push:
+    branches:
+      - feat/snapchat-capi-purchase-attribution
+    paths:
+      - ".github/workflows/_apply-snapchat-capi-lazy-router.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/snapchat-capi-purchase-attribution
+          fetch-depth: 0
+
+      - name: Make CAPI registration lazy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/integrations_control_center/__init__.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              'from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes\n',
+              '',
+              1,
+          )
+          old = '''    attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)\n    attach_snapchat_capi_purchase_routes(router, db, current_user, _require_owner)\n'''
+          new = '''    attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)\n\n    # Keep package imports lightweight for focused Dashboard tests.  PyMongo\n    # and the CAPI worker are loaded only when the full V2 router is composed.\n    from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes\n\n    attach_snapchat_capi_purchase_routes(router, db, current_user, _require_owner)\n'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit("CAPI attach marker missing")
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify lightweight package import
+        run: |
+          pip install fastapi "pydantic>=2" httpx openpyxl
+          cd backend
+          python - <<'PY'
+          import integrations_control_center
+          from integrations_control_center import dashboard_authoritative_summary_routes
+          print("LIGHTWEIGHT_IMPORT_OK")
+          PY
+          python -m py_compile integrations_control_center/__init__.py
+
+      - name: Commit and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/_apply-snapchat-capi-lazy-router.yml
+          git add backend/integrations_control_center/__init__.py
+          git commit -m "fix(snapchat): lazy-load CAPI worker in V2 router"
+          git push origin HEAD:feat/snapchat-capi-purchase-attribution
