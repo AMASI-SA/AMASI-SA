@@ -26,6 +26,17 @@ test("Mezan 2 navigation and order search share one responsive header", () => {
     expect(navigation).not.toContain('flex min-h-16 flex-wrap items-center');
 });
 
+test("the unified Mezan 2 header scrolls with the page rather than staying fixed", () => {
+    const layout = read("src/components/Layout.jsx");
+    const headerStart = layout.indexOf('data-testid="mezan-v2-unified-header"');
+    expect(headerStart).toBeGreaterThan(-1);
+
+    const headerContext = layout.slice(Math.max(0, headerStart - 220), headerStart + 100);
+    expect(headerContext).toContain('className="relative z-30');
+    expect(headerContext).not.toContain('sticky top-0');
+    expect(headerContext).not.toContain('fixed top-0');
+});
+
 test("the search field stays collapsed until its header icon is activated", () => {
     const navigation = read("src/components/MezanV2NavigationShell.jsx");
 
