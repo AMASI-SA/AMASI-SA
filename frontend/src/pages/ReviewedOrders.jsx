@@ -170,7 +170,7 @@ export default function ReviewedOrders() {
     if (error) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>;
 
     return (
-        <section className="space-y-4" dir="rtl" data-testid="reviewed-products-stage">
+        <section className="space-y-4" dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
