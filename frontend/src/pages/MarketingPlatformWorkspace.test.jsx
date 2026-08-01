@@ -1,3 +1,7 @@
+jest.mock("react-router-dom", () => ({
+    useNavigate: () => jest.fn(),
+}));
+
 import {
     MARKETING_PLATFORM_PROVIDERS,
     isMarketingPlatformProvider,
