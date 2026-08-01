@@ -111,7 +111,11 @@ test("rejects an all-products response while the sold-missing filter is active",
     expect(isValidSoldMissingCostResult({
         items: [{ salla_product_id: "p-unsold" }],
         pagination: { total: 2006 },
-        meta: { missing_mezan_cost: true, sold_only: true },
+        meta: {
+            contract_version: "sold-missing-cost-v2",
+            missing_mezan_cost: true,
+            sold_only: true,
+        },
     }, "p-1,p-2")).toBe(false);
 });
 
@@ -123,6 +127,19 @@ test("accepts only marked sold-missing products inside the dashboard cohort", ()
             { salla_product_id: "p-2", mezan_cost_missing: true },
         ],
         pagination: { total: 2 },
-        meta: { missing_mezan_cost: true, sold_only: true },
+        meta: {
+            contract_version: "sold-missing-cost-v2",
+            missing_mezan_cost: true,
+            sold_only: true,
+        },
     }, "p-1,p-2")).toBe(true);
+});
+
+
+test("rejects a response from the legacy generic products endpoint", () => {
+    expect(isValidSoldMissingCostResult({
+        items: [],
+        pagination: { total: 0 },
+        meta: { missing_mezan_cost: true, sold_only: true },
+    })).toBe(false);
 });

@@ -54,7 +54,10 @@ export async function listWorkspaceProducts({
     if (paymentMethods) params.payment_methods = paymentMethods;
     if (shippingCompanies) params.shipping_companies = shippingCompanies;
     if (productIds) params.product_ids = productIds;
-    return (await api.get("/products-v2/workspace/products", { params })).data;
+    const endpoint = missingMezanCost && soldOnly
+        ? "/products-v2/workspace/sold-missing-cost-products"
+        : "/products-v2/workspace/products";
+    return (await api.get(endpoint, { params })).data;
 }
 
 export async function getProductsV2Summary() { return (await api.get("/products-v2/summary")).data; }

@@ -297,6 +297,11 @@ class SkuApplyRequest(BaseModel):
 def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/products-v2/workspace", tags=["Mezan OS Product Workspace"])
 
+    # Keep the sold/missing-cost contract on its own URL.  Production proxies
+    # and older deployments may still cache the generic products endpoint; a
+    # distinct route prevents a cached all-products payload from being treated
+    # as the Dashboard V2 cohort.
+    @router.get("/sold-missing-cost-products")
     @router.get("/products")
     async def workspace_products(
         user: dict = Depends(current_user),
@@ -402,6 +407,8 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "total_pages": max(1, (total + per_page - 1) // per_page),
             },
             "meta": {
+                "contract_version": "sold-missing-cost-v2"
+                if missing_mezan_cost and sold_only else "workspace-products-v1",
                 "sort": sort,
                 "legacy_dependency": False,
                 "source": PRODUCTS,
