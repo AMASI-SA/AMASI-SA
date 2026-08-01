@@ -1,6 +1,7 @@
 import {
     buildMezanProductCostHref,
     buildMissingMezanCostHref,
+    isValidSoldMissingCostResult,
     resolveInitialProductsView,
     resolveInitialSelectedProduct,
 } from "./mezanV2CostLinks";
@@ -24,8 +25,8 @@ test("one missing product opens its Mezan V2 editor directly", () => {
 test("multiple missing products open the filtered sold-products list with dashboard filters", () => {
     const href = buildMissingMezanCostHref({
         missing_products: [
-            { mezan_product_id: "m-1" },
-            { mezan_product_id: "m-2" },
+            { mezan_product_id: "m-1", salla_product_id: "p-1" },
+            { mezan_product_id: "m-2", salla_product_id: "p-2" },
         ],
     }, {
         from: "2026-08-01",
@@ -40,6 +41,7 @@ test("multiple missing products open the filtered sold-products list with dashbo
     expect(href).toContain("view=list");
     expect(decodeURIComponent(href)).toContain("payment_methods=مدى,Apple+Pay");
     expect(decodeURIComponent(href)).toContain("shipping_companies=سمسا");
+    expect(decodeURIComponent(href)).toContain("product_ids=p-1,p-2");
     expect(href).not.toContain("product=");
 });
 
@@ -102,4 +104,25 @@ test("a direct cost link still opens the requested product details", () => {
 
     expect(resolveInitialSelectedProduct(search, "old-product")).toBe("m-7");
     expect(resolveInitialProductsView(search, "old-product")).toBe("detail");
+});
+
+
+test("rejects an all-products response while the sold-missing filter is active", () => {
+    expect(isValidSoldMissingCostResult({
+        items: [{ salla_product_id: "p-unsold" }],
+        pagination: { total: 2006 },
+        meta: { missing_mezan_cost: true, sold_only: true },
+    }, "p-1,p-2")).toBe(false);
+});
+
+
+test("accepts only marked sold-missing products inside the dashboard cohort", () => {
+    expect(isValidSoldMissingCostResult({
+        items: [
+            { salla_product_id: "p-1", mezan_cost_missing: true },
+            { salla_product_id: "p-2", mezan_cost_missing: true },
+        ],
+        pagination: { total: 2 },
+        meta: { missing_mezan_cost: true, sold_only: true },
+    }, "p-1,p-2")).toBe(true);
 });

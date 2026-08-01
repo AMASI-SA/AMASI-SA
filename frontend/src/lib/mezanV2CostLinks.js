@@ -12,6 +12,33 @@ function applyOrderFilters(params, filters) {
     setListFilter(params, "shipping_companies", filters.shipping_companies);
 }
 
+function productIdValues(value) {
+    return (Array.isArray(value) ? value : String(value || "").split(","))
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+}
+
+function productMatchesIds(product, expectedIds) {
+    const identities = [
+        product?.salla_product_id,
+        product?.mezan_product_id,
+        product?.id,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    return identities.some((identity) => expectedIds.has(identity));
+}
+
+export function isValidSoldMissingCostResult(result, expectedProductIds = "") {
+    if (result?.meta?.missing_mezan_cost !== true || result?.meta?.sold_only !== true) {
+        return false;
+    }
+    const items = Array.isArray(result?.items) ? result.items : [];
+    if (items.some((item) => item?.mezan_cost_missing !== true)) return false;
+    const expectedIds = new Set(productIdValues(expectedProductIds));
+    if (!expectedIds.size) return true;
+    if (Number(result?.pagination?.total || 0) > expectedIds.size) return false;
+    return items.every((item) => productMatchesIds(item, expectedIds));
+}
+
 export function resolveInitialSelectedProduct(search = "", storedProduct = "") {
     const params = new URLSearchParams(search);
     const fromUrl = params.get("product");
@@ -66,5 +93,11 @@ export function buildMissingMezanCostHref(productCost, filters = {}) {
         );
         return directHref;
     }
+    const soldProductIds = [...new Set(missing
+        .filter((product) => product?.catalog_product_found !== false)
+        .map((product) => product?.salla_product_id || product?.mezan_product_id)
+        .filter(Boolean)
+        .map(String))];
+    if (soldProductIds.length) params.set("product_ids", soldProductIds.join(","));
     return `/products-v2?${params.toString()}`;
 }

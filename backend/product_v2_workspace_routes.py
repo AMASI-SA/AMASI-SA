@@ -107,6 +107,33 @@ def _matches_any(value: str, allowed: list[str]) -> bool:
     )
 
 
+def _parse_product_ids(value: str | None) -> list[str]:
+    return list(dict.fromkeys(
+        part.strip() for part in (value or "").split(",") if part.strip()
+    ))[:500]
+
+
+def _mongo_id_values(values: list[str]) -> list[Any]:
+    result: list[Any] = list(values)
+    result.extend(int(value) for value in values if value.isdigit())
+    return list(dict.fromkeys(result))
+
+
+def _restrict_missing_rows(
+    rows: dict[str, dict[str, Any]],
+    requested_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    if not requested_ids:
+        return rows
+    requested = set(requested_ids)
+    return {
+        product_id: row for product_id, row in rows.items()
+        if product_id in requested
+        or str(row.get("salla_product_id") or "") in requested
+        or str(row.get("mezan_product_id") or "") in requested
+    }
+
+
 def _line_product(
     item: dict[str, Any],
     *,
@@ -285,6 +312,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
         to_date: str | None = Query(default=None, alias="to"),
         payment_methods: str | None = Query(default=None),
         shipping_companies: str | None = Query(default=None),
+        product_ids: str | None = Query(default=None, max_length=12000),
     ) -> dict[str, Any]:
         await ensure_product_v2_indexes(db)
         user_id = str(user["id"])
@@ -296,6 +324,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
         missing_cost_rows: dict[str, dict[str, Any]] = {}
         effective_from = from_date
         effective_to = to_date
+        requested_product_ids = _parse_product_ids(product_ids)
         if missing_mezan_cost and sold_only:
             today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh")).date()
             effective_from = effective_from or today.replace(day=1).isoformat()
@@ -314,7 +343,20 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 payment_methods=payment_method_list,
                 shipping_companies=shipping_company_list,
             )
-            query["salla_product_id"] = {"$in": list(missing_cost_rows)}
+            missing_cost_rows = _restrict_missing_rows(
+                missing_cost_rows,
+                requested_product_ids,
+            )
+            query["salla_product_id"] = {
+                "$in": _mongo_id_values(list(missing_cost_rows))
+            }
+        elif requested_product_ids:
+            identity_values = _mongo_id_values(requested_product_ids)
+            query["$and"] = query.get("$and", []) + [{"$or": [
+                {"salla_product_id": {"$in": identity_values}},
+                {"mezan_product_id": {"$in": requested_product_ids}},
+                {"id": {"$in": requested_product_ids}},
+            ]}]
         if q and q.strip():
             pattern = q.strip()
             query["$and"] = query.get("$and", []) + [{"$or": [
@@ -370,6 +412,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "payment_methods": payment_methods,
                 "shipping_companies": shipping_companies,
                 "matched_sold_products": len(missing_cost_rows),
+                "requested_product_ids_count": len(requested_product_ids),
             },
         }
 
