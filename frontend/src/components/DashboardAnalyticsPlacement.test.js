@@ -64,3 +64,12 @@ test("Mezan V2 hides legacy-only salary and analysis sections", () => {
         'data-testid="dashboard-recent-analyses-section"',
     );
 });
+
+
+test("Mezan V2 uses independent full Snapchat account cards", () => {
+    expect(dashboardSource).toContain(
+        'endpoint="/dashboard-v2/snapchat-accounts-summary"',
+    );
+    expect(dashboardSource).toContain('variant="separated"');
+    expect(dashboardSource).toContain("{!isMezanV2 && snapSummary && (");
+});

@@ -12,9 +12,11 @@
  * replace it.  Renders nothing when the user has < 2 Snapchat accounts
  * (the aggregated card is sufficient in that case).
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ghost, ShoppingBag, CurrencyDollar, Coins } from "@phosphor-icons/react";
+import {
+    ArrowsClockwise, Ghost, ShoppingBag, CurrencyDollar, Coins,
+} from "@phosphor-icons/react";
 import api from "../lib/api";
 
 
@@ -26,22 +28,198 @@ function fmt(n) {
 }
 
 
+function fmtOrders(value) {
+    return Number(value || 0).toLocaleString("en-US", {
+        maximumFractionDigits: 0,
+    });
+}
+
+
+function SnapchatPeriodMetric({ label, value, hint, tone, testid }) {
+    const tones = {
+        violet: "border-violet-200 bg-violet-50/70 text-violet-900",
+        sky: "border-sky-200 bg-sky-50/70 text-sky-900",
+        emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-900",
+        amber: "border-amber-200 bg-amber-50/70 text-amber-900",
+    };
+    return (
+        <div className={`rounded-xl border p-3 sm:p-4 ${tones[tone] || tones.amber}`} data-testid={testid}>
+            <div className="text-xs font-bold opacity-70">{label}</div>
+            <div className="num mt-2 text-xl font-extrabold sm:text-2xl">{value}</div>
+            {hint && <div className="mt-1 text-[10px] font-semibold opacity-60">{hint}</div>}
+        </div>
+    );
+}
+
+
+function SnapchatAccountPeriod({ accountId, label, period, periodKey }) {
+    const spend = Number(period?.spend || 0);
+    const orders = Number(period?.orders || 0);
+    const revenue = Number(period?.revenue || 0);
+    const roas = spend > 0 ? Number(period?.roas || 0) : null;
+    const costPerOrder = period?.cost_per_order;
+    return (
+        <section>
+            <div className="mb-2 text-xs font-extrabold text-slate-600">{label}</div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 lg:gap-3">
+                <SnapchatPeriodMetric
+                    label="الصرف"
+                    value={`${fmt(spend)} ر.س`}
+                    tone="violet"
+                    testid={`snap-v2-${accountId}-${periodKey}-spend`}
+                />
+                <SnapchatPeriodMetric
+                    label="الطلبات"
+                    value={fmtOrders(orders)}
+                    hint="تحويلات Snapchat"
+                    tone="sky"
+                    testid={`snap-v2-${accountId}-${periodKey}-orders`}
+                />
+                <SnapchatPeriodMetric
+                    label="المبيعات"
+                    value={`${fmt(revenue)} ر.س`}
+                    tone="emerald"
+                    testid={`snap-v2-${accountId}-${periodKey}-revenue`}
+                />
+                <SnapchatPeriodMetric
+                    label="ROAS"
+                    value={roas == null ? "—" : `${roas.toFixed(2)}×`}
+                    tone="amber"
+                    testid={`snap-v2-${accountId}-${periodKey}-roas`}
+                />
+                <SnapchatPeriodMetric
+                    label="متوسط تكلفة الطلب"
+                    value={costPerOrder == null ? "—" : `${fmt(costPerOrder)} ر.س`}
+                    tone="amber"
+                    testid={`snap-v2-${accountId}-${periodKey}-cpo`}
+                />
+            </div>
+        </section>
+    );
+}
+
+
+function SnapchatSeparatedAccountCard({ account, monthStart, today }) {
+    const accountId = account.id || account.external_account_id;
+    return (
+        <article
+            className="rounded-2xl border-2 border-yellow-300 bg-gradient-to-br from-yellow-50 via-white to-yellow-50/40 p-4 shadow-sm sm:p-6"
+            data-testid={`snap-v2-account-card-${accountId}`}
+        >
+            <header className="flex flex-col gap-3 border-b border-yellow-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-yellow-400 text-black">
+                        <Ghost size={24} weight="fill" />
+                    </span>
+                    <div className="min-w-0">
+                        <h3 className="truncate text-lg font-extrabold text-slate-900 sm:text-xl" title={account.name}>
+                            {account.name || accountId}
+                        </h3>
+                        <div className="truncate font-mono text-[10px] text-slate-400" dir="ltr">{accountId}</div>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[10px] font-extrabold">
+                    <span className="rounded-full border border-yellow-200 bg-white px-2.5 py-1 text-yellow-900">{account.currency || "SAR"}</span>
+                    <span className="rounded-full border border-sky-200 bg-white px-2.5 py-1 text-sky-700">{account.timezone || "Asia/Riyadh"}</span>
+                </div>
+            </header>
+
+            <div className="mt-4 space-y-5">
+                <SnapchatAccountPeriod
+                    accountId={accountId}
+                    label={`اليوم (${account.today?.date || today || "—"})`}
+                    period={account.today}
+                    periodKey="today"
+                />
+                <SnapchatAccountPeriod
+                    accountId={accountId}
+                    label={`هذا الشهر (منذ ${account.month?.start || monthStart || "—"})`}
+                    period={account.month}
+                    periodKey="month"
+                />
+            </div>
+
+            <footer className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-yellow-200 pt-3 text-[10px]">
+                <span className="text-slate-500">المصدر: Snapchat Marketing API — هذا الحساب فقط</span>
+                <Link
+                    to={`/ads-manager?provider=snapchat&account=${encodeURIComponent(accountId)}`}
+                    className="font-extrabold text-yellow-800 hover:text-yellow-950 hover:underline"
+                    data-testid={`snap-v2-account-details-${accountId}`}
+                >
+                    تفاصيل الحملات ←
+                </Link>
+            </footer>
+        </article>
+    );
+}
+
+
+export function SnapchatSeparatedAccountsView({ data, onRefresh, refreshing, lastFetched }) {
+    const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+    if (!accounts.length) return null;
+    return (
+        <section className="space-y-4" data-testid="snapchat-v2-separated-accounts">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <div className="flex items-center gap-2">
+                        <Ghost size={22} weight="fill" className="text-yellow-500" />
+                        <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">حسابات Snapchat المنفصلة</h2>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">كل بطاقة تقرأ حسابًا إعلانيًا واحدًا فقط؛ لا يوجد دمج بين الحسابات.</p>
+                    {lastFetched && (
+                        <p className="mt-1 text-[10px] font-bold text-emerald-700">
+                            آخر قراءة: {new Date(lastFetched).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={onRefresh}
+                    disabled={refreshing}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-extrabold text-black hover:bg-yellow-500 disabled:opacity-60"
+                    data-testid="snapchat-v2-accounts-refresh"
+                >
+                    <ArrowsClockwise size={16} weight="bold" className={refreshing ? "animate-spin" : ""} />
+                    {refreshing ? "جارٍ التحديث…" : "تحديث الحسابات الآن"}
+                </button>
+            </div>
+            <div className="space-y-4" data-testid="snapchat-v2-accounts-list">
+                {accounts.map((account) => (
+                    <SnapchatSeparatedAccountCard
+                        key={account.id || account.external_account_id}
+                        account={account}
+                        monthStart={data.month_start}
+                        today={data.today}
+                    />
+                ))}
+            </div>
+        </section>
+    );
+}
+
+
 export default function SnapchatAccountsCards({
     refreshSignal = 0,
     endpoint = "/dashboard/snapchat-accounts-summary",
+    variant = "compact",
 }) {
     const [data, setData] = useState(null);
     const [busy, setBusy] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [lastFetched, setLastFetched] = useState(null);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async ({ manual = false } = {}) => {
+        if (manual) setRefreshing(true);
         try {
             const { data } = await api.get(endpoint);
             setData(data);
             setLastFetched(Date.now());
         } catch (_) { /* silent */ }
-        finally { setBusy(false); }
-    };
+        finally {
+            setBusy(false);
+            if (manual) setRefreshing(false);
+        }
+    }, [endpoint]);
 
     // Initial load + refetch whenever the parent bumps refreshSignal.
     useEffect(() => {
@@ -51,7 +229,7 @@ export default function SnapchatAccountsCards({
             if (!mounted) return;
         })();
         return () => { mounted = false; };
-    }, [refreshSignal, endpoint]);
+    }, [refreshSignal, fetchData]);
 
     // Iter-204 — Silent auto-poll every 30 minutes so card numbers
     // refresh on their own without a page reload (mirrors the
@@ -61,9 +239,19 @@ export default function SnapchatAccountsCards({
             if (document.visibilityState === "visible") fetchData();
         }, 30 * 60 * 1000);
         return () => clearInterval(id);
-    }, []);
+    }, [fetchData]);
 
     if (busy || !data) return null;
+    if (variant === "separated") {
+        return (
+            <SnapchatSeparatedAccountsView
+                data={data}
+                onRefresh={() => fetchData({ manual: true })}
+                refreshing={refreshing}
+                lastFetched={lastFetched}
+            />
+        );
+    }
     if (!data.accounts || data.accounts.length < 2) return null;  // no value to split when only one account
 
     return (

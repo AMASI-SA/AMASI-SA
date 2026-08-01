@@ -807,10 +807,20 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                         testid="dashboard-pending-orders"
                     />
 
+                    {/* Mezan 2 keeps every Snapchat account in its own full
+                        card. The legacy dashboard below remains unchanged. */}
+                    {isMezanV2 && (
+                        <SnapchatAccountsCards
+                            refreshSignal={adCardsRefreshSignal}
+                            endpoint="/dashboard-v2/snapchat-accounts-summary"
+                            variant="separated"
+                        />
+                    )}
+
                     {/* Snapchat Ads dedicated section — always visible so the
                         "تحديث صرف الشهر" button is reachable even when daily_costs
                         are empty (e.g. before the first Snapchat fetch). */}
-                    {snapSummary && (
+                    {!isMezanV2 && snapSummary && (
                         <div
                             className="rounded-xl border-2 border-yellow-300 p-4 sm:p-6"
                             style={{ background: "linear-gradient(135deg,#FFFCEA 0%,#fff 60%,#FFFAE0 100%)" }}
@@ -1105,9 +1115,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                                 credit-limit per account. */}
                             <SnapchatAccountsCards
                                 refreshSignal={adCardsRefreshSignal}
-                                endpoint={isMezanV2
-                                    ? "/dashboard-v2/snapchat-accounts-summary"
-                                    : "/dashboard/snapchat-accounts-summary"}
+                                endpoint="/dashboard/snapchat-accounts-summary"
                             />
 
                             {/* Footer: link to detailed report */}

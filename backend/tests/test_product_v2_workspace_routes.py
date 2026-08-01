@@ -94,3 +94,59 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
     assert list(result) == ["p-1"]
     assert result["p-1"]["uses_salla_fallback"] is True
     assert result["p-1"]["missing_everywhere"] is False
+
+
+def test_sold_missing_products_use_same_payment_and_shipping_cohort(monkeypatch):
+    async def settings(_db, _user_id):
+        return {"report_included_statuses": ["تم التنفيذ"]}
+
+    monkeypatch.setattr(
+        "product_v2_workspace_routes._user_reporting_settings",
+        settings,
+    )
+    db = _Db({
+        PRODUCTS: [
+            {
+                "id": "m-mada",
+                "mezan_product_id": "m-mada",
+                "salla_product_id": "p-mada",
+                "name": "منتج مدى",
+                "cost_price_from_salla": 20,
+                "variants": [],
+            },
+            {
+                "id": "m-cod",
+                "mezan_product_id": "m-cod",
+                "salla_product_id": "p-cod",
+                "name": "منتج الدفع عند الاستلام",
+                "cost_price_from_salla": 25,
+                "variants": [],
+            },
+        ],
+        COST_PROFILES: [],
+        "unified_orders": [
+            {
+                "order_status": "تم التنفيذ",
+                "payment_method": "مدى",
+                "shipping_company": "سمسا",
+                "products": [{"product_id": "p-mada", "quantity": 1}],
+            },
+            {
+                "order_status": "تم التنفيذ",
+                "payment_method": "الدفع عند الاستلام",
+                "shipping_company": "أرامكس",
+                "products": [{"product_id": "p-cod", "quantity": 1}],
+            },
+        ],
+    })
+
+    result = asyncio.run(_sold_missing_mezan_cost_products(
+        db,
+        "owner-1",
+        from_date="2026-08-01",
+        to_date="2026-08-01",
+        payment_methods=["مدى"],
+        shipping_companies=["سمسا"],
+    ))
+
+    assert list(result) == ["p-mada"]
