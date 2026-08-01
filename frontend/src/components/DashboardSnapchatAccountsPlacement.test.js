@@ -36,8 +36,9 @@ test("merged Snapchat card is hidden only after isolated account data is ready",
 
 test("standalone cards do not allocate orders or revenue by spend share", () => {
     expect(cardsSource).toContain("لا يوجد دمج بين الحسابات");
-    expect(cardsSource).toContain("account.today");
-    expect(cardsSource).toContain("account.month");
+    expect(cardsSource).toContain('periodKey="today"');
+    expect(cardsSource).toContain('periodKey="month"');
+    expect(cardsSource).toContain("account?.[periodKey]");
     expect(cardsSource).not.toContain("spend_share_pct");
     expect(cardsSource).not.toContain("prorated");
 });
