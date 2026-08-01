@@ -1,7 +1,11 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
-import { SnapchatStandaloneAccountCardsContent } from "./SnapchatStandaloneAccountCards";
+
+jest.mock("react-router-dom", () => ({
+    Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
+}));
+
+const { SnapchatStandaloneAccountCardsContent } = require("./SnapchatStandaloneAccountCards");
 
 const data = {
     today_date: "2026-08-01",
@@ -54,12 +58,10 @@ const data = {
 
 test("renders one full independent card for each selected Snapchat account", () => {
     const html = renderToStaticMarkup(
-        <MemoryRouter>
-            <SnapchatStandaloneAccountCardsContent
-                data={data}
-                onRefresh={() => {}}
-            />
-        </MemoryRouter>,
+        <SnapchatStandaloneAccountCardsContent
+            data={data}
+            onRefresh={() => {}}
+        />,
     );
 
     expect(html).toContain("حسابات Snapchat المنفصلة");
