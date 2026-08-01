@@ -31,6 +31,9 @@ DEFAULT_USD_TO_SAR = 3.7544
 MAX_EXPECTED_CURRENT_DAY_DELAY_MINUTES = 180
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PROVIDER_ORDER = ("snapchat", "tiktok", "meta")
+META_V2_PERFORMANCE_COLLECTION = "mezan_meta_performance_daily_v2"
+META_LEGACY_PERFORMANCE_COLLECTION = "meta_ads_daily"
+META_INTEGRATION_PROVIDER = "meta_ads"
 PROVIDER_ALIASES = {
     "snap": "snapchat",
     "snapchat": "snapchat",
@@ -77,8 +80,19 @@ SOURCE_DEFINITIONS = [
         "authoritative_for": ["snapchat_purchases", "snapchat_revenue"],
     },
     {
-        "key": "meta_ads_daily",
-        "role": "أداء حملات Meta المحفوظ محليًا",
+        "key": META_V2_PERFORMANCE_COLLECTION,
+        "role": "أداء حسابات Meta الأصلي المحفوظ عبر Integrations V2",
+        "grain": "حساب إعلاني محدد × يوم",
+        "authoritative_for": [
+            "meta_provider_reported_spend",
+            "meta_impressions",
+            "meta_clicks",
+            "meta_platform_attribution",
+        ],
+    },
+    {
+        "key": META_LEGACY_PERFORMANCE_COLLECTION,
+        "role": "مصدر Meta التاريخي الاحتياطي عند غياب مصدر V2",
         "grain": "حملة × يوم",
         "authoritative_for": [
             "meta_provider_reported_spend",
@@ -902,6 +916,41 @@ def _currency_for_row(
     return None, None, "unknown"
 
 
+def _normalize_meta_v2_rows(rows: list[dict]) -> list[dict]:
+    """Adapt native Meta V2 account-day facts to the Ads Manager read model.
+
+    Native V2 is account-grain, not campaign-grain. The adapter preserves the
+    provider-native currency and stored FX evidence, marks the row as aggregate
+    only, and never mixes it with the historical ``meta_ads_daily`` source.
+    """
+
+    output: list[dict] = []
+    for row in rows:
+        account_id = _clean_text(row.get("ad_account_id"), limit=120)
+        display_name = _clean_text(row.get("display_name"), limit=180)
+        output.append(
+            {
+                "date": row.get("date"),
+                "account_id": account_id or None,
+                "campaign_id": "_default",
+                "campaign_name": (
+                    f"إجمالي {display_name}" if display_name else "إجمالي الحساب"
+                ),
+                "spend": row.get("spend_native"),
+                "currency_native": row.get("currency_native"),
+                "fx_rate": row.get("fx_rate_to_sar"),
+                "purchases": row.get("purchases"),
+                "purchase_value": row.get("purchase_value_native"),
+                "impressions": row.get("impressions"),
+                "clicks": row.get("clicks"),
+                "updated_at": row.get("updated_at") or row.get("observed_at"),
+                "_data_source": META_V2_PERFORMANCE_COLLECTION,
+                "_aggregate_only": True,
+            }
+        )
+    return output
+
+
 def _campaign_rows(
     provider: str,
     rows: list[dict],
@@ -956,7 +1005,12 @@ def _campaign_rows(
                 "_campaign_name_date": observed_date,
                 "last_observed_date": None,
                 "data_source": (
-                    "meta_ads_daily" if provider == "meta" else "tiktok_ads_daily"
+                    _clean_text(row.get("_data_source"), limit=80)
+                    or (
+                        META_LEGACY_PERFORMANCE_COLLECTION
+                        if provider == "meta"
+                        else "tiktok_ads_daily"
+                    )
                 ),
                 "spend_currency": currency,
                 "_fx_rate": fx_rate,
@@ -1479,9 +1533,34 @@ class AdsManagerService:
             limit=MAX_PERFORMANCE_ROWS,
             sort=[("date", 1), ("campaign_id", 1), ("account_id", 1)],
         )
-        meta_task = _rows(
+        meta_v2_task = _rows(
             self.db,
-            "meta_ads_daily",
+            META_V2_PERFORMANCE_COLLECTION,
+            {**date_query, "provider": META_INTEGRATION_PROVIDER},
+            {
+                "_id": 0,
+                "date": 1,
+                "ad_account_id": 1,
+                "display_name": 1,
+                "spend_native": 1,
+                "spend_sar": 1,
+                "currency_native": 1,
+                "fx_rate_to_sar": 1,
+                "purchases": 1,
+                "purchase_value_native": 1,
+                "purchase_value_sar": 1,
+                "impressions": 1,
+                "clicks": 1,
+                "empty_provider_row": 1,
+                "observed_at": 1,
+                "updated_at": 1,
+            },
+            limit=MAX_PERFORMANCE_ROWS,
+            sort=[("date", 1), ("ad_account_id", 1)],
+        )
+        meta_legacy_task = _rows(
+            self.db,
+            META_LEGACY_PERFORMANCE_COLLECTION,
             date_query,
             {
                 "_id": 0,
@@ -1501,6 +1580,25 @@ class AdsManagerService:
             },
             limit=MAX_PERFORMANCE_ROWS,
             sort=[("date", 1), ("campaign_id", 1), ("account_id", 1)],
+        )
+        meta_selected_accounts_task = _rows(
+            self.db,
+            "mezan_integration_accounts_v2",
+            {
+                "user_id": user_id,
+                "provider": META_INTEGRATION_PROVIDER,
+                "connection_provenance": "api_connection",
+                "mezan_selected": True,
+            },
+            {
+                "_id": 0,
+                "external_account_id": 1,
+                "ad_account_id": 1,
+                "display_name": 1,
+                "mezan_selected": 1,
+            },
+            limit=MAX_ACCOUNTS,
+            sort=[("display_name", 1), ("external_account_id", 1)],
         )
         accounts_task = _rows(
             self.db,
@@ -1553,7 +1651,9 @@ class AdsManagerService:
             snap_accounts,
             snap_stats_rows,
             tiktok_rows,
-            meta_rows,
+            meta_v2_rows,
+            meta_legacy_rows,
+            meta_selected_accounts,
             accounts,
             legacy_accounts,
             currency_settings,
@@ -1564,34 +1664,79 @@ class AdsManagerService:
             snap_accounts_task,
             snap_stats_task,
             tiktok_task,
-            meta_task,
+            meta_v2_task,
+            meta_legacy_task,
+            meta_selected_accounts_task,
             accounts_task,
             legacy_accounts_task,
             currency_settings_task,
         )
-        source_limit_reached = {
-            "snapchat_account_daily": len(snap_account_rows)
-            > MAX_PERFORMANCE_ROWS,
-            "snapchat_ad_accounts": len(snap_accounts) > MAX_ACCOUNTS,
-            "snapchat_daily_stats": len(snap_stats_rows)
-            > MAX_PERFORMANCE_ROWS,
-            "tiktok_ads_daily": len(tiktok_rows) > MAX_PERFORMANCE_ROWS,
-            "meta_ads_daily": len(meta_rows) > MAX_PERFORMANCE_ROWS,
-            "ads_accounts": len(accounts) > MAX_ACCOUNTS,
-            "counterparties": len(legacy_accounts) > MAX_ACCOUNTS,
-        }
+        snap_account_limit_reached = (
+            len(snap_account_rows) > MAX_PERFORMANCE_ROWS
+        )
+        snap_accounts_limit_reached = len(snap_accounts) > MAX_ACCOUNTS
+        snap_stats_limit_reached = len(snap_stats_rows) > MAX_PERFORMANCE_ROWS
+        tiktok_limit_reached = len(tiktok_rows) > MAX_PERFORMANCE_ROWS
+        meta_v2_limit_reached = len(meta_v2_rows) > MAX_PERFORMANCE_ROWS
+        meta_legacy_limit_reached = len(meta_legacy_rows) > MAX_PERFORMANCE_ROWS
+        meta_selection_limit_reached = len(meta_selected_accounts) > MAX_ACCOUNTS
+        accounts_limit_reached = len(accounts) > MAX_ACCOUNTS
+        legacy_accounts_limit_reached = len(legacy_accounts) > MAX_ACCOUNTS
+
         snap_account_rows = snap_account_rows[:MAX_PERFORMANCE_ROWS]
         snap_accounts = snap_accounts[:MAX_ACCOUNTS]
         snap_stats_rows = snap_stats_rows[:MAX_PERFORMANCE_ROWS]
         tiktok_rows = tiktok_rows[:MAX_PERFORMANCE_ROWS]
-        meta_rows = meta_rows[:MAX_PERFORMANCE_ROWS]
+        meta_v2_rows = meta_v2_rows[:MAX_PERFORMANCE_ROWS]
+        meta_legacy_rows = meta_legacy_rows[:MAX_PERFORMANCE_ROWS]
+        meta_selected_accounts = meta_selected_accounts[:MAX_ACCOUNTS]
         accounts = accounts[:MAX_ACCOUNTS]
         legacy_accounts = legacy_accounts[:MAX_ACCOUNTS]
+
+        selected_meta_ids = {
+            _clean_text(
+                row.get("external_account_id") or row.get("ad_account_id"),
+                limit=120,
+            ).removeprefix("act_")
+            for row in meta_selected_accounts
+            if _clean_text(
+                row.get("external_account_id") or row.get("ad_account_id"),
+                limit=120,
+            )
+        }
+        meta_v2_authoritative = bool(meta_v2_rows or meta_selected_accounts)
+        if meta_v2_authoritative:
+            meta_v2_rows = [
+                row
+                for row in meta_v2_rows
+                if _clean_text(row.get("ad_account_id"), limit=120)
+                .removeprefix("act_")
+                in selected_meta_ids
+            ]
+            meta_rows = _normalize_meta_v2_rows(meta_v2_rows)
+            meta_source_key = META_V2_PERFORMANCE_COLLECTION
+            active_meta_limit_reached = (
+                meta_v2_limit_reached or meta_selection_limit_reached
+            )
+        else:
+            meta_rows = meta_legacy_rows
+            meta_source_key = META_LEGACY_PERFORMANCE_COLLECTION
+            active_meta_limit_reached = meta_legacy_limit_reached
+
+        source_limit_reached = {
+            "snapchat_account_daily": snap_account_limit_reached,
+            "snapchat_ad_accounts": snap_accounts_limit_reached,
+            "snapchat_daily_stats": snap_stats_limit_reached,
+            "tiktok_ads_daily": tiktok_limit_reached,
+            meta_source_key: active_meta_limit_reached,
+            "ads_accounts": accounts_limit_reached,
+            "counterparties": legacy_accounts_limit_reached,
+        }
         dated_sources = {
             "snapchat_account_daily": snap_account_rows,
             "snapchat_daily_stats": snap_stats_rows,
             "tiktok_ads_daily": tiktok_rows,
-            "meta_ads_daily": meta_rows,
+            meta_source_key: meta_rows,
         }
         source_invalid_date_rows = {
             source: sum(
@@ -1709,7 +1854,9 @@ class AdsManagerService:
             provider_source_key = (
                 "snapchat_account_daily"
                 if provider_key == "snapchat"
-                else f"{provider_key}_ads_daily"
+                else meta_source_key
+                if provider_key == "meta"
+                else "tiktok_ads_daily"
             )
             provider_source_truncated = source_limit_reached[
                 provider_source_key
@@ -2130,7 +2277,9 @@ class AdsManagerService:
                     provider_source_key = (
                         "snapchat_account_daily"
                         if provider_key == "snapchat"
-                        else f"{provider_key}_ads_daily"
+                        else meta_source_key
+                        if provider_key == "meta"
+                        else "tiktok_ads_daily"
                     )
                     if (
                         not source_limit_reached[provider_source_key]
