@@ -1,0 +1,80 @@
+import { renderToStaticMarkup } from "react-dom/server";
+
+jest.mock("react-router-dom", () => ({
+    Link: ({ to, children, ...props }) => (
+        <a href={to} {...props}>{children}</a>
+    ),
+}));
+
+import MezanV2NavigationShell, {
+    MEZAN_V2_NAV_SECTIONS,
+    activeNavigationSection,
+    isMezanV2Route,
+    isNavigationItemActive,
+} from "./MezanV2NavigationShell";
+
+const PRODUCTS_LOCATION = {
+    pathname: "/products-v2",
+    search: "?workspace=intake",
+};
+
+test("Mezan 2 shell is limited to Mezan 2 routes", () => {
+    [
+        "/dashboard-v2",
+        "/orders-v2/280001234",
+        "/fulfillment-v2",
+        "/products-v2",
+        "/components-v2",
+        "/integrations-v2",
+        "/customer-intelligence",
+        "/ads-manager",
+    ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(true));
+
+    [
+        "/",
+        "/orders",
+        "/reports",
+        "/transactions",
+        "/settings",
+    ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(false));
+});
+
+test("products section exposes a Salla-style primary group and secondary page rail", () => {
+    const markup = renderToStaticMarkup(
+        <MezanV2NavigationShell
+            location={PRODUCTS_LOCATION}
+            onOpenAll={() => {}}
+        />,
+    );
+
+    expect(markup).toContain('data-testid="mezan-v2-navigation-shell"');
+    expect(markup).toContain('data-testid="mezan-v2-primary-products"');
+    expect(markup).toContain('data-testid="mezan-v2-secondary-products"');
+    expect(markup).toContain("إدارة المنتجات");
+    expect(markup).toContain("استقبال المنتجات");
+    expect(markup).toContain("مكونات المنتجات");
+    expect(markup).toContain("الفروع والمخازن");
+    expect(markup).toContain('data-testid="mezan-v2-open-all"');
+});
+
+test("query-specific product page is the active child", () => {
+    const section = activeNavigationSection(PRODUCTS_LOCATION);
+    expect(section?.id).toBe("products");
+
+    const activeItems = section.items.filter(
+        (item) => isNavigationItemActive(PRODUCTS_LOCATION, item),
+    );
+    expect(activeItems.map((item) => item.label)).toEqual(["استقبال المنتجات"]);
+});
+
+test("new navigation does not route to legacy Mezan pages", () => {
+    const targets = MEZAN_V2_NAV_SECTIONS.flatMap((section) => (
+        section.items.map((item) => item.to.split("?")[0])
+    ));
+
+    expect(targets).not.toContain("/");
+    expect(targets).not.toContain("/orders");
+    expect(targets).not.toContain("/reports");
+    expect(targets).not.toContain("/transactions");
+    expect(targets).not.toContain("/settings");
+});
