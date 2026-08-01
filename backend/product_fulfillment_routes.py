@@ -10,8 +10,11 @@ from pymongo import ASCENDING
 
 from product_fulfillment_rules import (
     DEFAULT_LOW_STOCK_THRESHOLD,
+    FROZEN_FULFILLMENT_TYPE,
+    FROZEN_INVENTORY_POLICY,
     FULFILLMENT_TYPES,
     INVENTORY_POLICIES,
+    PRODUCT_OPERATION_CHOICES_FROZEN,
     PRODUCT_OPERATION_PROFILES,
     PRODUCT_RESOURCE_BINDINGS,
     STOCKOUT_POLICIES,
@@ -190,6 +193,15 @@ async def _operations_view(
     # Legacy product-level warehouse values are intentionally hidden and
     # ignored. Warehouse resolution belongs to inventory/order-item routing.
     serialized_profile.pop("warehouse_id", None)
+    if PRODUCT_OPERATION_CHOICES_FROZEN:
+        serialized_profile.update({
+            "fulfillment_type": FROZEN_FULFILLMENT_TYPE,
+            "inventory_policy": FROZEN_INVENTORY_POLICY,
+            "stockout_policy": STOCKOUT_POLICY_CLOSE,
+            "low_stock_threshold": DEFAULT_LOW_STOCK_THRESHOLD,
+            "configured": True,
+            "operation_choices_frozen": True,
+        })
 
     return {
         "product": {
@@ -210,6 +222,9 @@ async def _operations_view(
             "component_alone_requires_preparation": False,
             "service_can_force_preparation": True,
             "default_when_unconfigured": "requires_preparation",
+            "operation_choices_frozen": (
+                PRODUCT_OPERATION_CHOICES_FROZEN
+            ),
             "inventory_and_preparation_are_independent": True,
             "stockout_policy_applies_to_tracked_products_only": True,
             "product_service_applies_to_every_order": True,
@@ -253,6 +268,17 @@ def make_product_fulfillment_router(
         await ensure_product_fulfillment_indexes(db)
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
+        if PRODUCT_OPERATION_CHOICES_FROZEN:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "product_operation_choices_frozen",
+                    "message": (
+                        "خيارات تشغيل المنتج مجمّدة مؤقتًا؛ "
+                        "جميع المنتجات تحتاج تجهيزًا."
+                    ),
+                },
+            )
         try:
             fulfillment_type = normalize_fulfillment_type(
                 payload.fulfillment_type

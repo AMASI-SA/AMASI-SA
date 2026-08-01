@@ -27,6 +27,11 @@ INVENTORY_POLICIES = {
     INVENTORY_POLICY_BRANCH_STOCK,
     INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED,
 }
+# Temporary product-operation freeze. Keep the dormant choice model below so
+# it can be restored later without losing already-saved merchant preferences.
+PRODUCT_OPERATION_CHOICES_FROZEN = True
+FROZEN_FULFILLMENT_TYPE = FULFILLMENT_TYPE_PREPARATION
+FROZEN_INVENTORY_POLICY = INVENTORY_POLICY_FINISHED_GOODS_UNLIMITED
 STOCKOUT_POLICY_CLOSE = "close_when_out_of_stock"
 STOCKOUT_POLICY_PREORDER = "allow_preorder"
 STOCKOUT_POLICIES = {
@@ -210,6 +215,39 @@ def classify_line_fulfillment(
 ) -> dict[str, Any]:
     """Resolve one order line after applying selected option/service rules."""
     profile = profile or {}
+    resources = [
+        *(product_resources or []),
+        *(selected_option_resources or []),
+    ]
+    forcing_services = [
+        {
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "source": row.get("_link_source"),
+        }
+        for row in resources
+        if resource_requires_preparation(row)
+    ]
+
+    if PRODUCT_OPERATION_CHOICES_FROZEN:
+        inventory = inventory_policy_details(FROZEN_INVENTORY_POLICY)
+        return {
+            "configured": True,
+            "configured_type": FROZEN_FULFILLMENT_TYPE,
+            "resolved_type": FROZEN_FULFILLMENT_TYPE,
+            "requires_preparation": True,
+            "inventory_policy": inventory["mode"],
+            "inventory_policy_configured": True,
+            "requires_branch_inventory": False,
+            "sell_without_finished_goods_inventory": True,
+            "stockout_policy": STOCKOUT_POLICY_CLOSE,
+            "preorder_when_out_of_stock": False,
+            "low_stock_threshold": DEFAULT_LOW_STOCK_THRESHOLD,
+            "forcing_services": forcing_services,
+            "supplier_export_eligible": True,
+            "operation_choices_frozen": True,
+        }
+
     explicit = profile.get("fulfillment_type") in FULFILLMENT_TYPES
     configured_type = (
         profile.get("fulfillment_type")
@@ -239,19 +277,6 @@ def classify_line_fulfillment(
         )
     except ValueError:
         low_stock_threshold = DEFAULT_LOW_STOCK_THRESHOLD
-    resources = [
-        *(product_resources or []),
-        *(selected_option_resources or []),
-    ]
-    forcing_services = [
-        {
-            "id": row.get("id"),
-            "name": row.get("name"),
-            "source": row.get("_link_source"),
-        }
-        for row in resources
-        if resource_requires_preparation(row)
-    ]
     resolved = (
         FULFILLMENT_TYPE_PREPARATION
         if forcing_services

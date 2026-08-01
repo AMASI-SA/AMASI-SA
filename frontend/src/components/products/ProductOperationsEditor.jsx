@@ -11,6 +11,7 @@ import {
     saveProductOperationProfile,
     unlinkProductResource,
 } from "../../services/mezanProductsV2";
+import { PRODUCT_OPERATION_CHOICES_ENABLED } from "../../lib/productOperationFreeze";
 
 function errorCode(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -168,11 +169,16 @@ export default function ProductOperationsEditor({ productId }) {
     return (
         <section className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/30 p-3 sm:p-4" data-testid="product-operations-editor">
             <div>
-                <h2 className="font-black">تشغيل المنتج وخدماته ومكوّناته</h2>
+                <h2 className="font-black">خدمات ومكوّنات المنتج</h2>
                 <p className="mt-1 text-xs leading-6 text-slate-500">الربط هنا يطبق على المنتج دائمًا. أي خدمة أو مكوّن مرتبط بخيار لا يمكن تكراره هنا.</p>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="rounded-xl border border-violet-200 bg-violet-100/70 p-3 text-xs font-bold leading-6 text-violet-950">
+                خيارات التشغيل والمخزون مجمّدة مؤقتًا. جميع المنتجات تدخل مسار التجهيز، ويستمر ربط الخدمات والمكوّنات أدناه كالمعتاد.
+            </div>
+
+            {PRODUCT_OPERATION_CHOICES_ENABLED && <>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                 <div className="grid gap-4 xl:grid-cols-2">
                     <div>
                         <div className="mb-2 text-xs font-bold text-slate-600">المسار الافتراضي للتنفيذ</div>
@@ -193,9 +199,9 @@ export default function ProductOperationsEditor({ productId }) {
                     <p className="text-[11px] leading-5 text-slate-500 xl:col-span-2">المنتج يتبع المتجر كله ولا يرتبط بفرع. الكميات وحدها تُسجل داخل الفروع، وارتباط الموظف يحدد العرض والصلاحيات فقط.</p>
                 </div>
                 <button type="button" disabled={busy || !fulfillmentType || !inventoryPolicy} onClick={saveProfile} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ التشغيل"}</button>
-            </div>
+                </div>
 
-            {inventoryPolicy === "branch_stock_required" && (
+                {inventoryPolicy === "branch_stock_required" && (
                 <section className="rounded-2xl border border-amber-200 bg-white p-4">
                     <div className="flex items-center gap-2 font-black text-slate-950">
                         <WarningCircle size={21} className="text-amber-600" />
@@ -222,14 +228,15 @@ export default function ProductOperationsEditor({ productId }) {
                         </label>
                     </div>
                 </section>
-            )}
+                )}
 
-            {inventoryPolicy === "branch_stock_required" && linked.some((row) => row.requires_preparation) && (
+                {inventoryPolicy === "branch_stock_required" && linked.some((row) => row.requires_preparation) && (
                 <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold leading-6 text-sky-950">
                     سيحجز ميزان كمية المنتج من الفرع أولًا، ثم يرسل الطلب إلى خدمات التجهيز المرتبطة به.
                 </div>
-            )}
-            {fulfillmentType === "instant" && linked.some((row) => row.requires_preparation) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">الخدمة التي تتطلب تجهيزًا تتغلب على المسار المباشر لهذا الطلب، ولا تلغي تتبع مخزون المنتج.</div>}
+                )}
+                {fulfillmentType === "instant" && linked.some((row) => row.requires_preparation) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">الخدمة التي تتطلب تجهيزًا تتغلب على المسار المباشر لهذا الطلب، ولا تلغي تتبع مخزون المنتج.</div>}
+            </>}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-3">
                 <h3 className="font-black">المرتبط بالمنتج مباشرة ({linked.length})</h3>
