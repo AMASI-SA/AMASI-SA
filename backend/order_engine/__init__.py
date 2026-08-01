@@ -63,6 +63,9 @@ def make_order_engine_router(*args, **kwargs):
     from order_review_export_controls import (
         make_order_review_export_controls_router,
     )
+    from order_review_mezan_image_unlink import (
+        make_order_review_mezan_image_unlink_router,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -132,6 +135,7 @@ def make_order_engine_router(*args, **kwargs):
         make_product_inventory_receipt_router(db, current_user),
         make_salla_inventory_sync_router(db, current_user),
         make_order_review_export_controls_router(db, current_user),
+        make_order_review_mezan_image_unlink_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
