@@ -560,6 +560,42 @@ async def enqueue_snapchat_purchase_event(
     }
 
 
+async def cancel_pending_snapchat_purchase_event(
+    db: Any,
+    *,
+    user_id: str,
+    event_id: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current = (now or _utcnow()).astimezone(timezone.utc)
+    result = await _collection(db, OUTBOX_COLLECTION).update_many(
+        {
+            "user_id": str(user_id),
+            "event_id": str(event_id),
+            "status": {"$in": ["pending", "retry"]},
+        },
+        {"$set": {
+            "status": "cancelled",
+            "payload": None,
+            "payload_redacted_after_cancel": True,
+            "lock_owner": None,
+            "lock_expires_at": None,
+            "last_error": {
+                "code": "source_order_cancelled_before_delivery",
+                "retryable": False,
+            },
+            "purge_at": current + FAILED_RETENTION,
+            "updated_at": current,
+        }},
+    )
+    return {
+        "queued": False,
+        "cancelled_pending": int(getattr(result, "modified_count", 0)),
+        "event_id": str(event_id),
+        "reason": "order_ineligible",
+    }
+
+
 async def _resolve_salla_user_id(db: Any, merchant_id: Any) -> str | None:
     values: list[Any] = []
     text = _text(merchant_id)
@@ -618,6 +654,15 @@ async def enqueue_snapchat_purchase_from_salla_event(
         "customer_mobile": customer.get("mobile") or customer.get("phone"),
         "products": raw.get("items") if isinstance(raw.get("items"), list) else [],
     }
+    if not _status_eligible(order):
+        event_id = _text(order.get("order_number"))
+        if not event_id:
+            return {"queued": False, "reason": "cancelled_order_id_missing"}
+        return await cancel_pending_snapchat_purchase_event(
+            db,
+            user_id=user_id,
+            event_id=event_id,
+        )
     return await enqueue_snapchat_purchase_event(
         db,
         user_id=user_id,
@@ -908,7 +953,16 @@ async def drain_snapchat_capi_outbox(
                     token in provider_status
                     for token in ("FAIL", "ERROR", "INVALID", "REJECT")
                 )
-                if 200 <= response.status_code < 300 and not provider_failed:
+                provider_accepted = (
+                    provider_status in {"VALID", "SUCCESS", "OK"}
+                    or summary.get("events_received") is not None
+                    or summary.get("events_processed") is not None
+                )
+                if (
+                    200 <= response.status_code < 300
+                    and provider_accepted
+                    and not provider_failed
+                ):
                     await _complete_event(
                         db,
                         event,
@@ -918,7 +972,11 @@ async def drain_snapchat_capi_outbox(
                     )
                     sent += 1
                 else:
-                    retryable = response.status_code == 429 or response.status_code >= 500
+                    retryable = (
+                        response.status_code == 429
+                        or response.status_code >= 500
+                        or (200 <= response.status_code < 300 and not provider_failed)
+                    )
                     await _complete_event(
                         db,
                         event,
@@ -996,7 +1054,7 @@ async def snapchat_capi_status(db: Any, user_id: str) -> dict[str, Any]:
         status: await _collection(db, OUTBOX_COLLECTION).count_documents(
             {"user_id": str(user_id), "status": status}
         )
-        for status in ("pending", "sending", "retry", "sent", "failed")
+        for status in ("pending", "sending", "retry", "sent", "failed", "cancelled")
     }
     latest = await _collection(db, OUTBOX_COLLECTION).find_one(
         {"user_id": str(user_id)},
@@ -1158,6 +1216,7 @@ __all__ = [
     "SOURCE_MODE",
     "attach_snapchat_capi_purchase_routes",
     "build_snapchat_purchase_event",
+    "cancel_pending_snapchat_purchase_event",
     "capi_enabled",
     "drain_snapchat_capi_outbox",
     "enqueue_recent_purchase_events",
