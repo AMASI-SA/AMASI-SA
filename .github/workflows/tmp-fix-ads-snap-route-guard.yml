@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - fix/ads-manager-snap-route-guard-baseline
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 concurrency:
-  group: generate-fixed-ads-manager-workflow
+  group: generate-fixed-ads-manager-workflow-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,9 +30,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Generate symmetrically normalized workflow
+      - name: Generate, verify, and persist result
         run: |
-          python - <<'PY'
+          set +e
+          mkdir -p scripts
+
+          python - <<'PY' >/tmp/generate.log 2>&1
           from pathlib import Path
 
           source_path = Path('.github/workflows/ads-manager-readonly.yml')
@@ -88,14 +94,18 @@ jobs:
               raise SystemExit(
                   f'Expected one stale route-normalization block, found {source.count(old)}'
               )
-          target_path.parent.mkdir(parents=True, exist_ok=True)
           target_path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          print('GENERATE_OK')
           PY
+          GENERATE_STATUS=$?
 
-      - name: Verify normalization and YAML
-        run: |
-          python -m pip install --disable-pip-version-check -q PyYAML
-          python - <<'PY'
+          VERIFY_STATUS=99
+          if [ "$GENERATE_STATUS" -eq 0 ]; then
+            python -m pip install --disable-pip-version-check -q PyYAML \
+              >/tmp/install.log 2>&1
+            INSTALL_STATUS=$?
+            if [ "$INSTALL_STATUS" -eq 0 ]; then
+              python - <<'PY' >/tmp/verify.log 2>&1
           from pathlib import Path
           import yaml
 
@@ -130,12 +140,38 @@ jobs:
               raise SystemExit('Invalid workflow structure')
           print('FIXED_ADS_MANAGER_WORKFLOW_OK')
           PY
+              VERIFY_STATUS=$?
+            else
+              VERIFY_STATUS=98
+            fi
+          else
+            INSTALL_STATUS=99
+          fi
 
-      - name: Commit generated workflow blob
-        run: |
+          {
+            echo "GENERATE_STATUS=$GENERATE_STATUS"
+            echo "INSTALL_STATUS=$INSTALL_STATUS"
+            echo "VERIFY_STATUS=$VERIFY_STATUS"
+            echo
+            for log in generate install verify; do
+              echo "=== $log ==="
+              if [ -f "/tmp/$log.log" ]; then
+                tail -n 100 "/tmp/$log.log"
+              else
+                echo "not_run"
+              fi
+              echo
+            done
+          } > scripts/tmp_ads_snap_guard_status.txt
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/ads-manager-readonly.fixed.yml
-          git diff --cached --check
-          git commit -m 'ci: generate fixed Ads Manager workflow blob'
+          git add scripts/tmp_ads_snap_guard_status.txt
+          if [ "$GENERATE_STATUS" -eq 0 ] && [ "$VERIFY_STATUS" -eq 0 ]; then
+            git add scripts/ads-manager-readonly.fixed.yml
+            git commit -m 'ci: generate fixed Ads Manager workflow blob'
+          else
+            git commit -m 'ci: record Ads Manager guard generation failure'
+          fi
           git push origin HEAD:fix/ads-manager-snap-route-guard-baseline
+          exit 0
