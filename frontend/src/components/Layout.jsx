@@ -21,6 +21,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
+import GoogleAdsAllPlatformsCard from "./GoogleAdsAllPlatformsCard";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
@@ -208,6 +209,7 @@ export default function Layout({ children }) {
             )}
 
             <OrderUiEnhancements />
+            <GoogleAdsAllPlatformsCard location={location} />
 
             <header
                 className="sticky top-0 z-30 border-b border-border bg-white/95 backdrop-blur lg:hidden"
