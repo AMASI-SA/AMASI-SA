@@ -30,6 +30,8 @@ from order_review_routes import (
 
 SUPPLIER_FILE_ROUTE = "supplier_file"
 INTERNAL_PREPARATION_ROUTE = "internal_preparation"
+ASSIGNMENT_DEFAULTS = "order_review_preparation_assignment_defaults"
+PREPARATION_MANAGE_DEFAULT_ROLES = {"owner", "admin", "operations"}
 
 
 class ReviewExportControlPatch(BaseModel):
@@ -43,6 +45,9 @@ class ReviewExportControlPatch(BaseModel):
         Literal["supplier_file", "internal_preparation"]
     ] = None
     assigned_employee_id: Optional[str] = Field(default=None, max_length=120)
+    # The requested behavior is persistent by default. A reviewer may explicitly
+    # disable this for a one-order override.
+    save_assignment_as_default: bool = True
 
 
 def normalize_spec_keys(values: Any) -> list[str]:
@@ -66,13 +71,98 @@ def operational_excluded_keys(
     })
 
 
+def preparation_assignment_product_key(item: Any) -> str:
+    """Stable product-level identity used for future-order assignment defaults."""
+    source = getattr(item, "source", None)
+    product_id = _text(
+        getattr(item, "product_id", None)
+        or getattr(item, "parent_product_id", None)
+        or getattr(source, "source_product_id", None)
+    )
+    if product_id:
+        return f"product:{product_id}"
+
+    sku = _normalized(getattr(item, "sku", None))
+    if sku:
+        return f"sku:{sku}"
+
+    name = _normalized(getattr(item, "name", None))
+    if name:
+        return f"name:{name}"
+
+    return f"order-item:{_text(getattr(item, 'order_item_id', None))}"
+
+
+def user_can_manage_preparation(user_doc: dict[str, Any]) -> bool:
+    """Resolve the existing preparation.manage permission without importing server."""
+    role = _text(user_doc.get("role")).lower() or "viewer"
+    allowed = role in PREPARATION_MANAGE_DEFAULT_ROLES
+    if "preparation.manage" in set(user_doc.get("extra_permissions") or []):
+        allowed = True
+    if "preparation.manage" in set(user_doc.get("denied_permissions") or []):
+        allowed = False
+    return allowed
+
+
+def assignable_employee_view(user_doc: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": _text(user_doc.get("id")),
+        "name": _text(user_doc.get("name")) or _text(user_doc.get("email")),
+        "email": _text(user_doc.get("email")),
+        "role": _text(user_doc.get("role")) or "viewer",
+    }
+
+
+def resolve_responsible_employee_id(
+    *,
+    target_route: str,
+    payload_employee_id: Any,
+    current_employee_id: Any,
+    default_employee_id: Any,
+    eligible_employee_ids: set[str],
+) -> Optional[str]:
+    """Require an eligible responsible employee for every internal item."""
+    if target_route != INTERNAL_PREPARATION_ROUTE:
+        return None
+
+    employee_id = (
+        _text(payload_employee_id)
+        or _text(current_employee_id)
+        or _text(default_employee_id)
+    )
+    if not employee_id:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "responsible_employee_required",
+                "message": "يجب تحديد الموظف المسؤول قبل توجيه المنتج للتجهيز.",
+            },
+        )
+    if employee_id not in eligible_employee_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "responsible_employee_unavailable",
+                "message": (
+                    "الموظف المحدد غير متاح أو لا يملك صلاحية إدارة التجهيز. "
+                    "اختر موظفًا آخر."
+                ),
+            },
+        )
+    return employee_id
+
+
 def item_export_control_view(
     state: Optional[dict[str, Any]],
     *,
     operational_items: list[dict[str, Any]],
     order_item_id: str,
+    product_key: Optional[str] = None,
+    default_assignment: Optional[dict[str, Any]] = None,
+    employees_by_id: Optional[dict[str, dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     state = state or {}
+    employees_by_id = employees_by_id or {}
     manual = normalize_spec_keys(
         state.get("manual_supplier_export_excluded_spec_keys")
     )
@@ -86,8 +176,23 @@ def item_export_control_view(
         if "supplier_export" in state
         else route != INTERNAL_PREPARATION_ROUTE
     )
+
+    state_employee_id = _text(state.get("assigned_employee_id")) or None
+    default_employee_id = _text(
+        (default_assignment or {}).get("assigned_employee_id")
+    ) or None
+    usable_default_id = (
+        default_employee_id
+        if default_employee_id and default_employee_id in employees_by_id
+        else None
+    )
+    assigned_employee_id = state_employee_id or usable_default_id
+    assigned_employee = employees_by_id.get(assigned_employee_id or "")
+    default_employee = employees_by_id.get(usable_default_id or "")
+
     return {
         "order_item_id": order_item_id,
+        "product_key": product_key,
         "manual_hidden_spec_keys": manual,
         "operational_hidden_spec_keys": operational,
         "hidden_spec_keys": hidden,
@@ -101,7 +206,22 @@ def item_export_control_view(
                 else "pending_file"
             )
         ),
-        "assigned_employee_id": _text(state.get("assigned_employee_id")) or None,
+        "assigned_employee_id": assigned_employee_id,
+        "assigned_employee_name": (
+            assigned_employee.get("name") if assigned_employee else None
+        ),
+        "assigned_employee_valid": bool(assigned_employee),
+        "assignment_source": (
+            "order"
+            if state_employee_id
+            else "default"
+            if usable_default_id
+            else None
+        ),
+        "default_assigned_employee_id": usable_default_id,
+        "default_assigned_employee_name": (
+            default_employee.get("name") if default_employee else None
+        ),
     }
 
 
@@ -124,6 +244,11 @@ def apply_export_control_patch(
             set(manual) | set(operational)
         )
 
+    if "assigned_employee_id" in fields:
+        state["assigned_employee_id"] = (
+            _text(payload.assigned_employee_id) or None
+        )
+
     if "preparation_route" in fields and payload.preparation_route:
         route = payload.preparation_route
         state["preparation_route"] = route
@@ -133,9 +258,8 @@ def apply_export_control_patch(
         else:
             state["supplier_export"] = True
             state["preparation_status"] = "pending_file"
-
-    if "assigned_employee_id" in fields:
-        state["assigned_employee_id"] = _text(payload.assigned_employee_id) or None
+            # The product is no longer assigned for internal execution.
+            state["assigned_employee_id"] = None
 
     state.update({
         "order_item_id": order_item_id,
@@ -176,7 +300,7 @@ def make_order_review_export_controls_router(
     )
     repository = MongoOrderRepository(db)
 
-    async def _order_and_item_ids(user_id: str, order_number: str):
+    async def _order_and_items(user_id: str, order_number: str):
         try:
             order = await get_order(
                 repository,
@@ -190,10 +314,61 @@ def make_order_review_export_controls_router(
             ) from exc
         identities = map_order_item_identities(order)
         return order, {
-            _text(item.order_item_id)
+            _text(item.order_item_id): item
             for item in identities
             if _text(item.order_item_id)
         }
+
+    async def _assignable_employees(user_id: str) -> list[dict[str, Any]]:
+        docs = await db.users.find(
+            {"created_by": user_id},
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "email": 1,
+                "role": 1,
+                "extra_permissions": 1,
+                "denied_permissions": 1,
+                "disabled": 1,
+                "is_active": 1,
+                "deleted_at": 1,
+            },
+        ).sort("name", 1).to_list(500)
+        return [
+            assignable_employee_view(row)
+            for row in docs
+            if row.get("disabled") is not True
+            and row.get("is_active") is not False
+            and not row.get("deleted_at")
+            and user_can_manage_preparation(row)
+            and _text(row.get("id"))
+        ]
+
+    async def _assignment_defaults(
+        user_id: str,
+        product_keys: set[str],
+    ) -> dict[str, dict[str, Any]]:
+        if not product_keys:
+            return {}
+        rows = await db[ASSIGNMENT_DEFAULTS].find(
+            {
+                "user_id": user_id,
+                "product_key": {"$in": sorted(product_keys)},
+            },
+            {"_id": 0},
+        ).to_list(500)
+        return {
+            _text(row.get("product_key")): row
+            for row in rows
+            if _text(row.get("product_key"))
+        }
+
+    async def _ensure_assignment_default_indexes() -> None:
+        await db[ASSIGNMENT_DEFAULTS].create_index(
+            [("user_id", 1), ("product_key", 1)],
+            unique=True,
+        )
 
     @router.get("/{order_number}")
     async def get_export_controls(
@@ -202,23 +377,42 @@ def make_order_review_export_controls_router(
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-        _, item_ids = await _order_and_item_ids(user_id, order_number)
+        _, items_by_id = await _order_and_items(user_id, order_number)
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number},
             {"_id": 0},
         ) or {}
         states = _state_map(workflow)
         operational_items = list(workflow.get("operational_items") or [])
+
+        employees = await _assignable_employees(user_id)
+        employees_by_id = {row["id"]: row for row in employees}
+        product_keys = {
+            preparation_assignment_product_key(item)
+            for item in items_by_id.values()
+        }
+        defaults = await _assignment_defaults(user_id, product_keys)
+
+        ordered_items = sorted(
+            items_by_id.values(),
+            key=lambda item: int(getattr(item, "line_index", 0) or 0),
+        )
         return {
             "order_number": order_number,
             "stage": workflow.get("stage") or "pending_review",
+            "employees": employees,
             "items": [
                 item_export_control_view(
-                    states.get(order_item_id),
+                    states.get(_text(item.order_item_id)),
                     operational_items=operational_items,
-                    order_item_id=order_item_id,
+                    order_item_id=_text(item.order_item_id),
+                    product_key=preparation_assignment_product_key(item),
+                    default_assignment=defaults.get(
+                        preparation_assignment_product_key(item)
+                    ),
+                    employees_by_id=employees_by_id,
                 )
-                for order_item_id in sorted(item_ids)
+                for item in ordered_items
             ],
         }
 
@@ -232,8 +426,9 @@ def make_order_review_export_controls_router(
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = _text(reviewer.get("id"))
-        order, item_ids = await _order_and_item_ids(user_id, order_number)
-        if order_item_id not in item_ids:
+        order, items_by_id = await _order_and_items(user_id, order_number)
+        item = items_by_id.get(order_item_id)
+        if item is None:
             raise HTTPException(
                 status_code=404,
                 detail={"code": "order_item_not_found"},
@@ -260,9 +455,41 @@ def make_order_review_export_controls_router(
             "order_item_id": order_item_id,
             "review_status": "pending_review",
         })
+
+        employees = await _assignable_employees(user_id)
+        employees_by_id = {row["id"]: row for row in employees}
+        eligible_employee_ids = set(employees_by_id)
+        product_key = preparation_assignment_product_key(item)
+        defaults = await _assignment_defaults(user_id, {product_key})
+        default_assignment = defaults.get(product_key) or {}
+
+        target_route = (
+            payload.preparation_route
+            or _text(current.get("preparation_route"))
+            or SUPPLIER_FILE_ROUTE
+        )
+        responsible_employee_id = resolve_responsible_employee_id(
+            target_route=target_route,
+            payload_employee_id=(
+                payload.assigned_employee_id
+                if "assigned_employee_id" in payload.model_fields_set
+                else None
+            ),
+            current_employee_id=current.get("assigned_employee_id"),
+            default_employee_id=default_assignment.get("assigned_employee_id"),
+            eligible_employee_ids=eligible_employee_ids,
+        )
+
+        effective_values = payload.model_dump(exclude_unset=True)
+        if target_route == INTERNAL_PREPARATION_ROUTE:
+            effective_values["assigned_employee_id"] = responsible_employee_id
+        elif payload.preparation_route == SUPPLIER_FILE_ROUTE:
+            effective_values["assigned_employee_id"] = None
+        effective_payload = ReviewExportControlPatch(**effective_values)
+
         states[order_item_id] = apply_export_control_patch(
             current,
-            payload,
+            effective_payload,
             operational_items=operational_items,
             order_item_id=order_item_id,
             actor_id=actor_id,
@@ -307,12 +534,45 @@ def make_order_review_export_controls_router(
                     detail={"code": "review_revision_conflict"},
                 ) from exc
 
+        default_updated = False
+        if (
+            target_route == INTERNAL_PREPARATION_ROUTE
+            and responsible_employee_id
+            and payload.save_assignment_as_default
+        ):
+            await _ensure_assignment_default_indexes()
+            await db[ASSIGNMENT_DEFAULTS].update_one(
+                {
+                    "user_id": user_id,
+                    "product_key": product_key,
+                },
+                {
+                    "$set": {
+                        "assigned_employee_id": responsible_employee_id,
+                        "updated_at": now,
+                        "updated_by": actor_id,
+                    },
+                    "$setOnInsert": {
+                        "created_at": now,
+                        "created_by": actor_id,
+                    },
+                },
+                upsert=True,
+            )
+            default_assignment = {
+                "assigned_employee_id": responsible_employee_id,
+            }
+            default_updated = True
+
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
             "order_item_id": order_item_id,
+            "product_key": product_key,
             "event_type": "review_export_controls_updated",
             "changed_fields": sorted(payload.model_fields_set),
+            "assigned_employee_id": responsible_employee_id,
+            "assignment_default_updated": default_updated,
             "occurred_at": now,
             "actor_id": actor_id,
         })
@@ -320,6 +580,9 @@ def make_order_review_export_controls_router(
             states[order_item_id],
             operational_items=operational_items,
             order_item_id=order_item_id,
+            product_key=product_key,
+            default_assignment=default_assignment,
+            employees_by_id=employees_by_id,
         )
 
     return router
