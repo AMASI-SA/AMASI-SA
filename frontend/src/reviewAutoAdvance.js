@@ -12,8 +12,19 @@ export function reviewOrderNumberFromHeading(root = document) {
   return heading?.textContent?.match(/#(\d+)/)?.[1] || "";
 }
 
+export function isVisibleReviewQueueButton(button) {
+  if (!button || button.hidden || button.disabled) return false;
+  if (button.closest('[data-review-queue-hidden="true"]')) return false;
+  const section = button.closest("[data-review-queue-section]");
+  if (section?.hidden || section?.dataset.reviewQueueHidden === "true") {
+    return false;
+  }
+  return true;
+}
+
 export function pendingReviewOrderRows(root = document) {
   return [...root.querySelectorAll("button")]
+    .filter(isVisibleReviewQueueButton)
     .map((button) => {
       const orderNumberNode = [...button.querySelectorAll("span")].find((node) =>
         /^#\d+$/.test(text(node.textContent)),
@@ -85,7 +96,6 @@ export function attemptReviewAutoAdvance(root = document) {
     scheduleAdvanceAttempt();
     return false;
   }
-  // Another order is already open, so no synthetic click is needed.
   if (
     drawerOrderNumber
     && drawerOrderNumber !== pendingAdvance.completedOrderNumber
@@ -98,8 +108,6 @@ export function attemptReviewAutoAdvance(root = document) {
   const completedStillVisible = rows.some(
     (row) => row.orderNumber === pendingAdvance.completedOrderNumber,
   );
-  // Closing the drawer manually must not advance. Successful completion removes
-  // the completed row from the pending list before the next order is opened.
   if (completedStillVisible) {
     scheduleAdvanceAttempt();
     return false;
@@ -113,7 +121,6 @@ export function attemptReviewAutoAdvance(root = document) {
   );
 
   if (!nextRow) {
-    // The current page may still be refilling after its last row was removed.
     scheduleAdvanceAttempt();
     return false;
   }
