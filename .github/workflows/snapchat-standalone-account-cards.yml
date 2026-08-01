@@ -1,0 +1,68 @@
+name: Snapchat Standalone Account Cards
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
+      - "backend/tests/test_snapchat_dashboard_summary_v2.py"
+      - "frontend/src/components/SnapchatStandaloneAccountCards.jsx"
+      - "frontend/src/components/SnapchatStandaloneAccountCards.test.jsx"
+      - "frontend/src/components/DashboardSnapchatAccountsPlacement.jsx"
+      - "frontend/src/components/DashboardSnapchatAccountsPlacement.test.js"
+      - "frontend/src/components/Layout.jsx"
+      - ".github/workflows/snapchat-standalone-account-cards.yml"
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl
+      - name: Compile Snapchat account summary
+        working-directory: backend
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_dashboard_summary_routes.py
+      - name: Test isolated account metrics
+        working-directory: backend
+        run: pytest -q tests/test_snapchat_dashboard_summary_v2.py
+      - name: Enforce account isolation and source safety
+        run: |
+          FILE=backend/integrations_control_center/snapchat_dashboard_summary_routes.py
+          grep -q 'per_account_daily' "$FILE"
+          grep -q '"isolated_account": True' "$FILE"
+          grep -q '"today": account_today' "$FILE"
+          grep -q '"month": {' "$FILE"
+          grep -q '"source": "snapchat_marketing_api_account"' "$FILE"
+          ! grep -q 'spend_share_pct\|prorat' "$FILE"
+          ! grep -q 'google_analytics\|build_ga4' "$FILE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test standalone Snapchat cards and placement
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand
+          src/components/SnapchatStandaloneAccountCards.test.jsx
+          src/components/DashboardSnapchatAccountsPlacement.test.js
+      - name: Build Production frontend
+        run: CI=false yarn build
