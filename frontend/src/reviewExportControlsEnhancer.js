@@ -193,76 +193,6 @@ function applySpecRowPresentation(row, control, specKey, rerender) {
   }
 }
 
-function routeControlsHost(card) {
-  const operationalButton = [...card.querySelectorAll("button")].find(
-    (node) => node.textContent?.includes("إضافة منتج تشغيلي"),
-  );
-  return operationalButton?.parentElement || null;
-}
-
-function applyItemRoutePresentation(card, control, rerender) {
-  const host = routeControlsHost(card);
-  if (!host) return;
-  const internal = isInternalPreparationRoute(control);
-
-  card.style.borderColor = internal ? "#f59e0b" : "#e2e8f0";
-  card.style.boxShadow = internal ? "0 0 0 2px rgba(245,158,11,.13)" : "";
-
-  let button = host.querySelector("[data-item-route-action]");
-  if (!button) {
-    button = document.createElement("button");
-    button.type = "button";
-    button.dataset.itemRouteAction = "1";
-    host.appendChild(button);
-  }
-  button.textContent = internal
-    ? "إرجاع المنتج لملف التجهيز"
-    : "توجيه مباشر للتجهيز الداخلي";
-  button.style.cssText = internal
-    ? `${buttonBase()};border:1px solid #10b981;background:white;color:#047857`
-    : `${buttonBase()};border:1px solid #f59e0b;background:#fffbeb;color:#92400e`;
-
-  let banner = card.querySelector("[data-item-route-banner]");
-  if (internal && !banner) {
-    banner = document.createElement("div");
-    banner.dataset.itemRouteBanner = "1";
-    banner.style.cssText = "margin:0 16px 12px;border:1px solid #f59e0b;border-radius:12px;background:#fffbeb;color:#92400e;padding:10px 12px;font-size:12px;font-weight:900;line-height:1.7";
-    const footer = host.closest(".border-t") || host.parentElement;
-    footer?.parentElement?.insertBefore(banner, footer);
-  }
-  if (banner) {
-    banner.textContent = "تجهيز داخلي — لن يظهر هذا المنتج في ملف المورد، وسيبدأ مباشرة بحالة قيد التجهيز داخل ميزان.";
-    banner.hidden = !internal;
-  }
-
-  button.onclick = async () => {
-    const nextRoute = internal ? "supplier_file" : "internal_preparation";
-    if (!internal && !window.confirm(
-      "سيتم استبعاد المنتج كاملًا من ملف التجهيز وتوجيهه مباشرة إلى قيد التنفيذ داخل ميزان. متابعة؟",
-    )) return;
-    button.disabled = true;
-    const original = button.textContent;
-    button.textContent = "جارٍ الحفظ…";
-    try {
-      const next = await patchControl(
-        activeOrderNumber,
-        control.order_item_id,
-        { preparation_route: nextRoute },
-      );
-      toast.success(
-        nextRoute === "internal_preparation"
-          ? "تم توجيه المنتج مباشرة للتجهيز الداخلي."
-          : "تمت إعادة المنتج إلى ملف التجهيز.",
-      );
-      rerender(next);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail?.message || error.message || "تعذّر تغيير مسار المنتج.");
-      button.disabled = false;
-      button.textContent = original;
-    }
-  };
-}
-
 function enhanceCard(card, item) {
   const orderItemId = text(item?.order_item_id);
   if (!orderItemId) return;
@@ -281,7 +211,9 @@ function enhanceCard(card, item) {
       if (specKey) applySpecRowPresentation(row, control, specKey, renderWith);
     });
   }
-  applyItemRoutePresentation(card, control, renderWith);
+  // Item routing is owned exclusively by reviewInternalPreparationRouteEnhancer.
+  // Keeping one owner prevents the legacy confirm-only handler from replacing
+  // the mandatory responsible-employee selector.
 }
 
 async function enhance() {
