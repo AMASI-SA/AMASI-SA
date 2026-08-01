@@ -27,13 +27,26 @@ export function specReplacementPatchPath(orderNumber, orderItemId) {
   return `/order-review-spec-replacements-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}`;
 }
 
+export function specReplacementDisplayLines(spec) {
+  const lines = [];
+  const replacementName = text(spec?.replacement_name);
+  const replacementValue = text(spec?.replacement_value);
+  if (replacementName) lines.push(`اسم المواصفة في الملف: ${replacementName}`);
+  if (replacementValue) lines.push(`قيمة المواصفة في الملف: ${replacementValue}`);
+  return lines;
+}
+
+// Kept for compatibility with earlier tests and cached UI helpers.
 export function specReplacementDisplayText(spec) {
-  const replacement = text(spec?.replacement_text);
-  return replacement ? `النص البديل للملف: ${replacement}` : "";
+  return specReplacementDisplayLines(spec).join(" · ");
+}
+
+export function hasSpecFieldReplacement(spec) {
+  return specReplacementDisplayLines(spec).length > 0;
 }
 
 export function specReplacementButtonLabel(spec) {
-  return text(spec?.replacement_text) ? "تعديل البديل" : "نص بديل";
+  return hasSpecFieldReplacement(spec) ? "تعديل الحقول" : "تعديل للملف";
 }
 
 function orderNumberFromPage() {
@@ -65,10 +78,28 @@ async function loadContext(orderNumber) {
       ]),
     );
   } catch (error) {
-    console.warn("Supplier spec replacements unavailable", error);
+    console.warn("Supplier spec field replacements unavailable", error);
   } finally {
     loading = false;
   }
+}
+
+function fieldInput({ title, originalValue, replacementValue, placeholder }) {
+  const label = document.createElement("label");
+  label.style.cssText = "display:block;margin-top:14px;color:#334155;font-weight:900";
+  const heading = document.createElement("div");
+  heading.textContent = title;
+  const original = document.createElement("div");
+  original.textContent = `الأصلي من سلة: ${originalValue}`;
+  original.style.cssText = "margin-top:4px;color:#64748b;font-size:12px;font-weight:700";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = text(replacementValue);
+  input.placeholder = placeholder;
+  input.maxLength = 500;
+  input.style.cssText = "width:100%;box-sizing:border-box;margin-top:7px;padding:12px;border:1px solid #94a3b8;border-radius:12px;font:inherit;font-weight:800";
+  label.append(heading, original, input);
+  return { label, input };
 }
 
 function showReplacementModal(item, spec) {
@@ -89,7 +120,9 @@ function showReplacementModal(item, spec) {
 
     const panel = document.createElement("div");
     panel.style.cssText = [
-      "width:min(560px,100%)",
+      "width:min(580px,100%)",
+      "max-height:92vh",
+      "overflow:auto",
       "background:white",
       "border-radius:24px",
       "padding:20px",
@@ -97,28 +130,42 @@ function showReplacementModal(item, spec) {
     ].join(";");
 
     const title = document.createElement("h2");
-    title.textContent = "نص بديل في ملف التجهيز";
+    title.textContent = "تعديل حقول المواصفة في ملف التجهيز";
     title.style.cssText = "margin:0;color:#0f172a;font-size:21px;font-weight:900";
 
     const productName = document.createElement("p");
     productName.textContent = text(item?.name) || "المنتج";
     productName.style.cssText = "margin:6px 0 0;color:#64748b;font-weight:700";
 
-    const original = document.createElement("div");
-    original.textContent = `النص الأصلي: ${text(spec?.original_text)}`;
-    original.style.cssText = "margin-top:16px;padding:11px 12px;border-radius:12px;background:#f5f3ff;color:#4c1d95;font-weight:900";
+    const explanation = document.createElement("div");
+    explanation.textContent = "يمكن تعديل اسم المواصفة أو قيمتها بشكل مستقل. ترك الحقل فارغًا يعني استخدام قيمة سلة الأصلية.";
+    explanation.style.cssText = "margin-top:14px;padding:11px 12px;border-radius:12px;background:#f5f3ff;color:#4c1d95;font-size:13px;font-weight:800;line-height:1.7";
 
-    const label = document.createElement("label");
-    label.textContent = "النص الذي سيظهر بدلًا منه في الملف فقط";
-    label.style.cssText = "display:block;margin-top:16px;color:#334155;font-weight:900";
+    const nameField = fieldInput({
+      title: "اسم المواصفة في الملف",
+      originalValue: text(spec?.original_name || spec?.name),
+      replacementValue: spec?.replacement_name,
+      placeholder: text(spec?.original_name || spec?.name),
+    });
+    const valueField = fieldInput({
+      title: "قيمة المواصفة في الملف",
+      originalValue: text(spec?.original_value || spec?.value),
+      replacementValue: spec?.replacement_value,
+      placeholder: text(spec?.original_value || spec?.value),
+    });
 
-    const input = document.createElement("textarea");
-    input.value = text(spec?.replacement_text);
-    input.placeholder = text(spec?.original_text).replace(":", "");
-    input.maxLength = 500;
-    input.rows = 3;
-    input.style.cssText = "width:100%;box-sizing:border-box;margin-top:7px;padding:12px;border:1px solid #94a3b8;border-radius:12px;resize:vertical;font:inherit;font-weight:800";
-    label.appendChild(input);
+    const preview = document.createElement("div");
+    preview.style.cssText = "margin-top:14px;padding:11px 12px;border-radius:12px;background:#eff6ff;color:#1e3a8a;font-weight:900";
+    const refreshPreview = () => {
+      const fileName = text(nameField.input.value)
+        || text(spec?.original_name || spec?.name);
+      const fileValue = text(valueField.input.value)
+        || text(spec?.original_value || spec?.value);
+      preview.textContent = `سيظهر في الملف: ${fileName}: ${fileValue}`;
+    };
+    nameField.input.addEventListener("input", refreshPreview);
+    valueField.input.addEventListener("input", refreshPreview);
+    refreshPreview();
 
     const persistentLabel = document.createElement("label");
     persistentLabel.style.cssText = "display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border-radius:12px;background:#f0fdfa;color:#115e59;font-weight:800;line-height:1.7";
@@ -127,23 +174,23 @@ function showReplacementModal(item, spec) {
     persistent.checked = true;
     persistent.style.marginTop = "5px";
     const persistentText = document.createElement("span");
-    persistentText.textContent = "حفظه لنفس المنتج والمواصفة في الطلبات القادمة";
+    persistentText.textContent = "حفظ الاسمين/القيمتين المعدلتين لنفس المنتج والمواصفة في الطلبات القادمة";
     persistentLabel.append(persistent, persistentText);
 
     const note = document.createElement("p");
-    note.textContent = "ستبقى مواصفة سلة الأصلية ظاهرة هنا كما هي؛ التغيير يخص ملف التجهيز فقط.";
+    note.textContent = "بيانات سلة الأصلية لا تتغير؛ هذه الحقول تخص ملف التجهيز فقط.";
     note.style.cssText = "margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.7";
 
     const actions = document.createElement("div");
     actions.style.cssText = "display:flex;gap:9px;flex-wrap:wrap;margin-top:18px";
     const save = document.createElement("button");
     save.type = "button";
-    save.textContent = "حفظ النص البديل";
+    save.textContent = "حفظ حقول الملف";
     save.style.cssText = "border:0;border-radius:12px;padding:10px 15px;background:#7c3aed;color:white;font-weight:900";
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "حذف النص البديل";
-    remove.hidden = !text(spec?.replacement_text);
+    remove.textContent = "استخدام حقول سلة الأصلية";
+    remove.hidden = !hasSpecFieldReplacement(spec);
     remove.style.cssText = "border:1px solid #fda4af;border-radius:12px;padding:10px 15px;background:white;color:#be123c;font-weight:900";
     const cancel = document.createElement("button");
     cancel.type = "button";
@@ -159,27 +206,31 @@ function showReplacementModal(item, spec) {
     overlay.onclick = (event) => {
       if (event.target === overlay) finish(null);
     };
-    save.onclick = () => {
-      const replacementText = text(input.value);
-      if (!replacementText) {
-        input.style.borderColor = "#e11d48";
-        toast.error("اكتب النص البديل أو استخدم زر حذف النص البديل.");
-        return;
-      }
-      finish({
-        replacementText,
-        saveAsDefault: persistent.checked,
-      });
-    };
+    save.onclick = () => finish({
+      replacementName: text(nameField.input.value) || null,
+      replacementValue: text(valueField.input.value) || null,
+      saveAsDefault: persistent.checked,
+    });
     remove.onclick = () => finish({
-      replacementText: null,
+      replacementName: null,
+      replacementValue: null,
       saveAsDefault: persistent.checked,
     });
 
-    panel.append(title, productName, original, label, persistentLabel, note, actions);
+    panel.append(
+      title,
+      productName,
+      explanation,
+      nameField.label,
+      valueField.label,
+      preview,
+      persistentLabel,
+      note,
+      actions,
+    );
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
-    input.focus();
+    nameField.input.focus();
   });
 }
 
@@ -188,7 +239,8 @@ async function patchReplacement(item, spec, selection) {
     specReplacementPatchPath(activeOrderNumber, item.order_item_id),
     {
       spec_key: spec.spec_key,
-      replacement_text: selection.replacementText,
+      replacement_name: selection.replacementName,
+      replacement_value: selection.replacementValue,
       save_as_default: selection.saveAsDefault,
     },
   );
@@ -200,7 +252,8 @@ function renderSpecTools(row, item, spec) {
   let tools = row.querySelector("[data-spec-replacement-tools]");
   const signature = JSON.stringify({
     specKey: text(spec?.spec_key),
-    replacementText: text(spec?.replacement_text),
+    replacementName: text(spec?.replacement_name),
+    replacementValue: text(spec?.replacement_value),
     replacementSource: text(spec?.replacement_source),
   });
   if (tools?.dataset.specReplacementSignature === signature) return;
@@ -213,7 +266,7 @@ function renderSpecTools(row, item, spec) {
   tools.style.cssText = [
     "grid-column:1/-1",
     "display:flex",
-    "align-items:center",
+    "align-items:flex-start",
     "justify-content:space-between",
     "gap:8px",
     "flex-wrap:wrap",
@@ -223,15 +276,19 @@ function renderSpecTools(row, item, spec) {
 
   const display = document.createElement("div");
   display.dataset.specReplacementDisplay = "1";
-  display.textContent = specReplacementDisplayText(spec);
-  display.hidden = !display.textContent;
-  display.style.cssText = "color:#6d28d9;font-size:11px;font-weight:900;line-height:1.6";
+  display.style.cssText = "display:grid;gap:2px;color:#6d28d9;font-size:11px;font-weight:900;line-height:1.6";
+  specReplacementDisplayLines(spec).forEach((line) => {
+    const lineNode = document.createElement("div");
+    lineNode.textContent = line;
+    display.appendChild(lineNode);
+  });
+  display.hidden = display.childElementCount === 0;
 
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.specReplacementAction = "1";
   button.textContent = specReplacementButtonLabel(spec);
-  button.title = "إضافة نص يظهر بدل هذه المواصفة في ملف التجهيز فقط";
+  button.title = "تعديل اسم المواصفة أو قيمتها في ملف التجهيز فقط";
   button.style.cssText = "border:1px solid #8b5cf6;border-radius:9px;padding:4px 8px;background:white;color:#6d28d9;font-size:10px;font-weight:900;white-space:nowrap";
   button.onclick = async () => {
     const selection = await showReplacementModal(item, spec);
@@ -244,21 +301,24 @@ function renderSpecTools(row, item, spec) {
       const nextSpec = (nextItem.specs || []).find(
         (rowSpec) => text(rowSpec.spec_key) === text(spec.spec_key),
       ) || spec;
+      const hasReplacement = Boolean(
+        selection.replacementName || selection.replacementValue,
+      );
       toast.success(
-        selection.replacementText
+        hasReplacement
           ? selection.saveAsDefault
-            ? "تم حفظ النص البديل للملف والطلبات القادمة."
-            : "تم حفظ النص البديل لهذا الطلب فقط."
+            ? "تم حفظ حقول الملف والطلبات القادمة."
+            : "تم حفظ حقول الملف لهذا الطلب فقط."
           : selection.saveAsDefault
-            ? "تم حذف النص البديل من هذا الطلب والطلبات القادمة."
-            : "تم حذف النص البديل من هذا الطلب فقط.",
+            ? "تمت استعادة حقول سلة لهذا الطلب والطلبات القادمة."
+            : "تمت استعادة حقول سلة لهذا الطلب فقط.",
       );
       renderSpecTools(row, item, nextSpec);
     } catch (error) {
       toast.error(
         error?.response?.data?.detail?.message
         || error.message
-        || "تعذّر حفظ النص البديل.",
+        || "تعذّر حفظ حقول المواصفة.",
       );
       button.disabled = false;
       button.textContent = originalLabel;
