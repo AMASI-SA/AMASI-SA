@@ -156,6 +156,101 @@ def calculate_mezan_v2_line_cost(
     }
 
 
+def _line_sales_total(item: dict[str, Any], quantity: float) -> float:
+    """Return product-line sales using the source total when available.
+
+    Fresh Salla order rows carry ``total`` as the authoritative line amount.
+    Older normalized rows may only have a unit ``price`` plus discount/tax, so
+    keep a deterministic fallback for them instead of dropping their sales.
+    """
+    source_total = _number(item.get("total"))
+    if source_total is not None:
+        return round(max(source_total, 0.0), 4)
+    unit_price = _number(item.get("price") or item.get("unit_price")) or 0.0
+    discount = _number(item.get("discount")) or 0.0
+    tax = _number(item.get("tax")) or 0.0
+    return round(max((unit_price * quantity) - discount + tax, 0.0), 4)
+
+
+def _finalize_product_profit_rows(
+    rows: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Shape product-grain dashboard rows without inventing missing profit."""
+    items: list[dict[str, Any]] = []
+    for raw in rows.values():
+        units = max(_float(raw.get("units_sold")), 0.0)
+        if units <= 0:
+            continue
+        sales = round(_float(raw.get("total_sales")), 2)
+        accumulated_cost = round(_float(raw.get("total_cost")), 2)
+        missing_everywhere = bool(raw.get("missing_everywhere"))
+        uses_salla_fallback = bool(raw.get("uses_salla_fallback"))
+        mezan_complete = bool(raw.get("mezan_cost_complete"))
+        if missing_everywhere:
+            cost_status = "missing"
+        elif not mezan_complete or uses_salla_fallback:
+            cost_status = "salla_fallback"
+        else:
+            cost_status = "complete"
+
+        reportable_cost = None if cost_status == "missing" else accumulated_cost
+        average_unit_cost = (
+            round(reportable_cost / units, 2)
+            if reportable_cost is not None and units > 0
+            else None
+        )
+        net_profit = (
+            round(sales - reportable_cost, 2)
+            if reportable_cost is not None
+            else None
+        )
+        items.append({
+            "identity": raw.get("identity") or "",
+            "salla_product_id": raw.get("salla_product_id") or "",
+            "mezan_product_id": raw.get("mezan_product_id") or "",
+            "catalog_product_found": bool(raw.get("catalog_product_found")),
+            "name": raw.get("name") or "منتج بدون اسم",
+            "sku": raw.get("sku") or "",
+            "image_url": raw.get("image_url") or "",
+            "units_sold": round(units, 2),
+            "orders_count": int(raw.get("orders_count") or 0),
+            "average_unit_cost": average_unit_cost,
+            "total_sales": sales,
+            "total_cost": reportable_cost,
+            "net_profit": net_profit,
+            "profit_margin_pct": (
+                round((net_profit / sales) * 100, 2)
+                if net_profit is not None and sales > 0
+                else None
+            ),
+            "cost_status": cost_status,
+            "uses_salla_fallback": uses_salla_fallback,
+            "missing_everywhere": missing_everywhere,
+            "cost_sources": sorted(raw.get("cost_sources") or []),
+        })
+
+    # "Best selling" is defined by sold quantity. Revenue breaks ties so the
+    # result stays deterministic and useful when two products sell equally.
+    items.sort(key=lambda row: (
+        -_float(row.get("units_sold")),
+        -_float(row.get("total_sales")),
+        str(row.get("name") or "").casefold(),
+    ))
+    has_unpriced = any(row["cost_status"] == "missing" for row in items)
+    has_fallback = any(row["cost_status"] == "salla_fallback" for row in items)
+    total_sales = round(sum(_float(row["total_sales"]) for row in items), 2)
+    accumulated_cost = round(sum(_float(raw.get("total_cost")) for raw in rows.values()), 2)
+    return items, {
+        "product_count": len(items),
+        "total_units": round(sum(_float(row["units_sold"]) for row in items), 2),
+        "total_sales": total_sales,
+        "total_cost": accumulated_cost,
+        "net_profit": None if has_unpriced else round(total_sales - accumulated_cost, 2),
+        "has_unpriced_products": has_unpriced,
+        "uses_salla_fallback": has_fallback,
+    }
+
+
 async def _filtered_orders(
     db: Any,
     user_id: str,
@@ -285,10 +380,12 @@ async def build_mezan_v2_product_cost(
     missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
+    product_profit_rows: dict[str, dict[str, Any]] = {}
 
     for order in orders:
         raw_order_total = 0.0
         order_parts = defaultdict(float)
+        order_product_lines: list[dict[str, Any]] = []
         items = order.get("products") or []
         order_incomplete = not bool(items)
         if not items:
@@ -361,6 +458,29 @@ async def build_mezan_v2_product_cost(
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
             order_parts["selected_options"] += result["selected_options_total"]
+            order_product_lines.append({
+                "identity": identity,
+                "salla_product_id": product_id or str(
+                    item.get("parent_product_id") or item.get("product_id") or ""
+                ).strip(),
+                "mezan_product_id": str((product or {}).get("mezan_product_id") or "").strip(),
+                "catalog_product_found": bool(product),
+                "name": (product or {}).get("name") or item.get("name") or "منتج بدون اسم",
+                "sku": item.get("sku") or (product or {}).get("sku") or "",
+                "image_url": (
+                    (product or {}).get("main_image")
+                    or item.get("image_url")
+                    or item.get("image")
+                    or ""
+                ),
+                "quantity": result["quantity"],
+                "line_sales": _line_sales_total(item, result["quantity"]),
+                "line_cost": result["line_total"],
+                "base_complete": result["base_complete"],
+                "mezan_cost_complete": result["mezan_cost_complete"],
+                "uses_salla_fallback": result["uses_salla_fallback"],
+                "base_cost_source": result["base_cost_source"],
+            })
 
         adjusted_total = effective_product_cost(
             {**order, "total_product_cost": raw_order_total},
@@ -370,6 +490,50 @@ async def build_mezan_v2_product_cost(
         totals["total"] += adjusted_total
         for key, amount in order_parts.items():
             totals[key] += amount * scale
+        # Apply the same return/cancellation scale used by the authoritative
+        # product-cost total. Missing-cost orders have no cost denominator, so
+        # retain their sold quantity and sales to surface them for correction.
+        product_scale = scale if raw_order_total > 0 else 1.0
+        seen_in_order: set[str] = set()
+        for line in order_product_lines:
+            if product_scale <= 0:
+                continue
+            identity = str(line["identity"])
+            row = product_profit_rows.setdefault(identity, {
+                "identity": identity,
+                "salla_product_id": line["salla_product_id"],
+                "mezan_product_id": line["mezan_product_id"],
+                "catalog_product_found": line["catalog_product_found"],
+                "name": line["name"],
+                "sku": line["sku"],
+                "image_url": line["image_url"],
+                "units_sold": 0.0,
+                "orders_count": 0,
+                "total_sales": 0.0,
+                "total_cost": 0.0,
+                "mezan_cost_complete": True,
+                "uses_salla_fallback": False,
+                "missing_everywhere": False,
+                "cost_sources": set(),
+            })
+            row["units_sold"] += _float(line["quantity"]) * product_scale
+            row["total_sales"] += _float(line["line_sales"]) * product_scale
+            row["total_cost"] += _float(line["line_cost"]) * product_scale
+            row["mezan_cost_complete"] = bool(
+                row["mezan_cost_complete"] and line["mezan_cost_complete"]
+            )
+            row["uses_salla_fallback"] = bool(
+                row["uses_salla_fallback"] or line["uses_salla_fallback"]
+            )
+            row["missing_everywhere"] = bool(
+                row["missing_everywhere"] or not line["base_complete"]
+            )
+            row["cost_sources"].add(str(line["base_cost_source"]))
+            if not row["image_url"] and line["image_url"]:
+                row["image_url"] = line["image_url"]
+            if identity not in seen_in_order:
+                row["orders_count"] += 1
+                seen_in_order.add(identity)
         if order_incomplete:
             incomplete_orders += 1
 
@@ -380,6 +544,7 @@ async def build_mezan_v2_product_cost(
             "fallback_sources": sorted(row["fallback_sources"]),
         })
     missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
+    product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
 
     return {
         "total": round(totals["total"], 2),
@@ -399,6 +564,8 @@ async def build_mezan_v2_product_cost(
         "missing_all_cost_lines_count": missing_all_cost_lines,
         "salla_fallback_products_count": len(salla_fallback_products),
         "missing_products": missing_product_rows,
+        "product_rows": product_rows,
+        "product_profit_summary": product_profit_summary,
         "no_products_orders_count": no_products_orders,
         "incomplete_orders_count": incomplete_orders,
         "source_contract": {
@@ -411,6 +578,8 @@ async def build_mezan_v2_product_cost(
             "always_added": ["product_components", "selected_option_components"],
             "mezan_completion_sources": ["mezan_v2_variant", "mezan_v2_base"],
             "salla_fallback_is_missing_mezan_cost": True,
+            "product_sales": "unified_orders.products.total; price*quantity-discount+tax fallback",
+            "product_profit": "product sales minus Mezan V2 product cost; ads/shipping/payment fees are not allocated per product",
         },
     }
 
@@ -495,6 +664,74 @@ def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -
         "cpm": round(spend / impressions * 1000, 2) if impressions > 0 else 0.0,
         "ctr": round(clicks / impressions * 100, 2) if impressions > 0 else 0.0,
     }
+
+
+def _build_snapchat_account_summaries(
+    rows: list[dict[str, Any]],
+    accounts_meta: list[dict[str, Any]],
+    *,
+    month_start: str,
+    today: str,
+) -> list[dict[str, Any]]:
+    """Return account-grain Snapchat KPIs without cross-account mixing."""
+    by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        account_id = str(row.get("ad_account_id") or "").strip()
+        if account_id:
+            by_account[account_id].append(row)
+
+    total_spend = sum(_float(row.get("spend_sar")) for row in rows)
+    accounts: list[dict[str, Any]] = []
+    for meta in accounts_meta:
+        account_id = str(
+            meta.get("ad_account_id") or meta.get("external_account_id") or ""
+        ).strip()
+        if not account_id:
+            continue
+        account_rows = by_account.get(account_id, [])
+        month_metrics = _aggregate_provider_rows(
+            account_rows, month_start, today
+        )
+        today_metrics = _aggregate_provider_rows(account_rows, today, today)
+        latest = max(
+            (
+                str(row.get("updated_at") or row.get("fetched_at") or "")
+                for row in account_rows
+                if row.get("updated_at") or row.get("fetched_at")
+            ),
+            default="",
+        )
+        first_fact = account_rows[0] if account_rows else {}
+        currency = str(
+            meta.get("currency") or first_fact.get("currency") or "SAR"
+        ).upper()
+        account_timezone = str(
+            meta.get("timezone")
+            or first_fact.get("account_timezone")
+            or "Asia/Riyadh"
+        )
+        accounts.append({
+            "id": account_id,
+            "external_account_id": account_id,
+            "name": meta.get("display_name") or account_id,
+            "currency": currency,
+            "timezone": account_timezone,
+            "today": {"date": today, **today_metrics},
+            "month": {"start": month_start, **month_metrics},
+            # Backward-compatible aliases used by the compact legacy view.
+            "spend": month_metrics["spend"],
+            "orders": month_metrics["orders"],
+            "revenue": month_metrics["revenue"],
+            "roas": month_metrics["roas"],
+            "cost_per_order": month_metrics["cost_per_order"],
+            "spend_share_pct": round(
+                month_metrics["spend"] / total_spend * 100, 2
+            ) if total_spend > 0 else 0.0,
+            "last_fetched_at": latest or None,
+            "credit_limit": None,
+            "open_debt": 0,
+        })
+    return accounts
 
 
 async def build_mezan_v2_ads(
@@ -743,35 +980,34 @@ def make_dashboard_v2_router(
                     "connection_provenance": "api_connection",
                     "mezan_selected": True,
                 },
-                {"_id": 0, "ad_account_id": 1, "external_account_id": 1, "display_name": 1},
+                {
+                    "_id": 0,
+                    "ad_account_id": 1,
+                    "external_account_id": 1,
+                    "display_name": 1,
+                    "currency": 1,
+                    "timezone": 1,
+                },
             ),
             100,
         )
-        by_account: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for row in rows:
-            by_account[str(row.get("ad_account_id") or "")].append(row)
-        total_spend = sum(_float(row.get("spend_sar")) for row in rows)
-        accounts = []
-        for meta in accounts_meta:
-            account_id = str(meta.get("ad_account_id") or meta.get("external_account_id") or "")
-            metrics = _aggregate_provider_rows(by_account.get(account_id, []), start, end)
-            accounts.append({
-                "id": account_id,
-                "external_account_id": account_id,
-                "name": meta.get("display_name") or account_id,
-                "spend": metrics["spend"],
-                "orders": metrics["orders"],
-                "revenue": metrics["revenue"],
-                "roas": metrics["roas"],
-                "cost_per_order": metrics["cost_per_order"],
-                "spend_share_pct": round(metrics["spend"] / total_spend * 100, 2) if total_spend > 0 else 0.0,
-                "credit_limit": None,
-                "open_debt": 0,
-            })
+        accounts = _build_snapchat_account_summaries(
+            rows,
+            accounts_meta,
+            month_start=start,
+            today=end,
+        )
         return {
             "month_start": start,
+            "today": end,
             "accounts": accounts,
             "source": SNAP_FACTS,
+            "source_contract": {
+                "grain": "one independent card per selected Snapchat ad account",
+                "identity": "ad_account_id",
+                "metrics": "provider ad-account Riyadh-day facts only",
+                "cross_account_allocation": False,
+            },
             "source_only": True,
         }
 

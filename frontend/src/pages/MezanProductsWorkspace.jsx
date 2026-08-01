@@ -14,14 +14,20 @@ import {
     listWorkspaceProducts, previewMissingSkus, refreshProductV2Details,
     saveProductV2Costs, syncProductsV2,
 } from "../services/mezanProductsV2";
+import {
+    resolveInitialProductsView,
+    resolveInitialSelectedProduct,
+} from "../lib/mezanV2CostLinks";
 
 const STATUS_FILTERS = [["", "كل المنتجات"], ["active", "منتجات للبيع"], ["inactive", "منتجات مخفية"], ["out_of_stock", "منتجات نفدت"]];
 const SELECTED_PRODUCT_KEY = "mezan.products-v2.selected-product";
 
 function initialSelectedProduct() {
     if (typeof window === "undefined") return "";
-    const fromUrl = new URLSearchParams(window.location.search).get("product");
-    return fromUrl || window.localStorage.getItem(SELECTED_PRODUCT_KEY) || "";
+    return resolveInitialSelectedProduct(
+        window.location.search,
+        window.localStorage.getItem(SELECTED_PRODUCT_KEY) || "",
+    );
 }
 
 function initialMissingCostFilter() {
@@ -32,9 +38,24 @@ function initialMissingCostFilter() {
 }
 
 function initialMissingCostRange() {
-    if (typeof window === "undefined") return { from: "", to: "" };
+    if (typeof window === "undefined") {
+        return { from: "", to: "", paymentMethods: "", shippingCompanies: "" };
+    }
     const params = new URLSearchParams(window.location.search);
-    return { from: params.get("from") || "", to: params.get("to") || "" };
+    return {
+        from: params.get("from") || "",
+        to: params.get("to") || "",
+        paymentMethods: params.get("payment_methods") || "",
+        shippingCompanies: params.get("shipping_companies") || "",
+    };
+}
+
+function initialMobileView() {
+    if (typeof window === "undefined") return "list";
+    return resolveInitialProductsView(
+        window.location.search,
+        window.localStorage.getItem(SELECTED_PRODUCT_KEY) || "",
+    );
 }
 
 function initialCostFocus() {
@@ -104,7 +125,7 @@ export default function MezanProductsWorkspace() {
     const [skuPreview, setSkuPreview] = useState(null);
     const [skuBusy, setSkuBusy] = useState(false);
     const [error, setError] = useState("");
-    const [mobileView, setMobileView] = useState(() => initialSelectedProduct() ? "detail" : "list");
+    const [mobileView, setMobileView] = useState(initialMobileView);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
     const load = useCallback(async ({ page = 1, search = appliedQuery } = {}) => {
@@ -122,6 +143,8 @@ export default function MezanProductsWorkspace() {
                     soldOnly: missingMezanCost,
                     fromDate: missingCostRange.from,
                     toDate: missingCostRange.to,
+                    paymentMethods: missingCostRange.paymentMethods,
+                    shippingCompanies: missingCostRange.shippingCompanies,
                 }),
                 getProductsV2Summary(),
             ]);
@@ -138,7 +161,7 @@ export default function MezanProductsWorkspace() {
             const detail = err?.response?.data?.detail;
             setError((typeof detail === "string" ? detail : detail?.message) || err?.message || "تعذّر تحميل المنتجات.");
         } finally { setLoading(false); }
-    }, [appliedQuery, missingCostRange.from, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
+    }, [appliedQuery, missingCostRange.from, missingCostRange.paymentMethods, missingCostRange.shippingCompanies, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
 
     const loadSelected = useCallback(async () => {
         if (!selectedId) return;

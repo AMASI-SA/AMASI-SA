@@ -138,6 +138,8 @@ async def _sold_missing_mezan_cost_products(
     *,
     from_date: str,
     to_date: str,
+    payment_methods: list[str] | None = None,
+    shipping_companies: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Return sold V2 products whose sold lines lack an explicit Mezan cost."""
     products = await db[PRODUCTS].find(
@@ -198,13 +200,23 @@ async def _sold_missing_mezan_cost_products(
         order_query["order_date_inferred"] = {"$ne": True}
     orders = await db["unified_orders"].find(
         order_query,
-        {"_id": 0, "order_status": 1, "products": 1},
+        {
+            "_id": 0,
+            "order_status": 1,
+            "payment_method": 1,
+            "shipping_company": 1,
+            "products": 1,
+        },
     ).to_list(length=100000)
     included_statuses = settings.get("report_included_statuses") or []
 
     missing: dict[str, dict[str, Any]] = {}
     for order in orders:
-        if not _matches_any(order.get("order_status", ""), included_statuses):
+        if (
+            not _matches_any(order.get("order_status", ""), included_statuses)
+            or not _matches_any(order.get("payment_method", ""), payment_methods or [])
+            or not _matches_any(order.get("shipping_company", ""), shipping_companies or [])
+        ):
             continue
         for item in order.get("products") or []:
             if not isinstance(item, dict):
@@ -271,6 +283,8 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
         sold_only: bool = Query(default=False),
         from_date: str | None = Query(default=None, alias="from"),
         to_date: str | None = Query(default=None, alias="to"),
+        payment_methods: str | None = Query(default=None),
+        shipping_companies: str | None = Query(default=None),
     ) -> dict[str, Any]:
         await ensure_product_v2_indexes(db)
         user_id = str(user["id"])
@@ -286,11 +300,19 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
             today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh")).date()
             effective_from = effective_from or today.replace(day=1).isoformat()
             effective_to = effective_to or today.isoformat()
+            payment_method_list = [
+                part.strip() for part in (payment_methods or "").split(",") if part.strip()
+            ]
+            shipping_company_list = [
+                part.strip() for part in (shipping_companies or "").split(",") if part.strip()
+            ]
             missing_cost_rows = await _sold_missing_mezan_cost_products(
                 db,
                 user_id,
                 from_date=effective_from,
                 to_date=effective_to,
+                payment_methods=payment_method_list,
+                shipping_companies=shipping_company_list,
             )
             query["salla_product_id"] = {"$in": list(missing_cost_rows)}
         if q and q.strip():
@@ -345,6 +367,9 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "sold_only": sold_only,
                 "from": effective_from,
                 "to": effective_to,
+                "payment_methods": payment_methods,
+                "shipping_companies": shipping_companies,
+                "matched_sold_products": len(missing_cost_rows),
             },
         }
 
