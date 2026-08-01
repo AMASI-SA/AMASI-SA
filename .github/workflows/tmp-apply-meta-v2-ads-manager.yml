@@ -27,9 +27,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Align deterministic patch with current source shape
+      - name: Apply, verify, and persist outcome
         run: |
-          python - <<'PY'
+          set +e
+
+          python - <<'PY' >/tmp/align.log 2>&1
           from pathlib import Path
 
           path = Path('scripts/tmp_apply_meta_v2_ads_manager.py')
@@ -56,30 +58,44 @@ jobs:
               raise SystemExit('Temporary patch source-count guard is missing')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
+          ALIGN_STATUS=$?
 
-      - name: Apply reviewed Meta V2 source patch
-        run: python scripts/tmp_apply_meta_v2_ads_manager.py
+          PATCH_STATUS=99
+          COMPILE_STATUS=99
+          INSTALL_STATUS=99
+          TEST_STATUS=99
+          AST_STATUS=99
 
-      - name: Compile changed backend files
-        run: |
-          python -m py_compile \
-            backend/ads_manager/service.py \
-            backend/tests/test_unified_ads_manager_phase1.py
+          if [ "$ALIGN_STATUS" -eq 0 ]; then
+            python scripts/tmp_apply_meta_v2_ads_manager.py >/tmp/patch.log 2>&1
+            PATCH_STATUS=$?
+          fi
 
-      - name: Install targeted test dependencies
-        run: |
-          python -m pip install --disable-pip-version-check -q \
-            pytest pytest-asyncio fastapi httpx pydantic
+          if [ "$PATCH_STATUS" -eq 0 ]; then
+            python -m py_compile \
+              backend/ads_manager/service.py \
+              backend/tests/test_unified_ads_manager_phase1.py \
+              >/tmp/compile.log 2>&1
+            COMPILE_STATUS=$?
+          fi
 
-      - name: Run Ads Manager safety suite
-        env:
-          PYTHONPATH: backend
-          MEZAN_ADS_MANAGER_READ_ONLY_ENABLED: 'true'
-        run: pytest -q backend/tests/test_unified_ads_manager_phase1.py
+          if [ "$COMPILE_STATUS" -eq 0 ]; then
+            python -m pip install --disable-pip-version-check -q \
+              pytest pytest-asyncio fastapi httpx pydantic \
+              >/tmp/install.log 2>&1
+            INSTALL_STATUS=$?
+          fi
 
-      - name: Enforce read-only AST guard
-        run: |
-          python - <<'PY'
+          if [ "$INSTALL_STATUS" -eq 0 ]; then
+            PYTHONPATH=backend \
+            MEZAN_ADS_MANAGER_READ_ONLY_ENABLED=true \
+            pytest -q backend/tests/test_unified_ads_manager_phase1.py \
+              >/tmp/tests.log 2>&1
+            TEST_STATUS=$?
+          fi
+
+          if [ "$TEST_STATUS" -eq 0 ]; then
+            python - <<'PY' >/tmp/ast.log 2>&1
           import ast
           from pathlib import Path
 
@@ -97,17 +113,48 @@ jobs:
               raise SystemExit(f'Forbidden Ads Manager operations: {found}')
           print('ADS_MANAGER_META_V2_READ_ONLY_GUARD_OK')
           PY
+            AST_STATUS=$?
+          fi
 
-      - name: Commit verified implementation
-        run: |
+          mkdir -p scripts
+          {
+            echo "ALIGN_STATUS=$ALIGN_STATUS"
+            echo "PATCH_STATUS=$PATCH_STATUS"
+            echo "COMPILE_STATUS=$COMPILE_STATUS"
+            echo "INSTALL_STATUS=$INSTALL_STATUS"
+            echo "TEST_STATUS=$TEST_STATUS"
+            echo "AST_STATUS=$AST_STATUS"
+            echo
+            for log in align patch compile install tests ast; do
+              echo "=== $log ==="
+              if [ -f "/tmp/$log.log" ]; then
+                tail -n 80 "/tmp/$log.log"
+              else
+                echo "not_run"
+              fi
+              echo
+            done
+          } > scripts/tmp_meta_v2_status.txt
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend/ads_manager/service.py \
-                  backend/tests/test_unified_ads_manager_phase1.py
-          git diff --cached --check
-          if git diff --cached --quiet; then
-            echo 'META_V2_ADS_MANAGER_FIX_ALREADY_PRESENT'
-            exit 0
+
+          if [ "$ALIGN_STATUS" -eq 0 ] \
+            && [ "$PATCH_STATUS" -eq 0 ] \
+            && [ "$COMPILE_STATUS" -eq 0 ] \
+            && [ "$INSTALL_STATUS" -eq 0 ] \
+            && [ "$TEST_STATUS" -eq 0 ] \
+            && [ "$AST_STATUS" -eq 0 ]; then
+            git add backend/ads_manager/service.py \
+                    backend/tests/test_unified_ads_manager_phase1.py
+            git diff --cached --check
+            git commit -m 'fix(ads): read authoritative Meta V2 performance source'
+          else
+            git restore backend/ads_manager/service.py \
+                        backend/tests/test_unified_ads_manager_phase1.py
+            git add scripts/tmp_meta_v2_status.txt
+            git commit -m 'ci: record Meta V2 source verification failure'
           fi
-          git commit -m 'fix(ads): read authoritative Meta V2 performance source'
+
           git push origin HEAD:fix/ads-manager-meta-v2-source
+          exit 0
