@@ -7,11 +7,11 @@ import {
   reviewOrderNumberFromHeading,
 } from "./reviewAutoAdvance";
 
-function addPendingRow(orderNumber) {
+function addPendingRow(orderNumber, section = document.body) {
   const button = document.createElement("button");
   button.type = "button";
   button.innerHTML = `<span dir="ltr">#${orderNumber}</span>`;
-  document.body.appendChild(button);
+  section.appendChild(button);
   return button;
 }
 
@@ -46,6 +46,24 @@ test("reads the active drawer and pending rows without matching unrelated button
   expect(reviewOrderNumberFromHeading()).toBe("100");
   expect(pendingReviewOrderRows().map((row) => row.orderNumber))
     .toEqual(["100", "99"]);
+});
+
+test("ignores rows hidden by the inactive review queue tab", () => {
+  const pending = document.createElement("section");
+  pending.dataset.reviewQueueSection = "pending";
+  document.body.appendChild(pending);
+  addPendingRow("100", pending);
+  const waiting = addPendingRow("99", pending);
+  waiting.dataset.reviewQueueHidden = "true";
+
+  const customer = document.createElement("section");
+  customer.dataset.reviewQueueSection = "customer";
+  customer.hidden = true;
+  document.body.appendChild(customer);
+  addPendingRow("88", customer);
+
+  expect(pendingReviewOrderRows().map((row) => row.orderNumber))
+    .toEqual(["100"]);
 });
 
 test("successful completion removes current row and opens the following order", () => {
