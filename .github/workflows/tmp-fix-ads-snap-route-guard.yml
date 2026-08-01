@@ -1,6 +1,9 @@
 name: Apply Ads Snapchat Route Guard Fix
 
 on:
+  push:
+    branches:
+      - fix/ads-manager-snap-route-guard-baseline
   pull_request:
     branches:
       - main
@@ -9,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ads-snap-route-guard-${{ github.event.pull_request.number }}
+  group: ads-snap-route-guard-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
