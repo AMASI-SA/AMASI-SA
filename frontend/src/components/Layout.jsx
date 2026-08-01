@@ -21,6 +21,8 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
+import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
+import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement";
 import GoogleAdsAllPlatformsCard from "./GoogleAdsAllPlatformsCard";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
@@ -163,6 +165,9 @@ export default function Layout({ children }) {
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
     const isMarketingPlatform = location.pathname === "/ads-manager"
         && isMarketingPlatformProvider(marketingProvider);
+    const isLegacyDashboard = location.pathname === "/legacy-dashboard";
+    const isMezanV2Dashboard = location.pathname === "/dashboard-v2";
+    const showsDashboardAnalytics = isLegacyDashboard || isMezanV2Dashboard;
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />
         : isProductIntake
@@ -287,6 +292,8 @@ export default function Layout({ children }) {
                         />
                     )}
                     {pageContent}
+                    <DashboardAnalyticsPlacement active={showsDashboardAnalytics} />
+                    <DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics} />
                 </div>
             </main>
             <Toaster richColors position="top-center" />
