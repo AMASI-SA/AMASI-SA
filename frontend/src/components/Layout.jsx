@@ -160,7 +160,7 @@ export default function Layout({ children }) {
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";
     const isStoreAccess = location.pathname === "/products-v2" && workspace === "access";
-    const isMarketingPlatform = location.pathname === "/integrations-v2"
+    const isMarketingPlatform = location.pathname === "/ads-manager"
         && isMarketingPlatformProvider(marketingProvider);
     const pageContent = isWarehouseV2
         ? <WarehouseHierarchyWorkspace />

@@ -10,6 +10,8 @@ on:
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
       - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
       - "frontend/src/pages/MarketingPlatformWorkspace.test.jsx"
+      - "frontend/src/services/marketingPerformance.js"
+      - "frontend/src/services/marketingPerformance.test.js"
       - ".github/workflows/mezan-v2-navigation-shell.yml"
 
 jobs:
@@ -32,13 +34,14 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --non-interactive
 
-      - name: Test navigation shell contract
+      - name: Test navigation and marketing contracts
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/MezanV2NavigationShell.test.jsx
           src/pages/MarketingPlatformWorkspace.test.jsx
+          src/services/marketingPerformance.test.js
 
       - name: Build frontend
         env:
@@ -51,13 +54,17 @@ jobs:
           SHELL=frontend/src/components/MezanV2NavigationShell.jsx
           LAYOUT=frontend/src/components/Layout.jsx
           PLATFORM=frontend/src/pages/MarketingPlatformWorkspace.jsx
+          SERVICE=frontend/src/services/marketingPerformance.js
 
           grep -q 'data-testid="mezan-v2-navigation-shell"' "$SHELL"
           grep -q 'data-testid="mezan-v2-open-all"' "$SHELL"
-          grep -q 'provider=google_ads' "$SHELL"
+          grep -q 'provider=google' "$SHELL"
+          ! grep -q 'provider=google_ads' "$SHELL"
           grep -q 'workspace=access' "$SHELL"
           grep -q 'isMezanV2Route' "$LAYOUT"
           grep -q 'isMarketingPlatformProvider' "$LAYOUT"
           grep -q 'data-testid="marketing-platform-workspace"' "$PLATFORM"
+          grep -q '/integrations-v2/snapchat_ads/campaign-report' "$SERVICE"
+          grep -q 'campaign_creation_enabled: false' "$SERVICE"
           grep -q 'legacyMenuOpen &&' "$LAYOUT"
           ! grep -q 'lg:ps-64' "$LAYOUT"

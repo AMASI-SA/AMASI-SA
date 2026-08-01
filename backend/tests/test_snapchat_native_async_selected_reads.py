@@ -7,11 +7,14 @@ import pytest
 
 from integrations_control_center import snapchat_native_async_routes as async_routes
 from integrations_control_center.snapchat_native_data_common import (
+    ATTRIBUTION_MODEL,
+    SNAPCHAT_ENTITY_COLLECTION,
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SnapchatNativeSyncError,
     SnapchatNativeSyncInput,
 )
 from integrations_control_center.snapchat_native_selected_reads import (
+    selected_snapchat_campaign_report,
     selected_snapchat_performance_summary,
 )
 
@@ -182,6 +185,7 @@ def _db():
             ],
             "mezan_integration_sync_runs_v2": [],
             SNAPCHAT_PERFORMANCE_COLLECTION: [],
+            SNAPCHAT_ENTITY_COLLECTION: [],
         }
     )
 
@@ -256,6 +260,133 @@ async def test_selected_summary_excludes_unselected_historical_rows():
     assert result["unselected_rows_excluded"] == 1
     assert result["spend_sar"] == 57.5
     assert result["purchase_value_sar"] == 230.0
+    assert result["accounting_write_reached"] is False
+    assert result["qoyod_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_selected_campaign_report_aggregates_verified_campaign_metrics():
+    db = _db()
+    db.rows[SNAPCHAT_PERFORMANCE_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "sar-second",
+            "entity_type": "campaign",
+            "external_id": "campaign-a",
+            "campaign_id": "campaign-a",
+            "date": "2026-07-30",
+            "currency": "SAR",
+            "attribution_model": ATTRIBUTION_MODEL,
+            "metrics": {
+                "conversion_purchases": 4,
+                "impressions": 1000,
+                "swipes": 50,
+                "video_views": 700,
+            },
+            "spend_sar": 100,
+            "purchase_value_sar": 400,
+            "updated_at": "2026-07-30T19:50:00+00:00",
+        },
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "sar-second",
+            "entity_type": "campaign",
+            "external_id": "campaign-b",
+            "campaign_id": "campaign-b",
+            "date": "2026-07-30",
+            "currency": "SAR",
+            "attribution_model": ATTRIBUTION_MODEL,
+            "metrics": {
+                "conversion_purchases": 1,
+                "impressions": 500,
+                "swipes": 20,
+                "video_views": 300,
+            },
+            "spend_sar": 50,
+            "purchase_value_sar": 100,
+            "updated_at": "2026-07-30T19:50:00+00:00",
+        },
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "old-account",
+            "entity_type": "campaign",
+            "external_id": "excluded-campaign",
+            "campaign_id": "excluded-campaign",
+            "date": "2026-07-30",
+            "currency": "USD",
+            "attribution_model": ATTRIBUTION_MODEL,
+            "metrics": {
+                "conversion_purchases": 99,
+                "impressions": 9999,
+                "swipes": 999,
+            },
+            "spend_sar": 9999,
+            "purchase_value_sar": 99999,
+        },
+    ]
+    db.rows[SNAPCHAT_ENTITY_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "sar-second",
+            "entity_type": "campaign",
+            "external_id": "campaign-a",
+            "campaign_id": "campaign-a",
+            "display_name": "حملة أغسطس الرئيسية",
+            "status": "ACTIVE",
+            "delivery_status": "ACTIVE",
+            "objective": "WEB_CONVERSIONS",
+            "daily_budget_micro": 700_000_000,
+            "last_observed_at": "2026-07-30T19:50:00+00:00",
+        },
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "sar-second",
+            "entity_type": "campaign",
+            "external_id": "campaign-b",
+            "campaign_id": "campaign-b",
+            "display_name": "حملة إعادة الاستهداف",
+            "status": "ACTIVE",
+            "delivery_status": "ACTIVE",
+            "objective": "WEB_CONVERSIONS",
+            "daily_budget_micro": 300_000_000,
+            "last_observed_at": "2026-07-30T19:50:00+00:00",
+        },
+    ]
+
+    result = await selected_snapchat_campaign_report(
+        db,
+        "owner-1",
+        from_date="2026-07-30",
+        to_date="2026-07-30",
+        now=lambda: datetime(
+            2026, 7, 30, 20, 0, tzinfo=timezone.utc
+        ),
+    )
+
+    assert result["totals"]["spend_sar"] == 150
+    assert result["totals"]["sales_sar"] == 500
+    assert result["totals"]["orders"] == 5
+    assert result["totals"]["roas"] == 3.33
+    assert result["totals"]["cpa_sar"] == 30
+    assert result["totals"]["ctr_pct"] == 4.67
+    assert result["campaign_pagination"]["total"] == 2
+    assert result["campaigns"][0]["campaign_name"] == "حملة أغسطس الرئيسية"
+    assert result["campaigns"][0]["budget"]["daily_native"] == 700
+    assert result["source"]["selected_account_ids"] == [
+        "sar-second",
+        "usd-main",
+    ]
+    assert result["source"]["identity_coverage_pct"] == 100
+    assert result["ai_readiness"]["ai_analysis_ready"] is True
+    assert result["ai_readiness"]["campaign_creation_enabled"] is False
+    assert result["ai_readiness"]["campaign_management_enabled"] is False
+    assert result["provider_network_called"] is False
+    assert result["campaign_write_reached"] is False
     assert result["accounting_write_reached"] is False
     assert result["qoyod_write_reached"] is False
 
