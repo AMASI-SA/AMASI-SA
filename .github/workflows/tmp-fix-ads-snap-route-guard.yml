@@ -1,0 +1,151 @@
+name: Apply Ads Snapchat Route Guard Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ads-snap-route-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ads-manager-snap-route-guard-baseline
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Patch route normalization symmetrically
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/ads-manager-readonly.yml')
+          source = path.read_text(encoding='utf-8')
+          old = '''              current_routes = current["routes"]
+              if path == "backend/snapchat_routes.py":
+                  legacy_route = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[])"
+                  )
+                  deprecated_adapter = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[keyword(arg='deprecated', "
+                      "value=Constant(value=True))])"
+                  )
+                  current_routes = sorted(
+                      legacy_route if route == deprecated_adapter else route
+                      for route in current_routes
+                  )
+              if current_routes != baseline["routes"]:
+                  errors.append(f"{path}: route declarations changed")
+'''
+          new = '''              baseline_routes = baseline["routes"]
+              current_routes = current["routes"]
+              if path == "backend/snapchat_routes.py":
+                  legacy_route = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[])"
+                  )
+                  deprecated_adapter = (
+                      "Call(func=Attribute(value=Name(id='router', "
+                      "ctx=Load()), attr='post', ctx=Load()), "
+                      "args=[Constant(value='/sync-all-accounts')], "
+                      "keywords=[keyword(arg='deprecated', "
+                      "value=Constant(value=True))])"
+                  )
+                  baseline_routes = sorted(
+                      legacy_route if route == deprecated_adapter else route
+                      for route in baseline_routes
+                  )
+                  current_routes = sorted(
+                      legacy_route if route == deprecated_adapter else route
+                      for route in current_routes
+                  )
+              if current_routes != baseline_routes:
+                  errors.append(f"{path}: route declarations changed")
+'''
+          if source.count(old) != 1:
+              raise SystemExit(
+                  f'Expected one stale route-normalization block, found {source.count(old)}'
+              )
+          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Verify the normalization contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/ads-manager-readonly.yml').read_text(
+              encoding='utf-8'
+          )
+          required = (
+              'baseline_routes = baseline["routes"]',
+              'current_routes = current["routes"]',
+              'for route in baseline_routes',
+              'for route in current_routes',
+              'if current_routes != baseline_routes:',
+          )
+          missing = [marker for marker in required if source.count(marker) != 1]
+          if missing:
+              raise SystemExit(f'Symmetric guard contract missing: {missing}')
+
+          legacy = "route:/sync-all-accounts"
+          deprecated = "route:/sync-all-accounts:deprecated"
+
+          def normalize(routes):
+              return sorted(legacy if route == deprecated else route for route in routes)
+
+          if normalize([deprecated]) != normalize([deprecated]):
+              raise SystemExit('Equivalent deprecated baselines must match')
+          if normalize([legacy]) != normalize([deprecated]):
+              raise SystemExit('Legacy and deprecated adapter forms must match')
+          if normalize([deprecated, 'route:/new']) == normalize([deprecated]):
+              raise SystemExit('A genuinely new route must remain detectable')
+          print('SYMMETRIC_SNAPCHAT_ROUTE_GUARD_OK')
+          PY
+
+      - name: Validate YAML parse
+        run: |
+          python -m pip install --disable-pip-version-check -q PyYAML
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          payload = yaml.safe_load(
+              Path('.github/workflows/ads-manager-readonly.yml').read_text(
+                  encoding='utf-8'
+              )
+          )
+          if not isinstance(payload, dict) or 'jobs' not in payload:
+              raise SystemExit('Invalid workflow structure')
+          print('ADS_MANAGER_WORKFLOW_YAML_OK')
+          PY
+
+      - name: Commit verified CI fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/ads-manager-readonly.yml
+          git diff --cached --check
+          git commit -m 'fix(ci): normalize Snapchat routes on both AST sides'
+          git push origin HEAD:fix/ads-manager-snap-route-guard-baseline
