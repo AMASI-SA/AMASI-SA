@@ -27,6 +27,8 @@ describe("public legal pages", () => {
         expect(markup).toContain("Snapchat Conversions API");
         expect(markup).toContain("SHA-256");
         expect(markup).toContain("لا يرسل ميزان عنوان IP أو User-Agent");
+        expect(markup).toContain("آخر تحديث: 1 أغسطس 2026");
+        expect(markup).toContain("Last updated: 1 August 2026");
         expect(markup).not.toContain("تسجيل الدخول مطلوب");
     });
 
