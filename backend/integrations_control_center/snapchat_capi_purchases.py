@@ -4,9 +4,10 @@ Consent and safety contract
 ---------------------------
 This module is disabled unless ``MEZAN_SNAPCHAT_CAPI_ENABLED=true`` is set in
 Production.  When enabled it sends website PURCHASE events to one canonical
-Snap Pixel.  Plaintext customer identifiers are never stored in the CAPI
-outbox: email, phone, city, country and external identifiers are normalised and
-SHA-256 hashed before persistence.
+Snap Pixel.  Plaintext customer contact data is never stored in the CAPI outbox:
+email, phone, city, country, postal code and external identifiers are normalised
+and SHA-256 hashed before persistence.  IP address and User-Agent are deliberately
+excluded.  Snap click/cookie attribution IDs are sent only when already present.
 
 The Salla webhook only enqueues an idempotent event.  A server-side worker owns
 provider delivery, retries and seven-day backfill, so Salla acknowledgement and
@@ -398,25 +399,15 @@ def build_snapchat_purchase_event(
         or order.get("customer_mobile"),
         country=country_raw,
     )
-    client_ip = _text(
-        _walk_key(raw_order, {"client_ip_address", "client_ip", "ip_address", "ip"})
-    )
-    user_agent = _text(
-        _walk_key(raw_order, {"client_user_agent", "user_agent", "useragent"})
-    )
-
     user_data: dict[str, Any] = {}
     if email:
         user_data["em"] = _sha256(email)
     if phone:
         user_data["ph"] = _sha256(phone)
-    if client_ip and user_agent:
-        user_data["client_ip_address"] = client_ip[:64]
-        user_data["client_user_agent"] = user_agent[:1000]
 
-    # Snap requires at least one primary match signal.  external_id alone is
-    # supplemental, so fail closed rather than sending an unmatchable event.
-    if not any(key in user_data for key in ("em", "ph", "client_ip_address")):
+    # Data-minimised consent: require a hashed contact signal and deliberately
+    # avoid storing or sending IP address and User-Agent.
+    if not any(key in user_data for key in ("em", "ph")):
         return None
 
     click_id = _click_id(raw_order)
@@ -467,7 +458,6 @@ def build_snapchat_purchase_event(
         "event_source_url": _event_source_url(raw_order),
         "user_data": user_data,
         "custom_data": custom_data,
-        "integration": "mezan_os",
     }
     return event
 
@@ -533,19 +523,40 @@ async def enqueue_snapchat_purchase_event(
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
     }
+    inserted = False
     try:
         result = await _collection(db, OUTBOX_COLLECTION).update_one(
             {"user_id": str(user_id), "event_id": event_id},
             {"$setOnInsert": document},
             upsert=True,
         )
+        inserted = bool(result and result.upserted_id is not None)
     except DuplicateKeyError:
-        result = None
+        inserted = False
+
+    enriched = False
+    if not inserted:
+        # Repeated Salla order updates may contain a richer phone, email or
+        # ScCid.  Improve only an unsent event; never reopen a sent purchase.
+        update = await _collection(db, OUTBOX_COLLECTION).update_one(
+            {
+                "user_id": str(user_id),
+                "event_id": event_id,
+                "status": {"$in": ["pending", "retry"]},
+            },
+            {"$set": {
+                "payload": event,
+                "payload_fingerprint": _payload_fingerprint(event),
+                "updated_at": current,
+            }},
+        )
+        enriched = bool(getattr(update, "matched_count", 0))
     return {
-        "queued": bool(result and result.upserted_id is not None),
-        "duplicate": not bool(result and result.upserted_id is not None),
+        "queued": inserted,
+        "duplicate": not inserted,
+        "enriched_pending_event": enriched,
         "event_id": event_id,
-        "contains_plaintext_pii": False,
+        "plaintext_customer_contact_stored": False,
     }
 
 
@@ -558,7 +569,9 @@ async def _resolve_salla_user_id(db: Any, merchant_id: Any) -> str | None:
             values.append(int(text))
         except (TypeError, ValueError, OverflowError):
             pass
-    query = {"store_id": {"$in": values}} if values else {}
+    if not values:
+        return None
+    query = {"store_id": {"$in": values}}
     row = await _collection(db, "salla_integrations").find_one(
         query,
         {"_id": 0, "user_id": 1},
@@ -725,8 +738,8 @@ def _safe_provider_summary(payload: Any) -> dict[str, Any]:
         return {}
     result: dict[str, Any] = {}
     for key in (
-        "request_status", "events_received", "events_processed", "event_id",
-        "message", "error", "errors",
+        "status", "reason", "request_status", "events_received",
+        "events_processed", "event_id", "message", "error", "errors",
     ):
         value = payload.get(key)
         if value not in (None, "", [], {}):
@@ -888,8 +901,13 @@ async def drain_snapchat_capi_outbox(
                 except (TypeError, ValueError):
                     provider_payload = {}
                 summary = _safe_provider_summary(provider_payload)
-                request_status = str(summary.get("request_status") or "").upper()
-                provider_failed = "FAIL" in request_status or "ERROR" in request_status
+                provider_status = str(
+                    summary.get("status") or summary.get("request_status") or ""
+                ).upper()
+                provider_failed = any(
+                    token in provider_status
+                    for token in ("FAIL", "ERROR", "INVALID", "REJECT")
+                )
                 if 200 <= response.status_code < 300 and not provider_failed:
                     await _complete_event(
                         db,
@@ -963,7 +981,7 @@ async def run_snapchat_capi_cycle(
         "enqueued": enqueued,
         "delivery": delivered,
         "source_mode": SOURCE_MODE,
-        "contains_plaintext_pii": False,
+        "plaintext_customer_contact_stored": False,
         "provider_write_authorized": True,
         "campaign_write_reached": False,
         "accounting_write_reached": False,
@@ -1000,7 +1018,8 @@ async def snapchat_capi_status(db: Any, user_id: str) -> dict[str, Any]:
         "data_shared": {
             "event": ["PURCHASE", "event_time", "event_id", "order_id", "value", "currency", "contents"],
             "hashed_only": ["email", "phone", "city", "country", "postal_code", "external_id"],
-            "plain_when_available": ["sc_click_id", "sc_cookie1", "client_ip_address", "client_user_agent"],
+            "unhashed_attribution_signals_when_available": ["sc_click_id", "sc_cookie1"],
+            "excluded": ["client_ip_address", "client_user_agent"],
             "plaintext_customer_contact_stored_in_outbox": False,
         },
         "source_mode": SOURCE_MODE,
