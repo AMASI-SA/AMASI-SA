@@ -14,6 +14,7 @@ jest.mock("sonner", () => ({
 import {
     formatSaudiMobileInternational,
     shouldLoadCustomerHistory,
+    shouldShowCustomerHistory,
 } from "../reviewCustomerHistoryFast";
 import { PaymentReceiptCard, reviewProductSpecs } from "./OrderReview";
 
@@ -59,8 +60,17 @@ test("Saudi customer mobile is shown in international WhatsApp format", () => {
 });
 
 
-test("customer history reloads when the same order is reopened without its card", () => {
-    expect(shouldLoadCustomerHistory("272897129", "272897129", false, false)).toBe(true);
-    expect(shouldLoadCustomerHistory("272897129", "272897129", false, true)).toBe(false);
-    expect(shouldLoadCustomerHistory("272897129", "272897129", true, false)).toBe(false);
+test("customer history card is shown only when previous orders exist", () => {
+    expect(shouldShowCustomerHistory(undefined)).toBe(false);
+    expect(shouldShowCustomerHistory([])).toBe(false);
+    expect(shouldShowCustomerHistory([{ order_number: "272897129" }])).toBe(true);
+});
+
+
+test("customer history reloads on reopen only when a previous history card is expected", () => {
+    expect(shouldLoadCustomerHistory("272897129", "272897129", false, false, true)).toBe(true);
+    expect(shouldLoadCustomerHistory("272897129", "272897129", false, true, true)).toBe(false);
+    expect(shouldLoadCustomerHistory("272897129", "272897129", true, false, true)).toBe(false);
+    expect(shouldLoadCustomerHistory("272897129", "272897129", false, false, false)).toBe(false);
+    expect(shouldLoadCustomerHistory("272897130", "272897129", false, false, false)).toBe(true);
 });
