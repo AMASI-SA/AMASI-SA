@@ -6,6 +6,7 @@ on:
       - "backend/order_review_routes.py"
       - "backend/order_review_image_modes.py"
       - "backend/order_review_export_controls.py"
+      - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -14,6 +15,7 @@ on:
       - "backend/order_engine/salla_refresh.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
+      - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
@@ -27,6 +29,8 @@ on:
       - "frontend/src/reviewMezanImageEnhancer.test.js"
       - "frontend/src/reviewExportControlsEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.test.js"
+      - "frontend/src/reviewSpecReplacementEnhancer.js"
+      - "frontend/src/reviewSpecReplacementEnhancer.test.js"
       - "frontend/src/reviewCompactActionLabels.js"
       - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -46,6 +50,7 @@ on:
       - "backend/order_review_routes.py"
       - "backend/order_review_image_modes.py"
       - "backend/order_review_export_controls.py"
+      - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -54,6 +59,7 @@ on:
       - "backend/order_engine/salla_refresh.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
+      - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
@@ -67,6 +73,8 @@ on:
       - "frontend/src/reviewMezanImageEnhancer.test.js"
       - "frontend/src/reviewExportControlsEnhancer.js"
       - "frontend/src/reviewExportControlsEnhancer.test.js"
+      - "frontend/src/reviewSpecReplacementEnhancer.js"
+      - "frontend/src/reviewSpecReplacementEnhancer.test.js"
       - "frontend/src/reviewCompactActionLabels.js"
       - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -112,6 +120,7 @@ jobs:
           python -m pytest
           tests/test_order_review_stage_one.py
           tests/test_order_review_export_controls.py
+          tests/test_order_review_spec_replacements.py
           tests/test_order_review_mezan_image_unlink.py
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
@@ -147,7 +156,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
