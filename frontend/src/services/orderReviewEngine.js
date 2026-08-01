@@ -25,6 +25,18 @@ export async function listReviewedOrderReviews({ limit = 50 } = {}) {
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها.")); }
 }
 
+export async function listReviewedProductCatalog({ limit = 500 } = {}) {
+    try {
+        const { data } = await api.get("/reviewed-products-v1/catalog", { params: { limit } });
+        return {
+            products: Array.isArray(data?.products) ? data.products : [],
+            categories: Array.isArray(data?.categories) ? data.categories : [],
+            summary: data?.summary || {},
+            truncated: Boolean(data?.truncated),
+        };
+    } catch (error) { throw new Error(message(error, "تعذّر تحميل منتجات مرحلة تمت المراجعة.")); }
+}
+
 export async function getOrderReview(orderNumber) {
     try { return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data; }
     catch (error) { throw new Error(message(error, "تعذّر تحميل بيانات المراجعة.")); }
