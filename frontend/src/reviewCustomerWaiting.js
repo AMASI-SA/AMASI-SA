@@ -19,6 +19,17 @@ let refreshTimer = null;
 
 const text = (value) => String(value || "").trim();
 
+export const WAITING_CUSTOMER_REVIEW_CSS = `
+  [data-review-customer-waiting-drawer="true"]
+    [data-testid="order-review-product-card"] button,
+  [data-review-customer-waiting-drawer="true"]
+    [data-testid="order-review-operational-item"] button,
+  [data-review-customer-waiting-drawer="true"] [data-mezan-image-tools],
+  [data-review-customer-waiting-drawer="true"] [data-review-edit-control] {
+    display:none !important;
+  }
+`;
+
 export function waitingCustomerActionLabel(isWaiting) {
   return isWaiting
     ? "إرجاع لانتظار المراجعة"
@@ -281,8 +292,9 @@ function drawerHeader(root = document) {
 }
 
 function closeDrawer(header) {
-  const button = [...(header?.children || [])].find(
-    (node) => node.tagName === "BUTTON",
+  const button = [...(header?.children || [])].find((node) =>
+    node.tagName === "BUTTON"
+    && !node.dataset.reviewCustomerWaitingAction,
   );
   button?.click();
 }
@@ -297,18 +309,7 @@ function injectStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement("style");
   style.id = STYLE_ID;
-  style.textContent = `
-    [data-review-customer-waiting-drawer="true"]
-      [data-testid="order-review-product-card"] button,
-    [data-review-customer-waiting-drawer="true"]
-      [data-testid="order-review-operational-item"] button,
-    [data-review-customer-waiting-drawer="true"] [data-mezan-image-tools],
-    [data-review-customer-waiting-drawer="true"] [data-review-edit-control],
-    [data-review-customer-waiting-drawer="true"]
-      [data-review-customer-complete-action] {
-      display:none !important;
-    }
-  `;
+  style.textContent = WAITING_CUSTOMER_REVIEW_CSS;
   document.head.appendChild(style);
 }
 
@@ -409,7 +410,13 @@ function decorateDrawer(root = document) {
     drawer.dataset.reviewCustomerWaitingDrawer = waiting ? "true" : "false";
   }
   const complete = completeReviewButton(root);
-  if (complete) complete.dataset.reviewCustomerCompleteAction = "1";
+  if (complete) {
+    complete.dataset.reviewCustomerCompleteAction = "1";
+    complete.hidden = false;
+    complete.title = waiting
+      ? "اعتماد الطلب مباشرة بعد اكتمال مراجعة العميل"
+      : "اعتماد مراجعة الطلب";
+  }
 
   const action = customerActionButton(header);
   action.textContent = waitingCustomerActionLabel(waiting);
@@ -419,6 +426,21 @@ function decorateDrawer(root = document) {
   action.disabled = false;
   action.onclick = () => handleCustomerAction(orderNumber, waiting, action);
   return action;
+}
+
+function isCompleteAction(button) {
+  return Boolean(button)
+    && text(button.textContent).replace(/\s+/g, " ").includes("تمت المراجعة");
+}
+
+function captureWaitingCompletion(event) {
+  const button = event.target?.closest?.("button");
+  if (!isCompleteAction(button)) return;
+  const drawer = button.closest("section");
+  if (drawer?.dataset.reviewCustomerWaitingDrawer !== "true") return;
+  [450, 1000, 2000, 4000, 7000].forEach((delay) => {
+    window.setTimeout(loadWaiting, delay);
+  });
 }
 
 async function resumeAndOpen(item, overlay) {
@@ -536,6 +558,7 @@ function start() {
   marker.hidden = true;
   document.body.appendChild(marker);
   injectStyle();
+  document.addEventListener("click", captureWaitingCompletion, true);
   const observer = new MutationObserver(scheduleDecorate);
   observer.observe(document.body, { childList: true, subtree: true });
   loadWaiting();
