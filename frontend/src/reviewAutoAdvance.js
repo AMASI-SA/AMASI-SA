@@ -12,8 +12,19 @@ export function reviewOrderNumberFromHeading(root = document) {
   return heading?.textContent?.match(/#(\d+)/)?.[1] || "";
 }
 
+export function isVisibleReviewQueueButton(button) {
+  if (!button || button.hidden || button.disabled) return false;
+  if (button.closest('[data-review-queue-hidden="true"]')) return false;
+  const section = button.closest("[data-review-queue-section]");
+  if (section?.hidden || section?.dataset.reviewQueueHidden === "true") {
+    return false;
+  }
+  return true;
+}
+
 export function pendingReviewOrderRows(root = document) {
   return [...root.querySelectorAll("button")]
+    .filter(isVisibleReviewQueueButton)
     .map((button) => {
       const orderNumberNode = [...button.querySelectorAll("span")].find((node) =>
         /^#\d+$/.test(text(node.textContent)),
