@@ -806,6 +806,7 @@ jobs:
               baseline = snapshot(baseline_source, f"{base}:{path}")
               current = snapshot(current_source, path)
 
+              baseline_routes = baseline["routes"]
               current_routes = current["routes"]
               if path == "backend/snapchat_routes.py":
                   legacy_route = (
@@ -821,11 +822,15 @@ jobs:
                       "keywords=[keyword(arg='deprecated', "
                       "value=Constant(value=True))])"
                   )
+                  baseline_routes = sorted(
+                      legacy_route if route == deprecated_adapter else route
+                      for route in baseline_routes
+                  )
                   current_routes = sorted(
                       legacy_route if route == deprecated_adapter else route
                       for route in current_routes
                   )
-              if current_routes != baseline["routes"]:
+              if current_routes != baseline_routes:
                   errors.append(f"{path}: route declarations changed")
               unexpected_imports = (
                   current["imports"]
