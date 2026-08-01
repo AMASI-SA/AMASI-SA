@@ -92,7 +92,8 @@ const V2_LINKS = [
 function legacySpecificChildContract(location) {
     const pathname = location.pathname;
     const hasSpecificChild = V2_LINKS.some((item) => item.to.startsWith(`${pathname}?`));
-    return hasSpecificChild;
+    // Historical active-expression contract: !hasSpecificChild || !location.search
+    return hasSpecificChild && Boolean(location.search);
 }
 
 function WarehouseSidebarLink({ location, onNavigate }) {
