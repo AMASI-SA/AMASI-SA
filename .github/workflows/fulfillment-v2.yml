@@ -8,6 +8,7 @@ on:
       - "backend/order_review_export_controls.py"
       - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
+      - "backend/order_review_customer_waiting.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
@@ -19,6 +20,7 @@ on:
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
+      - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
@@ -43,6 +45,10 @@ on:
       - "frontend/src/reviewProductEditMode.test.js"
       - "frontend/src/reviewAutoAdvance.js"
       - "frontend/src/reviewAutoAdvance.test.js"
+      - "frontend/src/reviewManualNavigation.js"
+      - "frontend/src/reviewManualNavigation.test.js"
+      - "frontend/src/reviewCustomerWaiting.js"
+      - "frontend/src/reviewCustomerWaiting.test.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -64,6 +70,7 @@ on:
       - "backend/order_review_export_controls.py"
       - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
+      - "backend/order_review_customer_waiting.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/repository.py"
@@ -75,6 +82,7 @@ on:
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
+      - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
@@ -99,6 +107,10 @@ on:
       - "frontend/src/reviewProductEditMode.test.js"
       - "frontend/src/reviewAutoAdvance.js"
       - "frontend/src/reviewAutoAdvance.test.js"
+      - "frontend/src/reviewManualNavigation.js"
+      - "frontend/src/reviewManualNavigation.test.js"
+      - "frontend/src/reviewCustomerWaiting.js"
+      - "frontend/src/reviewCustomerWaiting.test.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -146,6 +158,7 @@ jobs:
           tests/test_order_review_export_controls.py
           tests/test_order_review_spec_replacements.py
           tests/test_order_review_mezan_image_unlink.py
+          tests/test_order_review_customer_waiting.py
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
           tests/test_order_engine_salla_refresh.py
@@ -183,7 +196,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
