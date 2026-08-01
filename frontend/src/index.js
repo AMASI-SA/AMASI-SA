@@ -9,6 +9,7 @@ import "@/reviewSpecReplacementEnhancer";
 import "@/reviewCompactActionLabels";
 import "@/reviewInternalPreparationRouteEnhancer";
 import "@/reviewProductEditMode";
+import "@/reviewAutoAdvance";
 import App from "@/App";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
