@@ -3,6 +3,7 @@ import { normalize_saudi_mobile } from "./lib/normalizeSaudiMobile";
 
 const ROOT_ID = "mezan-review-customer-history-fast-root";
 let activeOrder = null;
+let activeOrderHasHistory = null;
 let loading = false;
 
 const text = (value) => String(value || "").trim();
@@ -15,8 +16,21 @@ export function formatSaudiMobileInternational(value) {
   return text(value);
 }
 
-export function shouldLoadCustomerHistory(orderNumber, activeOrderNumber, loadingNow, cardPresent) {
-  return Boolean(orderNumber) && !loadingNow && (orderNumber !== activeOrderNumber || !cardPresent);
+export function shouldShowCustomerHistory(history) {
+  return Array.isArray(history) && history.length > 0;
+}
+
+export function shouldLoadCustomerHistory(
+  orderNumber,
+  activeOrderNumber,
+  loadingNow,
+  cardPresent,
+  resolvedOrderHasHistory = null,
+) {
+  if (!orderNumber || loadingNow) return false;
+  if (orderNumber !== activeOrderNumber) return true;
+  if (resolvedOrderHasHistory === false) return false;
+  return !cardPresent;
 }
 
 function syncCustomerMobile() {
@@ -78,6 +92,10 @@ function recommendation(history, currentOrder) {
   return { title: "لا توجد هدية مقترحة الآن", reason: "البيانات السابقة غير كافية.", reward: "رسالة شكر شخصية بعد اكتمال الطلب", max: 0 };
 }
 function render(currentOrder, history) {
+  if (!shouldShowCustomerHistory(history)) {
+    document.querySelector("[data-customer-history-card]")?.remove();
+    return false;
+  }
   const heading = [...document.querySelectorAll("h2,h3")].find((node) => node.textContent?.trim() === "منتجات الطلب");
   if (!heading) return false;
   let host = document.querySelector("[data-customer-history-card]");
@@ -97,7 +115,7 @@ function render(currentOrder, history) {
   const codMessage = currentCod ? (codFailed ? `تنبيه: لدى العميل ${codFailed} طلب دفع عند الاستلام سابق لم يكتمل.` : codCompleted ? `العميل استلم ${codCompleted} طلب دفع عند الاستلام سابقًا.` : "لا توجد تجربة دفع عند الاستلام مكتملة ضمن السجل المحمّل.") : "";
   const rows = history.map((order) => `<tr style="border-top:1px solid #e2e8f0"><td style="padding:9px"><a href="/orders/${encodeURIComponent(order.order_number)}" style="font-weight:900;color:#0f766e">#${order.order_number}</a></td><td style="padding:9px">${dateText(order.created_at)}</td><td style="padding:9px">${money(order?.totals?.total, order?.totals?.currency)}</td><td style="padding:9px">${text(order?.payment?.method_native || order?.payment?.method) || "—"}</td><td style="padding:9px">${statusText(order)}</td></tr>`).join("");
   host.style.cssText = "margin:14px 0;border:1px solid #cbd5e1;border-radius:18px;background:white;overflow:hidden";
-  host.innerHTML = `<div style="padding:14px 16px;background:#f8fafc"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b style="font-size:18px">سجل العميل السابق</b><div style="color:#64748b;margin-top:3px">مطابقة بالجوال الموحّد ثم البريد الإلكتروني</div></div><button data-toggle style="border:1px solid #94a3b8;background:white;border-radius:12px;padding:9px 13px;font-weight:800">${history.length} طلبات سابقة</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span>${counts.completed} مكتملة</span><span>${counts.cancelled} ملغاة</span><span>${counts.returned} مرتجعة</span><span>مشتريات مكتملة: ${money(completedSpend)}</span></div></div>${codMessage ? `<div style="padding:11px 16px;background:#fffbeb;color:#92400e;font-weight:900">${codMessage}</div>` : ""}<div style="padding:14px 16px;background:#f5f3ff"><b>${rec.title}</b><div style="margin-top:5px">${rec.reason}</div><div style="margin-top:7px"><b>الاقتراح:</b> ${rec.reward}${rec.max ? ` — تكلفة قصوى ${money(rec.max)}` : ""}</div><div style="font-size:12px;color:#6b7280;margin-top:5px">توصية فقط وتحتاج اعتمادًا بشريًا.</div></div><div data-table hidden style="overflow:auto;padding:12px"><table style="width:100%;min-width:680px;border-collapse:collapse"><thead><tr><th>رقم الطلب</th><th>التاريخ</th><th>الإجمالي</th><th>الدفع</th><th>الحالة</th></tr></thead><tbody>${rows || `<tr><td colspan="5" style="padding:18px;text-align:center">لا توجد طلبات سابقة مطابقة ضمن السجل المحمّل.</td></tr>`}</tbody></table></div>`;
+  host.innerHTML = `<div style="padding:14px 16px;background:#f8fafc"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b style="font-size:18px">سجل العميل السابق</b><div style="color:#64748b;margin-top:3px">مطابقة بالجوال الموحّد ثم البريد الإلكتروني</div></div><button data-toggle style="border:1px solid #94a3b8;background:white;border-radius:12px;padding:9px 13px;font-weight:800">${history.length} طلبات سابقة</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span>${counts.completed} مكتملة</span><span>${counts.cancelled} ملغاة</span><span>${counts.returned} مرتجعة</span><span>مشتريات مكتملة: ${money(completedSpend)}</span></div></div>${codMessage ? `<div style="padding:11px 16px;background:#fffbeb;color:#92400e;font-weight:900">${codMessage}</div>` : ""}<div style="padding:14px 16px;background:#f5f3ff"><b>${rec.title}</b><div style="margin-top:5px">${rec.reason}</div><div style="margin-top:7px"><b>الاقتراح:</b> ${rec.reward}${rec.max ? ` — تكلفة قصوى ${money(rec.max)}` : ""}</div><div style="font-size:12px;color:#6b7280;margin-top:5px">توصية فقط وتحتاج اعتمادًا بشريًا.</div></div><div data-table hidden style="overflow:auto;padding:12px"><table style="width:100%;min-width:680px;border-collapse:collapse"><thead><tr><th>رقم الطلب</th><th>التاريخ</th><th>الإجمالي</th><th>الدفع</th><th>الحالة</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   const table = host.querySelector("[data-table]");
   host.querySelector("[data-toggle]").onclick = () => { table.hidden = !table.hidden; };
   return true;
@@ -107,14 +125,28 @@ async function load() {
   syncCustomerMobile();
   const orderNumber = orderNumberFromPage();
   const cardPresent = Boolean(document.querySelector("[data-customer-history-card]"));
-  if (!shouldLoadCustomerHistory(orderNumber, activeOrder, loading, cardPresent)) return;
+  if (!shouldLoadCustomerHistory(
+    orderNumber,
+    activeOrder,
+    loading,
+    cardPresent,
+    activeOrderHasHistory,
+  )) return;
   loading = true;
   try {
     const { data } = await api.get(`/orders-v2/${encodeURIComponent(orderNumber)}/customer-history`);
     const currentOrder = data?.current_order;
     const history = Array.isArray(data?.previous_orders) ? data.previous_orders : [];
     if (!currentOrder) throw new Error("customer_history_current_order_missing");
-    if (render(currentOrder, history)) activeOrder = orderNumber;
+    const hasHistory = shouldShowCustomerHistory(history);
+    if (!hasHistory) {
+      render(currentOrder, history);
+      activeOrder = orderNumber;
+      activeOrderHasHistory = false;
+    } else if (render(currentOrder, history)) {
+      activeOrder = orderNumber;
+      activeOrderHasHistory = true;
+    }
   } catch (error) {
     console.warn("Customer history unavailable", error);
   } finally {
