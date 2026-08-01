@@ -41,7 +41,7 @@ const SECTIONS = [
         label: "العمليات المالية",
         icon: CurrencyDollar,
         items: [
-            { to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" },
+            { to: "/legacy-dashboard", label: "لوحة التحكم القديمة", icon: House, testid: "nav-dashboard" },
             { to: "/orders", label: "الطلبات", icon: Package, testid: "nav-orders" },
             { to: "/accounts", label: "الأصول والحسابات", icon: Wallet, testid: "nav-accounts" },
             { to: "/new-transaction", label: "➕ حركة مالية جديدة (موحدة)", icon: PaperPlaneRight, testid: "nav-new-transaction" },
