@@ -39,6 +39,20 @@ const FILTERS = [
     { id: "unknown", label: "غير محسوم" },
 ];
 
+const FOCUSABLE_PROVIDERS = new Set([
+    "salla",
+    "openai",
+    "snapchat_ads",
+    "tiktok_ads",
+    "meta_ads",
+    "google_ads",
+    "google_analytics_4",
+    "google_search_console",
+    "google_merchant_center",
+    "qoyod",
+    "shipping_companies",
+]);
+
 function SummaryCard({ label, value, hint, tone, Icon, testid }) {
     const tones = {
         emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
@@ -123,8 +137,9 @@ export default function AppsIntegrationsControlCenter() {
         load();
     }, [load]);
 
-    const focusedProvider = searchParams.get("provider") === "snapchat_ads"
-        ? "snapchat_ads"
+    const requestedProvider = searchParams.get("provider");
+    const focusedProvider = FOCUSABLE_PROVIDERS.has(requestedProvider)
+        ? requestedProvider
         : "";
     const visibleProviders = useMemo(() => filterIntegrationProviders(
         overview.providers,
