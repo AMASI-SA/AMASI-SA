@@ -204,7 +204,7 @@ export default function MezanV2NavigationShell({
     return (
         <div
             ref={rootRef}
-            className="relative overflow-visible border-y border-slate-800 bg-slate-950 shadow-xl sm:rounded-2xl sm:border"
+            className="relative overflow-visible border-y border-emerald-900/70 bg-brand shadow-xl sm:rounded-2xl sm:border"
             dir="rtl"
             data-testid="mezan-v2-navigation-shell"
         >
@@ -259,7 +259,7 @@ export default function MezanV2NavigationShell({
 
                                     {section.items.length > 1 && open && (
                                         <div
-                                            className="absolute right-0 top-[calc(100%+0.6rem)] z-[70] max-h-[65vh] w-72 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-2 shadow-2xl"
+                                            className="absolute right-0 top-[calc(100%+0.6rem)] z-[70] max-h-[65vh] w-72 overflow-y-auto rounded-2xl border border-emerald-800 bg-[#0B4A38] p-2 shadow-2xl"
                                             data-testid={`mezan-v2-dropdown-${section.id}`}
                                         >
                                             <div className="mb-1 px-3 py-2 text-xs font-black text-emerald-200">
@@ -336,7 +336,7 @@ export default function MezanV2NavigationShell({
 
             {activeSection && activeSection.items.length > 1 && (
                 <nav
-                    className="flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-slate-900/90 px-2 scrollbar-thin sm:px-5"
+                    className="flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-[#0B4A38]/95 px-2 scrollbar-thin sm:px-5"
                     aria-label={`صفحات ${activeSection.label}`}
                     data-testid={`mezan-v2-secondary-${activeSection.id}`}
                 >
