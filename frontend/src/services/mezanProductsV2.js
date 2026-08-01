@@ -34,6 +34,7 @@ export async function listWorkspaceProducts({
     toDate = "",
     paymentMethods = "",
     shippingCompanies = "",
+    productIds = "",
 } = {}) {
     if (page === 1 && sort === "newest" && !query.trim()) {
         try { await syncRecentProductsV2(); } catch { /* keep local listing available */ }
@@ -52,6 +53,7 @@ export async function listWorkspaceProducts({
     if (toDate) params.to = toDate;
     if (paymentMethods) params.payment_methods = paymentMethods;
     if (shippingCompanies) params.shipping_companies = shippingCompanies;
+    if (productIds) params.product_ids = productIds;
     return (await api.get("/products-v2/workspace/products", { params })).data;
 }
 

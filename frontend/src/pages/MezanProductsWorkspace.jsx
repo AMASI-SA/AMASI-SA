@@ -15,6 +15,7 @@ import {
     saveProductV2Costs, syncProductsV2,
 } from "../services/mezanProductsV2";
 import {
+    isValidSoldMissingCostResult,
     resolveInitialProductsView,
     resolveInitialSelectedProduct,
 } from "../lib/mezanV2CostLinks";
@@ -39,7 +40,7 @@ function initialMissingCostFilter() {
 
 function initialMissingCostRange() {
     if (typeof window === "undefined") {
-        return { from: "", to: "", paymentMethods: "", shippingCompanies: "" };
+        return { from: "", to: "", paymentMethods: "", shippingCompanies: "", productIds: "" };
     }
     const params = new URLSearchParams(window.location.search);
     return {
@@ -47,6 +48,7 @@ function initialMissingCostRange() {
         to: params.get("to") || "",
         paymentMethods: params.get("payment_methods") || "",
         shippingCompanies: params.get("shipping_companies") || "",
+        productIds: params.get("product_ids") || "",
     };
 }
 
@@ -145,9 +147,18 @@ export default function MezanProductsWorkspace() {
                     toDate: missingCostRange.to,
                     paymentMethods: missingCostRange.paymentMethods,
                     shippingCompanies: missingCostRange.shippingCompanies,
+                    productIds: missingMezanCost ? missingCostRange.productIds : "",
                 }),
                 getProductsV2Summary(),
             ]);
+            if (
+                missingMezanCost
+                && !isValidSoldMissingCostResult(listResult, missingCostRange.productIds)
+            ) {
+                setItems([]);
+                setPagination({ page: 1, total: 0, total_pages: 1 });
+                throw new Error("رفض ميزان عرض قائمة غير مطابقة: لم يطبّق الخادم فلتر المنتجات المباعة بدون تكلفة.");
+            }
             const nextItems = listResult.items || [];
             setItems(nextItems);
             setPagination(listResult.pagination || { page: 1, total: 0, total_pages: 1 });
@@ -161,7 +172,7 @@ export default function MezanProductsWorkspace() {
             const detail = err?.response?.data?.detail;
             setError((typeof detail === "string" ? detail : detail?.message) || err?.message || "تعذّر تحميل المنتجات.");
         } finally { setLoading(false); }
-    }, [appliedQuery, missingCostRange.from, missingCostRange.paymentMethods, missingCostRange.shippingCompanies, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
+    }, [appliedQuery, missingCostRange.from, missingCostRange.paymentMethods, missingCostRange.productIds, missingCostRange.shippingCompanies, missingCostRange.to, missingMezanCost, missingSku, selectedId, sort, status]);
 
     const loadSelected = useCallback(async () => {
         if (!selectedId) return;
@@ -233,7 +244,6 @@ export default function MezanProductsWorkspace() {
         if (typeof window === "undefined") return;
         const url = new URL(window.location.href);
         if (next) {
-            url.searchParams.set("workspace", "intake");
             url.searchParams.set("missing_mezan_cost", "1");
             url.searchParams.set("sold_only", "1");
         } else {
@@ -241,6 +251,9 @@ export default function MezanProductsWorkspace() {
             url.searchParams.delete("sold_only");
             url.searchParams.delete("from");
             url.searchParams.delete("to");
+            url.searchParams.delete("payment_methods");
+            url.searchParams.delete("shipping_companies");
+            url.searchParams.delete("product_ids");
         }
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
@@ -261,7 +274,7 @@ export default function MezanProductsWorkspace() {
                 <button type="button" onClick={async () => setSkuPreview(await previewMissingSkus({ limit: 50 }))} className="rounded-xl border border-violet-300 px-3 py-2 text-violet-800">توليد SKU</button>
                 <button type="button" onClick={syncNow} disabled={syncing} className="col-span-2 rounded-xl bg-violet-700 px-3 py-2 text-white md:col-span-1 xl:mr-auto xl:px-4">{syncing ? <SpinnerGap className="inline animate-spin" /> : <ArrowsClockwise className="inline" />} مزامنة سلة</button>
             </div>
-            {mobileFiltersOpen && <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-2 xl:hidden">{STATUS_FILTERS.map(([value, label]) => <button key={value} type="button" onClick={() => { setStatus(value); setMobileFiltersOpen(false); }} className={`rounded-xl px-3 py-2 text-sm ${status === value ? "bg-violet-700 text-white" : "bg-white"}`}>{label}</button>)}</div>}
+            {mobileFiltersOpen && <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-2 xl:hidden">{STATUS_FILTERS.map(([value, label]) => <button key={value} type="button" onClick={() => { setStatus(value); setMobileFiltersOpen(false); }} className={`rounded-xl px-3 py-2 text-sm ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "bg-white"}`}>{label}</button>)}</div>}
         </section>
 
         {missingMezanCost && (
@@ -284,7 +297,7 @@ export default function MezanProductsWorkspace() {
         <section className="grid min-w-0 gap-3 lg:grid-cols-[340px_minmax(0,1fr)] xl:min-h-[820px] xl:grid-cols-[220px_420px_minmax(0,1fr)] xl:gap-4">
             <aside className="hidden rounded-3xl border bg-white p-4 xl:block">
                 <h2 className="mb-4 font-black"><SlidersHorizontal className="inline" /> تصفية المنتجات</h2>
-                {STATUS_FILTERS.map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`mb-1 w-full rounded-xl px-3 py-3 text-right ${status === value ? "bg-violet-700 text-white" : "hover:bg-slate-50"}`}>{label}</button>)}
+                {STATUS_FILTERS.map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`mb-1 w-full rounded-xl px-3 py-3 text-right ${status === value && (value !== "" || !missingMezanCost) ? "bg-violet-700 text-white" : "hover:bg-slate-50"}`}>{label}</button>)}
                 <button type="button" onClick={toggleMissingMezanCost} className={`mt-2 w-full rounded-xl px-3 py-3 text-right font-bold ${missingMezanCost ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-900 hover:bg-amber-100"}`}>مباعة بدون تكلفة ميزان</button>
                 <div className="mt-4 text-xs text-slate-500">إجمالي V2: {summary?.total || 0}</div>
             </aside>

@@ -1,6 +1,9 @@
 import asyncio
 
 from product_v2_workspace_routes import (
+    _mongo_id_values,
+    _parse_product_ids,
+    _restrict_missing_rows,
     _sku_number,
     _sold_missing_mezan_cost_products,
 )
@@ -17,6 +20,22 @@ def test_sku_number_rejects_other_formats():
     assert _sku_number("SKU-12047", "AMS") is None
     assert _sku_number("AMS12A", "AMS") is None
     assert _sku_number("", "AMS") is None
+
+
+def test_requested_product_ids_are_deduplicated_and_support_numeric_catalog_ids():
+    requested = _parse_product_ids("111,222,111")
+
+    assert requested == ["111", "222"]
+    assert _mongo_id_values(requested) == ["111", "222", 111, 222]
+
+
+def test_requested_product_ids_restrict_the_sold_missing_cohort():
+    rows = {
+        "p-1": {"salla_product_id": "p-1", "mezan_product_id": "m-1"},
+        "p-2": {"salla_product_id": "p-2", "mezan_product_id": "m-2"},
+    }
+
+    assert list(_restrict_missing_rows(rows, ["m-2"])) == ["p-2"]
 
 
 class _Cursor:
