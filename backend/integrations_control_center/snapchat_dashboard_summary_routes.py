@@ -96,6 +96,21 @@ def _period(daily: dict[str, dict[str, float]], start: date, end: date) -> dict[
     return _metric(spend, orders, revenue)
 
 
+def _history(daily: dict[str, dict[str, float]], start: date, end: date) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    cursor = start
+    while cursor <= end:
+        bucket = daily.get(cursor.isoformat(), {})
+        rows.append({
+            "date": cursor.isoformat(),
+            "spend": round(_number(bucket.get("spend")), 2),
+            "orders": _round_purchase_count(_number(bucket.get("orders"))),
+            "revenue": round(_number(bucket.get("revenue")), 2),
+        })
+        cursor += timedelta(days=1)
+    return rows
+
+
 def _connection_status(snapshot: dict[str, Any], selected_count: int) -> str:
     raw = str(snapshot.get("connection_status") or "not_connected").strip().lower()
     if raw in {"needs_reauth", "expired"}:
@@ -123,8 +138,10 @@ def summarize_snapchat_dashboard_rows(
     query_start = min(month_start, history_start)
 
     daily: dict[str, dict[str, float]] = {}
-    per_account_today: dict[str, dict[str, float]] = {}
+    per_account_daily: dict[str, dict[str, dict[str, float]]] = {}
+    per_account_today_native: dict[str, dict[str, float]] = {}
     observed_values: list[str] = []
+
     for row in rows:
         row_date = str(row.get("date") or "").strip()
         try:
@@ -133,23 +150,40 @@ def summarize_snapchat_dashboard_rows(
             continue
         if parsed_date < query_start or parsed_date > today_value:
             continue
+
+        account_id = str(row.get("ad_account_id") or "").strip()
+        spend_sar = _number(row.get("spend_sar"))
+        purchases = _number(
+            _row_metric(row, "purchases", "conversion_purchases")
+        )
+        revenue_sar = _number(row.get("purchase_value_sar"))
+
         bucket = daily.setdefault(
             row_date,
             {"spend": 0.0, "orders": 0.0, "revenue": 0.0},
         )
-        bucket["spend"] += _number(row.get("spend_sar"))
-        bucket["orders"] += _number(
-            _row_metric(row, "purchases", "conversion_purchases")
-        )
-        bucket["revenue"] += _number(row.get("purchase_value_sar"))
-        if parsed_date == today_value:
-            account_id = str(row.get("ad_account_id") or "").strip()
-            account_bucket = per_account_today.setdefault(
-                account_id,
-                {"spend_sar": 0.0, "spend_native": 0.0},
+        bucket["spend"] += spend_sar
+        bucket["orders"] += purchases
+        bucket["revenue"] += revenue_sar
+
+        if account_id:
+            account_daily = per_account_daily.setdefault(account_id, {})
+            account_bucket = account_daily.setdefault(
+                row_date,
+                {"spend": 0.0, "orders": 0.0, "revenue": 0.0},
             )
-            account_bucket["spend_sar"] += _number(row.get("spend_sar"))
-            account_bucket["spend_native"] += _number(row.get("spend_native"))
+            account_bucket["spend"] += spend_sar
+            account_bucket["orders"] += purchases
+            account_bucket["revenue"] += revenue_sar
+
+            if parsed_date == today_value:
+                native_bucket = per_account_today_native.setdefault(
+                    account_id,
+                    {"spend_sar": 0.0, "spend_native": 0.0},
+                )
+                native_bucket["spend_sar"] += spend_sar
+                native_bucket["spend_native"] += _number(row.get("spend_native"))
+
         observed_at = str(
             row.get("observed_at") or row.get("updated_at") or ""
         ).strip()
@@ -173,35 +207,42 @@ def summarize_snapchat_dashboard_rows(
     today_metrics = _period(daily, today_value, today_value)
     month_metrics = _period(daily, month_start, today_value)
     last_30d_metrics = _period(daily, history_start, today_value)
-    history = []
-    cursor = history_start
-    while cursor <= today_value:
-        bucket = daily.get(cursor.isoformat(), {})
-        history.append({
-            "date": cursor.isoformat(),
-            "spend": round(_number(bucket.get("spend")), 2),
-        })
-        cursor += timedelta(days=1)
 
-    # Always return every selected account, even when the provider confirms
-    # zero spend.  The Dashboard can therefore restore the old two-account
-    # presentation instead of collapsing into one aggregate card.
+    # Each selected account gets its own isolated periods. No spend-share
+    # allocation or aggregate prorating is used anywhere in these cards.
     accounts = []
     for account in selected_accounts:
         account_id = str(account.get("ad_account_id") or "").strip()
-        today_bucket = per_account_today.get(account_id, {})
+        account_daily = per_account_daily.get(account_id, {})
+        native_today = per_account_today_native.get(account_id, {})
+        account_today = _period(account_daily, today_value, today_value)
+        account_today.update({
+            "spend_sar": round(_number(native_today.get("spend_sar")), 2),
+            "spend_native": round(_number(native_today.get("spend_native")), 6),
+        })
         accounts.append({
+            "id": account_id,
             "ad_account_id": account_id,
+            "external_account_id": account_id,
             "name": account.get("display_name") or account.get("name") or account_id,
             "currency_native": account.get("currency") or "SAR",
             "timezone": account.get("timezone"),
             "report_timezone": BUSINESS_TIMEZONE,
             "day_start": "00:00",
             "day_end": "23:59",
-            "today": {
-                "spend_sar": round(_number(today_bucket.get("spend_sar")), 2),
-                "spend_native": round(_number(today_bucket.get("spend_native")), 6),
+            "today": account_today,
+            "month": {
+                "start": month_start.isoformat(),
+                **_period(account_daily, month_start, today_value),
             },
+            "last_30d": {
+                "start": history_start.isoformat(),
+                "end": today_value.isoformat(),
+                **_period(account_daily, history_start, today_value),
+            },
+            "history": _history(account_daily, history_start, today_value),
+            "source": "snapchat_marketing_api_account",
+            "isolated_account": True,
         })
 
     last_sync_at = max(observed_values) if observed_values else (
@@ -209,6 +250,14 @@ def summarize_snapchat_dashboard_rows(
         or snapshot.get("checked_at")
         or snapshot.get("updated_at")
     )
+    conversion_reporting = {
+        "metric": "conversion_purchases",
+        "source_types": [CONVERSION_SOURCE_TYPES],
+        "action_report_time": ACTION_REPORT_TIME,
+        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "today_is_provisional": True,
+    }
     return {
         "provider": "snapchat",
         "integration_provider": SNAPCHAT_PROVIDER_ID,
@@ -227,16 +276,9 @@ def summarize_snapchat_dashboard_rows(
             "end": today_value.isoformat(),
             **last_30d_metrics,
         },
-        "history": history,
+        "history": _history(daily, history_start, today_value),
         "accounts": accounts,
-        "conversion_reporting": {
-            "metric": "conversion_purchases",
-            "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ACTION_REPORT_TIME,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-            "today_is_provisional": True,
-        },
+        "conversion_reporting": conversion_reporting,
         "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
         "source_only": True,
         "provider_write_reached": False,
@@ -342,11 +384,20 @@ def attach_snapchat_dashboard_summary_routes(
         return {
             "count": len(summary["accounts"]),
             "accounts": summary["accounts"],
+            "today_date": summary["today"]["date"],
+            "month_start": summary["month"]["start"],
+            "last_30d_start": summary["last_30d"]["start"],
+            "last_30d_end": summary["last_30d"]["end"],
+            "last_fetched_at": summary.get("last_fetched_at"),
+            "conversion_reporting": summary.get("conversion_reporting") or {},
             "business_timezone": BUSINESS_TIMEZONE,
             "day_start": "00:00",
             "day_end": "23:59",
-            "source": "snapchat_v2",
+            "source": "snapchat_v2_isolated_accounts",
+            "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
             "source_only": True,
+            "provider_write_reached": False,
+            "campaign_write_reached": False,
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
         }
