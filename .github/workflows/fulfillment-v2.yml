@@ -41,6 +41,8 @@ on:
       - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/reviewProductEditMode.js"
       - "frontend/src/reviewProductEditMode.test.js"
+      - "frontend/src/reviewAutoAdvance.js"
+      - "frontend/src/reviewAutoAdvance.test.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -95,6 +97,8 @@ on:
       - "frontend/src/reviewCompactActionLabels.test.js"
       - "frontend/src/reviewProductEditMode.js"
       - "frontend/src/reviewProductEditMode.test.js"
+      - "frontend/src/reviewAutoAdvance.js"
+      - "frontend/src/reviewAutoAdvance.test.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -179,7 +183,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
