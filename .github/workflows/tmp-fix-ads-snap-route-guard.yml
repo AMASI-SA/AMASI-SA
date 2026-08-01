@@ -1,22 +1,19 @@
-name: Apply Ads Snapchat Route Guard Fix
+name: Generate Fixed Ads Manager Workflow
 
 on:
   push:
     branches:
       - fix/ads-manager-snap-route-guard-baseline
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: write
 
 concurrency:
-  group: ads-snap-route-guard-${{ github.ref }}
+  group: generate-fixed-ads-manager-workflow
   cancel-in-progress: true
 
 jobs:
-  patch-test-push:
+  generate-test-push:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
 
@@ -30,13 +27,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Patch route normalization symmetrically
+      - name: Generate symmetrically normalized workflow
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('.github/workflows/ads-manager-readonly.yml')
-          source = path.read_text(encoding='utf-8')
+          source_path = Path('.github/workflows/ads-manager-readonly.yml')
+          target_path = Path('scripts/ads-manager-readonly.fixed.yml')
+          source = source_path.read_text(encoding='utf-8')
           old = '''              current_routes = current["routes"]
               if path == "backend/snapchat_routes.py":
                   legacy_route = (
@@ -90,17 +88,19 @@ jobs:
               raise SystemExit(
                   f'Expected one stale route-normalization block, found {source.count(old)}'
               )
-          path.write_text(source.replace(old, new, 1), encoding='utf-8')
+          target_path.parent.mkdir(parents=True, exist_ok=True)
+          target_path.write_text(source.replace(old, new, 1), encoding='utf-8')
           PY
 
-      - name: Verify the normalization contract
+      - name: Verify normalization and YAML
         run: |
+          python -m pip install --disable-pip-version-check -q PyYAML
           python - <<'PY'
           from pathlib import Path
+          import yaml
 
-          source = Path('.github/workflows/ads-manager-readonly.yml').read_text(
-              encoding='utf-8'
-          )
+          path = Path('scripts/ads-manager-readonly.fixed.yml')
+          source = path.read_text(encoding='utf-8')
           required = (
               'baseline_routes = baseline["routes"]',
               'current_routes = current["routes"]',
@@ -111,44 +111,31 @@ jobs:
           missing = [marker for marker in required if source.count(marker) != 1]
           if missing:
               raise SystemExit(f'Symmetric guard contract missing: {missing}')
+          if 'if current_routes != baseline["routes"]:' in source:
+              raise SystemExit('Stale one-sided route comparison remains')
 
-          legacy = "route:/sync-all-accounts"
-          deprecated = "route:/sync-all-accounts:deprecated"
+          legacy = 'route:/sync-all-accounts'
+          deprecated = 'route:/sync-all-accounts:deprecated'
 
           def normalize(routes):
               return sorted(legacy if route == deprecated else route for route in routes)
 
-          if normalize([deprecated]) != normalize([deprecated]):
-              raise SystemExit('Equivalent deprecated baselines must match')
           if normalize([legacy]) != normalize([deprecated]):
-              raise SystemExit('Legacy and deprecated adapter forms must match')
+              raise SystemExit('Equivalent route adapter forms must match')
           if normalize([deprecated, 'route:/new']) == normalize([deprecated]):
-              raise SystemExit('A genuinely new route must remain detectable')
-          print('SYMMETRIC_SNAPCHAT_ROUTE_GUARD_OK')
-          PY
+              raise SystemExit('A genuine new route must remain detectable')
 
-      - name: Validate YAML parse
-        run: |
-          python -m pip install --disable-pip-version-check -q PyYAML
-          python - <<'PY'
-          from pathlib import Path
-          import yaml
-
-          payload = yaml.safe_load(
-              Path('.github/workflows/ads-manager-readonly.yml').read_text(
-                  encoding='utf-8'
-              )
-          )
+          payload = yaml.safe_load(source)
           if not isinstance(payload, dict) or 'jobs' not in payload:
               raise SystemExit('Invalid workflow structure')
-          print('ADS_MANAGER_WORKFLOW_YAML_OK')
+          print('FIXED_ADS_MANAGER_WORKFLOW_OK')
           PY
 
-      - name: Commit verified CI fix
+      - name: Commit generated workflow blob
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/ads-manager-readonly.yml
+          git add scripts/ads-manager-readonly.fixed.yml
           git diff --cached --check
-          git commit -m 'fix(ci): normalize Snapchat routes on both AST sides'
+          git commit -m 'ci: generate fixed Ads Manager workflow blob'
           git push origin HEAD:fix/ads-manager-snap-route-guard-baseline
