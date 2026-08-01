@@ -1,12 +1,9 @@
-"""Supplier-file-only replacement text for reviewed product specifications.
+"""Supplier-file-only name/value overrides for reviewed product specs.
 
-The original Salla specification remains unchanged and visible in the review UI.
-A reviewer may save an alternative full line for the supplier preparation file,
-for example replacing ``المقاس: 54 انش`` with ``المقاس 54 انش``.
-
-Replacement defaults are product + specification scoped. They are snapshotted
-into each order when that order is opened for review so later default changes do
-not retroactively alter already reviewed orders.
+Salla's original specification name and value remain unchanged. Reviewers may
+change the supplier-file label, the supplier-file value, or both independently.
+Product defaults are snapshotted into an order when it is opened for review so
+later default changes never rewrite an older order.
 """
 from __future__ import annotations
 
@@ -35,19 +32,26 @@ from order_review_routes import (
 
 SPEC_REPLACEMENT_DEFAULTS = "order_review_spec_replacement_defaults"
 ORDER_OVERRIDE_FIELD = "supplier_export_spec_replacement_overrides"
-MAX_REPLACEMENT_LENGTH = 500
+MAX_COMPONENT_LENGTH = 500
 
 
 class SpecReplacementPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     spec_key: str = Field(min_length=1, max_length=160)
+    replacement_name: Optional[str] = Field(
+        default=None,
+        max_length=MAX_COMPONENT_LENGTH,
+    )
+    replacement_value: Optional[str] = Field(
+        default=None,
+        max_length=MAX_COMPONENT_LENGTH,
+    )
+    # Backward-compatible during rollout. New clients send the two fields above.
     replacement_text: Optional[str] = Field(
         default=None,
-        max_length=MAX_REPLACEMENT_LENGTH,
+        max_length=MAX_COMPONENT_LENGTH,
     )
-    # Persistent is the requested default. Clearing this checkbox applies the
-    # replacement to the current order only.
     save_as_default: bool = True
 
 
@@ -79,7 +83,7 @@ def _display_value(value: Any) -> str:
 
 
 def extract_item_specs(item: Any) -> list[dict[str, str]]:
-    """Return stable, de-duplicated display specs without changing source data."""
+    """Return stable display specs without changing Salla source values."""
     rows: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -127,26 +131,107 @@ def extract_item_specs(item: Any) -> list[dict[str, str]]:
     return rows
 
 
-def replacement_override_map(state: Optional[dict[str, Any]]) -> dict[str, Optional[str]]:
-    result: dict[str, Optional[str]] = {}
+def _without_redundant_component(value: Any, original: Any) -> Optional[str]:
+    visible = _text(value)
+    if not visible or visible == _text(original):
+        return None
+    return visible
+
+
+def split_legacy_replacement_text(
+    replacement_text: Any,
+    *,
+    original_name: str,
+    original_value: str,
+) -> dict[str, Optional[str]]:
+    """Convert the old full-line format into separate name/value components."""
+    visible = _text(replacement_text)
+    if not visible:
+        return {"replacement_name": None, "replacement_value": None}
+
+    candidate_name: Optional[str] = None
+    candidate_value: Optional[str] = None
+    original_name_text = _text(original_name)
+
+    if original_name_text and visible.startswith(original_name_text):
+        remainder = visible[len(original_name_text):].lstrip(" :：-—")
+        candidate_value = remainder or None
+    elif ":" in visible or "：" in visible:
+        separator = ":" if ":" in visible else "："
+        left, right = visible.split(separator, 1)
+        candidate_name = _text(left) or None
+        candidate_value = _text(right) or None
+    else:
+        candidate_value = visible
+
+    return {
+        "replacement_name": _without_redundant_component(
+            candidate_name,
+            original_name,
+        ),
+        "replacement_value": _without_redundant_component(
+            candidate_value,
+            original_value,
+        ),
+    }
+
+
+def replacement_components(
+    raw: Optional[dict[str, Any]],
+    spec: dict[str, str],
+) -> dict[str, Optional[str]]:
+    raw = raw or {}
+    # Legacy rows may already have empty new keys after being read through the
+    # compatibility map. The legacy full line still wins when both are blank.
+    if (
+        _text(raw.get("replacement_text"))
+        and not _text(raw.get("replacement_name"))
+        and not _text(raw.get("replacement_value"))
+    ):
+        return split_legacy_replacement_text(
+            raw.get("replacement_text"),
+            original_name=spec["name"],
+            original_value=spec["value"],
+        )
+    return {
+        "replacement_name": _without_redundant_component(
+            raw.get("replacement_name"),
+            spec["name"],
+        ),
+        "replacement_value": _without_redundant_component(
+            raw.get("replacement_value"),
+            spec["value"],
+        ),
+    }
+
+
+def replacement_override_map(
+    state: Optional[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
     for row in (state or {}).get(ORDER_OVERRIDE_FIELD, []) or []:
         if not isinstance(row, dict):
             continue
         spec_key = canonical_spec_key(row.get("spec_key"))
         if not spec_key:
             continue
-        # None is an explicit current-order clear and therefore suppresses the
-        # product default for this order.
-        replacement = _text(row.get("replacement_text")) or None
-        result[spec_key] = replacement
+        result[spec_key] = {
+            "replacement_name": _text(row.get("replacement_name")) or None,
+            "replacement_value": _text(row.get("replacement_value")) or None,
+            "replacement_text": _text(row.get("replacement_text")) or None,
+        }
     return result
 
 
 def replacement_override_rows(
-    values: dict[str, Optional[str]],
+    values: dict[str, dict[str, Any]],
 ) -> list[dict[str, Optional[str]]]:
     return [
-        {"spec_key": key, "replacement_text": values[key]}
+        {
+            "spec_key": key,
+            "replacement_name": _text(values[key].get("replacement_name")) or None,
+            "replacement_value": _text(values[key].get("replacement_value")) or None,
+        }
         for key in sorted(values)
     ]
 
@@ -154,7 +239,7 @@ def replacement_override_rows(
 def effective_spec_rows(
     item: Any,
     state: Optional[dict[str, Any]],
-    defaults: Optional[dict[str, str]],
+    defaults: Optional[dict[str, dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     defaults = defaults or {}
     overrides = replacement_override_map(state)
@@ -162,60 +247,97 @@ def effective_spec_rows(
     for spec in extract_item_specs(item):
         spec_key = spec["spec_key"]
         if spec_key in overrides:
-            replacement_text = overrides[spec_key]
-            source = "order" if replacement_text else "order_clear"
+            components = replacement_components(overrides[spec_key], spec)
+            source = (
+                "order"
+                if components["replacement_name"] or components["replacement_value"]
+                else "order_clear"
+            )
         else:
-            replacement_text = _text(defaults.get(spec_key)) or None
-            source = "default" if replacement_text else None
+            components = replacement_components(defaults.get(spec_key), spec)
+            source = (
+                "default"
+                if components["replacement_name"] or components["replacement_value"]
+                else None
+            )
+
+        file_name = components["replacement_name"] or spec["name"]
+        file_value = components["replacement_value"] or spec["value"]
         original_text = f"{spec['name']}: {spec['value']}"
+        has_replacement = bool(
+            components["replacement_name"] or components["replacement_value"]
+        )
         rows.append({
             **spec,
+            "original_name": spec["name"],
+            "original_value": spec["value"],
             "original_text": original_text,
-            "replacement_text": replacement_text,
+            "replacement_name": components["replacement_name"],
+            "replacement_value": components["replacement_value"],
             "replacement_source": source,
-            "file_text": replacement_text or original_text,
+            "file_name": file_name,
+            "file_value": file_value,
+            "file_text": f"{file_name}: {file_value}",
+            "replacement_text": (
+                f"{file_name}: {file_value}" if has_replacement else None
+            ),
         })
     return rows
 
 
-def supplier_file_spec_lines(
+def supplier_file_spec_fields(
     item: Any,
     state: Optional[dict[str, Any]],
-    defaults: Optional[dict[str, str]] = None,
-) -> list[str]:
-    """Canonical contract for the future preparation-file generator.
-
-    Hidden specs are omitted. A replacement line fully replaces the original
-    label/value only in the supplier file.
-    """
+    defaults: Optional[dict[str, dict[str, Any]]] = None,
+) -> list[dict[str, str]]:
+    """Structured canonical fields for the future preparation-file generator."""
     hidden = {
         canonical_spec_key(value)
         for value in (state or {}).get("supplier_export_excluded_spec_keys", []) or []
         if canonical_spec_key(value)
     }
     return [
-        row["file_text"]
+        {
+            "spec_key": row["spec_key"],
+            "name": row["file_name"],
+            "value": row["file_value"],
+            "text": row["file_text"],
+        }
         for row in effective_spec_rows(item, state, defaults)
         if row["spec_key"] not in hidden
+    ]
+
+
+def supplier_file_spec_lines(
+    item: Any,
+    state: Optional[dict[str, Any]],
+    defaults: Optional[dict[str, dict[str, Any]]] = None,
+) -> list[str]:
+    return [
+        row["text"]
+        for row in supplier_file_spec_fields(item, state, defaults)
     ]
 
 
 def materialize_defaults_into_state(
     item: Any,
     state: Optional[dict[str, Any]],
-    defaults: Optional[dict[str, str]],
+    defaults: Optional[dict[str, dict[str, Any]]],
 ) -> tuple[dict[str, Any], bool]:
-    """Snapshot product defaults into one order exactly once per spec."""
+    """Snapshot each product default into one order exactly once per spec."""
     current = dict(state or {})
     overrides = replacement_override_map(current)
     changed = False
-    valid_keys = {row["spec_key"] for row in extract_item_specs(item)}
-    for spec_key, replacement in (defaults or {}).items():
+    specs = {row["spec_key"]: row for row in extract_item_specs(item)}
+    for spec_key, raw_default in (defaults or {}).items():
         key = canonical_spec_key(spec_key)
-        visible = _text(replacement)
-        if not key or key not in valid_keys or not visible or key in overrides:
+        spec = specs.get(key)
+        if not spec or key in overrides:
             continue
-        overrides[key] = visible
+        components = replacement_components(raw_default, spec)
+        if not components["replacement_name"] and not components["replacement_value"]:
+            continue
+        overrides[key] = components
         changed = True
     if changed:
         current[ORDER_OVERRIDE_FIELD] = replacement_override_rows(overrides)
@@ -225,7 +347,7 @@ def materialize_defaults_into_state(
 def item_replacement_view(
     item: Any,
     state: Optional[dict[str, Any]],
-    defaults: Optional[dict[str, str]],
+    defaults: Optional[dict[str, dict[str, Any]]],
 ) -> dict[str, Any]:
     product_key = preparation_assignment_product_key(item)
     rows = effective_spec_rows(item, state, defaults)
@@ -233,6 +355,7 @@ def item_replacement_view(
         "order_item_id": _text(getattr(item, "order_item_id", None)),
         "product_key": product_key,
         "specs": rows,
+        "file_spec_fields": supplier_file_spec_fields(item, state, defaults),
         "file_spec_lines": supplier_file_spec_lines(item, state, defaults),
         "has_unmaterialized_defaults": any(
             row.get("replacement_source") == "default" for row in rows
@@ -278,7 +401,7 @@ def make_order_review_spec_replacements_router(
     async def defaults_for_items(
         user_id: str,
         items_by_id: dict[str, Any],
-    ) -> dict[str, dict[str, str]]:
+    ) -> dict[str, dict[str, dict[str, Any]]]:
         product_keys = {
             preparation_assignment_product_key(item)
             for item in items_by_id.values()
@@ -292,13 +415,19 @@ def make_order_review_spec_replacements_router(
             },
             {"_id": 0},
         ).to_list(5000)
-        result: dict[str, dict[str, str]] = {}
+        result: dict[str, dict[str, dict[str, Any]]] = {}
         for doc in docs:
             product_key = _text(doc.get("product_key"))
             spec_key = canonical_spec_key(doc.get("spec_key"))
-            replacement = _text(doc.get("replacement_text"))
-            if product_key and spec_key and replacement:
-                result.setdefault(product_key, {})[spec_key] = replacement
+            if not product_key or not spec_key:
+                continue
+            raw = {
+                "replacement_name": _text(doc.get("replacement_name")) or None,
+                "replacement_value": _text(doc.get("replacement_value")) or None,
+                "replacement_text": _text(doc.get("replacement_text")) or None,
+            }
+            if any(raw.values()):
+                result.setdefault(product_key, {})[spec_key] = raw
         return result
 
     async def response_view(
@@ -475,7 +604,7 @@ def make_order_review_spec_replacements_router(
                 status_code=409,
                 detail={
                     "code": "review_already_completed",
-                    "message": "اكتملت مراجعة الطلب ولا يمكن تغيير نصوص ملفه.",
+                    "message": "اكتملت مراجعة الطلب ولا يمكن تغيير حقول ملفه.",
                 },
             )
 
@@ -483,7 +612,8 @@ def make_order_review_spec_replacements_router(
         valid_specs = {
             row["spec_key"]: row for row in extract_item_specs(item)
         }
-        if spec_key not in valid_specs:
+        spec = valid_specs.get(spec_key)
+        if spec is None:
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -492,14 +622,68 @@ def make_order_review_spec_replacements_router(
                 },
             )
 
-        replacement = _text(payload.replacement_text) or None
+        provided = payload.model_fields_set
+        if not provided.intersection({
+            "replacement_name",
+            "replacement_value",
+            "replacement_text",
+        }):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "supplier_spec_replacement_update_required",
+                    "message": "حدد اسم المواصفة أو قيمتها المراد تعديلها.",
+                },
+            )
+
         states = _state_map(workflow)
         current = dict(states.get(order_item_id) or {
             "order_item_id": order_item_id,
             "review_status": "pending_review",
         })
+        defaults = await defaults_for_items(user_id, items_by_id)
+        product_key = preparation_assignment_product_key(item)
+        effective = next(
+            row for row in effective_spec_rows(
+                item,
+                current,
+                defaults.get(product_key, {}),
+            )
+            if row["spec_key"] == spec_key
+        )
+
+        if (
+            "replacement_text" in provided
+            and "replacement_name" not in provided
+            and "replacement_value" not in provided
+        ):
+            components = split_legacy_replacement_text(
+                payload.replacement_text,
+                original_name=spec["name"],
+                original_value=spec["value"],
+            )
+        else:
+            components = {
+                "replacement_name": (
+                    _without_redundant_component(
+                        payload.replacement_name,
+                        spec["name"],
+                    )
+                    if "replacement_name" in provided
+                    else effective.get("replacement_name")
+                ),
+                "replacement_value": (
+                    _without_redundant_component(
+                        payload.replacement_value,
+                        spec["value"],
+                    )
+                    if "replacement_value" in provided
+                    else effective.get("replacement_value")
+                ),
+            }
+
         overrides = replacement_override_map(current)
-        overrides[spec_key] = replacement
+        overrides[spec_key] = components
         current[ORDER_OVERRIDE_FIELD] = replacement_override_rows(overrides)
         current.update({
             "order_item_id": order_item_id,
@@ -516,10 +700,9 @@ def make_order_review_spec_replacements_router(
             states=states,
         )
 
-        product_key = preparation_assignment_product_key(item)
         now = _now()
         if payload.save_as_default:
-            if replacement:
+            if components["replacement_name"] or components["replacement_value"]:
                 await db[SPEC_REPLACEMENT_DEFAULTS].update_one(
                     {
                         "user_id": user_id,
@@ -528,10 +711,12 @@ def make_order_review_spec_replacements_router(
                     },
                     {
                         "$set": {
-                            "replacement_text": replacement,
+                            "replacement_name": components["replacement_name"],
+                            "replacement_value": components["replacement_value"],
                             "updated_at": now,
                             "updated_by": actor_id,
                         },
+                        "$unset": {"replacement_text": ""},
                         "$setOnInsert": {
                             "created_at": now,
                             "created_by": actor_id,
@@ -552,8 +737,9 @@ def make_order_review_spec_replacements_router(
             "order_item_id": order_item_id,
             "product_key": product_key,
             "spec_key": spec_key,
-            "event_type": "supplier_file_spec_replacement_updated",
-            "replacement_text": replacement,
+            "event_type": "supplier_file_spec_fields_updated",
+            "replacement_name": components["replacement_name"],
+            "replacement_value": components["replacement_value"],
             "default_updated": bool(payload.save_as_default),
             "occurred_at": now,
             "actor_id": actor_id,
@@ -563,14 +749,14 @@ def make_order_review_spec_replacements_router(
             {"user_id": user_id, "order_number": order_number},
             {"_id": 0},
         )
-        defaults = await defaults_for_items(user_id, items_by_id)
+        refreshed_defaults = await defaults_for_items(user_id, items_by_id)
         refreshed_state = _state_map(refreshed_workflow).get(order_item_id)
         return {
             "order_number": order_number,
             "item": item_replacement_view(
                 item,
                 refreshed_state,
-                defaults.get(product_key, {}),
+                refreshed_defaults.get(product_key, {}),
             ),
         }
 
