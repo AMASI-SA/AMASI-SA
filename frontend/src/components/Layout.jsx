@@ -8,6 +8,7 @@ import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
+import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement";
 import WarehouseHierarchyWorkspace from "../pages/WarehouseHierarchyWorkspace";
 import ProductIntakeWorkspace from "../pages/ProductIntakeWorkspace";
 import StoreOperationsAccessWorkspace from "../pages/StoreOperationsAccessWorkspace";
@@ -161,6 +162,7 @@ export default function Layout({ children }) {
                     <MezanV2Navigation location={location} />
                     {pageContent}
                     <DashboardAnalyticsPlacement active={showsDashboardAnalytics} />
+                    <DashboardSnapchatAccountsPlacement active={showsDashboardAnalytics} />
                 </div>
             </main>
             <Toaster richColors position="top-center" />
