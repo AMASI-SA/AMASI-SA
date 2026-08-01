@@ -24,6 +24,9 @@ describe("public legal pages", () => {
         expect(markup).toContain("مؤسسة أماسي الخليج التجارية");
         expect(markup).toContain("support@amasi-sa.com");
         expect(markup).toContain("30 يومًا");
+        expect(markup).toContain("Snapchat Conversions API");
+        expect(markup).toContain("SHA-256");
+        expect(markup).toContain("لا يرسل ميزان عنوان IP أو User-Agent");
         expect(markup).not.toContain("تسجيل الدخول مطلوب");
     });
 
