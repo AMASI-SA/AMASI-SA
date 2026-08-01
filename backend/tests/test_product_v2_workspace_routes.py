@@ -1,6 +1,9 @@
 import asyncio
 
+from fastapi.routing import APIRoute
+
 from product_v2_workspace_routes import (
+    make_product_v2_workspace_router,
     _mongo_id_values,
     _parse_product_ids,
     _restrict_missing_rows,
@@ -36,6 +39,21 @@ def test_requested_product_ids_restrict_the_sold_missing_cohort():
     }
 
     assert list(_restrict_missing_rows(rows, ["m-2"])) == ["p-2"]
+
+
+def test_sold_missing_cost_filter_has_a_dedicated_non_generic_route():
+    async def current_user():
+        return {"id": "owner-1"}
+
+    router = make_product_v2_workspace_router(object(), current_user)
+    paths = {
+        route.path
+        for route in router.routes
+        if isinstance(route, APIRoute) and "GET" in route.methods
+    }
+
+    assert "/products-v2/workspace/sold-missing-cost-products" in paths
+    assert "/products-v2/workspace/products" in paths
 
 
 class _Cursor:

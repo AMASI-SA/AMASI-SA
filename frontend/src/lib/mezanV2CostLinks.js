@@ -28,7 +28,11 @@ function productMatchesIds(product, expectedIds) {
 }
 
 export function isValidSoldMissingCostResult(result, expectedProductIds = "") {
-    if (result?.meta?.missing_mezan_cost !== true || result?.meta?.sold_only !== true) {
+    if (
+        result?.meta?.contract_version !== "sold-missing-cost-v2"
+        || result?.meta?.missing_mezan_cost !== true
+        || result?.meta?.sold_only !== true
+    ) {
         return false;
     }
     const items = Array.isArray(result?.items) ? result.items : [];
