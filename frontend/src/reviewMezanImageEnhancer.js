@@ -7,6 +7,19 @@ let refreshing = false;
 let decorateScheduled = false;
 
 function text(value) { return String(value || "").trim(); }
+
+export function mezanImageIdFromUrl(imageUrl) {
+    return text(imageUrl).split(/[?#]/, 1)[0].split("/").filter(Boolean).pop() || "";
+}
+
+export function mezanImageDeleteErrorCode(error) {
+    return text(error?.response?.data?.detail?.code);
+}
+
+export function mezanImageUnlinkDeletePath(orderNumber, orderItemId, imageId) {
+    return `/order-reviews-v1/${encodeURIComponent(orderNumber)}/items/${encodeURIComponent(orderItemId)}/mezan-images/${encodeURIComponent(imageId)}/unlink-and-delete`;
+}
+
 function orderNumberFromPage() {
     const heading = [...document.querySelectorAll("h2")].find((node) => node.textContent?.includes("مراجعة الطلب #"));
     return heading?.textContent?.match(/#(\d+)/)?.[1] || null;
@@ -112,11 +125,44 @@ function showChoiceModal(item, imageUrl) {
     });
     overlay.appendChild(panel); document.body.appendChild(overlay);
 }
+
+async function unlinkAndDeleteImage(item, imageId) {
+    const { data } = await api.post(
+        mezanImageUnlinkDeletePath(activeOrder, item.order_item_id, imageId),
+    );
+    detail = data;
+    toast("تم فك ارتباط الصورة وحذفها من ميزان");
+    window.setTimeout(() => window.location.reload(), 350);
+}
+
 async function deleteImage(item, imageUrl) {
-    const id = imageUrl.split("/").pop();
+    const id = mezanImageIdFromUrl(imageUrl);
+    if (!id) return toast("تعذر تحديد صورة ميزان", true);
     if (!window.confirm("حذف صورة ميزان؟ لن يؤثر ذلك على صور سلة.")) return;
-    try { const { data } = await api.delete(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/mezan-images/${encodeURIComponent(id)}`); detail = data; toast("تم حذف صورة ميزان"); scheduleDecorate(); }
-    catch (error) { toast(error?.response?.data?.detail?.message || "تعذر حذف صورة ميزان", true); }
+    try {
+        const { data } = await api.delete(`/order-reviews-v1/${encodeURIComponent(activeOrder)}/items/${encodeURIComponent(item.order_item_id)}/mezan-images/${encodeURIComponent(id)}`);
+        detail = data;
+        toast("تم حذف صورة ميزان");
+        scheduleDecorate();
+    } catch (error) {
+        if (mezanImageDeleteErrorCode(error) !== "mezan_image_in_use") {
+            toast(error?.response?.data?.detail?.message || "تعذر حذف صورة ميزان", true);
+            return;
+        }
+        const confirmed = window.confirm(
+            "الصورة مرتبطة بالطلب الحالي أو بصورة رئيسية أو بقواعد خيارات.\n\nهل تريد فك ارتباطها من الطلب الحالي ومن قواعد هذا المنتج ثم حذفها؟",
+        );
+        if (!confirmed) return;
+        try {
+            await unlinkAndDeleteImage(item, id);
+        } catch (unlinkError) {
+            toast(
+                unlinkError?.response?.data?.detail?.message
+                || "تعذر فك ارتباط الصورة وحذفها",
+                true,
+            );
+        }
+    }
 }
 function decorateCards() {
     if (!detail) return;
