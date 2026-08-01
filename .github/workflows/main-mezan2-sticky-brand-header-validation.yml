@@ -1,0 +1,93 @@
+name: Main Mezan 2 Sticky Brand Header Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/main-mezan2-sticky-brand-header-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: main-mezan2-sticky-brand-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/main-mezan2-sticky-header
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply sticky Mezan brand header patch
+        run: python scripts/apply_main_mezan2_sticky_header.py
+
+      - name: Verify exact Preview UI scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            git diff --name-only origin/main...HEAD
+            git diff --name-only
+          } | sort -u > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/components/Layout.jsx
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/mezanUnifiedHeader.test.js
+          scripts/apply_main_mezan2_sticky_header.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "MAIN_MEZAN2_STICKY_BRAND_SCOPE_OK"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run header and navigation tests
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          CI=true yarn test \
+            --watchAll=false \
+            --runInBand \
+            --runTestsByPath \
+            src/mezanUnifiedHeader.test.js \
+            src/components/MezanV2NavigationShell.test.jsx \
+            src/defaultDashboardRoute.test.js \
+            src/pages/MarketingPlatformWorkspace.test.jsx \
+            src/components/GoogleAdsAllPlatformsCard.test.jsx
+
+      - name: Build Preview frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Commit verified sticky brand header
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_main_mezan2_sticky_header.py
+          git add \
+            frontend/src/components/Layout.jsx \
+            frontend/src/components/MezanV2NavigationShell.jsx \
+            frontend/src/mezanUnifiedHeader.test.js
+          git diff --cached --check
+          git commit -m 'fix(ui): keep Mezan brand header visible on scroll'
+          git push origin HEAD:fix/main-mezan2-sticky-header
