@@ -2449,3 +2449,95 @@ async def test_tiktok_native_connection_without_rows_does_not_use_legacy():
     assert result["campaigns"] == []
     assert result["providers"][0]["campaign_coverage"]["status"] == "unavailable"
     assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
+async def test_meta_campaign_v2_details_are_used_without_double_counting_account_totals():
+    db = FakeDB(
+        {
+            "mezan_meta_performance_daily_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "ad_account_id": "act-selected",
+                    "display_name": "Selected Meta",
+                    "date": "2026-07-10",
+                    "spend_native": 100,
+                    "spend_sar": 375,
+                    "currency_native": "USD",
+                    "fx_rate_to_sar": 3.75,
+                    "purchases": 5,
+                    "purchase_value_native": 300,
+                    "purchase_value_sar": 1125,
+                    "impressions": 10000,
+                    "clicks": 500,
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+            "mezan_meta_campaign_performance_daily_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "ad_account_id": "act-selected",
+                    "campaign_id": "campaign-sales",
+                    "campaign_name": "Sales Riyadh",
+                    "objective": "OUTCOME_SALES",
+                    "status": "ACTIVE",
+                    "effective_status": "ACTIVE",
+                    "date": "2026-07-10",
+                    "currency_native": "USD",
+                    "spend_native": 100,
+                    "fx_rate_to_sar": 3.75,
+                    "purchases": 5,
+                    "purchase_value_native": 300,
+                    "impressions": 10000,
+                    "clicks": 500,
+                    "daily_budget_native": 250,
+                    "lifetime_budget_native": 1000,
+                    "start_time": "2026-07-01T00:00:00+00:00",
+                    "stop_time": "2026-08-31T23:59:59+00:00",
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "meta_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "act-selected",
+                    "display_name": "Selected Meta",
+                    "mezan_selected": True,
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="meta",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 375
+    assert provider["metrics"]["platform_attributed_revenue_sar"] == 1125
+    assert provider["campaign_coverage"]["status"] == "available"
+    assert result["campaign_pagination"]["total"] == 1
+    campaign = result["campaigns"][0]
+    assert campaign["campaign_id"] == "campaign-sales"
+    assert campaign["campaign_name"] == "Sales Riyadh"
+    assert campaign["status"] == "ACTIVE"
+    assert campaign["delivery_status"] == "ACTIVE"
+    assert campaign["objective"] == "OUTCOME_SALES"
+    assert campaign["budget"] == {
+        "currency": "USD",
+        "daily_native": 250,
+        "lifetime_native": 1000,
+    }
+    assert campaign["spend_sar_equivalent"] == 375
+    assert campaign["revenue_sar_equivalent"] == 1125
+    assert campaign["data_source"] == (
+        "mezan_meta_campaign_performance_daily_v2"
+    )
+    assert db.write_attempts == []

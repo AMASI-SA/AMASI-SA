@@ -39,6 +39,9 @@ TIKTOK_V2_PERFORMANCE_COLLECTION = "mezan_tiktok_performance_daily_v2"
 TIKTOK_LEGACY_PERFORMANCE_COLLECTION = "tiktok_ads_daily"
 TIKTOK_INTEGRATION_PROVIDER = "tiktok_ads"
 META_V2_PERFORMANCE_COLLECTION = "mezan_meta_performance_daily_v2"
+META_CAMPAIGN_V2_PERFORMANCE_COLLECTION = (
+    "mezan_meta_campaign_performance_daily_v2"
+)
 META_LEGACY_PERFORMANCE_COLLECTION = "meta_ads_daily"
 META_INTEGRATION_PROVIDER = "meta_ads"
 PROVIDER_ALIASES = {
@@ -105,6 +108,17 @@ SOURCE_DEFINITIONS = [
             "meta_impressions",
             "meta_clicks",
             "meta_platform_attribution",
+        ],
+    },
+    {
+        "key": META_CAMPAIGN_V2_PERFORMANCE_COLLECTION,
+        "role": "تفاصيل حملات Meta الأصلية المحفوظة عبر Integrations V2",
+        "grain": "حساب محدد × حملة × يوم",
+        "authoritative_for": [
+            "meta_campaign_identity",
+            "meta_campaign_status",
+            "meta_campaign_objective",
+            "meta_campaign_performance",
         ],
     },
     {
@@ -979,6 +993,43 @@ def _normalize_meta_v2_rows(rows: list[dict]) -> list[dict]:
     return output
 
 
+def _normalize_meta_campaign_v2_rows(rows: list[dict]) -> list[dict]:
+    output: list[dict] = []
+    for row in rows:
+        account_id = _clean_text(row.get("ad_account_id"), limit=120)
+        campaign_id = _clean_text(row.get("campaign_id"), limit=160)
+        if not campaign_id:
+            continue
+        output.append(
+            {
+                "date": row.get("date"),
+                "account_id": account_id or None,
+                "campaign_id": campaign_id,
+                "campaign_name": (
+                    _clean_text(row.get("campaign_name"), limit=180)
+                    or campaign_id
+                ),
+                "status": row.get("status"),
+                "delivery_status": row.get("effective_status"),
+                "objective": row.get("objective"),
+                "start_time": row.get("start_time"),
+                "end_time": row.get("stop_time"),
+                "daily_budget_native": row.get("daily_budget_native"),
+                "lifetime_budget_native": row.get("lifetime_budget_native"),
+                "spend": row.get("spend_native"),
+                "currency_native": row.get("currency_native"),
+                "fx_rate": row.get("fx_rate_to_sar"),
+                "purchases": row.get("purchases"),
+                "purchase_value": row.get("purchase_value_native"),
+                "impressions": row.get("impressions"),
+                "clicks": row.get("clicks"),
+                "updated_at": row.get("updated_at") or row.get("observed_at"),
+                "_data_source": META_CAMPAIGN_V2_PERFORMANCE_COLLECTION,
+            }
+        )
+    return output
+
+
 def _snapchat_metric(row: dict, key: str) -> Any:
     metrics = row.get("metrics")
     if not isinstance(metrics, dict):
@@ -1164,6 +1215,28 @@ def _campaign_rows(
                     campaign_name
                     or ("إجمالي غير مفصل" if campaign_id == "_default" else campaign_id)
                 ),
+                "status": _clean_text(row.get("status"), limit=40) or None,
+                "delivery_status": (
+                    _clean_text(
+                        row.get("delivery_status")
+                        or row.get("effective_status"),
+                        limit=40,
+                    )
+                    or None
+                ),
+                "objective": _clean_text(row.get("objective"), limit=80) or None,
+                "start_time": _clean_text(row.get("start_time"), limit=80) or None,
+                "end_time": (
+                    _clean_text(row.get("end_time") or row.get("stop_time"), limit=80)
+                    or None
+                ),
+                "_daily_budget_native": _optional_nonnegative_number(
+                    row.get("daily_budget_native")
+                ),
+                "_lifetime_budget_native": _optional_nonnegative_number(
+                    row.get("lifetime_budget_native")
+                ),
+                "_metadata_date": observed_date,
                 "spend_reported": 0.0,
                 "revenue_reported": 0.0,
                 "purchases": 0,
@@ -1248,6 +1321,43 @@ def _campaign_rows(
             or observed_date > target["last_observed_date"]
         ):
             target["last_observed_date"] = observed_date
+        if observed_date and (
+            not target.get("_metadata_date")
+            or observed_date >= target["_metadata_date"]
+        ):
+            target["status"] = (
+                _clean_text(row.get("status"), limit=40) or target.get("status")
+            )
+            target["delivery_status"] = (
+                _clean_text(
+                    row.get("delivery_status") or row.get("effective_status"),
+                    limit=40,
+                )
+                or target.get("delivery_status")
+            )
+            target["objective"] = (
+                _clean_text(row.get("objective"), limit=80)
+                or target.get("objective")
+            )
+            target["start_time"] = (
+                _clean_text(row.get("start_time"), limit=80)
+                or target.get("start_time")
+            )
+            target["end_time"] = (
+                _clean_text(row.get("end_time") or row.get("stop_time"), limit=80)
+                or target.get("end_time")
+            )
+            daily_budget = _optional_nonnegative_number(
+                row.get("daily_budget_native")
+            )
+            lifetime_budget = _optional_nonnegative_number(
+                row.get("lifetime_budget_native")
+            )
+            if daily_budget is not None:
+                target["_daily_budget_native"] = daily_budget
+            if lifetime_budget is not None:
+                target["_lifetime_budget_native"] = lifetime_budget
+            target["_metadata_date"] = observed_date
 
     output: list[dict] = []
     for value in grouped.values():
@@ -1287,7 +1397,15 @@ def _campaign_rows(
             else None
         )
         value.pop("_campaign_name_date", None)
+        value.pop("_metadata_date", None)
+        daily_budget_native = value.pop("_daily_budget_native", None)
+        lifetime_budget_native = value.pop("_lifetime_budget_native", None)
         currency = value["spend_currency"]
+        value["budget"] = {
+            "currency": currency,
+            "daily_native": daily_budget_native,
+            "lifetime_native": lifetime_budget_native,
+        }
         fx_rate = value.pop("_fx_rate")
         sar_equivalent = (
             _round(spend * fx_rate)
@@ -1813,6 +1931,36 @@ class AdsManagerService:
             limit=MAX_PERFORMANCE_ROWS,
             sort=[("date", 1), ("ad_account_id", 1)],
         )
+        meta_campaign_v2_task = _rows(
+            self.db,
+            META_CAMPAIGN_V2_PERFORMANCE_COLLECTION,
+            {**date_query, "provider": META_INTEGRATION_PROVIDER},
+            {
+                "_id": 0,
+                "date": 1,
+                "ad_account_id": 1,
+                "campaign_id": 1,
+                "campaign_name": 1,
+                "objective": 1,
+                "status": 1,
+                "effective_status": 1,
+                "start_time": 1,
+                "stop_time": 1,
+                "daily_budget_native": 1,
+                "lifetime_budget_native": 1,
+                "currency_native": 1,
+                "spend_native": 1,
+                "fx_rate_to_sar": 1,
+                "purchases": 1,
+                "purchase_value_native": 1,
+                "impressions": 1,
+                "clicks": 1,
+                "observed_at": 1,
+                "updated_at": 1,
+            },
+            limit=MAX_PERFORMANCE_ROWS,
+            sort=[("date", 1), ("campaign_id", 1), ("ad_account_id", 1)],
+        )
         meta_legacy_task = _rows(
             self.db,
             META_LEGACY_PERFORMANCE_COLLECTION,
@@ -1911,6 +2059,7 @@ class AdsManagerService:
             tiktok_v2_rows,
             tiktok_connected_accounts,
             meta_v2_rows,
+            meta_campaign_v2_rows,
             meta_legacy_rows,
             meta_selected_accounts,
             accounts,
@@ -1928,6 +2077,7 @@ class AdsManagerService:
             tiktok_v2_task,
             tiktok_connected_accounts_task,
             meta_v2_task,
+            meta_campaign_v2_task,
             meta_legacy_task,
             meta_selected_accounts_task,
             accounts_task,
@@ -1948,6 +2098,9 @@ class AdsManagerService:
         tiktok_v2_limit_reached = len(tiktok_v2_rows) > MAX_PERFORMANCE_ROWS
         tiktok_accounts_limit_reached = len(tiktok_connected_accounts) > MAX_ACCOUNTS
         meta_v2_limit_reached = len(meta_v2_rows) > MAX_PERFORMANCE_ROWS
+        meta_campaign_v2_limit_reached = (
+            len(meta_campaign_v2_rows) > MAX_PERFORMANCE_ROWS
+        )
         meta_legacy_limit_reached = len(meta_legacy_rows) > MAX_PERFORMANCE_ROWS
         meta_selection_limit_reached = len(meta_selected_accounts) > MAX_ACCOUNTS
         accounts_limit_reached = len(accounts) > MAX_ACCOUNTS
@@ -1962,6 +2115,7 @@ class AdsManagerService:
         tiktok_v2_rows = tiktok_v2_rows[:MAX_PERFORMANCE_ROWS]
         tiktok_connected_accounts = tiktok_connected_accounts[:MAX_ACCOUNTS]
         meta_v2_rows = meta_v2_rows[:MAX_PERFORMANCE_ROWS]
+        meta_campaign_v2_rows = meta_campaign_v2_rows[:MAX_PERFORMANCE_ROWS]
         meta_legacy_rows = meta_legacy_rows[:MAX_PERFORMANCE_ROWS]
         meta_selected_accounts = meta_selected_accounts[:MAX_ACCOUNTS]
         accounts = accounts[:MAX_ACCOUNTS]
@@ -2104,15 +2258,35 @@ class AdsManagerService:
                 .removeprefix("act_")
                 in selected_meta_ids
             ]
+            meta_campaign_v2_rows = [
+                row
+                for row in meta_campaign_v2_rows
+                if _clean_text(row.get("ad_account_id"), limit=120)
+                .removeprefix("act_")
+                in selected_meta_ids
+            ]
             meta_rows = _normalize_meta_v2_rows(meta_v2_rows)
+            normalized_meta_campaign_rows = _normalize_meta_campaign_v2_rows(
+                meta_campaign_v2_rows
+            )
+            meta_campaign_source_rows = (
+                normalized_meta_campaign_rows or list(meta_rows)
+            )
             meta_source_key = META_V2_PERFORMANCE_COLLECTION
+            meta_campaign_source_key = META_CAMPAIGN_V2_PERFORMANCE_COLLECTION
             active_meta_limit_reached = (
                 meta_v2_limit_reached or meta_selection_limit_reached
             )
+            active_meta_campaign_limit_reached = (
+                meta_campaign_v2_limit_reached or meta_selection_limit_reached
+            )
         else:
             meta_rows = meta_legacy_rows
+            meta_campaign_source_rows = meta_legacy_rows
             meta_source_key = META_LEGACY_PERFORMANCE_COLLECTION
+            meta_campaign_source_key = META_LEGACY_PERFORMANCE_COLLECTION
             active_meta_limit_reached = meta_legacy_limit_reached
+            active_meta_campaign_limit_reached = meta_legacy_limit_reached
 
         source_limit_reached = {
             snap_source_key: active_snap_limit_reached,
@@ -2120,12 +2294,14 @@ class AdsManagerService:
             snap_account_config_source_key: active_snap_account_config_limit_reached,
             tiktok_source_key: active_tiktok_limit_reached,
             meta_source_key: active_meta_limit_reached,
+            meta_campaign_source_key: active_meta_campaign_limit_reached,
             "ads_accounts": accounts_limit_reached,
             "counterparties": legacy_accounts_limit_reached,
         }
         dated_sources = {
             tiktok_source_key: tiktok_rows,
             meta_source_key: meta_rows,
+            meta_campaign_source_key: meta_campaign_source_rows,
         }
         if snap_v2_authoritative:
             dated_sources[snap_source_key] = snap_normalized_rows
@@ -2162,6 +2338,11 @@ class AdsManagerService:
         meta_rows = [
             row
             for row in meta_rows
+            if _valid_source_date(row.get("date"), from_iso, to_iso)
+        ]
+        meta_campaign_source_rows = [
+            row
+            for row in meta_campaign_source_rows
             if _valid_source_date(row.get("date"), from_iso, to_iso)
         ]
         stored_usd_to_sar_rate = _optional_nonnegative_number(
@@ -2210,7 +2391,7 @@ class AdsManagerService:
             ),
             "meta": _campaign_rows(
                 "meta",
-                meta_rows,
+                meta_campaign_source_rows,
                 exact_accounts=exact_accounts,
                 provider_accounts=provider_accounts,
             ),
@@ -2494,7 +2675,11 @@ class AdsManagerService:
                     else None
                 )
                 unverified_zero_performance = False
-                campaign_source_rows = raw_rows[provider_key]
+                campaign_source_rows = (
+                    meta_campaign_source_rows
+                    if provider_key == "meta"
+                    else raw_rows[provider_key]
+                )
 
             # The open-current-day lag exception is valid only when both
             # sides of the ratio omit that still-open day. If performance

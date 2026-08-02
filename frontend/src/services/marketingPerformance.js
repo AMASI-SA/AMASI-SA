@@ -208,7 +208,7 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
     };
 }
 
-function adaptAdsManager(platform, overview) {
+export function adaptAdsManager(platform, overview) {
     const config = MARKETING_PLATFORM_CONFIG[platform];
     const provider = overview.providers?.find(
         (row) => row.provider === config.adsProvider,
@@ -255,7 +255,16 @@ function adaptAdsManager(platform, overview) {
                 sales_sar: row.revenue_sar_equivalent,
                 orders: row.purchases,
                 swipes: row.clicks,
-                status: "unknown",
+                status: row.status || "unknown",
+                delivery_status: row.delivery_status || null,
+                objective: row.objective || null,
+                start_time: row.start_time || null,
+                end_time: row.end_time || null,
+                budget: row.budget || {
+                    currency: row.spend_currency || null,
+                    daily_native: null,
+                    lifetime_native: null,
+                },
             }))
             .filter(Boolean),
         campaign_pagination: overview.campaign_pagination,
