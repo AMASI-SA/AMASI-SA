@@ -113,7 +113,9 @@ export function enhanceReviewEditToggle(button) {
     return button;
   }
 
-  button.setAttribute("aria-label", "تعديل خيارات المنتج");
+  if (button.getAttribute("aria-label") !== "تعديل خيارات المنتج") {
+    button.setAttribute("aria-label", "تعديل خيارات المنتج");
+  }
   button.title = "تعديل الاسم والمقاس واللون وباقي خيارات المنتج";
   let label = button.querySelector("[data-review-edit-visible-label]");
   if (!label) {
@@ -137,7 +139,7 @@ function directChildOf(node, parent) {
 
 function findButton(panel, phrase) {
   return [...panel.querySelectorAll("button")].find((button) =>
-    text(button.textContent).includes(phrase),
+    !button.dataset.reviewImageProxy && text(button.textContent).includes(phrase),
   ) || null;
 }
 
@@ -166,7 +168,8 @@ function syncDialogFooter(panel, footer) {
   Object.entries(originals).forEach(([mode, original]) => {
     const proxy = footer.querySelector(`[data-review-image-proxy="${mode}"]`);
     if (!proxy) return;
-    proxy.disabled = !original || Boolean(original.disabled);
+    const shouldDisable = !original || Boolean(original.disabled);
+    if (proxy.disabled !== shouldDisable) proxy.disabled = shouldDisable;
     const visible = text(original?.textContent);
     const fallback = mode === "order"
       ? "حفظ لهذا الطلب فقط"
