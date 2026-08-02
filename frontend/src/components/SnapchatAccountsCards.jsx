@@ -1,16 +1,13 @@
 /**
- * Iter-159j — Per-Snapchat-Ad-Account Cards
- * ----------------------------------------
- * Renders one card per Snapchat ad account showing:
- *   • Spend (this month)
- *   • Orders (prorated by spend share)
- *   • Avg cost per order
- *   • Sales/revenue
- *   • Credit-limit progress bar (links to /ad-accounts)
+ * Snapchat account cards plus the Mezan V2 hybrid operational summary.
  *
- * Sits ALONGSIDE the existing aggregated SnapchatOfficialCard — does NOT
- * replace it.  Renders nothing when the user has < 2 Snapchat accounts
- * (the aggregated card is sufficient in that case).
+ * The separated V2 view renders one aggregate card first:
+ * - spend, impressions and clicks from Snapchat Ads API;
+ * - actual orders and revenue from Salla's reported order source;
+ * - Snapchat-attributed conversions as a separate comparison.
+ *
+ * Per-account cards remain provider-only because Salla orders cannot be split
+ * safely between ad accounts without campaign/click evidence.
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -18,6 +15,7 @@ import {
     ArrowsClockwise, Ghost, ShoppingBag, CurrencyDollar, Coins,
 } from "@phosphor-icons/react";
 import api from "../lib/api";
+import SnapchatHybridSummaryCard from "./SnapchatHybridSummaryCard";
 
 
 function fmt(n) {
@@ -69,26 +67,27 @@ function SnapchatAccountPeriod({ accountId, label, period, periodKey }) {
                     testid={`snap-v2-${accountId}-${periodKey}-spend`}
                 />
                 <SnapchatPeriodMetric
-                    label="الطلبات"
+                    label="التحويلات المنسوبة"
                     value={fmtOrders(orders)}
-                    hint="تحويلات Snapchat"
+                    hint="من Snapchat API لهذا الحساب"
                     tone="sky"
                     testid={`snap-v2-${accountId}-${periodKey}-orders`}
                 />
                 <SnapchatPeriodMetric
-                    label="المبيعات"
+                    label="المبيعات المنسوبة"
                     value={`${fmt(revenue)} ر.س`}
+                    hint="من Snapchat API لهذا الحساب"
                     tone="emerald"
                     testid={`snap-v2-${accountId}-${periodKey}-revenue`}
                 />
                 <SnapchatPeriodMetric
-                    label="ROAS"
+                    label="ROAS المنسوب"
                     value={roas == null ? "—" : `${roas.toFixed(2)}×`}
                     tone="amber"
                     testid={`snap-v2-${accountId}-${periodKey}-roas`}
                 />
                 <SnapchatPeriodMetric
-                    label="متوسط تكلفة الطلب"
+                    label="CPA المنسوب"
                     value={costPerOrder == null ? "—" : `${fmt(costPerOrder)} ر.س`}
                     tone="amber"
                     testid={`snap-v2-${accountId}-${periodKey}-cpo`}
@@ -165,7 +164,7 @@ export function SnapchatSeparatedAccountsView({ data, onRefresh, refreshing, las
                         <Ghost size={22} weight="fill" className="text-yellow-500" />
                         <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">حسابات Snapchat المنفصلة</h2>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">كل بطاقة تقرأ حسابًا إعلانيًا واحدًا فقط؛ لا يوجد دمج بين الحسابات.</p>
+                    <p className="mt-1 text-xs text-slate-500">هذه البطاقات تعرض أرقام Snapchat API لكل حساب؛ الطلبات الفعلية من سلة تظهر في البطاقة الإجمالية أعلاه.</p>
                     {lastFetched && (
                         <p className="mt-1 text-[10px] font-bold text-emerald-700">
                             آخر قراءة: {new Date(lastFetched).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })}
@@ -180,7 +179,7 @@ export function SnapchatSeparatedAccountsView({ data, onRefresh, refreshing, las
                     data-testid="snapchat-v2-accounts-refresh"
                 >
                     <ArrowsClockwise size={16} weight="bold" className={refreshing ? "animate-spin" : ""} />
-                    {refreshing ? "جارٍ التحديث…" : "تحديث الحسابات الآن"}
+                    {refreshing ? "جارٍ التحديث…" : "تحديث بيانات سناب الآن"}
                 </button>
             </div>
             <div className="space-y-4" data-testid="snapchat-v2-accounts-list">
@@ -204,6 +203,7 @@ export default function SnapchatAccountsCards({
     variant = "compact",
 }) {
     const [data, setData] = useState(null);
+    const [hybridData, setHybridData] = useState(null);
     const [busy, setBusy] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [lastFetched, setLastFetched] = useState(null);
@@ -211,17 +211,27 @@ export default function SnapchatAccountsCards({
     const fetchData = useCallback(async ({ manual = false } = {}) => {
         if (manual) setRefreshing(true);
         try {
-            const { data } = await api.get(endpoint);
-            setData(data);
-            setLastFetched(Date.now());
-        } catch (_) { /* silent */ }
-        finally {
+            const requests = [api.get(endpoint)];
+            if (variant === "separated") {
+                requests.push(api.get("/dashboard-v2/snapchat-summary"));
+            }
+            const results = await Promise.allSettled(requests);
+            let updated = false;
+            if (results[0]?.status === "fulfilled") {
+                setData(results[0].value.data);
+                updated = true;
+            }
+            if (variant === "separated" && results[1]?.status === "fulfilled") {
+                setHybridData(results[1].value.data);
+                updated = true;
+            }
+            if (updated) setLastFetched(Date.now());
+        } finally {
             setBusy(false);
             if (manual) setRefreshing(false);
         }
-    }, [endpoint]);
+    }, [endpoint, variant]);
 
-    // Initial load + refetch whenever the parent bumps refreshSignal.
     useEffect(() => {
         let mounted = true;
         (async () => {
@@ -231,9 +241,6 @@ export default function SnapchatAccountsCards({
         return () => { mounted = false; };
     }, [refreshSignal, fetchData]);
 
-    // Iter-204 — Silent auto-poll every 30 minutes so card numbers
-    // refresh on their own without a page reload (mirrors the
-    // backend half-hour ad-account cron at iter-139).
     useEffect(() => {
         const id = setInterval(() => {
             if (document.visibilityState === "visible") fetchData();
@@ -241,18 +248,21 @@ export default function SnapchatAccountsCards({
         return () => clearInterval(id);
     }, [fetchData]);
 
-    if (busy || !data) return null;
+    if (busy && !data && !hybridData) return null;
     if (variant === "separated") {
         return (
-            <SnapchatSeparatedAccountsView
-                data={data}
-                onRefresh={() => fetchData({ manual: true })}
-                refreshing={refreshing}
-                lastFetched={lastFetched}
-            />
+            <div className="space-y-6" data-testid="snapchat-v2-hybrid-and-accounts">
+                <SnapchatHybridSummaryCard data={hybridData} />
+                <SnapchatSeparatedAccountsView
+                    data={data}
+                    onRefresh={() => fetchData({ manual: true })}
+                    refreshing={refreshing}
+                    lastFetched={lastFetched}
+                />
+            </div>
         );
     }
-    if (!data.accounts || data.accounts.length < 2) return null;  // no value to split when only one account
+    if (!data?.accounts || data.accounts.length < 2) return null;
 
     return (
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm" data-testid="snapchat-accounts-cards">
@@ -306,28 +316,27 @@ export default function SnapchatAccountsCards({
                                 </div>
                                 <div className="bg-sky-50 border border-sky-200 rounded p-2">
                                     <div className="text-[10px] font-bold text-sky-700 inline-flex items-center gap-1">
-                                        <ShoppingBag size={10} weight="bold" /> الطلبات
+                                        <ShoppingBag size={10} weight="bold" /> التحويلات
                                     </div>
                                     <div className="num font-extrabold text-sky-900 mt-0.5" data-testid={`snap-acc-orders-${a.id}`}>{a.orders}</div>
-                                    <div className="text-[9px] text-sky-600">طلب</div>
+                                    <div className="text-[9px] text-sky-600">منسوبة بواسطة سناب</div>
                                 </div>
                                 <div className="bg-amber-50 border border-amber-200 rounded p-2">
-                                    <div className="text-[10px] font-bold text-amber-700">متوسط تكلفة الطلب</div>
+                                    <div className="text-[10px] font-bold text-amber-700">CPA المنسوب</div>
                                     <div className="num font-extrabold text-amber-900 mt-0.5" data-testid={`snap-acc-cpo-${a.id}`}>
                                         {a.cost_per_order != null ? fmt(a.cost_per_order) : "—"}
                                     </div>
-                                    <div className="text-[9px] text-amber-600">ر.س / طلب</div>
+                                    <div className="text-[9px] text-amber-600">ر.س / تحويل</div>
                                 </div>
                                 <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
                                     <div className="text-[10px] font-bold text-emerald-700 inline-flex items-center gap-1">
-                                        <CurrencyDollar size={10} weight="bold" /> المبيعات
+                                        <CurrencyDollar size={10} weight="bold" /> المبيعات المنسوبة
                                     </div>
                                     <div className="num font-extrabold text-emerald-900 mt-0.5" data-testid={`snap-acc-revenue-${a.id}`}>{fmt(a.revenue)}</div>
                                     <div className="text-[9px] text-emerald-600">ROAS {a.roas?.toFixed?.(2) ?? a.roas}×</div>
                                 </div>
                             </div>
 
-                            {/* Credit-limit usage strip */}
                             {hasLimit && (
                                 <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-1" data-testid={`snap-acc-limit-${a.id}`}>
                                     <div className="flex items-center justify-between text-[10px]">
