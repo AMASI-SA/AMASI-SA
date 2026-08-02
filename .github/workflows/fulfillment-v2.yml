@@ -12,6 +12,7 @@ on:
       - "backend/order_review_forward_stage_guard.py"
       - "backend/reviewed_products_catalog.py"
       - "backend/reviewed_preparation_batches.py"
+      - "backend/preparation_file_registry.py"
       - "backend/preparation_pdf.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -27,6 +28,7 @@ on:
       - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_reviewed_products_catalog.py"
       - "backend/tests/test_reviewed_preparation_batches.py"
+      - "backend/tests/test_preparation_file_registry.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
@@ -60,6 +62,9 @@ on:
       - "frontend/src/reviewedPreparationSelection.css"
       - "frontend/src/reviewedPreparationSelection.js"
       - "frontend/src/reviewedPreparationSelection.test.js"
+      - "frontend/src/preparationFileRegistryUi.js"
+      - "frontend/src/preparationFileRegistryUi.test.js"
+      - "frontend/src/reviewPreparationFileRegistryEnhancer.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -86,6 +91,7 @@ on:
       - "backend/order_review_forward_stage_guard.py"
       - "backend/reviewed_products_catalog.py"
       - "backend/reviewed_preparation_batches.py"
+      - "backend/preparation_file_registry.py"
       - "backend/preparation_pdf.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -101,6 +107,7 @@ on:
       - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_reviewed_products_catalog.py"
       - "backend/tests/test_reviewed_preparation_batches.py"
+      - "backend/tests/test_preparation_file_registry.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
       - "backend/tests/test_order_engine_salla_refresh.py"
@@ -134,6 +141,9 @@ on:
       - "frontend/src/reviewedPreparationSelection.css"
       - "frontend/src/reviewedPreparationSelection.js"
       - "frontend/src/reviewedPreparationSelection.test.js"
+      - "frontend/src/preparationFileRegistryUi.js"
+      - "frontend/src/preparationFileRegistryUi.test.js"
+      - "frontend/src/reviewPreparationFileRegistryEnhancer.js"
       - "frontend/src/lib/normalizeSaudiMobile.js"
       - "frontend/src/lib/normalizeSaudiMobile.test.js"
       - "frontend/src/components/Layout.jsx"
@@ -190,6 +200,7 @@ jobs:
           tests/test_order_review_customer_waiting.py
           tests/test_reviewed_products_catalog.py
           tests/test_reviewed_preparation_batches.py
+          tests/test_preparation_file_registry.py
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
           tests/test_order_engine_salla_refresh.py
@@ -227,7 +238,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
