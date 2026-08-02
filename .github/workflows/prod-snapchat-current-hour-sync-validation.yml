@@ -1,0 +1,149 @@
+name: Production Snapchat Current Hour Sync Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-snapchat-current-hour-sync-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-snapchat-current-hour-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-snapchat-current-hour-sync
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply staged Snapchat fix
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f tools/apply_snapchat_current_hour_sync.py ]]; then
+            python tools/apply_snapchat_current_hour_sync.py
+            rm tools/apply_snapchat_current_hour_sync.py
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify exact final scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.patch.outputs.applied }}" == "true" ]]; then
+            git diff --name-only origin/hotfix/prod-snap-meta-final -- | sort > /tmp/changed.txt
+          else
+            git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          fi
+          cat > /tmp/expected.txt <<'EOF'
+          backend/integrations_control_center/ads_auto_sync_scheduler.py
+          backend/integrations_control_center/snapchat_account_hourly_refresh.py
+          backend/tests/test_ads_auto_sync_scheduler_v2.py
+          backend/tests/test_snapchat_account_hourly_refresh_v2.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo SNAPCHAT_CURRENT_HOUR_SCOPE_OK
+
+      - name: Install targeted backend dependencies
+        shell: bash
+        run: |
+          python -m pip install -q \
+            fastapi==0.110.1 \
+            httpx==0.28.1 \
+            pydantic==2.13.4 \
+            'pymongo>=4.8,<5' \
+            'motor>=3.5,<4' \
+            cryptography==48.0.0 \
+            email-validator \
+            python-jose \
+            passlib \
+            bcrypt \
+            pytest==9.0.3 \
+            pytest-asyncio
+
+      - name: Compile changed backend modules
+        run: |
+          python -m py_compile \
+            backend/integrations_control_center/ads_auto_sync_scheduler.py \
+            backend/integrations_control_center/snapchat_account_hourly_refresh.py \
+            backend/tests/test_ads_auto_sync_scheduler_v2.py \
+            backend/tests/test_snapchat_account_hourly_refresh_v2.py
+
+      - name: Run scheduler and Snapchat contracts
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q --tb=short \
+            backend/tests/test_ads_auto_sync_scheduler_v2.py \
+            backend/tests/test_snapchat_account_hourly_refresh_v2.py \
+            backend/tests/test_snapchat_native_data_sync_v2.py
+
+      - name: Enforce current-hour and read-only safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          hourly = Path('backend/integrations_control_center/snapchat_account_hourly_refresh.py')
+          source = hourly.read_text(encoding='utf-8')
+          required = (
+              'def snapchat_hourly_request_window',
+              'completed_hour_end',
+              'min(nominal_end, completed_hour_end)',
+              'request_end_time',
+              'no_completed_hour_available',
+          )
+          missing = [marker for marker in required if marker not in source]
+          if missing:
+              raise SystemExit(f'Missing current-hour markers: {missing}')
+
+          scheduler = Path('backend/integrations_control_center/ads_auto_sync_scheduler.py')
+          scheduler_source = scheduler.read_text(encoding='utf-8')
+          for marker in ('error_samples', 'ad_account_id', '_record_error'):
+              if marker not in scheduler_source:
+                  raise SystemExit(f'Missing scheduler diagnostic marker: {marker}')
+
+          for path in (hourly, scheduler):
+              tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                      if node.func.attr in {'post', 'put', 'patch', 'delete'}:
+                          raise SystemExit(
+                              f'Provider mutation method found in {path}: '
+                              f'{node.func.attr} line {node.lineno}'
+                          )
+          print('SNAPCHAT_CURRENT_HOUR_SOURCE_ONLY_OK')
+          PY
+          git diff --check
+
+      - name: Publish clean candidate commit
+        if: steps.patch.outputs.applied == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A \
+            backend/integrations_control_center/ads_auto_sync_scheduler.py \
+            backend/integrations_control_center/snapchat_account_hourly_refresh.py \
+            backend/tests/test_ads_auto_sync_scheduler_v2.py \
+            backend/tests/test_snapchat_account_hourly_refresh_v2.py \
+            tools/apply_snapchat_current_hour_sync.py
+          git commit -m "fix(prod-snap): clamp five-minute sync to completed hour"
+          git push origin HEAD:fix/prod-snapchat-current-hour-sync
+          echo SNAPCHAT_CURRENT_HOUR_CLEAN_COMMIT_PUSHED
