@@ -37,30 +37,31 @@ jobs:
 
           path = Path("tools/apply_ads_manager_snap_tiktok_v2.py")
           source = path.read_text(encoding="utf-8")
-          old = '''service = replace_once(
+          old = """service = replace_once(
               service,
               old_provider_key,
-              ''' + "'''" + '''                    provider_source_key = provider_source_keys[provider_key]
-          ''' + "'''" + ''',
-              "daily source key",
+              '''                    provider_source_key = provider_source_keys[provider_key]
+          ''',
+              \"daily source key\",
           )
-          '''
-          new = '''old_daily_provider_key = ''' + "'''" + '''                    provider_source_key = (
-                          "snapchat_account_daily"
-                          if provider_key == "snapchat"
-                          else meta_source_key
-                          if provider_key == "meta"
-                          else "tiktok_ads_daily"
-                      )
-          ''' + "'''" + '''
+          """
+          new = """daily_indent = \" \" * 20
+          old_daily_provider_key = (
+              f\"{daily_indent}provider_source_key = (\\n\"
+              f\"{daily_indent}    \\\"snapchat_account_daily\\\"\\n\"
+              f\"{daily_indent}    if provider_key == \\\"snapchat\\\"\\n\"
+              f\"{daily_indent}    else meta_source_key\\n\"
+              f\"{daily_indent}    if provider_key == \\\"meta\\\"\\n\"
+              f\"{daily_indent}    else \\\"tiktok_ads_daily\\\"\\n\"
+              f\"{daily_indent})\\n\"
+          )
           service = replace_once(
               service,
               old_daily_provider_key,
-              ''' + "'''" + '''                    provider_source_key = provider_source_keys[provider_key]
-          ''' + "'''" + ''',
-              "daily source key",
+              f\"{daily_indent}provider_source_key = provider_source_keys[provider_key]\\n\",
+              \"daily source key\",
           )
-          '''
+          """
           if source.count(old) != 1:
               raise SystemExit("daily source patch target missing")
           path.write_text(source.replace(old, new, 1), encoding="utf-8")
