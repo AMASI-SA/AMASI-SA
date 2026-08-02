@@ -7,109 +7,113 @@ import {
 } from "./reviewedProductSortUi";
 
 const ROOT_ID = "mezan-reviewed-product-sort-enhancer";
-const LAUNCHER_ID = "mezan-reviewed-product-sort-launcher";
+const BUTTON_ID = "mezan-reviewed-product-sort-button";
 let products = [];
+let modal = null;
 let loadingPromise = null;
-let managerOverlay = null;
-let visibilityScheduled = false;
 
 const text = (value) => String(value || "").trim();
 
-function node(tag, content = "") {
-    const element = document.createElement(tag);
-    if (content) element.textContent = content;
-    return element;
+function element(tag, value = "") {
+    const node = document.createElement(tag);
+    if (value) node.textContent = value;
+    return node;
 }
 
-async function loadProducts({ force = false } = {}) {
+function isReviewedStage() {
+    const params = new URLSearchParams(window.location.search);
+    return (
+        (window.location.pathname.includes("/fulfillment-v2") && params.get("stage") === "reviewed")
+        || Boolean(document.querySelector('[data-testid="reviewed-orders-stage"]'))
+    );
+}
+
+async function loadProducts(force = false) {
     if (force) loadingPromise = null;
-    if (loadingPromise) return loadingPromise;
-    loadingPromise = listReviewedProductCatalog({ limit: 2000 })
-        .then((catalog) => {
-            products = Array.isArray(catalog?.products) ? catalog.products : [];
-            return products;
-        })
-        .catch((error) => {
-            loadingPromise = null;
-            throw error;
-        });
+    if (!loadingPromise) {
+        loadingPromise = listReviewedProductCatalog({ limit: 2000 })
+            .then((catalog) => {
+                products = Array.isArray(catalog?.products) ? catalog.products : [];
+                return products;
+            })
+            .catch((error) => {
+                loadingPromise = null;
+                throw error;
+            });
+    }
     return loadingPromise;
 }
 
-function closeManager() {
-    managerOverlay?.remove();
-    managerOverlay = null;
+function closeModal() {
+    modal?.remove();
+    modal = null;
 }
 
-function selectedCandidate(product, value) {
-    const wanted = text(value);
+function candidateFor(product, key) {
     return (product?.preparation_sort_candidates || []).find(
-        (candidate) => text(candidate?.key) === wanted,
+        (candidate) => text(candidate?.key) === text(key),
     ) || null;
 }
 
-function renderProductRow(product) {
-    const row = node("article");
-    row.style.cssText = "border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:13px";
+function productRow(product) {
+    const card = element("article");
+    card.style.cssText = "border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:14px";
 
-    const top = node("div");
-    top.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
-    const identity = node("div");
-    identity.style.cssText = "min-width:0;flex:1";
-    const name = node("div", text(product?.name) || "منتج");
+    const heading = element("div");
+    heading.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
+    const nameBox = element("div");
+    nameBox.style.cssText = "min-width:0;flex:1";
+    const name = element("div", text(product?.name) || "منتج");
     name.style.cssText = "font-size:14px;font-weight:950;color:#0f172a;line-height:1.6";
-    const sku = node("div", text(product?.sku) ? `SKU: ${text(product.sku)}` : "");
+    const sku = element("div", text(product?.sku) ? `SKU: ${text(product.sku)}` : "");
     sku.style.cssText = "margin-top:2px;font-size:10px;font-weight:750;color:#94a3b8;direction:ltr;text-align:right";
-    identity.append(name);
-    if (sku.textContent) identity.append(sku);
+    nameBox.append(name);
+    if (sku.textContent) nameBox.append(sku);
 
-    const quantity = node(
-        "div",
-        `${Math.max(0, Math.floor(Number(product?.remaining_quantity ?? product?.quantity) || 0))} قطعة`,
-    );
-    quantity.style.cssText = "flex:none;border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
-    top.append(identity, quantity);
+    const quantity = Math.max(0, Math.floor(Number(product?.remaining_quantity ?? product?.quantity) || 0));
+    const badge = element("div", `${quantity} قطعة`);
+    badge.style.cssText = "flex:none;border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
+    heading.append(nameBox, badge);
 
-    const current = node("div", reviewedProductSortButtonLabel(product));
+    const current = element("div", reviewedProductSortButtonLabel(product));
     current.style.cssText = "margin-top:9px;font-size:11px;font-weight:850;color:#6d28d9";
 
     const candidates = Array.isArray(product?.preparation_sort_candidates)
         ? product.preparation_sort_candidates
         : [];
-    const controls = node("div");
-    controls.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:9px";
+    const controls = element("div");
+    controls.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px";
 
-    const select = node("select");
-    select.style.cssText = "min-width:0;min-height:43px;border:1px solid #cbd5e1;border-radius:11px;background:white;padding:0 10px;font-size:12px;font-weight:800;color:#334155;outline:none";
-    const defaultOption = node("option", "بدون ترتيب مخصص");
-    defaultOption.value = "";
-    select.appendChild(defaultOption);
+    const select = element("select");
+    select.style.cssText = "min-width:0;min-height:44px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:0 10px;font-size:12px;font-weight:850;color:#334155;outline:none";
+    const noSort = element("option", "بدون ترتيب مخصص");
+    noSort.value = "";
+    select.append(noSort);
     candidates.forEach((candidate) => {
-        const option = node("option", text(candidate?.label || candidate?.key));
+        const option = element("option", text(candidate?.label || candidate?.key));
         option.value = text(candidate?.key);
-        select.appendChild(option);
+        select.append(option);
     });
     select.value = text(product?.preparation_sort_spec);
-    select.disabled = candidates.length === 0;
 
-    const save = node("button", "حفظ");
+    const save = element("button", "حفظ");
     save.type = "button";
-    save.disabled = candidates.length === 0;
-    save.style.cssText = "min-height:43px;border:0;border-radius:11px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950";
+    save.style.cssText = "min-height:44px;border:0;border-radius:11px;background:#6d28d9;padding:0 17px;color:#fff;font-size:12px;font-weight:950";
 
-    const summary = node("div");
-    summary.style.cssText = "margin-top:7px;border-radius:10px;background:#f8fafc;padding:8px 9px;color:#64748b;font-size:10px;font-weight:700;line-height:1.65";
-    const status = node("div");
-    status.style.cssText = "display:none;margin-top:7px;border-radius:10px;padding:8px 9px;font-size:11px;font-weight:850";
+    const summary = element("div");
+    summary.style.cssText = "margin-top:8px;border-radius:10px;background:#f8fafc;padding:9px;color:#64748b;font-size:10px;font-weight:750;line-height:1.7";
+    const status = element("div");
+    status.style.cssText = "display:none;margin-top:8px;border-radius:10px;padding:9px;font-size:11px;font-weight:850";
 
     function refreshSummary() {
-        const candidate = selectedCandidate(product, select.value);
+        const candidate = candidateFor(product, select.value);
         summary.textContent = candidate
-            ? reviewedProductSortCandidateSummary(candidate, 6)
+            ? reviewedProductSortCandidateSummary(candidate, 8)
             : (candidates.length
-                ? "اختر مواصفة واحدة؛ القيمة صاحبة أكبر عدد من القطع ستظهر أولًا في الملف."
-                : "لا توجد حاليًا مواصفات قابلة للترتيب في طلبات هذا المنتج.");
+                ? "اختر العمر أو المقاس أو اللون. القيمة الأكثر عددًا بالقطع ستظهر أولًا في ملف PDF."
+                : "لا توجد مواصفات قابلة للترتيب في الطلبات الحالية لهذا المنتج.");
     }
+
     select.onchange = refreshSummary;
     refreshSummary();
 
@@ -124,94 +128,84 @@ function renderProductRow(product) {
                 spec_key: select.value || null,
             });
             const updated = updateReviewedProductSortPreference(product, data);
-            products = products.map((item) =>
-                item.group_key === updated.group_key ? updated : item,
-            );
+            products = products.map((row) => row.group_key === updated.group_key ? updated : row);
             product = updated;
             current.textContent = reviewedProductSortButtonLabel(updated);
             status.textContent = select.value
-                ? "تم حفظ ترتيب بطاقات هذا المنتج."
-                : "تم إلغاء الترتيب المخصص لهذا المنتج.";
-            status.style.cssText = "display:block;margin-top:7px;border-radius:10px;padding:8px 9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
+                ? "تم حفظ طريقة ترتيب بطاقات هذا المنتج."
+                : "تم إلغاء الترتيب المخصص.";
+            status.style.cssText = "display:block;margin-top:8px;border-radius:10px;padding:9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
             refreshSummary();
         } catch (error) {
             status.textContent = error?.response?.data?.detail?.message
                 || error?.message
                 || "تعذّر حفظ ترتيب المنتج.";
-            status.style.cssText = "display:block;margin-top:7px;border-radius:10px;padding:8px 9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
+            status.style.cssText = "display:block;margin-top:8px;border-radius:10px;padding:9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
         } finally {
-            save.disabled = candidates.length === 0;
-            select.disabled = candidates.length === 0;
+            save.disabled = false;
+            select.disabled = false;
             save.textContent = "حفظ";
         }
     };
 
     controls.append(select, save);
-    row.append(top, current, controls, summary, status);
-    return row;
+    card.append(heading, current, controls, summary, status);
+    return card;
 }
 
-function renderManagerRows(container) {
+function renderRows(container) {
     container.replaceChildren();
     if (!products.length) {
-        const empty = node("div", "لا توجد منتجات متبقية في مرحلة تمت المراجعة.");
-        empty.style.cssText = "border:1px dashed #cbd5e1;border-radius:14px;padding:24px;text-align:center;color:#64748b;font-size:13px";
-        container.appendChild(empty);
+        const empty = element("div", "لا توجد منتجات متبقية في مرحلة تمت المراجعة.");
+        empty.style.cssText = "border:1px dashed #cbd5e1;border-radius:14px;padding:25px;text-align:center;color:#64748b;font-size:13px";
+        container.append(empty);
         return;
     }
-    products.forEach((product) => container.appendChild(renderProductRow(product)));
+    products.forEach((product) => container.append(productRow(product)));
 }
 
-async function openManager() {
-    if (managerOverlay) return;
+async function openModal() {
+    if (modal) return;
+    const overlay = element("div");
+    modal = overlay;
+    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
+    overlay.onclick = (event) => { if (event.target === overlay) closeModal(); };
 
-    const overlay = node("div");
-    managerOverlay = overlay;
-    overlay.dataset.reviewedProductSortManager = "1";
-    overlay.style.cssText = "position:fixed;inset:0;z-index:15000;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
-    overlay.onclick = (event) => {
-        if (event.target === overlay) closeManager();
-    };
-
-    const panel = node("section");
-    panel.style.cssText = "display:flex;width:min(720px,100%);max-height:92vh;flex-direction:column;overflow:hidden;border-radius:22px;background:#f8fafc;box-shadow:0 28px 90px #0005";
-
-    const header = node("header");
-    header.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;background:white;padding:18px";
-    const headingBox = node("div");
-    const heading = node("h2", "ترتيب بطاقات المنتجات في الملف");
-    heading.style.cssText = "margin:0;font-size:20px;font-weight:950;color:#0f172a";
-    const description = node(
-        "p",
-        "اختر مواصفة واحدة لكل منتج مثل العمر أو المقاس أو اللون. داخل PDF تتجمع البطاقات ذات القيمة المتشابهة، وتظهر القيمة الأكثر عددًا بالقطع أولًا.",
-    );
+    const panel = element("section");
+    panel.style.cssText = "display:flex;width:min(760px,100%);max-height:92vh;flex-direction:column;overflow:hidden;border-radius:22px;background:#f8fafc;box-shadow:0 28px 90px #0005";
+    const header = element("header");
+    header.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;background:#fff;padding:18px";
+    const titleBox = element("div");
+    const title = element("h2", "ترتيب بطاقات المنتجات في الملف");
+    title.style.cssText = "margin:0;font-size:20px;font-weight:950;color:#0f172a";
+    const description = element("p", "اختر مواصفة واحدة لكل منتج. يتم تجميع البطاقات المتشابهة، وتظهر القيمة ذات أكبر عدد من القطع أولًا.");
     description.style.cssText = "margin:6px 0 0;color:#64748b;font-size:11px;line-height:1.8";
-    headingBox.append(heading, description);
+    titleBox.append(title, description);
 
-    const headerActions = node("div");
-    headerActions.style.cssText = "display:flex;gap:7px";
-    const refresh = node("button", "تحديث");
+    const actions = element("div");
+    actions.style.cssText = "display:flex;gap:7px";
+    const refresh = element("button", "تحديث");
     refresh.type = "button";
-    refresh.style.cssText = "min-height:37px;border:1px solid #cbd5e1;border-radius:10px;background:white;padding:0 12px;color:#475569;font-size:11px;font-weight:900";
-    const close = node("button", "×");
+    refresh.style.cssText = "min-height:38px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;padding:0 12px;color:#475569;font-size:11px;font-weight:900";
+    const close = element("button", "×");
     close.type = "button";
-    close.style.cssText = "width:37px;height:37px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px;line-height:1";
-    close.onclick = closeManager;
-    headerActions.append(refresh, close);
-    header.append(headingBox, headerActions);
+    close.style.cssText = "width:38px;height:38px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px;line-height:1";
+    close.onclick = closeModal;
+    actions.append(refresh, close);
+    header.append(titleBox, actions);
 
-    const list = node("div");
-    list.style.cssText = "display:grid;gap:9px;overflow:auto;padding:13px";
-    const loading = node("div", "جارٍ تحميل المنتجات والمواصفات…");
-    loading.style.cssText = "padding:28px;text-align:center;color:#64748b;font-size:13px;font-weight:800";
-    list.appendChild(loading);
+    const list = element("div");
+    list.style.cssText = "display:grid;gap:10px;overflow:auto;padding:14px";
+    const loading = element("div", "جارٍ تحميل المنتجات والمواصفات…");
+    loading.style.cssText = "padding:30px;text-align:center;color:#64748b;font-size:13px;font-weight:850";
+    list.append(loading);
 
     refresh.onclick = async () => {
         refresh.disabled = true;
         refresh.textContent = "…";
         try {
-            await loadProducts({ force: true });
-            renderManagerRows(list);
+            await loadProducts(true);
+            renderRows(list);
         } finally {
             refresh.disabled = false;
             refresh.textContent = "تحديث";
@@ -219,60 +213,67 @@ async function openManager() {
     };
 
     panel.append(header, list);
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
+    overlay.append(panel);
+    document.body.append(overlay);
 
     try {
-        await loadProducts({ force: true });
-        if (managerOverlay === overlay) renderManagerRows(list);
+        await loadProducts(true);
+        if (modal === overlay) renderRows(list);
     } catch (error) {
-        if (managerOverlay !== overlay) return;
+        if (modal !== overlay) return;
         list.replaceChildren();
-        const warning = node("div", error?.message || "تعذّر تحميل المنتجات.");
+        const warning = element("div", error?.message || "تعذّر تحميل المنتجات.");
         warning.style.cssText = "border-radius:14px;background:#fff1f2;padding:18px;color:#be123c;font-size:12px;font-weight:850";
-        list.appendChild(warning);
+        list.append(warning);
     }
 }
 
-function launcher() {
-    let button = document.getElementById(LAUNCHER_ID);
+function ensureButton() {
+    let button = document.getElementById(BUTTON_ID);
     if (button) return button;
-    button = node("button", "ترتيب بطاقات المنتجات");
-    button.id = LAUNCHER_ID;
+    button = element("button", "ترتيب بطاقات المنتجات");
+    button.id = BUTTON_ID;
     button.type = "button";
-    button.hidden = true;
-    button.style.cssText = "position:fixed;left:16px;top:92px;z-index:10500;min-height:46px;border:1px solid #c4b5fd;border-radius:14px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;box-shadow:0 14px 35px #5b21b644";
-    button.onclick = openManager;
-    document.body.appendChild(button);
+    button.style.cssText = "position:fixed;right:22px;bottom:22px;z-index:2147483000;min-height:48px;border:1px solid #c4b5fd;border-radius:15px;background:#6d28d9;padding:0 18px;color:#fff;font-size:13px;font-weight:950;box-shadow:0 14px 40px #5b21b655";
+    button.onclick = openModal;
+    document.body.append(button);
     return button;
 }
 
 function syncVisibility() {
-    visibilityScheduled = false;
-    const button = launcher();
-    button.hidden = !document.querySelector('[data-testid="reviewed-orders-stage"]');
+    ensureButton().style.display = isReviewedStage() ? "block" : "none";
 }
 
-function scheduleVisibility() {
-    if (visibilityScheduled) return;
-    visibilityScheduled = true;
-    window.requestAnimationFrame(syncVisibility);
+function patchHistory() {
+    ["pushState", "replaceState"].forEach((method) => {
+        const original = window.history[method];
+        if (original.__mezanSortPatched) return;
+        const wrapped = function patchedHistory(...args) {
+            const result = original.apply(this, args);
+            window.setTimeout(syncVisibility, 0);
+            return result;
+        };
+        wrapped.__mezanSortPatched = true;
+        window.history[method] = wrapped;
+    });
 }
 
 function start() {
     if (!document.body || document.getElementById(ROOT_ID)) return;
-    const marker = node("div");
+    const marker = element("div");
     marker.id = ROOT_ID;
     marker.hidden = true;
-    document.body.appendChild(marker);
-    launcher();
+    document.body.append(marker);
+    ensureButton();
+    patchHistory();
 
-    const observer = new MutationObserver(scheduleVisibility);
+    const observer = new MutationObserver(syncVisibility);
     observer.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("mezan:preparation-file-created", () => {
-        loadingPromise = null;
-    });
-    scheduleVisibility();
+    window.addEventListener("popstate", syncVisibility);
+    window.addEventListener("hashchange", syncVisibility);
+    window.addEventListener("mezan:preparation-file-created", () => { loadingPromise = null; });
+    window.setInterval(syncVisibility, 1500);
+    syncVisibility();
 }
 
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
