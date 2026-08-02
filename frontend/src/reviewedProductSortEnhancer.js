@@ -95,7 +95,7 @@ function renderProductRow(product) {
     const save = node("button", "حفظ");
     save.type = "button";
     save.disabled = candidates.length === 0;
-    save.style.cssText = "min-height:43px;border:0;border-radius:11px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;disabled:opacity:.5";
+    save.style.cssText = "min-height:43px;border:0;border-radius:11px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950";
 
     const summary = node("div");
     summary.style.cssText = "margin-top:7px;border-radius:10px;background:#f8fafc;padding:8px 9px;color:#64748b;font-size:10px;font-weight:700;line-height:1.65";
@@ -132,13 +132,13 @@ function renderProductRow(product) {
             status.textContent = select.value
                 ? "تم حفظ ترتيب بطاقات هذا المنتج."
                 : "تم إلغاء الترتيب المخصص لهذا المنتج.";
-            status.style.cssText += ";display:block;background:#ecfdf5;color:#047857";
+            status.style.cssText = "display:block;margin-top:7px;border-radius:10px;padding:8px 9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
             refreshSummary();
         } catch (error) {
             status.textContent = error?.response?.data?.detail?.message
                 || error?.message
                 || "تعذّر حفظ ترتيب المنتج.";
-            status.style.cssText += ";display:block;background:#fff1f2;color:#be123c";
+            status.style.cssText = "display:block;margin-top:7px;border-radius:10px;padding:8px 9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
         } finally {
             save.disabled = candidates.length === 0;
             select.disabled = candidates.length === 0;
@@ -241,7 +241,7 @@ function launcher() {
     button.id = LAUNCHER_ID;
     button.type = "button";
     button.hidden = true;
-    button.style.cssText = "position:fixed;left:16px;bottom:18px;z-index:10500;min-height:46px;border:1px solid #c4b5fd;border-radius:14px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;box-shadow:0 14px 35px #5b21b644";
+    button.style.cssText = "position:fixed;left:16px;top:92px;z-index:10500;min-height:46px;border:1px solid #c4b5fd;border-radius:14px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;box-shadow:0 14px 35px #5b21b644";
     button.onclick = openManager;
     document.body.appendChild(button);
     return button;
