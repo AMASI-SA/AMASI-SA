@@ -1,3 +1,7 @@
+jest.mock("react-router-dom", () => ({
+    Link: ({ children }) => children,
+}));
+
 import {
     activeNavigationSection,
     isNavigationItemActive,
