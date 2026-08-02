@@ -26,6 +26,9 @@ def install_order_review_forward_stage_guard() -> None:
     from preparation_pdf_card_file_number import (
         install_preparation_pdf_card_file_number,
     )
+    from preparation_pdf_compact_operational_layout import (
+        install_preparation_pdf_compact_operational_layout,
+    )
 
     order_review_routes.REVIEW_COMPLETED_STAGES.update(
         FORWARD_FULFILLMENT_STAGES
@@ -39,6 +42,9 @@ def install_order_review_forward_stage_guard() -> None:
     install_preparation_pdf_unit_card_expansion()
     install_preparation_pdf_wrapped_text()
     install_preparation_pdf_card_file_number()
+    # Keep wrapping and durable numbering, then apply only the merchant-approved
+    # compact media/detail geometry as the final renderer overlay.
+    install_preparation_pdf_compact_operational_layout()
 
 
 __all__ = [
