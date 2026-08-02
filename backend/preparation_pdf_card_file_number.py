@@ -5,9 +5,9 @@ files already have a permanent registry number such as ``PF-20260802-0017``.
 This preview-only support layer keeps the approved 3x5 layout unchanged and
 replaces the visible serial with ``1-17``, ``2-17``, ... .
 
-Card count follows Salla product lines, not the sum of line quantities. A Salla
-line with quantity 3 remains one PDF card showing quantity 3; seven additional
-quantity-1 lines produce seven more cards.
+Card count follows selected physical pieces. A selected source line with
+quantity 5 is expanded before rendering into five cards, each showing quantity
+1 and retaining the same order/product/specification snapshot.
 """
 from __future__ import annotations
 
@@ -149,8 +149,6 @@ def install_preparation_pdf_card_file_number() -> None:
     def render_with_card_file_number(batch_row: dict[str, Any]) -> bytes:
         assert _ORIGINAL_RENDERER is not None
         rendered = _ORIGINAL_RENDERER(batch_row)
-        # One stored batch line is one original Salla product line/card.
-        # The line quantity remains printed on that single card.
         card_count = sum(
             1
             for row in (batch_row.get("lines") or [])
