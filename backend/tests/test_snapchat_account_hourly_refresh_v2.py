@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timezone
-
-import pytest
 
 from integrations_control_center.snapchat_account_hourly_refresh import (
     PROVIDER_BREAKDOWN,
@@ -211,8 +210,7 @@ class _CaptureContext:
         return self.payload
 
 
-@pytest.mark.asyncio
-async def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
+def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
     payload = _hour_payload(
         (
             "campaign-1",
@@ -227,13 +225,15 @@ async def test_provider_request_uses_hour_campaign_breakdown_and_native_window()
     )
     context = _CaptureContext(payload)
 
-    rows, errors = await _fetch_account_hours(
-        context,
-        object(),
-        "access-token",
-        account_id="account-1",
-        request_start=datetime.fromisoformat("2026-08-01T14:00:00-07:00"),
-        request_end=datetime.fromisoformat("2026-08-02T14:00:00-07:00"),
+    rows, errors = asyncio.run(
+        _fetch_account_hours(
+            context,
+            object(),
+            "access-token",
+            account_id="account-1",
+            request_start=datetime.fromisoformat("2026-08-01T14:00:00-07:00"),
+            request_end=datetime.fromisoformat("2026-08-02T14:00:00-07:00"),
+        )
     )
 
     params = context.calls[0]["params"]
