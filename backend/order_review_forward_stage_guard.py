@@ -11,6 +11,9 @@ FORWARD_FULFILLMENT_STAGES = {
 
 def install_order_review_forward_stage_guard() -> None:
     import order_review_routes
+    from reviewed_product_sorting import (
+        install_reviewed_product_sorting,
+    )
     from preparation_pdf_reference_layout import (
         install_preparation_pdf_reference_layout,
     )
@@ -24,6 +27,9 @@ def install_order_review_forward_stage_guard() -> None:
     order_review_routes.REVIEW_COMPLETED_STAGES.update(
         FORWARD_FULFILLMENT_STAGES
     )
+    # Sorting must wrap the original catalogue loader before the reference PDF
+    # layer adds its image-access context around that same loader.
+    install_reviewed_product_sorting()
     install_preparation_pdf_reference_layout()
     install_preparation_pdf_wrapped_text()
     install_preparation_pdf_card_file_number()
