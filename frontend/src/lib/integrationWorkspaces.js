@@ -14,6 +14,12 @@ export function integrationWorkspaceFromSearchParams(searchParams) {
 export function focusedIntegrationProvider(searchParams, providers = []) {
     const requested = String(searchParams?.get?.("provider") || "").trim();
     if (!requested) return "";
+    if (
+        integrationWorkspaceFromSearchParams(searchParams) === "accounts"
+        && !ADVERTISING_PROVIDER_SET.has(requested)
+    ) {
+        return "";
+    }
     return (providers || []).some((provider) => provider?.provider === requested)
         ? requested
         : "";
