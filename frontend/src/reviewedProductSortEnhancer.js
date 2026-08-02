@@ -47,7 +47,8 @@ function cardIdentity(card) {
 }
 
 function updateButton(button, product) {
-    button.textContent = reviewedProductSortButtonLabel(product);
+    const label = reviewedProductSortButtonLabel(product);
+    if (button.textContent !== label) button.textContent = label;
     button.dataset.groupKey = text(product?.group_key);
     const candidates = Array.isArray(product?.preparation_sort_candidates)
         ? product.preparation_sort_candidates
@@ -55,7 +56,7 @@ function updateButton(button, product) {
     button.disabled = candidates.length === 0;
     button.title = candidates.length
         ? "اختر مواصفة واحدة لترتيب بطاقات هذا المنتج داخل ملف التجهيز"
-        : "لا توجد مواصفات متعددة قابلة للترتيب في بطاقات هذا المنتج";
+        : "لا توجد مواصفات قابلة للترتيب في بطاقات هذا المنتج";
     button.style.opacity = candidates.length ? "1" : ".55";
     button.style.cursor = candidates.length ? "pointer" : "not-allowed";
 }
@@ -163,8 +164,11 @@ function openSortModal(product) {
             products = products.map((row) =>
                 row.group_key === updated.group_key ? updated : row,
             );
-            document.querySelectorAll(`[${BUTTON_ATTR}][data-group-key="${CSS.escape(text(updated.group_key))}"]`)
-                .forEach((button) => updateButton(button, updated));
+            document.querySelectorAll(`[${BUTTON_ATTR}]`).forEach((button) => {
+                if (text(button.dataset.groupKey) === text(updated.group_key)) {
+                    updateButton(button, updated);
+                }
+            });
             closeModal(overlay);
         } catch (saveError) {
             error.textContent = saveError?.response?.data?.detail?.message
