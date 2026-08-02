@@ -42,17 +42,10 @@ const GOOGLE_INTEGRATION = {
     },
 };
 
-beforeEach(() => {
-    window.history.pushState({}, "", "/integrations-v2?workspace=accounts");
-});
-
-afterEach(() => {
-    window.history.pushState({}, "", "/");
-});
-
 test("advertising accounts workspace renders a compact account-first card", () => {
     const markup = renderToStaticMarkup(
         <IntegrationCard
+            compactAdvertisingAccounts
             integration={GOOGLE_INTEGRATION}
             onTest={() => {}}
             onSettings={() => {}}
@@ -76,8 +69,7 @@ test("advertising accounts workspace renders a compact account-first card", () =
     expect(markup).not.toContain("إنشاء الحملات");
 });
 
-test("outside the accounts workspace the full applications card remains unchanged", () => {
-    window.history.pushState({}, "", "/integrations-v2");
+test("the full applications card remains unchanged when compact mode is not selected", () => {
     const markup = renderToStaticMarkup(
         <IntegrationCard
             integration={GOOGLE_INTEGRATION}
