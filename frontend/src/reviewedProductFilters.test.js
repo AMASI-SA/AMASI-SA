@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 import {
   displayReviewedQuantity,
   filterReviewedProducts,
@@ -96,4 +99,16 @@ test("saved preference updates only sort metadata", () => {
   expect(updated.group_key).toBe("product:1");
   expect(updated.preparation_sort_spec).toBe("اللون");
   expect(updated.preparation_sort_candidates).toHaveLength(1);
+});
+
+test("sort manager renders a compact thumbnail beside each product name", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "reviewedProductSortEnhancer.js"),
+    "utf8",
+  );
+
+  expect(source).toContain('data-testid", "reviewed-sort-product-thumbnail"');
+  expect(source).toContain("product?.image_url");
+  expect(source).toContain("object-fit:cover");
+  expect(source).toContain("identity.append(thumbnail, nameBox)");
 });
