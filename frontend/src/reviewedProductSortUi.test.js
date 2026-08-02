@@ -5,6 +5,7 @@ import {
     updateReviewedProductSortPreference,
 } from "./reviewedProductSortUi";
 import { isReviewedProductsWindow } from "./reviewedProductSortEnhancer";
+import { reviewedProductThumbnailUrl } from "./reviewedProductSortThumbnailEnhancer";
 
 const products = [
     { group_key: "product:1", name: "سلسال", sku: "N-1" },
@@ -54,4 +55,12 @@ test("sorting controls appear in reviewed products window only", () => {
         pathname: "/fulfillment-v2",
         search: "?stage=reviewed&view=files",
     }, emptyRoot)).toBe(false);
+});
+
+test("sort manager thumbnail uses current reviewed product image", () => {
+    expect(reviewedProductThumbnailUrl({ image_url: "https://cdn.example/product.jpg" }))
+        .toBe("https://cdn.example/product.jpg");
+    expect(reviewedProductThumbnailUrl({ main_image: "https://cdn.example/fallback.jpg" }))
+        .toBe("https://cdn.example/fallback.jpg");
+    expect(reviewedProductThumbnailUrl({})).toBe("");
 });
