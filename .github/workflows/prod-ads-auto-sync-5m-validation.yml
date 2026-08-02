@@ -1,0 +1,74 @@
+name: Production Ads Auto Sync 5m Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-ads-auto-sync-5m-validation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-ads-auto-sync-5m-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-ads-auto-sync-5m
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify exact candidate scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          backend/integrations_control_center/ads_auto_sync.py
+          backend/integrations_control_center/routes.py
+          backend/tests/test_ads_auto_sync_5m.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo ADS_AUTO_SYNC_SCOPE_OK
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install pytest pytest-asyncio
+
+      - name: Compile changed modules
+        run: |
+          python -m py_compile \
+            backend/integrations_control_center/ads_auto_sync.py \
+            backend/integrations_control_center/routes.py \
+            backend/tests/test_ads_auto_sync_5m.py
+
+      - name: Run scheduler and provider contracts
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q \
+            backend/tests/test_ads_auto_sync_5m.py \
+            backend/tests/test_snapchat_native_async_selected_reads.py \
+            backend/tests/test_meta_native_reporting.py
+
+      - name: Enforce source-only safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -nE 'general_ledger|daily_costs|post_txn_group|campaigns/|adsets/' \
+            backend/integrations_control_center/ads_auto_sync.py
+          grep -n 'provider_write_reached.*False' backend/integrations_control_center/ads_auto_sync.py
+          grep -n 'accounting_write_reached.*False' backend/integrations_control_center/ads_auto_sync.py
+          grep -n 'qoyod_write_reached.*False' backend/integrations_control_center/ads_auto_sync.py
+          grep -n 'MIN_INTERVAL_SECONDS = 300' backend/integrations_control_center/ads_auto_sync.py
+          grep -n '/ads-auto-sync/status' backend/integrations_control_center/ads_auto_sync.py
+          echo ADS_AUTO_SYNC_READ_ONLY_GUARD_OK
