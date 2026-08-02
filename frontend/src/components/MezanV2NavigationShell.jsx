@@ -129,6 +129,18 @@ export function activeNavigationSection(location) {
     ) || null;
 }
 
+export function navigationSectionsForDisplay(location, openSectionId = null) {
+    const activeSection = activeNavigationSection(location);
+    const openSection = MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.id === openSectionId,
+    ) || null;
+    return {
+        activeSection,
+        openSection,
+        visibleSection: openSection || activeSection,
+    };
+}
+
 function SectionButton({ section, active, open, onToggle, onNavigate }) {
     const Icon = section.Icon;
     const singleItem = section.items.length === 1;
@@ -183,7 +195,10 @@ export default function MezanV2NavigationShell({
     const [openSectionId, setOpenSectionId] = useState(null);
     const [searchOpen, setSearchOpen] = useState(false);
     const rootRef = useRef(null);
-    const activeSection = useMemo(() => activeNavigationSection(location), [location]);
+    const { activeSection, openSection, visibleSection } = useMemo(
+        () => navigationSectionsForDisplay(location, openSectionId),
+        [location, openSectionId],
+    );
 
     useEffect(() => {
         setOpenSectionId(null);
@@ -257,39 +272,6 @@ export default function MezanV2NavigationShell({
                                         }}
                                     />
 
-                                    {section.items.length > 1 && open && (
-                                        <div
-                                            className="absolute right-0 top-[calc(100%+0.6rem)] z-[70] max-h-[65vh] w-72 overflow-y-auto rounded-2xl border border-emerald-950 bg-[#0B4938] p-2 shadow-2xl"
-                                            data-testid={`mezan-v2-dropdown-${section.id}`}
-                                        >
-                                            <div className="mb-1 px-3 py-2 text-xs font-black text-emerald-200">
-                                                صفحات {section.label}
-                                            </div>
-                                            {section.items.map((item) => {
-                                                const itemActive = isNavigationItemActive(location, item);
-                                                return (
-                                                    <Link
-                                                        key={item.to}
-                                                        to={item.to}
-                                                        onClick={() => {
-                                                            setOpenSectionId(null);
-                                                            setSearchOpen(false);
-                                                        }}
-                                                        className={[
-                                                            "flex items-center justify-between rounded-xl px-4 py-3 text-sm font-bold transition",
-                                                            itemActive
-                                                                ? "bg-emerald-200 text-slate-950"
-                                                                : "text-slate-100 hover:bg-white/10",
-                                                        ].join(" ")}
-                                                        data-testid={`mezan-v2-dropdown-link-${section.id}`}
-                                                    >
-                                                        <span className="whitespace-nowrap">{item.label}</span>
-                                                        {itemActive && <span className="whitespace-nowrap text-xs">الحالية</span>}
-                                                    </Link>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })}
@@ -334,13 +316,14 @@ export default function MezanV2NavigationShell({
                 </div>
             </div>
 
-            {activeSection && activeSection.items.length > 1 && (
+            {visibleSection && visibleSection.items.length > 1 && (
                 <nav
-                    className="flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-[#0B4938] px-2 scrollbar-thin sm:px-5"
-                    aria-label={`صفحات ${activeSection.label}`}
-                    data-testid={`mezan-v2-secondary-${activeSection.id}`}
+                    className="relative z-[60] flex flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap border-t border-white/10 bg-[#0B4938] px-2 shadow-inner scrollbar-thin sm:px-5"
+                    aria-label={`صفحات ${visibleSection.label}`}
+                    data-testid={`mezan-v2-secondary-${visibleSection.id}`}
+                    data-navigation-source={openSection ? "opened" : "active"}
                 >
-                    {activeSection.items.map((item) => {
+                    {visibleSection.items.map((item) => {
                         const active = isNavigationItemActive(location, item);
                         return (
                             <Link
@@ -352,7 +335,7 @@ export default function MezanV2NavigationShell({
                                         ? "text-emerald-200"
                                         : "text-slate-400 hover:text-white",
                                 ].join(" ")}
-                                data-testid={`mezan-v2-secondary-link-${activeSection.id}`}
+                                data-testid={`mezan-v2-secondary-link-${visibleSection.id}`}
                             >
                                 {item.label}
                                 {active && (
