@@ -38,6 +38,9 @@ jobs:
           python -m pip install -q
           fastapi==0.110.1
           pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          cryptography
           pytest
           pytest-asyncio
           openpyxl
