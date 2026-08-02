@@ -167,6 +167,9 @@ async def _upsert_performance(
     *, account: dict[str, Any], entity_type: str, external_id: str,
     date_string: str, metrics: dict[str, Any],
     provider_start: Any = None, provider_end: Any = None,
+    source_mode: str = SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
+    provider_granularity: str = "HOUR",
+    provider_breakdown: str | None = None,
 ) -> None:
     currency = str(account.get("currency") or "").strip().upper()
     spend_micro = _as_number(metrics.get("spend"))
@@ -213,11 +216,12 @@ async def _upsert_performance(
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
-        "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
+        "source_mode": source_mode,
         "accounting_eligible": False,
         "provider_window_start": provider_start,
         "provider_window_end": provider_end,
-        "provider_granularity": "HOUR",
+        "provider_granularity": provider_granularity,
+        "provider_breakdown": provider_breakdown,
         "stored_granularity": "RIYADH_DAY",
         "updated_at": now_iso,
     }
