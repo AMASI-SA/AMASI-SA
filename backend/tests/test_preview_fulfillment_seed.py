@@ -76,15 +76,15 @@ def test_reviewed_catalog_aggregates_preview_quantities_and_categories():
     ]
 
     catalog = aggregate_reviewed_products(pairs, seed["products"])
-    by_sku = {row["sku"]: row for row in catalog["products"]}
+    by_product_id = {row["product_id"]: row for row in catalog["products"]}
 
     assert catalog["summary"]["reviewed_order_count"] == 18
     assert catalog["summary"]["unique_product_count"] == 3
     assert catalog["summary"]["total_quantity"] == 62
-    assert by_sku["PV-NECKLACE-001"]["quantity"] == 50
-    assert by_sku["PV-WATCH-001"]["quantity"] == 10
-    assert by_sku["PV-BAG-001"]["quantity"] == 2
-    assert len(by_sku["PV-NECKLACE-001"]["source_lines"]) == 15
+    assert by_product_id["990001"]["quantity"] == 50
+    assert by_product_id["990002"]["quantity"] == 10
+    assert by_product_id["990003"]["quantity"] == 2
+    assert len(by_product_id["990001"]["source_lines"]) == 15
     category_ids = {row["id"] for row in catalog["categories"]}
     assert {"pv-accessories", "pv-necklaces", "pv-watches", "pv-fashion", "pv-bags"}.issubset(category_ids)
 
