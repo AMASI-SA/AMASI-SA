@@ -71,6 +71,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Plug,
         items: [
             { to: "/integrations-v2", label: "كل التطبيقات والتكاملات", exactSearch: true },
+            { to: "/integrations-v2?workspace=accounts", label: "الحسابات الإعلانية" },
         ],
     },
     {
@@ -271,7 +272,6 @@ export default function MezanV2NavigationShell({
                                             setSearchOpen(false);
                                         }}
                                     />
-
                                 </div>
                             );
                         })}
