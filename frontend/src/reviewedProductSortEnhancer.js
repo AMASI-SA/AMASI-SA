@@ -1,6 +1,7 @@
 import api from "./lib/api";
 import { listReviewedProductCatalog } from "./services/orderReviewEngine";
 import {
+    findReviewedProductForCard,
     reviewedProductSortButtonLabel,
     reviewedProductSortCandidateSummary,
     updateReviewedProductSortPreference,
@@ -8,6 +9,7 @@ import {
 
 const ROOT_ID = "mezan-reviewed-product-sort-enhancer";
 const BUTTON_ID = "mezan-reviewed-product-sort-button";
+const STYLE_ID = "mezan-reviewed-product-sort-badge-style";
 let products = [];
 let modal = null;
 let loadingPromise = null;
@@ -28,12 +30,85 @@ function isReviewedStage() {
     );
 }
 
+function ensureBadgeStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = element("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+        [data-testid="reviewed-product-card"][data-reviewed-sort-label] {
+            position: relative;
+        }
+        [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
+            content: attr(data-reviewed-sort-label);
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            z-index: 5;
+            max-width: 46%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            border: 1px solid #c4b5fd;
+            border-radius: 999px;
+            background: #f5f3ff;
+            padding: 5px 10px;
+            color: #6d28d9;
+            font-family: Tajawal, sans-serif;
+            font-size: 11px;
+            font-weight: 900;
+            box-shadow: 0 5px 16px #6d28d91f;
+        }
+        @media (max-width: 640px) {
+            [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
+                left: 8px;
+                top: 8px;
+                max-width: 52%;
+                padding: 4px 8px;
+                font-size: 10px;
+            }
+        }
+    `;
+    document.head.append(style);
+}
+
+function cardIdentity(card) {
+    const name = text(card.querySelector("h3")?.textContent);
+    const skuNode = [...card.querySelectorAll('[dir="ltr"]')].find((entry) =>
+        text(entry.textContent).toUpperCase().startsWith("SKU:"),
+    );
+    const sku = text(skuNode?.textContent).replace(/^SKU:\s*/i, "");
+    return { name, sku };
+}
+
+function syncProductBadges() {
+    ensureBadgeStyles();
+    const stage = document.querySelector('[data-testid="reviewed-orders-stage"]');
+    if (!stage) return;
+
+    const used = new Set();
+    stage.querySelectorAll('[data-testid="reviewed-product-card"]').forEach((card) => {
+        const product = findReviewedProductForCard(products, cardIdentity(card), used);
+        if (!product) {
+            card.removeAttribute("data-reviewed-sort-label");
+            return;
+        }
+        used.add(text(product.group_key));
+        const label = text(product.preparation_sort_label || product.preparation_sort_spec);
+        if (label) {
+            card.setAttribute("data-reviewed-sort-label", `ترتيب الملف: ${label}`);
+        } else {
+            card.removeAttribute("data-reviewed-sort-label");
+        }
+    });
+}
+
 async function loadProducts(force = false) {
     if (force) loadingPromise = null;
     if (!loadingPromise) {
         loadingPromise = listReviewedProductCatalog({ limit: 2000 })
             .then((catalog) => {
                 products = Array.isArray(catalog?.products) ? catalog.products : [];
+                window.setTimeout(syncProductBadges, 0);
                 return products;
             })
             .catch((error) => {
@@ -136,6 +211,7 @@ function productRow(product) {
                 : "تم إلغاء الترتيب المخصص.";
             status.style.cssText = "display:block;margin-top:8px;border-radius:10px;padding:9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
             refreshSummary();
+            syncProductBadges();
         } catch (error) {
             status.textContent = error?.response?.data?.detail?.message
                 || error?.message
@@ -241,7 +317,11 @@ function ensureButton() {
 }
 
 function syncVisibility() {
-    ensureButton().style.display = isReviewedStage() ? "block" : "none";
+    const reviewed = isReviewedStage();
+    ensureButton().style.display = reviewed ? "block" : "none";
+    if (reviewed) {
+        loadProducts().then(syncProductBadges).catch(() => null);
+    }
 }
 
 function patchHistory() {
@@ -264,6 +344,7 @@ function start() {
     marker.id = ROOT_ID;
     marker.hidden = true;
     document.body.append(marker);
+    ensureBadgeStyles();
     ensureButton();
     patchHistory();
 
@@ -271,7 +352,10 @@ function start() {
     observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("popstate", syncVisibility);
     window.addEventListener("hashchange", syncVisibility);
-    window.addEventListener("mezan:preparation-file-created", () => { loadingPromise = null; });
+    window.addEventListener("mezan:preparation-file-created", () => {
+        loadingPromise = null;
+        syncVisibility();
+    });
     window.setInterval(syncVisibility, 1500);
     syncVisibility();
 }
