@@ -16,6 +16,7 @@ import "@/reviewCustomerWaiting";
 import "@/reviewPreparationFileMetadataEnhancer";
 import "@/reviewedProductSortEnhancer";
 import "@/reviewedProductSortThumbnailEnhancer";
+import "@/reviewHideReviewedSecondaryTab";
 import App from "@/App";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
