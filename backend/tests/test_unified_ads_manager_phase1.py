@@ -2117,3 +2117,335 @@ async def test_account_day_offsets_cannot_look_matched_at_zero_net_gap():
     assert reconciliation["gap_sar"] == 0
     assert reconciliation["gap_pct"] == 0
     assert "تتعادل فروق الإجمالي" in reconciliation["detail"]
+
+
+@pytest.mark.asyncio
+async def test_snapchat_v2_is_authoritative_and_filters_selected_accounts():
+    db = FakeDB(
+        {
+            "mezan_snapchat_performance_daily_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "ad_account_id": "snap-selected",
+                    "entity_type": "ad_account",
+                    "external_id": "snap-selected",
+                    "date": "2026-07-10",
+                    "currency": "USD",
+                    "spend_native": 10,
+                    "spend_sar": 37.5,
+                    "purchases": 2,
+                    "purchase_value_native": 20,
+                    "purchase_value_sar": 75,
+                    "metrics": {
+                        "impressions": 1000,
+                        "swipes": 50,
+                        "conversion_purchases": 2,
+                    },
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "ad_account_id": "snap-selected",
+                    "entity_type": "campaign",
+                    "external_id": "snap-campaign",
+                    "campaign_id": "snap-campaign",
+                    "date": "2026-07-10",
+                    "currency": "USD",
+                    "spend_native": 10,
+                    "spend_sar": 37.5,
+                    "purchases": 2,
+                    "purchase_value_native": 20,
+                    "purchase_value_sar": 75,
+                    "metrics": {
+                        "impressions": 1000,
+                        "swipes": 50,
+                        "conversion_purchases": 2,
+                    },
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "ad_account_id": "snap-not-selected",
+                    "entity_type": "ad_account",
+                    "external_id": "snap-not-selected",
+                    "date": "2026-07-10",
+                    "spend_sar": 999,
+                    "purchases": 99,
+                    "purchase_value_sar": 999,
+                    "metrics": {"impressions": 9999, "swipes": 999},
+                },
+                {
+                    "user_id": OTHER_OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "ad_account_id": "snap-other-owner",
+                    "entity_type": "ad_account",
+                    "external_id": "snap-other-owner",
+                    "date": "2026-07-10",
+                    "spend_sar": 999,
+                    "purchases": 99,
+                    "purchase_value_sar": 999,
+                    "metrics": {"impressions": 9999, "swipes": 999},
+                },
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "snap-selected",
+                    "display_name": "Selected Snap",
+                    "currency": "USD",
+                    "mezan_selected": True,
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "snap-not-selected",
+                    "display_name": "Old Snap",
+                    "mezan_selected": False,
+                },
+            ],
+            "snapchat_account_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "ad_account_id": "legacy-snap",
+                    "spend_sar": 999,
+                    "purchases": 99,
+                    "revenue_sar": 999,
+                }
+            ],
+            "snapchat_daily_stats": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "purchases": 99,
+                    "revenue": 999,
+                    "conversion_data_status": "available",
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="snapchat",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 37.5
+    assert provider["metrics"]["platform_attributed_revenue_sar"] == 75
+    assert provider["metrics"]["platform_reported_purchases"] == 2
+    assert provider["metrics"]["platform_reported_impressions"] == 1000
+    assert provider["metrics"]["platform_reported_clicks"] == 50
+    assert provider["campaign_coverage"]["status"] == "available"
+    assert result["campaign_pagination"]["total"] == 1
+    assert result["campaigns"][0]["campaign_id"] == "snap-campaign"
+    assert result["campaigns"][0]["data_source"] == (
+        "mezan_snapchat_performance_daily_v2"
+    )
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert "legacy-snap" not in serialized
+    assert "snap-not-selected" not in serialized
+    assert OTHER_OWNER_ID not in serialized
+    assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
+async def test_snapchat_v2_selection_without_rows_does_not_use_legacy():
+    db = FakeDB(
+        {
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "snapchat_ads",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "snap-selected",
+                    "display_name": "Selected Snap",
+                    "mezan_selected": True,
+                }
+            ],
+            "snapchat_account_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "ad_account_id": "legacy-snap",
+                    "spend_sar": 50,
+                }
+            ],
+            "snapchat_daily_stats": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "purchases": 2,
+                    "revenue": 100,
+                    "conversion_data_status": "available",
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="snapchat",
+    )
+
+    assert result["metrics"]["provider_reported_spend_sar"] is None
+    assert result["campaigns"] == []
+    assert result["providers"][0]["campaign_coverage"]["status"] == "unavailable"
+    assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
+async def test_tiktok_v2_is_authoritative_and_exposes_raw_facts_without_fake_revenue():
+    db = FakeDB(
+        {
+            "mezan_tiktok_performance_daily_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "tiktok_ads",
+                    "ad_account_id": "tt-connected",
+                    "display_name": "TikTok Riyadh",
+                    "date": "2026-07-10",
+                    "currency_native": "USD",
+                    "spend_native": 10,
+                    "spend_sar": 37.5,
+                    "fx_rate_to_sar": 3.75,
+                    "conversions": 2,
+                    "impressions": 1000,
+                    "clicks": 50,
+                    "updated_at": "2026-07-28T10:00:00+00:00",
+                },
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "tiktok_ads",
+                    "ad_account_id": "tt-disconnected",
+                    "date": "2026-07-10",
+                    "currency_native": "SAR",
+                    "spend_native": 999,
+                    "fx_rate_to_sar": 1,
+                    "conversions": 99,
+                    "impressions": 9999,
+                    "clicks": 999,
+                },
+                {
+                    "user_id": OTHER_OWNER_ID,
+                    "provider": "tiktok_ads",
+                    "ad_account_id": "tt-other-owner",
+                    "date": "2026-07-10",
+                    "currency_native": "SAR",
+                    "spend_native": 999,
+                    "fx_rate_to_sar": 1,
+                    "conversions": 99,
+                    "impressions": 9999,
+                    "clicks": 999,
+                },
+            ],
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "tiktok_ads",
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "tt-connected",
+                    "display_name": "TikTok Riyadh",
+                    "currency": "USD",
+                }
+            ],
+            "tiktok_ads_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "advertiser_id": "tt-legacy",
+                    "campaign_id": "legacy-tiktok",
+                    "campaign_name": "Legacy TikTok",
+                    "spend": 999,
+                    "currency": "SAR",
+                    "purchases": 99,
+                    "revenue": 999,
+                    "impressions": 9999,
+                    "clicks": 999,
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="tiktok",
+    )
+
+    provider = result["providers"][0]
+    assert provider["metrics"]["provider_reported_spend_sar"] == 37.5
+    assert provider["metrics"]["platform_attributed_revenue_sar"] is None
+    assert provider["metrics"]["platform_reported_purchases"] == 2
+    assert provider["metrics"]["platform_reported_impressions"] == 1000
+    assert provider["metrics"]["platform_reported_clicks"] == 50
+    assert provider["metrics"]["platform_roas"] is None
+    assert provider["metrics"]["platform_cpa_sar"] is None
+    assert provider["campaign_coverage"]["status"] == "aggregate_only"
+    assert result["campaign_pagination"]["total"] == 1
+    assert result["campaigns"][0]["campaign_id"] == "_default"
+    assert result["campaigns"][0]["data_source"] == (
+        "mezan_tiktok_performance_daily_v2"
+    )
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert "legacy-tiktok" not in serialized
+    assert "tt-disconnected" not in serialized
+    assert OTHER_OWNER_ID not in serialized
+    assert db.write_attempts == []
+
+
+@pytest.mark.asyncio
+async def test_tiktok_native_connection_without_rows_does_not_use_legacy():
+    db = FakeDB(
+        {
+            "mezan_integration_accounts_v2": [
+                {
+                    "user_id": OWNER_ID,
+                    "provider": "tiktok_ads",
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "external_account_id": "tt-connected",
+                    "display_name": "TikTok Riyadh",
+                }
+            ],
+            "tiktok_ads_daily": [
+                {
+                    "user_id": OWNER_ID,
+                    "date": "2026-07-10",
+                    "advertiser_id": "tt-legacy",
+                    "campaign_id": "legacy-tiktok",
+                    "campaign_name": "Legacy TikTok",
+                    "spend": 50,
+                    "currency": "SAR",
+                    "purchases": 2,
+                    "revenue": 100,
+                    "impressions": 500,
+                    "clicks": 20,
+                }
+            ],
+        }
+    )
+
+    result = await _service(db).overview(
+        OWNER_ID,
+        date_from="2026-07-10",
+        date_to="2026-07-10",
+        provider="tiktok",
+    )
+
+    assert result["metrics"]["provider_reported_spend_sar"] is None
+    assert result["campaigns"] == []
+    assert result["providers"][0]["campaign_coverage"]["status"] == "unavailable"
+    assert db.write_attempts == []
