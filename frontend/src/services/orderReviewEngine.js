@@ -11,6 +11,9 @@ function message(error, fallback) {
     if (detail?.code === "reviewed_product_not_available") return "المنتج لم يعد متاحًا في هذه المرحلة. حدّث الصفحة.";
     if (detail?.code === "reviewed_catalog_truncated") return "لا يمكن إنشاء ملف من قائمة ناقصة. راجع تنبيه الحد التشغيلي.";
     if (detail?.code === "preparation_batch_generation_failed") return "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.";
+    if (detail?.code === "responsible_employee_unavailable") return "اختر موظفًا مسؤولًا نشطًا يملك صلاحية إدارة التجهيز.";
+    if (detail?.code === "preparation_file_draft_conflict") return "تغيرت بيانات الملف بعد بدء الحفظ. أغلق النافذة وأعد المحاولة.";
+    if (detail?.code === "preparation_file_quantity_mismatch") return "عدد القطع الفعلي لا يطابق بيانات الملف. حدّث الصفحة وأعد المحاولة.";
     return error?.message || fallback;
 }
 
@@ -42,14 +45,69 @@ export async function listReviewedProductCatalog({ limit = 500 } = {}) {
     } catch (error) { throw new Error(message(error, "تعذّر تحميل منتجات مرحلة تمت المراجعة.")); }
 }
 
+export async function listPreparationFileEmployees() {
+    try {
+        const { data } = await api.get("/preparation-file-registry-v1/employees");
+        return { items: Array.isArray(data?.items) ? data.items : [] };
+    } catch (error) {
+        throw new Error(message(error, "تعذّر تحميل الموظفين المسؤولين."));
+    }
+}
+
+export async function createPreparationFileDraft(payload) {
+    try {
+        return (await api.post("/preparation-file-registry-v1/drafts", payload)).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر حفظ بيانات ملف التجهيز."));
+    }
+}
+
+export async function finalizePreparationFile(clientRequestId) {
+    try {
+        return (await api.post(`/preparation-file-registry-v1/finalize/${encodeURIComponent(clientRequestId)}`)).data;
+    } catch (error) {
+        throw new Error(message(error, "تم إنشاء PDF، لكن تعذّر تسجيل الملف. أعد المحاولة بنفس الاختيار."));
+    }
+}
+
+export async function listPreparationFiles({ limit = 30 } = {}) {
+    try {
+        const { data } = await api.get("/preparation-file-registry-v1/files", { params: { limit } });
+        return { items: Array.isArray(data?.items) ? data.items : [] };
+    } catch (error) {
+        throw new Error(message(error, "تعذّر تحميل سجل ملفات التجهيز."));
+    }
+}
+
 export async function createReviewedPreparationBatch({ clientRequestId, selections }) {
     try {
+        const metadata = typeof window !== "undefined"
+            ? window.__mezanPreparationFileMetadata
+            : null;
+        if (!metadata?.fileTitle || !metadata?.responsibleEmployeeId) {
+            throw new Error("أكمل اسم الملف والموظف المسؤول قبل إنشاء PDF.");
+        }
+        await createPreparationFileDraft({
+            client_request_id: clientRequestId,
+            file_title: metadata.fileTitle,
+            responsible_employee_id: metadata.responsibleEmployeeId,
+            expected_quantity: Number(metadata.expectedQuantity || 0),
+            selected_product_count: Number(metadata.selectedProductCount || 0),
+        });
         const { data } = await api.post("/reviewed-preparation-batches-v1/batches", {
             client_request_id: clientRequestId,
             selections,
         });
-        return data;
+        const registered = await finalizePreparationFile(clientRequestId);
+        if (typeof window !== "undefined") {
+            delete window.__mezanPreparationFileMetadata;
+            window.dispatchEvent(new CustomEvent("mezan:preparation-file-created", {
+                detail: registered,
+            }));
+        }
+        return { ...data, ...registered, batch_id: registered.batch_id || data.batch_id };
     } catch (error) {
+        if (error instanceof Error && !error?.response) throw error;
         throw new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
     }
 }
