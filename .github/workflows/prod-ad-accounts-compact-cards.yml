@@ -7,6 +7,7 @@ on:
     paths:
       - "frontend/src/components/integrationsV2/IntegrationCard.js"
       - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
+      - "frontend/src/components/integrationsV2/IntegrationCardV2.js"
       - "frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx"
       - "frontend/src/components/integrationsV2/AdvertisingAccountCard.test.jsx"
       - ".github/workflows/prod-ad-accounts-compact-cards.yml"
@@ -38,6 +39,7 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/integrationsV2/AdvertisingAccountCard.test.jsx
           src/components/integrationsV2/IntegrationCard.test.jsx
+          src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx
 
       - name: Build Production frontend
         env:
@@ -48,14 +50,17 @@ jobs:
         working-directory: .
         run: |
           CARD=frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx
-          ENTRY=frontend/src/components/integrationsV2/IntegrationCard.js
-          FACADE=frontend/src/components/integrationsV2/IntegrationCard.jsx
+          ENTRY_JS=frontend/src/components/integrationsV2/IntegrationCard.js
+          ENTRY_JSX=frontend/src/components/integrationsV2/IntegrationCard.jsx
+          WRAPPER=frontend/src/components/integrationsV2/IntegrationCardV2.js
 
           grep -q 'data-layout="advertising-account-compact"' "$CARD"
           grep -q 'إدارة الحسابات والتقارير' "$CARD"
           grep -q 'الحسابات الظاهرة' "$CARD"
-          grep -q 'IntegrationCard.jsx' "$ENTRY"
-          grep -q 'workspace' "$FACADE"
-          grep -q 'AdvertisingAccountCard' "$FACADE"
+          grep -q 'export { default } from "./IntegrationCardV2"' "$ENTRY_JS"
+          grep -q 'export { default } from "./IntegrationCardV2"' "$ENTRY_JSX"
+          grep -q 'workspace' "$WRAPPER"
+          grep -q 'AdvertisingAccountCard' "$WRAPPER"
+          grep -q 'IntegrationCardV2.jsx' "$WRAPPER"
           ! grep -q 'ما يستطيع الذكاء الاصطناعي فعله' "$CARD"
           ! grep -q 'api.post' "$CARD"
