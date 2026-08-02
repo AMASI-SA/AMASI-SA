@@ -14,11 +14,15 @@ def install_order_review_forward_stage_guard() -> None:
     from preparation_pdf_reference_layout import (
         install_preparation_pdf_reference_layout,
     )
+    from preparation_pdf_wrapped_text import (
+        install_preparation_pdf_wrapped_text,
+    )
 
     order_review_routes.REVIEW_COMPLETED_STAGES.update(
         FORWARD_FULFILLMENT_STAGES
     )
     install_preparation_pdf_reference_layout()
+    install_preparation_pdf_wrapped_text()
 
 
 __all__ = [
