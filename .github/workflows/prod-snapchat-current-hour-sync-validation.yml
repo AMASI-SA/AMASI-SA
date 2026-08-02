@@ -107,7 +107,8 @@ jobs:
           python -m pytest -q --tb=short \
             backend/tests/test_ads_auto_sync_scheduler_v2.py \
             backend/tests/test_snapchat_account_hourly_refresh_v2.py \
-            backend/tests/test_snapchat_native_data_sync_v2.py
+            backend/tests/test_snapchat_native_data_sync_v2.py::test_native_sync_reads_v2_and_writes_only_native_analytics \
+            backend/tests/test_snapchat_native_data_sync_v2.py::test_executor_audits_native_provenance_and_safe_contract
 
       - name: Enforce current-hour and read-only safety
         shell: bash
