@@ -248,7 +248,12 @@ def _install_provider_response_capture() -> None:
 
 
 def _install_dashboard_freshness() -> None:
-    import dashboard_v2_routes as dashboard
+    try:
+        import dashboard_v2_routes as dashboard
+    except ModuleNotFoundError:
+        # Focused Snapchat tests intentionally omit full auth dependencies.
+        # Production imports this module from the complete backend environment.
+        return
 
     current = dashboard.build_provider_summary
     if getattr(current, "_mezan_snapchat_freshness_v5", False):
