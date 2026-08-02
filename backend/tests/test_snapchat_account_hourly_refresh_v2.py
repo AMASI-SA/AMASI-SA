@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from integrations_control_center.snapchat_account_hourly_refresh import (
     aggregate_account_hours_by_riyadh_day,
+    snapchat_hourly_request_window,
 )
 from integrations_control_center.snapchat_dashboard_summary_routes import (
     summarize_snapchat_dashboard_rows,
@@ -115,3 +116,37 @@ def test_dashboard_returns_both_selected_accounts_and_nested_purchases():
     assert result["accounts"][1]["today"]["spend_sar"] == 0.0
     assert result["accounts"][0]["report_timezone"] == "Asia/Riyadh"
     assert result["accounts"][1]["day_start"] == "00:00"
+
+
+def test_current_riyadh_day_ends_at_last_completed_hour():
+    start, end = snapchat_hourly_request_window(
+        date(2026, 8, 1),
+        date(2026, 8, 2),
+        now=datetime(2026, 8, 2, 12, 31, tzinfo=timezone.utc),
+    )
+
+    assert start.isoformat() == "2026-08-01T00:00:00+03:00"
+    assert end.isoformat() == "2026-08-02T15:00:00+03:00"
+    assert end <= datetime(2026, 8, 2, 12, 31, tzinfo=timezone.utc).astimezone(end.tzinfo)
+
+
+def test_midnight_window_does_not_request_the_following_day():
+    start, end = snapchat_hourly_request_window(
+        date(2026, 8, 1),
+        date(2026, 8, 2),
+        now=datetime(2026, 8, 1, 21, 10, tzinfo=timezone.utc),
+    )
+
+    assert start.isoformat() == "2026-08-01T00:00:00+03:00"
+    assert end.isoformat() == "2026-08-02T00:00:00+03:00"
+
+
+def test_historical_range_keeps_full_riyadh_days():
+    start, end = snapchat_hourly_request_window(
+        date(2026, 7, 30),
+        date(2026, 7, 31),
+        now=datetime(2026, 8, 2, 12, 31, tzinfo=timezone.utc),
+    )
+
+    assert start.isoformat() == "2026-07-30T00:00:00+03:00"
+    assert end.isoformat() == "2026-08-01T00:00:00+03:00"

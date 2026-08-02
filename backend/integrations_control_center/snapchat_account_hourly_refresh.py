@@ -7,7 +7,7 @@ run every five minutes without reloading campaign entities.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -40,24 +40,55 @@ SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
 VIEW_ATTRIBUTION_WINDOW = "1_DAY"
 
 
+def snapchat_hourly_request_window(
+    start_date: date,
+    end_date: date,
+    *,
+    now: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Return a provider-safe HOUR window without asking for future data.
+
+    The merchant date range is expressed in Riyadh time.  For a range that
+    includes today, Snap must only receive completed hour boundaries; sending
+    the following midnight while the day is still in progress causes account
+    stats requests to fail.
+    """
+    start, nominal_end = riyadh_business_window(start_date, end_date)
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    business_tz = _timezone(BUSINESS_TIMEZONE)
+    current_business = current.astimezone(business_tz)
+    # Historical ranges are complete and must not be truncated by today's
+    # clock. Clamp only when the requested range reaches the current Riyadh
+    # business day.
+    if end_date < current_business.date():
+        return start, nominal_end
+    completed_hour_end = current_business.replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    return start, min(nominal_end, completed_hour_end)
+
+
 async def _fetch_account_hours(
     context: SnapchatSyncContext,
     client: httpx.AsyncClient,
     access_token: str,
     *,
     account_id: str,
-    start_date: date,
-    end_date: date,
+    request_start: datetime,
+    request_end: datetime,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    start, end = riyadh_business_window(start_date, end_date)
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
     }
     params: dict[str, Any] | None = {
-        "start_time": start.isoformat(timespec="seconds"),
-        "end_time": end.isoformat(timespec="seconds"),
+        "start_time": request_start.isoformat(timespec="seconds"),
+        "end_time": request_end.isoformat(timespec="seconds"),
         "granularity": "HOUR",
         "fields": ",".join(STAT_FIELDS),
         "limit": 200,
@@ -168,6 +199,7 @@ async def refresh_snapchat_account_hours(
     *,
     start_date: date,
     end_date: date,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     account_id = str(account.get("ad_account_id") or "").strip()
     if not account_id:
@@ -177,13 +209,38 @@ async def refresh_snapchat_account_hours(
             status_code=409,
         )
 
+    request_start, request_end = snapchat_hourly_request_window(
+        start_date,
+        end_date,
+        now=now,
+    )
+    if request_end <= request_start:
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "ad_account_id": account_id,
+            "date_from": start_date.isoformat(),
+            "date_to": end_date.isoformat(),
+            "rows_saved": 0,
+            "errors_count": 0,
+            "errors": [],
+            "provider_calls": context.provider_calls,
+            "source_mode": ACCOUNT_REFRESH_SOURCE_MODE,
+            "business_timezone": BUSINESS_TIMEZONE,
+            "reason": "no_completed_hour_available",
+            "request_start_time": request_start.isoformat(timespec="seconds"),
+            "request_end_time": request_end.isoformat(timespec="seconds"),
+            "source_only": True,
+            "accounting_write_reached": False,
+            "qoyod_write_reached": False,
+        }
+
     rows, errors = await _fetch_account_hours(
         context,
         client,
         access_token,
         account_id=account_id,
-        start_date=start_date,
-        end_date=end_date,
+        request_start=request_start,
+        request_end=request_end,
     )
     daily = aggregate_account_hours_by_riyadh_day(
         rows,
@@ -191,9 +248,15 @@ async def refresh_snapchat_account_hours(
         end_date=end_date,
     )
 
+    business_tz = _timezone(BUSINESS_TIMEZONE)
+    covered_end_date = (
+        request_end.astimezone(business_tz) - timedelta(microseconds=1)
+    ).date()
+    persist_end_date = min(end_date, covered_end_date)
+
     saved = 0
     cursor = start_date
-    while cursor <= end_date:
+    while cursor <= persist_end_date:
         date_string = cursor.isoformat()
         bucket = daily.get(date_string)
         # A valid, empty account response with omit_empty=false is a confirmed
@@ -204,6 +267,8 @@ async def refresh_snapchat_account_hours(
             else {key: 0 for key in STAT_FIELDS}
         )
         window_start, window_end = riyadh_business_window(cursor, cursor)
+        if cursor == persist_end_date and request_end < window_end:
+            window_end = request_end
         await _upsert_performance(
             context,
             account=account,
@@ -233,6 +298,8 @@ async def refresh_snapchat_account_hours(
         "action_report_time": ACTION_REPORT_TIME,
         "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "request_start_time": request_start.isoformat(timespec="seconds"),
+        "request_end_time": request_end.isoformat(timespec="seconds"),
         "source_only": True,
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
@@ -247,4 +314,5 @@ __all__ = [
     "VIEW_ATTRIBUTION_WINDOW",
     "aggregate_account_hours_by_riyadh_day",
     "refresh_snapchat_account_hours",
+    "snapchat_hourly_request_window",
 ]
