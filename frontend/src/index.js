@@ -15,6 +15,7 @@ import "@/reviewManualNavigation";
 import "@/reviewCustomerWaiting";
 import "@/reviewPreparationFileRegistryEnhancer";
 import "@/reviewPreviewFulfillmentSeedEnhancer";
+import "@/reviewedProductSortEnhancer";
 import App from "@/App";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
