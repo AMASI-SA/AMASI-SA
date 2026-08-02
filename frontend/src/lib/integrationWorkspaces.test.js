@@ -1,3 +1,7 @@
+jest.mock("react-router-dom", () => ({
+    Link: ({ children }) => children,
+}));
+
 import {
     ADVERTISING_PROVIDER_IDS,
     focusedIntegrationProvider,
