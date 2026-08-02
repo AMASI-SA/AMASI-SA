@@ -2,6 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import SnapchatHybridSummaryCard from "./SnapchatHybridSummaryCard";
 
 
+function visibleText(markup) {
+    return markup
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+
 test("renders Salla actual KPIs separately from Snapchat attributed conversions", () => {
     const markup = renderToStaticMarkup(
         <SnapchatHybridSummaryCard
@@ -52,22 +60,23 @@ test("renders Salla actual KPIs separately from Snapchat attributed conversions"
             }}
         />,
     );
+    const text = visibleText(markup);
 
     expect(markup).toContain('data-testid="snapchat-hybrid-summary-card"');
-    expect(markup).toContain("Snapchat — الأداء الفعلي");
-    expect(markup).toContain("الطلبات الفعلية");
-    expect(markup).toContain(">42</div>");
-    expect(markup).toContain("9,116.97 ر.س");
-    expect(markup).toContain("2.10×");
-    expect(markup).toContain("103.15 ر.س");
-    expect(markup).toContain("تحويلات سناب المنسوبة");
-    expect(markup).toContain(">15</div>");
-    expect(markup).toContain("3,108.88 ر.س");
-    expect(markup).toContain("+27 طلب");
-    expect(markup).toContain("35.71%");
-    expect(markup).toContain("فعالة: 42");
-    expect(markup).toContain("ملغية: 1");
-    expect(markup).toContain("تحويلات Snapchat المنسوبة ما زالت مؤقتة");
+    expect(markup).toContain('data-testid="snap-hybrid-today-orders"');
+    expect(markup).toContain('data-testid="snap-hybrid-today-attributed-orders"');
+    expect(text).toContain("Snapchat — الأداء الفعلي");
+    expect(text).toContain("الطلبات الفعلية 42");
+    expect(text).toContain("المبيعات الفعلية 9,116.97 ر.س");
+    expect(text).toContain("ROAS الفعلي 2.10×");
+    expect(text).toContain("CPA الفعلي 103.15 ر.س");
+    expect(text).toContain("تحويلات سناب المنسوبة 15");
+    expect(text).toContain("مبيعات سناب المنسوبة 3,108.88 ر.س");
+    expect(text).toMatch(/فجوة الإسناد \+\s*27 طلب/);
+    expect(text).toMatch(/35\.71\s*%/);
+    expect(text).toContain("فعالة: 42");
+    expect(text).toContain("ملغية: 1");
+    expect(text).toContain("تحويلات Snapchat المنسوبة ما زالت مؤقتة");
 });
 
 
