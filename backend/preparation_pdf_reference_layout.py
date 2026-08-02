@@ -2,9 +2,9 @@
 
 The merchant's operational reference uses an A4 portrait page with three
 right-to-left columns and five rows (15 preparation cards per page). Each card
-has a serial number, product image next to a QR code, then product/spec fields,
-order number, full date, quantity, and delivery information. Cards have no
-large surrounding borders.
+has a serial number, product image next to a QR code, then a split detail area:
+product specifications below the QR and order/date/quantity/delivery below the
+image. Cards have no surrounding borders.
 
 This module patches only reviewed preparation batches. The legacy Salla PDF
 parser remains untouched.
@@ -40,8 +40,9 @@ REFERENCE_ROWS = 5
 REFERENCE_CARDS_PER_PAGE = REFERENCE_COLUMNS * REFERENCE_ROWS
 REFERENCE_RED = HexColor("#D12B2B")
 REFERENCE_TEXT = HexColor("#151515")
-REFERENCE_MUTED = HexColor("#555555")
 REFERENCE_QR_LOGO = "#7C173C"
+MEZAN_IMAGE_COLLECTION = "order_review_mezan_images"
+MEZAN_IMAGE_PREFIX = "/api/order-reviews-v1/mezan-images/"
 _IMAGE_REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -101,6 +102,14 @@ def reference_card_rows(line: ProductLine) -> list[tuple[str, str]]:
     return rows
 
 
+def split_reference_card_rows(
+    line: ProductLine,
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Partition rows exactly like the reference: specs right, order data left."""
+    rows = reference_card_rows(line)
+    return rows[:-4], rows[-4:]
+
+
 def _qr_with_center_mark(payload: str) -> bytes:
     qr = qrcode.QRCode(
         version=None,
@@ -121,8 +130,6 @@ def _qr_with_center_mark(payload: str) -> bytes:
         radius=max(2, mark_size // 10),
         fill=REFERENCE_QR_LOGO,
     )
-    # A simple white brand mark keeps the QR reference appearance without
-    # depending on a bundled external logo file.
     draw.text(
         (side // 2, side // 2),
         "A",
@@ -186,7 +193,7 @@ def generate_reference_preparation_pdf(
     card_height = (page_height - 2 * margin_y) / REFERENCE_ROWS
     inner = 3.2 * mm
     media_size = 24 * mm
-    media_gap = 3.2 * mm
+    detail_gap = 2.4 * mm
 
     def draw_label_value(
         label: str,
@@ -209,8 +216,8 @@ def generate_reference_preparation_pdf(
         pdf.setFillColor(REFERENCE_RED if label_red else REFERENCE_TEXT)
         pdf.drawRightString(right, y, label_visual)
 
-        value_right = right - label_width - 2.5
-        value_width = max(10, width - label_width - 2.5)
+        value_right = right - label_width - 2.2
+        value_width = max(8, width - label_width - 2.2)
         value_font = font_bold if bold_value else font_name
         value_visual = _fit_visual_line(clean_value, value_font, font_size, value_width)
         pdf.setFont(value_font, font_size)
@@ -219,7 +226,7 @@ def generate_reference_preparation_pdf(
 
     def draw_card(card_index: int, line: ProductLine, serial: int) -> None:
         logical_column = card_index % REFERENCE_COLUMNS
-        column = REFERENCE_COLUMNS - 1 - logical_column  # right-to-left
+        column = REFERENCE_COLUMNS - 1 - logical_column
         row = card_index // REFERENCE_COLUMNS
         x = margin_x + column * card_width
         y = page_height - margin_y - (row + 1) * card_height
@@ -227,7 +234,6 @@ def generate_reference_preparation_pdf(
         right = x + card_width - inner
         usable_width = right - left
 
-        # Serial number centered above the media, matching the reference file.
         pdf.setFillColor(REFERENCE_TEXT)
         pdf.setFont(font_name, 8.5)
         pdf.drawCentredString(x + card_width / 2, y + card_height - 8.5, str(serial))
@@ -262,55 +268,65 @@ def generate_reference_preparation_pdf(
                 anchor="c",
                 mask="auto",
             )
-        # Intentionally no grey placeholder. A missing image must look missing,
-        # not like a successfully loaded grey product.
 
-        text_top = media_y - 4
-        cursor = text_top
-        body_size = 6.8
-        line_height = 8.25
-
-        # Product name is required by the merchant and appears first below media.
+        product_cursor = media_y - 4
         if line.product_name:
             product_lines = _wrap_arabic_lines(
                 _text(line.product_name),
                 font_bold,
-                7.2,
+                7.0,
                 usable_width,
                 max_lines=2,
             )
-            pdf.setFont(font_bold, 7.2)
+            pdf.setFont(font_bold, 7.0)
             pdf.setFillColor(REFERENCE_TEXT)
             for product_line in product_lines:
-                pdf.drawCentredString(x + card_width / 2, cursor, product_line)
-                cursor -= 8.4
-            cursor -= 0.8
+                pdf.drawCentredString(x + card_width / 2, product_cursor, product_line)
+                product_cursor -= 8.0
+            product_cursor -= 0.5
 
-        fields = reference_card_rows(line)
-        # Keep the operational tail visible even with many specifications.
-        fixed_tail_count = 4
-        dynamic_rows = fields[:-fixed_tail_count]
-        tail_rows = fields[-fixed_tail_count:]
-        available_dynamic = max(0, int((cursor - (y + inner) - fixed_tail_count * line_height) // line_height))
-        if len(dynamic_rows) > available_dynamic:
-            dynamic_rows = dynamic_rows[:available_dynamic]
-        rows_to_draw = [*dynamic_rows, *tail_rows]
+        half_width = (usable_width - detail_gap) / 2
+        left_half_right = left + half_width
+        right_half_right = right
+        detail_top = product_cursor
+        line_height = 8.15
+        body_size = 6.6
 
-        for label, value in rows_to_draw:
-            if cursor < y + inner + 2:
+        specification_rows, order_rows = split_reference_card_rows(line)
+        max_rows = max(1, int((detail_top - (y + inner)) // line_height))
+        specification_rows = specification_rows[:max_rows]
+        order_rows = order_rows[:max_rows]
+
+        spec_cursor = detail_top
+        for label, value in specification_rows:
+            if spec_cursor < y + inner:
+                break
+            draw_label_value(
+                label,
+                value,
+                right=right_half_right,
+                y=spec_cursor,
+                width=half_width,
+                font_size=body_size,
+            )
+            spec_cursor -= line_height
+
+        order_cursor = detail_top
+        for label, value in order_rows:
+            if order_cursor < y + inner:
                 break
             is_delivery = label == "للتوصيل"
             draw_label_value(
                 label,
                 value,
-                right=right,
-                y=cursor,
-                width=usable_width,
-                font_size=7.0 if is_delivery else body_size,
+                right=left_half_right,
+                y=order_cursor,
+                width=half_width,
+                font_size=6.8 if is_delivery else body_size,
                 label_red=not is_delivery,
                 bold_value=is_delivery,
             )
-            cursor -= line_height
+            order_cursor -= line_height
 
     for page_start in range(0, len(lines), REFERENCE_CARDS_PER_PAGE):
         page_lines = lines[page_start:page_start + REFERENCE_CARDS_PER_PAGE]
@@ -341,26 +357,57 @@ def image_candidate_urls(state: dict[str, Any], identity: Any, source_line: dict
     return candidates
 
 
+async def _mezan_image_from_context(
+    context: dict[str, Any],
+    candidate: str,
+    batch_module: Any,
+) -> tuple[bytes | None, str | None]:
+    if not candidate.startswith(MEZAN_IMAGE_PREFIX):
+        return None, None
+    database = context.get("_database")
+    user_id = _text(context.get("_user_id"))
+    image_id = candidate.removeprefix(MEZAN_IMAGE_PREFIX).split("/", 1)[0]
+    if database is None or not user_id or not image_id:
+        return None, None
+    try:
+        row = await database[MEZAN_IMAGE_COLLECTION].find_one(
+            {
+                "user_id": user_id,
+                "id": image_id,
+                "deleted_at": {"$exists": False},
+            },
+            {"_id": 0, "data_base64": 1, "content_type": 1},
+        )
+        if not row or not row.get("data_base64"):
+            return None, None
+        raw = base64.b64decode(row["data_base64"], validate=True)
+        return batch_module._compress_image_bytes(raw)
+    except Exception:
+        return None, None
+
+
 async def _download_first_product_image(
     client: httpx.AsyncClient,
     candidates: list[str],
     cache: dict[str, tuple[bytes | None, str | None]],
     batch_module: Any,
+    context: dict[str, Any],
 ) -> tuple[bytes | None, str | None, str | None]:
     for candidate in candidates:
+        if candidate.startswith(MEZAN_IMAGE_PREFIX):
+            raw, mime = await _mezan_image_from_context(context, candidate, batch_module)
+            if raw:
+                return raw, mime, candidate
+            continue
         if candidate.startswith("data:image/") and "," in candidate:
             try:
-                header, encoded = candidate.split(",", 1)
+                _header, encoded = candidate.split(",", 1)
                 raw = base64.b64decode(encoded)
                 compressed = batch_module._compress_image_bytes(raw)
                 if compressed[0]:
                     return compressed[0], compressed[1], candidate
             except Exception:
                 continue
-
-        # Mezan image URLs are authenticated relative endpoints. They cannot be
-        # fetched by an unauthenticated external HTTP client here, so continue
-        # to the original Salla image candidates instead of stopping on them.
         if candidate.startswith("/"):
             continue
         safe_url = batch_module._safe_image_url(candidate)
@@ -466,6 +513,7 @@ async def build_reference_batch_lines(
                 candidates,
                 image_cache,
                 batch,
+                context,
             )
             total_products = sum(
                 batch._unit_quantity(getattr(item, "quantity", 0))
@@ -512,12 +560,33 @@ async def build_reference_batch_lines(
 
 
 _INSTALLED = False
+_ORIGINAL_CONTEXT_LOADER = None
 
 
 def install_preparation_pdf_reference_layout() -> None:
-    global _INSTALLED
+    global _INSTALLED, _ORIGINAL_CONTEXT_LOADER
     import reviewed_preparation_batches as batch
 
+    if _INSTALLED:
+        return
+    _ORIGINAL_CONTEXT_LOADER = batch.load_reviewed_product_context
+
+    async def load_context_with_image_access(
+        database: Any,
+        *,
+        user_id: str,
+        limit: int,
+    ) -> dict[str, Any]:
+        context = await _ORIGINAL_CONTEXT_LOADER(
+            database,
+            user_id=user_id,
+            limit=limit,
+        )
+        context["_database"] = database
+        context["_user_id"] = user_id
+        return context
+
+    batch.load_reviewed_product_context = load_context_with_image_access
     batch.generate_preparation_pdf = generate_reference_preparation_pdf
     batch._build_batch_lines = build_reference_batch_lines
     _INSTALLED = True
@@ -532,4 +601,5 @@ __all__ = [
     "image_candidate_urls",
     "install_preparation_pdf_reference_layout",
     "reference_card_rows",
+    "split_reference_card_rows",
 ]
