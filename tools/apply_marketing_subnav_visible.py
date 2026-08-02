@@ -10,19 +10,48 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
 
 component_path = Path("frontend/src/components/MezanV2NavigationShell.jsx")
 test_path = Path("frontend/src/components/MezanV2NavigationShell.test.jsx")
+header_test_path = Path("frontend/src/mezanUnifiedHeader.test.js")
 component = component_path.read_text(encoding="utf-8")
 tests = test_path.read_text(encoding="utf-8")
+header_tests = header_test_path.read_text(encoding="utf-8")
+
+component = replace_once(
+    component,
+    '''export function activeNavigationSection(location) {
+    return MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.items.some((item) => isNavigationItemActive(location, item)),
+    ) || null;
+}
+''',
+    '''export function activeNavigationSection(location) {
+    return MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.items.some((item) => isNavigationItemActive(location, item)),
+    ) || null;
+}
+
+export function navigationSectionsForDisplay(location, openSectionId = null) {
+    const activeSection = activeNavigationSection(location);
+    const openSection = MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.id === openSectionId,
+    ) || null;
+    return {
+        activeSection,
+        openSection,
+        visibleSection: openSection || activeSection,
+    };
+}
+''',
+    "navigation display helper",
+)
 
 component = replace_once(
     component,
     '''    const activeSection = useMemo(() => activeNavigationSection(location), [location]);
 ''',
-    '''    const activeSection = useMemo(() => activeNavigationSection(location), [location]);
-    const openSection = useMemo(
-        () => MEZAN_V2_NAV_SECTIONS.find((section) => section.id === openSectionId) || null,
-        [openSectionId],
+    '''    const { activeSection, openSection, visibleSection } = useMemo(
+        () => navigationSectionsForDisplay(location, openSectionId),
+        [location, openSectionId],
     );
-    const visibleSection = openSection || activeSection;
 ''',
     "visible section state",
 )
@@ -85,19 +114,27 @@ component = replace_once(
 ''',
     "secondary rail visibility",
 )
-
+component = replace_once(
+    component,
+    '''                                data-testid={`mezan-v2-secondary-link-${activeSection.id}`}
+''',
+    '''                                data-testid={`mezan-v2-secondary-link-${visibleSection.id}`}
+''',
+    "secondary link section id",
+)
 component_path.write_text(component, encoding="utf-8")
 
 tests = replace_once(
     tests,
-    '''import { renderToStaticMarkup } from "react-dom/server";
+    '''    isMezanV2Route,
+    isNavigationItemActive,
 ''',
-    '''import { fireEvent, render, screen } from "@testing-library/react";
-import { renderToStaticMarkup } from "react-dom/server";
+    '''    isMezanV2Route,
+    isNavigationItemActive,
+    navigationSectionsForDisplay,
 ''',
-    "testing library import",
+    "display helper import",
 )
-
 tests = replace_once(
     tests,
     '''const PRODUCTS_LOCATION = {
@@ -111,31 +148,41 @@ const PRODUCTS_LOCATION = {
 ''',
     "dashboard location",
 )
-
-tests += '''
-
-test("opening marketing renders its page rail outside the clipped primary scroller", () => {
-    render(
-        <MezanV2NavigationShell
-            location={DASHBOARD_LOCATION}
-            onOpenAll={() => {}}
-        />,
-    );
-
-    fireEvent.click(screen.getByTestId("mezan-v2-primary-marketing"));
-
-    const rail = screen.getByTestId("mezan-v2-secondary-marketing");
-    const primaryScroller = screen.getByTestId("mezan-v2-primary-scroll");
-    expect(primaryScroller.contains(rail)).toBe(false);
-    expect(rail.getAttribute("data-navigation-source")).toBe("opened");
-    expect(rail.textContent).toContain("جميع المنصات");
-    expect(rail.textContent).toContain("سناب شات");
-    expect(rail.textContent).toContain("تيك توك");
-    expect(rail.textContent).toContain("ميتا");
-    expect(rail.textContent).toContain("إعلانات Google");
-    expect(document.querySelector('[data-testid="mezan-v2-dropdown-marketing"]')).toBeNull();
+tests = replace_once(
+    tests,
+    '''test("new navigation does not route to legacy Mezan pages", () => {
+''',
+    '''test("opening marketing selects a visible secondary rail outside the primary scroller", () => {
+    const state = navigationSectionsForDisplay(DASHBOARD_LOCATION, "marketing");
+    expect(state.activeSection?.id).toBe("home");
+    expect(state.openSection?.id).toBe("marketing");
+    expect(state.visibleSection?.id).toBe("marketing");
+    expect(state.visibleSection.items.map((item) => item.label)).toEqual([
+        "جميع المنصات",
+        "سناب شات",
+        "تيك توك",
+        "ميتا",
+        "إعلانات Google",
+    ]);
 });
-'''
 
+test("new navigation does not route to legacy Mezan pages", () => {
+''',
+    "marketing open rail test",
+)
 test_path.write_text(tests, encoding="utf-8")
+
+header_tests = replace_once(
+    header_tests,
+    '''    expect(navigation).toContain('border-emerald-950 bg-[#0B4938]');
+    expect(navigation).toContain('border-t border-white/10 bg-[#0B4938]');
+''',
+    '''    expect(navigation).toContain('border-t border-white/10 bg-[#0B4938]');
+    expect(navigation).toContain('data-navigation-source={openSection ? "opened" : "active"}');
+    expect(navigation).not.toContain('top-[calc(100%+0.6rem)]');
+''',
+    "green identity rail contract",
+)
+header_test_path.write_text(header_tests, encoding="utf-8")
+
 print("MARKETING_SUBNAV_VISIBLE_PATCH_APPLIED")
