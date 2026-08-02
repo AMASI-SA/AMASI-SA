@@ -2,9 +2,17 @@ from types import SimpleNamespace
 
 import pytest
 
+import reviewed_preparation_batches as batch_module
+from order_review_forward_stage_guard import (
+    FORWARD_FULFILLMENT_STAGES,
+    install_order_review_forward_stage_guard,
+)
+from order_review_routes import EVENTS, REVIEW_COMPLETED_STAGES, WORKFLOWS
+from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from reviewed_preparation_batches import (
     _batch_response,
     _card_field_projection,
+    _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
     render_preparation_batch_pdf,
@@ -28,6 +36,51 @@ def _line(order_number, order_item_id, quantity, start=1):
         "quantity": quantity,
         "available_unit_indices": list(range(start, start + quantity)),
     }
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    async def to_list(self, length=None):
+        return list(self.rows[:length] if length else self.rows)
+
+
+class _Collection:
+    def __init__(self, *, one=None, rows=None):
+        self.one = one
+        self.rows = list(rows or [])
+        self.last_update = None
+        self.inserted = []
+
+    async def find_one(self, *_args, **_kwargs):
+        return dict(self.one) if isinstance(self.one, dict) else self.one
+
+    def find(self, *_args, **_kwargs):
+        return _Cursor(self.rows)
+
+    async def update_one(self, _selector, update, **_kwargs):
+        self.last_update = update
+        if isinstance(self.one, dict):
+            self.one.update(update.get("$set") or {})
+            self.one["revision"] = int(self.one.get("revision") or 0) + int((update.get("$inc") or {}).get("revision") or 0)
+        return SimpleNamespace(matched_count=1, modified_count=1)
+
+    async def insert_one(self, row):
+        self.inserted.append(dict(row))
+        return SimpleNamespace(inserted_id="event-1")
+
+
+class _DB:
+    def __init__(self, workflow, allocations):
+        self.collections = {
+            WORKFLOWS: _Collection(one=workflow),
+            PREPARATION_UNIT_ALLOCATIONS: _Collection(rows=allocations),
+            EVENTS: _Collection(),
+        }
+
+    def __getitem__(self, name):
+        return self.collections[name]
 
 
 def test_select_thirty_of_fifty_across_deterministic_order_lines():
@@ -147,6 +200,92 @@ def test_batch_snapshot_can_regenerate_pdf():
 
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 1000
+
+
+@pytest.mark.asyncio
+async def test_partial_file_keeps_order_in_reviewed(monkeypatch):
+    workflow = {
+        "user_id": "owner-1",
+        "order_number": "100",
+        "stage": "reviewed",
+        "revision": 1,
+        "items": [],
+    }
+    order = SimpleNamespace(
+        order_number="100",
+        items=[SimpleNamespace(order_item_id="line-a", quantity=2)],
+    )
+    db = _DB(workflow, [
+        {"status": "committed", "order_item_id": "line-a", "unit_index": 1},
+    ])
+
+    async def context(*_args, **_kwargs):
+        return {"pairs": [(order, workflow)]}
+
+    monkeypatch.setattr(batch_module, "load_reviewed_product_context", context)
+    complete, remaining = await _reconcile_order_stage(
+        db,
+        user_id="owner-1",
+        order_number="100",
+        batch_id="batch-1",
+        actor={"id": "employee-1", "name": "موظف"},
+    )
+
+    assert complete is False
+    assert remaining == 1
+    update = db[WORKFLOWS].last_update
+    assert update["$set"]["preparation_progress"]["remaining_quantity"] == 1
+    assert "stage" not in update["$set"]
+    assert db[EVENTS].inserted == []
+
+
+@pytest.mark.asyncio
+async def test_final_unit_moves_order_to_in_progress(monkeypatch):
+    workflow = {
+        "user_id": "owner-1",
+        "order_number": "100",
+        "stage": "reviewed",
+        "revision": 1,
+        "items": [],
+    }
+    order = SimpleNamespace(
+        order_number="100",
+        items=[SimpleNamespace(order_item_id="line-a", quantity=2)],
+    )
+    db = _DB(workflow, [
+        {"status": "committed", "order_item_id": "line-a", "unit_index": 1},
+        {"status": "committed", "order_item_id": "line-a", "unit_index": 2},
+    ])
+
+    async def context(*_args, **_kwargs):
+        return {"pairs": [(order, workflow)]}
+
+    monkeypatch.setattr(batch_module, "load_reviewed_product_context", context)
+    complete, remaining = await _reconcile_order_stage(
+        db,
+        user_id="owner-1",
+        order_number="100",
+        batch_id="batch-2",
+        actor={"id": "employee-1", "name": "موظف"},
+    )
+
+    assert complete is True
+    assert remaining == 0
+    update = db[WORKFLOWS].last_update
+    assert update["$set"]["stage"] == "in_progress"
+    assert update["$set"]["preparation_progress"]["remaining_quantity"] == 0
+    assert db[EVENTS].inserted[0]["event_type"] == "order_moved_to_in_progress"
+    assert db[EVENTS].inserted[0]["salla_updated"] is False
+
+
+def test_forward_stages_freeze_review_mutations():
+    previous = set(REVIEW_COMPLETED_STAGES)
+    try:
+        install_order_review_forward_stage_guard()
+        assert FORWARD_FULFILLMENT_STAGES.issubset(REVIEW_COMPLETED_STAGES)
+    finally:
+        REVIEW_COMPLETED_STAGES.clear()
+        REVIEW_COMPLETED_STAGES.update(previous)
 
 
 def test_batch_response_is_mezan_only_and_exposes_transitions():
