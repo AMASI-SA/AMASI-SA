@@ -1,0 +1,116 @@
+name: Production Fulfillment 278 Port
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/order_engine/__init__.py"
+      - "backend/order_review_forward_stage_guard.py"
+      - "backend/preparation_pdf_card_file_number.py"
+      - "backend/preparation_pdf_unit_card_expansion.py"
+      - "backend/reviewed_product_sorting.py"
+      - "backend/tests/test_preparation_pdf_card_file_number.py"
+      - "backend/tests/test_prod_fulfillment_278_port.py"
+      - "frontend/src/index.js"
+      - "frontend/src/reviewedProductSortEnhancer.js"
+      - "frontend/src/reviewedProductSortUi.js"
+      - "frontend/src/reviewedProductSortUi.test.js"
+      - ".github/workflows/prod-fulfillment-278-port.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile selective port
+        run: >-
+          python -m py_compile
+          order_engine/__init__.py
+          order_review_forward_stage_guard.py
+          preparation_pdf_card_file_number.py
+          preparation_pdf_unit_card_expansion.py
+          reviewed_product_sorting.py
+          tests/test_preparation_pdf_card_file_number.py
+          tests/test_prod_fulfillment_278_port.py
+      - name: Run focused and existing fulfillment contracts
+        run: >-
+          python -m pytest
+          tests/test_preparation_pdf_card_file_number.py
+          tests/test_prod_fulfillment_278_port.py
+          tests/test_reviewed_products_catalog.py
+          tests/test_reviewed_preparation_batches.py
+          tests/test_fulfillment_v2_contract.py
+          -q --tb=short
+      - name: Enforce no external writes
+        working-directory: .
+        run: |
+          SORT=backend/reviewed_product_sorting.py
+          grep -q 'mezan_only' "$SORT"
+          grep -q 'salla_updated.*False' "$SORT"
+          grep -q 'qoyod_updated.*False' "$SORT"
+          ! grep -q 'salla.*update' "$SORT"
+          ! grep -q 'qoyod.*update' "$SORT"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test sorting controls and separated windows
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/reviewedProductSortUi.test.js
+          src/pages/FulfillmentV2.test.jsx
+          src/components/MezanV2NavigationShell.fulfillment.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce reviewed-products-only sort controls
+        working-directory: .
+        run: |
+          ENTRY=frontend/src/index.js
+          SORT=frontend/src/reviewedProductSortEnhancer.js
+          grep -q 'reviewedProductSortEnhancer' "$ENTRY"
+          grep -q 'view") !== "files"' "$SORT"
+          grep -q 'reviewed-product-sort-button' "$SORT"
+          grep -q 'reviewed-product-sorting-v1/preference' "$SORT"
