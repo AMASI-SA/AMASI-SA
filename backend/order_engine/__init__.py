@@ -76,6 +76,9 @@ def make_order_engine_router(*args, **kwargs):
         install_order_review_forward_stage_guard,
     )
     from reviewed_products_catalog import make_reviewed_products_catalog_router
+    from reviewed_product_sorting import (
+        make_reviewed_product_sorting_router,
+    )
     from reviewed_preparation_batches import (
         make_reviewed_preparation_batches_router,
     )
@@ -159,6 +162,7 @@ def make_order_engine_router(*args, **kwargs):
         make_order_review_mezan_image_unlink_router(db, current_user),
         make_order_review_customer_waiting_router(db, current_user),
         make_reviewed_products_catalog_router(db, current_user),
+        make_reviewed_product_sorting_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
         make_preview_fulfillment_seed_router(db, current_user),

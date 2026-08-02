@@ -5,6 +5,12 @@ import {
   selectedReviewedCategoryNames,
   toggleReviewedCategory,
 } from "./reviewedProductFilters";
+import {
+  findReviewedProductForCard,
+  reviewedProductSortButtonLabel,
+  reviewedProductSortCandidateSummary,
+  updateReviewedProductSortPreference,
+} from "./reviewedProductSortUi";
 
 const products = [
   {
@@ -56,4 +62,38 @@ test("quantity and selected labels stay phone friendly", () => {
     [{ id: "bags", name: "الشنط" }, { id: "necklaces", name: "السلاسل" }],
     ["necklaces"],
   )).toEqual(["السلاسل"]);
+});
+
+test("sort candidate summary shows highest piece demand first", () => {
+  expect(reviewedProductSortCandidateSummary({
+    values: [
+      { value: "5 سنوات", quantity: 30 },
+      { value: "6 سنوات", quantity: 12 },
+    ],
+  })).toBe("5 سنوات (30 قطعة)، 6 سنوات (12 قطعة)");
+});
+
+test("sort button reflects the saved one-field preference", () => {
+  expect(reviewedProductSortButtonLabel({ preparation_sort_label: "العمر" }))
+    .toBe("ترتيب الملف: العمر");
+  expect(reviewedProductSortButtonLabel({}))
+    .toBe("تحديد ترتيب الملف");
+});
+
+test("visible reviewed card maps to its product by name and sku", () => {
+  expect(findReviewedProductForCard(products, {
+    name: "شنطة كوتش",
+    sku: "BAG-2",
+  })?.group_key).toBe("product:2");
+});
+
+test("saved preference updates only sort metadata", () => {
+  const updated = updateReviewedProductSortPreference(products[0], {
+    spec_key: "اللون",
+    spec_label: "اللون",
+    candidates: [{ key: "اللون", label: "اللون", values: [] }],
+  });
+  expect(updated.group_key).toBe("product:1");
+  expect(updated.preparation_sort_spec).toBe("اللون");
+  expect(updated.preparation_sort_candidates).toHaveLength(1);
 });

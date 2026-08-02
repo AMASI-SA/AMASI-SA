@@ -1,5 +1,11 @@
 from types import SimpleNamespace
 
+from reviewed_product_sorting import (
+    apply_reviewed_product_sorting,
+    make_reviewed_product_sorting_router,
+    order_selections_by_product_rank,
+    reviewed_product_sort_candidates,
+)
 from reviewed_products_catalog import (
     UNCATEGORIZED_ID,
     aggregate_reviewed_products,
@@ -17,7 +23,15 @@ def _order(number, items):
     }
 
 
-def _item(line_id, product_id, *, quantity=1, name="سلسال بالاسم", sku="NAME-1"):
+def _item(
+    line_id,
+    product_id,
+    *,
+    quantity=1,
+    name="سلسال بالاسم",
+    sku="NAME-1",
+    options=None,
+):
     return {
         "order_item_id": line_id,
         "product_id": product_id,
@@ -27,7 +41,7 @@ def _item(line_id, product_id, *, quantity=1, name="سلسال بالاسم", sk
         "name": name,
         "quantity": quantity,
         "image_url": "https://example.test/source.jpg",
-        "options_normalized": {"engraving": "اسم مختلف لكل عميل"},
+        "options_normalized": options or {"engraving": "اسم مختلف لكل عميل"},
     }
 
 
@@ -193,14 +207,120 @@ def test_product_without_salla_category_is_visible_under_uncategorized():
     assert result["categories"][0]["id"] == UNCATEGORIZED_ID
 
 
-def test_router_registers_catalog_endpoint():
-    router = make_reviewed_products_catalog_router(
+def test_reviewed_product_cards_are_ranked_by_remaining_piece_quantity():
+    base = aggregate_reviewed_products(
+        [(
+            _order("1", [
+                _item("small", "p-small", quantity=2, name="منتج صغير", sku="S"),
+                _item("large", "p-large", quantity=9, name="منتج كبير", sku="L"),
+            ]),
+            {"items": []},
+        )],
+        [],
+    )
+
+    result = apply_reviewed_product_sorting(base, [])
+
+    assert [row["product_id"] for row in result["products"]] == [
+        "p-large",
+        "p-small",
+    ]
+
+
+def test_selected_age_spec_groups_cards_by_highest_piece_demand_without_expansion():
+    product = {
+        "group_key": "product:dress",
+        "name": "دقلة أطفال",
+        "quantity": 14,
+        "remaining_quantity": 14,
+        "source_lines": [
+            {
+                "order_number": "1001",
+                "order_item_id": "a",
+                "quantity": 3,
+                "remaining_quantity": 3,
+                "options_normalized": {"العمر": "5 سنوات", "الاسم اللي تبيه": "سارة"},
+            },
+            {
+                "order_number": "1002",
+                "order_item_id": "b",
+                "quantity": 5,
+                "remaining_quantity": 5,
+                "options_normalized": {"العمر": "6 سنوات", "الاسم اللي تبيه": "نورة"},
+            },
+            {
+                "order_number": "1003",
+                "order_item_id": "c",
+                "quantity": 4,
+                "remaining_quantity": 4,
+                "options_normalized": {"العمر": "5 سنوات", "الاسم اللي تبيه": "ريم"},
+            },
+            {
+                "order_number": "1004",
+                "order_item_id": "d",
+                "quantity": 2,
+                "remaining_quantity": 2,
+                "options_normalized": {"العمر": "4 سنوات", "الاسم اللي تبيه": "ليان"},
+            },
+        ],
+    }
+
+    candidates = reviewed_product_sort_candidates(product)
+    assert [row["label"] for row in candidates] == ["العمر"]
+    assert candidates[0]["values"][0] == {
+        "value": "5 سنوات",
+        "quantity": 7,
+        "card_count": 2,
+    }
+
+    result = apply_reviewed_product_sorting(
+        {"products": [product], "categories": [], "summary": {}},
+        [{"group_key": "product:dress", "spec_key": "العمر"}],
+    )
+    lines = result["products"][0]["source_lines"]
+
+    assert [row["options_normalized"]["العمر"] for row in lines] == [
+        "5 سنوات",
+        "5 سنوات",
+        "6 سنوات",
+        "4 سنوات",
+    ]
+    # One Salla line remains one card and retains the original line quantity.
+    assert len(lines) == 4
+    assert [row["quantity"] for row in lines] == [4, 3, 5, 2]
+
+
+def test_batch_product_blocks_follow_reviewed_quantity_rank():
+    products = [
+        {"group_key": "product:large", "quantity": 20},
+        {"group_key": "product:small", "quantity": 3},
+    ]
+    selections = [
+        {"group_key": "product:small", "quantity": 3},
+        {"group_key": "product:large", "quantity": 10},
+    ]
+
+    assert [row["group_key"] for row in order_selections_by_product_rank(products, selections)] == [
+        "product:large",
+        "product:small",
+    ]
+
+
+def test_router_registers_catalog_and_sort_preference_endpoints():
+    current_user = lambda: {"id": "owner-1", "role": "owner"}
+    catalog_router = make_reviewed_products_catalog_router(
         SimpleNamespace(unified_orders=object()),
-        lambda: {"id": "owner-1", "role": "owner"},
+        current_user,
+    )
+    sorting_router = make_reviewed_product_sorting_router(
+        SimpleNamespace(unified_orders=object()),
+        current_user,
     )
     routes = {
         (route.path, method)
+        for router in (catalog_router, sorting_router)
         for route in router.routes
         for method in route.methods
     }
     assert ("/reviewed-products-v1/catalog", "GET") in routes
+    assert ("/reviewed-product-sorting-v1/preference", "PUT") in routes
