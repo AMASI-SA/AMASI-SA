@@ -1,0 +1,196 @@
+name: Production Meta Campaign Reporting V2 Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-meta-campaign-reporting-v2-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-meta-campaign-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-meta-campaign-reporting-v2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply staged campaign reporting patch
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f tools/apply_meta_campaign_reporting_v2.py ]]; then
+            python tools/apply_meta_campaign_reporting_v2.py
+            rm tools/apply_meta_campaign_reporting_v2.py
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify exact final scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          backend/ads_manager/models.py
+          backend/ads_manager/service.py
+          backend/integrations_control_center/meta_campaign_reporting.py
+          backend/integrations_control_center/meta_native_reporting.py
+          backend/tests/test_meta_native_reporting.py
+          backend/tests/test_unified_ads_manager_phase1.py
+          frontend/src/services/marketingPerformance.js
+          frontend/src/services/marketingPerformance.test.js
+          EOF
+          sort -o /tmp/expected.txt /tmp/expected.txt
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo META_CAMPAIGN_V2_SCOPE_OK
+
+      - name: Install targeted backend dependencies
+        shell: bash
+        run: |
+          python -m pip install -q \
+            fastapi==0.110.1 \
+            httpx==0.28.1 \
+            pydantic==2.13.4 \
+            'pymongo>=4.8,<5' \
+            'motor>=3.5,<4' \
+            cryptography==48.0.0 \
+            openpyxl==3.1.5 \
+            email-validator \
+            python-jose \
+            passlib \
+            bcrypt \
+            pytest==9.0.3 \
+            pytest-asyncio
+
+      - name: Compile changed backend modules
+        run: |
+          python -m py_compile \
+            backend/integrations_control_center/meta_campaign_reporting.py \
+            backend/integrations_control_center/meta_native_reporting.py \
+            backend/ads_manager/models.py \
+            backend/ads_manager/service.py \
+            backend/tests/test_meta_native_reporting.py \
+            backend/tests/test_unified_ads_manager_phase1.py
+
+      - name: Run Meta and Ads Manager contracts
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q --tb=short \
+            backend/tests/test_meta_native_reporting.py \
+            backend/tests/test_meta_native_integrations_v2.py \
+            backend/tests/test_unified_ads_manager_phase1.py
+
+      - name: Enforce source-only campaign safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          campaign_path = Path('backend/integrations_control_center/meta_campaign_reporting.py')
+          campaign_source = campaign_path.read_text(encoding='utf-8')
+          tree = ast.parse(campaign_source, filename=str(campaign_path))
+          banned_fragments = (
+              'general_ledger', 'daily_costs', 'qoyod', 'salla',
+              'meta_ads_daily', 'ads_daily', '/campaigns?status=',
+          )
+          for fragment in banned_fragments:
+              if fragment in campaign_source:
+                  raise SystemExit(f'Forbidden campaign reporting fragment: {fragment}')
+
+          provider_write_methods = {'post', 'put', 'patch', 'delete'}
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                  if node.func.attr in provider_write_methods:
+                      raise SystemExit(
+                          f'Provider mutation method found: {node.func.attr} line {node.lineno}'
+                      )
+
+          service_path = Path('backend/ads_manager/service.py')
+          service_tree = ast.parse(
+              service_path.read_text(encoding='utf-8'),
+              filename=str(service_path),
+          )
+          db_write_methods = {
+              'insert_one', 'insert_many', 'update_one', 'update_many',
+              'delete_one', 'delete_many', 'replace_one', 'bulk_write',
+              'find_one_and_update', 'create_index',
+          }
+          writes = []
+          for node in ast.walk(service_tree):
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                  if node.func.attr in db_write_methods:
+                      writes.append((node.func.attr, node.lineno))
+          if writes:
+              raise SystemExit(f'Ads Manager write calls detected: {writes}')
+
+          required = (
+              'mezan_meta_campaign_performance_daily_v2',
+              'level": "campaign"',
+              'campaign_write_reached": False',
+              'accounting_eligible": False',
+          )
+          missing = [marker for marker in required if marker not in campaign_source]
+          if missing:
+              raise SystemExit(f'Missing campaign safety markers: {missing}')
+          print('META_CAMPAIGN_V2_SOURCE_ONLY_OK')
+          PY
+          git diff --check
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          yarn install --non-interactive
+
+      - name: Run frontend campaign adapter tests
+        working-directory: frontend
+        run: |
+          CI=true yarn test --watchAll=false --runInBand \
+            src/services/marketingPerformance.test.js \
+            src/pages/MarketingPlatformWorkspace.test.jsx
+
+      - name: Build Production frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Publish clean candidate commit
+        if: steps.patch.outputs.applied == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/ads_manager/models.py \
+            backend/ads_manager/service.py \
+            backend/integrations_control_center/meta_campaign_reporting.py \
+            backend/integrations_control_center/meta_native_reporting.py \
+            backend/tests/test_meta_native_reporting.py \
+            backend/tests/test_unified_ads_manager_phase1.py \
+            frontend/src/services/marketingPerformance.js \
+            frontend/src/services/marketingPerformance.test.js
+          git commit -m "feat(prod-meta): add campaign-level reporting v2"
+          git push origin HEAD:feat/prod-meta-campaign-reporting-v2
+          echo META_CAMPAIGN_V2_CLEAN_COMMIT_PUSHED
