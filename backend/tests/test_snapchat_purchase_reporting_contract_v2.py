@@ -17,6 +17,12 @@ from integrations_control_center.snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
     summarize_conversion_freshness,
 )
+from integrations_control_center.snapchat_salla_source_hybrid import (
+    HYBRID_CONTRACT_VERSION,
+    aggregate_salla_reported_source,
+    canonical_marketing_source,
+    merge_hybrid_snapchat_metrics,
+)
 
 
 class FakeContext:
@@ -69,6 +75,7 @@ def test_installer_keeps_request_storage_and_response_metadata_consistent():
         ADS_MANAGER_SOURCE_MODE
     )
     assert ADS_MANAGER_SOURCE_MODE.endswith("conversion_freshness_nested_v6")
+    assert HYBRID_CONTRACT_VERSION == "salla_reported_source_hybrid_v1"
 
 
 def test_stats_url_extracts_only_the_ad_account_id():
@@ -170,3 +177,113 @@ def test_freshness_is_complete_only_when_every_account_covers_request():
 
     assert result["status"] == "complete"
     assert result["provisional"] is False
+
+
+def test_salla_source_normalizer_accepts_arabic_and_nested_snapchat_values():
+    assert canonical_marketing_source({"source": "سناب شات"}) == "snapchat"
+    assert canonical_marketing_source({"utm_source": "snap_ads"}) == "snapchat"
+    assert canonical_marketing_source({
+        "raw_by_source": {
+            "salla_direct": {
+                "source": {"name": "Snapchat"},
+            }
+        }
+    }) == "snapchat"
+    assert canonical_marketing_source({"source": "Tik Tok"}) == "tiktok"
+
+
+def test_salla_source_aggregation_counts_actual_orders_and_gross_revenue():
+    result = aggregate_salla_reported_source(
+        [
+            {
+                "order_number": "1",
+                "order_date": "2026-08-02",
+                "source": "snapchat",
+                "total_amount": 250,
+                "order_status": "جديد",
+            },
+            {
+                "order_number": "2",
+                "order_date": "2026-08-02",
+                "utm_source": "سناب",
+                "total_amount": 300,
+                "order_status": "ملغى",
+            },
+            {
+                "order_number": "3",
+                "order_date": "2026-08-02",
+                "source": "instagram",
+                "total_amount": 500,
+                "order_status": "جديد",
+            },
+            {
+                "order_number": "4",
+                "order_date": "2026-08-01",
+                "source": "snapchat",
+                "total_amount": 100,
+                "order_status": "جديد",
+            },
+        ],
+        start="2026-08-02",
+        end="2026-08-02",
+    )
+
+    assert result["orders"] == 2
+    assert result["revenue"] == 550.0
+    assert result["source_observed_orders"] == 3
+    assert result["total_period_orders"] == 3
+    assert result["cancelled_orders"] == 1
+    assert result["active_orders"] == 1
+
+
+def test_hybrid_card_uses_salla_orders_but_preserves_snapchat_attribution():
+    result = merge_hybrid_snapchat_metrics(
+        {
+            "spend": 3922.28,
+            "orders": 14,
+            "revenue": 2976.16,
+            "impressions": 383013,
+            "clicks": 8092,
+            "roas": 0.76,
+            "cpa": 280.16,
+            "cost_per_order": 280.16,
+        },
+        {
+            "orders": 32,
+            "revenue": 7900,
+            "source_observed_orders": 40,
+            "total_period_orders": 44,
+            "reported_source_coverage_pct": 90.91,
+            "active_orders": 30,
+            "cancelled_orders": 2,
+            "refunded_orders": 0,
+        },
+    )
+
+    assert result["hybrid_applied"] is True
+    assert result["orders"] == 32
+    assert result["revenue"] == 7900.0
+    assert result["roas"] == 2.01
+    assert result["cpa"] == 122.57
+    assert result["attributed_orders"] == 14
+    assert result["attributed_revenue"] == 2976.16
+    assert result["attribution_gap_orders"] == 18
+    assert result["attribution_coverage_pct"] == 43.75
+    assert result["orders_source"] == "salla_reported_source"
+
+
+def test_hybrid_card_keeps_provider_metrics_when_salla_source_is_unavailable():
+    result = merge_hybrid_snapchat_metrics(
+        {"spend": 100, "orders": 4, "revenue": 500, "roas": 5},
+        {
+            "orders": 0,
+            "revenue": 0,
+            "source_observed_orders": 0,
+            "total_period_orders": 8,
+        },
+    )
+
+    assert result["hybrid_applied"] is False
+    assert result["orders"] == 4
+    assert result["revenue"] == 500
+    assert result["attributed_orders"] == 4
