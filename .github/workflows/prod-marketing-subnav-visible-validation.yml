@@ -51,6 +51,7 @@ jobs:
           cat > /tmp/expected.txt <<'EOF'
           frontend/src/components/MezanV2NavigationShell.jsx
           frontend/src/components/MezanV2NavigationShell.test.jsx
+          frontend/src/mezanUnifiedHeader.test.js
           EOF
           diff -u /tmp/expected.txt /tmp/changed.txt
           echo MARKETING_SUBNAV_SCOPE_OK
@@ -59,9 +60,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'const visibleSection = openSection || activeSection' frontend/src/components/MezanV2NavigationShell.jsx
+          grep -q 'export function navigationSectionsForDisplay' frontend/src/components/MezanV2NavigationShell.jsx
           grep -q 'data-navigation-source={openSection ? "opened" : "active"}' frontend/src/components/MezanV2NavigationShell.jsx
           grep -q 'mezan-v2-secondary-${visibleSection.id}' frontend/src/components/MezanV2NavigationShell.jsx
+          grep -q 'mezan-v2-secondary-link-${visibleSection.id}' frontend/src/components/MezanV2NavigationShell.jsx
           if grep -q 'mezan-v2-dropdown-${section.id}' frontend/src/components/MezanV2NavigationShell.jsx; then
             echo "Clipped dropdown contract still present"
             exit 1
@@ -96,6 +98,7 @@ jobs:
           git add -A \
             frontend/src/components/MezanV2NavigationShell.jsx \
             frontend/src/components/MezanV2NavigationShell.test.jsx \
+            frontend/src/mezanUnifiedHeader.test.js \
             tools/apply_marketing_subnav_visible.py
           git commit -m "fix(prod-ui): show marketing subnav below header"
           git push origin HEAD:fix/prod-marketing-subnav-visible
