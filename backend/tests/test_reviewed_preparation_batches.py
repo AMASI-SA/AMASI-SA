@@ -11,7 +11,7 @@ from order_review_forward_stage_guard import (
     install_order_review_forward_stage_guard,
 )
 from order_review_routes import EVENTS, REVIEW_COMPLETED_STAGES, WORKFLOWS
-from preparation_pdf import ProductLine
+from preparation_pdf import ProductLine, _register_font
 from preparation_pdf_reference_layout import (
     REFERENCE_CARDS_PER_PAGE,
     REFERENCE_COLUMNS,
@@ -19,6 +19,11 @@ from preparation_pdf_reference_layout import (
     generate_reference_preparation_pdf,
     image_candidate_urls,
     reference_card_rows,
+)
+from preparation_pdf_wrapped_text import (
+    build_wrapped_specification_plan,
+    generate_wrapped_reference_preparation_pdf,
+    wrap_reference_text,
 )
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from reviewed_preparation_batches import (
@@ -237,6 +242,42 @@ def test_reference_card_uses_full_labels_and_confirmed_field_order():
     assert rows[-3] == ("تاريخ", "2026-08-02")
     assert rows[-2] == ("الكمية", "1")
     assert rows[-1] == ("للتوصيل", "2 - iMile")
+
+
+def test_long_note_wraps_without_ellipsis_or_word_loss():
+    note = "تجربة ملف تجهيز طويلة للتأكد من ظهور الملاحظة كاملة دون اختفاء أي كلمة داخل البطاقة"
+    font_name, font_bold = _register_font()
+    wrapped = wrap_reference_text(
+        note,
+        font_name=font_name,
+        font_size=6.6,
+        first_width=42,
+        continuation_width=66,
+    )
+    plan = build_wrapped_specification_plan(
+        [("ملاحظة", note)],
+        font_name=font_name,
+        font_bold=font_bold,
+        width=66,
+        available_height=58,
+    )
+
+    assert len(wrapped) > 1
+    assert " ".join(wrapped) == note
+    assert "…" not in " ".join(wrapped)
+    assert " ".join(plan.fields[0].lines) == note
+    assert plan.physical_line_count > 1
+
+
+def test_wrapped_note_keeps_fifteen_card_page_density():
+    lines = [_reference_line(index) for index in range(1, 16)]
+    for line in lines:
+        line.note = "اكتب العبارة كاملة داخل الكرت مع تغليف المنتج بعناية وعدم حذف أي جزء من الملاحظة"
+    pdf = generate_wrapped_reference_preparation_pdf(lines)
+    document = fitz.open(stream=pdf, filetype="pdf")
+
+    assert document.page_count == 1
+    assert len(document[0].get_images(full=True)) >= 24
 
 
 def test_reference_pdf_is_three_columns_by_five_rows_with_images_and_qr():
