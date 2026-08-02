@@ -128,7 +128,7 @@ class CampaignBudget(StrictResponseModel):
 
 
 class CampaignRow(StrictResponseModel):
-    provider: Literal["tiktok", "meta"]
+    provider: Literal["snapchat", "tiktok", "meta"]
     provider_label: str
     account_id: str | None = None
     campaign_id: str
