@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@/index.css";
+import "@/reviewedPreparationSelection.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewMezanImageGlobalDelete";
 import "@/reviewCustomerHistoryFast";

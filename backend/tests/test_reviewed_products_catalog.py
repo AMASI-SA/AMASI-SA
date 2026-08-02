@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from reviewed_products_catalog import (
     UNCATEGORIZED_ID,
     aggregate_reviewed_products,
+    apply_preparation_allocations,
     make_reviewed_products_catalog_router,
 )
 
@@ -10,6 +11,8 @@ from reviewed_products_catalog import (
 def _order(number, items):
     return {
         "order_number": number,
+        "created_at": "2026-08-02T02:00:00+00:00",
+        "shipping": {"company": "iMile"},
         "items": items,
     }
 
@@ -35,6 +38,7 @@ def test_same_salla_product_across_fifty_orders_becomes_one_card():
         pairs.append((
             _order(str(1000 + index), [_item(line_id, "p-name")]),
             {
+                "reviewed_at": f"2026-08-02T02:{index:02d}:00+00:00",
                 "items": [{
                     "order_item_id": line_id,
                     "selected_image_url": "https://example.test/selected.jpg",
@@ -64,6 +68,73 @@ def test_same_salla_product_across_fifty_orders_becomes_one_card():
     assert product["source_line_count"] == 50
     assert len(product["source_lines"]) == 50
     assert product["image_url"] == "https://example.test/selected.jpg"
+    assert product["source_lines"][0]["shipping_company"] == "iMile"
+
+
+def test_thirty_allocated_units_leave_twenty_available():
+    base = aggregate_reviewed_products(
+        [(
+            _order("100", [_item("line-50", "p-name", quantity=50)]),
+            {"reviewed_at": "2026-08-02T02:00:00+00:00", "items": []},
+        )],
+        [],
+    )
+    allocations = [
+        {
+            "status": "committed",
+            "order_number": "100",
+            "order_item_id": "line-50",
+            "unit_index": index,
+        }
+        for index in range(1, 31)
+    ]
+
+    result = apply_preparation_allocations(base, allocations)
+
+    assert result["summary"]["original_quantity"] == 50
+    assert result["summary"]["allocated_quantity"] == 30
+    assert result["summary"]["remaining_quantity"] == 20
+    assert result["products"][0]["quantity"] == 20
+    source = result["products"][0]["source_lines"][0]
+    assert source["remaining_quantity"] == 20
+    assert source["available_unit_indices"] == list(range(31, 51))
+
+
+def test_fully_allocated_product_disappears_from_reviewed_catalog():
+    base = aggregate_reviewed_products(
+        [(_order("100", [_item("line-2", "p-name", quantity=2)]), {"items": []})],
+        [],
+    )
+    result = apply_preparation_allocations(base, [
+        {"status": "committed", "order_number": "100", "order_item_id": "line-2", "unit_index": 1},
+        {"status": "committed", "order_number": "100", "order_item_id": "line-2", "unit_index": 2},
+    ])
+
+    assert result["products"] == []
+    assert result["categories"] == []
+    assert result["summary"]["remaining_quantity"] == 0
+
+
+def test_supplier_hidden_or_internal_line_is_not_offered_for_file():
+    result = aggregate_reviewed_products(
+        [(
+            _order("100", [
+                _item("supplier", "p-1"),
+                _item("internal", "p-2"),
+            ]),
+            {
+                "items": [{
+                    "order_item_id": "internal",
+                    "supplier_export": False,
+                    "preparation_route": "internal_preparation",
+                }],
+            },
+        )],
+        [],
+    )
+
+    assert result["summary"]["unique_product_count"] == 1
+    assert result["products"][0]["product_id"] == "p-1"
 
 
 def test_different_product_ids_never_merge_only_because_names_match():

@@ -1,22 +1,38 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Check,
+    DownloadSimple,
+    FilePdf,
     Funnel,
     MagnifyingGlass,
+    Minus,
     Package,
+    Plus,
     SpinnerGap,
     Stack,
     WarningCircle,
     X,
 } from "@phosphor-icons/react";
 
-import { listReviewedProductCatalog } from "../services/orderReviewEngine";
+import {
+    createReviewedPreparationBatch,
+    downloadReviewedPreparationBatchPdf,
+    listReviewedProductCatalog,
+} from "../services/orderReviewEngine";
 import {
     displayReviewedQuantity,
     filterReviewedProducts,
     selectedReviewedCategoryNames,
     toggleReviewedCategory,
 } from "../reviewedProductFilters";
+import {
+    createPreparationClientRequestId,
+    reconcileReviewedPreparationSelection,
+    reviewedPreparationSelectionSummary,
+    reviewedRemainingQuantity,
+    setReviewedPreparationQuantity,
+    toggleReviewedPreparationProduct,
+} from "../reviewedPreparationSelection";
 
 function categoryLabel(category) {
     return String(category?.path || category?.name || category?.id || "").trim();
@@ -119,23 +135,126 @@ function MobileCategoryDrawer({ open, categories, selectedIds, onToggle, onClear
     );
 }
 
+function QuantitySelector({ product, value, onChange, onRemove }) {
+    const remaining = reviewedRemainingQuantity(product);
+    return (
+        <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 p-3" data-testid="reviewed-preparation-quantity">
+            <div className="flex items-center justify-between gap-2">
+                <div>
+                    <div className="text-xs font-extrabold text-violet-900">كمية هذا الملف</div>
+                    <div className="mt-0.5 text-[11px] text-violet-600">المتاح حاليًا: {remaining}</div>
+                </div>
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                    aria-label={`إلغاء تحديد ${product.name}`}
+                >
+                    <X size={18} weight="bold" />
+                </button>
+            </div>
+            <div className="mt-3 grid grid-cols-[42px_minmax(64px,1fr)_42px_auto] items-center gap-2" dir="ltr">
+                <button
+                    type="button"
+                    onClick={() => onChange(Number(value || 1) - 1)}
+                    className="flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-800"
+                    aria-label="إنقاص الكمية"
+                >
+                    <Minus size={18} weight="bold" />
+                </button>
+                <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    max={remaining}
+                    step="1"
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                    className="h-11 min-w-0 rounded-xl border border-violet-300 bg-white px-2 text-center text-lg font-black text-violet-950 outline-none focus:border-violet-600"
+                    aria-label={`كمية ${product.name} في الملف`}
+                />
+                <button
+                    type="button"
+                    onClick={() => onChange(Number(value || 1) + 1)}
+                    className="flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-800"
+                    aria-label="زيادة الكمية"
+                >
+                    <Plus size={18} weight="bold" />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onChange(remaining)}
+                    className="h-11 rounded-xl bg-violet-700 px-3 text-sm font-extrabold text-white"
+                >
+                    كامل
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function BatchSuccess({ batch, onDownload, downloading }) {
+    if (!batch) return null;
+    return (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950" data-testid="reviewed-preparation-batch-success">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                        <FilePdf size={24} weight="duotone" />
+                    </span>
+                    <div>
+                        <div className="font-black">تم إنشاء ملف التجهيز</div>
+                        <div className="mt-1 break-all text-sm font-semibold text-emerald-800">{batch.file_name || `ملف ${batch.batch_id}`}</div>
+                        <div className="mt-1 text-xs text-emerald-700">
+                            {batch.allocated_quantity || 0} قطعة • {batch.order_count || 0} طلب
+                            {(batch.transitioned_order_numbers || []).length > 0 && (
+                                <> • انتقل {(batch.transitioned_order_numbers || []).length} طلب إلى قيد التنفيذ</>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={onDownload}
+                    disabled={downloading}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 font-extrabold text-white disabled:opacity-60"
+                >
+                    {downloading ? <SpinnerGap className="animate-spin" /> : <DownloadSimple size={20} weight="bold" />}
+                    تحميل الملف مجددًا
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function ReviewedOrders() {
     const [catalog, setCatalog] = useState({ products: [], categories: [], summary: {}, truncated: false });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+    const [selectedQuantities, setSelectedQuantities] = useState({});
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [creatingBatch, setCreatingBatch] = useState(false);
+    const [downloadingBatch, setDownloadingBatch] = useState(false);
+    const [batchError, setBatchError] = useState("");
+    const [lastBatch, setLastBatch] = useState(null);
+    const requestIdRef = useRef("");
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async ({ silent = false } = {}) => {
+        if (!silent) setLoading(true);
         setError("");
         try {
-            setCatalog(await listReviewedProductCatalog({ limit: 2000 }));
+            const nextCatalog = await listReviewedProductCatalog({ limit: 2000 });
+            setCatalog(nextCatalog);
+            setSelectedQuantities((current) => reconcileReviewedPreparationSelection(
+                current,
+                nextCatalog.products,
+            ));
         } catch (loadError) {
             setError(loadError.message);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
@@ -161,29 +280,80 @@ export default function ReviewedOrders() {
         () => filteredProducts.reduce((total, product) => total + Number(product.quantity || 0), 0),
         [filteredProducts],
     );
+    const selectionSummary = useMemo(
+        () => reviewedPreparationSelectionSummary(selectedQuantities),
+        [selectedQuantities],
+    );
 
     const toggleCategory = (categoryId) => {
         setSelectedCategoryIds((current) => toggleReviewedCategory(current, categoryId));
+    };
+
+    const downloadBatch = useCallback(async (batch) => {
+        if (!batch?.batch_id) return;
+        setDownloadingBatch(true);
+        setBatchError("");
+        try {
+            await downloadReviewedPreparationBatchPdf(batch.batch_id, batch.file_name);
+        } catch (downloadError) {
+            setBatchError(downloadError.message);
+        } finally {
+            setDownloadingBatch(false);
+        }
+    }, []);
+
+    const createBatch = async () => {
+        if (selectionSummary.productCount === 0 || creatingBatch || catalog.truncated) return;
+        const confirmed = window.confirm(
+            `إنشاء ملف تجهيز يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} منتج؟`,
+        );
+        if (!confirmed) return;
+
+        setCreatingBatch(true);
+        setBatchError("");
+        if (!requestIdRef.current) {
+            requestIdRef.current = createPreparationClientRequestId();
+        }
+        try {
+            const batch = await createReviewedPreparationBatch({
+                clientRequestId: requestIdRef.current,
+                selections: selectionSummary.selections,
+            });
+            setLastBatch(batch);
+            setSelectedQuantities({});
+            requestIdRef.current = "";
+            await load({ silent: true });
+            try {
+                await downloadReviewedPreparationBatchPdf(batch.batch_id, batch.file_name);
+            } catch (downloadError) {
+                setBatchError(downloadError.message);
+            }
+        } catch (createError) {
+            setBatchError(createError.message);
+            await load({ silent: true });
+        } finally {
+            setCreatingBatch(false);
+        }
     };
 
     if (loading) return <div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
     if (error) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>;
 
     return (
-        <section className="space-y-4" dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
+        <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h2 className="text-xl font-black text-slate-950 sm:text-2xl">منتجات تمت مراجعتها</h2>
-                        <p className="mt-1 text-sm text-slate-500">كل منتج يظهر مرة واحدة، والكمية تجمع جميع الطلبات الموجودة في هذه المرحلة.</p>
+                        <p className="mt-1 text-sm text-slate-500">حدد المنتجات والكمية التي تريد إضافتها إلى ملف التجهيز الحالي.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                         <div className="rounded-xl bg-violet-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-violet-500">المنتجات</div>
+                            <div className="text-[11px] font-bold text-violet-500">المنتجات المتاحة</div>
                             <div className="mt-0.5 text-lg font-black text-violet-900">{filteredProducts.length}</div>
                         </div>
                         <div className="rounded-xl bg-emerald-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-emerald-600">إجمالي الكمية</div>
+                            <div className="text-[11px] font-bold text-emerald-600">إجمالي المتبقي</div>
                             <div className="mt-0.5 text-lg font-black text-emerald-900">{displayReviewedQuantity(shownQuantity)}</div>
                         </div>
                     </div>
@@ -255,6 +425,19 @@ export default function ReviewedOrders() {
                 )}
             </div>
 
+            <BatchSuccess
+                batch={lastBatch}
+                onDownload={() => downloadBatch(lastBatch)}
+                downloading={downloadingBatch}
+            />
+
+            {batchError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-800" role="alert">
+                    <WarningCircle className="ml-2 inline" size={19} />
+                    {batchError}
+                </div>
+            )}
+
             {catalog.truncated && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
                     تم الوصول إلى الحد التشغيلي لعدد الطلبات. لن يتم إنشاء ملف تجهيز من بيانات ناقصة قبل معالجة هذا التنبيه.
@@ -263,7 +446,7 @@ export default function ReviewedOrders() {
 
             {filteredProducts.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
-                    {catalog.products.length === 0 ? "لا توجد منتجات في مرحلة تمت المراجعة." : "لا توجد منتجات مطابقة للتصنيفات أو البحث."}
+                    {catalog.products.length === 0 ? "لا توجد قطع متبقية في مرحلة تمت المراجعة." : "لا توجد منتجات مطابقة للتصنيفات أو البحث."}
                 </div>
             ) : (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="reviewed-products-grid">
@@ -272,11 +455,16 @@ export default function ReviewedOrders() {
                             .map((id) => categoryById.get(id))
                             .filter(Boolean)
                             .slice(0, 2);
+                        const selected = Object.prototype.hasOwnProperty.call(selectedQuantities, product.group_key);
+                        const selectedQuantity = selectedQuantities[product.group_key];
+                        const remaining = reviewedRemainingQuantity(product);
+                        const allocated = Math.max(0, Number(product.allocated_quantity || 0));
                         return (
                             <article
                                 key={product.group_key}
-                                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                                className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${selected ? "border-violet-500 ring-2 ring-violet-100" : "border-slate-200"}`}
                                 data-testid="reviewed-product-card"
+                                data-selected={selected ? "true" : "false"}
                             >
                                 <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-3 p-3 sm:grid-cols-[118px_minmax(0,1fr)] sm:p-4">
                                     <div className="aspect-square overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
@@ -295,17 +483,40 @@ export default function ReviewedOrders() {
                                                     ))}
                                                 </div>
                                             )}
+                                            {allocated > 0 && (
+                                                <div className="mt-2 text-[11px] font-bold text-amber-700">رُفع سابقًا: {displayReviewedQuantity(allocated)}</div>
+                                            )}
                                         </div>
                                         <div className="mt-3 flex items-end justify-between gap-2">
                                             <div className="text-xs font-bold text-slate-400">
-                                                في <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
+                                                متبقي في <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
                                             </div>
                                             <div className="min-w-20 rounded-2xl bg-emerald-600 px-3 py-2 text-center text-white shadow-sm shadow-emerald-200">
-                                                <div className="text-[10px] font-bold text-emerald-100">الكمية</div>
-                                                <div className="text-2xl font-black leading-none">{displayReviewedQuantity(product.quantity)}</div>
+                                                <div className="text-[10px] font-bold text-emerald-100">المتاح</div>
+                                                <div className="text-2xl font-black leading-none">{displayReviewedQuantity(remaining)}</div>
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
+                                    {selected ? (
+                                        <QuantitySelector
+                                            product={product}
+                                            value={selectedQuantity}
+                                            onChange={(value) => setSelectedQuantities((current) => setReviewedPreparationQuantity(current, product, value))}
+                                            onRemove={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
+                                        />
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
+                                            className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-extrabold text-violet-800 hover:bg-violet-100"
+                                        >
+                                            <Check size={19} weight="bold" />
+                                            تحديد للملف
+                                        </button>
+                                    )}
                                 </div>
                             </article>
                         );
@@ -315,7 +526,7 @@ export default function ReviewedOrders() {
 
             <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold leading-6 text-slate-500">
                 <Stack className="ml-1 inline text-violet-600" size={17} />
-                التجميع يعتمد على هوية منتج سلة. أسماء النقش والرسائل الشخصية لا تكرر البطاقة، وتبقى تفاصيل كل طلب محفوظة للخطوة التالية.
+                تُخصم القطع من المتاح بعد نجاح إنشاء الملف فقط. وينتقل الطلب إلى قيد التنفيذ عندما تصبح جميع قطعه المخصصة لملفات التجهيز مضافة إلى دفعات.
             </div>
 
             <MobileCategoryDrawer
@@ -326,6 +537,42 @@ export default function ReviewedOrders() {
                 onClear={() => setSelectedCategoryIds([])}
                 onClose={() => setMobileFiltersOpen(false)}
             />
+
+            {selectionSummary.productCount > 0 && (
+                <div className="sticky bottom-3 z-50 mx-auto max-w-3xl rounded-2xl border border-violet-200 bg-white/95 p-3 shadow-2xl shadow-violet-200/60 backdrop-blur" data-testid="reviewed-preparation-selection-bar">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
+                            <div className="rounded-xl bg-violet-50 px-3 py-2">
+                                <div className="text-[10px] font-bold text-violet-500">المنتجات المحددة</div>
+                                <div className="text-lg font-black text-violet-950">{selectionSummary.productCount}</div>
+                            </div>
+                            <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                                <div className="text-[10px] font-bold text-emerald-600">قطع هذا الملف</div>
+                                <div className="text-lg font-black text-emerald-950">{selectionSummary.totalQuantity}</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedQuantities({})}
+                                disabled={creatingBatch}
+                                className="min-h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-600 disabled:opacity-50"
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                onClick={createBatch}
+                                disabled={creatingBatch || catalog.truncated}
+                                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                            >
+                                {creatingBatch ? <SpinnerGap className="animate-spin" size={21} /> : <FilePdf size={21} weight="duotone" />}
+                                {creatingBatch ? "جارٍ إنشاء الملف…" : "إنشاء وتحميل الملف"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </section>
     );
 }
