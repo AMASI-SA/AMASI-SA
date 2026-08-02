@@ -1,0 +1,86 @@
+name: Production Snapchat Campaign Report Route
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_campaign_report_routes.py"
+      - "backend/tests/test_snapchat_campaign_report_route_v1.py"
+      - "frontend/src/services/marketingPerformance.js"
+      - ".github/workflows/prod-snapchat-campaign-report-route.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+
+      - name: Compile campaign report modules
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_campaign_report_routes.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_campaign_report_route_v1.py
+
+      - name: Test campaign report route
+        run: >-
+          python -m pytest
+          tests/test_snapchat_campaign_report_route_v1.py
+          tests/test_snapchat_native_async_selected_reads.py
+          tests/test_unified_ads_manager_phase1.py
+          -q --tb=short
+
+      - name: Enforce local read-only contract
+        working-directory: .
+        run: |
+          REPORT=backend/integrations_control_center/snapchat_campaign_report_routes.py
+          FRONTEND=frontend/src/services/marketingPerformance.js
+          ROUTER=backend/integrations_control_center/__init__.py
+          SERVER=backend/server.py
+
+          grep -q '/snapchat_ads/campaign-report' "$FRONTEND"
+          grep -q 'attach_snapchat_campaign_report_routes' "$ROUTER"
+          grep -q 'SNAPCHAT_PERFORMANCE_COLLECTION' "$REPORT"
+          grep -q 'SNAPCHAT_ENTITY_COLLECTION' "$REPORT"
+          grep -q 'provider_read_reached.*False' "$REPORT"
+          grep -q 'provider_write_reached.*False' "$REPORT"
+          grep -q 'campaign_write_reached.*False' "$REPORT"
+          grep -q 'accounting_write_reached.*False' "$REPORT"
+          grep -q 'qoyod_write_reached.*False' "$REPORT"
+          grep -q 'make_ads_manager_router' "$SERVER"
+          ! grep -q 'httpx' "$REPORT"
+          ! grep -q 'update_one' "$REPORT"
+          ! grep -q 'insert_one' "$REPORT"
+          ! grep -q 'delete_one' "$REPORT"
