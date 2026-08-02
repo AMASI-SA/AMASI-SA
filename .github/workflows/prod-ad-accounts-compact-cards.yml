@@ -5,6 +5,7 @@ on:
     branches:
       - hotfix/prod-snap-meta-final
     paths:
+      - "frontend/src/components/integrationsV2/IntegrationCard.js"
       - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
       - "frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx"
       - "frontend/src/components/integrationsV2/AdvertisingAccountCard.test.jsx"
@@ -47,11 +48,13 @@ jobs:
         working-directory: .
         run: |
           CARD=frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx
+          ENTRY=frontend/src/components/integrationsV2/IntegrationCard.js
           FACADE=frontend/src/components/integrationsV2/IntegrationCard.jsx
 
           grep -q 'data-layout="advertising-account-compact"' "$CARD"
           grep -q 'إدارة الحسابات والتقارير' "$CARD"
           grep -q 'الحسابات الظاهرة' "$CARD"
+          grep -q 'IntegrationCard.jsx' "$ENTRY"
           grep -q 'workspace' "$FACADE"
           grep -q 'AdvertisingAccountCard' "$FACADE"
           ! grep -q 'ما يستطيع الذكاء الاصطناعي فعله' "$CARD"
