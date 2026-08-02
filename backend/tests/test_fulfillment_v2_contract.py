@@ -5,6 +5,7 @@ import inspect
 from pathlib import Path
 
 import order_review_routes
+from preparation_pdf_unit_card_expansion import expand_preparation_unit_cards
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -190,3 +191,21 @@ def test_operational_item_can_be_renamed_or_unlinked_before_review_completion():
     assert 'unlinkOrderReviewOperationalItem' in service_source
     assert 'order-review-operational-item-unlink' in frontend_source
     assert 'إلغاء الربط وإرجاع القيم' in frontend_source
+
+
+def test_selected_piece_quantities_expand_to_one_pdf_card_per_piece():
+    rows = [
+        {"order_number": "1", "quantity": 4, "unit_indices": [1, 2, 3, 4]},
+        {"order_number": "2", "quantity": 1, "unit_indices": [1]},
+        {"order_number": "3", "quantity": 5, "unit_indices": [1, 2, 3, 4, 5]},
+        {"order_number": "4", "quantity": 1, "unit_indices": [1]},
+    ]
+
+    cards = expand_preparation_unit_cards(rows)
+
+    assert len(cards) == 11
+    assert [card["line_number"] for card in cards] == list(range(1, 12))
+    assert {card["quantity"] for card in cards} == {1}
+    assert [card["order_number"] for card in cards].count("1") == 4
+    assert [card["order_number"] for card in cards].count("3") == 5
+    assert all(len(card["unit_indices"]) == 1 for card in cards)
