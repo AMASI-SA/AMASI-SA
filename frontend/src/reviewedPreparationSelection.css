@@ -1,0 +1,9 @@
+[data-testid="reviewed-preparation-selection-bar"] {
+  position: fixed !important;
+  right: 0.75rem;
+  left: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  width: auto;
+  margin-right: auto;
+  margin-left: auto;
+}
