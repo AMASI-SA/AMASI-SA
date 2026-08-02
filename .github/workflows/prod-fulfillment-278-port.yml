@@ -76,8 +76,9 @@ jobs:
           grep -q 'mezan_only' "$SORT"
           grep -q 'salla_updated.*False' "$SORT"
           grep -q 'qoyod_updated.*False' "$SORT"
-          ! grep -q 'salla.*update' "$SORT"
-          ! grep -q 'qoyod.*update' "$SORT"
+          ! grep -Eq 'https?://|httpx\.|requests\.|aiohttp\.' "$SORT"
+          ! grep -Eq 'from[[:space:]]+.*salla|import[[:space:]]+.*salla' "$SORT"
+          ! grep -Eq 'from[[:space:]]+.*qoyod|import[[:space:]]+.*qoyod' "$SORT"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
