@@ -29,6 +29,9 @@ from .meta_connections import attach_meta_connection_routes
 from .meta_dashboard_summary_routes import attach_meta_dashboard_summary_routes
 from .meta_native_reporting_routes import attach_meta_native_reporting_routes
 from .snapchat_account_selection import attach_snapchat_account_selection_routes
+from .snapchat_ads_manager_attribution import (
+    install_snapchat_ads_manager_attribution,
+)
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
 from .snapchat_dashboard_summary_routes import attach_snapchat_dashboard_summary_routes
@@ -61,6 +64,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     """
     install_meta_native_catalog()
     install_snapchat_native_catalog()
+    install_snapchat_ads_manager_attribution()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
