@@ -26,6 +26,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Rebase staged candidate onto latest Production
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rebase origin/hotfix/prod-snap-meta-final
+
       - name: Apply staged Snapchat fix
         id: patch
         shell: bash
@@ -145,5 +153,5 @@ jobs:
             backend/tests/test_snapchat_account_hourly_refresh_v2.py \
             tools/apply_snapchat_current_hour_sync.py
           git commit -m "fix(prod-snap): clamp five-minute sync to completed hour"
-          git push origin HEAD:fix/prod-snapchat-current-hour-sync
+          git push --force-with-lease origin HEAD:fix/prod-snapchat-current-hour-sync
           echo SNAPCHAT_CURRENT_HOUR_CLEAN_COMMIT_PUSHED
