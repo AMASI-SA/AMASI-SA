@@ -1,4 +1,5 @@
 import {
+    adaptAdsManager,
     isMarketingPerformanceProvider,
     normalizeSnapchatMarketingWorkspace,
 } from "./marketingPerformance";
@@ -103,5 +104,68 @@ test("marketing performance route identifiers stay separate from integration IDs
     });
     ["snapchat_ads", "tiktok_ads", "meta_ads", "google_ads"].forEach((provider) => {
         expect(isMarketingPerformanceProvider(provider)).toBe(false);
+    });
+});
+
+
+test("Meta Ads Manager adapter preserves campaign status objective and budget", () => {
+    const result = adaptAdsManager("meta", {
+        range: { date_from: "2026-08-01", date_to: "2026-08-01", timezone: "Asia/Riyadh" },
+        providers: [
+            {
+                provider: "meta",
+                connection_status: "connected",
+                connection_provenance: "api_connection",
+                last_sync_at: "2026-08-01T17:00:00+00:00",
+                health_status: "healthy",
+                health_score: 100,
+                freshness: { data_delay_minutes: 5, observed_days: 1 },
+                performance_coverage: { status: "complete", eligible_for_ratios: true },
+                campaign_coverage: { status: "available", source_rows: 1 },
+                metrics: {
+                    provider_reported_spend_sar: 375,
+                    platform_attributed_revenue_sar: 1125,
+                    platform_reported_purchases: 5,
+                    platform_reported_impressions: 10000,
+                    platform_reported_clicks: 500,
+                    platform_roas: 3,
+                },
+            },
+        ],
+        daily_spend: [{ date: "2026-08-01", meta: 375 }],
+        campaigns: [
+            {
+                provider: "meta",
+                account_id: "act-selected",
+                campaign_id: "campaign-sales",
+                campaign_name: "Sales Riyadh",
+                status: "ACTIVE",
+                delivery_status: "ACTIVE",
+                objective: "OUTCOME_SALES",
+                start_time: "2026-07-01T00:00:00+00:00",
+                end_time: "2026-08-31T23:59:59+00:00",
+                budget: { currency: "USD", daily_native: 250, lifetime_native: 1000 },
+                spend_sar_equivalent: 375,
+                revenue_sar_equivalent: 1125,
+                purchases: 5,
+                impressions: 10000,
+                clicks: 500,
+            },
+        ],
+        campaign_pagination: { page: 1, limit: 25, total: 1, pages: 1 },
+        insights: [],
+        coverage: { source_row_limit_reached: [] },
+    });
+
+    expect(result.campaigns[0]).toMatchObject({
+        campaign_id: "campaign-sales",
+        campaign_name: "Sales Riyadh",
+        status: "ACTIVE",
+        delivery_status: "ACTIVE",
+        objective: "OUTCOME_SALES",
+        budget: { currency: "USD", daily_native: 250, lifetime_native: 1000 },
+        spend_sar: 375,
+        sales_sar: 1125,
+        orders: 5,
     });
 });

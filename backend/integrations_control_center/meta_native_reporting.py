@@ -19,6 +19,12 @@ from .meta_account_selection import (
     MAX_META_SELECTED_ACCOUNTS,
     load_selected_meta_accounts,
 )
+from .meta_campaign_reporting import (
+    MetaCampaignReportingError,
+    ensure_meta_campaign_reporting_indexes,
+    fetch_meta_campaign_catalog,
+    sync_meta_campaign_day,
+)
 from .meta_oauth_security import (
     META_CREDENTIALS_COLLECTION,
     META_PROVIDER_ID,
@@ -343,6 +349,7 @@ async def run_meta_reporting_sync(
 
     now_value = now().astimezone(timezone.utc)
     await ensure_meta_reporting_indexes(db)
+    await ensure_meta_campaign_reporting_indexes(db)
     access_token = await _credential(db, user_id, now_value)
     accounts = await _accounts(db, user_id)
     days = _dates(payload, now_value.date())
@@ -354,7 +361,28 @@ async def run_meta_reporting_sync(
     async with httpx.AsyncClient(timeout=35.0) as client:
         for account in accounts:
             saved = 0
+            campaign_saved = 0
             account_errors: list[dict[str, Any]] = []
+            campaign_catalog: dict[str, dict[str, Any]] = {}
+            try:
+                catalog_result = await fetch_meta_campaign_catalog(
+                    client, access_token, account
+                )
+                provider_calls += int(catalog_result.get("provider_calls") or 0)
+                campaign_catalog = catalog_result.get("campaigns") or {}
+            except MetaCampaignReportingError as exc:
+                provider_calls += int(exc.provider_calls or 0)
+                if exc.code == "meta_needs_reauth":
+                    raise MetaReportingError(
+                        exc.code, exc.message, status_code=exc.status_code
+                    ) from exc
+                item = {
+                    "ad_account_id": account["ad_account_id"],
+                    "kind": "campaign_catalog",
+                    "code": exc.code,
+                }
+                account_errors.append(item)
+                error_items.append(item)
             for day in days:
                 try:
                     row = await _fetch_day(client, access_token, account, day)
@@ -411,6 +439,39 @@ async def run_meta_reporting_sync(
                         upsert=True,
                     )
                     saved += 1
+                    try:
+                        campaign_result = await sync_meta_campaign_day(
+                            db,
+                            user_id,
+                            client,
+                            access_token,
+                            account,
+                            day,
+                            campaign_catalog=campaign_catalog,
+                            observed_at=observed_at,
+                        )
+                        provider_calls += int(
+                            campaign_result.get("provider_calls") or 0
+                        )
+                        campaign_saved += int(
+                            campaign_result.get("rows_saved") or 0
+                        )
+                    except MetaCampaignReportingError as exc:
+                        provider_calls += int(exc.provider_calls or 0)
+                        if exc.code == "meta_needs_reauth":
+                            raise MetaReportingError(
+                                exc.code,
+                                exc.message,
+                                status_code=exc.status_code,
+                            ) from exc
+                        item = {
+                            "ad_account_id": account["ad_account_id"],
+                            "date": day.isoformat(),
+                            "kind": "campaign_insights",
+                            "code": exc.code,
+                        }
+                        account_errors.append(item)
+                        error_items.append(item)
                 except MetaReportingError as exc:
                     provider_calls += 1
                     if exc.code == "meta_needs_reauth":
@@ -449,12 +510,16 @@ async def run_meta_reporting_sync(
                     "currency": account.get("currency"),
                     "timezone": account.get("timezone"),
                     "rows_saved": saved,
+                    "campaign_rows_saved": campaign_saved,
                     "errors": len(account_errors),
                     "complete": complete,
                 }
             )
 
     rows_saved = sum(item["rows_saved"] for item in account_summaries)
+    campaign_rows_saved = sum(
+        item.get("campaign_rows_saved", 0) for item in account_summaries
+    )
     accounts_complete = sum(bool(item["complete"]) for item in account_summaries)
     if rows_saved == 0:
         raise MetaReportingError(
@@ -510,6 +575,7 @@ async def run_meta_reporting_sync(
         "accounts_attempted": len(account_summaries),
         "accounts_complete": accounts_complete,
         "rows_saved": rows_saved,
+        "campaign_rows_saved": campaign_rows_saved,
         "errors_count": len(error_items),
         "provider_calls": provider_calls,
         "items": account_summaries,

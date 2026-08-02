@@ -121,12 +121,24 @@ class DailySpendPoint(StrictResponseModel):
     booked_ad_expense_sar: float | None = None
 
 
+class CampaignBudget(StrictResponseModel):
+    currency: str | None = None
+    daily_native: float | None = None
+    lifetime_native: float | None = None
+
+
 class CampaignRow(StrictResponseModel):
     provider: Literal["tiktok", "meta"]
     provider_label: str
     account_id: str | None = None
     campaign_id: str
     campaign_name: str
+    status: str | None = None
+    delivery_status: str | None = None
+    objective: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    budget: CampaignBudget = Field(default_factory=CampaignBudget)
     spend_reported: float | None = None
     spend_currency: str | None = None
     spend_sar_equivalent: float | None = None
