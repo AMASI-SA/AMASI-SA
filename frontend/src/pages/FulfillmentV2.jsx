@@ -1,5 +1,5 @@
 // Mezan OS V2 governed preparation workspace.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
     CheckCircle,
@@ -15,6 +15,7 @@ import {
 
 import OrderReview from "./OrderReview";
 import ReviewedOrders from "./ReviewedOrders";
+import PreparationFilesRegistry from "../components/fulfillment/PreparationFilesRegistry";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 
 export const FULFILLMENT_STAGES = [
@@ -137,15 +138,31 @@ function PlannedStage({ stage }) {
 
 export default function FulfillmentV2() {
     const [searchParams, setSearchParams] = useSearchParams();
+    const searchKey = searchParams.toString();
     const requestedStage = String(searchParams.get("stage") || "pending_review").trim();
     const activeStage = useMemo(
         () => FULFILLMENT_STAGES.find((stage) => stage.key === requestedStage) || FULFILLMENT_STAGES[0],
         [requestedStage],
     );
+    const reviewedView = activeStage.key === "reviewed" && searchParams.get("view") === "files"
+        ? "files"
+        : "products";
+    const currentWindowLabel = activeStage.key === "reviewed" && reviewedView === "files"
+        ? "سجل ملفات التجهيز"
+        : activeStage.label;
+
+    useEffect(() => {
+        if (activeStage.key !== "reviewed" || searchParams.get("view")) return;
+        const next = new URLSearchParams(searchParams);
+        next.set("view", "products");
+        setSearchParams(next, { replace: true });
+    }, [activeStage.key, searchKey, searchParams, setSearchParams]);
 
     const selectStage = (stageKey) => {
         const next = new URLSearchParams(searchParams);
         next.set("stage", stageKey);
+        if (stageKey === "reviewed") next.set("view", "products");
+        else next.delete("view");
         setSearchParams(next, { replace: true });
     };
 
@@ -162,8 +179,8 @@ export default function FulfillmentV2() {
                             </p>
                         </div>
                         <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">
-                            <div className="text-xs font-bold text-violet-100">المرحلة الحالية</div>
-                            <div className="mt-1 text-lg font-extrabold">{activeStage.label}</div>
+                            <div className="text-xs font-bold text-violet-100">النافذة الحالية</div>
+                            <div className="mt-1 text-lg font-extrabold">{currentWindowLabel}</div>
                         </div>
                     </div>
                 </div>
@@ -208,7 +225,9 @@ export default function FulfillmentV2() {
             {activeStage.key === "pending_review" ? (
                 <OrderReview embedded />
             ) : activeStage.key === "reviewed" ? (
-                <ReviewedOrders />
+                reviewedView === "files"
+                    ? <PreparationFilesRegistry />
+                    : <ReviewedOrders />
             ) : activeStage.key === "ready_to_ship" ? (
                 <ReadyToShipOrders />
             ) : (

@@ -1,0 +1,68 @@
+name: Production Reviewed And Files Windows
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.fulfillment.test.jsx"
+      - "frontend/src/components/fulfillment/PreparationFilesRegistry.jsx"
+      - "frontend/src/pages/FulfillmentV2.jsx"
+      - "frontend/src/pages/FulfillmentV2.test.jsx"
+      - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
+      - "frontend/src/index.js"
+      - ".github/workflows/prod-reviewed-files-separate-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test separate reviewed and files windows
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/pages/FulfillmentV2.test.jsx
+          src/components/MezanV2NavigationShell.fulfillment.test.jsx
+          src/preparationFileRegistryUi.test.js
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce window separation contract
+        working-directory: .
+        run: |
+          NAV=frontend/src/components/MezanV2NavigationShell.jsx
+          PAGE=frontend/src/pages/FulfillmentV2.jsx
+          REGISTRY=frontend/src/components/fulfillment/PreparationFilesRegistry.jsx
+          ENTRY=frontend/src/index.js
+
+          grep -q 'stage=reviewed&view=products' "$NAV"
+          grep -q 'stage=reviewed&view=files' "$NAV"
+          grep -q 'PreparationFilesRegistry' "$PAGE"
+          grep -q 'reviewedView === "files"' "$PAGE"
+          grep -q 'data-testid="preparation-files-registry-window"' "$REGISTRY"
+          grep -q 'reviewPreparationFileMetadataEnhancer' "$ENTRY"
+          ! grep -q 'reviewPreparationFileRegistryEnhancer' "$ENTRY"

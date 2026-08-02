@@ -37,7 +37,9 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "إدارة التجهيز",
         Icon: Queue,
         items: [
-            { to: "/fulfillment-v2", label: "إدارة التجهيز", pathPrefix: "/fulfillment-v2" },
+            { to: "/fulfillment-v2", label: "إدارة التجهيز", exactSearch: true },
+            { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
+            { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
         ],
     },
     {
@@ -125,8 +127,16 @@ export function isNavigationItemActive(location, item) {
 }
 
 export function activeNavigationSection(location) {
-    return MEZAN_V2_NAV_SECTIONS.find(
+    const directlyMatched = MEZAN_V2_NAV_SECTIONS.find(
         (section) => section.items.some((item) => isNavigationItemActive(location, item)),
+    );
+    if (directlyMatched) return directlyMatched;
+
+    const currentPath = String(location?.pathname || "");
+    return MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.items.some(
+            (item) => parseTarget(item.to).pathname === currentPath,
+        ),
     ) || null;
 }
 

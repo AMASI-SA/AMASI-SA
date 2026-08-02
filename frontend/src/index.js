@@ -13,7 +13,7 @@ import "@/reviewProductEditMode";
 import "@/reviewAutoAdvance";
 import "@/reviewManualNavigation";
 import "@/reviewCustomerWaiting";
-import "@/reviewPreparationFileRegistryEnhancer";
+import "@/reviewPreparationFileMetadataEnhancer";
 import App from "@/App";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
