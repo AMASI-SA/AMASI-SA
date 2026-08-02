@@ -6,6 +6,11 @@ function message(error, fallback) {
     if (detail?.message) return detail.message;
     if (detail?.code === "review_revision_conflict") return "تم تعديل الطلب من موظف آخر. حدّث البيانات ثم أعد المحاولة.";
     if (detail?.code === "review_already_completed") return "تم اعتماد مراجعة هذا الطلب سابقًا.";
+    if (detail?.code === "preparation_quantity_exceeds_remaining") return "الكمية المختارة أكبر من الكمية المتبقية.";
+    if (detail?.code === "preparation_units_already_allocated") return "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.";
+    if (detail?.code === "reviewed_product_not_available") return "المنتج لم يعد متاحًا في هذه المرحلة. حدّث الصفحة.";
+    if (detail?.code === "reviewed_catalog_truncated") return "لا يمكن إنشاء ملف من قائمة ناقصة. راجع تنبيه الحد التشغيلي.";
+    if (detail?.code === "preparation_batch_generation_failed") return "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.";
     return error?.message || fallback;
 }
 
@@ -35,6 +40,56 @@ export async function listReviewedProductCatalog({ limit = 500 } = {}) {
             truncated: Boolean(data?.truncated),
         };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل منتجات مرحلة تمت المراجعة.")); }
+}
+
+export async function createReviewedPreparationBatch({ clientRequestId, selections }) {
+    try {
+        const { data } = await api.post("/reviewed-preparation-batches-v1/batches", {
+            client_request_id: clientRequestId,
+            selections,
+        });
+        return data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
+    }
+}
+
+export async function listReviewedPreparationBatches({ limit = 20 } = {}) {
+    try {
+        const { data } = await api.get("/reviewed-preparation-batches-v1/batches", { params: { limit } });
+        return { items: Array.isArray(data?.items) ? data.items : [] };
+    } catch (error) {
+        throw new Error(message(error, "تعذّر تحميل ملفات التجهيز السابقة."));
+    }
+}
+
+export async function downloadReviewedPreparationBatchPdf(batchId, fileName = "") {
+    try {
+        const { data, headers } = await api.get(
+            `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/pdf`,
+            { responseType: "blob" },
+        );
+        const blob = data instanceof Blob
+            ? data
+            : new Blob([data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName || `preparation-${batchId}.pdf`;
+        anchor.style.display = "none";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return {
+            ok: true,
+            batchId,
+            fileName: anchor.download,
+            contentType: headers?.["content-type"] || "application/pdf",
+        };
+    } catch (error) {
+        throw new Error(message(error, "تم إنشاء الدفعة، لكن تعذّر تحميل ملف PDF."));
+    }
 }
 
 export async function getOrderReview(orderNumber) {

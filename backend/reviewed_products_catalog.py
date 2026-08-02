@@ -1,7 +1,8 @@
 """Aggregated product catalogue for the reviewed fulfillment stage.
 
-The reviewed screen is product-first, not order-first.  It reads only durable
-Mezan order/review/product snapshots and never mutates Salla or Qoyod.
+The reviewed screen is product-first, not order-first. It reads durable Mezan
+order/review/product snapshots and the immutable preparation allocation ledger.
+It never mutates Salla or Qoyod.
 """
 from __future__ import annotations
 
@@ -17,6 +18,8 @@ from product_category_variant_support import _build_category_catalog, _flatten_c
 
 
 PRODUCTS = "mezan_products_v2"
+PREPARATION_UNIT_ALLOCATIONS = "mezan_preparation_unit_allocations_v2"
+ACTIVE_PREPARATION_ALLOCATION_STATUSES = ("reserved", "committed")
 UNCATEGORIZED_ID = "uncategorized"
 MAX_REVIEWED_ORDERS = 2000
 
@@ -39,6 +42,15 @@ def _number(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _unit_quantity(value: Any) -> int:
+    """Return a physical piece count and fail closed for fractional quantities."""
+    number = _number(value)
+    rounded = int(round(number))
+    if number <= 0 or abs(number - rounded) > 0.000001:
+        return 0
+    return rounded
+
+
 def _normalized(value: Any) -> str:
     return " ".join(_text(value).casefold().replace("_", " ").split())
 
@@ -47,8 +59,8 @@ def _product_group_key(item: dict[str, Any]) -> str:
     """Group every order line of the same Salla product into one card.
 
     Personalized text, order item ids and variant selections deliberately do
-    not participate in this key.  They remain available in ``source_lines``
-    for the next fulfillment step.
+    not participate in this key. They remain available in ``source_lines``
+    for preparation-file allocation.
     """
     for kind, key in (
         ("product", item.get("product_id")),
@@ -160,10 +172,24 @@ def aggregate_reviewed_products(
         if order_number:
             reviewed_order_numbers.add(order_number)
         states = _review_state_map(workflow)
+        order_items = [
+            _dict(value) for value in (order.get("items") or []) if _dict(value)
+        ]
+        total_products_in_order = sum(
+            _unit_quantity(item.get("quantity")) for item in order_items
+        ) or 1
+        shipping = _dict(order.get("shipping"))
 
-        for item_value in order.get("items") or []:
-            item = _dict(item_value)
-            if not item:
+        for line_index, item in enumerate(order_items):
+            state = states.get(_text(item.get("order_item_id")), {})
+            # A reviewer may deliberately exclude a line from supplier files or
+            # route it to internal preparation. Such a line is already routed
+            # operationally and must not appear in this supplier-file queue.
+            if state.get("supplier_export") is False:
+                continue
+
+            quantity_units = _unit_quantity(item.get("quantity"))
+            if quantity_units <= 0:
                 continue
             total_source_lines += 1
             key = _product_group_key(item)
@@ -180,26 +206,25 @@ def aggregate_reviewed_products(
             if not category_ids:
                 category_ids = {UNCATEGORIZED_ID}
 
-            state = states.get(_text(item.get("order_item_id")), {})
             selected_image = _text(state.get("selected_image_url"))
             image = selected_image or _text(product.get("main_image")) or _text(item.get("image_url"))
-            quantity = _number(item.get("quantity"), 1.0)
+            product_name = _text(product.get("name")) or _text(item.get("name")) or "منتج بدون اسم"
 
             group = groups.setdefault(key, {
                 "group_key": key,
                 "product_id": product_id or None,
                 "parent_product_id": _text(item.get("parent_product_id")) or None,
                 "sku": sku or _text(product.get("sku")) or None,
-                "name": _text(product.get("name")) or _text(item.get("name")) or "منتج بدون اسم",
+                "name": product_name,
                 "image_url": image or None,
-                "quantity": 0.0,
+                "quantity": 0,
                 "source_order_numbers": set(),
                 "source_line_count": 0,
                 "category_ids": set(),
                 "direct_category_ids": set(),
                 "source_lines": [],
             })
-            group["quantity"] += quantity
+            group["quantity"] += quantity_units
             group["source_line_count"] += 1
             if order_number:
                 group["source_order_numbers"].add(order_number)
@@ -208,11 +233,20 @@ def aggregate_reviewed_products(
             if not group.get("image_url") and image:
                 group["image_url"] = image
             group["source_lines"].append({
+                "group_key": key,
                 "order_number": order_number,
                 "order_item_id": _text(item.get("order_item_id")),
-                "quantity": quantity,
+                "line_index": line_index,
+                "quantity": quantity_units,
                 "variant_id": _text(item.get("variant_id")) or None,
+                "product_id": product_id or None,
+                "product_name": product_name,
                 "sku": sku or None,
+                "image_url": image or None,
+                "order_date": order.get("created_at"),
+                "reviewed_at": workflow.get("reviewed_at"),
+                "shipping_company": _text(shipping.get("company")) or None,
+                "total_products_in_order": total_products_in_order,
                 "options_normalized": item.get("options_normalized") or {},
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
@@ -229,18 +263,22 @@ def aggregate_reviewed_products(
             "status_label": "نشط",
             "is_hidden": False,
         })
-        categories_by_id[UNCATEGORIZED_ID] = category_catalog[-1]
 
     counts: dict[str, set[str]] = defaultdict(set)
     products: list[dict[str, Any]] = []
-    total_quantity = 0.0
+    total_quantity = 0
     for group in groups.values():
-        total_quantity += group["quantity"]
+        group["source_lines"].sort(key=lambda row: (
+            _text(row.get("reviewed_at")),
+            _text(row.get("order_number")),
+            int(row.get("line_index") or 0),
+        ))
+        total_quantity += int(group["quantity"])
         for category_id in group["category_ids"]:
             counts[category_id].add(group["group_key"])
         products.append({
             **group,
-            "quantity": round(group["quantity"], 4),
+            "quantity": int(group["quantity"]),
             "source_order_numbers": sorted(group["source_order_numbers"]),
             "source_order_count": len(group["source_order_numbers"]),
             "category_ids": sorted(group["category_ids"]),
@@ -261,15 +299,194 @@ def aggregate_reviewed_products(
         "summary": {
             "reviewed_order_count": len(reviewed_order_numbers),
             "unique_product_count": len(products),
-            "total_quantity": round(total_quantity, 4),
+            "total_quantity": total_quantity,
             "source_line_count": total_source_lines,
         },
     }
 
 
+def apply_preparation_allocations(
+    catalog: dict[str, Any],
+    allocation_documents: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Subtract active unit allocations and expose only quantities still free."""
+    used_units: dict[tuple[str, str], set[int]] = defaultdict(set)
+    for row in allocation_documents:
+        if _text(row.get("status")) not in ACTIVE_PREPARATION_ALLOCATION_STATUSES:
+            continue
+        key = (_text(row.get("order_number")), _text(row.get("order_item_id")))
+        try:
+            unit_index = int(row.get("unit_index"))
+        except (TypeError, ValueError):
+            continue
+        if key[0] and key[1] and unit_index > 0:
+            used_units[key].add(unit_index)
+
+    remaining_products: list[dict[str, Any]] = []
+    category_counts: dict[str, set[str]] = defaultdict(set)
+    remaining_order_numbers: set[str] = set()
+    original_total = allocated_total = remaining_total = 0
+
+    for product in catalog.get("products") or []:
+        source_lines = []
+        product_original = product_allocated = product_remaining = 0
+        remaining_orders: set[str] = set()
+        for line in product.get("source_lines") or []:
+            quantity = _unit_quantity(line.get("quantity"))
+            if quantity <= 0:
+                continue
+            key = (_text(line.get("order_number")), _text(line.get("order_item_id")))
+            allocated_indices = sorted(
+                index for index in used_units.get(key, set()) if index <= quantity
+            )
+            allocated = len(allocated_indices)
+            remaining = max(0, quantity - allocated)
+            product_original += quantity
+            product_allocated += allocated
+            product_remaining += remaining
+            if remaining <= 0:
+                continue
+            available_indices = [
+                index for index in range(1, quantity + 1)
+                if index not in set(allocated_indices)
+            ]
+            source_lines.append({
+                **line,
+                "allocated_quantity": allocated,
+                "remaining_quantity": remaining,
+                "allocated_unit_indices": allocated_indices,
+                "available_unit_indices": available_indices,
+            })
+            order_number = _text(line.get("order_number"))
+            if order_number:
+                remaining_orders.add(order_number)
+                remaining_order_numbers.add(order_number)
+
+        original_total += product_original
+        allocated_total += product_allocated
+        remaining_total += product_remaining
+        if product_remaining <= 0:
+            continue
+        row = {
+            **product,
+            "quantity": product_remaining,
+            "total_quantity": product_original,
+            "allocated_quantity": product_allocated,
+            "remaining_quantity": product_remaining,
+            "source_lines": source_lines,
+            "source_order_numbers": sorted(remaining_orders),
+            "source_order_count": len(remaining_orders),
+            "source_line_count": len(source_lines),
+        }
+        remaining_products.append(row)
+        for category_id in row.get("category_ids") or []:
+            category_counts[_text(category_id)].add(_text(row.get("group_key")))
+
+    remaining_categories = [
+        {**row, "product_count": len(category_counts.get(_text(row.get("id")), set()))}
+        for row in catalog.get("categories") or []
+        if category_counts.get(_text(row.get("id")))
+    ]
+    summary = {
+        **(catalog.get("summary") or {}),
+        "reviewed_order_count": len(remaining_order_numbers),
+        "unique_product_count": len(remaining_products),
+        "total_quantity": remaining_total,
+        "original_quantity": original_total,
+        "allocated_quantity": allocated_total,
+        "remaining_quantity": remaining_total,
+        "source_line_count": sum(
+            int(row.get("source_line_count") or 0) for row in remaining_products
+        ),
+    }
+    return {
+        **catalog,
+        "products": remaining_products,
+        "categories": remaining_categories,
+        "summary": summary,
+    }
+
+
+async def load_reviewed_product_context(
+    db: Any,
+    *,
+    user_id: str,
+    limit: int = MAX_REVIEWED_ORDERS,
+) -> dict[str, Any]:
+    repository = MongoOrderRepository(db)
+    workflows = await db[WORKFLOWS].find(
+        {"user_id": user_id, "stage": "reviewed"},
+        {"_id": 0},
+    ).sort("reviewed_at", 1).limit(limit + 1).to_list(limit + 1)
+    truncated = len(workflows) > limit
+    workflows = workflows[:limit]
+
+    pairs: list[tuple[Any, dict[str, Any]]] = []
+    product_ids: set[str] = set()
+    skus: set[str] = set()
+    order_numbers: set[str] = set()
+    for workflow in workflows:
+        order_number = _text(workflow.get("order_number"))
+        if not order_number:
+            continue
+        try:
+            order = await get_order(repository, user_id=user_id, order_number=order_number)
+        except OrderNotFoundError:
+            continue
+        pairs.append((order, workflow))
+        order_numbers.add(order_number)
+        for item in order.items:
+            if _text(item.product_id):
+                product_ids.add(_text(item.product_id))
+            if _text(item.parent_product_id):
+                product_ids.add(_text(item.parent_product_id))
+            if _text(item.sku):
+                skus.add(_text(item.sku))
+
+    clauses: list[dict[str, Any]] = []
+    if product_ids:
+        clauses.append({"salla_product_id": {"$in": sorted(product_ids)}})
+    if skus:
+        clauses.append({"sku": {"$in": sorted(skus)}})
+    product_documents = []
+    if clauses:
+        product_documents = await db[PRODUCTS].find(
+            {"user_id": user_id, "$or": clauses},
+            {"_id": 0},
+        ).to_list(max(len(product_ids) + len(skus), 1))
+
+    allocation_documents = []
+    if order_numbers:
+        allocation_documents = await db[PREPARATION_UNIT_ALLOCATIONS].find(
+            {
+                "user_id": user_id,
+                "order_number": {"$in": sorted(order_numbers)},
+                "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
+            },
+            {"_id": 0},
+        ).to_list(100000)
+
+    catalog = apply_preparation_allocations(
+        aggregate_reviewed_products(pairs, product_documents),
+        allocation_documents,
+    )
+    catalog.update({
+        "ok": True,
+        "stage": "reviewed",
+        "truncated": truncated,
+        "order_limit": limit,
+    })
+    return {
+        "catalog": catalog,
+        "pairs": pairs,
+        "product_documents": product_documents,
+        "allocation_documents": allocation_documents,
+        "truncated": truncated,
+    }
+
+
 def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/reviewed-products-v1", tags=["Reviewed Products Catalog"])
-    repository = MongoOrderRepository(db)
 
     @router.get("/catalog")
     async def reviewed_products_catalog(
@@ -278,52 +495,23 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-        workflows = await db[WORKFLOWS].find(
-            {"user_id": user_id, "stage": "reviewed"},
-            {"_id": 0},
-        ).sort("reviewed_at", 1).limit(limit + 1).to_list(limit + 1)
-        truncated = len(workflows) > limit
-        workflows = workflows[:limit]
-
-        pairs: list[tuple[Any, dict[str, Any]]] = []
-        product_ids: set[str] = set()
-        skus: set[str] = set()
-        for workflow in workflows:
-            order_number = _text(workflow.get("order_number"))
-            if not order_number:
-                continue
-            try:
-                order = await get_order(repository, user_id=user_id, order_number=order_number)
-            except OrderNotFoundError:
-                continue
-            pairs.append((order, workflow))
-            for item in order.items:
-                if _text(item.product_id):
-                    product_ids.add(_text(item.product_id))
-                if _text(item.parent_product_id):
-                    product_ids.add(_text(item.parent_product_id))
-                if _text(item.sku):
-                    skus.add(_text(item.sku))
-
-        clauses: list[dict[str, Any]] = []
-        if product_ids:
-            clauses.append({"salla_product_id": {"$in": sorted(product_ids)}})
-        if skus:
-            clauses.append({"sku": {"$in": sorted(skus)}})
-        product_documents = []
-        if clauses:
-            product_documents = await db[PRODUCTS].find(
-                {"user_id": user_id, "$or": clauses},
-                {"_id": 0},
-            ).to_list(max(len(product_ids) + len(skus), 1))
-
-        result = aggregate_reviewed_products(pairs, product_documents)
-        result.update({
-            "ok": True,
-            "stage": "reviewed",
-            "truncated": truncated,
-            "order_limit": limit,
-        })
-        return result
+        context = await load_reviewed_product_context(
+            db,
+            user_id=user_id,
+            limit=limit,
+        )
+        return context["catalog"]
 
     return router
+
+
+__all__ = [
+    "ACTIVE_PREPARATION_ALLOCATION_STATUSES",
+    "MAX_REVIEWED_ORDERS",
+    "PREPARATION_UNIT_ALLOCATIONS",
+    "PRODUCTS",
+    "aggregate_reviewed_products",
+    "apply_preparation_allocations",
+    "load_reviewed_product_context",
+    "make_reviewed_products_catalog_router",
+]
