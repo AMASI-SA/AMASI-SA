@@ -11,6 +11,18 @@ jest.mock("./OrderReview", () => function PendingOrderReviewFixture() {
     return <div data-testid="pending-review-queue">قائمة انتظار المراجعة</div>;
 });
 
+jest.mock("./ReviewedOrders", () => function ReviewedOrdersFixture() {
+    return <div data-testid="reviewed-products-window">منتجات تمت مراجعتها</div>;
+});
+
+jest.mock("../components/fulfillment/PreparationFilesRegistry", () => function PreparationFilesRegistryFixture() {
+    return <div data-testid="preparation-files-registry-window">سجل ملفات التجهيز المستقل</div>;
+});
+
+jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToShipFixture() {
+    return <div data-testid="ready-to-ship-window">جاهز للشحن</div>;
+});
+
 import FulfillmentV2, { FULFILLMENT_STAGES } from "./FulfillmentV2";
 
 const EXPECTED_STAGE_KEYS = [
@@ -62,8 +74,29 @@ test("pending review is embedded under the organized preparation tabs", () => {
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain("قائمة انتظار المراجعة");
-    expect(markup).toContain("المرحلة الحالية");
+    expect(markup).toContain("النافذة الحالية");
     expect(markup).toContain("بانتظار المراجعة");
+});
+
+test("reviewed products window does not render the preparation files registry", () => {
+    mockSearchParams = new URLSearchParams("stage=reviewed&view=products");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="reviewed-products-window"');
+    expect(markup).toContain("منتجات تمت مراجعتها");
+    expect(markup).not.toContain('data-testid="preparation-files-registry-window"');
+    expect(markup).not.toContain("سجل ملفات التجهيز المستقل");
+});
+
+test("preparation files window does not render reviewed products", () => {
+    mockSearchParams = new URLSearchParams("stage=reviewed&view=files");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="preparation-files-registry-window"');
+    expect(markup).toContain("سجل ملفات التجهيز المستقل");
+    expect(markup).toContain("النافذة الحالية");
+    expect(markup).not.toContain('data-testid="reviewed-products-window"');
+    expect(markup).not.toContain("منتجات تمت مراجعتها");
 });
 
 test("preparation stage exposes warehouse supplier manufacturing and shortage tracks", () => {
