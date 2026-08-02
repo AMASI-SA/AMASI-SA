@@ -51,6 +51,7 @@ jobs:
           backend/tests/test_ads_auto_sync_tiktok.py
           backend/tests/test_tiktok_native_reporting.py
           frontend/src/components/integrationsV2/IntegrationCardV2.jsx
+          frontend/src/components/integrationsV2/IntegrationCardV2.tiktok.test.js
           frontend/src/components/integrationsV2/TikTokReportingSyncControl.jsx
           frontend/src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
           frontend/src/services/tiktokIntegrationsV2.js
@@ -151,7 +152,7 @@ jobs:
           --runTestsByPath
           src/services/tiktokIntegrationsV2.test.js
           src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
-          src/components/integrationsV2/IntegrationCardV2.test.jsx
+          src/components/integrationsV2/IntegrationCardV2.tiktok.test.js
 
       - name: Build production frontend
         working-directory: frontend
