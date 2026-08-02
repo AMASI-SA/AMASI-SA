@@ -51,7 +51,7 @@ jobs:
           grep -q 'الطلبات الفعلية' "$CARD"
           grep -q 'تحويلات سناب المنسوبة' "$CARD"
           grep -q 'فجوة الإسناد' "$CARD"
-          grep -q 'طلبات سلة لا تتأثر' "$CARD"
+          grep -q 'الطلبات الفعلية من سلة لا تتأثر' "$CARD"
           grep -q '/dashboard-v2/snapchat-summary' "$ACCOUNTS"
           grep -q 'SnapchatHybridSummaryCard' "$ACCOUNTS"
           ! grep -q 'api.post' "$CARD"
