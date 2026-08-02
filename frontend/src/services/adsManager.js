@@ -9,7 +9,7 @@ export const ADS_PROVIDER_LABELS = Object.freeze({
 });
 
 const SAFE_PROVIDERS = new Set(ADS_PROVIDER_ORDER);
-const SAFE_CAMPAIGN_PROVIDERS = new Set(["tiktok", "meta"]);
+const SAFE_CAMPAIGN_PROVIDERS = new Set(ADS_PROVIDER_ORDER);
 const SAFE_FRESHNESS = new Set(["fresh", "delayed", "stale", "unavailable", "unknown"]);
 const SAFE_CAMPAIGN_COVERAGE = new Set(["available", "aggregate_only", "unavailable"]);
 const SAFE_PERFORMANCE_COVERAGE = new Set(["complete", "partial", "stale", "unavailable"]);
