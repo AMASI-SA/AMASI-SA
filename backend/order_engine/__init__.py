@@ -73,6 +73,9 @@ def make_order_engine_router(*args, **kwargs):
         make_order_review_customer_waiting_router,
     )
     from reviewed_products_catalog import make_reviewed_products_catalog_router
+    from reviewed_preparation_batches import (
+        make_reviewed_preparation_batches_router,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -146,6 +149,7 @@ def make_order_engine_router(*args, **kwargs):
         make_order_review_mezan_image_unlink_router(db, current_user),
         make_order_review_customer_waiting_router(db, current_user),
         make_reviewed_products_catalog_router(db, current_user),
+        make_reviewed_preparation_batches_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
