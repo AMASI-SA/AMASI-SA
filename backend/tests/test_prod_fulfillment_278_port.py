@@ -1,5 +1,20 @@
 from types import SimpleNamespace
 
+import fitz
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+
+from preparation_pdf import ProductLine
+from preparation_pdf_compact_operational_layout import (
+    COLUMN_GAP,
+    MEDIA_GAP,
+    MEDIA_SIZE,
+    ROW_GAP,
+    compact_card_dimensions,
+    compact_media_positions,
+    compact_reference_card_rows,
+    generate_compact_operational_preparation_pdf,
+)
 from preparation_pdf_unit_card_expansion import expand_preparation_unit_cards
 from reviewed_product_sorting import (
     apply_reviewed_product_sorting,
@@ -97,3 +112,45 @@ def test_sort_preference_router_is_registered():
         for method in route.methods
     }
     assert ("/reviewed-product-sorting-v1/preference", "PUT") in routes
+
+
+def test_compact_pdf_omits_product_title_and_delivery_label():
+    line = ProductLine(
+        order_number="275808511",
+        order_date="2026-08-02",
+        product_name="PRODUCT-TITLE-MUST-NOT-APPEAR",
+        customer_name="Customer",
+        note=None,
+        quantity=1,
+        total_products_in_order=4,
+        shipping_company="iMile",
+        size="50 inch",
+        color="blue",
+    )
+    specifications, order_rows = compact_reference_card_rows(line)
+    assert specifications
+    assert order_rows[-1] == ("", "4 - iMile")
+
+    pdf_bytes = generate_compact_operational_preparation_pdf([line])
+    assert pdf_bytes.startswith(b"%PDF")
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        extracted = "\n".join(page.get_text() for page in document)
+    finally:
+        document.close()
+    assert "PRODUCT-TITLE-MUST-NOT-APPEAR" not in extracted
+    assert "iMile" in extracted
+
+
+def test_compact_pdf_reserves_card_gaps_and_tightens_media_pair():
+    card_width, card_height = compact_card_dimensions()
+    legacy_width = (A4[0] - 14 * mm) / 3
+    legacy_height = (A4[1] - 12 * mm) / 5
+    assert COLUMN_GAP == 4 * mm
+    assert ROW_GAP == 4.5 * mm
+    assert card_width < legacy_width
+    assert card_height < legacy_height
+
+    image_x, qr_x = compact_media_positions(0, card_width)
+    assert abs((qr_x - image_x - MEDIA_SIZE) - MEDIA_GAP) < 0.001
+    assert MEDIA_GAP == 1.5 * mm
