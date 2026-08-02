@@ -1,1 +1,1 @@
-export { default } from "./IntegrationCardV2";
+export { default } from "./IntegrationCard.jsx";
