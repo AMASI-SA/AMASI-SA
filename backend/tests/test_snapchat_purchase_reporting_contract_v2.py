@@ -4,11 +4,15 @@ from datetime import date
 import httpx
 
 from integrations_control_center.snapchat_account_hourly_refresh import (
-    ACTION_REPORT_TIME,
     CONVERSION_SOURCE_TYPES,
     SWIPE_ATTRIBUTION_WINDOW,
     VIEW_ATTRIBUTION_WINDOW,
     _fetch_account_hours,
+)
+from integrations_control_center.snapchat_ads_manager_attribution import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+    install_snapchat_ads_manager_attribution,
 )
 
 
@@ -21,8 +25,9 @@ class FakeContext:
         return {"timeseries_stats": []}
 
 
-def test_scheduler_requests_total_snapchat_purchases_with_explicit_attribution():
+def test_scheduler_requests_ads_manager_purchases_with_explicit_attribution():
     async def run():
+        install_snapchat_ads_manager_attribution()
         context = FakeContext()
         async with httpx.AsyncClient() as client:
             rows, errors = await _fetch_account_hours(
@@ -40,8 +45,23 @@ def test_scheduler_requests_total_snapchat_purchases_with_explicit_attribution()
     assert rows == []
     assert errors == []
     assert params["conversion_source_types"] == CONVERSION_SOURCE_TYPES == "total"
-    assert params["action_report_time"] == ACTION_REPORT_TIME == "conversion"
+    assert params["action_report_time"] == ADS_MANAGER_ACTION_REPORT_TIME == "impression"
     assert params["swipe_up_attribution_window"] == SWIPE_ATTRIBUTION_WINDOW == "28_DAY"
     assert params["view_attribution_window"] == VIEW_ATTRIBUTION_WINDOW == "1_DAY"
     assert "conversion_purchases" in params["fields"]
     assert "conversion_purchases_value" in params["fields"]
+
+
+def test_installer_keeps_request_storage_and_response_metadata_consistent():
+    from integrations_control_center import snapchat_account_hourly_refresh
+    from integrations_control_center import snapchat_dashboard_summary_routes
+    from integrations_control_center import snapchat_native_performance_sync
+
+    install_snapchat_ads_manager_attribution()
+
+    assert snapchat_account_hourly_refresh.ACTION_REPORT_TIME == "impression"
+    assert snapchat_native_performance_sync.ACTION_REPORT_TIME == "impression"
+    assert snapchat_dashboard_summary_routes.ACTION_REPORT_TIME == "impression"
+    assert snapchat_account_hourly_refresh.ACCOUNT_REFRESH_SOURCE_MODE == (
+        ADS_MANAGER_SOURCE_MODE
+    )
