@@ -14,6 +14,12 @@ import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
 import {
+    focusedIntegrationProvider,
+    integrationWorkspaceFromSearchParams,
+    providersForIntegrationWorkspace,
+    summarizeAdvertisingWorkspace,
+} from "../lib/integrationWorkspaces";
+import {
     filterIntegrationProviders,
     getIntegrationsActivity,
     getIntegrationsOverview,
@@ -97,6 +103,9 @@ export default function AppsIntegrationsControlCenter() {
     const [testingProvider, setTestingProvider] = useState("");
     const [syncingProvider, setSyncingProvider] = useState("");
 
+    const workspace = integrationWorkspaceFromSearchParams(searchParams);
+    const accountsWorkspace = workspace === "accounts";
+
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
         setActivityLoading(true);
@@ -123,18 +132,36 @@ export default function AppsIntegrationsControlCenter() {
         load();
     }, [load]);
 
-    const focusedProvider = searchParams.get("provider") === "snapchat_ads"
-        ? "snapchat_ads"
-        : "";
-    const visibleProviders = useMemo(() => filterIntegrationProviders(
+    useEffect(() => {
+        if (accountsWorkspace && activeTab === "capabilities") {
+            setActiveTab("apps");
+        }
+    }, [accountsWorkspace, activeTab]);
+
+    const focusedProvider = focusedIntegrationProvider(
+        searchParams,
         overview.providers,
+    );
+    const workspaceProviders = useMemo(() => providersForIntegrationWorkspace(
+        overview.providers,
+        workspace,
+    ), [overview.providers, workspace]);
+    const visibleProviders = useMemo(() => filterIntegrationProviders(
+        workspaceProviders,
         { query, status: statusFilter },
     ).filter((provider) => !focusedProvider || provider.provider === focusedProvider), [
-        overview.providers,
+        workspaceProviders,
         query,
         statusFilter,
         focusedProvider,
     ]);
+    const advertisingSummary = useMemo(
+        () => summarizeAdvertisingWorkspace(overview.providers),
+        [overview.providers],
+    );
+    const visibleTabs = accountsWorkspace
+        ? TABS.filter((tab) => tab.id !== "capabilities")
+        : TABS;
 
     async function handleTest(provider) {
         setTestingProvider(provider);
@@ -221,20 +248,52 @@ export default function AppsIntegrationsControlCenter() {
             <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
                 <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
-                        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-700 bg-emerald-900 px-3 py-1 text-xs font-extrabold text-emerald-100">
-                            <ShieldCheck size={16} weight="fill" />
-                            مرحلة المراقبة والجاهزية
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-700 bg-emerald-900 px-3 py-1 text-xs font-extrabold text-emerald-100">
+                                <ShieldCheck size={16} weight="fill" />
+                                {accountsWorkspace
+                                    ? "ربط الحسابات الإعلانية"
+                                    : "مرحلة المراقبة والجاهزية"}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => navigate("/integrations-v2")}
+                                className={`rounded-full border px-3 py-1 text-xs font-extrabold transition ${
+                                    !accountsWorkspace
+                                        ? "border-white bg-white text-emerald-950"
+                                        : "border-emerald-700 bg-emerald-900 text-emerald-100 hover:bg-emerald-800"
+                                }`}
+                                data-testid="integrations-workspace-apps"
+                            >
+                                كل التطبيقات
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => navigate("/integrations-v2?workspace=accounts")}
+                                className={`rounded-full border px-3 py-1 text-xs font-extrabold transition ${
+                                    accountsWorkspace
+                                        ? "border-white bg-white text-emerald-950"
+                                        : "border-emerald-700 bg-emerald-900 text-emerald-100 hover:bg-emerald-800"
+                                }`}
+                                data-testid="integrations-workspace-accounts"
+                            >
+                                الحسابات الإعلانية
+                            </button>
                         </div>
                         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
-                            التطبيقات والتكاملات
+                            {accountsWorkspace
+                                ? "الحسابات الإعلانية المرتبطة"
+                                : "التطبيقات والتكاملات"}
                         </h1>
                         <div className="mt-1 text-xs font-bold tracking-wide text-emerald-300">
-                            Apps &amp; Integrations Control Center
+                            {accountsWorkspace
+                                ? "Advertising Accounts Workspace"
+                                : "Apps & Integrations Control Center"}
                         </div>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-100">
-                            مركز واحد لقياس صحة الربط وجودة البيانات والصلاحيات، وتجهيز ميزان
-                            لإدارة المتجر والإعلانات مستقبلًا ضمن دورة اعتماد وتحقق كاملة.
-                            مزامنة سناب التحليلية تتم هنا داخل V2 ولا تعتمد على صفحات القديم.
+                            {accountsWorkspace
+                                ? "مكان واحد لمراجعة حسابات Snapchat وTikTok وMeta وGoogle، والتحقق من معرّف كل حساب وعملته وتوقيته وحالة اتصاله ومزامنته، من دون خلطها بأرصدة ومديونيات الإعلانات."
+                                : "مركز واحد لقياس صحة الربط وجودة البيانات والصلاحيات، وتجهيز ميزان لإدارة المتجر والإعلانات مستقبلًا ضمن دورة اعتماد وتحقق كاملة. مزامنة سناب التحليلية تتم هنا داخل V2 ولا تعتمد على صفحات القديم."}
                         </p>
                     </div>
                     <button
@@ -248,10 +307,9 @@ export default function AppsIntegrationsControlCenter() {
                     </button>
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
-                    التصنيف مبني على أدلة محلية محفوظة، وزر الفحص لا يتصل بالمنصة ولا يغيّر
-                    الربط. زر مزامنة سناب يحدّث الحقائق التحليلية فقط؛ لا ينشئ المركز حملات،
-                    ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة أو قيود. أي تعديل حساس
-                    مستقبلاً يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ← تحقق ← سجل ← رجوع.
+                    {accountsWorkspace
+                        ? "هذه الصفحة تدير نطاق الحسابات والقراءة التحليلية فقط. لا تنشئ تعبئة أو مديونية، ولا تسجل مصروفًا محاسبيًا، ولا تغيّر حملات أو ميزانيات. صفحة الأرصدة والمديونيات المالية تبقى مستقلة تحت العمليات المالية."
+                        : "التصنيف مبني على أدلة محلية محفوظة، وزر الفحص لا يغيّر الربط. زر مزامنة سناب يحدّث الحقائق التحليلية فقط؛ لا ينشئ المركز حملات، ولا يغيّر ميزانيات، ولا يحذف Tokens أو ربط سلة أو قيود. أي تعديل حساس مستقبلًا يمر: اقتراح ← معاينة ← اعتماد ← تنفيذ ← تحقق ← سجل ← رجوع."}
                 </div>
             </header>
 
@@ -272,63 +330,139 @@ export default function AppsIntegrationsControlCenter() {
                 </div>
             )}
 
-            <section
-                className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
-                aria-label="تصنيف مصادر التكامل"
-            >
-                <SummaryCard
-                    label="ربط API مباشر"
-                    value={overview.summary.api_connections}
-                    hint="سلة وموصلات API الحديثة"
-                    tone="emerald"
-                    Icon={Plug}
-                    testid="integrations-summary-api"
-                />
-                <SummaryCard
-                    label="تكامل قائم سابقًا"
-                    value={overview.summary.legacy_integrations}
-                    hint="موصل انتقالي تحت إدارة V2"
-                    tone="amber"
-                    Icon={ShieldCheck}
-                    testid="integrations-summary-legacy"
-                />
-                <SummaryCard
-                    label="تغذية بيانات فقط"
-                    value={overview.summary.data_feeds}
-                    hint="لا تثبت اتصال إدارة API"
-                    tone="sky"
-                    Icon={ChartLineUp}
-                    testid="integrations-summary-feed"
-                />
-                <SummaryCard
-                    label="غير مرتبط"
-                    value={overview.summary.disconnected}
-                    hint="يحتاج موصلًا معتمدًا"
-                    tone="slate"
-                    Icon={WarningCircle}
-                    testid="integrations-summary-disconnected"
-                />
-                <SummaryCard
-                    label="مستقبلي"
-                    value={overview.summary.planned}
-                    hint="ضمن الخطة اللاحقة"
-                    tone="violet"
-                    Icon={CheckCircle}
-                    testid="integrations-summary-planned"
-                />
-                <SummaryCard
-                    label="غير محسوم"
-                    value={overview.summary.unknown}
-                    hint={`من أصل ${overview.summary.total} تطبيقات`}
-                    tone="rose"
-                    Icon={WarningCircle}
-                    testid="integrations-summary-unknown"
-                />
-            </section>
+            {accountsWorkspace ? (
+                <section
+                    className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+                    aria-label="ملخص الحسابات الإعلانية"
+                    data-testid="advertising-accounts-summary"
+                >
+                    <SummaryCard
+                        label="منصات إعلانية"
+                        value={advertisingSummary.providers_total}
+                        hint="Snapchat وTikTok وMeta وGoogle"
+                        tone="slate"
+                        Icon={ChartLineUp}
+                        testid="advertising-summary-providers"
+                    />
+                    <SummaryCard
+                        label="ربط API مباشر"
+                        value={advertisingSummary.api_connections}
+                        hint="اتصال موثق بواجهة المنصة"
+                        tone="emerald"
+                        Icon={Plug}
+                        testid="advertising-summary-api"
+                    />
+                    <SummaryCard
+                        label="منصات متصلة"
+                        value={advertisingSummary.connected_providers}
+                        hint="حالة الاتصال الحالية"
+                        tone="blue"
+                        Icon={CheckCircle}
+                        testid="advertising-summary-connected"
+                    />
+                    <SummaryCard
+                        label="حسابات ظاهرة"
+                        value={advertisingSummary.accounts_visible}
+                        hint="حسابات مكتشفة داخل الربط"
+                        tone="sky"
+                        Icon={ChartLineUp}
+                        testid="advertising-summary-accounts"
+                    />
+                    <SummaryCard
+                        label="عملات / توقيتات"
+                        value={`${advertisingSummary.currencies}/${advertisingSummary.timezones}`}
+                        hint="عملات وتوقيتات الحسابات الظاهرة"
+                        tone="violet"
+                        Icon={ShieldCheck}
+                        testid="advertising-summary-locales"
+                    />
+                    <SummaryCard
+                        label="يحتاج انتباه"
+                        value={advertisingSummary.attention_required}
+                        hint="إعادة ربط أو صلاحيات أو صحة البيانات"
+                        tone={advertisingSummary.attention_required ? "rose" : "emerald"}
+                        Icon={WarningCircle}
+                        testid="advertising-summary-attention"
+                    />
+                </section>
+            ) : (
+                <section
+                    className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+                    aria-label="تصنيف مصادر التكامل"
+                >
+                    <SummaryCard
+                        label="ربط API مباشر"
+                        value={overview.summary.api_connections}
+                        hint="سلة وموصلات API الحديثة"
+                        tone="emerald"
+                        Icon={Plug}
+                        testid="integrations-summary-api"
+                    />
+                    <SummaryCard
+                        label="تكامل قائم سابقًا"
+                        value={overview.summary.legacy_integrations}
+                        hint="موصل انتقالي تحت إدارة V2"
+                        tone="amber"
+                        Icon={ShieldCheck}
+                        testid="integrations-summary-legacy"
+                    />
+                    <SummaryCard
+                        label="تغذية بيانات فقط"
+                        value={overview.summary.data_feeds}
+                        hint="لا تثبت اتصال إدارة API"
+                        tone="sky"
+                        Icon={ChartLineUp}
+                        testid="integrations-summary-feed"
+                    />
+                    <SummaryCard
+                        label="غير مرتبط"
+                        value={overview.summary.disconnected}
+                        hint="يحتاج موصلًا معتمدًا"
+                        tone="slate"
+                        Icon={WarningCircle}
+                        testid="integrations-summary-disconnected"
+                    />
+                    <SummaryCard
+                        label="مستقبلي"
+                        value={overview.summary.planned}
+                        hint="ضمن الخطة اللاحقة"
+                        tone="violet"
+                        Icon={CheckCircle}
+                        testid="integrations-summary-planned"
+                    />
+                    <SummaryCard
+                        label="غير محسوم"
+                        value={overview.summary.unknown}
+                        hint={`من أصل ${overview.summary.total} تطبيقات`}
+                        tone="rose"
+                        Icon={WarningCircle}
+                        testid="integrations-summary-unknown"
+                    />
+                </section>
+            )}
+
+            {accountsWorkspace && (
+                <section className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 sm:flex-row sm:items-center sm:justify-between" data-testid="advertising-accounts-separation-note">
+                    <div>
+                        <div className="font-extrabold">فصل واضح بين الربط والمحاسبة</div>
+                        <div className="mt-1 text-xs font-semibold text-sky-800">
+                            الحسابات أدناه تخص الاتصال والاختيار والمزامنة. التعبئة والأرصدة والمديونيات موجودة في صفحة مالية مستقلة ولا تؤثر في هذا الربط.
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => navigate("/ad-accounts")}
+                        className="shrink-0 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-extrabold text-sky-900 hover:bg-sky-100"
+                        data-testid="open-ad-account-balances"
+                    >
+                        فتح الأرصدة والمديونيات
+                    </button>
+                </section>
+            )}
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
                 <nav className="flex min-w-max gap-2" aria-label="أقسام مركز التكاملات">
-                    {TABS.map(({ id, label, Icon }) => (
+                    {visibleTabs.map(({ id, label, Icon }) => (
                         <button
                             key={id}
                             type="button"
@@ -342,7 +476,9 @@ export default function AppsIntegrationsControlCenter() {
                             data-testid={`integrations-tab-${id}`}
                         >
                             <Icon size={18} weight="duotone" />
-                            {label}
+                            {accountsWorkspace && id === "apps"
+                                ? "الحسابات المرتبطة"
+                                : label}
                         </button>
                     ))}
                 </nav>
@@ -359,7 +495,9 @@ export default function AppsIntegrationsControlCenter() {
                             <input
                                 value={query}
                                 onChange={(event) => setQuery(event.target.value)}
-                                placeholder="ابحث باسم التطبيق أو الحساب…"
+                                placeholder={accountsWorkspace
+                                    ? "ابحث باسم المنصة أو الحساب أو Ad Account ID…"
+                                    : "ابحث باسم التطبيق أو الحساب…"}
                                 className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pe-3 ps-10 text-sm outline-none transition focus:border-emerald-400 focus:bg-white"
                                 data-testid="integrations-search"
                             />
@@ -385,7 +523,7 @@ export default function AppsIntegrationsControlCenter() {
                     </section>
 
                     {visibleProviders.length ? (
-                        <section className="grid gap-4 xl:grid-cols-2" aria-label="بطاقات التطبيقات">
+                        <section className="grid gap-4 xl:grid-cols-2" aria-label={accountsWorkspace ? "بطاقات الحسابات الإعلانية" : "بطاقات التطبيقات"}>
                             {visibleProviders.map((integration) => (
                                 <IntegrationCard
                                     key={integration.provider}
@@ -404,13 +542,15 @@ export default function AppsIntegrationsControlCenter() {
                         </section>
                     ) : (
                         <div className="rounded-xl border border-dashed border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
-                            لا توجد تطبيقات تطابق البحث أو الفلتر.
+                            {accountsWorkspace
+                                ? "لا توجد حسابات إعلانية تطابق البحث أو الفلتر."
+                                : "لا توجد تطبيقات تطابق البحث أو الفلتر."}
                         </div>
                     )}
                 </>
             )}
 
-            {activeTab === "capabilities" && (
+            {activeTab === "capabilities" && !accountsWorkspace && (
                 <CapabilityMatrix providers={overview.providers} />
             )}
 
