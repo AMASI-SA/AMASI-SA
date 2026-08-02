@@ -82,6 +82,9 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_file_registry import (
         make_preparation_file_registry_router,
     )
+    from preview_fulfillment_seed import (
+        make_preview_fulfillment_seed_router,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -158,6 +161,7 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_products_catalog_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
+        make_preview_fulfillment_seed_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
