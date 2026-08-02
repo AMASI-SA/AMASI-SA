@@ -13,6 +13,7 @@ from integrations_control_center.snapchat_ads_manager_attribution import (
     ADS_MANAGER_ACTION_REPORT_TIME,
     ADS_MANAGER_SOURCE_MODE,
     _account_id_from_stats_url,
+    extract_provider_freshness,
     install_snapchat_ads_manager_attribution,
     summarize_conversion_freshness,
 )
@@ -67,7 +68,7 @@ def test_installer_keeps_request_storage_and_response_metadata_consistent():
     assert snapchat_account_hourly_refresh.ACCOUNT_REFRESH_SOURCE_MODE == (
         ADS_MANAGER_SOURCE_MODE
     )
-    assert ADS_MANAGER_SOURCE_MODE.endswith("conversion_freshness_v5")
+    assert ADS_MANAGER_SOURCE_MODE.endswith("conversion_freshness_nested_v6")
 
 
 def test_stats_url_extracts_only_the_ad_account_id():
@@ -77,6 +78,43 @@ def test_stats_url_extracts_only_the_ad_account_id():
     assert _account_id_from_stats_url(
         "https://adsapi.snapchat.com/v1/campaigns/campaign-1/stats"
     ) is None
+
+
+def test_nested_snapchat_response_exposes_conservative_freshness_times():
+    payload = {
+        "request_status": "SUCCESS",
+        "timeseries_stats": [
+            {
+                "sub_request_status": "SUCCESS",
+                "timeseries_stat": {
+                    "id": "campaign-1",
+                    "conversion_data_processed_end_time": (
+                        "2026-08-02T15:25:00.000Z"
+                    ),
+                    "finalized_data_end_time": "2026-08-02T15:38:00.000Z",
+                    "timeseries": [],
+                },
+            },
+            {
+                "sub_request_status": "SUCCESS",
+                "timeseries_stat": {
+                    "id": "campaign-2",
+                    "conversion_data_processed_end_time": (
+                        "2026-08-02T15:20:00.000Z"
+                    ),
+                    "finalized_data_end_time": "2026-08-02T15:35:00.000Z",
+                    "timeseries": [],
+                },
+            },
+        ],
+    }
+
+    result = extract_provider_freshness(payload)
+
+    assert result == {
+        "conversion_data_processed_end_time": "2026-08-02T15:20:00+00:00",
+        "finalized_data_end_time": "2026-08-02T15:35:00+00:00",
+    }
 
 
 def test_freshness_is_conservative_across_selected_accounts():
@@ -103,6 +141,7 @@ def test_freshness_is_conservative_across_selected_accounts():
 
     assert result["status"] == "processing"
     assert result["provisional"] is True
+    assert result["capture_version"] == "nested_v6"
     assert result["accounts_expected"] == 2
     assert result["accounts_reporting"] == 2
     assert result["conversion_data_processed_end_time"] == (
