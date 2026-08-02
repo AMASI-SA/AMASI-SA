@@ -38,11 +38,18 @@ jobs:
           diff -u /tmp/expected.txt /tmp/changed.txt
           echo ADS_AUTO_SYNC_SCOPE_OK
 
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
-          python -m pip install pytest pytest-asyncio
+      - name: Install targeted public dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          pydantic==2.13.4
+          pymongo>=4.8,<5
+          motor>=3.5,<4
+          cryptography==48.0.0
+          openpyxl==3.1.5
+          pytest==9.0.3
+          pytest-asyncio
 
       - name: Compile changed modules
         run: |
@@ -55,7 +62,7 @@ jobs:
         env:
           PYTHONPATH: backend
         run: |
-          python -m pytest -q \
+          python -m pytest -q --tb=short \
             backend/tests/test_ads_auto_sync_5m.py \
             backend/tests/test_snapchat_native_async_selected_reads.py \
             backend/tests/test_meta_native_reporting.py
