@@ -28,7 +28,14 @@ export function focusedIntegrationProvider(searchParams, providers = []) {
 export function providersForIntegrationWorkspace(providers = [], workspace = "apps") {
     const rows = Array.isArray(providers) ? providers : [];
     if (workspace !== "accounts") return rows;
-    return rows.filter((provider) => ADVERTISING_PROVIDER_SET.has(provider?.provider));
+    const byProvider = new Map(
+        rows
+            .filter((provider) => ADVERTISING_PROVIDER_SET.has(provider?.provider))
+            .map((provider) => [provider.provider, provider]),
+    );
+    return ADVERTISING_PROVIDER_IDS
+        .map((provider) => byProvider.get(provider))
+        .filter(Boolean);
 }
 
 export function summarizeAdvertisingWorkspace(providers = []) {
