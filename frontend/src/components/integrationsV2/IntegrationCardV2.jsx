@@ -10,6 +10,7 @@ import {
 import ProviderMark from "./ProviderMark";
 import SnapchatAccountScope from "./SnapchatAccountScope";
 import MetaReportingControl from "./MetaReportingControl";
+import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATUS = {
@@ -229,6 +230,7 @@ export default function IntegrationCard({
     const canTest = Boolean(integration.actions?.test_connection?.enabled) && !testing;
     const showSync = integration.provider === "snapchat_ads";
     const showMetaReporting = integration.provider === "meta_ads";
+    const showTikTokReporting = integration.provider === "tiktok_ads";
     const canSync = showSync
         && Boolean(integration.actions?.sync_data?.enabled)
         && !syncing;
@@ -463,6 +465,12 @@ export default function IntegrationCard({
             {showMetaReporting && (
                 <div className="mt-4" data-testid="meta-reporting-control-host">
                     <MetaReportingControl integration={integration} />
+                </div>
+            )}
+
+            {showTikTokReporting && (
+                <div className="mt-4" data-testid="tiktok-reporting-control-host">
+                    <TikTokReportingSyncControl integration={integration} />
                 </div>
             )}
 
