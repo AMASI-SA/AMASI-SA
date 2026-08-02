@@ -1,6 +1,9 @@
+import io
 from types import SimpleNamespace
 
+import fitz
 import pytest
+from PIL import Image
 
 import reviewed_preparation_batches as batch_module
 from order_review_forward_stage_guard import (
@@ -8,6 +11,15 @@ from order_review_forward_stage_guard import (
     install_order_review_forward_stage_guard,
 )
 from order_review_routes import EVENTS, REVIEW_COMPLETED_STAGES, WORKFLOWS
+from preparation_pdf import ProductLine
+from preparation_pdf_reference_layout import (
+    REFERENCE_CARDS_PER_PAGE,
+    REFERENCE_COLUMNS,
+    REFERENCE_ROWS,
+    generate_reference_preparation_pdf,
+    image_candidate_urls,
+    reference_card_rows,
+)
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
 from reviewed_preparation_batches import (
     _batch_response,
@@ -17,6 +29,11 @@ from reviewed_preparation_batches import (
     plan_preparation_allocations,
     render_preparation_batch_pdf,
 )
+
+
+# Production installs this through Order Engine startup. Install it explicitly
+# in the focused contract suite so PDF regeneration uses the same renderer.
+install_order_review_forward_stage_guard()
 
 
 def _product(group_key, quantity, source_lines):
@@ -36,6 +53,38 @@ def _line(order_number, order_item_id, quantity, start=1):
         "quantity": quantity,
         "available_unit_indices": list(range(start, start + quantity)),
     }
+
+
+def _image_bytes(index=0):
+    image = Image.new(
+        "RGB",
+        (260, 260),
+        ((index * 37) % 255, (index * 71 + 50) % 255, (index * 19 + 90) % 255),
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=90)
+    return buffer.getvalue()
+
+
+def _reference_line(index=1):
+    return ProductLine(
+        order_number=str(275800000 + index),
+        order_date="2026-08-02T10:00:00+03:00",
+        product_name=f"اسم المنتج التجريبي {index}",
+        customer_name="سارة",
+        note="رسالة هدية",
+        quantity=1,
+        total_products_in_order=2,
+        item_index=index - 1,
+        image_bytes=_image_bytes(index),
+        image_mime="image/jpeg",
+        shipping_company="iMile",
+        size="18",
+        color="ذهبي",
+        product_id=f"product-{index}",
+        sku=f"SKU-{index}",
+        product_options={"الخامة": "ستانلس"},
+    )
 
 
 class _Cursor:
@@ -178,6 +227,64 @@ def test_file_fields_preserve_name_color_size_and_notes():
     assert projected["product_options"] == {"الخامة": "ستانلس"}
 
 
+def test_reference_card_uses_full_labels_and_confirmed_field_order():
+    rows = reference_card_rows(_reference_line())
+    labels = [label for label, _value in rows]
+
+    assert labels[:5] == ["الاسم", "المقاس", "اللون", "الخامة", "ملاحظة"]
+    assert labels[-4:] == ["ط", "تاريخ", "الكمية", "للتوصيل"]
+    assert "ك" not in labels
+    assert rows[-3] == ("تاريخ", "2026-08-02")
+    assert rows[-2] == ("الكمية", "1")
+    assert rows[-1] == ("للتوصيل", "2 - iMile")
+
+
+def test_reference_pdf_is_three_columns_by_five_rows_with_images_and_qr():
+    assert REFERENCE_COLUMNS == 3
+    assert REFERENCE_ROWS == 5
+    assert REFERENCE_CARDS_PER_PAGE == 15
+
+    pdf = generate_reference_preparation_pdf([
+        _reference_line(index) for index in range(1, 15)
+    ])
+    document = fitz.open(stream=pdf, filetype="pdf")
+
+    assert document.page_count == 1
+    # Fourteen unique product images plus fourteen unique QR images. PyMuPDF
+    # may consolidate a small number of resources, so require at least 24.
+    assert len(document[0].get_images(full=True)) >= 24
+    pixmap = document[0].get_pixmap(matrix=fitz.Matrix(1, 1), alpha=False)
+    assert pixmap.width > 500
+    assert pixmap.height > 800
+
+
+def test_sixteenth_reference_card_starts_a_second_page():
+    pdf = generate_reference_preparation_pdf([
+        _reference_line(index) for index in range(1, 17)
+    ])
+    document = fitz.open(stream=pdf, filetype="pdf")
+    assert document.page_count == 2
+
+
+def test_image_candidates_skip_relative_mezan_then_fall_back_to_salla():
+    identity = SimpleNamespace(
+        image_url="https://cdn.salla.sa/main.jpg",
+        image_urls=[
+            "/api/order-reviews-v1/mezan-images/abc",
+            "https://cdn.salla.sa/gallery.jpg",
+        ],
+    )
+    candidates = image_candidate_urls(
+        {"selected_image_url": "/api/order-reviews-v1/mezan-images/abc"},
+        identity,
+        {"image_url": "https://cdn.salla.sa/source.jpg"},
+    )
+
+    assert candidates[0].startswith("/api/order-reviews-v1/mezan-images/")
+    assert "https://cdn.salla.sa/main.jpg" in candidates
+    assert "https://cdn.salla.sa/source.jpg" in candidates
+
+
 def test_batch_snapshot_can_regenerate_pdf():
     pdf = render_preparation_batch_pdf({
         "id": "batch-1",
@@ -191,6 +298,8 @@ def test_batch_snapshot_can_regenerate_pdf():
             "quantity": 2,
             "total_products_in_order": 3,
             "line_index": 0,
+            "image_b64": __import__("base64").b64encode(_image_bytes(9)).decode("ascii"),
+            "image_mime": "image/jpeg",
             "shipping_company": "iMile",
             "size": "18",
             "color": "ذهبي",
@@ -200,6 +309,9 @@ def test_batch_snapshot_can_regenerate_pdf():
 
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 1000
+    document = fitz.open(stream=pdf, filetype="pdf")
+    assert document.page_count == 1
+    assert len(document[0].get_images(full=True)) >= 2
 
 
 @pytest.mark.asyncio
