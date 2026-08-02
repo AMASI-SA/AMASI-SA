@@ -263,22 +263,26 @@ def _install_dashboard_freshness() -> None:
         if provider != "snapchat":
             return result
 
-        selected_ids = await dashboard._selected_account_ids(
-            db,
-            user_id,
-            provider,
-        )
+        selected_ids: list[str] = []
         rows: list[dict[str, Any]] = []
-        if selected_ids:
-            cursor = db[FRESHNESS_COLLECTION].find(
-                {
-                    "user_id": user_id,
-                    "provider": "snapchat_ads",
-                    "ad_account_id": {"$in": selected_ids},
-                },
-                {"_id": 0},
+        try:
+            selected_ids = await dashboard._selected_account_ids(
+                db,
+                user_id,
+                provider,
             )
-            rows = await dashboard._to_list(cursor, 100)
+            if selected_ids:
+                cursor = db[FRESHNESS_COLLECTION].find(
+                    {
+                        "user_id": user_id,
+                        "provider": "snapchat_ads",
+                        "ad_account_id": {"$in": selected_ids},
+                    },
+                    {"_id": 0},
+                )
+                rows = await dashboard._to_list(cursor, 100)
+        except Exception:  # noqa: BLE001 - summary remains backward compatible
+            rows = []
         freshness = summarize_conversion_freshness(
             rows,
             expected_account_ids=selected_ids,
