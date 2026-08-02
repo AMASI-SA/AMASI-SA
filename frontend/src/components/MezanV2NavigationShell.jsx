@@ -65,6 +65,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
             { to: "/ads-manager?provider=tiktok", label: "تيك توك" },
             { to: "/ads-manager?provider=meta", label: "ميتا" },
             { to: "/ads-manager?provider=google", label: "إعلانات Google" },
+            { to: "/settings/ads-currencies", label: "العمولات وسعر الصرف", exactSearch: true },
         ],
     },
     {
@@ -96,6 +97,7 @@ const MEZAN_V2_PATHS = [
     "/integrations-v2",
     "/customer-intelligence",
     "/ads-manager",
+    "/settings/ads-currencies",
 ];
 
 export function isMezanV2Route(pathname = "") {
