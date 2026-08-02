@@ -37,7 +37,15 @@ jobs:
           httpx
           pytest
           pytest-asyncio
+          openpyxl
           cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
 
       - name: Compile campaign report modules
         run: >-
