@@ -65,3 +65,25 @@ def test_router_registers_status_and_backend_lifecycle(monkeypatch):
     )
     assert len(router.on_startup) == before_startup + 1
     assert len(router.on_shutdown) == before_shutdown + 1
+
+
+def test_safe_summary_preserves_account_error_samples():
+    summary = scheduler._safe_summary({
+        "errors_count": 1,
+        "error_samples": [{
+            "error_id": "err-1",
+            "ad_account_id": "account-1",
+            "code": "snapchat_request_failed",
+            "message": "provider rejected the range",
+            "retryable": True,
+            "secret": "must-not-leak",
+        }],
+    })
+
+    assert summary["error_samples"] == [{
+        "error_id": "err-1",
+        "ad_account_id": "account-1",
+        "code": "snapchat_request_failed",
+        "message": "provider rejected the range",
+        "retryable": True,
+    }]

@@ -294,6 +294,15 @@ async def _start_run(
 
 
 def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
+    error_samples = []
+    for item in list(result.get("error_samples") or result.get("errors") or [])[:10]:
+        if not isinstance(item, dict):
+            continue
+        error_samples.append({
+            key: item.get(key)
+            for key in ("error_id", "ad_account_id", "code", "message", "retryable", "kind", "error")
+            if item.get(key) is not None
+        })
     return {
         "date_from": result.get("date_from"),
         "date_to": result.get("date_to"),
@@ -306,6 +315,7 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
         "rows_saved": int(result.get("rows_saved") or 0),
         "errors_count": int(result.get("errors_count") or 0),
         "provider_calls": int(result.get("provider_calls") or 0),
+        "error_samples": error_samples,
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -587,6 +597,7 @@ async def _refresh_snapchat(
         errors: list[dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=35.0) as client:
             for account in accounts:
+                account_id = str(account.get("ad_account_id") or "").strip()
                 try:
                     item = await refresh_snapchat_account_hours(
                         context,
@@ -595,10 +606,33 @@ async def _refresh_snapchat(
                         account,
                         start_date=start_date,
                         end_date=end_date,
+                        now=now,
                     )
                     items.append(item)
-                    errors.extend(item.get("errors") or [])
-                    account_id = str(account.get("ad_account_id") or "")
+                    for item_error in item.get("errors") or []:
+                        code = str(item_error.get("code") or "snapchat_account_stats_partial")
+                        message = str(
+                            item_error.get("message")
+                            or item_error.get("error")
+                            or "Snapchat returned a partial account stats response."
+                        )
+                        error_id = await _record_error(
+                            db,
+                            user_id=user_id,
+                            provider=SNAPCHAT_PROVIDER_ID,
+                            run_id=run_id,
+                            source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                            code=code,
+                            message=f"account={account_id}: {message}",
+                            retryable=True,
+                        )
+                        errors.append({
+                            "error_id": error_id,
+                            "ad_account_id": account_id,
+                            "code": code,
+                            "message": message[:300],
+                            "retryable": True,
+                        })
                     await _collection(db, "mezan_integration_accounts_v2").update_one(
                         {
                             "user_id": user_id,
@@ -622,7 +656,23 @@ async def _refresh_snapchat(
                 except SnapchatNativeSyncError as exc:
                     if exc.code == "snapchat_needs_reauth":
                         raise
-                    errors.append({"code": exc.code, "message": exc.message})
+                    error_id = await _record_error(
+                        db,
+                        user_id=user_id,
+                        provider=SNAPCHAT_PROVIDER_ID,
+                        run_id=run_id,
+                        source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
+                        code=exc.code,
+                        message=f"account={account_id}: {exc.message}",
+                        retryable=exc.retryable,
+                    )
+                    errors.append({
+                        "error_id": error_id,
+                        "ad_account_id": account_id,
+                        "code": exc.code,
+                        "message": exc.message[:300],
+                        "retryable": exc.retryable,
+                    })
         rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
         complete = sum(int(item.get("errors_count") or 0) == 0 for item in items)
         status = "complete" if not errors and complete == len(accounts) else "partial"
@@ -636,6 +686,7 @@ async def _refresh_snapchat(
             "rows_saved": rows_saved,
             "errors_count": len(errors),
             "provider_calls": context.provider_calls,
+            "error_samples": errors[:10],
         }
         await _collection(db, "mezan_integrations_v2").update_one(
             {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
