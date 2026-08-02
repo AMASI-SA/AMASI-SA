@@ -1,0 +1,296 @@
+import api from "./lib/api";
+import { listReviewedProductCatalog } from "./services/orderReviewEngine";
+import {
+    findReviewedProductForCard,
+    reviewedProductSortButtonLabel,
+    reviewedProductSortCandidateSummary,
+    updateReviewedProductSortPreference,
+} from "./reviewedProductSortUi";
+
+const ROOT_ID = "mezan-reviewed-product-sort-enhancer";
+const BUTTON_ID = "mezan-reviewed-product-sort-button";
+const STYLE_ID = "mezan-reviewed-product-sort-badge-style";
+let products = [];
+let modal = null;
+let loadingPromise = null;
+
+const text = (value) => String(value || "").trim();
+
+function element(tag, value = "") {
+    const node = document.createElement(tag);
+    if (value) node.textContent = value;
+    return node;
+}
+
+export function isReviewedProductsWindow(location = window.location, root = document) {
+    const params = new URLSearchParams(location.search || "");
+    const explicitProducts = (
+        String(location.pathname || "").includes("/fulfillment-v2")
+        && params.get("stage") === "reviewed"
+        && params.get("view") !== "files"
+    );
+    return explicitProducts || Boolean(root.querySelector?.('[data-testid="reviewed-orders-stage"]'));
+}
+
+function ensureBadgeStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = element("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+        [data-testid="reviewed-product-card"][data-reviewed-sort-label] { position: relative; }
+        [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
+            content: attr(data-reviewed-sort-label); position: absolute; left: 12px; top: 12px;
+            z-index: 5; max-width: 46%; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; border: 1px solid #c4b5fd; border-radius: 999px;
+            background: #f5f3ff; padding: 5px 10px; color: #6d28d9;
+            font-family: Tajawal, sans-serif; font-size: 11px; font-weight: 900;
+            box-shadow: 0 5px 16px #6d28d91f;
+        }
+        @media (max-width: 640px) {
+            [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
+                left: 8px; top: 8px; max-width: 52%; padding: 4px 8px; font-size: 10px;
+            }
+        }
+    `;
+    document.head.append(style);
+}
+
+function cardIdentity(card) {
+    const name = text(card.querySelector("h3")?.textContent);
+    const skuNode = [...card.querySelectorAll('[dir="ltr"]')].find((entry) =>
+        text(entry.textContent).toUpperCase().startsWith("SKU:"),
+    );
+    return {
+        name,
+        sku: text(skuNode?.textContent).replace(/^SKU:\s*/i, ""),
+    };
+}
+
+function syncProductBadges() {
+    ensureBadgeStyles();
+    const stage = document.querySelector('[data-testid="reviewed-orders-stage"]');
+    if (!stage) return;
+    const used = new Set();
+    stage.querySelectorAll('[data-testid="reviewed-product-card"]').forEach((card) => {
+        const product = findReviewedProductForCard(products, cardIdentity(card), used);
+        if (!product) {
+            card.removeAttribute("data-reviewed-sort-label");
+            return;
+        }
+        used.add(text(product.group_key));
+        const label = text(product.preparation_sort_label || product.preparation_sort_spec);
+        if (label) card.setAttribute("data-reviewed-sort-label", `ترتيب الملف: ${label}`);
+        else card.removeAttribute("data-reviewed-sort-label");
+    });
+}
+
+async function loadProducts(force = false) {
+    if (force) loadingPromise = null;
+    if (!loadingPromise) {
+        loadingPromise = listReviewedProductCatalog({ limit: 2000 })
+            .then((catalog) => {
+                products = Array.isArray(catalog?.products) ? catalog.products : [];
+                window.setTimeout(syncProductBadges, 0);
+                return products;
+            })
+            .catch((error) => {
+                loadingPromise = null;
+                throw error;
+            });
+    }
+    return loadingPromise;
+}
+
+function closeModal() {
+    modal?.remove();
+    modal = null;
+}
+
+function renderProductRow(product) {
+    const card = element("article");
+    card.style.cssText = "border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:14px";
+
+    const heading = element("div");
+    heading.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
+    const name = element("strong", text(product.name) || "منتج");
+    name.style.cssText = "font-size:14px;color:#0f172a;line-height:1.6";
+    const quantity = Math.max(0, Math.floor(Number(product.remaining_quantity ?? product.quantity) || 0));
+    const badge = element("span", `${quantity} قطعة`);
+    badge.style.cssText = "border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
+    heading.append(name, badge);
+
+    const current = element("div", reviewedProductSortButtonLabel(product));
+    current.style.cssText = "margin-top:8px;font-size:11px;font-weight:850;color:#6d28d9";
+
+    const controls = element("div");
+    controls.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px";
+    const select = element("select");
+    select.style.cssText = "min-height:44px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:0 10px;font-size:12px;font-weight:850";
+    const none = element("option", "بدون ترتيب مخصص");
+    none.value = "";
+    select.append(none);
+    (product.preparation_sort_candidates || []).forEach((candidate) => {
+        const option = element("option", text(candidate.label || candidate.key));
+        option.value = text(candidate.key);
+        select.append(option);
+    });
+    select.value = text(product.preparation_sort_spec);
+
+    const save = element("button", "حفظ");
+    save.type = "button";
+    save.style.cssText = "min-height:44px;border:0;border-radius:11px;background:#6d28d9;padding:0 17px;color:#fff;font-size:12px;font-weight:950";
+    controls.append(select, save);
+
+    const summary = element("div");
+    summary.style.cssText = "margin-top:8px;border-radius:10px;background:#f8fafc;padding:9px;color:#64748b;font-size:10px;font-weight:750;line-height:1.7";
+    const status = element("div");
+
+    const refreshSummary = () => {
+        const candidate = (product.preparation_sort_candidates || []).find(
+            (row) => text(row.key) === text(select.value),
+        );
+        summary.textContent = candidate
+            ? reviewedProductSortCandidateSummary(candidate, 8)
+            : "اختر العمر أو المقاس أو اللون لترتيب بطاقات PDF المتشابهة معًا.";
+    };
+    select.onchange = refreshSummary;
+    refreshSummary();
+
+    save.onclick = async () => {
+        save.disabled = true;
+        select.disabled = true;
+        save.textContent = "جارٍ الحفظ…";
+        try {
+            const { data } = await api.put("/reviewed-product-sorting-v1/preference", {
+                group_key: product.group_key,
+                spec_key: select.value || null,
+            });
+            const updated = updateReviewedProductSortPreference(product, data);
+            products = products.map((row) => row.group_key === updated.group_key ? updated : row);
+            product = updated;
+            current.textContent = reviewedProductSortButtonLabel(updated);
+            status.textContent = select.value ? "تم حفظ ترتيب المنتج." : "تم إلغاء الترتيب المخصص.";
+            status.style.cssText = "margin-top:8px;border-radius:10px;padding:9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
+            syncProductBadges();
+        } catch (error) {
+            status.textContent = error?.response?.data?.detail?.message || error?.message || "تعذّر حفظ ترتيب المنتج.";
+            status.style.cssText = "margin-top:8px;border-radius:10px;padding:9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
+        } finally {
+            save.disabled = false;
+            select.disabled = false;
+            save.textContent = "حفظ";
+        }
+    };
+
+    card.append(heading, current, controls, summary, status);
+    return card;
+}
+
+function renderRows(container) {
+    container.replaceChildren();
+    if (!products.length) {
+        const empty = element("div", "لا توجد منتجات متبقية في مرحلة تم المراجعة.");
+        empty.style.cssText = "border:1px dashed #cbd5e1;border-radius:14px;padding:25px;text-align:center;color:#64748b;font-size:13px";
+        container.append(empty);
+        return;
+    }
+    products.forEach((product) => container.append(renderProductRow(product)));
+}
+
+async function openModal() {
+    if (modal || !isReviewedProductsWindow()) return;
+    const overlay = element("div");
+    modal = overlay;
+    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
+    overlay.onclick = (event) => { if (event.target === overlay) closeModal(); };
+
+    const panel = element("section");
+    panel.style.cssText = "display:flex;width:min(760px,100%);max-height:92vh;flex-direction:column;overflow:hidden;border-radius:22px;background:#f8fafc;box-shadow:0 28px 90px #0005";
+    const header = element("header");
+    header.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;background:#fff;padding:18px";
+    const titleBox = element("div");
+    const title = element("h2", "ترتيب بطاقات المنتجات في الملف");
+    title.style.cssText = "margin:0;font-size:20px;font-weight:950;color:#0f172a";
+    const description = element("p", "اختر مواصفة واحدة لكل منتج. القيمة ذات أكبر عدد من القطع تظهر أولًا.");
+    description.style.cssText = "margin:6px 0 0;color:#64748b;font-size:11px;line-height:1.8";
+    titleBox.append(title, description);
+    const close = element("button", "×");
+    close.type = "button";
+    close.style.cssText = "width:38px;height:38px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px";
+    close.onclick = closeModal;
+    header.append(titleBox, close);
+
+    const list = element("div");
+    list.style.cssText = "display:grid;gap:10px;overflow:auto;padding:14px";
+    list.append(element("div", "جارٍ تحميل المنتجات والمواصفات…"));
+    panel.append(header, list);
+    overlay.append(panel);
+    document.body.append(overlay);
+
+    try {
+        await loadProducts(true);
+        if (modal === overlay) renderRows(list);
+    } catch (error) {
+        if (modal === overlay) {
+            list.replaceChildren(element("div", error?.message || "تعذّر تحميل المنتجات."));
+        }
+    }
+}
+
+function ensureButton() {
+    let button = document.getElementById(BUTTON_ID);
+    if (button) return button;
+    button = element("button", "ترتيب بطاقات المنتجات");
+    button.id = BUTTON_ID;
+    button.type = "button";
+    button.style.cssText = "position:fixed;right:22px;bottom:22px;z-index:2147483000;min-height:48px;border:1px solid #c4b5fd;border-radius:15px;background:#6d28d9;padding:0 18px;color:#fff;font-size:13px;font-weight:950;box-shadow:0 14px 40px #5b21b655";
+    button.onclick = openModal;
+    document.body.append(button);
+    return button;
+}
+
+function syncVisibility() {
+    const reviewed = isReviewedProductsWindow();
+    ensureButton().style.display = reviewed ? "block" : "none";
+    if (!reviewed) closeModal();
+    if (reviewed) loadProducts().then(syncProductBadges).catch(() => null);
+}
+
+function patchHistory() {
+    ["pushState", "replaceState"].forEach((method) => {
+        const original = window.history[method];
+        if (original.__mezanSortPatched) return;
+        const wrapped = function patchedHistory(...args) {
+            const result = original.apply(this, args);
+            window.setTimeout(syncVisibility, 0);
+            return result;
+        };
+        wrapped.__mezanSortPatched = true;
+        window.history[method] = wrapped;
+    });
+}
+
+function start() {
+    if (!document.body || document.getElementById(ROOT_ID)) return;
+    const marker = element("div");
+    marker.id = ROOT_ID;
+    marker.hidden = true;
+    document.body.append(marker);
+    ensureBadgeStyles();
+    ensureButton();
+    patchHistory();
+    const observer = new MutationObserver(syncVisibility);
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("popstate", syncVisibility);
+    window.addEventListener("hashchange", syncVisibility);
+    window.addEventListener("mezan:preparation-file-created", () => {
+        loadingPromise = null;
+        syncVisibility();
+    });
+    syncVisibility();
+}
+
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+    if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", start, { once: true });
+    else start();
+}
