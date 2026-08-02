@@ -1,0 +1,78 @@
+name: Temporary Patch Ads Manager Route Contract
+
+on:
+  push:
+    branches:
+      - feat/prod-mezan2-ad-cost-settings-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-mezan2-ad-cost-settings-v1
+          fetch-depth: 0
+
+      - name: Update exact route contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_unified_ads_manager_phase1.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''def test_router_exposes_one_get_only_operation():
+    async def current_user():
+        return {"id": OWNER_ID, "role": "owner"}
+
+    router = make_ads_manager_router(FakeDB(), current_user)
+    routes = [route for route in router.routes if isinstance(route, APIRoute)]
+
+    assert len(routes) == 1
+    assert routes[0].path == "/ads-manager/overview"
+    assert routes[0].methods == {"GET"}
+'''
+          new = '''def test_router_exposes_read_only_overview_and_bounded_account_settings():
+    async def current_user():
+        return {"id": OWNER_ID, "role": "owner"}
+
+    router = make_ads_manager_router(FakeDB(), current_user)
+    routes = {
+        route.path: route.methods
+        for route in router.routes
+        if isinstance(route, APIRoute)
+    }
+
+    assert routes == {
+        "/ads-manager/overview": {"GET"},
+        "/ads-manager/account-cost-settings": {"GET"},
+        (
+            "/ads-manager/account-cost-settings/"
+            "{mezan_integration_account_id}"
+        ): {"PUT"},
+    }
+    assert not any(
+        methods & {"POST", "PATCH", "DELETE"}
+        for methods in routes.values()
+    )
+'''
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          elif new not in text:
+              raise SystemExit("old route contract block not found")
+          PY
+
+      - name: Commit patch once
+        run: |
+          if git diff --quiet -- backend/tests/test_unified_ads_manager_phase1.py; then
+            echo "PATCH_ALREADY_PRESENT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/tests/test_unified_ads_manager_phase1.py
+          git commit -m "test(ads-manager): allow bounded Mezan 2 cost settings routes"
+          git push origin HEAD:feat/prod-mezan2-ad-cost-settings-v1
