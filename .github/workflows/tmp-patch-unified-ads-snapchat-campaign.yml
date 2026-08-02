@@ -1,0 +1,49 @@
+name: Temporary Patch Unified Ads Snapchat Campaign
+
+on:
+  push:
+    branches:
+      - fix/prod-unified-ads-snapchat-campaign-contract-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-unified-ads-snapchat-campaign-contract-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Apply exact frontend contract patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("frontend/src/services/adsManager.js")
+          text = path.read_text(encoding="utf-8")
+          old = 'const SAFE_CAMPAIGN_PROVIDERS = new Set(["tiktok", "meta"]);'
+          new = 'const SAFE_CAMPAIGN_PROVIDERS = new Set(ADS_PROVIDER_ORDER);'
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          elif new not in text:
+              raise SystemExit("expected campaign provider allowlist was not found")
+          PY
+
+      - name: Commit patch once
+        run: |
+          if git diff --quiet -- frontend/src/services/adsManager.js; then
+            echo "PATCH_ALREADY_PRESENT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/services/adsManager.js
+          git commit -m "fix(ads-manager): normalize Snapchat campaign rows"
+          git push origin HEAD:fix/prod-unified-ads-snapchat-campaign-contract-v1
