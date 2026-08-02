@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from .ads_auto_sync import attach_ads_auto_sync_runtime
 from .catalog import PROVIDER_BY_ID, provider_or_none
 from .models import (
     ActivityListResponse,
@@ -131,6 +132,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "local_probe_not_available", "message": "لا يوجد اختبار محلي آمن لهذه المنصة في المرحلة الأولى."})
         return await service.test_connection(str(owner["id"]), provider_id)
 
+    attach_ads_auto_sync_runtime(router, db, current_user, _require_owner)
     return router
 
 
