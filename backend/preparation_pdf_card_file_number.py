@@ -1,9 +1,13 @@
 """Stamp each reviewed preparation card with card-number/file-number.
 
-The approved PDF renderer numbers cards as ``1``, ``2``, ... .  Preparation
+The approved PDF renderer numbers cards as ``1``, ``2``, ... . Preparation
 files already have a permanent registry number such as ``PF-20260802-0017``.
 This preview-only support layer keeps the approved 3x5 layout unchanged and
 replaces the visible serial with ``1-17``, ``2-17``, ... .
+
+Card count follows Salla product lines, not the sum of line quantities. A Salla
+line with quantity 3 remains one PDF card showing quantity 3; seven additional
+quantity-1 lines produce seven more cards.
 """
 from __future__ import annotations
 
@@ -28,7 +32,7 @@ def _text(value: Any) -> str:
 def preparation_file_sequence(file_number: Any) -> str:
     """Return the human sequence suffix from a registry file number.
 
-    ``PF-20260802-0017`` becomes ``17``.  The registry always emits this
+    ``PF-20260802-0017`` becomes ``17``. The registry always emits this
     format, while the fallback preserves a non-standard value rather than
     hiding it.
     """
@@ -57,8 +61,8 @@ def stamp_preparation_card_file_numbers(
     """Replace the serial at the top of each approved 3x5 card.
 
     Only the small serial strip is redacted. Images, QR codes, quantities,
-    product fields, and delivery counts remain byte-for-byte visually
-    unchanged outside that strip.
+    product fields, and delivery counts remain visually unchanged outside that
+    strip.
     """
     sequence = preparation_file_sequence(file_number)
     count = max(0, int(card_count or 0))
@@ -94,7 +98,7 @@ def stamp_preparation_card_file_numbers(
                 card_top = margin_y + row * card_height
 
                 # The approved renderer places the 8.5pt serial at this exact
-                # centered baseline. Keep the redaction below the media area,
+                # centered baseline. Keep the redaction above the media area,
                 # which starts 13pt from the card top.
                 redact = fitz.Rect(
                     center_x - 38.0,
@@ -145,6 +149,8 @@ def install_preparation_pdf_card_file_number() -> None:
     def render_with_card_file_number(batch_row: dict[str, Any]) -> bytes:
         assert _ORIGINAL_RENDERER is not None
         rendered = _ORIGINAL_RENDERER(batch_row)
+        # One stored batch line is one original Salla product line/card.
+        # The line quantity remains printed on that single card.
         card_count = sum(
             1
             for row in (batch_row.get("lines") or [])
