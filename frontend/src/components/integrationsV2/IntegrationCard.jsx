@@ -6,8 +6,8 @@ function isAdvertisingAccountsWorkspace() {
     return new URLSearchParams(window.location.search).get("workspace") === "accounts";
 }
 
-export default function IntegrationCard(props) {
-    if (isAdvertisingAccountsWorkspace()) {
+export default function IntegrationCard({ compactAdvertisingAccounts = false, ...props }) {
+    if (compactAdvertisingAccounts || isAdvertisingAccountsWorkspace()) {
         return <AdvertisingAccountCard {...props} />;
     }
     return <IntegrationCardV2 {...props} />;
