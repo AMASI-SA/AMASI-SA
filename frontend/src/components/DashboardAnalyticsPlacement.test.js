@@ -21,10 +21,13 @@ test("Layout delegates GA4 cards to the profit-summary placement", () => {
         'import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement"',
     );
     expect(layoutSource).toContain(
+        'const isLegacyDashboard = location.pathname === "/legacy-dashboard"',
+    );
+    expect(layoutSource).toContain(
         'const isMezanV2Dashboard = location.pathname === "/dashboard-v2"',
     );
     expect(layoutSource).toContain(
-        "const showsDashboardAnalytics = isMainDashboard || isMezanV2Dashboard",
+        "const showsDashboardAnalytics = isLegacyDashboard || isMezanV2Dashboard",
     );
     expect(layoutSource).toContain(
         "<DashboardAnalyticsPlacement active={showsDashboardAnalytics} />",
