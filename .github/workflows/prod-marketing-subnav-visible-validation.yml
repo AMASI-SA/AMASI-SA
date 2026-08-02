@@ -1,0 +1,102 @@
+name: Production Marketing Subnav Visibility Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-marketing-subnav-visible-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-marketing-subnav-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-marketing-subnav-visible
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply staged navigation fix
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f tools/apply_marketing_subnav_visible.py ]]; then
+            python tools/apply_marketing_subnav_visible.py
+            rm tools/apply_marketing_subnav_visible.py
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify exact final scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.patch.outputs.applied }}" == "true" ]]; then
+            git diff --name-only origin/hotfix/prod-snap-meta-final -- | sort > /tmp/changed.txt
+          else
+            git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          fi
+          cat > /tmp/expected.txt <<'EOF'
+          frontend/src/components/MezanV2NavigationShell.jsx
+          frontend/src/components/MezanV2NavigationShell.test.jsx
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo MARKETING_SUBNAV_SCOPE_OK
+
+      - name: Enforce unclipped rail contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'const visibleSection = openSection || activeSection' frontend/src/components/MezanV2NavigationShell.jsx
+          grep -q 'data-navigation-source={openSection ? "opened" : "active"}' frontend/src/components/MezanV2NavigationShell.jsx
+          grep -q 'mezan-v2-secondary-${visibleSection.id}' frontend/src/components/MezanV2NavigationShell.jsx
+          if grep -q 'mezan-v2-dropdown-${section.id}' frontend/src/components/MezanV2NavigationShell.jsx; then
+            echo "Clipped dropdown contract still present"
+            exit 1
+          fi
+          echo MARKETING_SUBNAV_OUTSIDE_SCROLLER_OK
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          yarn install --non-interactive
+
+      - name: Run navigation tests
+        working-directory: frontend
+        run: |
+          CI=true yarn test --watchAll=false --runInBand \
+            src/components/MezanV2NavigationShell.test.jsx \
+            src/mezanUnifiedHeader.test.js
+
+      - name: Build Production frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Publish clean candidate commit
+        if: steps.patch.outputs.applied == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A \
+            frontend/src/components/MezanV2NavigationShell.jsx \
+            frontend/src/components/MezanV2NavigationShell.test.jsx \
+            tools/apply_marketing_subnav_visible.py
+          git commit -m "fix(prod-ui): show marketing subnav below header"
+          git push origin HEAD:fix/prod-marketing-subnav-visible
+          echo MARKETING_SUBNAV_CLEAN_COMMIT_PUSHED
