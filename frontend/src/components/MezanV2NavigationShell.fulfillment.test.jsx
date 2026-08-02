@@ -37,3 +37,13 @@ test("only the file registry navigation item is active in files view", () => {
     expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(true);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
+
+test("fulfillment parent remains active on other governed stages", () => {
+    const location = {
+        pathname: "/fulfillment-v2",
+        search: "?stage=preparation",
+    };
+
+    expect(fulfillment.items.some((item) => isNavigationItemActive(location, item))).toBe(false);
+    expect(activeNavigationSection(location)?.id).toBe("fulfillment");
+});
