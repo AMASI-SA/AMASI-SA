@@ -1,0 +1,57 @@
+name: Production Snapchat Hybrid Card
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/SnapchatAccountsCards.jsx"
+      - "frontend/src/components/SnapchatHybridSummaryCard.jsx"
+      - "frontend/src/components/SnapchatHybridSummaryCard.test.jsx"
+      - ".github/workflows/prod-snapchat-hybrid-card.yml"
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test Snapchat hybrid card
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/SnapchatHybridSummaryCard.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce hybrid source separation
+        working-directory: .
+        run: |
+          CARD=frontend/src/components/SnapchatHybridSummaryCard.jsx
+          ACCOUNTS=frontend/src/components/SnapchatAccountsCards.jsx
+
+          grep -q 'الطلبات الفعلية' "$CARD"
+          grep -q 'تحويلات سناب المنسوبة' "$CARD"
+          grep -q 'فجوة الإسناد' "$CARD"
+          grep -q 'طلبات سلة لا تتأثر' "$CARD"
+          grep -q '/dashboard-v2/snapchat-summary' "$ACCOUNTS"
+          grep -q 'SnapchatHybridSummaryCard' "$ACCOUNTS"
+          ! grep -q 'api.post' "$CARD"
