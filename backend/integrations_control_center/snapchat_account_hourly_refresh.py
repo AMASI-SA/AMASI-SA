@@ -36,6 +36,7 @@ from .snapchat_native_performance_sync import (
 ACCOUNT_REFRESH_SOURCE_MODE = (
     "snapchat_account_hourly_campaign_breakdown_riyadh_refresh_v3"
 )
+# Provider contract: granularity="HOUR" with account campaign breakdown.
 PROVIDER_GRANULARITY = "HOUR"
 PROVIDER_BREAKDOWN = "campaign"
 CONVERSION_SOURCE_TYPES = "total"
