@@ -273,9 +273,19 @@ async def _fetch_account_hours(
     access_token: str,
     *,
     account_id: str,
-    request_start: datetime,
-    request_end: datetime,
+    request_start: datetime | None = None,
+    request_end: datetime | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Fetch HOUR rows, accepting the legacy date-range call contract too."""
+    if request_start is None or request_end is None:
+        if start_date is None or end_date is None:
+            raise ValueError(
+                "request_start/request_end or start_date/end_date are required"
+            )
+        request_start, request_end = riyadh_business_window(start_date, end_date)
+
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     headers = {
         "Authorization": f"Bearer {access_token}",
