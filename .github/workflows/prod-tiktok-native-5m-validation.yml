@@ -1,0 +1,174 @@
+name: Production TikTok Native Five Minute Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-tiktok-native-5m-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-tiktok-native-5m-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-test-push:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-tiktok-native-5m
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply controlled TikTok native scheduler patch
+        run: python scripts/apply_prod_tiktok_native_5m.py
+
+      - name: Verify exact production scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD
+            git diff --name-only
+          } | sort -u > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          backend/integrations_control_center/__init__.py
+          backend/integrations_control_center/ads_auto_sync_scheduler.py
+          backend/integrations_control_center/tiktok_native_guard.py
+          backend/integrations_control_center/tiktok_native_reporting.py
+          backend/integrations_control_center/tiktok_native_reporting_routes.py
+          backend/tests/test_ads_auto_sync_tiktok.py
+          backend/tests/test_tiktok_native_reporting.py
+          frontend/src/components/integrationsV2/IntegrationCardV2.jsx
+          frontend/src/components/integrationsV2/TikTokReportingSyncControl.jsx
+          frontend/src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
+          frontend/src/services/tiktokIntegrationsV2.js
+          frontend/src/services/tiktokIntegrationsV2.test.js
+          scripts/apply_prod_tiktok_native_5m.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo "PROD_TIKTOK_NATIVE_5M_SCOPE_OK"
+
+      - name: Install targeted backend dependencies
+        working-directory: backend
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          pydantic==2.13.4
+          pytest==9.0.3
+          pytest-asyncio
+          cryptography==48.0.0
+          openpyxl==3.1.5
+          pymongo==4.16.0
+
+      - name: Compile TikTok and scheduler modules
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/__init__.py \
+            integrations_control_center/ads_auto_sync_scheduler.py \
+            integrations_control_center/tiktok_native_guard.py \
+            integrations_control_center/tiktok_native_reporting.py \
+            integrations_control_center/tiktok_native_reporting_routes.py \
+            tests/test_ads_auto_sync_tiktok.py \
+            tests/test_tiktok_native_reporting.py
+
+      - name: Enforce TikTok native legacy isolation
+        working-directory: backend
+        run: >-
+          python -c
+          "from integrations_control_center.tiktok_native_guard import assert_tiktok_v2_is_legacy_independent; assert_tiktok_v2_is_legacy_independent()"
+
+      - name: Run TikTok OAuth reporting and five-minute scheduler tests
+        working-directory: backend
+        run: >-
+          python -m pytest
+          tests/test_tiktok_integrations_v2.py
+          tests/test_tiktok_native_reporting.py
+          tests/test_ads_auto_sync_tiktok.py
+          -q
+          --tb=short
+
+      - name: Enforce source-only safety contract
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          paths = [
+              Path('integrations_control_center/tiktok_native_reporting.py'),
+              Path('integrations_control_center/tiktok_native_reporting_routes.py'),
+              Path('integrations_control_center/ads_auto_sync_scheduler.py'),
+          ]
+          forbidden_collections = {
+              'general_ledger', 'qoyod_invoices', 'qoyod_payments',
+              'ads_daily', 'tiktok_ads_daily',
+          }
+          for path in paths:
+              source = path.read_text(encoding='utf-8')
+              tree = ast.parse(source, filename=str(path))
+              if path.name.startswith('tiktok_native_reporting'):
+                  for node in ast.walk(tree):
+                      if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                          if node.value in forbidden_collections:
+                              raise SystemExit(f'{path}: forbidden collection {node.value}')
+              if path.name == 'tiktok_native_reporting.py':
+                  for node in ast.walk(tree):
+                      if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                          if node.func.attr.lower() in {'post', 'put', 'patch', 'delete'}:
+                              raise SystemExit(f'{path}: provider mutation method {node.func.attr}')
+          print('PROD_TIKTOK_NATIVE_5M_READ_ONLY_OK')
+          PY
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run TikTok and integrations frontend tests
+        working-directory: frontend
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          --runTestsByPath
+          src/services/tiktokIntegrationsV2.test.js
+          src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
+          src/components/integrationsV2/IntegrationCardV2.test.jsx
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: CI=false yarn build
+
+      - name: Commit verified TikTok native five-minute integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/apply_prod_tiktok_native_5m.py
+          git add \
+            backend/integrations_control_center/__init__.py \
+            backend/integrations_control_center/ads_auto_sync_scheduler.py \
+            backend/integrations_control_center/tiktok_native_guard.py \
+            frontend/src/components/integrationsV2/IntegrationCardV2.jsx
+          git diff --cached --check
+          git commit -m 'feat(tiktok): add native five-minute reporting sync'
+          git push origin HEAD:feat/prod-tiktok-native-5m
