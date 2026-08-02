@@ -29,6 +29,14 @@ from .meta_native_reporting import (
     run_meta_reporting_sync,
 )
 from .meta_oauth_security import META_PROVIDER_ID, meta_oauth_configured
+from .tiktok_native_reporting import (
+    TIKTOK_REPORTING_SOURCE_MODE,
+    TikTokReportingError,
+    TikTokReportingSyncInput,
+    run_tiktok_reporting_sync,
+    tiktok_reporting_enabled,
+)
+from .tiktok_oauth_security import TIKTOK_PROVIDER_ID, tiktok_oauth_configured
 from .snapchat_account_hourly_refresh import (
     ACCOUNT_REFRESH_SOURCE_MODE,
     refresh_snapchat_account_hours,
@@ -70,6 +78,7 @@ ERRORS_COLLECTION = "mezan_integration_errors_v2"
 TRIGGER = "server_scheduler_5m"
 META_RUN_TYPE = "meta_reporting_async"
 SNAP_RUN_TYPE = "analytics_refresh"
+TIKTOK_RUN_TYPE = "tiktok_reporting_async"
 ACTIVE_STATUSES = ("queued", "running")
 TERMINAL_STATUSES = ("complete", "partial", "failed", "skipped")
 
@@ -142,6 +151,28 @@ def riyadh_date_range(now: datetime, days: int) -> tuple[date, date]:
     return current - timedelta(days=days - 1), current
 
 
+def _tiktok_scheduler_state() -> dict[str, Any]:
+    configured = tiktok_oauth_configured()
+    enabled = configured and tiktok_reporting_enabled()
+    if enabled:
+        return {
+            "mode": "native_polling",
+            "status": "native_polling",
+            "native_polling": True,
+            "reason": None,
+        }
+    return {
+        "mode": "automatic_webhook_feed",
+        "status": "automatic_webhook_feed",
+        "native_polling": False,
+        "reason": (
+            "native_reporting_disabled"
+            if configured
+            else "awaiting_tiktok_oauth_approval"
+        ),
+    }
+
+
 def _worker_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:10]}"
 
@@ -155,7 +186,11 @@ async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
 async def _targets(db: Any) -> list[tuple[str, str]]:
     cursor = _collection(db, "mezan_integrations_v2").find(
         {
-            "provider": {"$in": [META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID]},
+            "provider": {"$in": [
+                META_PROVIDER_ID,
+                SNAPCHAT_PROVIDER_ID,
+                TIKTOK_PROVIDER_ID,
+            ]},
             "connection_status": "connected",
             "connection_provenance": "api_connection",
         },
@@ -165,7 +200,11 @@ async def _targets(db: Any) -> list[tuple[str, str]]:
     for row in await _to_list(cursor, 2000):
         user_id = str(row.get("user_id") or "").strip()
         provider = str(row.get("provider") or "").strip()
-        if user_id and provider in {META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID}:
+        if user_id and provider in {
+            META_PROVIDER_ID,
+            SNAPCHAT_PROVIDER_ID,
+            TIKTOK_PROVIDER_ID,
+        }:
             pairs.add((user_id, provider))
     return sorted(pairs)
 
@@ -419,6 +458,96 @@ async def _refresh_meta(
         return {"provider": META_PROVIDER_ID, "run_id": run_id, "status": "failed", "code": exc.code}
 
 
+async def _refresh_tiktok(
+    db: Any,
+    *,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+    now: datetime,
+) -> dict[str, Any]:
+    if not tiktok_oauth_configured() or not tiktok_reporting_enabled():
+        return {
+            "provider": TIKTOK_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "disabled",
+        }
+    active = await _active_run(
+        db, user_id=user_id, provider=TIKTOK_PROVIDER_ID, now=now
+    )
+    if active:
+        return {
+            "provider": TIKTOK_PROVIDER_ID,
+            "status": "skipped",
+            "reason": "sync_in_progress",
+            "run_id": active.get("run_id"),
+        }
+    run_id = await _start_run(
+        db,
+        user_id=user_id,
+        provider=TIKTOK_PROVIDER_ID,
+        run_type=TIKTOK_RUN_TYPE,
+        source_mode=TIKTOK_REPORTING_SOURCE_MODE,
+        start_date=start_date,
+        end_date=end_date,
+        now=now,
+    )
+    try:
+        result = await run_tiktok_reporting_sync(
+            db,
+            user_id,
+            TikTokReportingSyncInput(
+                days=(end_date - start_date).days + 1,
+                from_date=start_date.isoformat(),
+                to_date=end_date.isoformat(),
+            ),
+        )
+        status = str(result.get("status") or "complete")
+        if status not in {"complete", "partial"}:
+            status = "complete"
+        await _finish_run(
+            db, user_id=user_id, run_id=run_id, status=status, result=result
+        )
+        return {
+            "provider": TIKTOK_PROVIDER_ID,
+            "run_id": run_id,
+            "status": status,
+            **_safe_summary(result),
+        }
+    except TikTokReportingError as exc:
+        error_id = await _record_error(
+            db,
+            user_id=user_id,
+            provider=TIKTOK_PROVIDER_ID,
+            run_id=run_id,
+            source_mode=TIKTOK_REPORTING_SOURCE_MODE,
+            code=exc.code,
+            message=exc.message,
+            retryable=exc.retryable,
+        )
+        await _finish_run(
+            db,
+            user_id=user_id,
+            run_id=run_id,
+            status="failed",
+            result=exc.result,
+            error={
+                "error_id": error_id,
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+            },
+        )
+        if exc.code == "tiktok_needs_reauth":
+            await _mark_needs_reauth(db, user_id, TIKTOK_PROVIDER_ID)
+        return {
+            "provider": TIKTOK_PROVIDER_ID,
+            "run_id": run_id,
+            "status": "failed",
+            "code": exc.code,
+        }
+
+
 async def _refresh_snapchat(
     db: Any,
     *,
@@ -578,6 +707,14 @@ async def run_auto_sync_cycle(
                     end_date=end_date,
                     now=started,
                 )
+            if provider == TIKTOK_PROVIDER_ID:
+                return await _refresh_tiktok(
+                    db,
+                    user_id=user_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    now=started,
+                )
             return await _refresh_snapchat(
                 db,
                 user_id=user_id,
@@ -623,11 +760,7 @@ async def run_auto_sync_cycle(
         "skipped": skipped,
         "results": results,
         "runs_without_browser": True,
-        "tiktok": {
-            "status": "automatic_webhook_feed",
-            "native_polling": False,
-            "reason": "awaiting_tiktok_oauth_approval",
-        },
+        "tiktok": _tiktok_scheduler_state(),
     }
 
 
@@ -763,7 +896,11 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
         {
             "user_id": user_id,
             "trigger": TRIGGER,
-            "provider": {"$in": [META_PROVIDER_ID, SNAPCHAT_PROVIDER_ID]},
+            "provider": {"$in": [
+                META_PROVIDER_ID,
+                SNAPCHAT_PROVIDER_ID,
+                TIKTOK_PROVIDER_ID,
+            ]},
         },
         {"_id": 0},
     )
@@ -791,11 +928,7 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             "last_error": scheduler.get("last_error"),
         },
         "providers": latest,
-        "tiktok": {
-            "mode": "automatic_webhook_feed",
-            "native_polling": False,
-            "reason": "awaiting_tiktok_oauth_approval",
-        },
+        "tiktok": _tiktok_scheduler_state(),
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
