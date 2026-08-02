@@ -22,6 +22,39 @@ function element(tag, value = "") {
     return node;
 }
 
+function productThumbnailUrl(product) {
+    return text(
+        product?.image_url
+        || product?.selected_image_url
+        || product?.main_image
+        || product?.image,
+    );
+}
+
+function productThumbnail(product) {
+    const frame = element("div");
+    frame.setAttribute("data-testid", "reviewed-sort-product-thumbnail");
+    frame.style.cssText = "display:flex;width:54px;height:54px;flex:none;align-items:center;justify-content:center;overflow:hidden;border:1px solid #e2e8f0;border-radius:13px;background:#f8fafc;color:#94a3b8;font-size:10px;font-weight:850";
+
+    const url = productThumbnailUrl(product);
+    if (!url) {
+        frame.textContent = "بدون صورة";
+        return frame;
+    }
+
+    const image = element("img");
+    image.src = url;
+    image.alt = text(product?.name) || "صورة المنتج";
+    image.loading = "lazy";
+    image.style.cssText = "display:block;width:100%;height:100%;object-fit:cover";
+    image.onerror = () => {
+        image.remove();
+        frame.textContent = "بدون صورة";
+    };
+    frame.append(image);
+    return frame;
+}
+
 function isReviewedStage() {
     const params = new URLSearchParams(window.location.search);
     return (
@@ -136,6 +169,10 @@ function productRow(product) {
 
     const heading = element("div");
     heading.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
+
+    const identity = element("div");
+    identity.style.cssText = "display:flex;min-width:0;flex:1;align-items:flex-start;gap:10px";
+    const thumbnail = productThumbnail(product);
     const nameBox = element("div");
     nameBox.style.cssText = "min-width:0;flex:1";
     const name = element("div", text(product?.name) || "منتج");
@@ -144,11 +181,12 @@ function productRow(product) {
     sku.style.cssText = "margin-top:2px;font-size:10px;font-weight:750;color:#94a3b8;direction:ltr;text-align:right";
     nameBox.append(name);
     if (sku.textContent) nameBox.append(sku);
+    identity.append(thumbnail, nameBox);
 
     const quantity = Math.max(0, Math.floor(Number(product?.remaining_quantity ?? product?.quantity) || 0));
     const badge = element("div", `${quantity} قطعة`);
     badge.style.cssText = "flex:none;border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
-    heading.append(nameBox, badge);
+    heading.append(identity, badge);
 
     const current = element("div", reviewedProductSortButtonLabel(product));
     current.style.cssText = "margin-top:9px;font-size:11px;font-weight:850;color:#6d28d9";
