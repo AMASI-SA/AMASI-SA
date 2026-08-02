@@ -11,7 +11,13 @@ import MezanV2NavigationShell, {
     activeNavigationSection,
     isMezanV2Route,
     isNavigationItemActive,
+    navigationSectionsForDisplay,
 } from "./MezanV2NavigationShell";
+
+const DASHBOARD_LOCATION = {
+    pathname: "/dashboard-v2",
+    search: "",
+};
 
 const PRODUCTS_LOCATION = {
     pathname: "/products-v2",
@@ -127,6 +133,20 @@ test("marketing report routes are separate from app integration routes", () => {
         (item) => isNavigationItemActive(MARKETING_LOCATION, item),
     );
     expect(activeItems.map((item) => item.label)).toEqual(["ميتا"]);
+});
+
+test("opening marketing selects a visible secondary rail outside the primary scroller", () => {
+    const state = navigationSectionsForDisplay(DASHBOARD_LOCATION, "marketing");
+    expect(state.activeSection?.id).toBe("home");
+    expect(state.openSection?.id).toBe("marketing");
+    expect(state.visibleSection?.id).toBe("marketing");
+    expect(state.visibleSection.items.map((item) => item.label)).toEqual([
+        "جميع المنصات",
+        "سناب شات",
+        "تيك توك",
+        "ميتا",
+        "إعلانات Google",
+    ]);
 });
 
 test("new navigation does not route to legacy Mezan pages", () => {

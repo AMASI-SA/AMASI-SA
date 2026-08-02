@@ -41,8 +41,9 @@ test("the unified header uses the established Mezan green identity", () => {
     const navigation = read("src/components/MezanV2NavigationShell.jsx");
 
     expect(navigation).toContain('border-emerald-950 bg-brand shadow-xl');
-    expect(navigation).toContain('border-emerald-950 bg-[#0B4938]');
     expect(navigation).toContain('border-t border-white/10 bg-[#0B4938]');
+    expect(navigation).toContain('data-navigation-source={openSection ? "opened" : "active"}');
+    expect(navigation).not.toContain('top-[calc(100%+0.6rem)]');
     expect(navigation).not.toContain('border-y border-slate-800 bg-slate-950 shadow-xl');
 });
 
