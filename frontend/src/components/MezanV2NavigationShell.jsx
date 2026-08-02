@@ -127,8 +127,16 @@ export function isNavigationItemActive(location, item) {
 }
 
 export function activeNavigationSection(location) {
-    return MEZAN_V2_NAV_SECTIONS.find(
+    const directlyMatched = MEZAN_V2_NAV_SECTIONS.find(
         (section) => section.items.some((item) => isNavigationItemActive(location, item)),
+    );
+    if (directlyMatched) return directlyMatched;
+
+    const currentPath = String(location?.pathname || "");
+    return MEZAN_V2_NAV_SECTIONS.find(
+        (section) => section.items.some(
+            (item) => parseTarget(item.to).pathname === currentPath,
+        ),
     ) || null;
 }
 
