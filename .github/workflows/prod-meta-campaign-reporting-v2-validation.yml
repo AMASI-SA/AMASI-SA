@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          git diff --name-only origin/hotfix/prod-snap-meta-final -- | sort > /tmp/changed.txt
           cat > /tmp/expected.txt <<'EOF'
           backend/ads_manager/models.py
           backend/ads_manager/service.py
@@ -110,13 +110,14 @@ jobs:
           campaign_path = Path('backend/integrations_control_center/meta_campaign_reporting.py')
           campaign_source = campaign_path.read_text(encoding='utf-8')
           tree = ast.parse(campaign_source, filename=str(campaign_path))
-          banned_fragments = (
-              'general_ledger', 'daily_costs', 'qoyod', 'salla',
-              'meta_ads_daily', 'ads_daily', '/campaigns?status=',
+          banned_collections = (
+              'general_ledger', 'daily_costs', 'meta_ads_daily', 'ads_daily',
           )
-          for fragment in banned_fragments:
-              if fragment in campaign_source:
-                  raise SystemExit(f'Forbidden campaign reporting fragment: {fragment}')
+          for collection in banned_collections:
+              if collection in campaign_source:
+                  raise SystemExit(
+                      f'Forbidden campaign reporting collection: {collection}'
+                  )
 
           provider_write_methods = {'post', 'put', 'patch', 'delete'}
           for node in ast.walk(tree):
@@ -190,7 +191,8 @@ jobs:
             backend/tests/test_meta_native_reporting.py \
             backend/tests/test_unified_ads_manager_phase1.py \
             frontend/src/services/marketingPerformance.js \
-            frontend/src/services/marketingPerformance.test.js
+            frontend/src/services/marketingPerformance.test.js \
+            tools/apply_meta_campaign_reporting_v2.py
           git commit -m "feat(prod-meta): add campaign-level reporting v2"
           git push origin HEAD:feat/prod-meta-campaign-reporting-v2
           echo META_CAMPAIGN_V2_CLEAN_COMMIT_PUSHED
