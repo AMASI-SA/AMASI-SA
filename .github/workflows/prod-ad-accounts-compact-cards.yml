@@ -1,0 +1,58 @@
+name: Production Advertising Accounts Compact Cards
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/integrationsV2/IntegrationCard.jsx"
+      - "frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx"
+      - "frontend/src/components/integrationsV2/AdvertisingAccountCard.test.jsx"
+      - ".github/workflows/prod-ad-accounts-compact-cards.yml"
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test compact advertising account cards
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/integrationsV2/AdvertisingAccountCard.test.jsx
+          src/components/integrationsV2/IntegrationCard.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce compact account-first contract
+        working-directory: .
+        run: |
+          CARD=frontend/src/components/integrationsV2/AdvertisingAccountCard.jsx
+          FACADE=frontend/src/components/integrationsV2/IntegrationCard.jsx
+
+          grep -q 'data-layout="advertising-account-compact"' "$CARD"
+          grep -q 'إدارة الحسابات والتقارير' "$CARD"
+          grep -q 'الحسابات الظاهرة' "$CARD"
+          grep -q 'workspace' "$FACADE"
+          grep -q 'AdvertisingAccountCard' "$FACADE"
+          ! grep -q 'ما يستطيع الذكاء الاصطناعي فعله' "$CARD"
+          ! grep -q 'api.post' "$CARD"
