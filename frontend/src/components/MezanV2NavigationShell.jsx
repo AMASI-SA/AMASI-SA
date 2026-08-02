@@ -37,7 +37,9 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "إدارة التجهيز",
         Icon: Queue,
         items: [
-            { to: "/fulfillment-v2", label: "إدارة التجهيز", pathPrefix: "/fulfillment-v2" },
+            { to: "/fulfillment-v2", label: "إدارة التجهيز", exactSearch: true },
+            { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
+            { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
         ],
     },
     {
