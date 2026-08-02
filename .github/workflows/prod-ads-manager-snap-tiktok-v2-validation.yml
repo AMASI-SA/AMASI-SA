@@ -1,0 +1,137 @@
+name: Production Ads Manager Snapchat TikTok V2 Validation
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-ads-manager-snap-tiktok-v2-validation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prod-ads-manager-snap-tiktok-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-ads-manager-snap-tiktok-v2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply staged source migration
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f tools/apply_ads_manager_snap_tiktok_v2.py ]]; then
+            python tools/apply_ads_manager_snap_tiktok_v2.py
+            rm tools/apply_ads_manager_snap_tiktok_v2.py
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify final candidate scope
+        if: steps.patch.outputs.applied == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only origin/hotfix/prod-snap-meta-final...HEAD | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          backend/ads_manager/service.py
+          backend/tests/test_unified_ads_manager_phase1.py
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo ADS_MANAGER_NATIVE_V2_SCOPE_OK
+
+      - name: Install targeted public dependencies
+        shell: bash
+        run: |
+          python -m pip install -q \
+            fastapi==0.110.1 \
+            httpx==0.28.1 \
+            pydantic==2.13.4 \
+            'pymongo>=4.8,<5' \
+            'motor>=3.5,<4' \
+            cryptography==48.0.0 \
+            openpyxl==3.1.5 \
+            email-validator \
+            python-jose \
+            passlib \
+            bcrypt \
+            pytest==9.0.3 \
+            pytest-asyncio
+
+      - name: Compile changed modules
+        run: |
+          python -m py_compile \
+            backend/ads_manager/service.py \
+            backend/tests/test_unified_ads_manager_phase1.py
+
+      - name: Run Ads Manager and native-source contracts
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest -q --tb=short \
+            backend/tests/test_unified_ads_manager_phase1.py \
+            backend/tests/test_tiktok_native_reporting.py \
+            backend/tests/test_snapchat_dashboard_summary_v2.py
+
+      - name: Enforce read-only and source authority contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          path = Path('backend/ads_manager/service.py')
+          source = path.read_text(encoding='utf-8')
+          tree = ast.parse(source, filename=str(path))
+          forbidden = {
+              'insert_one', 'insert_many', 'update_one', 'update_many',
+              'delete_one', 'delete_many', 'replace_one', 'bulk_write',
+              'find_one_and_update', 'create_index',
+          }
+          calls = []
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                  if node.func.attr in forbidden:
+                      calls.append((node.func.attr, node.lineno))
+          if calls:
+              raise SystemExit(f'Ads Manager write calls detected: {calls}')
+          required = (
+              'mezan_snapchat_performance_daily_v2',
+              'mezan_tiktok_performance_daily_v2',
+              'snap_v2_authoritative',
+              'tiktok_v2_authoritative',
+              'performance_facts_usable',
+          )
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit(f'Missing native V2 contract markers: {missing}')
+          print('ADS_MANAGER_NATIVE_V2_READ_ONLY_OK')
+          PY
+          git diff --check
+
+      - name: Publish clean candidate commit
+        if: steps.patch.outputs.applied == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/ads_manager/service.py \
+                  backend/tests/test_unified_ads_manager_phase1.py \
+                  tools/apply_ads_manager_snap_tiktok_v2.py
+          git commit -m "fix(prod-ads): use native Snapchat and TikTok V2 facts"
+          git push origin HEAD:fix/prod-ads-manager-snap-tiktok-v2
+          echo ADS_MANAGER_NATIVE_V2_CLEAN_COMMIT_PUSHED
