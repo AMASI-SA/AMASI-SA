@@ -1,18 +1,17 @@
 import api from "./lib/api";
 import { listReviewedProductCatalog } from "./services/orderReviewEngine";
 import {
-    findReviewedProductForCard,
     reviewedProductSortButtonLabel,
     reviewedProductSortCandidateSummary,
     updateReviewedProductSortPreference,
 } from "./reviewedProductSortUi";
 
 const ROOT_ID = "mezan-reviewed-product-sort-enhancer";
-const BUTTON_ATTR = "data-reviewed-product-sort-button";
+const LAUNCHER_ID = "mezan-reviewed-product-sort-launcher";
 let products = [];
 let loadingPromise = null;
-let scanScheduled = false;
-let modalOpen = false;
+let managerOverlay = null;
+let visibilityScheduled = false;
 
 const text = (value) => String(value || "").trim();
 
@@ -37,199 +36,227 @@ async function loadProducts({ force = false } = {}) {
     return loadingPromise;
 }
 
-function cardIdentity(card) {
-    const name = text(card.querySelector("h3")?.textContent);
-    const skuNode = [...card.querySelectorAll('[dir="ltr"]')].find((entry) =>
-        text(entry.textContent).toUpperCase().startsWith("SKU:"),
-    );
-    const sku = text(skuNode?.textContent).replace(/^SKU:\s*/i, "");
-    return { name, sku };
+function closeManager() {
+    managerOverlay?.remove();
+    managerOverlay = null;
 }
 
-function updateButton(button, product) {
-    const label = reviewedProductSortButtonLabel(product);
-    if (button.textContent !== label) button.textContent = label;
-    button.dataset.groupKey = text(product?.group_key);
+function selectedCandidate(product, value) {
+    const wanted = text(value);
+    return (product?.preparation_sort_candidates || []).find(
+        (candidate) => text(candidate?.key) === wanted,
+    ) || null;
+}
+
+function renderProductRow(product) {
+    const row = node("article");
+    row.style.cssText = "border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:13px";
+
+    const top = node("div");
+    top.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
+    const identity = node("div");
+    identity.style.cssText = "min-width:0;flex:1";
+    const name = node("div", text(product?.name) || "منتج");
+    name.style.cssText = "font-size:14px;font-weight:950;color:#0f172a;line-height:1.6";
+    const sku = node("div", text(product?.sku) ? `SKU: ${text(product.sku)}` : "");
+    sku.style.cssText = "margin-top:2px;font-size:10px;font-weight:750;color:#94a3b8;direction:ltr;text-align:right";
+    identity.append(name);
+    if (sku.textContent) identity.append(sku);
+
+    const quantity = node(
+        "div",
+        `${Math.max(0, Math.floor(Number(product?.remaining_quantity ?? product?.quantity) || 0))} قطعة`,
+    );
+    quantity.style.cssText = "flex:none;border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
+    top.append(identity, quantity);
+
+    const current = node("div", reviewedProductSortButtonLabel(product));
+    current.style.cssText = "margin-top:9px;font-size:11px;font-weight:850;color:#6d28d9";
+
     const candidates = Array.isArray(product?.preparation_sort_candidates)
         ? product.preparation_sort_candidates
         : [];
-    button.disabled = candidates.length === 0;
-    button.title = candidates.length
-        ? "اختر مواصفة واحدة لترتيب بطاقات هذا المنتج داخل ملف التجهيز"
-        : "لا توجد مواصفات قابلة للترتيب في بطاقات هذا المنتج";
-    button.style.opacity = candidates.length ? "1" : ".55";
-    button.style.cursor = candidates.length ? "pointer" : "not-allowed";
-}
+    const controls = node("div");
+    controls.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:9px";
 
-function closeModal(overlay) {
-    modalOpen = false;
-    overlay.remove();
-}
-
-function openSortModal(product) {
-    if (modalOpen) return;
-    modalOpen = true;
-
-    const candidates = Array.isArray(product?.preparation_sort_candidates)
-        ? product.preparation_sort_candidates
-        : [];
-    let selected = text(product?.preparation_sort_spec);
-
-    const overlay = node("div");
-    overlay.dataset.reviewedProductSortModal = "1";
-    overlay.style.cssText = "position:fixed;inset:0;z-index:15000;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
-    const panel = node("div");
-    panel.style.cssText = "width:min(620px,100%);max-height:92vh;overflow:auto;border-radius:22px;background:white;padding:20px;box-shadow:0 28px 90px #0005";
-
-    const header = node("div");
-    header.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px";
-    const headerText = node("div");
-    const heading = node("h2", "ترتيب بطاقات المنتج في الملف");
-    heading.style.cssText = "margin:0;font-size:21px;font-weight:950;color:#0f172a";
-    const productName = node("div", text(product?.name) || "منتج");
-    productName.style.cssText = "margin-top:4px;font-size:13px;font-weight:850;color:#6d28d9";
-    const description = node(
-        "p",
-        "اختر مواصفة واحدة. ستظهر القيمة صاحبة أكبر عدد من القطع أولًا، ثم القيمة التالية، مع بقاء كل سطر منتج من سلة بطاقة واحدة وكميته كما هي.",
-    );
-    description.style.cssText = "margin:8px 0 0;color:#64748b;font-size:12px;line-height:1.8";
-    headerText.append(heading, productName, description);
-    const close = node("button", "×");
-    close.type = "button";
-    close.style.cssText = "border:0;background:#f1f5f9;width:36px;height:36px;border-radius:10px;font-size:25px;line-height:1;color:#475569";
-    close.onclick = () => closeModal(overlay);
-    header.append(headerText, close);
-
-    const choices = node("div");
-    choices.style.cssText = "display:grid;gap:9px;margin-top:17px";
-
-    function choiceRow({ key, label, summary }) {
-        const row = node("label");
-        row.style.cssText = "display:flex;align-items:flex-start;gap:10px;border:1px solid #e2e8f0;border-radius:14px;padding:12px;cursor:pointer;background:#fff";
-        const radio = node("input");
-        radio.type = "radio";
-        radio.name = "reviewed-product-sort-spec";
-        radio.value = key;
-        radio.checked = selected === key;
-        radio.style.cssText = "margin-top:3px;width:17px;height:17px;accent-color:#6d28d9";
-        radio.onchange = () => { selected = key; };
-        const content = node("div");
-        content.style.cssText = "min-width:0;flex:1";
-        const title = node("div", label);
-        title.style.cssText = "font-size:14px;font-weight:950;color:#0f172a";
-        content.appendChild(title);
-        if (summary) {
-            const small = node("div", summary);
-            small.style.cssText = "margin-top:4px;font-size:11px;font-weight:700;color:#64748b;line-height:1.65";
-            content.appendChild(small);
-        }
-        row.append(radio, content);
-        return row;
-    }
-
-    choices.appendChild(choiceRow({
-        key: "",
-        label: "بدون ترتيب مخصص",
-        summary: "يُستخدم الترتيب التشغيلي المعتاد حسب وقت المراجعة ورقم الطلب.",
-    }));
+    const select = node("select");
+    select.style.cssText = "min-width:0;min-height:43px;border:1px solid #cbd5e1;border-radius:11px;background:white;padding:0 10px;font-size:12px;font-weight:800;color:#334155;outline:none";
+    const defaultOption = node("option", "بدون ترتيب مخصص");
+    defaultOption.value = "";
+    select.appendChild(defaultOption);
     candidates.forEach((candidate) => {
-        choices.appendChild(choiceRow({
-            key: text(candidate?.key),
-            label: text(candidate?.label || candidate?.key),
-            summary: reviewedProductSortCandidateSummary(candidate, 5),
-        }));
+        const option = node("option", text(candidate?.label || candidate?.key));
+        option.value = text(candidate?.key);
+        select.appendChild(option);
     });
+    select.value = text(product?.preparation_sort_spec);
+    select.disabled = candidates.length === 0;
 
-    const error = node("div");
-    error.style.cssText = "display:none;margin-top:12px;border-radius:10px;background:#fff1f2;padding:10px;color:#be123c;font-size:12px;font-weight:800";
-    const actions = node("div");
-    actions.style.cssText = "display:flex;gap:9px;margin-top:18px";
-    const cancel = node("button", "إلغاء");
-    cancel.type = "button";
-    cancel.style.cssText = "min-height:46px;border:1px solid #cbd5e1;border-radius:12px;background:white;padding:0 18px;font-weight:900;color:#475569";
-    cancel.onclick = () => closeModal(overlay);
-    const save = node("button", "حفظ ترتيب الملف");
+    const save = node("button", "حفظ");
     save.type = "button";
-    save.style.cssText = "min-height:46px;flex:1;border:0;border-radius:12px;background:#6d28d9;padding:0 18px;font-weight:950;color:white";
+    save.disabled = candidates.length === 0;
+    save.style.cssText = "min-height:43px;border:0;border-radius:11px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;disabled:opacity:.5";
+
+    const summary = node("div");
+    summary.style.cssText = "margin-top:7px;border-radius:10px;background:#f8fafc;padding:8px 9px;color:#64748b;font-size:10px;font-weight:700;line-height:1.65";
+    const status = node("div");
+    status.style.cssText = "display:none;margin-top:7px;border-radius:10px;padding:8px 9px;font-size:11px;font-weight:850";
+
+    function refreshSummary() {
+        const candidate = selectedCandidate(product, select.value);
+        summary.textContent = candidate
+            ? reviewedProductSortCandidateSummary(candidate, 6)
+            : (candidates.length
+                ? "اختر مواصفة واحدة؛ القيمة صاحبة أكبر عدد من القطع ستظهر أولًا في الملف."
+                : "لا توجد حاليًا مواصفات قابلة للترتيب في طلبات هذا المنتج.");
+    }
+    select.onchange = refreshSummary;
+    refreshSummary();
+
     save.onclick = async () => {
         save.disabled = true;
+        select.disabled = true;
         save.textContent = "جارٍ الحفظ…";
-        error.style.display = "none";
+        status.style.display = "none";
         try {
             const { data } = await api.put("/reviewed-product-sorting-v1/preference", {
                 group_key: product.group_key,
-                spec_key: selected || null,
+                spec_key: select.value || null,
             });
             const updated = updateReviewedProductSortPreference(product, data);
-            products = products.map((row) =>
-                row.group_key === updated.group_key ? updated : row,
+            products = products.map((item) =>
+                item.group_key === updated.group_key ? updated : item,
             );
-            document.querySelectorAll(`[${BUTTON_ATTR}]`).forEach((button) => {
-                if (text(button.dataset.groupKey) === text(updated.group_key)) {
-                    updateButton(button, updated);
-                }
-            });
-            closeModal(overlay);
-        } catch (saveError) {
-            error.textContent = saveError?.response?.data?.detail?.message
-                || saveError?.message
+            product = updated;
+            current.textContent = reviewedProductSortButtonLabel(updated);
+            status.textContent = select.value
+                ? "تم حفظ ترتيب بطاقات هذا المنتج."
+                : "تم إلغاء الترتيب المخصص لهذا المنتج.";
+            status.style.cssText += ";display:block;background:#ecfdf5;color:#047857";
+            refreshSummary();
+        } catch (error) {
+            status.textContent = error?.response?.data?.detail?.message
+                || error?.message
                 || "تعذّر حفظ ترتيب المنتج.";
-            error.style.display = "block";
-            save.disabled = false;
-            save.textContent = "حفظ ترتيب الملف";
+            status.style.cssText += ";display:block;background:#fff1f2;color:#be123c";
+        } finally {
+            save.disabled = candidates.length === 0;
+            select.disabled = candidates.length === 0;
+            save.textContent = "حفظ";
         }
     };
-    actions.append(cancel, save);
 
-    panel.append(header, choices, error, actions);
-    overlay.appendChild(panel);
-    overlay.onclick = (event) => {
-        if (event.target === overlay) closeModal(overlay);
-    };
-    document.body.appendChild(overlay);
+    controls.append(select, save);
+    row.append(top, current, controls, summary, status);
+    return row;
 }
 
-function addButton(card, product) {
-    let button = card.querySelector(`[${BUTTON_ATTR}]`);
-    if (!button) {
-        button = node("button");
-        button.type = "button";
-        button.setAttribute(BUTTON_ATTR, "1");
-        button.style.cssText = "margin-top:8px;min-height:39px;width:100%;border:1px solid #c4b5fd;border-radius:11px;background:#f5f3ff;padding:7px 10px;color:#5b21b6;font-size:12px;font-weight:900";
-        button.onclick = (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const current = products.find((row) => text(row.group_key) === text(button.dataset.groupKey));
-            if (current && !button.disabled) openSortModal(current);
-        };
-        const footer = card.lastElementChild || card;
-        footer.appendChild(button);
-    }
-    updateButton(button, product);
-}
-
-async function scan() {
-    scanScheduled = false;
-    const stage = document.querySelector('[data-testid="reviewed-orders-stage"]');
-    if (!stage) return;
-    try {
-        await loadProducts();
-    } catch (_error) {
+function renderManagerRows(container) {
+    container.replaceChildren();
+    if (!products.length) {
+        const empty = node("div", "لا توجد منتجات متبقية في مرحلة تمت المراجعة.");
+        empty.style.cssText = "border:1px dashed #cbd5e1;border-radius:14px;padding:24px;text-align:center;color:#64748b;font-size:13px";
+        container.appendChild(empty);
         return;
     }
-    const used = new Set();
-    stage.querySelectorAll('[data-testid="reviewed-product-card"]').forEach((card) => {
-        const product = findReviewedProductForCard(products, cardIdentity(card), used);
-        if (!product) return;
-        used.add(text(product.group_key));
-        addButton(card, product);
-    });
+    products.forEach((product) => container.appendChild(renderProductRow(product)));
 }
 
-function scheduleScan() {
-    if (scanScheduled) return;
-    scanScheduled = true;
-    window.requestAnimationFrame(scan);
+async function openManager() {
+    if (managerOverlay) return;
+
+    const overlay = node("div");
+    managerOverlay = overlay;
+    overlay.dataset.reviewedProductSortManager = "1";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:15000;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
+    overlay.onclick = (event) => {
+        if (event.target === overlay) closeManager();
+    };
+
+    const panel = node("section");
+    panel.style.cssText = "display:flex;width:min(720px,100%);max-height:92vh;flex-direction:column;overflow:hidden;border-radius:22px;background:#f8fafc;box-shadow:0 28px 90px #0005";
+
+    const header = node("header");
+    header.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;background:white;padding:18px";
+    const headingBox = node("div");
+    const heading = node("h2", "ترتيب بطاقات المنتجات في الملف");
+    heading.style.cssText = "margin:0;font-size:20px;font-weight:950;color:#0f172a";
+    const description = node(
+        "p",
+        "اختر مواصفة واحدة لكل منتج مثل العمر أو المقاس أو اللون. داخل PDF تتجمع البطاقات ذات القيمة المتشابهة، وتظهر القيمة الأكثر عددًا بالقطع أولًا.",
+    );
+    description.style.cssText = "margin:6px 0 0;color:#64748b;font-size:11px;line-height:1.8";
+    headingBox.append(heading, description);
+
+    const headerActions = node("div");
+    headerActions.style.cssText = "display:flex;gap:7px";
+    const refresh = node("button", "تحديث");
+    refresh.type = "button";
+    refresh.style.cssText = "min-height:37px;border:1px solid #cbd5e1;border-radius:10px;background:white;padding:0 12px;color:#475569;font-size:11px;font-weight:900";
+    const close = node("button", "×");
+    close.type = "button";
+    close.style.cssText = "width:37px;height:37px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px;line-height:1";
+    close.onclick = closeManager;
+    headerActions.append(refresh, close);
+    header.append(headingBox, headerActions);
+
+    const list = node("div");
+    list.style.cssText = "display:grid;gap:9px;overflow:auto;padding:13px";
+    const loading = node("div", "جارٍ تحميل المنتجات والمواصفات…");
+    loading.style.cssText = "padding:28px;text-align:center;color:#64748b;font-size:13px;font-weight:800";
+    list.appendChild(loading);
+
+    refresh.onclick = async () => {
+        refresh.disabled = true;
+        refresh.textContent = "…";
+        try {
+            await loadProducts({ force: true });
+            renderManagerRows(list);
+        } finally {
+            refresh.disabled = false;
+            refresh.textContent = "تحديث";
+        }
+    };
+
+    panel.append(header, list);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    try {
+        await loadProducts({ force: true });
+        if (managerOverlay === overlay) renderManagerRows(list);
+    } catch (error) {
+        if (managerOverlay !== overlay) return;
+        list.replaceChildren();
+        const warning = node("div", error?.message || "تعذّر تحميل المنتجات.");
+        warning.style.cssText = "border-radius:14px;background:#fff1f2;padding:18px;color:#be123c;font-size:12px;font-weight:850";
+        list.appendChild(warning);
+    }
+}
+
+function launcher() {
+    let button = document.getElementById(LAUNCHER_ID);
+    if (button) return button;
+    button = node("button", "ترتيب بطاقات المنتجات");
+    button.id = LAUNCHER_ID;
+    button.type = "button";
+    button.hidden = true;
+    button.style.cssText = "position:fixed;left:16px;bottom:18px;z-index:10500;min-height:46px;border:1px solid #c4b5fd;border-radius:14px;background:#6d28d9;padding:0 16px;color:white;font-size:12px;font-weight:950;box-shadow:0 14px 35px #5b21b644";
+    button.onclick = openManager;
+    document.body.appendChild(button);
+    return button;
+}
+
+function syncVisibility() {
+    visibilityScheduled = false;
+    const button = launcher();
+    button.hidden = !document.querySelector('[data-testid="reviewed-orders-stage"]');
+}
+
+function scheduleVisibility() {
+    if (visibilityScheduled) return;
+    visibilityScheduled = true;
+    window.requestAnimationFrame(syncVisibility);
 }
 
 function start() {
@@ -238,14 +265,14 @@ function start() {
     marker.id = ROOT_ID;
     marker.hidden = true;
     document.body.appendChild(marker);
+    launcher();
 
-    const observer = new MutationObserver(scheduleScan);
+    const observer = new MutationObserver(scheduleVisibility);
     observer.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("mezan:preparation-file-created", async () => {
-        await loadProducts({ force: true }).catch(() => null);
-        scheduleScan();
+    window.addEventListener("mezan:preparation-file-created", () => {
+        loadingPromise = null;
     });
-    scheduleScan();
+    scheduleVisibility();
 }
 
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
