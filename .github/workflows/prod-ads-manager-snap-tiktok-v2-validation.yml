@@ -32,6 +32,40 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f tools/apply_ads_manager_snap_tiktok_v2.py ]]; then
+            python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tools/apply_ads_manager_snap_tiktok_v2.py")
+          source = path.read_text(encoding="utf-8")
+          old = '''service = replace_once(
+              service,
+              old_provider_key,
+              ''' + "'''" + '''                    provider_source_key = provider_source_keys[provider_key]
+          ''' + "'''" + ''',
+              "daily source key",
+          )
+          '''
+          new = '''old_daily_provider_key = ''' + "'''" + '''                    provider_source_key = (
+                          "snapchat_account_daily"
+                          if provider_key == "snapchat"
+                          else meta_source_key
+                          if provider_key == "meta"
+                          else "tiktok_ads_daily"
+                      )
+          ''' + "'''" + '''
+          service = replace_once(
+              service,
+              old_daily_provider_key,
+              ''' + "'''" + '''                    provider_source_key = provider_source_keys[provider_key]
+          ''' + "'''" + ''',
+              "daily source key",
+          )
+          '''
+          if source.count(old) != 1:
+              raise SystemExit("daily source patch target missing")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          print("DAILY_SOURCE_PATCH_FIXED")
+          PY
             python tools/apply_ads_manager_snap_tiktok_v2.py
             rm tools/apply_ads_manager_snap_tiktok_v2.py
             echo "applied=true" >> "$GITHUB_OUTPUT"
