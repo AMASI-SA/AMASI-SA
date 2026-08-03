@@ -49,8 +49,9 @@ function syncDateInputs(workspace, dateFrom, dateTo, { submit = false } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateTo || ""))) return false;
   const [fromInput, toInput] = reportDateInputs(workspace);
   if (!fromInput || !toInput) return false;
-  const changed = setReactInputValue(fromInput, dateFrom)
-    || setReactInputValue(toInput, dateTo);
+  const fromChanged = setReactInputValue(fromInput, dateFrom);
+  const toChanged = setReactInputValue(toInput, dateTo);
+  const changed = fromChanged || toChanged;
   if (changed && submit) {
     const form = reportForm(workspace);
     if (form && form.dataset.mezanAccountDateSubmitPending !== "true") {
