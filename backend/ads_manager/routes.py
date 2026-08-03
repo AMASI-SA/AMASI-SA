@@ -1,4 +1,4 @@
-"""Owner-only routes for the unified advertising manager."""
+"""Owner-only GET routes for the unified read-only advertising manager."""
 from __future__ import annotations
 
 import os
@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from integrations_control_center.routes import _require_owner
 
-from .account_cost_settings import attach_account_cost_settings_routes
 from .models import AdsManagerOverview
 from .service import AdsManagerService
 
@@ -37,16 +36,6 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
         prefix="/ads-manager",
         tags=["unified-ads-manager-read-only"],
     )
-
-    # Account cost settings are a native Mezan 2 control surface and remain
-    # available independently from the read-only overview feature flag.
-    attach_account_cost_settings_routes(
-        router,
-        db,
-        current_user,
-        _require_owner,
-    )
-
     if not _feature_enabled():
         @router.get("/overview", include_in_schema=False)
         async def overview_disabled() -> None:
