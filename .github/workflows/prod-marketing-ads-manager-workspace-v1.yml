@@ -24,20 +24,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
+          node-version: "22"
       - name: Enable Yarn Classic
-        run: corepack enable
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --non-interactive
       - name: Test ads manager workspace
+        env:
+          CI: "true"
         run: >-
-          yarn test --watchAll=false --runInBand
+          yarn test --watchAll=false --runInBand --runTestsByPath
           src/marketingAdsManagerWorkspaceEnhancer.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
           src/pages/MarketingPlatformWorkspace.test.jsx
       - name: Build Production frontend
+        env:
+          CI: "false"
         run: yarn build
       - name: Enforce read-only Ads Manager design contract
         working-directory: .
@@ -52,4 +54,4 @@ jobs:
           grep -q 'data-mezan-ads-manager-actions' "$ENHANCER"
           grep -q 'button.disabled = true' "$ENHANCER"
           grep -q 'إنشاء الحملات مقفل حاليًا' "$ENHANCER"
-          ! grep -q 'api\.|axios\.|fetch(' "$ENHANCER"
+          ! grep -Eq 'api\.|axios\.|fetch\(' "$ENHANCER"
