@@ -74,7 +74,7 @@ jobs:
           grep -q 'spend_native' "$ROUTE"
           grep -q 'display_currency' "$ROUTE"
           grep -q 'attach_snapchat_campaign_result_source_routes' "$INIT"
-          ! grep -q 'attach_snapchat_campaign_report_routes' "$INIT"
+          grep -q 'attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes' "$INIT"
           ! grep -Eq 'update_one|insert_one|delete_one|replace_one|find_one_and_update' "$ROUTE"
           ! grep -Eq 'httpx|requests\.|api\.snapchat|Authorization' "$ROUTE"
 
