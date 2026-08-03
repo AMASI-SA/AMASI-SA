@@ -106,7 +106,10 @@ def test_scheduler_installer_keeps_dashboard_collection_and_adds_campaign_rows()
             manager.refresh_snapchat_account_hours_with_account_days
         )
         assert 'entity_type="campaign"' in source
-        assert "SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION" in source
+        assert "_upsert_account_local_performance" in source
+        assert manager.SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION == (
+            "mezan_snapchat_performance_account_day_v2"
+        )
     finally:
         hourly.refresh_snapchat_account_hours = original
 
