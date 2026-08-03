@@ -1,0 +1,709 @@
+name: Temporary Dashboard Payment Fees Bank Commission Patch
+
+on:
+  push:
+    branches:
+      - feat/prod-dashboard-payment-fees-bank-commission-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-dashboard-payment-fees-bank-commission-v1
+          fetch-depth: 0
+
+      - name: Apply dashboard cost and payment-fee patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          backend = Path("backend/dashboard_v2_routes.py")
+          text = backend.read_text(encoding="utf-8")
+          import_anchor = "from auth import ensure_user_settings\n"
+          if "from ads_manager.account_cost_settings import list_account_cost_settings" not in text:
+              assert import_anchor in text
+              text = text.replace(
+                  import_anchor,
+                  "from ads_manager.account_cost_settings import list_account_cost_settings\n" + import_anchor,
+                  1,
+              )
+
+          helper_anchor = "async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[str]:\n"
+          helpers = r'''
+          PROVIDER_COST_SETTING_IDS = {
+              "snapchat": "snapchat_ads",
+              "meta": "meta_ads",
+              "tiktok": "tiktok_ads",
+          }
+
+
+          def _optional_float(value: Any) -> float | None:
+              if value is None or isinstance(value, bool):
+                  return None
+              try:
+                  parsed = float(value)
+              except (TypeError, ValueError, OverflowError):
+                  return None
+              return parsed if parsed == parsed and abs(parsed) != float("inf") else None
+
+
+          def _native_fact_amount(row: dict[str, Any], field: str, metric_field: str) -> float | None:
+              direct = _optional_float(row.get(field))
+              if direct is not None:
+                  return direct
+              metric = _optional_float((row.get("metrics") or {}).get(metric_field))
+              if metric is None:
+                  return None
+              return metric / 1_000_000 if metric_field in {"spend", "conversion_purchases_value"} else metric
+
+
+          def apply_account_cost_setting(
+              row: dict[str, Any],
+              setting: dict[str, Any] | None,
+          ) -> dict[str, Any]:
+              """Apply one Mezan 2 account FX/fee setting without mutating the fact."""
+              currency = str(
+                  (setting or {}).get("native_currency")
+                  or row.get("currency_native")
+                  or row.get("currency")
+                  or "SAR"
+              ).strip().upper()
+              default_rate = 1.0 if currency == "SAR" else 3.7544
+              rate = _optional_float((setting or {}).get("exchange_rate_to_sar"))
+              if rate is None or rate <= 0:
+                  rate = default_rate
+              if currency == "SAR":
+                  rate = 1.0
+
+              spend_native = _native_fact_amount(row, "spend_native", "spend")
+              purchase_native = _native_fact_amount(
+                  row, "purchase_value_native", "conversion_purchases_value"
+              )
+              stored_spend_sar = _optional_float(row.get("spend_sar"))
+              stored_purchase_sar = _optional_float(row.get("purchase_value_sar"))
+              spend_sar = (
+                  round(spend_native * rate, 2)
+                  if spend_native is not None
+                  else round(stored_spend_sar or 0.0, 2)
+              )
+              purchase_value_sar = (
+                  round(purchase_native * rate, 2)
+                  if purchase_native is not None
+                  else round(stored_purchase_sar or 0.0, 2)
+              )
+              commission_pct = max(
+                  0.0,
+                  _optional_float((setting or {}).get("bank_commission_pct")) or 0.0,
+              )
+              apply_commission = (setting or {}).get("apply_bank_commission") is True
+              bank_fee_sar = round(
+                  spend_sar * commission_pct / 100,
+                  2,
+              ) if apply_commission and spend_sar > 0 else 0.0
+              return {
+                  **row,
+                  "spend_native": spend_native,
+                  "spend_sar": spend_sar,
+                  "purchase_value_native": purchase_native,
+                  "purchase_value_sar": purchase_value_sar,
+                  "_native_currency": currency,
+                  "_exchange_rate_to_sar": round(rate, 6),
+                  "_bank_commission_pct": round(commission_pct, 4),
+                  "_apply_bank_commission": apply_commission,
+                  "_bank_fee_sar": bank_fee_sar,
+                  "_cost_setting_applied": setting is not None,
+              }
+
+
+          '''
+          if "def apply_account_cost_setting(" not in text:
+              assert helper_anchor in text
+              text = text.replace(helper_anchor, helpers + helper_anchor, 1)
+
+          new_build = r'''async def build_mezan_v2_ads(
+              db: Any,
+              user_id: str,
+              *,
+              from_date: str | None,
+              to_date: str | None,
+          ) -> dict[str, Any]:
+              today = _today_riyadh().isoformat()
+              start = from_date or today
+              end = to_date or start
+              settings_payload = await list_account_cost_settings(db, user_id)
+              setting_map = {
+                  (str(item.get("provider") or ""), str(item.get("external_account_id") or "")): item
+                  for item in settings_payload.get("items") or []
+                  if item.get("provider") and item.get("external_account_id")
+              }
+              raw_platform_rows = {
+                  provider: await _provider_rows(db, user_id, provider, start, end)
+                  for provider in ("snapchat", "meta", "tiktok")
+              }
+              platform_rows: dict[str, list[dict[str, Any]]] = {}
+              account_rollups: dict[tuple[str, str], dict[str, Any]] = {}
+              for provider, rows in raw_platform_rows.items():
+                  setting_provider = PROVIDER_COST_SETTING_IDS[provider]
+                  adjusted_rows: list[dict[str, Any]] = []
+                  for raw in rows:
+                      account_id = str(raw.get("ad_account_id") or "").strip()
+                      setting = setting_map.get((setting_provider, account_id))
+                      row = apply_account_cost_setting(raw, setting)
+                      adjusted_rows.append(row)
+                      if not account_id:
+                          continue
+                      key = (setting_provider, account_id)
+                      rollup = account_rollups.setdefault(key, {
+                          "provider": setting_provider,
+                          "ad_account_id": account_id,
+                          "account_name": (setting or {}).get("display_name")
+                              or raw.get("display_name")
+                              or account_id,
+                          "native_currency": row["_native_currency"],
+                          "exchange_rate_to_sar": row["_exchange_rate_to_sar"],
+                          "bank_commission_pct": row["_bank_commission_pct"],
+                          "apply_bank_commission": row["_apply_bank_commission"],
+                          "native_spend": 0.0,
+                          "spend_sar": 0.0,
+                          "bank_fee_sar": 0.0,
+                          "days": set(),
+                      })
+                      if row.get("spend_native") is not None:
+                          rollup["native_spend"] += _float(row.get("spend_native"))
+                      rollup["spend_sar"] += _float(row.get("spend_sar"))
+                      rollup["bank_fee_sar"] += _float(row.get("_bank_fee_sar"))
+                      if row.get("date"):
+                          rollup["days"].add(str(row["date"]))
+                  platform_rows[provider] = adjusted_rows
+
+              breakdown = {
+                  provider: round(sum(_float(row.get("spend_sar")) for row in rows), 2)
+                  for provider, rows in platform_rows.items()
+              }
+              google_rows = await _to_list(
+                  db.daily_costs.find(
+                      {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
+                      {"_id": 0, "google_ads": 1},
+                  ),
+                  100000,
+              )
+              breakdown["google_transitional"] = round(
+                  sum(_float(row.get("google_ads")) for row in google_rows),
+                  2,
+              )
+
+              account_costs: list[dict[str, Any]] = []
+              for raw in account_rollups.values():
+                  account_costs.append({
+                      **raw,
+                      "native_spend": round(_float(raw.get("native_spend")), 6),
+                      "spend_sar": round(_float(raw.get("spend_sar")), 2),
+                      "bank_fee_sar": round(_float(raw.get("bank_fee_sar")), 2),
+                      "effective_cost_sar": round(
+                          _float(raw.get("spend_sar")) + _float(raw.get("bank_fee_sar")),
+                          2,
+                      ),
+                      "observed_days": len(raw.get("days") or []),
+                      "days": None,
+                      "source": "mezan_ad_account_cost_settings_v2",
+                  })
+              for item in account_costs:
+                  item.pop("days", None)
+              account_costs.sort(key=lambda item: (
+                  item["provider"],
+                  -_float(item["spend_sar"]),
+                  item["account_name"],
+              ))
+              bank_fee_breakdown = [
+                  {
+                      "key": f"ad_bank_fee:{item['provider']}:{item['ad_account_id']}",
+                      "name": f"عمولة بنك الإعلانات — {item['account_name']}",
+                      "provider": item["provider"],
+                      "ad_account_id": item["ad_account_id"],
+                      "account_name": item["account_name"],
+                      "orders_count": 0,
+                      "total_sales": item["spend_sar"],
+                      "fee_amount": item["bank_fee_sar"],
+                      "commission_percent": item["bank_commission_pct"],
+                      "fixed_fee": 0.0,
+                      "vat_percent": 0.0,
+                      "native_currency": item["native_currency"],
+                      "native_spend": item["native_spend"],
+                      "exchange_rate_to_sar": item["exchange_rate_to_sar"],
+                      "is_ad_bank_fee": True,
+                      "source": "mezan_ad_account_cost_settings_v2",
+                  }
+                  for item in account_costs
+                  if item["apply_bank_commission"] and item["spend_sar"] > 0
+              ]
+              bank_fee_total = round(
+                  sum(_float(item.get("fee_amount")) for item in bank_fee_breakdown),
+                  2,
+              )
+              ads_total = round(sum(breakdown.values()), 2)
+              return {
+                  "total": ads_total,
+                  "bank_fee_total": bank_fee_total,
+                  "effective_total": round(ads_total + bank_fee_total, 2),
+                  "breakdown": breakdown,
+                  "account_costs": account_costs,
+                  "bank_fee_breakdown": bank_fee_breakdown,
+                  "providers": {
+                      provider: _aggregate_provider_rows(rows, start, end)
+                      for provider, rows in platform_rows.items()
+                  },
+                  "source_contract": {
+                      "snapchat": f"{SNAP_FACTS}:selected_accounts:ad_account_rows",
+                      "meta": f"{META_FACTS}:selected_accounts",
+                      "tiktok": f"{TIKTOK_FACTS}:connected_accounts",
+                      "google": "daily_costs.google_ads:transitional_read_only",
+                      "account_fx_and_bank_fee": "mezan_ad_account_cost_settings_v2:dynamic_read",
+                      "bank_fee_classification": "payment_fees:not_ad_platform_spend",
+                      "excluded": ["legacy_ad_ledger", "daily_costs.snapchat_ads", "daily_costs.instagram_ads"],
+                  },
+              }
+
+
+          async def build_provider_summary'''
+          pattern = re.compile(
+              r"async def build_mezan_v2_ads\([\s\S]*?\n\nasync def build_provider_summary",
+              re.MULTILINE,
+          )
+          text, count = pattern.subn(new_build, text, count=1)
+          assert count == 1, "build_mezan_v2_ads replacement failed"
+
+          ads_anchor = '''        ads = await build_mezan_v2_ads(
+              db,
+              user_id,
+              from_date=from_date,
+              to_date=to_date,
+          )
+          totals = response["totals"]
+          '''
+          ads_replacement = '''        ads = await build_mezan_v2_ads(
+              db,
+              user_id,
+              from_date=from_date,
+              to_date=to_date,
+          )
+          ad_bank_fees = round(_float(ads.get("bank_fee_total")), 2)
+          totals = response["totals"]
+          '''
+          assert ads_anchor in text
+          text = text.replace(ads_anchor, ads_replacement, 1)
+
+          profit_anchor = '''            + previous_ads - ads_total
+              + previous_operating - salary_total,
+              2,
+          )
+          config = response.get("net_sales_config") or {}
+          '''
+          profit_replacement = '''            + previous_ads - ads_total
+              + previous_operating - salary_total
+              - ad_bank_fees,
+              2,
+          )
+          config = response.get("net_sales_config") or {}
+          if config.get("deduct_payment_fees", True):
+              totals["net_sales"] = round(
+                  _float(totals.get("net_sales")) - ad_bank_fees,
+                  2,
+              )
+          '''
+          assert profit_anchor in text
+          text = text.replace(profit_anchor, profit_replacement, 1)
+
+          totals_anchor = '''            "total_ads_cost": ads_total,
+              "daily_ads_total": ads_total,
+              "daily_products_total": product_total,
+              "daily_costs_total": round(product_total + ads_total, 2),
+          '''
+          totals_replacement = '''            "total_ads_cost": ads_total,
+              "ad_bank_fees": ad_bank_fees,
+              "total_payment_fees": round(
+                  _float(totals.get("total_payment_fees")) + ad_bank_fees,
+                  2,
+              ),
+              "daily_ads_total": ads_total,
+              "daily_products_total": product_total,
+              "daily_costs_total": round(product_total + ads_total + ad_bank_fees, 2),
+          '''
+          assert totals_anchor in text
+          text = text.replace(totals_anchor, totals_replacement, 1)
+
+          response_anchor = '''            "product_cost_v2": product_cost,
+              "ads_v2": ads,
+              "dashboard_source": "mezan_v2",
+          '''
+          response_replacement = '''            "product_cost_v2": product_cost,
+              "ads_v2": ads,
+              "ad_bank_fee_breakdown": ads["bank_fee_breakdown"],
+              "dashboard_source": "mezan_v2",
+          '''
+          assert response_anchor in text
+          text = text.replace(response_anchor, response_replacement, 1)
+          text = text.replace(
+              '"payment_gateway_fees": "legacy_payment_method_settings",',
+              '"payment_gateway_fees": "legacy_payment_method_settings + mezan_ad_account_cost_settings_v2.bank_commission",',
+              1,
+          )
+          backend.write_text(text, encoding="utf-8")
+
+          Path("backend/tests/test_dashboard_v2_ad_account_costs.py").write_text(r'''from dashboard_v2_routes import apply_account_cost_setting
+
+
+def test_usd_snapchat_rate_and_bank_fee_are_applied():
+    row = {
+        "ad_account_id": "snap-usd",
+        "currency": "USD",
+        "spend_native": 100.0,
+        "purchase_value_native": 250.0,
+        "spend_sar": 375.0,
+    }
+    setting = {
+        "native_currency": "USD",
+        "exchange_rate_to_sar": 3.7544,
+        "bank_commission_pct": 2.3,
+        "apply_bank_commission": True,
+    }
+    result = apply_account_cost_setting(row, setting)
+    assert result["spend_sar"] == 375.44
+    assert result["purchase_value_sar"] == 938.60
+    assert result["_bank_fee_sar"] == 8.64
+    assert result["_exchange_rate_to_sar"] == 3.7544
+
+
+def test_sar_account_uses_rate_one_and_zero_fee_when_disabled():
+    result = apply_account_cost_setting(
+        {"ad_account_id": "meta-sar", "currency_native": "SAR", "spend_native": 100.0},
+        {
+            "native_currency": "SAR",
+            "exchange_rate_to_sar": 1.0,
+            "bank_commission_pct": 0.0,
+            "apply_bank_commission": False,
+        },
+    )
+    assert result["spend_sar"] == 100.0
+    assert result["_bank_fee_sar"] == 0.0
+    assert result["_exchange_rate_to_sar"] == 1.0
+
+
+def test_stored_sar_is_safe_fallback_when_native_amount_is_missing():
+    result = apply_account_cost_setting(
+        {"ad_account_id": "legacy-row", "currency": "USD", "spend_sar": 200.0},
+        {
+            "native_currency": "USD",
+            "exchange_rate_to_sar": 3.7544,
+            "bank_commission_pct": 2.3,
+            "apply_bank_commission": True,
+        },
+    )
+    assert result["spend_sar"] == 200.0
+    assert result["_bank_fee_sar"] == 4.6
+          ''', encoding="utf-8")
+
+          Path("frontend/src/lib/paymentFeeBreakdown.js").write_text(r'''const finite = (value, fallback = 0) => {
+              const parsed = Number(value);
+              return Number.isFinite(parsed) ? parsed : fallback;
+          };
+
+          export function paymentFeeFormulaLabel(row = {}) {
+              const pct = finite(row.commission_percent, 0);
+              const fixed = finite(row.fixed_fee, 0);
+              const vat = finite(row.vat_percent, 0);
+              const parts = [];
+              if (pct > 0 || row.is_ad_bank_fee) parts.push(`${pct.toFixed(2)}%`);
+              if (fixed > 0) parts.push(`+ ${fixed.toFixed(2)} ر.س`);
+              if (vat > 0) parts.push(`+ ضريبة ${vat.toFixed(0)}%`);
+              if (!parts.length) {
+                  const base = finite(row.total_sales, 0);
+                  const fee = finite(row.fee_amount, 0);
+                  return base > 0 && fee > 0
+                      ? `${((fee / base) * 100).toFixed(2)}% فعليًا`
+                      : "بدون عمولة";
+              }
+              return parts.join(" ");
+          }
+
+          export function buildPaymentFeeRows(paymentBreakdown = [], adBankFeeBreakdown = []) {
+              const gateways = (Array.isArray(paymentBreakdown) ? paymentBreakdown : [])
+                  .filter((row) => row && (
+                      finite(row.orders_count) > 0
+                      || finite(row.total_sales) > 0
+                      || finite(row.fee_amount) > 0
+                  ))
+                  .map((row, index) => ({
+                      id: `gateway:${row.key || row.name || index}`,
+                      kind: "payment_method",
+                      name: row.name || "طريقة دفع غير محددة",
+                      orders_count: finite(row.orders_count),
+                      base_amount: finite(row.total_sales),
+                      fee_amount: finite(row.fee_amount),
+                      formula: paymentFeeFormulaLabel(row),
+                  }));
+              const bankFees = (Array.isArray(adBankFeeBreakdown) ? adBankFeeBreakdown : [])
+                  .filter((row) => row && finite(row.total_sales) > 0)
+                  .map((row, index) => ({
+                      id: row.key || `ad-bank:${index}`,
+                      kind: "ad_bank_fee",
+                      name: row.name || "عمولة بنك الإعلانات",
+                      orders_count: null,
+                      base_amount: finite(row.total_sales),
+                      fee_amount: finite(row.fee_amount),
+                      formula: paymentFeeFormulaLabel({ ...row, is_ad_bank_fee: true }),
+                      provider: row.provider || null,
+                      account_name: row.account_name || null,
+                  }));
+              return [...gateways, ...bankFees];
+          }
+
+          export function paymentFeeRowsTotal(rows = []) {
+              return (Array.isArray(rows) ? rows : []).reduce(
+                  (sum, row) => sum + finite(row?.fee_amount),
+                  0,
+              );
+          }
+          ''', encoding="utf-8")
+
+          Path("frontend/src/lib/paymentFeeBreakdown.test.js").write_text(r'''import {
+              buildPaymentFeeRows,
+              paymentFeeFormulaLabel,
+              paymentFeeRowsTotal,
+          } from "./paymentFeeBreakdown";
+
+          test("combines payment methods and advertising bank fees", () => {
+              const rows = buildPaymentFeeRows(
+                  [{
+                      key: "tamara",
+                      name: "تمارا",
+                      orders_count: 3,
+                      total_sales: 1000,
+                      fee_amount: 80,
+                      commission_percent: 6.99,
+                      fixed_fee: 1.5,
+                      vat_percent: 15,
+                  }],
+                  [{
+                      key: "ad_bank_fee:snapchat_ads:one",
+                      name: "عمولة بنك الإعلانات — سناب دولار",
+                      total_sales: 375.44,
+                      fee_amount: 8.64,
+                      commission_percent: 2.3,
+                      is_ad_bank_fee: true,
+                  }],
+              );
+              expect(rows).toHaveLength(2);
+              expect(rows[0]).toMatchObject({ name: "تمارا", orders_count: 3, fee_amount: 80 });
+              expect(rows[1]).toMatchObject({ kind: "ad_bank_fee", fee_amount: 8.64 });
+              expect(paymentFeeRowsTotal(rows)).toBeCloseTo(88.64, 2);
+          });
+
+          test("describes configured and actual fee formulae", () => {
+              expect(paymentFeeFormulaLabel({ commission_percent: 2.3, is_ad_bank_fee: true }))
+                  .toBe("2.30%");
+              expect(paymentFeeFormulaLabel({ total_sales: 200, fee_amount: 4 }))
+                  .toBe("2.00% فعليًا");
+          });
+          ''', encoding="utf-8")
+
+          profit = Path("frontend/src/components/ProfitSummaryCard.jsx")
+          ptext = profit.read_text(encoding="utf-8")
+          ptext = ptext.replace(
+              'import { useState } from "react";',
+              'import { useMemo, useState } from "react";',
+              1,
+          )
+          import_marker = 'import DailyProductCostModal from "./DailyProductCostModal";\n'
+          if 'from "../lib/paymentFeeBreakdown"' not in ptext:
+              assert import_marker in ptext
+              ptext = ptext.replace(
+                  import_marker,
+                  import_marker + '''import {
+              buildPaymentFeeRows,
+              paymentFeeRowsTotal,
+          } from "../lib/paymentFeeBreakdown";
+          ''',
+                  1,
+              )
+          props_anchor = '''    totals,
+              shippingBreakdown = [],
+              fromDate,
+          '''
+          props_replacement = '''    totals,
+              shippingBreakdown = [],
+              paymentBreakdown = [],
+              adBankFeeBreakdown = [],
+              fromDate,
+          '''
+          assert props_anchor in ptext
+          ptext = ptext.replace(props_anchor, props_replacement, 1)
+          state_anchor = '''    const [shippingExpanded, setShippingExpanded] = useState(false);
+              const [opExpanded, setOpExpanded] = useState(false);
+          '''
+          state_replacement = '''    const [shippingExpanded, setShippingExpanded] = useState(false);
+              const [paymentFeesExpanded, setPaymentFeesExpanded] = useState(false);
+              const [opExpanded, setOpExpanded] = useState(false);
+          '''
+          assert state_anchor in ptext
+          ptext = ptext.replace(state_anchor, state_replacement, 1)
+          fees_anchor = '''                            + Number(t.emkan_fees         || 0)
+                              + Number(t.bank_fees          || 0));
+          '''
+          fees_replacement = '''                            + Number(t.emkan_fees         || 0)
+                              + Number(t.bank_fees          || 0)
+                              + Number(t.ad_bank_fees       || 0));
+          '''
+          assert fees_anchor in ptext
+          ptext = ptext.replace(fees_anchor, fees_replacement, 1)
+
+          payment_block = r'''
+              const paymentFeeRows = useMemo(
+                  () => buildPaymentFeeRows(paymentBreakdown, adBankFeeBreakdown),
+                  [paymentBreakdown, adBankFeeBreakdown],
+              );
+              const paymentRowsTotal = paymentFeeRowsTotal(paymentFeeRows);
+              const paymentFeesTooltip = (
+                  <div data-testid="payment-fees-tooltip-content" dir="rtl">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200">
+                          <span className="text-xs font-extrabold text-violet-900">
+                              💳 تفاصيل رسوم جميع طرق الدفع والعمولات البنكية
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                              {paymentFeeRows.length} بند
+                          </span>
+                      </div>
+                      {paymentFeeRows.length === 0 ? (
+                          <div className="text-xs text-slate-500 py-2 text-center">
+                              لا توجد رسوم دفع أو عمولات بنكية في هذه الفترة
+                          </div>
+                      ) : (
+                          <div className="overflow-x-auto">
+                              <table className="w-full min-w-[720px] text-[11px]" data-testid="payment-fees-breakdown-table">
+                                  <thead className="bg-slate-50 text-slate-700">
+                                      <tr>
+                                          <th className="text-right p-1.5 font-extrabold">الطريقة / الحساب</th>
+                                          <th className="text-center p-1.5 font-extrabold">العمليات</th>
+                                          <th className="text-left p-1.5 font-extrabold">المبيعات / أساس العمولة</th>
+                                          <th className="text-left p-1.5 font-extrabold">طريقة الاحتساب</th>
+                                          <th className="text-left p-1.5 font-extrabold">قيمة العمولة</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody>
+                                      {paymentFeeRows.map((row) => (
+                                          <tr key={row.id} className={`border-t border-slate-100 ${row.kind === "ad_bank_fee" ? "bg-rose-50/50" : ""}`}>
+                                              <td className="p-1.5 font-bold text-slate-700">
+                                                  {row.name}
+                                                  {row.kind === "ad_bank_fee" && (
+                                                      <span className="ms-1 rounded bg-rose-100 px-1 py-0.5 text-[9px] font-extrabold text-rose-700">
+                                                          إعلان
+                                                      </span>
+                                                  )}
+                                              </td>
+                                              <td className="p-1.5 text-center font-mono font-bold text-slate-700">
+                                                  {row.orders_count == null ? "—" : fmtInt(row.orders_count)}
+                                              </td>
+                                              <td className="p-1.5 text-left font-mono text-slate-700">
+                                                  {fmtSar(row.base_amount)}
+                                              </td>
+                                              <td className="p-1.5 text-left font-bold text-slate-600">
+                                                  {row.formula}
+                                              </td>
+                                              <td className="p-1.5 text-left font-mono font-extrabold text-violet-700">
+                                                  {fmtSar(row.fee_amount)}
+                                              </td>
+                                          </tr>
+                                      ))}
+                                      <tr className="border-t-2 border-violet-200 bg-violet-50/60">
+                                          <td colSpan={4} className="p-1.5 font-extrabold text-slate-800">
+                                              إجمالي رسوم جميع طرق الدفع
+                                          </td>
+                                          <td className="p-1.5 text-left font-mono font-extrabold text-violet-800">
+                                              {fmtSar(allPaymentFees)}
+                                          </td>
+                                      </tr>
+                                  </tbody>
+                              </table>
+                          </div>
+                      )}
+                      {Math.abs(paymentRowsTotal - allPaymentFees) > 0.02 && (
+                          <p className="mt-2 text-[10px] font-bold text-amber-700">
+                              الإجمالي المعتمد من الخادم {fmtSar(allPaymentFees)} ر.س؛ مجموع الصفوف الظاهرة {fmtSar(paymentRowsTotal)} ر.س.
+                          </p>
+                      )}
+                      <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+                          عمولات بنوك الإعلانات محسوبة من صرف الحساب بعد تحويله إلى الريال، وتظهر هنا مع رسوم تابي وتمارا وبقية طرق الدفع دون إضافتها إلى صرف المنصة مرتين.
+                      </p>
+                  </div>
+              );
+
+          '''
+          op_marker = "    // 2) Operating expenses breakdown — sourced from `totals.operating_*`.\n"
+          if "const paymentFeesTooltip" not in ptext:
+              assert op_marker in ptext
+              ptext = ptext.replace(op_marker, payment_block + op_marker, 1)
+
+          old_line = '''                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" />
+          '''
+          new_line = '''                <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded(v => !v)} />
+          '''
+          assert old_line in ptext
+          ptext = ptext.replace(old_line, new_line, 1)
+          profit.write_text(ptext, encoding="utf-8")
+
+          dashboard = Path("frontend/src/pages/Dashboard.jsx")
+          dtext = dashboard.read_text(encoding="utf-8")
+          pass_anchor = '''                        totals={totals}
+                              shippingBreakdown={data?.shipping_breakdown || []}
+                              fromDate={filters.from}
+          '''
+          pass_replacement = '''                        totals={totals}
+                              shippingBreakdown={data?.shipping_breakdown || []}
+                              paymentBreakdown={data?.payment_breakdown || []}
+                              adBankFeeBreakdown={data?.ad_bank_fee_breakdown || []}
+                              fromDate={filters.from}
+          '''
+          assert pass_anchor in dtext
+          dtext = dtext.replace(pass_anchor, pass_replacement, 1)
+          dashboard.write_text(dtext, encoding="utf-8")
+
+          Path("frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx").write_text(r'''import fs from "fs";
+          import path from "path";
+
+          test("executive profit payment-fee row owns an inline breakdown", () => {
+              const source = fs.readFileSync(
+                  path.join(__dirname, "ProfitSummaryCard.jsx"),
+                  "utf8",
+              );
+              expect(source).toContain('testid="profit-line-payment-fees"');
+              expect(source).toContain('data-testid="payment-fees-breakdown-table"');
+              expect(source).toContain("paymentFeesExpanded");
+              expect(source).toContain("t.ad_bank_fees");
+              expect(source).toContain("عمولة بنك الإعلانات");
+          });
+          ''', encoding="utf-8")
+          PY
+
+      - name: Validate patch targets
+        run: |
+          python -m py_compile backend/dashboard_v2_routes.py backend/tests/test_dashboard_v2_ad_account_costs.py
+          grep -q 'ad_bank_fee_breakdown' backend/dashboard_v2_routes.py
+          grep -q 'payment-fees-breakdown-table' frontend/src/components/ProfitSummaryCard.jsx
+          grep -q 'adBankFeeBreakdown' frontend/src/pages/Dashboard.jsx
+
+      - name: Commit source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/dashboard_v2_routes.py backend/tests/test_dashboard_v2_ad_account_costs.py \
+            frontend/src/lib/paymentFeeBreakdown.js frontend/src/lib/paymentFeeBreakdown.test.js \
+            frontend/src/components/ProfitSummaryCard.jsx \
+            frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx \
+            frontend/src/pages/Dashboard.jsx
+          git commit -m "feat(prod-dashboard): apply ad FX and bank fees to profit summary" || exit 0
+          git push origin HEAD:feat/prod-dashboard-payment-fees-bank-commission-v1
