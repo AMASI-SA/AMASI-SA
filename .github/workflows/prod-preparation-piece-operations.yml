@@ -7,10 +7,12 @@ on:
     paths:
       - "backend/preparation_piece_operations.py"
       - "backend/preparation_piece_line_services.py"
+      - "backend/preparation_piece_execution_guard.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
       - "backend/tests/test_preparation_piece_line_services.py"
       - "backend/tests/test_preparation_piece_stage_semantics.py"
+      - "backend/tests/test_preparation_piece_execution_guard.py"
       - "frontend/src/index.js"
       - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
       - "frontend/src/reviewPreparationFileScheduleSync.js"
@@ -60,6 +62,7 @@ jobs:
           python -m py_compile
           backend/preparation_piece_operations.py
           backend/preparation_piece_line_services.py
+          backend/preparation_piece_execution_guard.py
           backend/order_engine/__init__.py
 
       - name: Run focused fulfillment contracts
@@ -69,6 +72,7 @@ jobs:
           tests/test_preparation_piece_operations.py
           tests/test_preparation_piece_line_services.py
           tests/test_preparation_piece_stage_semantics.py
+          tests/test_preparation_piece_execution_guard.py
           tests/test_reviewed_preparation_batches.py
           tests/test_preparation_file_registry.py
           tests/test_fulfillment_v2_contract.py
@@ -77,7 +81,7 @@ jobs:
       - name: Enforce Mezan-only boundary
         run: |
           set -euo pipefail
-          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py; do
+          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py backend/preparation_piece_execution_guard.py; do
             ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
           done
           grep -q 'salla_updated.*False' backend/preparation_piece_operations.py
