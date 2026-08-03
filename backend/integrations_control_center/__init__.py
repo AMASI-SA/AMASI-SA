@@ -31,6 +31,10 @@ from .meta_catalog_native import install_meta_native_catalog
 from .meta_connections import attach_meta_connection_routes
 from .meta_dashboard_summary_routes import attach_meta_dashboard_summary_routes
 from .meta_native_reporting_routes import attach_meta_native_reporting_routes
+from .snapchat_account_delivery_refresh import (
+    install_snapchat_account_delivery_refresh,
+    install_snapchat_effective_delivery_report,
+)
 from .snapchat_account_selection import attach_snapchat_account_selection_routes
 from .snapchat_account_timezone_manager import (
     attach_snapchat_account_timezone_campaign_routes,
@@ -94,11 +98,13 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Campaign identity and
-    # status are wrapped last so names and ACTIVE/PAUSED state refresh before
-    # every five-minute performance pull.
+    # status are refreshed before performance, then account-level delivery is
+    # read last so billing/budget blocks become the effective UI status.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_campaign_catalog_refresh()
+    install_snapchat_account_delivery_refresh()
+    install_snapchat_effective_delivery_report()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
