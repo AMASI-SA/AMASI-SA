@@ -35,6 +35,7 @@ jobs:
           pymongo==4.5.0
           pytest
           pytest-asyncio
+          openpyxl
       - name: Compile dashboard cost modules
         run: >-
           python -m py_compile
