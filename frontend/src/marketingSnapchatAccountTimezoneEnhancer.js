@@ -12,14 +12,17 @@ import {
 const WORKSPACE_SELECTOR = '[data-testid="marketing-platform-workspace"]';
 const SWITCHER_ATTRIBUTE = "data-mezan-snapchat-account-switcher";
 const COVERAGE_ATTRIBUTE = "data-mezan-snapchat-campaign-coverage";
+const COVERAGE_TEXT = "إجمالي الحساب متوفر، لكن تفاصيل الحملات لنفس توقيت الحساب لم تكتمل بعد. ستُستكمل تلقائيًا في دورة المزامنة التالية.";
 const preparedWorkspaces = new WeakSet();
 
 function isSnapchatPage() {
   try {
+    const pathname = String(window.location.pathname || "").replace(/\/+$/, "") || "/";
+    if (pathname !== "/ads-manager") return false;
     const params = new URLSearchParams(window.location.search || "");
-    return String(params.get("provider") || "snapchat").toLowerCase() === "snapchat";
+    return String(params.get("provider") || "").toLowerCase() === "snapchat";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -105,13 +108,40 @@ function accountButton(account, selectedId, workspace) {
   return button;
 }
 
+function accountSwitcherSignature(accounts, selectedId) {
+  return JSON.stringify({
+    selectedId,
+    accounts: accounts.map((account) => ({
+      account_id: account.account_id,
+      account_name: account.account_name,
+      currency: account.currency,
+      timezone: account.timezone,
+      local_today: account.local_today,
+    })),
+  });
+}
+
+function updateWorkspaceAccountMetadata(workspace, snapshot, accounts, selectedId) {
+  workspace.dataset.snapchatSelectedAccount = selectedId;
+  workspace.dataset.snapchatAccountTimezone = String(
+    snapshot?.account_timezone
+      || accounts.find((account) => account.account_id === selectedId)?.timezone
+      || "",
+  );
+}
+
 function ensureAccountSwitcher(workspace, snapshot) {
   const accounts = snapchatAvailableAccounts();
   if (!accounts.length) return;
   const selectedId = String(
     snapshot?.selected_account_id || snapchatSelectedAccountId() || accounts[0].account_id,
   );
+  const signature = accountSwitcherSignature(accounts, selectedId);
   let switcher = workspace.querySelector(`[${SWITCHER_ATTRIBUTE}]`);
+  if (switcher?.dataset.renderSignature === signature) {
+    updateWorkspaceAccountMetadata(workspace, snapshot, accounts, selectedId);
+    return;
+  }
   if (!switcher) {
     switcher = document.createElement("section");
     switcher.setAttribute(SWITCHER_ATTRIBUTE, "true");
@@ -138,12 +168,8 @@ function ensureAccountSwitcher(workspace, snapshot) {
     accountButton(account, selectedId, workspace),
   ));
   switcher.append(titleRow, cards);
-  workspace.dataset.snapchatSelectedAccount = selectedId;
-  workspace.dataset.snapchatAccountTimezone = String(
-    snapshot?.account_timezone
-      || accounts.find((account) => account.account_id === selectedId)?.timezone
-      || "",
-  );
+  switcher.dataset.renderSignature = signature;
+  updateWorkspaceAccountMetadata(workspace, snapshot, accounts, selectedId);
 }
 
 function ensureFormTracking(workspace) {
@@ -180,7 +206,7 @@ function ensureCampaignCoverageMessage(workspace, snapshot) {
     notice.setAttribute(COVERAGE_ATTRIBUTE, "true");
     notice.className = "mezan-snapchat-campaign-coverage";
   }
-  notice.textContent = "إجمالي الحساب متوفر، لكن تفاصيل الحملات لنفس توقيت الحساب لم تكتمل بعد. ستُستكمل تلقائيًا في دورة المزامنة التالية.";
+  if (notice.textContent !== COVERAGE_TEXT) notice.textContent = COVERAGE_TEXT;
   if (table && notice.nextElementSibling !== table) table.parentNode.insertBefore(notice, table);
   else if (!notice.isConnected) workspace.appendChild(notice);
 
