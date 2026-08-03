@@ -85,6 +85,10 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_file_registry import (
         make_preparation_file_registry_router,
     )
+    from preparation_piece_operations import (
+        install_preparation_piece_operations,
+        make_preparation_piece_operations_router,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -108,6 +112,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
 
     install_order_review_forward_stage_guard()
+    install_preparation_piece_operations()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
     install_product_field_cost_support()
@@ -162,6 +167,7 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_product_sorting_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
+        make_preparation_piece_operations_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
     existing_keys = set()
