@@ -42,6 +42,9 @@ from .snapchat_account_timezone_retention import (
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
+from .snapchat_campaign_catalog_refresh import (
+    install_snapchat_campaign_catalog_refresh,
+)
 from .snapchat_campaign_result_source_routes import (
     attach_snapchat_campaign_result_source_routes,
 )
@@ -90,9 +93,12 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_salla_campaign_outcomes()
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
-    # the original Riyadh-day collection and semantics.
+    # the original Riyadh-day collection and semantics. Campaign identity and
+    # status are wrapped last so names and ACTIVE/PAUSED state refresh before
+    # every five-minute performance pull.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
+    install_snapchat_campaign_catalog_refresh()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
