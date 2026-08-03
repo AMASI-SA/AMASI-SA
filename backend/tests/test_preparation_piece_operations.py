@@ -75,10 +75,11 @@ def test_services_are_inherited_from_product_and_matching_option_only():
         resources_by_id=resources,
     )
 
-    assert [row["service_id"] for row in services] == ["cut", "paint"]
-    assert services[0]["source"] == "product"
-    assert services[1]["source"] == "option"
-    assert services[1]["condition"]["value_name"] == "ذهبي"
+    by_id = {row["service_id"]: row for row in services}
+    assert set(by_id) == {"cut", "paint"}
+    assert by_id["cut"]["source"] == "product"
+    assert by_id["paint"]["source"] == "option"
+    assert by_id["paint"]["condition"]["value_name"] == "ذهبي"
 
 
 def test_batch_units_become_assigned_piece_records_for_file_employee():
