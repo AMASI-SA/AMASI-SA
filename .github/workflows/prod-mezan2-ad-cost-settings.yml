@@ -5,6 +5,7 @@ on:
     branches:
       - hotfix/prod-snap-meta-final
     paths:
+      - "backend/ads_manager/__init__.py"
       - "backend/ads_manager/account_cost_settings.py"
       - "backend/ads_manager/routes.py"
       - "backend/tests/test_mezan2_ad_account_cost_settings_v1.py"
@@ -48,6 +49,7 @@ jobs:
       - name: Compile Mezan 2 account cost settings
         run: >-
           python -m py_compile
+          ads_manager/__init__.py
           ads_manager/account_cost_settings.py
           ads_manager/routes.py
           tests/test_mezan2_ad_account_cost_settings_v1.py
@@ -63,14 +65,18 @@ jobs:
         working-directory: .
         run: |
           MODULE=backend/ads_manager/account_cost_settings.py
+          PACKAGE=backend/ads_manager/__init__.py
           ROUTES=backend/ads_manager/routes.py
 
           grep -q 'mezan_integration_accounts_v2' "$MODULE"
           grep -q 'mezan_ad_account_cost_settings_v2' "$MODULE"
-          grep -q 'attach_account_cost_settings_routes' "$ROUTES"
+          grep -q 'attach_account_cost_settings_routes' "$PACKAGE"
+          grep -q '_make_overview_router' "$PACKAGE"
           grep -q '/account-cost-settings' "$MODULE"
           grep -q 'legacy_counterparties_read.*False' "$MODULE"
           grep -q 'legacy_ads_currency_settings_read.*False' "$MODULE"
+          grep -q 'make_ads_manager_router' "$ROUTES"
+          ! grep -q 'attach_account_cost_settings_routes' "$ROUTES"
           ! grep -q 'db\.counterparties' "$MODULE"
           ! grep -q 'db\.ads_currency_settings' "$MODULE"
           ! grep -q 'qoyod' "$MODULE" || grep -q 'qoyod_write_reached.*False' "$MODULE"
