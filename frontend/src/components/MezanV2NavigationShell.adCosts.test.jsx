@@ -35,12 +35,9 @@ test("marketing navigation owns bank commission and exchange rate settings", () 
     })?.id).toBe("marketing");
 });
 
-test("legacy component is only a compatibility export to the Mezan 2 page", () => {
+test("legacy ad cost component is removed and only the Mezan 2 page remains", () => {
     const root = path.resolve(__dirname, "..");
-    const legacyPage = fs.readFileSync(
-        path.join(root, "pages", "AdsCurrencySettings.jsx"),
-        "utf8",
-    );
+    const legacyPath = path.join(root, "pages", "AdsCurrencySettings.jsx");
     const v2Page = fs.readFileSync(
         path.join(root, "pages", "AdsCostSettingsV2.jsx"),
         "utf8",
@@ -50,8 +47,7 @@ test("legacy component is only a compatibility export to the Mezan 2 page", () =
         "utf8",
     );
 
-    expect(legacyPage).toContain('export { default } from "./AdsCostSettingsV2";');
-    expect(legacyPage).not.toContain("/ads-currency-settings");
+    expect(fs.existsSync(legacyPath)).toBe(false);
     expect(v2Page).toContain("mezan2-ad-cost-settings-page");
     expect(v2Service).toContain("/ads-manager/account-cost-settings");
     expect(v2Page).not.toContain('api.get("/counterparties');
