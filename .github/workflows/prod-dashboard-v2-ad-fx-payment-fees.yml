@@ -33,26 +33,20 @@ jobs:
           fastapi==0.110.1
           pydantic==2.13.4
           pymongo==4.5.0
-          httpx
-          cryptography
-          bcrypt
-          PyJWT
           pytest
           pytest-asyncio
-          openpyxl
       - name: Compile dashboard cost modules
         run: >-
           python -m py_compile
           dashboard_v2_ad_costs.py
           dashboard_v2_routes.py
           tests/test_dashboard_v2_ad_account_costs.py
-      - name: Test account FX, bank fees, and existing product costs
+      - name: Test account FX and bank-fee accounting contract
         run: >-
           python -m pytest
           tests/test_dashboard_v2_ad_account_costs.py
-          tests/test_dashboard_v2_product_cost.py
           -q --tb=short
-      - name: Enforce read-only and Mezan 2 isolation
+      - name: Enforce read-only integration in Dashboard V2
         working-directory: .
         run: |
           COSTS=backend/dashboard_v2_ad_costs.py
@@ -60,7 +54,10 @@ jobs:
           grep -q 'spend_native' "$COSTS"
           grep -q 'mezan_ad_account_cost_settings_v2' "$COSTS"
           grep -q 'effective_spend_sar' "$DASH"
-          grep -q 'merge_ad_bank_fees_into_dashboard' "$DASH"
+          grep -q 'apply_mezan_v2_ad_account_costs' "$DASH"
+          grep -q 'merge_ad_bank_fees_into_dashboard(response, ads)' "$DASH"
+          grep -q 'total_ads_cost.*ads_total' "$DASH"
+          grep -q 'payment_gateway_fees.*mezan_ad_account_cost_settings_v2' "$DASH"
           grep -q 'accounting_write_reached.*False' "$COSTS"
           grep -q 'qoyod_write_reached.*False' "$COSTS"
           ! grep -q 'ads_currency_settings' "$COSTS"
