@@ -33,6 +33,10 @@ jobs:
           fastapi==0.110.1
           pydantic==2.13.4
           pymongo==4.5.0
+          httpx
+          cryptography
+          bcrypt
+          PyJWT
           pytest
           pytest-asyncio
           openpyxl
