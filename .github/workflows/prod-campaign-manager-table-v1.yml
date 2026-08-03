@@ -1,0 +1,62 @@
+name: Production Campaign Manager Table V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - ".github/workflows/prod-campaign-manager-table-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test campaign manager helpers
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/CampaignManagerTable.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce read-only campaign manager contract
+        working-directory: .
+        run: |
+          TABLE=frontend/src/components/marketing/CampaignManagerTable.jsx
+          PAGE=frontend/src/pages/MarketingPlatformWorkspace.jsx
+
+          grep -q 'data-testid="campaign-manager-table"' "$TABLE"
+          grep -q 'campaign-manager-download' "$TABLE"
+          grep -q 'CAMPAIGN_MANAGER_DEFAULT_COLUMNS' "$TABLE"
+          grep -q 'CampaignManagerTable' "$PAGE"
+          grep -q 'readOnly={data?.policy?.mutations_allowed !== true}' "$PAGE"
+          grep -q 'disabled={readOnly || selected.size === 0}' "$TABLE"
+          ! grep -q 'api\.' "$TABLE"
+          ! grep -q 'fetch(' "$TABLE"
+          ! grep -q 'axios' "$TABLE"
