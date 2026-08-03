@@ -15,9 +15,6 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ads_manager.account_cost_settings import DEFAULT_USD_TO_SAR, list_account_cost_settings
-from dashboard_v2_routes import _filtered_orders
-
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_campaign_report_routes import read_snapchat_campaign_report
 from .snapchat_native_data_common import (
@@ -32,6 +29,7 @@ RESULT_SOURCE_SALLA = "salla"
 RESULT_SOURCE_PLATFORM = "platform"
 SUPPORTED_RESULT_SOURCES = (RESULT_SOURCE_SALLA, RESULT_SOURCE_PLATFORM)
 MAX_ROWS = 100_000
+DEFAULT_USD_TO_SAR = 3.7544
 
 
 def _number(value: Any) -> float | None:
@@ -224,6 +222,8 @@ async def _salla_outcomes(
     date_to: str,
     identities: list[dict[str, Any]],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
+    from dashboard_v2_routes import _filtered_orders
+
     orders = await _filtered_orders(
         db,
         user_id,
@@ -389,6 +389,8 @@ async def build_snapchat_result_source_report(
         date_to=date_to,
         identities=identities,
     )
+    from ads_manager.account_cost_settings import list_account_cost_settings
+
     settings_payload = await list_account_cost_settings(db, user_id)
     setting_by_account = {
         _text(item.get("external_account_id")): item
