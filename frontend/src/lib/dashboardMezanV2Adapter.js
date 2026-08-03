@@ -1,4 +1,5 @@
 const DASHBOARD_PATH = "/dashboard";
+const DASHBOARD_V2_PATH = "/dashboard-v2";
 const SNAP_SUMMARY_PATH = "/dashboard/snapchat-summary";
 const SNAP_ACCOUNTS_PATH = "/snapchat/accounts-summary";
 const SNAP_DAILY_PATH = "/snapchat/daily-spend";
@@ -75,6 +76,12 @@ export function rewriteDashboardMezanV2Request(config = {}) {
             _mezanDashboardAuthoritativeMerge: true,
         };
     }
+    if (method === "get" && path === DASHBOARD_V2_PATH) {
+        return {
+            ...config,
+            _mezanDashboardV2: true,
+        };
+    }
     return config;
 }
 
@@ -86,14 +93,58 @@ export function isDashboardAuthoritativeResponse(response = {}) {
     return response?.config?._mezanDashboardAuthoritativeMerge === true;
 }
 
-export function dashboardAuthoritativeParams(config = {}) {
+export function isDashboardV2Response(response = {}) {
+    return response?.config?._mezanDashboardV2 === true;
+}
+
+function selectedParams(config = {}, keys = []) {
     const source = queryParams(config);
     const params = {};
-    for (const key of ["from_date", "to_date"]) {
+    for (const key of keys) {
         const value = source.get(key);
         if (value) params[key] = value;
     }
     return params;
+}
+
+export function dashboardAuthoritativeParams(config = {}) {
+    return selectedParams(config, ["from_date", "to_date"]);
+}
+
+export function dashboardExecutiveParams(config = {}) {
+    return selectedParams(config, [
+        "from_date",
+        "to_date",
+        "payment_methods",
+        "shipping_companies",
+    ]);
+}
+
+export function hasDashboardExecutiveBreakdown(payload = {}) {
+    return Boolean(
+        payload?.ads_v2?.executive_breakdown?.providers
+        && payload?.ads_v2?.executive_breakdown?.total
+    );
+}
+
+export function mergeDashboardExecutiveBreakdown(
+    dashboardPayload = {},
+    executive = {},
+) {
+    if (!safeEnvelope(executive) || !executive?.providers || !executive?.total) {
+        return dashboardPayload;
+    }
+    const adsV2 = dashboardPayload?.ads_v2
+        && typeof dashboardPayload.ads_v2 === "object"
+        ? dashboardPayload.ads_v2
+        : {};
+    return {
+        ...dashboardPayload,
+        ads_v2: {
+            ...adsV2,
+            executive_breakdown: executive,
+        },
+    };
 }
 
 export function toLegacySnapDailySpend(summary = {}, date = "") {
