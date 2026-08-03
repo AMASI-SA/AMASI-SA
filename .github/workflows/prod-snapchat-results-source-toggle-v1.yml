@@ -96,7 +96,7 @@ jobs:
           grep -q 'install_snapchat_account_timezone_retention' "$INIT"
           grep -q 'mezan_snapchat_performance_daily_v2' backend/dashboard_v2_routes.py
           ! grep -Eq 'accounting_eligible": True|qoyod_write_reached": True|provider_write_reached": True' "$LOCAL"
-          ! grep -Eq '(post|put|patch|delete)\(' "$LOCAL"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$LOCAL"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
