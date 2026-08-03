@@ -85,7 +85,11 @@ function scheduleEnhancement() {
   });
 }
 
-if (typeof window !== "undefined" && typeof document !== "undefined") {
+const canAutoEnhance = typeof window !== "undefined"
+  && typeof document !== "undefined"
+  && process.env.NODE_ENV !== "test";
+
+if (canAutoEnhance) {
   const observer = new MutationObserver(scheduleEnhancement);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", scheduleEnhancement);
