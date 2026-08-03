@@ -45,7 +45,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/integrations-v2",
         "/customer-intelligence",
         "/ads-manager",
-        "/settings/ads-currencies",
+        "/ads-manager/cost-settings",
     ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(true));
 
     [
@@ -133,7 +133,7 @@ test("marketing report and cost routes are separate from app integration routes"
         "/ads-manager?provider=tiktok",
         "/ads-manager?provider=meta",
         "/ads-manager?provider=google",
-        "/settings/ads-currencies",
+        "/ads-manager/cost-settings",
     ]);
     expect(section.items.some((item) => item.to.startsWith("/integrations-v2"))).toBe(false);
 
