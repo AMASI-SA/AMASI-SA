@@ -1,9 +1,10 @@
-"""Line-granular service plans for preparation pieces.
+"""Line-granular service plans and safe piece reconciliation.
 
 The same Salla product may appear in one preparation file with different option
 values. Product-only service-plan keys would let the last line overwrite the
 others. This installer keeps inherited option services scoped to the exact
-order item while reusing the durable piece builder.
+order item while reusing the durable piece builder. It also materialises older
+ready files lazily when the employee or manager opens the new work view.
 """
 from __future__ import annotations
 
@@ -17,6 +18,8 @@ from product_option_cost_routes import BINDINGS, RESOURCES
 
 _INSTALLED = False
 _ORIGINAL_BUILD_PIECES = None
+_ORIGINAL_MY_WORK_VIEW = None
+_ORIGINAL_MANAGER_SUMMARY = None
 
 
 def preparation_line_service_key(line: dict[str, Any]) -> str:
@@ -147,15 +150,102 @@ def _build_piece_documents_by_line(
     return documents
 
 
+async def _materialize_missing_ready_files(
+    db: Any,
+    *,
+    user_id: str,
+    employee_id: str | None = None,
+    limit: int = 200,
+) -> list[str]:
+    """Backfill historical registered files without changing external systems."""
+    import preparation_piece_operations as base
+
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "status": "ready",
+        "$or": [
+            {"piece_registry_materialized_at": {"$exists": False}},
+            {"piece_registry_materialized_at": None},
+        ],
+    }
+    if employee_id:
+        query["responsible_employee_id"] = employee_id
+    rows = await db[base.REGISTRY].find(
+        query,
+        {"_id": 0},
+    ).sort("registered_at", -1).limit(limit).to_list(limit)
+    failures: list[str] = []
+    for row in rows:
+        try:
+            await base.materialize_preparation_pieces(
+                db,
+                user_id=user_id,
+                registry=row,
+            )
+        except Exception:
+            failures.append(_text(row.get("file_number")) or _text(row.get("batch_id")))
+    return [value for value in failures if value]
+
+
+async def _my_work_with_backfill(
+    db: Any,
+    *,
+    user_id: str,
+    employee_id: str,
+    limit: int,
+) -> dict[str, Any]:
+    assert _ORIGINAL_MY_WORK_VIEW is not None
+    failures = await _materialize_missing_ready_files(
+        db,
+        user_id=user_id,
+        employee_id=employee_id,
+        limit=max(limit, 100),
+    )
+    result = await _ORIGINAL_MY_WORK_VIEW(
+        db,
+        user_id=user_id,
+        employee_id=employee_id,
+        limit=limit,
+    )
+    result["materialization_warnings"] = failures
+    return result
+
+
+async def _manager_summary_with_backfill(
+    db: Any,
+    *,
+    user_id: str,
+    date: str,
+) -> dict[str, Any]:
+    assert _ORIGINAL_MANAGER_SUMMARY is not None
+    failures = await _materialize_missing_ready_files(
+        db,
+        user_id=user_id,
+        limit=200,
+    )
+    result = await _ORIGINAL_MANAGER_SUMMARY(
+        db,
+        user_id=user_id,
+        date=date,
+    )
+    result["materialization_warnings"] = failures
+    return result
+
+
 def install_preparation_piece_line_services() -> None:
-    global _INSTALLED, _ORIGINAL_BUILD_PIECES
+    global _INSTALLED
+    global _ORIGINAL_BUILD_PIECES, _ORIGINAL_MY_WORK_VIEW, _ORIGINAL_MANAGER_SUMMARY
     if _INSTALLED:
         return
     import preparation_piece_operations as base
 
     _ORIGINAL_BUILD_PIECES = base.build_piece_documents
+    _ORIGINAL_MY_WORK_VIEW = base._my_work_view
+    _ORIGINAL_MANAGER_SUMMARY = base._manager_summary
     base._service_context_for_batch = _line_service_context_for_batch
     base.build_piece_documents = _build_piece_documents_by_line
+    base._my_work_view = _my_work_with_backfill
+    base._manager_summary = _manager_summary_with_backfill
     _INSTALLED = True
 
 
