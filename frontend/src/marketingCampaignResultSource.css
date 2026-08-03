@@ -1,0 +1,115 @@
+[data-mezan-campaign-result-source="true"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 20px 14px;
+  padding: 12px 14px;
+  border: 1px solid rgb(51 65 85 / 0.8);
+  border-radius: 14px;
+  background: rgb(15 23 42 / 0.72);
+  color: #fff;
+}
+
+.mezan-campaign-result-source__label {
+  font-size: 12px;
+  font-weight: 900;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.mezan-campaign-result-source__controls {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid rgb(71 85 105 / 0.9);
+  border-radius: 11px;
+  background: rgb(2 6 23 / 0.72);
+}
+
+.mezan-campaign-result-source__controls button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.mezan-campaign-result-source__controls button:hover {
+  color: #fff;
+}
+
+.mezan-campaign-result-source__controls button[data-active="true"] {
+  background: #d1fae5;
+  color: #052e16;
+  box-shadow: 0 1px 7px rgb(0 0 0 / 0.2);
+}
+
+.mezan-campaign-result-source__description {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-align: left;
+  white-space: nowrap;
+}
+
+[data-mezan-campaign-result-source="true"][data-coverage-status="complete"]
+  .mezan-campaign-result-source__description {
+  color: #a7f3d0;
+}
+
+[data-mezan-campaign-result-source="true"][data-coverage-status="warning"]
+  .mezan-campaign-result-source__description {
+  color: #fde68a;
+}
+
+[data-marketing-platform="snapchat"][data-campaign-result-source="salla"]
+  [data-testid="campaign-manager-table"]::before {
+  content: "مصدر النتائج: سلة · الصرف والتفاعل من Snapchat";
+  display: block;
+  padding: 8px 14px;
+  border-bottom: 1px solid #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+[data-marketing-platform="snapchat"][data-campaign-result-source="platform"]
+  [data-testid="campaign-manager-table"]::before {
+  content: "مصدر النتائج: الحساب الإعلاني · جميع النتائج من Snapchat";
+  display: block;
+  padding: 8px 14px;
+  border-bottom: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 800px) {
+  [data-mezan-campaign-result-source="true"] {
+    grid-template-columns: 1fr;
+    margin-inline: 12px;
+  }
+
+  .mezan-campaign-result-source__controls {
+    width: 100%;
+  }
+
+  .mezan-campaign-result-source__controls button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+
+  .mezan-campaign-result-source__description {
+    text-align: right;
+    white-space: normal;
+  }
+}

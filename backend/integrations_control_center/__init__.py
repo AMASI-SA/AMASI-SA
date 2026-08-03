@@ -35,9 +35,15 @@ from .snapchat_account_selection import attach_snapchat_account_selection_routes
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
-from .snapchat_campaign_report_routes import (
-    attach_snapchat_campaign_report_routes,
+from .snapchat_campaign_result_source_routes import (
+    attach_snapchat_campaign_result_source_routes,
 )
+from .snapchat_salla_campaign_outcomes import (
+    install_snapchat_salla_campaign_outcomes,
+)
+
+# Backward-compatible symbol for the original read-only route contract.
+attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
 from .snapchat_dashboard_summary_routes import attach_snapchat_dashboard_summary_routes
@@ -71,6 +77,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_meta_native_catalog()
     install_snapchat_native_catalog()
     install_snapchat_ads_manager_attribution()
+    install_snapchat_salla_campaign_outcomes()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
@@ -92,7 +99,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
     attach_snapchat_account_selection_routes(router, db, current_user, _require_owner)
-    attach_snapchat_campaign_report_routes(router, db, current_user, _require_owner)
+    attach_snapchat_campaign_report_routes(
+        router, db, current_user, _require_owner
+    )
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)
 
     # Keep package imports lightweight for focused Dashboard tests.  PyMongo
