@@ -9,6 +9,7 @@ jest.mock("../../services/preparationWorkService", () => ({
 import PreparationWorkDashboard, {
     fileEstimatedDueAt,
     filePieces,
+    filePiecesAreReady,
     riyadhDateInputValue,
 } from "./PreparationWorkDashboard";
 
@@ -55,6 +56,20 @@ test("automatic file deadline uses the latest piece estimate", () => {
 test("Riyadh date input uses an ISO-like local business date", () => {
     const value = riyadhDateInputValue(new Date("2026-08-03T21:30:00Z"));
     expect(value).toBe("2026-08-04");
+});
+
+
+test("file cannot start until every expected piece is materialized", () => {
+    expect(filePiecesAreReady({
+        expected_piece_count: 1,
+        piece_count: 0,
+        piece_registry_status: "recovery_required",
+    })).toBe(false);
+    expect(filePiecesAreReady({
+        expected_piece_count: 1,
+        piece_count: 1,
+        piece_registry_status: "ready",
+    })).toBe(true);
 });
 
 

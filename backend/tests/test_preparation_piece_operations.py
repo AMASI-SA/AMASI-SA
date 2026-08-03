@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+from fastapi import HTTPException
+
 from preparation_piece_operations import (
     DEFAULT_ESTIMATED_DURATION_MINUTES,
     PIECE_STATUS_ASSIGNED,
@@ -10,6 +13,7 @@ from preparation_piece_operations import (
     build_piece_documents,
     inherit_required_services,
     make_preparation_piece_operations_router,
+    validate_materialized_piece_count,
 )
 
 
@@ -132,6 +136,26 @@ def test_batch_units_become_assigned_piece_records_for_file_employee():
     assert all(row["responsible_employee_id"] == "employee-1" for row in documents)
     assert all(row["remaining_service_count"] == 1 for row in documents)
     assert documents[0]["estimated_due_at"] == assigned_at + timedelta(minutes=90)
+
+
+def test_ready_file_cannot_materialize_with_zero_or_partial_piece_records():
+    with pytest.raises(HTTPException) as missing:
+        validate_materialized_piece_count(
+            batch={"allocated_quantity": 1},
+            registry={"allocated_quantity": 1},
+            pieces=[],
+        )
+    assert missing.value.detail == {
+        "code": "preparation_piece_count_mismatch",
+        "expected_piece_count": 1,
+        "actual_piece_count": 0,
+    }
+
+    assert validate_materialized_piece_count(
+        batch={"allocated_quantity": 2},
+        registry={"allocated_quantity": 2},
+        pieces=[{"piece_id": "a"}, {"piece_id": "b"}],
+    ) == 2
 
 
 def test_previous_duration_uses_employee_product_median_then_fallback():
