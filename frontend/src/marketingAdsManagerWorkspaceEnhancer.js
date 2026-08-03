@@ -177,6 +177,7 @@ function headerIndex(table, matcher) {
 }
 
 function moneyText(value, currency) {
+  if (value === null || value === undefined || value === "") return "—";
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return "—";
   const amount = parsed.toLocaleString("en-US", {
@@ -188,7 +189,9 @@ function moneyText(value, currency) {
 
 function writeMetricCell(cell, value, currency, secondary = "") {
   if (!cell) return;
-  const parsed = Number(value);
+  const parsed = value === null || value === undefined || value === ""
+    ? Number.NaN
+    : Number(value);
   const normalizedValue = Number.isFinite(parsed) ? parsed : null;
   const signature = JSON.stringify([normalizedValue, currency, secondary]);
   if (cell.dataset.nativeCurrencySignature === signature) return;
