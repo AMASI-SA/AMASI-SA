@@ -9,6 +9,8 @@ function errorMessage(error, fallback) {
         assigned_file_start_permission_required: "بدء الملف متاح للموظف المسند أو مدير التشغيل فقط.",
         preparation_file_not_found: "ملف التجهيز غير موجود أو لم يكتمل تسجيله.",
         preparation_file_start_conflict: "بدأ موظف آخر هذا الملف أو تغيرت حالته. حدّث الصفحة.",
+        preparation_file_pieces_missing: "لم تكتمل سجلات قطع الملف. حدّث الصفحة ثم أعد المحاولة.",
+        preparation_file_start_requires_full_assignment: "لا يمكن بدء التنفيذ قبل إسناد جميع القطع المتبقية لطلبات هذا الملف.",
         required_due_at_required: "حدد تاريخًا ووقتًا للموعد الإجباري.",
     };
     return messages[detail?.code] || error?.message || fallback;
