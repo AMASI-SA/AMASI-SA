@@ -1,0 +1,48 @@
+name: Temporary Patch Dashboard V2 Ad Fees
+
+on:
+  push:
+    branches:
+      - feat/prod-dashboard-v2-ad-fx-payment-fees-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-dashboard-v2-ad-fx-payment-fees-v1
+          fetch-depth: 0
+
+      - name: Apply dashboard patch
+        run: python scripts/tmp_patch_dashboard_v2_ad_fees.py
+
+      - name: Validate patched Python
+        run: |
+          python -m py_compile \
+            backend/dashboard_v2_ad_costs.py \
+            backend/dashboard_v2_routes.py \
+            backend/tests/test_dashboard_v2_ad_account_costs.py
+          grep -q 'effective_spend_sar' backend/dashboard_v2_routes.py
+          grep -q 'paymentBreakdown={data?.payment_breakdown || \[\]}' frontend/src/pages/Dashboard.jsx
+          grep -q 'profit-line-payment-fees' frontend/src/components/ProfitSummaryCard.jsx
+
+      - name: Commit patched files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/dashboard_v2_routes.py \
+            backend/tests/test_dashboard_v2_ad_account_costs.py \
+            frontend/src/components/ProfitSummaryCard.jsx \
+            frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx \
+            frontend/src/pages/Dashboard.jsx
+          if git diff --cached --quiet; then
+            echo "PATCH_ALREADY_APPLIED"
+            exit 0
+          fi
+          git commit -m "feat(dashboard-v2): include account FX and bank fees in profit summary"
+          git push origin HEAD:feat/prod-dashboard-v2-ad-fx-payment-fees-v1
