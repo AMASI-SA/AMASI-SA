@@ -36,8 +36,42 @@ jobs:
                   body.append(line[10:] if line.startswith("          ") else line)
           if not body:
               raise RuntimeError("patch body not found")
+
+          patch = "\n".join(body) + "\n"
+          patch = patch.replace(
+              'ads_anchor = \'\'\'        ads = await build_mezan_v2_ads(\n'
+              '              db,\n'
+              '              user_id,\n'
+              '              from_date=from_date,\n'
+              '              to_date=to_date,\n'
+              '          )\n'
+              '          totals = response["totals"]\n'
+              '\'\'\'',
+              'ads_anchor = \'\'\'        ads = await build_mezan_v2_ads(\n'
+              '            db,\n'
+              '            user_id,\n'
+              '            from_date=from_date,\n'
+              '            to_date=to_date,\n'
+              '        )\n'
+              '        totals = response["totals"]\n'
+              '\'\'\'',
+          )
+          patch = patch.replace(
+              'ads_replacement = \'\'\'        ads = await build_mezan_v2_ads(\n'
+              '              db,\n'
+              '              user_id,\n'
+              '              from_date=from_date,\n'
+              '              to_date=to_date,\n'
+              '          )\n',
+              'ads_replacement = \'\'\'        ads = await build_mezan_v2_ads(\n'
+              '            db,\n'
+              '            user_id,\n'
+              '            from_date=from_date,\n'
+              '            to_date=to_date,\n'
+              '        )\n',
+          )
           Path("/tmp/ads_executive_patch.py").write_text(
-              "\n".join(body) + "\n",
+              patch,
               encoding="utf-8",
           )
           PY
