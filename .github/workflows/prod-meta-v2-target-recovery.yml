@@ -60,4 +60,4 @@ jobs:
           grep -q 'install_ads_auto_sync_target_recovery()' "$INIT"
           grep -q 'attach_ads_auto_sync_scheduler' "$INIT"
           ! grep -q 'access_token\|ciphertext\|decrypt_meta_token' "$RECOVERY"
-          ! grep -q 'accounting\|qoyod\|campaign.*update' "$RECOVERY"
+          ! grep -q 'update_one\|insert_one\|delete_one\|replace_one' "$RECOVERY"
