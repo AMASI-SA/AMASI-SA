@@ -70,6 +70,14 @@ describe("Snapchat account-timezone campaign interface", () => {
     await api.get("/integrations-v2/snapchat_ads/campaign-report");
   }
 
+  test("runs only on the explicit Snapchat Ads Manager route", async () => {
+    await storeSnapshot();
+    window.history.pushState({}, "", "/products-v2?product=mpv2_1038691572");
+
+    expect(enhanceSnapchatAccountTimezone(document)).toBe(false);
+    expect(document.querySelector("[data-mezan-snapchat-account-switcher]")).toBeNull();
+  });
+
   test("shows one separate card per account and the selected timezone policy", async () => {
     await storeSnapshot();
 
@@ -82,6 +90,20 @@ describe("Snapchat account-timezone campaign interface", () => {
     expect(switcher.textContent).toContain("Asia/Riyadh");
     expect(switcher.textContent).toContain("America/Los_Angeles");
     expect(switcher.textContent).toContain("لوحة التحكم والمحاسبة تبقيان بتوقيت الرياض");
+  });
+
+  test("is idempotent and does not replace account cards on every DOM mutation", async () => {
+    await storeSnapshot();
+    enhanceSnapchatAccountTimezone(document);
+    const firstSwitcher = document.querySelector("[data-mezan-snapchat-account-switcher]");
+    const firstAccountButton = firstSwitcher.querySelector('button[data-account-id="riyadh-account"]');
+
+    enhanceSnapchatAccountTimezone(document);
+
+    const secondSwitcher = document.querySelector("[data-mezan-snapchat-account-switcher]");
+    const secondAccountButton = secondSwitcher.querySelector('button[data-account-id="riyadh-account"]');
+    expect(secondSwitcher).toBe(firstSwitcher);
+    expect(secondAccountButton).toBe(firstAccountButton);
   });
 
   test("switching account sets both dates to that account local today", async () => {
