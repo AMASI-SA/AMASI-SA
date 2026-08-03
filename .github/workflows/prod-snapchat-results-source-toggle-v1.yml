@@ -30,8 +30,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install backend dependencies
-        run: python -m pip install -q -r requirements.txt
+      - name: Install focused backend dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
       - name: Compile result source route
         run: >-
           python -m py_compile
