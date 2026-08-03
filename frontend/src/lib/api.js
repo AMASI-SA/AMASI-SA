@@ -1,9 +1,13 @@
 import axios from "axios";
 import {
     dashboardAuthoritativeParams,
+    dashboardExecutiveParams,
+    hasDashboardExecutiveBreakdown,
     isDashboardAuthoritativeResponse,
+    isDashboardV2Response,
     isSnapDailyCompatibilityResponse,
     mergeDashboardAuthoritativeSummary,
+    mergeDashboardExecutiveBreakdown,
     rewriteDashboardMezanV2Request,
     toLegacySnapDailySpend,
 } from "./dashboardMezanV2Adapter";
@@ -61,6 +65,19 @@ async function loadSnapDailyCompatibility(config = {}) {
         },
     );
     return toLegacySnapDailySpend(summaryResponse.data, date);
+}
+
+function emptyDashboardExecutiveBreakdown() {
+    return {
+        providers: {},
+        total: {},
+        coverage: { transport_fallback_unavailable: true },
+        source_only: true,
+        provider_write_reached: false,
+        campaign_write_reached: false,
+        accounting_write_reached: false,
+        qoyod_write_reached: false,
+    };
 }
 
 api.interceptors.request.use((config) => {
@@ -148,6 +165,42 @@ api.interceptors.response.use(
                 status: 200,
                 statusText: "Snapchat asynchronous sync completed",
             };
+        }
+
+        if (
+            isDashboardV2Response(response)
+            && !hasDashboardExecutiveBreakdown(response.data)
+        ) {
+            try {
+                const executiveResponse = await axios.get(
+                    `${API_BASE}/integrations-v2/dashboard/ads-executive-breakdown`,
+                    {
+                        params: dashboardExecutiveParams(response.config),
+                        withCredentials: true,
+                        headers: directRequestHeaders(),
+                    },
+                );
+                return {
+                    ...response,
+                    data: mergeDashboardExecutiveBreakdown(
+                        response.data,
+                        executiveResponse.data,
+                    ),
+                    statusText: "Dashboard V2 merged with inline ads executive breakdown",
+                };
+            } catch {
+                // Mezan 2 must never reopen the legacy advertising-cost modal.
+                // Preserve an inline table shell with dashes until the focused
+                // read-only fallback endpoint becomes available again.
+                return {
+                    ...response,
+                    data: mergeDashboardExecutiveBreakdown(
+                        response.data,
+                        emptyDashboardExecutiveBreakdown(),
+                    ),
+                    statusText: "Dashboard V2 inline ads breakdown unavailable",
+                };
+            }
         }
 
         if (isDashboardAuthoritativeResponse(response)) {
