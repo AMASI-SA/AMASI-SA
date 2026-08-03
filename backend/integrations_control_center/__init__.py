@@ -32,6 +32,13 @@ from .meta_connections import attach_meta_connection_routes
 from .meta_dashboard_summary_routes import attach_meta_dashboard_summary_routes
 from .meta_native_reporting_routes import attach_meta_native_reporting_routes
 from .snapchat_account_selection import attach_snapchat_account_selection_routes
+from .snapchat_account_timezone_manager import (
+    attach_snapchat_account_timezone_campaign_routes,
+    install_snapchat_account_timezone_scheduler,
+)
+from .snapchat_account_timezone_retention import (
+    install_snapchat_account_timezone_retention,
+)
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
@@ -42,8 +49,11 @@ from .snapchat_salla_campaign_outcomes import (
     install_snapchat_salla_campaign_outcomes,
 )
 
-# Backward-compatible symbol for the original read-only route contract.
-attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes
+# The Ads Manager route is account-scoped and follows the selected account's
+# native timezone. Dashboard/accounting continue reading the Riyadh-day facts.
+attach_snapchat_campaign_report_routes = (
+    attach_snapchat_account_timezone_campaign_routes
+)
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
 from .snapchat_dashboard_summary_routes import attach_snapchat_dashboard_summary_routes
@@ -78,6 +88,11 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_native_catalog()
     install_snapchat_ads_manager_attribution()
     install_snapchat_salla_campaign_outcomes()
+    # Install before importing the scheduler below. The scheduler then receives
+    # the account-local wrapper while all Dashboard/accounting readers retain
+    # the original Riyadh-day collection and semantics.
+    install_snapchat_account_timezone_retention()
+    install_snapchat_account_timezone_scheduler()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)

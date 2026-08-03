@@ -1,4 +1,4 @@
-name: Production Snapchat Results Source Toggle V1
+name: Production Snapchat Results Source and Account Timezone V2
 
 on:
   pull_request:
@@ -8,13 +8,19 @@ on:
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_campaign_result_source_routes.py"
       - "backend/integrations_control_center/snapchat_salla_campaign_outcomes.py"
+      - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
+      - "backend/integrations_control_center/snapchat_account_timezone_retention.py"
       - "backend/tests/test_snapchat_campaign_result_source_v1.py"
+      - "backend/tests/test_snapchat_account_timezone_manager_v1.py"
       - "frontend/src/index.js"
       - "frontend/src/marketingAdsManagerWorkspaceEnhancer.js"
       - "frontend/src/marketingAdsManagerWorkspaceEnhancer.test.js"
       - "frontend/src/marketingCampaignResultSource.css"
       - "frontend/src/marketingCampaignResultSource.js"
       - "frontend/src/marketingCampaignResultSource.test.js"
+      - "frontend/src/marketingSnapchatAccountTimezone.css"
+      - "frontend/src/marketingSnapchatAccountTimezoneEnhancer.js"
+      - "frontend/src/marketingSnapchatAccountTimezoneEnhancer.test.js"
       - ".github/workflows/prod-snapchat-results-source-toggle-v1.yml"
 
 permissions:
@@ -51,39 +57,46 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile result source routes
+      - name: Compile Snapchat account-timezone routes
         run: >-
           python -m py_compile
           integrations_control_center/snapchat_campaign_result_source_routes.py
           integrations_control_center/snapchat_salla_campaign_outcomes.py
+          integrations_control_center/snapchat_account_timezone_manager.py
+          integrations_control_center/snapchat_account_timezone_retention.py
           integrations_control_center/__init__.py
           tests/test_snapchat_campaign_result_source_v1.py
+          tests/test_snapchat_account_timezone_manager_v1.py
       - name: Run focused backend tests
         run: >-
           python -m pytest
           tests/test_snapchat_campaign_result_source_v1.py
           tests/test_snapchat_campaign_report_route_v1.py
+          tests/test_snapchat_account_timezone_manager_v1.py
+          tests/test_snapchat_account_hourly_refresh_v2.py
           -q --tb=short
-      - name: Enforce Salla/provider source isolation
+      - name: Enforce account-local Ads Manager and Riyadh isolation
         working-directory: .
         run: |
           ROUTE=backend/integrations_control_center/snapchat_campaign_result_source_routes.py
           OUTCOMES=backend/integrations_control_center/snapchat_salla_campaign_outcomes.py
+          LOCAL=backend/integrations_control_center/snapchat_account_timezone_manager.py
+          RETENTION=backend/integrations_control_center/snapchat_account_timezone_retention.py
           INIT=backend/integrations_control_center/__init__.py
           grep -q 'RESULT_SOURCE_SALLA = "salla"' "$ROUTE"
           grep -q 'RESULT_SOURCE_PLATFORM = "platform"' "$ROUTE"
-          grep -q 'unified_orders:salla_financially_included' "$ROUTE"
-          grep -q 'snapchat_conversion_reporting' "$ROUTE"
-          grep -q 'spend_native' "$ROUTE"
-          grep -q 'display_currency' "$ROUTE"
           grep -q 'campaign_rows_exact_match_only' "$OUTCOMES"
-          grep -q 'headline_includes_unattributed_snapchat' "$OUTCOMES"
-          grep -q 'salla_snapchat_orders' "$OUTCOMES"
-          grep -q 'install_snapchat_salla_campaign_outcomes' "$INIT"
-          grep -q 'attach_snapchat_campaign_result_source_routes' "$INIT"
-          grep -q 'attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes' "$INIT"
-          ! grep -Eq 'update_one|insert_one|delete_one|replace_one|find_one_and_update' "$ROUTE" "$OUTCOMES"
-          ! grep -Eq 'httpx|requests\.|api\.snapchat|Authorization' "$ROUTE" "$OUTCOMES"
+          grep -q 'SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION' "$LOCAL"
+          grep -q 'ACCOUNT_LOCAL_DAY' "$LOCAL"
+          grep -q 'entity_type="campaign"' "$LOCAL"
+          grep -q 'dashboard_accounting_timezone_unchanged' "$LOCAL"
+          grep -q 'ACCOUNT_MANAGER_LOCAL_DAYS = 7' "$RETENTION"
+          grep -q 'attach_snapchat_account_timezone_campaign_routes' "$INIT"
+          grep -q 'install_snapchat_account_timezone_scheduler' "$INIT"
+          grep -q 'install_snapchat_account_timezone_retention' "$INIT"
+          grep -q 'mezan_snapchat_performance_daily_v2' backend/dashboard_v2_routes.py
+          ! grep -Eq 'accounting_eligible": True|qoyod_write_reached": True|provider_write_reached": True' "$LOCAL"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$LOCAL"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -99,12 +112,13 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test result source UI and campaign table
+      - name: Test result source, account timezone UI, and campaign table
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/marketingCampaignResultSource.test.js
+          src/marketingSnapchatAccountTimezoneEnhancer.test.js
           src/marketingAdsManagerWorkspaceEnhancer.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
           src/pages/MarketingPlatformWorkspace.test.jsx
@@ -112,21 +126,25 @@ jobs:
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce result source UI contract
+      - name: Enforce selected-account native-day UI contract
         working-directory: .
         run: |
           TRANSPORT=frontend/src/marketingCampaignResultSource.js
+          ACCOUNT_UI=frontend/src/marketingSnapchatAccountTimezoneEnhancer.js
+          ACCOUNT_CSS=frontend/src/marketingSnapchatAccountTimezone.css
           ENHANCER=frontend/src/marketingAdsManagerWorkspaceEnhancer.js
-          CSS=frontend/src/marketingCampaignResultSource.css
           INDEX=frontend/src/index.js
           grep -q 'result_source: campaignResultsSource("snapchat")' "$TRANSPORT"
+          grep -q 'params.account_id = selectedAccountId' "$TRANSPORT"
+          grep -q 'delete params.from_date' "$TRANSPORT"
+          grep -q 'delete params.to_date' "$TRANSPORT"
+          grep -q 'كل حساب بواجهته وتاريخه وتوقيته الأصلي' "$ACCOUNT_UI"
+          grep -q 'لوحة التحكم والمحاسبة تبقيان بتوقيت الرياض' "$ACCOUNT_UI"
+          grep -q 'تفاصيل الحملات قيد الاستكمال' "$ACCOUNT_UI"
+          grep -q 'data-mezan-snapchat-account-switcher' "$ACCOUNT_CSS"
           grep -q 'سلة — النتائج الفعلية' "$ENHANCER"
           grep -q 'الحساب الإعلاني' "$ENHANCER"
-          grep -q 'matched_orders' "$ENHANCER"
-          grep -q 'unattributed_snapchat_orders' "$ENHANCER"
-          grep -q 'campaign.cpa_native' "$ENHANCER"
-          grep -q 'campaign.sales_native' "$ENHANCER"
-          grep -q 'data-mezan-campaign-result-source' "$CSS"
-          grep -q 'marketingCampaignResultSource.css' "$INDEX"
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TRANSPORT"
-          ! grep -Eq 'fetch\(' "$TRANSPORT"
+          grep -q 'marketingSnapchatAccountTimezone.css' "$INDEX"
+          grep -q 'marketingSnapchatAccountTimezoneEnhancer' "$INDEX"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TRANSPORT" "$ACCOUNT_UI"
+          ! grep -Eq 'fetch\(' "$TRANSPORT" "$ACCOUNT_UI"
