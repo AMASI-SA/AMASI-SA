@@ -10,6 +10,10 @@ on:
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
       - "backend/tests/test_preparation_piece_line_services.py"
+      - "frontend/src/index.js"
+      - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
+      - "frontend/src/reviewPreparationFileScheduleSync.js"
+      - "frontend/src/reviewPreparationFileScheduleSync.test.js"
       - "frontend/src/services/preparationWorkService.js"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
@@ -101,6 +105,7 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/fulfillment/PreparationWorkDashboard.test.jsx
+          src/reviewPreparationFileScheduleSync.test.js
           src/pages/FulfillmentV2.test.jsx
 
       - name: Build Production frontend
