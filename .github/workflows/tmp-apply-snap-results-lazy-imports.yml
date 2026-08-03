@@ -1,0 +1,62 @@
+name: Temporary Apply Snapchat Results Lazy Imports
+
+on:
+  push:
+    branches:
+      - feat/prod-snapchat-results-source-toggle-v1
+    paths:
+      - ".github/workflows/tmp-apply-snap-results-lazy-imports.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-snapchat-results-source-toggle-v1
+          fetch-depth: 0
+      - name: Apply focused source patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/integrations_control_center/snapchat_campaign_result_source_routes.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from ads_manager.account_cost_settings import DEFAULT_USD_TO_SAR, list_account_cost_settings\nfrom dashboard_v2_routes import _filtered_orders\n\n",
+              "",
+          )
+          text = text.replace(
+              "MAX_ROWS = 100_000\n",
+              "MAX_ROWS = 100_000\nDEFAULT_USD_TO_SAR = 3.7544\n",
+              1,
+          )
+          text = text.replace(
+              ") -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:\n    orders = await _filtered_orders(\n",
+              ") -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:\n    from dashboard_v2_routes import _filtered_orders\n\n    orders = await _filtered_orders(\n",
+              1,
+          )
+          text = text.replace(
+              "    settings_payload = await list_account_cost_settings(db, user_id)\n",
+              "    from ads_manager.account_cost_settings import list_account_cost_settings\n\n    settings_payload = await list_account_cost_settings(db, user_id)\n",
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Verify patch
+        run: |
+          ! grep -q '^from dashboard_v2_routes import' backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+          ! grep -q '^from ads_manager.account_cost_settings import' backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+          grep -q 'from dashboard_v2_routes import _filtered_orders' backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+          grep -q 'from ads_manager.account_cost_settings import list_account_cost_settings' backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+      - name: Commit source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(prod-snap): lazy load campaign attribution dependencies"
+          git push origin HEAD:feat/prod-snapchat-results-source-toggle-v1
