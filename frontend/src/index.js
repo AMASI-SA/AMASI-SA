@@ -11,6 +11,7 @@ import "@/reviewCompactActionLabels";
 import "@/reviewInternalPreparationRouteEnhancer";
 import "@/reviewProductEditMode";
 import "@/reviewImageDialogAndEditControlEnhancer";
+import "@/reviewSpecRowLayoutFix";
 import "@/reviewAutoAdvance";
 import "@/reviewManualNavigation";
 import "@/reviewCustomerWaiting";
