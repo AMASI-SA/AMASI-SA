@@ -1,7 +1,10 @@
+import pytest
+
 from integrations_control_center.snapchat_campaign_result_source_routes import (
     RESULT_SOURCE_PLATFORM,
     RESULT_SOURCE_SALLA,
     _match_order_campaign,
+    _salla_outcomes,
     _selected_metrics,
 )
 
@@ -32,6 +35,60 @@ def test_campaign_name_match_requires_snapchat_source():
     )
     assert missing is None
     assert missing_kind == "unmatched"
+
+
+@pytest.mark.asyncio
+async def test_salla_headline_totals_include_unattributed_snapchat_orders(monkeypatch):
+    import dashboard_v2_routes
+
+    async def fake_filtered_orders(*args, **kwargs):
+        return [
+            {
+                "order_number": "1",
+                "order_date": "2026-08-03",
+                "source": "",
+                "utm_campaign": "campaign-1",
+                "total_amount": 100.0,
+            },
+            {
+                "order_number": "2",
+                "order_date": "2026-08-03",
+                "source": "snapchat",
+                "utm_campaign": "campaign-not-known",
+                "total_amount": 200.0,
+            },
+            {
+                "order_number": "3",
+                "order_date": "2026-08-03",
+                "source": "meta",
+                "utm_campaign": "campaign-not-known",
+                "total_amount": 300.0,
+            },
+        ]
+
+    monkeypatch.setattr(dashboard_v2_routes, "_filtered_orders", fake_filtered_orders)
+    by_campaign, by_account, by_date, coverage = await _salla_outcomes(
+        object(),
+        "owner-1",
+        date_from="2026-08-03",
+        date_to="2026-08-03",
+        identities=[{
+            "account_id": "account-1",
+            "campaign_id": "campaign-1",
+            "campaign_name": "حملة 1",
+        }],
+    )
+
+    assert by_campaign[("account-1", "campaign-1")] == {
+        "orders": 1,
+        "sales_sar": 100.0,
+    }
+    assert by_account["account-1"] == {"orders": 1, "sales_sar": 100.0}
+    assert by_date["2026-08-03"] == {"orders": 2, "sales_sar": 300.0}
+    assert coverage["salla_snapchat_orders"] == 2
+    assert coverage["salla_snapchat_sales_sar"] == 300.0
+    assert coverage["matched_orders"] == 1
+    assert coverage["unattributed_snapchat_orders"] == 1
 
 
 def test_salla_source_uses_salla_orders_and_sales_with_native_currency():
