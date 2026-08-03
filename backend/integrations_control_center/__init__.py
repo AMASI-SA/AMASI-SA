@@ -105,12 +105,18 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
 
-    # Lazy import keeps focused V2 modules importable in lightweight test
+    # Lazy imports keep focused V2 modules importable in lightweight test
     # environments that intentionally omit Motor/PyMongo. In Production this
     # registers a server-side task that refreshes Meta and selected Snapchat
-    # account totals every five minutes even when no browser is open.
+    # account totals every five minutes even when no browser is open. The
+    # recovery installer prevents a missing provider-level projection from
+    # silently producing targets=0 while selected Meta accounts still exist.
     from .ads_auto_sync_scheduler import attach_ads_auto_sync_scheduler
+    from .ads_auto_sync_target_recovery import (
+        install_ads_auto_sync_target_recovery,
+    )
 
+    install_ads_auto_sync_target_recovery()
     attach_ads_auto_sync_scheduler(router, db, current_user, _require_owner)
 
     exact_test_routes = [
