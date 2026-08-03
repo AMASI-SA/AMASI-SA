@@ -1,0 +1,109 @@
+name: Production Dashboard V2 Salla Ads Executive
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/dashboard_v2_ads_executive.py"
+      - "backend/dashboard_v2_routes.py"
+      - "backend/tests/test_dashboard_v2_salla_ads_executive.py"
+      - "frontend/src/components/AdsExecutiveBreakdownTable.jsx"
+      - "frontend/src/components/ProfitSummaryCard.jsx"
+      - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
+      - "frontend/src/pages/Dashboard.jsx"
+      - ".github/workflows/prod-dashboard-v2-salla-ads-executive.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          cryptography
+          bcrypt
+          PyJWT
+          pytest
+          pytest-asyncio
+          openpyxl
+      - name: Compile executive advertising modules
+        run: >-
+          python -m py_compile
+          dashboard_v2_ads_executive.py
+          dashboard_v2_routes.py
+          tests/test_dashboard_v2_salla_ads_executive.py
+      - name: Test Salla and provider source contract
+        run: >-
+          python -m pytest
+          tests/test_dashboard_v2_salla_ads_executive.py
+          tests/test_dashboard_v2_ad_account_costs.py
+          -q --tb=short
+      - name: Enforce authoritative read-only sources
+        working-directory: .
+        run: |
+          ENGINE=backend/dashboard_v2_ads_executive.py
+          DASH=backend/dashboard_v2_routes.py
+          grep -q 'unified_orders.source/utm_source:salla' "$ENGINE"
+          grep -q 'unified_orders.total_amount:salla' "$ENGINE"
+          grep -q 'ad_platform_spend_divided_by_ad_platform_reported_orders' "$ENGINE"
+          grep -q 'salla_sales_divided_by_ad_platform_spend' "$ENGINE"
+          grep -q 'provider_conversion_sales_excluded.*True' "$ENGINE"
+          grep -q 'build_salla_ads_executive_breakdown' "$DASH"
+          grep -q 'ads\["executive_breakdown"\]' "$DASH"
+          grep -q 'accounting_write_reached.*False' "$ENGINE"
+          grep -q 'qoyod_write_reached.*False' "$ENGINE"
+          ! grep -q 'update_one\|insert_one\|delete_one\|replace_one' "$ENGINE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test executive advertising and payment-fee tables
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/ProfitSummaryCard.adsExecutive.test.jsx
+          src/components/ProfitSummaryCard.paymentFees.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce inline table and source labels
+        working-directory: .
+        run: |
+          TABLE=frontend/src/components/AdsExecutiveBreakdownTable.jsx
+          CARD=frontend/src/components/ProfitSummaryCard.jsx
+          DASH=frontend/src/pages/Dashboard.jsx
+          grep -q 'ads-executive-breakdown-table' "$TABLE"
+          grep -q 'متوسط تكلفة الطلب' "$TABLE"
+          grep -q 'المبيعات / العائد' "$TABLE"
+          grep -q 'سلة: الطلبات والمبيعات' "$TABLE"
+          grep -q 'المنصة: الصرف وتكلفة الطلب' "$TABLE"
+          grep -q 'tooltip={adsExecutiveTooltip}' "$CARD"
+          grep -q 'adsExecutiveBreakdown={isMezanV2' "$DASH"

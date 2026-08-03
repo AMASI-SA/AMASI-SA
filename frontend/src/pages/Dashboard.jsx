@@ -736,6 +736,9 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                         adsBreakdownEndpoint={isMezanV2
                             ? "/dashboard-v2/ads-cost-breakdown"
                             : "/dashboard/ads-cost-breakdown"}
+                        adsExecutiveBreakdown={isMezanV2
+                            ? data?.ads_v2?.executive_breakdown
+                            : null}
                     />
                     {/* KPI grid (config-driven, supports per-card hide) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
