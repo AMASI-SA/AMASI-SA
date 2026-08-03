@@ -29,6 +29,7 @@ import {
 } from "recharts";
 
 import DateInput, { isValidISODate } from "../components/DateInput";
+import CampaignManagerTable from "../components/marketing/CampaignManagerTable";
 import { monthStartSA, todaySA } from "../lib/dates";
 import {
     getMarketingPerformance,
@@ -396,28 +397,16 @@ export default function MarketingPlatformWorkspace({ provider }) {
             )}
 
             {activeTab === "campaigns" && (
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="marketing-campaigns-table">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4">
-                        <div><h2 className="font-black text-slate-900">الحملات</h2><p className="mt-1 text-xs font-semibold text-slate-500">{numeric(pagination.total)} حملة ضمن البحث والفترة.</p></div>
-                        <button type="button" disabled className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-black text-slate-400">إنشاء حملة بالذكاء الاصطناعي — قريبًا</button>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-[1250px] w-full text-right text-sm">
-                            <thead className="bg-slate-50 text-xs font-black text-slate-600"><tr><th className="px-4 py-3">الحملة</th><th className="px-4 py-3">الحالة</th><th className="px-4 py-3">الحساب</th><th className="px-4 py-3">الصرف</th><th className="px-4 py-3">الطلبات</th><th className="px-4 py-3">المبيعات</th><th className="px-4 py-3">ROAS</th><th className="px-4 py-3">CPA</th><th className="px-4 py-3">الظهور</th><th className="px-4 py-3">النقرات</th><th className="px-4 py-3">CTR</th><th className="px-4 py-3">الميزانية اليومية</th></tr></thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {(data?.campaigns || []).map((campaign) => (
-                                    <tr key={`${campaign.account_id}-${campaign.campaign_id}`} className="hover:bg-slate-50/70">
-                                        <td className="px-4 py-3"><div className="max-w-[260px] font-black text-slate-900">{campaign.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{campaign.campaign_id}</div></td>
-                                        <td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{campaign.status}</span></td>
-                                        <td className="px-4 py-3 font-bold text-slate-600">{campaign.account_name}</td><td className="px-4 py-3 font-mono font-black">{money(campaign.spend_sar)}</td><td className="px-4 py-3 font-mono font-black">{numeric(campaign.orders)}</td><td className="px-4 py-3 font-mono font-black">{money(campaign.sales_sar)}</td><td className="px-4 py-3 font-mono font-black">{ratio(campaign.roas, "×")}</td><td className="px-4 py-3 font-mono font-black">{money(campaign.cpa_sar)}</td><td className="px-4 py-3 font-mono">{numeric(campaign.impressions)}</td><td className="px-4 py-3 font-mono">{numeric(campaign.swipes)}</td><td className="px-4 py-3 font-mono">{ratio(campaign.ctr_pct, "%")}</td><td className="px-4 py-3 font-mono">{campaign.budget?.daily_native === null ? "غير متاح" : `${numeric(campaign.budget.daily_native)} ${campaign.budget.currency || ""}`}</td>
-                                    </tr>
-                                ))}
-                                {!(data?.campaigns || []).length && <tr><td colSpan="12" className="px-4 py-12 text-center font-bold text-slate-500">لا توجد حملات موثقة ضمن الفترة أو البحث.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                    {pagination.pages > 1 && <div className="flex items-center justify-center gap-3 border-t border-slate-100 p-4"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border px-4 py-2 font-black disabled:opacity-40">السابق</button><span className="font-mono text-sm font-black">{pagination.page} / {pagination.pages}</span><button type="button" disabled={page >= pagination.pages} onClick={() => setPage((value) => value + 1)} className="rounded-xl border px-4 py-2 font-black disabled:opacity-40">التالي</button></div>}
-                </section>
+                <CampaignManagerTable
+                    platform={platform}
+                    platformLabel={config.label}
+                    campaigns={data?.campaigns || []}
+                    totals={totals}
+                    pagination={pagination}
+                    page={page}
+                    onPageChange={setPage}
+                    readOnly={data?.policy?.mutations_allowed !== true}
+                />
             )}
 
             {activeTab === "accounts" && (

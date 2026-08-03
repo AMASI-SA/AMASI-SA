@@ -1,0 +1,622 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+    ChartBar,
+    Check,
+    Columns,
+    DownloadSimple,
+    Eye,
+    FileText,
+    Funnel,
+    PencilSimple,
+    Trash,
+    UploadSimple,
+} from "@phosphor-icons/react";
+
+export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
+    "name",
+    "status",
+    "delivery",
+    "orders",
+    "cpa",
+    "spend",
+    "impressions",
+    "cpm",
+    "clicks",
+    "cpc",
+    "roas",
+    "sales",
+    "ctr",
+    "budget",
+    "account",
+]);
+
+const COLUMN_DEFINITIONS = Object.freeze([
+    { id: "name", label: "اسم الحملة", width: 300, sortable: true },
+    { id: "status", label: "الحالة", width: 120, sortable: true },
+    { id: "delivery", label: "حالة التسليم", width: 190, sortable: true },
+    { id: "orders", label: "النتائج", sublabel: "المشتريات", width: 125, sortable: true },
+    { id: "cpa", label: "تكلفة النتيجة", sublabel: "تكلفة الشراء", width: 145, sortable: true },
+    { id: "spend", label: "المبلغ المصروف", width: 145, sortable: true },
+    { id: "impressions", label: "مرات الظهور المدفوعة", width: 165, sortable: true },
+    { id: "cpm", label: "eCPM المدفوع", width: 135, sortable: true },
+    { id: "clicks", label: "النقرات", width: 115, sortable: true },
+    { id: "cpc", label: "eCPC", width: 115, sortable: true },
+    { id: "roas", label: "ROAS الشراء", width: 130, sortable: true },
+    { id: "sales", label: "مبيعات الشراء", width: 145, sortable: true },
+    { id: "ctr", label: "CTR", width: 105, sortable: true },
+    { id: "budget", label: "الميزانية اليومية", width: 150, sortable: true },
+    { id: "account", label: "الحساب الإعلاني", width: 230, sortable: true },
+]);
+
+const STATUS_LABELS = Object.freeze({
+    ACTIVE: "نشطة",
+    active: "نشطة",
+    ENABLED: "نشطة",
+    enabled: "نشطة",
+    PAUSED: "متوقفة",
+    paused: "متوقفة",
+    ARCHIVED: "مؤرشفة",
+    archived: "مؤرشفة",
+    DELETED: "محذوفة",
+    deleted: "محذوفة",
+    unknown: "غير محسومة",
+});
+
+function finiteNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatMoney(value) {
+    const parsed = finiteNumber(value);
+    if (parsed === null) return "—";
+    return `${parsed.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })} ر.س`;
+}
+
+function formatNumber(value) {
+    const parsed = finiteNumber(value);
+    if (parsed === null) return "—";
+    return parsed.toLocaleString("en-US", {
+        maximumFractionDigits: Number.isInteger(parsed) ? 0 : 2,
+    });
+}
+
+function formatRatio(value, suffix = "") {
+    const parsed = finiteNumber(value);
+    if (parsed === null) return "—";
+    return `${parsed.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })}${suffix}`;
+}
+
+function normalizeStatus(value) {
+    return String(value || "unknown").trim() || "unknown";
+}
+
+function isActiveStatus(value) {
+    return ["active", "enabled", "delivering"].includes(
+        normalizeStatus(value).toLowerCase(),
+    );
+}
+
+function statusLabel(value) {
+    const status = normalizeStatus(value);
+    return STATUS_LABELS[status] || STATUS_LABELS[status.toLowerCase()] || status;
+}
+
+function deliveryLabel(campaign) {
+    const raw = String(campaign.delivery_status || "").trim();
+    if (raw) return raw;
+    return isActiveStatus(campaign.status) ? "يتم التسليم" : "غير نشط";
+}
+
+export function campaignRowKey(campaign) {
+    return `${campaign?.account_id || "unknown"}:${campaign?.campaign_id || "unknown"}`;
+}
+
+function valueForColumn(campaign, columnId) {
+    switch (columnId) {
+        case "name": return String(campaign.campaign_name || campaign.campaign_id || "");
+        case "status": return normalizeStatus(campaign.status);
+        case "delivery": return deliveryLabel(campaign);
+        case "orders": return finiteNumber(campaign.orders);
+        case "cpa": return finiteNumber(campaign.cpa_sar);
+        case "spend": return finiteNumber(campaign.spend_sar);
+        case "impressions": return finiteNumber(campaign.impressions);
+        case "cpm": return finiteNumber(campaign.cpm_sar);
+        case "clicks": return finiteNumber(campaign.swipes);
+        case "cpc": return finiteNumber(campaign.cpc_sar);
+        case "roas": return finiteNumber(campaign.roas);
+        case "sales": return finiteNumber(campaign.sales_sar);
+        case "ctr": return finiteNumber(campaign.ctr_pct);
+        case "budget": return finiteNumber(campaign.budget?.daily_native);
+        case "account": return String(campaign.account_name || campaign.account_id || "");
+        default: return null;
+    }
+}
+
+export function sortCampaignRows(rows, sort) {
+    const source = Array.isArray(rows) ? [...rows] : [];
+    const key = sort?.key || "spend";
+    const direction = sort?.direction === "asc" ? 1 : -1;
+    return source.sort((left, right) => {
+        const a = valueForColumn(left, key);
+        const b = valueForColumn(right, key);
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+        if (typeof a === "number" && typeof b === "number") {
+            return (a - b) * direction;
+        }
+        return String(a).localeCompare(String(b), "ar", {
+            numeric: true,
+            sensitivity: "base",
+        }) * direction;
+    });
+}
+
+export function campaignTotalsForColumn(totals, columnId) {
+    const value = totals || {};
+    switch (columnId) {
+        case "name": return "إجمالي الفترة";
+        case "orders": return formatNumber(value.orders);
+        case "cpa": return formatMoney(value.cpa_sar);
+        case "spend": return formatMoney(value.spend_sar);
+        case "impressions": return formatNumber(value.impressions);
+        case "cpm": return formatMoney(value.cpm_sar);
+        case "clicks": return formatNumber(value.swipes);
+        case "cpc": return formatMoney(value.cpc_sar);
+        case "roas": return formatRatio(value.roas, "×");
+        case "sales": return formatMoney(value.sales_sar);
+        case "ctr": return formatRatio(value.ctr_pct, "%");
+        default: return "";
+    }
+}
+
+function cellValue(campaign, columnId) {
+    switch (columnId) {
+        case "name":
+            return (
+                <div className="min-w-0">
+                    <div className="max-w-[270px] truncate font-extrabold text-slate-950" title={campaign.campaign_name}>
+                        {campaign.campaign_name || campaign.campaign_id}
+                    </div>
+                    <div className="mt-1 max-w-[270px] truncate font-mono text-[10px] text-slate-400">
+                        {campaign.campaign_id}
+                    </div>
+                </div>
+            );
+        case "status": {
+            const active = isActiveStatus(campaign.status);
+            return (
+                <div className="flex items-center gap-2">
+                    <span
+                        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full ${active ? "bg-emerald-500" : "bg-slate-300"}`}
+                        aria-label={active ? "الحملة نشطة" : "الحملة غير نشطة"}
+                    >
+                        <span className={`absolute top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition ${active ? "right-[18px]" : "right-0.5"}`}>
+                            {active && <Check size={10} weight="bold" className="text-emerald-600" />}
+                        </span>
+                    </span>
+                    <span className="text-xs font-bold text-slate-600">{statusLabel(campaign.status)}</span>
+                </div>
+            );
+        }
+        case "delivery": {
+            const active = isActiveStatus(campaign.status);
+            return (
+                <div className="flex items-start gap-2">
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${active ? "bg-emerald-500 ring-2 ring-emerald-100" : "bg-slate-300"}`} />
+                    <div>
+                        <div className="font-bold text-slate-700">{deliveryLabel(campaign)}</div>
+                        {active && <div className="mt-0.5 text-[10px] font-semibold text-slate-400">قد تكون في مرحلة التعلم</div>}
+                    </div>
+                </div>
+            );
+        }
+        case "orders": return <MetricValue primary={formatNumber(campaign.orders)} secondary="مشتريات" />;
+        case "cpa": return <MetricValue primary={formatMoney(campaign.cpa_sar)} secondary="لكل عملية شراء" />;
+        case "spend": return <MetricValue primary={formatMoney(campaign.spend_sar)} />;
+        case "impressions": return <MetricValue primary={formatNumber(campaign.impressions)} />;
+        case "cpm": return <MetricValue primary={formatMoney(campaign.cpm_sar)} />;
+        case "clicks": return <MetricValue primary={formatNumber(campaign.swipes)} />;
+        case "cpc": return <MetricValue primary={formatMoney(campaign.cpc_sar)} />;
+        case "roas": return <MetricValue primary={formatRatio(campaign.roas, "×")} />;
+        case "sales": return <MetricValue primary={formatMoney(campaign.sales_sar)} />;
+        case "ctr": return <MetricValue primary={formatRatio(campaign.ctr_pct, "%")} />;
+        case "budget": {
+            const amount = finiteNumber(campaign.budget?.daily_native);
+            return <MetricValue primary={amount === null ? "—" : `${formatNumber(amount)} ${campaign.budget?.currency || ""}`} />;
+        }
+        case "account":
+            return (
+                <div>
+                    <div className="max-w-[210px] truncate font-bold text-slate-700" title={campaign.account_name}>
+                        {campaign.account_name || "حساب غير معروف"}
+                    </div>
+                    <div className="mt-1 max-w-[210px] truncate font-mono text-[10px] text-slate-400">
+                        {campaign.account_id || "—"}
+                    </div>
+                </div>
+            );
+        default: return "—";
+    }
+}
+
+function MetricValue({ primary, secondary = "" }) {
+    return (
+        <div className="font-mono">
+            <div className="font-extrabold text-slate-800">{primary}</div>
+            {secondary && <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{secondary}</div>}
+        </div>
+    );
+}
+
+function csvEscape(value) {
+    const text = String(value ?? "");
+    return `"${text.replaceAll('"', '""')}"`;
+}
+
+function campaignCsv(rows) {
+    const headers = [
+        "اسم الحملة", "معرف الحملة", "الحالة", "حالة التسليم", "الحساب",
+        "الصرف بالريال", "المشتريات", "المبيعات بالريال", "ROAS", "CPA",
+        "الظهور", "النقرات", "CTR", "eCPC", "eCPM", "الميزانية اليومية", "عملة الميزانية",
+    ];
+    const body = rows.map((campaign) => [
+        campaign.campaign_name,
+        campaign.campaign_id,
+        statusLabel(campaign.status),
+        deliveryLabel(campaign),
+        campaign.account_name,
+        campaign.spend_sar,
+        campaign.orders,
+        campaign.sales_sar,
+        campaign.roas,
+        campaign.cpa_sar,
+        campaign.impressions,
+        campaign.swipes,
+        campaign.ctr_pct,
+        campaign.cpc_sar,
+        campaign.cpm_sar,
+        campaign.budget?.daily_native,
+        campaign.budget?.currency,
+    ]);
+    return [headers, ...body].map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+function downloadRows(rows, platform) {
+    if (typeof window === "undefined" || typeof document === "undefined" || !rows.length) return;
+    const blob = new Blob(["\ufeff", campaignCsv(rows)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mezan-${platform || "ads"}-campaigns.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function ToolButton({ Icon, label, disabled = false, onClick, testid }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-35"
+            data-testid={testid}
+        >
+            <Icon size={16} weight="duotone" />
+            {label}
+        </button>
+    );
+}
+
+export default function CampaignManagerTable({
+    platform,
+    platformLabel,
+    campaigns = [],
+    totals = {},
+    pagination = {},
+    page = 1,
+    onPageChange,
+    readOnly = true,
+}) {
+    const storageKey = `mezan-campaign-manager-columns-v1:${platform || "all"}`;
+    const [selected, setSelected] = useState(() => new Set());
+    const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+    const [sort, setSort] = useState({ key: "spend", direction: "desc" });
+    const [visibleColumns, setVisibleColumns] = useState(() => {
+        if (typeof window === "undefined") return CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+            const valid = Array.isArray(stored)
+                ? stored.filter((id) => CAMPAIGN_MANAGER_DEFAULT_COLUMNS.includes(id))
+                : [];
+            return valid.length ? valid : CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+        } catch {
+            return CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+        }
+    });
+
+    useEffect(() => {
+        setSelected(new Set());
+        setShowSelectedOnly(false);
+    }, [campaigns]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
+    }, [storageKey, visibleColumns]);
+
+    const sortedRows = useMemo(
+        () => sortCampaignRows(campaigns, sort),
+        [campaigns, sort],
+    );
+    const rows = useMemo(
+        () => showSelectedOnly
+            ? sortedRows.filter((campaign) => selected.has(campaignRowKey(campaign)))
+            : sortedRows,
+        [selected, showSelectedOnly, sortedRows],
+    );
+    const selectedRows = useMemo(
+        () => sortedRows.filter((campaign) => selected.has(campaignRowKey(campaign))),
+        [selected, sortedRows],
+    );
+    const allVisibleSelected = rows.length > 0
+        && rows.every((campaign) => selected.has(campaignRowKey(campaign)));
+    const columns = COLUMN_DEFINITIONS.filter((column) => visibleColumns.includes(column.id));
+
+    function toggleRow(campaign) {
+        const key = campaignRowKey(campaign);
+        setSelected((current) => {
+            const next = new Set(current);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    }
+
+    function toggleAllVisible() {
+        setSelected((current) => {
+            const next = new Set(current);
+            if (allVisibleSelected) rows.forEach((campaign) => next.delete(campaignRowKey(campaign)));
+            else rows.forEach((campaign) => next.add(campaignRowKey(campaign)));
+            return next;
+        });
+    }
+
+    function toggleColumn(columnId) {
+        setVisibleColumns((current) => {
+            if (current.includes(columnId)) {
+                if (current.length <= 4 || columnId === "name") return current;
+                return current.filter((id) => id !== columnId);
+            }
+            return CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
+                (id) => current.includes(id) || id === columnId,
+            );
+        });
+    }
+
+    function changeSort(columnId) {
+        setSort((current) => ({
+            key: columnId,
+            direction: current.key === columnId && current.direction === "desc" ? "asc" : "desc",
+        }));
+    }
+
+    const totalPages = Number(pagination.pages || 0);
+    const currentPage = Number(pagination.page || page || 1);
+
+    return (
+        <section
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            data-testid="campaign-manager-table"
+            dir="rtl"
+        >
+            <div className="flex min-h-14 items-end gap-6 overflow-x-auto border-b border-slate-200 px-4">
+                <button type="button" className="relative shrink-0 px-1 pb-3 pt-4 text-sm font-black text-slate-950">
+                    الحملات
+                    <span className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />
+                </button>
+                <button type="button" disabled className="shrink-0 px-1 pb-3 pt-4 text-sm font-bold text-slate-400">المجموعات الإعلانية</button>
+                <button type="button" disabled className="shrink-0 px-1 pb-3 pt-4 text-sm font-bold text-slate-400">الإعلانات</button>
+                <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">
+                    {platformLabel || "المنصة"} · قراءة فقط
+                </span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-1">
+                    <ToolButton
+                        Icon={Eye}
+                        label={showSelectedOnly ? "عرض الكل" : `عرض المحدد${selected.size ? ` (${selected.size})` : ""}`}
+                        disabled={!showSelectedOnly && selected.size === 0}
+                        onClick={() => setShowSelectedOnly((value) => !value)}
+                        testid="campaign-manager-view-selected"
+                    />
+                    <ToolButton Icon={PencilSimple} label="تعديل" disabled={readOnly || selected.size === 0} />
+                    <ToolButton Icon={Trash} label="حذف" disabled={readOnly || selected.size === 0} />
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                    <details className="relative">
+                        <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-950">
+                            <Columns size={16} weight="duotone" />
+                            الأعمدة
+                        </summary>
+                        <div className="absolute left-0 z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-800">تخصيص الأعمدة</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setVisibleColumns(CAMPAIGN_MANAGER_DEFAULT_COLUMNS)}
+                                    className="text-[10px] font-bold text-emerald-700 hover:underline"
+                                >
+                                    إعادة الافتراضي
+                                </button>
+                            </div>
+                            <div className="grid max-h-80 gap-1 overflow-auto">
+                                {COLUMN_DEFINITIONS.map((column) => (
+                                    <label key={column.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                                        <span>{column.label}</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={visibleColumns.includes(column.id)}
+                                            disabled={column.id === "name"}
+                                            onChange={() => toggleColumn(column.id)}
+                                            className="h-4 w-4 accent-emerald-600"
+                                        />
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </details>
+                    <ToolButton Icon={FileText} label="التقارير" disabled />
+                    <ToolButton Icon={Funnel} label="التقسيم" disabled />
+                    <ToolButton Icon={UploadSimple} label="رفع" disabled />
+                    <ToolButton
+                        Icon={DownloadSimple}
+                        label="تنزيل"
+                        disabled={rows.length === 0}
+                        onClick={() => downloadRows(rows, platform)}
+                        testid="campaign-manager-download"
+                    />
+                </div>
+            </div>
+
+            <div className="overflow-x-auto" data-testid="campaign-manager-scroll">
+                <table className="w-max min-w-full border-separate border-spacing-0 text-right text-xs">
+                    <thead className="sticky top-0 z-20 bg-slate-50 text-slate-600">
+                        <tr>
+                            <th className="sticky right-0 z-30 w-12 border-b border-l border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                <input
+                                    type="checkbox"
+                                    checked={allVisibleSelected}
+                                    onChange={toggleAllVisible}
+                                    aria-label="تحديد كل الحملات الظاهرة"
+                                    className="h-4 w-4 accent-emerald-600"
+                                />
+                            </th>
+                            {columns.map((column) => (
+                                <th
+                                    key={column.id}
+                                    className={`${column.id === "name" ? "sticky right-12 z-30 border-l bg-slate-50" : ""} border-b border-slate-200 px-4 py-3 align-bottom`}
+                                    style={{ minWidth: column.width, width: column.width }}
+                                >
+                                    {column.sortable ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => changeSort(column.id)}
+                                            className="flex w-full items-end justify-between gap-2 text-right font-black hover:text-slate-950"
+                                        >
+                                            <span>
+                                                <span className="block">{column.label}</span>
+                                                {column.sublabel && <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">{column.sublabel}</span>}
+                                            </span>
+                                            {sort.key === column.id && (
+                                                <span className="text-[10px] text-emerald-700">{sort.direction === "desc" ? "↓" : "↑"}</span>
+                                            )}
+                                        </button>
+                                    ) : column.label}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((campaign) => {
+                            const key = campaignRowKey(campaign);
+                            const checked = selected.has(key);
+                            return (
+                                <tr key={key} className={`${checked ? "bg-emerald-50/60" : "bg-white"} group hover:bg-slate-50`}>
+                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-0 z-10 border-b border-l border-slate-100 px-3 py-4 text-center`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => toggleRow(campaign)}
+                                            aria-label={`تحديد ${campaign.campaign_name || campaign.campaign_id}`}
+                                            className="h-4 w-4 accent-emerald-600"
+                                        />
+                                    </td>
+                                    {columns.map((column) => (
+                                        <td
+                                            key={column.id}
+                                            className={`${column.id === "name" ? `${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-l` : ""} border-b border-slate-100 px-4 py-4 align-middle`}
+                                            style={{ minWidth: column.width, width: column.width }}
+                                        >
+                                            {cellValue(campaign, column.id)}
+                                        </td>
+                                    ))}
+                                </tr>
+                            );
+                        })}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={columns.length + 1} className="px-6 py-16 text-center">
+                                    <ChartBar size={38} weight="duotone" className="mx-auto text-slate-300" />
+                                    <div className="mt-3 font-black text-slate-600">
+                                        {showSelectedOnly ? "لا توجد حملات محددة لعرضها." : "لا توجد حملات موثقة ضمن الفترة أو البحث."}
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                    {rows.length > 0 && (
+                        <tfoot className="bg-slate-50/95 font-black text-slate-800">
+                            <tr>
+                                <td className="sticky right-0 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-3 py-3" />
+                                {columns.map((column) => (
+                                    <td
+                                        key={column.id}
+                                        className={`${column.id === "name" ? "sticky right-12 z-10 border-l bg-slate-50" : ""} border-t-2 border-slate-300 px-4 py-3 font-mono`}
+                                    >
+                                        {campaignTotalsForColumn(totals, column.id)}
+                                    </td>
+                                ))}
+                            </tr>
+                        </tfoot>
+                    )}
+                </table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                    <span className="relative inline-flex h-5 w-9 rounded-full bg-slate-300">
+                        <span className="absolute right-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm" />
+                    </span>
+                    الحملات المحذوفة مستبعدة من الإجماليات
+                </div>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-500">
+                        {formatNumber(pagination.total || campaigns.length)} حملة · الصفحة {currentPage}{totalPages > 0 ? ` من ${totalPages}` : ""}
+                    </span>
+                    {totalPages > 1 && (
+                        <>
+                            <button
+                                type="button"
+                                disabled={currentPage <= 1}
+                                onClick={() => onPageChange?.(Math.max(1, currentPage - 1))}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-35"
+                            >
+                                السابق
+                            </button>
+                            <button
+                                type="button"
+                                disabled={currentPage >= totalPages}
+                                onClick={() => onPageChange?.(Math.min(totalPages, currentPage + 1))}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-35"
+                            >
+                                التالي
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </section>
+    );
+}
