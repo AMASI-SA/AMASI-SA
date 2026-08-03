@@ -19,6 +19,10 @@ jest.mock("../components/fulfillment/PreparationFilesRegistry", () => function P
     return <div data-testid="preparation-files-registry-window">سجل ملفات التجهيز المستقل</div>;
 });
 
+jest.mock("../components/fulfillment/PreparationWorkDashboard", () => function PreparationWorkDashboardFixture() {
+    return <div data-testid="preparation-work-dashboard">منتجاتي وإدارة منتجات الموظفين</div>;
+});
+
 jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToShipFixture() {
     return <div data-testid="ready-to-ship-window">جاهز للشحن</div>;
 });
@@ -97,6 +101,15 @@ test("preparation files window does not render reviewed products", () => {
     expect(markup).toContain("النافذة الحالية");
     expect(markup).not.toContain('data-testid="reviewed-products-window"');
     expect(markup).not.toContain("منتجات تمت مراجعتها");
+});
+
+test("in progress stage renders the employee work dashboard instead of a placeholder", () => {
+    mockSearchParams = new URLSearchParams("stage=in_progress");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="preparation-work-dashboard"');
+    expect(markup).toContain("منتجاتي وإدارة منتجات الموظفين");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
 test("preparation stage exposes warehouse supplier manufacturing and shortage tracks", () => {
