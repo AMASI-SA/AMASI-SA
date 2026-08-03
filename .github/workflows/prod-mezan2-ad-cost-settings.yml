@@ -9,12 +9,16 @@ on:
       - "backend/ads_manager/account_cost_settings.py"
       - "backend/ads_manager/routes.py"
       - "backend/tests/test_mezan2_ad_account_cost_settings_v1.py"
+      - "frontend/src/App.js"
+      - "frontend/src/components/Layout.jsx"
       - "frontend/src/pages/AdsCostSettingsV2.jsx"
       - "frontend/src/pages/AdsCurrencySettings.jsx"
       - "frontend/src/services/adsAccountCostSettingsV2.js"
       - "frontend/src/services/adsAccountCostSettingsV2.test.js"
       - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.test.jsx"
       - "frontend/src/components/MezanV2NavigationShell.adCosts.test.jsx"
+      - "frontend/src/components/MezanV2AdCostRouteOwnership.test.jsx"
       - ".github/workflows/prod-mezan2-ad-cost-settings.yml"
 
 permissions:
@@ -100,32 +104,40 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --non-interactive
 
-      - name: Test Mezan 2 page, service, and navigation
+      - name: Test Mezan 2 page, route ownership, and navigation
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/services/adsAccountCostSettingsV2.test.js
           src/components/MezanV2NavigationShell.adCosts.test.jsx
+          src/components/MezanV2AdCostRouteOwnership.test.jsx
+          src/components/MezanV2NavigationShell.test.jsx
 
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
 
-      - name: Enforce frontend isolation
+      - name: Enforce frontend route ownership and isolation
         working-directory: .
         run: |
           PAGE=frontend/src/pages/AdsCostSettingsV2.jsx
           SERVICE=frontend/src/services/adsAccountCostSettingsV2.js
-          LEGACY=frontend/src/pages/AdsCurrencySettings.jsx
+          APP=frontend/src/App.js
+          LAYOUT=frontend/src/components/Layout.jsx
           NAV=frontend/src/components/MezanV2NavigationShell.jsx
 
           grep -q 'mezan2-ad-cost-settings-page' "$PAGE"
           grep -q '/ads-manager/account-cost-settings' "$SERVICE"
-          grep -q 'export { default } from "./AdsCostSettingsV2"' "$LEGACY"
           grep -q 'العمولات وسعر الصرف' "$NAV"
-          grep -q '"/settings/ads-currencies"' "$NAV"
+          grep -q '"/ads-manager/cost-settings"' "$NAV"
+          grep -q 'path="/ads-manager/cost-settings"' "$APP"
+          grep -q 'Navigate to="/ads-manager/cost-settings" replace' "$APP"
+          grep -q 'const isMezanV2 = isMezanV2Route(location.pathname);' "$LAYOUT"
+          test ! -e frontend/src/pages/AdsCurrencySettings.jsx
+          ! grep -q '"/settings/ads-currencies"' "$NAV"
+          ! grep -q 'AdsCurrencySettings' "$APP"
+          ! grep -q 'const isV2 = \[' "$LAYOUT"
           ! grep -q '/counterparties' "$PAGE" "$SERVICE"
           ! grep -q '/ads-currency-settings' "$PAGE" "$SERVICE"
-          ! grep -q 'AdsCurrencySettings' "$LEGACY"
