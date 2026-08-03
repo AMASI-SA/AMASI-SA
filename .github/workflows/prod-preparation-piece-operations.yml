@@ -63,6 +63,6 @@ jobs:
         run: |
           set -euo pipefail
           FILE=backend/preparation_piece_operations.py
-          ! grep -Eq 'call_salla|qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
+          ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
           grep -q 'salla_updated.*False' "$FILE"
           grep -q 'qoyod_updated.*False' "$FILE"
