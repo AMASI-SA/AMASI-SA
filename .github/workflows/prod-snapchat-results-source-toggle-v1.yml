@@ -119,4 +119,5 @@ jobs:
           grep -q 'campaign.sales_native' "$ENHANCER"
           grep -q 'data-mezan-campaign-result-source' "$CSS"
           grep -q 'marketingCampaignResultSource.css' "$INDEX"
-          ! grep -Eq 'post\(|put\(|patch\(|delete\(' "$TRANSPORT"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TRANSPORT"
+          ! grep -Eq 'fetch\(' "$TRANSPORT"
