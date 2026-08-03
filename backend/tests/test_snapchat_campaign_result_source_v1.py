@@ -89,6 +89,8 @@ async def test_salla_headline_totals_include_unattributed_snapchat_orders(monkey
     assert coverage["salla_snapchat_sales_sar"] == 300.0
     assert coverage["matched_orders"] == 1
     assert coverage["unattributed_snapchat_orders"] == 1
+    assert coverage["campaign_rows_exact_match_only"] is True
+    assert coverage["headline_includes_unattributed_snapchat"] is True
 
 
 def test_salla_source_uses_salla_orders_and_sales_with_native_currency():
@@ -123,3 +125,15 @@ def test_platform_source_preserves_provider_results():
     assert selected["roas"] == 0.8
     assert selected["cpa_sar"] == 187.5
     assert selected["cpa_native"] == 50.0
+
+
+def test_platform_source_backfills_native_sales_when_old_row_lacks_it():
+    selected = _selected_metrics(
+        result_source=RESULT_SOURCE_PLATFORM,
+        platform={"orders": 2, "sales_sar": 300.0, "sales_native": None},
+        salla={"orders": 5, "sales_sar": 750.0},
+        spend_sar=375.0,
+        spend_native=100.0,
+        rate=3.75,
+    )
+    assert selected["sales_native"] == 80.0
