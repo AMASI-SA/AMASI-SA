@@ -1,0 +1,55 @@
+name: Production Marketing Ads Manager Workspace V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsManagerWorkspace.css"
+      - "frontend/src/marketingAdsManagerWorkspaceEnhancer.js"
+      - "frontend/src/marketingAdsManagerWorkspaceEnhancer.test.js"
+      - ".github/workflows/prod-marketing-ads-manager-workspace-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Yarn Classic
+        run: corepack enable
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+      - name: Test ads manager workspace
+        run: >-
+          yarn test --watchAll=false --runInBand
+          src/marketingAdsManagerWorkspaceEnhancer.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/pages/MarketingPlatformWorkspace.test.jsx
+      - name: Build Production frontend
+        run: yarn build
+      - name: Enforce read-only Ads Manager design contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          CSS=frontend/src/marketingAdsManagerWorkspace.css
+          ENHANCER=frontend/src/marketingAdsManagerWorkspaceEnhancer.js
+          grep -q 'marketingAdsManagerWorkspace.css' "$INDEX"
+          grep -q 'marketingAdsManagerWorkspaceEnhancer' "$INDEX"
+          grep -q 'campaign-manager-scroll' "$CSS"
+          grep -q 'position: sticky' "$CSS"
+          grep -q 'data-mezan-ads-manager-actions' "$ENHANCER"
+          grep -q 'button.disabled = true' "$ENHANCER"
+          grep -q 'إنشاء الحملات مقفل حاليًا' "$ENHANCER"
+          ! grep -q 'api\.|axios\.|fetch(' "$ENHANCER"
