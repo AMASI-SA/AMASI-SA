@@ -155,6 +155,26 @@ async def salla_campaign_outcomes(
 def install_snapchat_salla_campaign_outcomes() -> None:
     from . import snapchat_campaign_result_source_routes as routes
 
+    current_selected_metrics = routes._selected_metrics
+    if not getattr(
+        current_selected_metrics, "_mezan_native_sales_fallback", False
+    ):
+        def wrapped_selected_metrics(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            result = current_selected_metrics(*args, **kwargs)
+            if _number(result.get("sales_native")) is not None:
+                return result
+            rate = _number(kwargs.get("rate"))
+            sales_sar = _number(result.get("sales_sar"))
+            result["sales_native"] = (
+                round(sales_sar / rate, 6)
+                if sales_sar is not None and rate not in {None, 0}
+                else None
+            )
+            return result
+
+        wrapped_selected_metrics._mezan_native_sales_fallback = True  # type: ignore[attr-defined]
+        routes._selected_metrics = wrapped_selected_metrics
+
     current_build = routes.build_snapchat_result_source_report
     if getattr(current_build, "_mezan_salla_headline_totals", False):
         routes._salla_outcomes = salla_campaign_outcomes
