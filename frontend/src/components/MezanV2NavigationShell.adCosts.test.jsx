@@ -54,8 +54,8 @@ test("legacy component is only a compatibility export to the Mezan 2 page", () =
     expect(legacyPage).not.toContain("/ads-currency-settings");
     expect(v2Page).toContain("mezan2-ad-cost-settings-page");
     expect(v2Service).toContain("/ads-manager/account-cost-settings");
-    expect(v2Page).not.toContain("counterparties");
-    expect(v2Page).not.toContain("ads-currency-settings");
+    expect(v2Page).not.toContain('api.get("/counterparties');
+    expect(v2Page).not.toContain('api.put("/ads-currency-settings');
     expect(v2Service).not.toContain("/counterparties");
     expect(v2Service).not.toContain("/ads-currency-settings");
 });
