@@ -25,6 +25,12 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+    if numerator is None or denominator in {None, 0}:
+        return None
+    return round(numerator / denominator, 6)
+
+
 async def salla_campaign_outcomes(
     db: Any,
     user_id: str,
@@ -86,9 +92,14 @@ async def salla_campaign_outcomes(
         order_date = _text(order.get("order_date"))[:10]
         source_is_snapchat = _source_is_snapchat(order)
 
-        # A unique campaign match is sufficient proof. Otherwise the Salla
-        # source fields must explicitly resolve to Snapchat.
-        belongs_to_snapchat = key is not None or source_is_snapchat
+        # A unique or ambiguous match against Snapchat campaign identities is
+        # enough to count the order in platform totals. Only a unique match is
+        # assigned to an individual campaign row.
+        belongs_to_snapchat = (
+            key is not None
+            or source_is_snapchat
+            or match_kind.startswith("ambiguous")
+        )
         if belongs_to_snapchat:
             source_total["orders"] += 1
             source_total["sales_sar"] += amount
@@ -144,7 +155,45 @@ async def salla_campaign_outcomes(
 def install_snapchat_salla_campaign_outcomes() -> None:
     from . import snapchat_campaign_result_source_routes as routes
 
+    current_build = routes.build_snapchat_result_source_report
+    if getattr(current_build, "_mezan_salla_headline_totals", False):
+        routes._salla_outcomes = salla_campaign_outcomes
+        return
+
     routes._salla_outcomes = salla_campaign_outcomes
+
+    async def wrapped_build_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        result = await current_build(*args, **kwargs)
+        result_source = str(
+            kwargs.get("result_source") or result.get("result_source") or ""
+        )
+        if result_source != routes.RESULT_SOURCE_SALLA:
+            return result
+
+        coverage = (
+            (result.get("source") or {}).get("salla_attribution") or {}
+        )
+        total_orders = int(coverage.get("salla_snapchat_orders") or 0)
+        total_sales = round(
+            float(coverage.get("salla_snapchat_sales_sar") or 0), 2
+        )
+        totals = result.setdefault("totals", {})
+        spend_sar = _number(totals.get("spend_sar"))
+        totals.update({
+            "orders": total_orders,
+            "sales_sar": total_sales,
+            "roas": _ratio(total_sales, spend_sar),
+            "cpa_sar": _ratio(spend_sar, total_orders),
+        })
+        return result
+
+    wrapped_build_report._mezan_salla_headline_totals = True  # type: ignore[attr-defined]
+    routes.build_snapchat_result_source_report = wrapped_build_report
+
+
+# The package imports the original route before this module, so installation is
+# safe here and also covers focused tests that import the route directly.
+install_snapchat_salla_campaign_outcomes()
 
 
 __all__ = [
