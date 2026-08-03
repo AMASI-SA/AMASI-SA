@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feat/prod-ads-executive-salla-attribution-v1
+          ref: feat/prod-ads-executive-salla-attribution-v2
           fetch-depth: 0
 
       - name: Extract and apply patch
@@ -93,4 +93,4 @@ jobs:
             frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx \
             frontend/src/pages/Dashboard.jsx
           git commit -m "feat(prod-dashboard): use Salla attribution in ads executive table"
-          git push origin HEAD:feat/prod-ads-executive-salla-attribution-v1
+          git push origin HEAD:feat/prod-ads-executive-salla-attribution-v2
