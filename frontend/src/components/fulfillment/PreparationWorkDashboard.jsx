@@ -48,6 +48,14 @@ export function fileEstimatedDueAt(pieces = [], batchId = "") {
     return timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null;
 }
 
+export function filePiecesAreReady(file = {}) {
+    const actual = Number(file?.piece_count || 0);
+    const expected = Number(file?.expected_piece_count || 0);
+    return expected > 0
+        && actual === expected
+        && file?.piece_registry_status !== "recovery_required";
+}
+
 function formatDateTime(value) {
     if (!value) return "—";
     const parsed = new Date(value);
@@ -97,6 +105,9 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
     const files = Array.isArray(work?.files) ? work.files : [];
     const pieces = Array.isArray(work?.pieces) ? work.pieces : [];
     const summary = work?.summary || {};
+    const materializationWarnings = Array.isArray(work?.materialization_warnings)
+        ? work.materialization_warnings
+        : [];
 
     if (loading && !files.length) {
         return (
@@ -139,6 +150,25 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
                 </div>
             )}
 
+            {materializationWarnings.length > 0 && (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-rose-950" data-testid="preparation-piece-recovery-warning">
+                    <div className="flex items-start gap-2">
+                        <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
+                        <div>
+                            <div className="font-black">تعذّر تجهيز سجلات القطع لبعض الملفات</div>
+                            <p className="mt-1 text-xs font-bold leading-6">لا تبدأ هذه الملفات حتى يكتمل الاسترداد. اضغط تحديث لإعادة المحاولة.</p>
+                            <div className="mt-2 space-y-1 text-xs font-bold" dir="ltr">
+                                {materializationWarnings.map((warning) => (
+                                    <div key={`${warning.file_number}-${warning.error_code || warning.error_type}`}>
+                                        {warning.file_number}: {warning.error_code || warning.error_type || "materialization_failed"}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {!files.length && !error ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
                     <CheckCircle size={34} className="mx-auto text-slate-400" />
@@ -151,7 +181,9 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
                         const automaticDue = fileEstimatedDueAt(pieces, file.batch_id);
                         const required = file.schedule_mode === "required";
                         const dueAt = required ? file.required_due_at : automaticDue;
-                        const canStart = ["assigned", "not_started", ""].includes(file.execution_status || "");
+                        const piecesReady = filePiecesAreReady(file);
+                        const canStart = piecesReady
+                            && ["assigned", "not_started", ""].includes(file.execution_status || "");
                         return (
                             <article key={file.file_number} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${required ? "border-rose-300" : "border-slate-200"}`}>
                                 <header className={`p-4 sm:p-5 ${required ? "bg-rose-50" : "bg-slate-50"}`}>
@@ -190,6 +222,11 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
                                             {startingFile === file.file_number ? <SpinnerGap size={19} className="animate-spin" /> : <Play size={19} weight="fill" />}
                                             بدء التنفيذ
                                         </button>
+                                    )}
+                                    {!piecesReady && (
+                                        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">
+                                            سجلات القطع غير مكتملة ({file.piece_count || 0}/{file.expected_piece_count || 0}) — بدء التنفيذ متوقف حتى الاسترداد.
+                                        </div>
                                     )}
                                 </header>
                                 <div className="divide-y divide-slate-100">

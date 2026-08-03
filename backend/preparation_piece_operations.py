@@ -113,6 +113,30 @@ def _positive_unit_indices(line: dict[str, Any]) -> list[int]:
     return list(range(1, quantity + 1))
 
 
+def validate_materialized_piece_count(
+    *,
+    batch: dict[str, Any],
+    registry: dict[str, Any],
+    pieces: list[dict[str, Any]],
+) -> int:
+    """Fail closed when a ready file did not produce every physical piece."""
+    expected_piece_count = int(
+        batch.get("allocated_quantity")
+        or registry.get("allocated_quantity")
+        or 0
+    )
+    if expected_piece_count <= 0 or len(pieces) != expected_piece_count:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "preparation_piece_count_mismatch",
+                "expected_piece_count": expected_piece_count,
+                "actual_piece_count": len(pieces),
+            },
+        )
+    return expected_piece_count
+
+
 def _selected_spec_pairs(line: dict[str, Any]) -> set[tuple[str, str]]:
     pairs: set[tuple[str, str]] = set()
     for row in line.get("file_spec_fields") or []:
@@ -432,10 +456,13 @@ async def materialize_preparation_pieces(
     registry: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Idempotently create physical pieces after file registration."""
-    await ensure_piece_operation_indexes(db)
     batch_id = _text(registry.get("batch_id"))
     if not batch_id:
-        return []
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "preparation_file_batch_missing"},
+        )
+    await ensure_piece_operation_indexes(db)
     batch = await db[BATCHES].find_one(
         {"user_id": user_id, "id": batch_id, "status": "ready"},
         {"_id": 0},
@@ -469,6 +496,11 @@ async def materialize_preparation_pieces(
         assigned_at=assigned_at,
         duration_by_signature=duration_history,
     )
+    validate_materialized_piece_count(
+        batch=batch,
+        registry=registry,
+        pieces=pieces,
+    )
     for piece in pieces:
         insert_values = dict(piece)
         insert_values.pop("updated_at", None)
@@ -496,16 +528,23 @@ async def materialize_preparation_pieces(
     runtime_patch = {
         "execution_status": "assigned",
         "piece_count": len(pieces),
+        "piece_registry_status": "ready",
         "piece_registry_materialized_at": now,
         "updated_at": now,
     }
+    runtime_unset = {
+        "piece_registry_last_error": "",
+        "piece_registry_last_error_code": "",
+        "piece_registry_last_error_message": "",
+        "piece_registry_last_error_at": "",
+    }
     await db[REGISTRY].update_one(
         {"user_id": user_id, "batch_id": batch_id},
-        {"$set": runtime_patch},
+        {"$set": runtime_patch, "$unset": runtime_unset},
     )
     await db[BATCHES].update_one(
         {"user_id": user_id, "id": batch_id},
-        {"$set": runtime_patch},
+        {"$set": runtime_patch, "$unset": runtime_unset},
     )
     return pieces
 
@@ -751,6 +790,11 @@ def _file_public(row: dict[str, Any], counts: dict[str, int]) -> dict[str, Any]:
         "started_at": row.get("started_at"),
         "schedule_mode": _text(row.get("schedule_mode")) or "automatic",
         "required_due_at": row.get("required_due_at"),
+        "expected_piece_count": int(row.get("allocated_quantity") or 0),
+        "piece_registry_status": _text(row.get("piece_registry_status")) or None,
+        "piece_registry_last_error": _text(row.get("piece_registry_last_error")) or None,
+        "piece_registry_last_error_code": _text(row.get("piece_registry_last_error_code")) or None,
+        "piece_registry_last_error_message": _text(row.get("piece_registry_last_error_message")) or None,
         "piece_count": counts.get("total", 0),
         "assigned_count": counts.get(PIECE_STATUS_ASSIGNED, 0),
         "in_progress_count": counts.get(PIECE_STATUS_IN_PROGRESS, 0),
@@ -1017,6 +1061,7 @@ __all__ = [
     "build_piece_documents",
     "ensure_piece_operation_indexes",
     "inherit_required_services",
+    "validate_materialized_piece_count",
     "install_preparation_piece_operations",
     "make_preparation_piece_operations_router",
     "materialize_preparation_pieces",

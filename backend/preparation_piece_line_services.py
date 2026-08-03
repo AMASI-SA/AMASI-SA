@@ -10,7 +10,10 @@ materialises older ready files when the work views are opened.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
+
+from fastapi import HTTPException
 
 from order_item_engine.mapper import map_order_item_identities
 from order_review_routes import _text
@@ -209,7 +212,7 @@ async def _materialize_missing_ready_files(
     user_id: str,
     employee_id: str | None = None,
     limit: int = 200,
-) -> list[str]:
+) -> list[dict[str, Any]]:
     """Backfill historical registered files without changing external systems."""
     import preparation_piece_operations as base
 
@@ -219,6 +222,8 @@ async def _materialize_missing_ready_files(
         "$or": [
             {"piece_registry_materialized_at": {"$exists": False}},
             {"piece_registry_materialized_at": None},
+            {"piece_registry_status": "recovery_required"},
+            {"piece_count": {"$lte": 0}},
         ],
     }
     if employee_id:
@@ -227,7 +232,7 @@ async def _materialize_missing_ready_files(
         query,
         {"_id": 0},
     ).sort("registered_at", -1).limit(limit).to_list(limit)
-    failures: list[str] = []
+    failures: list[dict[str, Any]] = []
     for row in rows:
         try:
             await base.materialize_preparation_pieces(
@@ -235,9 +240,39 @@ async def _materialize_missing_ready_files(
                 user_id=user_id,
                 registry=row,
             )
-        except Exception:
-            failures.append(_text(row.get("file_number")) or _text(row.get("batch_id")))
-    return [value for value in failures if value]
+        except Exception as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else None
+            error_code = _text(detail.get("code")) if isinstance(detail, dict) else ""
+            error_message = _text(detail.get("message")) if isinstance(detail, dict) else ""
+            if not error_message:
+                error_message = _text(exc)[:240]
+            now = datetime.now(timezone.utc)
+            warning = {
+                "piece_registry_status": "recovery_required",
+                "piece_registry_last_error": type(exc).__name__,
+                "piece_registry_last_error_code": error_code or None,
+                "piece_registry_last_error_message": error_message or None,
+                "piece_registry_last_error_at": now,
+                "updated_at": now,
+            }
+            file_number = _text(row.get("file_number"))
+            batch_id = _text(row.get("batch_id"))
+            await db[base.REGISTRY].update_one(
+                {"user_id": user_id, "file_number": file_number},
+                {"$set": warning},
+            )
+            if batch_id:
+                await db[base.BATCHES].update_one(
+                    {"user_id": user_id, "id": batch_id},
+                    {"$set": warning},
+                )
+            failures.append({
+                "file_number": file_number or batch_id,
+                "error_type": type(exc).__name__,
+                "error_code": error_code or None,
+                "error_message": error_message or None,
+            })
+    return [value for value in failures if value.get("file_number")]
 
 
 async def _my_work_with_backfill(
