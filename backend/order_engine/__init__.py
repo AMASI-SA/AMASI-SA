@@ -95,6 +95,10 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_piece_execution_guard import (
         install_preparation_piece_execution_guard,
     )
+    from preparation_file_failure_safety import (
+        install_preparation_finalize_safety,
+        make_preparation_file_failure_safety_router,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -121,6 +125,7 @@ def make_order_engine_router(*args, **kwargs):
     install_preparation_piece_operations()
     install_preparation_piece_line_services()
     install_preparation_piece_execution_guard()
+    install_preparation_finalize_safety()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
     install_product_field_cost_support()
@@ -175,6 +180,7 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_product_sorting_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
+        make_preparation_file_failure_safety_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]
