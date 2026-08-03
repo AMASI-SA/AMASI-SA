@@ -1,0 +1,104 @@
+name: Production Dashboard V2 Ad FX And Payment Fees
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/dashboard_v2_ad_costs.py"
+      - "backend/dashboard_v2_routes.py"
+      - "backend/tests/test_dashboard_v2_ad_account_costs.py"
+      - "frontend/src/components/ProfitSummaryCard.jsx"
+      - "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx"
+      - "frontend/src/pages/Dashboard.jsx"
+      - ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          cryptography
+          bcrypt
+          PyJWT
+          pytest
+          pytest-asyncio
+          openpyxl
+      - name: Compile dashboard cost modules
+        run: >-
+          python -m py_compile
+          dashboard_v2_ad_costs.py
+          dashboard_v2_routes.py
+          tests/test_dashboard_v2_ad_account_costs.py
+      - name: Test account FX and bank-fee accounting contract
+        run: >-
+          python -m pytest
+          tests/test_dashboard_v2_ad_account_costs.py
+          -q --tb=short
+      - name: Enforce read-only integration in Dashboard V2
+        working-directory: .
+        run: |
+          COSTS=backend/dashboard_v2_ad_costs.py
+          DASH=backend/dashboard_v2_routes.py
+          grep -q 'spend_native' "$COSTS"
+          grep -q 'mezan_ad_account_cost_settings_v2' "$COSTS"
+          grep -q 'effective_spend_sar' "$DASH"
+          grep -q 'apply_mezan_v2_ad_account_costs' "$DASH"
+          grep -q 'merge_ad_bank_fees_into_dashboard(response, ads)' "$DASH"
+          grep -q 'total_ads_cost.*ads_total' "$DASH"
+          grep -q 'payment_gateway_fees.*mezan_ad_account_cost_settings_v2' "$DASH"
+          grep -q 'accounting_write_reached.*False' "$COSTS"
+          grep -q 'qoyod_write_reached.*False' "$COSTS"
+          ! grep -q 'ads_currency_settings' "$COSTS"
+          ! grep -q 'counterparties' "$COSTS"
+          ! grep -q 'update_one\|insert_one\|delete_one' "$COSTS"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test expandable payment-fee table
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/ProfitSummaryCard.paymentFees.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce executive-summary contract
+        working-directory: .
+        run: |
+          CARD=frontend/src/components/ProfitSummaryCard.jsx
+          DASH=frontend/src/pages/Dashboard.jsx
+          grep -q 'profit-line-payment-fees' "$CARD"
+          grep -q 'payment-fees-breakdown-table' "$CARD"
+          grep -q 'ad_bank_commission_fees' "$CARD"
+          grep -q 'paymentBreakdown={data?.payment_breakdown || \[\]}' "$DASH"

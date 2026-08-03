@@ -17,6 +17,10 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 
 from auth import ensure_user_settings
+from dashboard_v2_ad_costs import (
+    apply_mezan_v2_ad_account_costs,
+    merge_ad_bank_fees_into_dashboard,
+)
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
@@ -631,7 +635,11 @@ async def _provider_rows(
 
 def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -> dict[str, Any]:
     selected = [row for row in rows if start <= str(row.get("date") or "") <= end]
-    spend = sum(_float(row.get("spend_sar")) for row in selected)
+    spend = sum(_float(
+        row.get("effective_spend_sar")
+        if row.get("effective_spend_sar") is not None
+        else row.get("spend_sar")
+    ) for row in selected)
     orders = sum(
         _float(
             row.get("purchases")
@@ -680,7 +688,11 @@ def _build_snapchat_account_summaries(
         if account_id:
             by_account[account_id].append(row)
 
-    total_spend = sum(_float(row.get("spend_sar")) for row in rows)
+    total_spend = sum(_float(
+        row.get("effective_spend_sar")
+        if row.get("effective_spend_sar") is not None
+        else row.get("spend_sar")
+    ) for row in rows)
     accounts: list[dict[str, Any]] = []
     for meta in accounts_meta:
         account_id = str(
@@ -744,12 +756,22 @@ async def build_mezan_v2_ads(
     today = _today_riyadh().isoformat()
     start = from_date or today
     end = to_date or start
-    platform_rows = {
+    raw_platform_rows = {
         provider: await _provider_rows(db, user_id, provider, start, end)
         for provider in ("snapchat", "meta", "tiktok")
     }
+    account_costs = await apply_mezan_v2_ad_account_costs(
+        db,
+        user_id,
+        raw_platform_rows,
+    )
+    platform_rows = account_costs["platform_rows"]
     breakdown = {
-        provider: round(sum(_float(row.get("spend_sar")) for row in rows), 2)
+        provider: round(sum(_float(
+            row.get("effective_spend_sar")
+            if row.get("effective_spend_sar") is not None
+            else row.get("spend_sar")
+        ) for row in rows), 2)
         for provider, rows in platform_rows.items()
     }
     google_rows = await _to_list(
@@ -763,6 +785,14 @@ async def build_mezan_v2_ads(
         sum(_float(row.get("google_ads")) for row in google_rows),
         2,
     )
+    bank_commissions = {
+        key: value for key, value in account_costs.items()
+        if key != "platform_rows"
+    }
+    bank_commissions["google_transitional_spend_sar"] = breakdown["google_transitional"]
+    bank_commissions["google_account_allocation"] = (
+        "not_available" if breakdown["google_transitional"] > 0 else "not_required"
+    )
     return {
         "total": round(sum(breakdown.values()), 2),
         "breakdown": breakdown,
@@ -770,12 +800,15 @@ async def build_mezan_v2_ads(
             provider: _aggregate_provider_rows(rows, start, end)
             for provider, rows in platform_rows.items()
         },
+        "bank_commissions": bank_commissions,
         "source_contract": {
-            "snapchat": f"{SNAP_FACTS}:selected_accounts:ad_account_rows",
-            "meta": f"{META_FACTS}:selected_accounts",
-            "tiktok": f"{TIKTOK_FACTS}:connected_accounts",
-            "google": "daily_costs.google_ads:transitional_read_only",
-            "excluded": ["legacy_ad_ledger", "daily_costs.snapchat_ads", "daily_costs.instagram_ads"],
+            "snapchat": f"{SNAP_FACTS}:selected_accounts:ad_account_rows:spend_native",
+            "meta": f"{META_FACTS}:selected_accounts:spend_native",
+            "tiktok": f"{TIKTOK_FACTS}:connected_accounts:spend_native",
+            "exchange_rates": "mezan_ad_account_cost_settings_v2:per_account",
+            "bank_commissions": "mezan_ad_account_cost_settings_v2:per_account",
+            "google": "daily_costs.google_ads:transitional_read_only:no_account_allocation",
+            "excluded": ["legacy_ad_ledger", "legacy_ads_currency_settings", "daily_costs.snapchat_ads", "daily_costs.instagram_ads"],
         },
     }
 
@@ -785,10 +818,20 @@ async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[s
     today_s = today.isoformat()
     month_start = today.replace(day=1).isoformat()
     d30_start = (today - timedelta(days=29)).isoformat()
-    rows = await _provider_rows(db, user_id, provider, d30_start, today_s)
+    raw_rows = await _provider_rows(db, user_id, provider, d30_start, today_s)
+    costed = await apply_mezan_v2_ad_account_costs(
+        db,
+        user_id,
+        {slug: raw_rows if slug == provider else [] for slug in ("snapchat", "meta", "tiktok")},
+    )
+    rows = costed["platform_rows"].get(provider, [])
     by_date = defaultdict(float)
     for row in rows:
-        by_date[str(row.get("date") or "")] += _float(row.get("spend_sar"))
+        by_date[str(row.get("date") or "")] += _float(
+            row.get("effective_spend_sar")
+            if row.get("effective_spend_sar") is not None
+            else row.get("spend_sar")
+        )
     return {
         "today": {"date": today_s, **_aggregate_provider_rows(rows, today_s, today_s)},
         "month": {"start": month_start, **_aggregate_provider_rows(rows, month_start, today_s)},
@@ -797,7 +840,8 @@ async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[s
             {"date": (today - timedelta(days=offset)).isoformat(), "spend": round(by_date[(today - timedelta(days=offset)).isoformat()], 2)}
             for offset in range(29, -1, -1)
         ],
-        "source": f"mezan_v2_{provider}_native",
+        "source": f"mezan_v2_{provider}_native_with_account_fx",
+        "cost_settings_coverage": costed.get("coverage") or {},
         "has_data": bool(rows),
         "connection_status": "ok" if rows else "unavailable",
         "source_only": True,
@@ -913,6 +957,7 @@ def make_dashboard_v2_router(
             "legacy_analyses_count": 0,
             "analyses_count": 0,
         })
+        merge_ad_bank_fees_into_dashboard(response, ads)
         response.update({
             "recent_analyses": [],
             "product_cost_v2": product_cost,
@@ -924,7 +969,7 @@ def make_dashboard_v2_router(
                 "advertising": ads["source_contract"],
                 "employee_salaries": "legacy_operating_expense_settings",
                 "shipping_partners": "legacy_shipping_cost_ssot",
-                "payment_gateway_fees": "legacy_payment_method_settings",
+                "payment_gateway_fees": "legacy_payment_method_settings + mezan_ad_account_cost_settings_v2",
             },
             "source_only": True,
             "accounting_write_reached": False,
@@ -970,7 +1015,13 @@ def make_dashboard_v2_router(
         today = _today_riyadh()
         start = today.replace(day=1).isoformat()
         end = today.isoformat()
-        rows = await _provider_rows(db, user_id, "snapchat", start, end)
+        raw_rows = await _provider_rows(db, user_id, "snapchat", start, end)
+        costed = await apply_mezan_v2_ad_account_costs(
+            db,
+            user_id,
+            {"snapchat": raw_rows, "meta": [], "tiktok": []},
+        )
+        rows = costed["platform_rows"].get("snapchat", [])
         accounts_meta = await _to_list(
             db.mezan_integration_accounts_v2.find(
                 {
@@ -1005,7 +1056,8 @@ def make_dashboard_v2_router(
             "source_contract": {
                 "grain": "one independent card per selected Snapchat ad account",
                 "identity": "ad_account_id",
-                "metrics": "provider ad-account Riyadh-day facts only",
+                "metrics": "provider native spend multiplied by Mezan 2 account exchange rate",
+                "bank_commissions": "reported separately under payment fees",
                 "cross_account_allocation": False,
             },
             "source_only": True,
