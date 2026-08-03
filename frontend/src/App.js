@@ -92,7 +92,7 @@ import FinancialMovementNewPage from "./pages/FinancialMovementNewPage";
 import FinancialMovementsListPage from "./pages/FinancialMovementsListPage";
 import LegacyUsageReportPage from "./pages/LegacyUsageReportPage";
 import SuppliersReportPage from "./pages/SuppliersReportPage";
-import AdsCurrencySettings from "./pages/AdsCurrencySettings";
+import AdsCostSettingsV2 from "./pages/AdsCostSettingsV2";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
@@ -223,7 +223,7 @@ function AppRoutes() {
             <Route path="/financial-movements" element={<ProtectedRoute><Layout><FinancialMovementsListPage /></Layout></ProtectedRoute>} />
             <Route path="/legacy-usage-report" element={<ProtectedRoute><Layout><LegacyUsageReportPage /></Layout></ProtectedRoute>} />
             <Route path="/reports/suppliers" element={<ProtectedRoute><Layout><SuppliersReportPage /></Layout></ProtectedRoute>} />
-            <Route path="/settings/ads-currencies" element={<ProtectedRoute><Layout><AdsCurrencySettings /></Layout></ProtectedRoute>} />
+            <Route path="/settings/ads-currencies" element={<ProtectedRoute><Navigate to="/ads-manager/cost-settings" replace /></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
@@ -323,6 +323,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><CustomerIntelligenceCenter /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/ads-manager/cost-settings"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><AdsCostSettingsV2 /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

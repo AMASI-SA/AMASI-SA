@@ -147,18 +147,7 @@ export default function Layout({ children }) {
     const searchParams = new URLSearchParams(location.search);
     const workspace = searchParams.get("workspace");
     const marketingProvider = searchParams.get("provider");
-    const isV2 = [
-        "/dashboard-v2",
-        "/orders-v2",
-        "/fulfillment-v2",
-        "/inventory-receiving-v2",
-        "/products-v2",
-        "/components-v2",
-        "/integrations-v2",
-        "/customer-intelligence",
-        "/ads-manager",
-    ].some((prefix) => location.pathname.startsWith(prefix));
-    const isMezanV2 = isV2 && isMezanV2Route(location.pathname);
+    const isMezanV2 = isMezanV2Route(location.pathname);
     const hasLegacySpecificChild = legacySpecificChildContract(location);
     const isWarehouseV2 = location.pathname === "/components-v2" && workspace === "warehouse";
     const isProductIntake = location.pathname === "/products-v2" && workspace === "intake";

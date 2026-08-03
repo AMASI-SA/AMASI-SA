@@ -16,21 +16,21 @@ const marketing = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "market
 
 test("marketing navigation owns bank commission and exchange rate settings", () => {
     const item = marketing.items.find(
-        (row) => row.to === "/settings/ads-currencies",
+        (row) => row.to === "/ads-manager/cost-settings",
     );
 
     expect(item).toEqual({
-        to: "/settings/ads-currencies",
+        to: "/ads-manager/cost-settings",
         label: "العمولات وسعر الصرف",
         exactSearch: true,
     });
-    expect(isMezanV2Route("/settings/ads-currencies")).toBe(true);
+    expect(isMezanV2Route("/ads-manager/cost-settings")).toBe(true);
     expect(isNavigationItemActive(
-        { pathname: "/settings/ads-currencies", search: "" },
+        { pathname: "/ads-manager/cost-settings", search: "" },
         item,
     )).toBe(true);
     expect(activeNavigationSection({
-        pathname: "/settings/ads-currencies",
+        pathname: "/ads-manager/cost-settings",
         search: "",
     })?.id).toBe("marketing");
 });
