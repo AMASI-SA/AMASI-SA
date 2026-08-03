@@ -10,6 +10,7 @@ on:
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
       - "backend/tests/test_preparation_piece_line_services.py"
+      - "backend/tests/test_preparation_piece_stage_semantics.py"
       - "frontend/src/index.js"
       - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
       - "frontend/src/reviewPreparationFileScheduleSync.js"
@@ -67,6 +68,7 @@ jobs:
           python -m pytest
           tests/test_preparation_piece_operations.py
           tests/test_preparation_piece_line_services.py
+          tests/test_preparation_piece_stage_semantics.py
           tests/test_reviewed_preparation_batches.py
           tests/test_preparation_file_registry.py
           tests/test_fulfillment_v2_contract.py
