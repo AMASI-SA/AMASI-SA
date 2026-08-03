@@ -92,6 +92,9 @@ def make_order_engine_router(*args, **kwargs):
     from preparation_piece_line_services import (
         install_preparation_piece_line_services,
     )
+    from preparation_piece_execution_guard import (
+        install_preparation_piece_execution_guard,
+    )
     from product_inventory_receipt_routes import (
         make_product_inventory_receipt_router,
     )
@@ -117,6 +120,7 @@ def make_order_engine_router(*args, **kwargs):
     install_order_review_forward_stage_guard()
     install_preparation_piece_operations()
     install_preparation_piece_line_services()
+    install_preparation_piece_execution_guard()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
     install_product_field_cost_support()
