@@ -7,6 +7,7 @@ on:
     paths:
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_campaign_result_source_routes.py"
+      - "backend/integrations_control_center/snapchat_salla_campaign_outcomes.py"
       - "backend/tests/test_snapchat_campaign_result_source_v1.py"
       - "frontend/src/index.js"
       - "frontend/src/marketingAdsManagerWorkspaceEnhancer.js"
@@ -50,10 +51,11 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile result source route
+      - name: Compile result source routes
         run: >-
           python -m py_compile
           integrations_control_center/snapchat_campaign_result_source_routes.py
+          integrations_control_center/snapchat_salla_campaign_outcomes.py
           integrations_control_center/__init__.py
           tests/test_snapchat_campaign_result_source_v1.py
       - name: Run focused backend tests
@@ -66,6 +68,7 @@ jobs:
         working-directory: .
         run: |
           ROUTE=backend/integrations_control_center/snapchat_campaign_result_source_routes.py
+          OUTCOMES=backend/integrations_control_center/snapchat_salla_campaign_outcomes.py
           INIT=backend/integrations_control_center/__init__.py
           grep -q 'RESULT_SOURCE_SALLA = "salla"' "$ROUTE"
           grep -q 'RESULT_SOURCE_PLATFORM = "platform"' "$ROUTE"
@@ -73,10 +76,14 @@ jobs:
           grep -q 'snapchat_conversion_reporting' "$ROUTE"
           grep -q 'spend_native' "$ROUTE"
           grep -q 'display_currency' "$ROUTE"
+          grep -q 'campaign_rows_exact_match_only' "$OUTCOMES"
+          grep -q 'headline_includes_unattributed_snapchat' "$OUTCOMES"
+          grep -q 'salla_snapchat_orders' "$OUTCOMES"
+          grep -q 'install_snapchat_salla_campaign_outcomes' "$INIT"
           grep -q 'attach_snapchat_campaign_result_source_routes' "$INIT"
           grep -q 'attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes' "$INIT"
-          ! grep -Eq 'update_one|insert_one|delete_one|replace_one|find_one_and_update' "$ROUTE"
-          ! grep -Eq 'httpx|requests\.|api\.snapchat|Authorization' "$ROUTE"
+          ! grep -Eq 'update_one|insert_one|delete_one|replace_one|find_one_and_update' "$ROUTE" "$OUTCOMES"
+          ! grep -Eq 'httpx|requests\.|api\.snapchat|Authorization' "$ROUTE" "$OUTCOMES"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -115,6 +122,8 @@ jobs:
           grep -q 'result_source: campaignResultsSource("snapchat")' "$TRANSPORT"
           grep -q 'سلة — النتائج الفعلية' "$ENHANCER"
           grep -q 'الحساب الإعلاني' "$ENHANCER"
+          grep -q 'matched_orders' "$ENHANCER"
+          grep -q 'unattributed_snapchat_orders' "$ENHANCER"
           grep -q 'campaign.cpa_native' "$ENHANCER"
           grep -q 'campaign.sales_native' "$ENHANCER"
           grep -q 'data-mezan-campaign-result-source' "$CSS"
