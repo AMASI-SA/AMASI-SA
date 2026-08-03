@@ -21,6 +21,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           workflow = Path(".github/workflows/tmp-ads-executive-salla-attribution.yml")
           lines = workflow.read_text(encoding="utf-8").splitlines()
@@ -38,38 +39,42 @@ jobs:
               raise RuntimeError("patch body not found")
 
           patch = "\n".join(body) + "\n"
-          patch = patch.replace(
-              'ads_anchor = \'\'\'        ads = await build_mezan_v2_ads(\n'
-              '              db,\n'
-              '              user_id,\n'
-              '              from_date=from_date,\n'
-              '              to_date=to_date,\n'
-              '          )\n'
-              '          totals = response["totals"]\n'
-              '\'\'\'',
-              'ads_anchor = \'\'\'        ads = await build_mezan_v2_ads(\n'
-              '            db,\n'
-              '            user_id,\n'
-              '            from_date=from_date,\n'
-              '            to_date=to_date,\n'
-              '        )\n'
-              '        totals = response["totals"]\n'
-              '\'\'\'',
+          correct_anchor = '''ads_anchor = \'\'\'        ads = await build_mezan_v2_ads(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        totals = response["totals"]
+\'\'\''''
+          correct_replacement = '''ads_replacement = \'\'\'        ads = await build_mezan_v2_ads(
+            db,
+            user_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        ads["executive_breakdown"] = build_salla_ads_executive_breakdown(
+            orders,
+            ads,
+        )
+        totals = response["totals"]
+\'\'\''''
+          patch, anchor_count = re.subn(
+              r"ads_anchor = '''[\s\S]*?'''",
+              lambda _match: correct_anchor,
+              patch,
+              count=1,
           )
-          patch = patch.replace(
-              'ads_replacement = \'\'\'        ads = await build_mezan_v2_ads(\n'
-              '              db,\n'
-              '              user_id,\n'
-              '              from_date=from_date,\n'
-              '              to_date=to_date,\n'
-              '          )\n',
-              'ads_replacement = \'\'\'        ads = await build_mezan_v2_ads(\n'
-              '            db,\n'
-              '            user_id,\n'
-              '            from_date=from_date,\n'
-              '            to_date=to_date,\n'
-              '        )\n',
+          patch, replacement_count = re.subn(
+              r"ads_replacement = '''[\s\S]*?'''",
+              lambda _match: correct_replacement,
+              patch,
+              count=1,
           )
+          if anchor_count != 1 or replacement_count != 1:
+              raise RuntimeError(
+                  f"could not normalize dashboard anchors: {anchor_count}/{replacement_count}"
+              )
           Path("/tmp/ads_executive_patch.py").write_text(
               patch,
               encoding="utf-8",
