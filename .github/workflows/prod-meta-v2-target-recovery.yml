@@ -36,6 +36,7 @@ jobs:
           pymongo==4.5.0
           pytest
           pytest-asyncio
+          openpyxl
       - name: Compile recovery modules
         run: >-
           python -m py_compile
