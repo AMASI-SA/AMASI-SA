@@ -2,22 +2,26 @@
 
 The same Salla product may appear in one preparation file with different option
 values. Product-only service-plan keys would let the last line overwrite the
-others. This installer keeps inherited option services scoped to the exact
-order item while reusing the durable piece builder. It also materialises older
-ready files lazily when the employee or manager opens the new work view.
+others. The visible supplier-file wording may also be edited without changing
+the original Salla option that controls services. This installer snapshots the
+original option fields, scopes services to the exact order item, and lazily
+materialises older ready files when the work views are opened.
 """
 from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
 
+from order_item_engine.mapper import map_order_item_identities
 from order_review_routes import _text
+from order_review_spec_replacements import extract_item_specs
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 
 
 _INSTALLED = False
 _ORIGINAL_BUILD_PIECES = None
+_ORIGINAL_BUILD_BATCH_LINES = None
 _ORIGINAL_MY_WORK_VIEW = None
 _ORIGINAL_MANAGER_SUMMARY = None
 
@@ -32,6 +36,43 @@ def preparation_line_service_key(line: dict[str, Any]) -> str:
         _text(line.get("product_id")),
         _text(line.get("line_number")),
     ))
+
+
+def original_service_spec_fields(identity: Any) -> list[dict[str, str]]:
+    return [
+        {
+            "spec_key": _text(row.get("spec_key")),
+            "name": _text(row.get("name")),
+            "value": _text(row.get("value")),
+        }
+        for row in extract_item_specs(identity)
+        if _text(row.get("name")) and _text(row.get("value"))
+    ]
+
+
+async def _build_batch_lines_with_service_snapshot(
+    context: dict[str, Any],
+    planned: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep original option values beside editable PDF field wording."""
+    assert _ORIGINAL_BUILD_BATCH_LINES is not None
+    rows = await _ORIGINAL_BUILD_BATCH_LINES(context, planned)
+    identities: dict[tuple[str, str], Any] = {}
+    for order, _workflow in context.get("pairs") or []:
+        order_number = _text(getattr(order, "order_number", None))
+        for identity in map_order_item_identities(order):
+            identities[(order_number, _text(identity.order_item_id))] = identity
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        identity = identities.get((
+            _text(row.get("order_number")),
+            _text(row.get("order_item_id")),
+        ))
+        row["service_spec_fields"] = (
+            original_service_spec_fields(identity) if identity is not None else []
+        )
+    return rows
 
 
 def build_line_service_plans(
@@ -54,10 +95,17 @@ def build_line_service_plans(
         if not isinstance(line, dict):
             continue
         product_id = _text(line.get("product_id"))
+        service_line = dict(line)
+        if line.get("service_spec_fields"):
+            service_line["file_spec_fields"] = list(line["service_spec_fields"])
+            service_line["product_options"] = {}
+            service_line["size"] = None
+            service_line["color"] = None
+            service_line["customer_name"] = None
         plans[preparation_line_service_key(line)] = {
             "product_id": product_id or None,
             "services": inherit_services(
-                line=line,
+                line=service_line,
                 product_links=links_by_product.get(product_id, []),
                 option_bindings=bindings_by_product.get(product_id, []),
                 resources_by_id=resources_by_id,
@@ -139,14 +187,19 @@ def _build_piece_documents_by_line(
         plan = services_by_product.get(preparation_line_service_key(line)) or {
             "services": [],
         }
-        documents.extend(_ORIGINAL_BUILD_PIECES(
+        line_documents = _ORIGINAL_BUILD_PIECES(
             user_id=user_id,
             registry=registry,
             batch={**batch, "lines": [line]},
             services_by_product={product_id: plan},
             assigned_at=assigned_at,
             duration_by_signature=duration_by_signature,
-        ))
+        )
+        for document in line_documents:
+            document["service_specifications_snapshot"] = list(
+                line.get("service_spec_fields") or []
+            )
+        documents.extend(line_documents)
     return documents
 
 
@@ -234,14 +287,18 @@ async def _manager_summary_with_backfill(
 
 def install_preparation_piece_line_services() -> None:
     global _INSTALLED
-    global _ORIGINAL_BUILD_PIECES, _ORIGINAL_MY_WORK_VIEW, _ORIGINAL_MANAGER_SUMMARY
+    global _ORIGINAL_BUILD_PIECES, _ORIGINAL_BUILD_BATCH_LINES
+    global _ORIGINAL_MY_WORK_VIEW, _ORIGINAL_MANAGER_SUMMARY
     if _INSTALLED:
         return
     import preparation_piece_operations as base
+    import reviewed_preparation_batches as batch_module
 
     _ORIGINAL_BUILD_PIECES = base.build_piece_documents
+    _ORIGINAL_BUILD_BATCH_LINES = batch_module._build_batch_lines
     _ORIGINAL_MY_WORK_VIEW = base._my_work_view
     _ORIGINAL_MANAGER_SUMMARY = base._manager_summary
+    batch_module._build_batch_lines = _build_batch_lines_with_service_snapshot
     base._service_context_for_batch = _line_service_context_for_batch
     base.build_piece_documents = _build_piece_documents_by_line
     base._my_work_view = _my_work_with_backfill
@@ -252,5 +309,6 @@ def install_preparation_piece_line_services() -> None:
 __all__ = [
     "build_line_service_plans",
     "install_preparation_piece_line_services",
+    "original_service_spec_fields",
     "preparation_line_service_key",
 ]
