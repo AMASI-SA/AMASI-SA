@@ -8,15 +8,21 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/preparation_piece_line_services.py"
       - "backend/preparation_piece_execution_guard.py"
+      - "backend/preparation_file_failure_safety.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
       - "backend/tests/test_preparation_piece_line_services.py"
       - "backend/tests/test_preparation_piece_stage_semantics.py"
       - "backend/tests/test_preparation_piece_execution_guard.py"
+      - "backend/tests/test_preparation_file_failure_safety.py"
       - "frontend/src/index.js"
       - "frontend/src/reviewPreparationFileMetadataEnhancer.js"
       - "frontend/src/reviewPreparationFileScheduleSync.js"
       - "frontend/src/reviewPreparationFileScheduleSync.test.js"
+      - "frontend/src/preparationFileFailureSafetyClient.js"
+      - "frontend/src/preparationFileFailureSafetyClient.test.js"
+      - "frontend/src/reviewSpecEditVisibilitySafety.js"
+      - "frontend/src/reviewSpecEditVisibilitySafety.test.js"
       - "frontend/src/services/preparationWorkService.js"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
@@ -63,6 +69,7 @@ jobs:
           backend/preparation_piece_operations.py
           backend/preparation_piece_line_services.py
           backend/preparation_piece_execution_guard.py
+          backend/preparation_file_failure_safety.py
           backend/order_engine/__init__.py
 
       - name: Run focused fulfillment contracts
@@ -73,6 +80,7 @@ jobs:
           tests/test_preparation_piece_line_services.py
           tests/test_preparation_piece_stage_semantics.py
           tests/test_preparation_piece_execution_guard.py
+          tests/test_preparation_file_failure_safety.py
           tests/test_reviewed_preparation_batches.py
           tests/test_preparation_file_registry.py
           tests/test_fulfillment_v2_contract.py
@@ -81,11 +89,12 @@ jobs:
       - name: Enforce Mezan-only boundary
         run: |
           set -euo pipefail
-          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py backend/preparation_piece_execution_guard.py; do
+          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py backend/preparation_piece_execution_guard.py backend/preparation_file_failure_safety.py; do
             ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
           done
-          grep -q 'salla_updated.*False' backend/preparation_piece_operations.py
-          grep -q 'qoyod_updated.*False' backend/preparation_piece_operations.py
+          grep -q 'failed_preparation_request_released' backend/preparation_file_failure_safety.py
+          grep -q 'salla_updated.*False' backend/preparation_file_failure_safety.py
+          grep -q 'qoyod_updated.*False' backend/preparation_file_failure_safety.py
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -112,6 +121,8 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/fulfillment/PreparationWorkDashboard.test.jsx
           src/reviewPreparationFileScheduleSync.test.js
+          src/preparationFileFailureSafetyClient.test.js
+          src/reviewSpecEditVisibilitySafety.test.js
           src/pages/FulfillmentV2.test.jsx
 
       - name: Build Production frontend
