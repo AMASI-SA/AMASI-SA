@@ -38,6 +38,9 @@ from .snapchat_ads_manager_attribution import (
 from .snapchat_campaign_result_source_routes import (
     attach_snapchat_campaign_result_source_routes,
 )
+
+# Backward-compatible symbol for the original read-only route contract.
+attach_snapchat_campaign_report_routes = attach_snapchat_campaign_result_source_routes
 from .snapchat_catalog_native import install_snapchat_native_catalog
 from .snapchat_connections import attach_snapchat_connection_routes
 from .snapchat_dashboard_summary_routes import attach_snapchat_dashboard_summary_routes
@@ -92,7 +95,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
     attach_snapchat_account_selection_routes(router, db, current_user, _require_owner)
-    attach_snapchat_campaign_result_source_routes(
+    attach_snapchat_campaign_report_routes(
         router, db, current_user, _require_owner
     )
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)
