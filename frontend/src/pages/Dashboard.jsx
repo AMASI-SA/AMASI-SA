@@ -729,6 +729,7 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                     <ProfitSummaryCard
                         totals={totals}
                         shippingBreakdown={data?.shipping_breakdown || []}
+                        paymentBreakdown={data?.payment_breakdown || []}
                         fromDate={filters.from}
                         toDate={filters.to}
                         productCostBreakdown={isMezanV2 ? data?.product_cost_v2 : null}
