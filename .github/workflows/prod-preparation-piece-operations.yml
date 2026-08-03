@@ -6,8 +6,15 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_piece_line_services.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
+      - "backend/tests/test_preparation_piece_line_services.py"
+      - "frontend/src/services/preparationWorkService.js"
+      - "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx"
+      - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
+      - "frontend/src/pages/FulfillmentV2.jsx"
+      - "frontend/src/pages/FulfillmentV2.test.jsx"
       - ".github/workflows/prod-preparation-piece-operations.yml"
 
 permissions:
@@ -47,6 +54,7 @@ jobs:
         run: >-
           python -m py_compile
           backend/preparation_piece_operations.py
+          backend/preparation_piece_line_services.py
           backend/order_engine/__init__.py
 
       - name: Run focused fulfillment contracts
@@ -54,6 +62,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_preparation_piece_operations.py
+          tests/test_preparation_piece_line_services.py
           tests/test_reviewed_preparation_batches.py
           tests/test_preparation_file_registry.py
           tests/test_fulfillment_v2_contract.py
@@ -62,7 +71,39 @@ jobs:
       - name: Enforce Mezan-only boundary
         run: |
           set -euo pipefail
-          FILE=backend/preparation_piece_operations.py
-          ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
-          grep -q 'salla_updated.*False' "$FILE"
-          grep -q 'qoyod_updated.*False' "$FILE"
+          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py; do
+            ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
+          done
+          grep -q 'salla_updated.*False' backend/preparation_piece_operations.py
+          grep -q 'qoyod_updated.*False' backend/preparation_piece_operations.py
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Run preparation work UI contracts
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/fulfillment/PreparationWorkDashboard.test.jsx
+          src/pages/FulfillmentV2.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
