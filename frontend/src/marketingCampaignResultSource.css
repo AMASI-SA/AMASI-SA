@@ -59,6 +59,16 @@
   white-space: nowrap;
 }
 
+[data-mezan-campaign-result-source="true"][data-coverage-status="complete"]
+  .mezan-campaign-result-source__description {
+  color: #a7f3d0;
+}
+
+[data-mezan-campaign-result-source="true"][data-coverage-status="warning"]
+  .mezan-campaign-result-source__description {
+  color: #fde68a;
+}
+
 [data-marketing-platform="snapchat"][data-campaign-result-source="salla"]
   [data-testid="campaign-manager-table"]::before {
   content: "مصدر النتائج: سلة · الصرف والتفاعل من Snapchat";
