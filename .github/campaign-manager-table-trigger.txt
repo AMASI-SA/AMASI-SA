@@ -1,0 +1,1 @@
+trigger campaign manager table patch
