@@ -8,6 +8,11 @@ import {
   persistOpenReviewProductNotes,
   reviewProductQuantityValue,
 } from "./reviewProductEditMode";
+import {
+  REVIEW_DIALOG_EDIT_CONTROL_CSS,
+  enhanceReviewEditToggle,
+  enhanceReviewImageDialog,
+} from "./reviewImageDialogAndEditControlEnhancer";
 
 
 jest.mock("sonner", () => ({
@@ -126,4 +131,60 @@ test("final card save triggers the hidden notes save when note editors are open"
   await persistOpenReviewProductNotes(card);
 
   expect(handler).toHaveBeenCalledTimes(1);
+});
+
+test("collapsed card exposes a visible edit-options label instead of a hidden pencil-only control", () => {
+  const card = productCard();
+  decorateReviewProductCard(card, { key: "order-1|AMS11936|0" });
+  const toggle = card.querySelector('[data-review-edit-toggle="1"]');
+
+  enhanceReviewEditToggle(toggle);
+
+  expect(toggle.getAttribute("aria-label")).toBe("تعديل خيارات المنتج");
+  expect(toggle.textContent).toContain("تعديل خيارات المنتج");
+  expect(toggle.querySelector("[data-review-edit-visible-label]")).not.toBeNull();
+  expect(REVIEW_DIALOG_EDIT_CONTROL_CSS).toContain("position: relative !important");
+});
+
+test("image-choice dialog keeps close and save actions in a dedicated visible footer", () => {
+  const card = productCard();
+  decorateReviewProductCard(card, { key: "order-1|AMS11936|0" });
+  const overlay = document.createElement("div");
+  overlay.className = "fixed";
+  overlay.innerHTML = `
+    <div class="panel">
+      <div class="header">
+        <div><h3>حفظ صورة التجهيز</h3><p>اختر طريقة استخدام الصورة داخل ميزان.</p></div>
+        <button type="button" data-close>×</button>
+      </div>
+      <div class="body">
+        <label><input type="checkbox" checked> المقاس: 12 سنة</label>
+        <div class="actions">
+          <button type="button">حفظ لهذا الطلب فقط</button>
+          <button type="button">حفظ مع الخيارات المحددة</button>
+          <button type="button">حفظ كصورة رئيسية في ميزان</button>
+        </div>
+      </div>
+    </div>
+  `;
+  card.appendChild(overlay);
+  const heading = overlay.querySelector("h3");
+  const originalOptions = [...overlay.querySelectorAll("button")].find((button) =>
+    button.textContent.includes("حفظ مع الخيارات المحددة"),
+  );
+  const handler = jest.fn();
+  originalOptions.addEventListener("click", handler);
+
+  const enhanced = enhanceReviewImageDialog(heading);
+
+  expect(enhanced.panel.dataset.reviewImageDialogPanel).toBe("1");
+  expect(enhanced.header.dataset.reviewImageDialogHeader).toBe("1");
+  expect(enhanced.body.dataset.reviewImageDialogBody).toBe("1");
+  expect(enhanced.header.querySelector("button").dataset.reviewImageDialogClose).toBe("1");
+  expect(enhanced.panel.querySelector("[data-review-image-dialog-original-actions]")).not.toBeNull();
+  expect(enhanced.footer.querySelectorAll("button")).toHaveLength(4);
+
+  enhanced.footer.querySelector('[data-review-image-proxy="options"]').click();
+  expect(handler).toHaveBeenCalledTimes(1);
+  expect(REVIEW_DIALOG_EDIT_CONTROL_CSS).toContain("display: inline-flex !important");
 });

@@ -10,6 +10,7 @@ import "@/reviewSpecReplacementEnhancer";
 import "@/reviewCompactActionLabels";
 import "@/reviewInternalPreparationRouteEnhancer";
 import "@/reviewProductEditMode";
+import "@/reviewImageDialogAndEditControlEnhancer";
 import "@/reviewAutoAdvance";
 import "@/reviewManualNavigation";
 import "@/reviewCustomerWaiting";
