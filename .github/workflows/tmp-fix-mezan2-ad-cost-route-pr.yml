@@ -1,0 +1,39 @@
+name: Temporary Fix Mezan2 Ad Cost Route On PR
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/prod-mezan2-ad-cost-route-ownership-v1'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-mezan2-ad-cost-route-ownership-v1
+          fetch-depth: 0
+
+      - name: Apply route ownership patch
+        run: python scripts/tmp_fix_mezan2_ad_cost_route.py
+
+      - name: Validate final tree
+        run: |
+          grep -q '"/ads-manager/cost-settings"' frontend/src/components/MezanV2NavigationShell.jsx
+          grep -q 'const isMezanV2 = isMezanV2Route(location.pathname);' frontend/src/components/Layout.jsx
+          grep -q 'Navigate to="/ads-manager/cost-settings" replace' frontend/src/App.js
+          test ! -e frontend/src/pages/AdsCurrencySettings.jsx
+          test ! -e .github/workflows/tmp-fix-mezan2-ad-cost-route-pr.yml
+          test ! -e scripts/tmp_fix_mezan2_ad_cost_route.py
+
+      - name: Commit route ownership patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(prod-marketing): keep ad cost settings inside Mezan 2"
+          git push origin HEAD:fix/prod-mezan2-ad-cost-route-ownership-v1
