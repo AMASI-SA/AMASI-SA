@@ -18,6 +18,7 @@ import "@/reviewAutoAdvance";
 import "@/reviewManualNavigation";
 import "@/reviewCustomerWaiting";
 import "@/reviewPreparationFileMetadataEnhancer";
+import "@/reviewPreparationFileScheduleSync";
 import "@/reviewedProductSortEnhancer";
 import "@/reviewedProductSortThumbnailEnhancer";
 import "@/reviewHideReviewedSecondaryTab";

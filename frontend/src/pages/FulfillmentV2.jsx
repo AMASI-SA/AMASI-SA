@@ -16,6 +16,7 @@ import {
 import OrderReview from "./OrderReview";
 import ReviewedOrders from "./ReviewedOrders";
 import PreparationFilesRegistry from "../components/fulfillment/PreparationFilesRegistry";
+import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 
 export const FULFILLMENT_STAGES = [
@@ -38,7 +39,7 @@ export const FULFILLMENT_STAGES = [
         label: "قيد التنفيذ",
         shortLabel: "قيد التنفيذ",
         Icon: Gear,
-        description: "متابعة القطع المسندة، الموظف المسؤول، المورد، والموعد المتوقع.",
+        description: "متابعة الملفات والقطع المسندة، الموظف المسؤول، الخدمات والموعد المتوقع.",
     },
     {
         key: "preparation",
@@ -228,6 +229,8 @@ export default function FulfillmentV2() {
                 reviewedView === "files"
                     ? <PreparationFilesRegistry />
                     : <ReviewedOrders />
+            ) : activeStage.key === "in_progress" ? (
+                <PreparationWorkDashboard />
             ) : activeStage.key === "ready_to_ship" ? (
                 <ReadyToShipOrders />
             ) : (
