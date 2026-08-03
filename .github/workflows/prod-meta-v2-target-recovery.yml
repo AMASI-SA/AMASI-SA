@@ -1,0 +1,63 @@
+name: Production Meta V2 Scheduler Target Recovery
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/ads_auto_sync_target_recovery.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_ads_auto_sync_target_recovery.py"
+      - ".github/workflows/prod-meta-v2-target-recovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          httpx
+          cryptography
+          bcrypt
+          PyJWT
+          pymongo==4.5.0
+          pytest
+          pytest-asyncio
+      - name: Compile recovery modules
+        run: >-
+          python -m py_compile
+          integrations_control_center/ads_auto_sync_target_recovery.py
+          integrations_control_center/__init__.py
+          tests/test_ads_auto_sync_target_recovery.py
+      - name: Test missing provider projection recovery
+        run: >-
+          python -m pytest
+          tests/test_ads_auto_sync_target_recovery.py
+          -q --tb=short
+      - name: Enforce safe scheduler integration
+        working-directory: .
+        run: |
+          RECOVERY=backend/integrations_control_center/ads_auto_sync_target_recovery.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'mezan_integration_accounts_v2.find' "$RECOVERY"
+          grep -q '"provider": META_PROVIDER_ID' "$RECOVERY"
+          grep -q '"connection_status": "connected"' "$RECOVERY"
+          grep -q '"connection_provenance": "api_connection"' "$RECOVERY"
+          grep -q '"mezan_selected": True' "$RECOVERY"
+          grep -q 'install_ads_auto_sync_target_recovery()' "$INIT"
+          grep -q 'attach_ads_auto_sync_scheduler' "$INIT"
+          ! grep -q 'access_token\|ciphertext\|decrypt_meta_token' "$RECOVERY"
+          ! grep -q 'accounting\|qoyod\|campaign.*update' "$RECOVERY"
