@@ -9,6 +9,9 @@ from .catalog import (
     PROVIDER_BY_ID,
     SAFETY_POLICY,
 )
+from .dashboard_ads_executive_routes import (
+    attach_dashboard_ads_executive_routes,
+)
 from .dashboard_authoritative_summary_routes import (
     attach_dashboard_authoritative_summary_routes,
 )
@@ -98,6 +101,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
 
     attach_snapchat_capi_purchase_routes(router, db, current_user, _require_owner)
     attach_dashboard_authoritative_summary_routes(
+        router, db, current_user, _require_owner
+    )
+    attach_dashboard_ads_executive_routes(
         router, db, current_user, _require_owner
     )
     attach_tiktok_connection_routes(router, db, current_user, _require_owner)

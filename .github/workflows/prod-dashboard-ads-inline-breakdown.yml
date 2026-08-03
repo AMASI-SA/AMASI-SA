@@ -1,0 +1,105 @@
+name: Production Dashboard Ads Inline Breakdown
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_dashboard_ads_executive_inline_fallback.py"
+      - "frontend/src/lib/dashboardMezanV2Adapter.js"
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/dashboardMezanV2Adapter.adsExecutive.test.js"
+      - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
+      - ".github/workflows/prod-dashboard-ads-inline-breakdown.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          cryptography
+          bcrypt
+          PyJWT
+          pytest
+          pytest-asyncio
+          openpyxl
+      - name: Compile fallback route
+        run: >-
+          python -m py_compile
+          integrations_control_center/dashboard_ads_executive_routes.py
+          integrations_control_center/__init__.py
+          tests/test_dashboard_ads_executive_inline_fallback.py
+      - name: Test focused inline fallback
+        run: >-
+          python -m pytest
+          tests/test_dashboard_ads_executive_inline_fallback.py
+          tests/test_dashboard_v2_salla_ads_executive.py
+          -q --tb=short
+      - name: Enforce read-only fallback contract
+        working-directory: .
+        run: |
+          ROUTE=backend/integrations_control_center/dashboard_ads_executive_routes.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q '/dashboard/ads-executive-breakdown' "$ROUTE"
+          grep -q 'build_salla_ads_executive_breakdown' "$ROUTE"
+          grep -q 'build_mezan_v2_ads' "$ROUTE"
+          grep -q 'source_only.*True' "$ROUTE"
+          grep -q 'accounting_write_reached.*False' "$ROUTE"
+          grep -q 'qoyod_write_reached.*False' "$ROUTE"
+          grep -q 'attach_dashboard_ads_executive_routes' "$INIT"
+          ! grep -q 'update_one\|insert_one\|delete_one\|replace_one' "$ROUTE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test inline advertising breakdown
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+          src/components/ProfitSummaryCard.adsExecutive.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce Mezan 2 inline-only behavior
+        working-directory: .
+        run: |
+          API=frontend/src/lib/api.js
+          ADAPTER=frontend/src/lib/dashboardMezanV2Adapter.js
+          grep -q '_mezanDashboardV2' "$ADAPTER"
+          grep -q 'isDashboardV2Response' "$API"
+          grep -q '/integrations-v2/dashboard/ads-executive-breakdown' "$API"
+          grep -q 'emptyDashboardExecutiveBreakdown' "$API"
+          grep -q 'Mezan 2 must never reopen the legacy advertising-cost modal' "$API"
+          grep -q 'mergeDashboardExecutiveBreakdown' "$API"
