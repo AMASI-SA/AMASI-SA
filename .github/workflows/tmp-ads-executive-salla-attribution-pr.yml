@@ -1,0 +1,57 @@
+name: Temporary Ads Executive Salla Attribution On PR
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/prod-ads-executive-salla-attribution-v1
+          fetch-depth: 0
+
+      - name: Extract and apply patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/tmp-ads-executive-salla-attribution.yml")
+          lines = workflow.read_text(encoding="utf-8").splitlines()
+          body = []
+          capture = False
+          for line in lines:
+              if line.strip() == "python - <<'PY'":
+                  capture = True
+                  continue
+              if capture and line.strip() == "PY":
+                  break
+              if capture:
+                  body.append(line[10:] if line.startswith("          ") else line)
+          if not body:
+              raise RuntimeError("patch body not found")
+          Path("/tmp/ads_executive_patch.py").write_text(
+              "\n".join(body) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          python /tmp/ads_executive_patch.py
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/dashboard_v2_routes.py \
+            backend/tests/test_dashboard_v2_salla_ads_executive.py \
+            frontend/src/components/ProfitSummaryCard.jsx \
+            frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx \
+            frontend/src/pages/Dashboard.jsx
+          git commit -m "feat(prod-dashboard): use Salla attribution in ads executive table"
+          git push origin HEAD:feat/prod-ads-executive-salla-attribution-v1
