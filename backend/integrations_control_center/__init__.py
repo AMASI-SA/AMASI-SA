@@ -36,6 +36,9 @@ from .snapchat_account_timezone_manager import (
     attach_snapchat_account_timezone_campaign_routes,
     install_snapchat_account_timezone_scheduler,
 )
+from .snapchat_account_timezone_retention import (
+    install_snapchat_account_timezone_retention,
+)
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
@@ -88,6 +91,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics.
+    install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
