@@ -1,0 +1,68 @@
+import { renderToStaticMarkup } from "react-dom/server";
+
+jest.mock("../../services/preparationWorkService", () => ({
+    getMyPreparationWork: jest.fn(),
+    getPreparationManagerSummary: jest.fn(),
+    startPreparationFile: jest.fn(),
+}));
+
+import PreparationWorkDashboard, {
+    fileEstimatedDueAt,
+    filePieces,
+    riyadhDateInputValue,
+} from "./PreparationWorkDashboard";
+
+
+test("piece selection stays inside its preparation batch", () => {
+    const pieces = [
+        { piece_id: "a", batch_id: "batch-1" },
+        { piece_id: "b", batch_id: "batch-2" },
+        { piece_id: "c", batch_id: "batch-1" },
+    ];
+
+    expect(filePieces(pieces, "batch-1").map((row) => row.piece_id)).toEqual([
+        "a",
+        "c",
+    ]);
+});
+
+
+test("automatic file deadline uses the latest piece estimate", () => {
+    const pieces = [
+        {
+            piece_id: "a",
+            batch_id: "batch-1",
+            estimated_due_at: "2026-08-05T10:00:00Z",
+        },
+        {
+            piece_id: "b",
+            batch_id: "batch-1",
+            estimated_due_at: "2026-08-05T14:00:00Z",
+        },
+        {
+            piece_id: "c",
+            batch_id: "batch-2",
+            estimated_due_at: "2026-08-07T14:00:00Z",
+        },
+    ];
+
+    expect(fileEstimatedDueAt(pieces, "batch-1")).toBe(
+        "2026-08-05T14:00:00.000Z",
+    );
+});
+
+
+test("Riyadh date input uses an ISO-like local business date", () => {
+    const value = riyadhDateInputValue(new Date("2026-08-03T21:30:00Z"));
+    expect(value).toBe("2026-08-04");
+});
+
+
+test("dashboard exposes my work and employee management windows", () => {
+    const markup = renderToStaticMarkup(<PreparationWorkDashboard />);
+
+    expect(markup).toContain('data-testid="preparation-work-dashboard"');
+    expect(markup).toContain("منتجاتي");
+    expect(markup).toContain("إدارة منتجات الموظفين");
+    expect(markup).toContain("جارٍ تحميل منتجاتك");
+});
