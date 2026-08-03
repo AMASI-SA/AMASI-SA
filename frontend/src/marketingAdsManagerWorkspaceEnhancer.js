@@ -68,17 +68,48 @@ function markEntityTabs(table) {
   });
 }
 
-function updateSourceToggle(toggle, source) {
+function finiteCount(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
+}
+
+function sourceDescription(source, snapshot) {
+  if (source !== "salla") {
+    return {
+      text: "المشتريات والعائد كما أبلغت بها المنصة",
+      status: "provider",
+    };
+  }
+  const coverage = snapshot?.source?.salla_attribution;
+  if (!coverage || typeof coverage !== "object") {
+    return {
+      text: "الطلبات والمبيعات الفعلية من سلة",
+      status: "pending",
+    };
+  }
+  const matched = finiteCount(coverage.matched_orders);
+  const unmatched = finiteCount(coverage.unattributed_snapchat_orders);
+  const ambiguous = finiteCount(coverage.ambiguous_orders);
+  const parts = [`مطابقة ${matched.toLocaleString("en-US")} طلب من سلة بالحملات`];
+  if (unmatched > 0) parts.push(`${unmatched.toLocaleString("en-US")} طلب سناب بلا حملة واضحة`);
+  if (ambiguous > 0) parts.push(`${ambiguous.toLocaleString("en-US")} طلب مطابقته ملتبسة`);
+  return {
+    text: parts.join(" · "),
+    status: unmatched > 0 || ambiguous > 0 ? "warning" : "complete",
+  };
+}
+
+function updateSourceToggle(toggle, source, snapshot = null) {
   toggle.querySelectorAll("button[data-result-source]").forEach((button) => {
     const active = button.dataset.resultSource === source;
     button.dataset.active = active ? "true" : "false";
     button.setAttribute("aria-pressed", active ? "true" : "false");
   });
+  const state = sourceDescription(source, snapshot);
+  toggle.dataset.coverageStatus = state.status;
   const description = toggle.querySelector("[data-result-source-description]");
-  if (description) {
-    description.textContent = source === "salla"
-      ? "الطلبات والمبيعات الفعلية من سلة"
-      : "المشتريات والعائد كما أبلغت بها المنصة";
+  if (description && description.textContent !== state.text) {
+    description.textContent = state.text;
   }
 }
 
@@ -121,7 +152,7 @@ function ensureResultSourceToggle(workspace, platform) {
       if (!button) return;
       const next = setCampaignResultsSource(button.dataset.resultSource, platform);
       clearCampaignReportSnapshot(platform);
-      updateSourceToggle(toggle, next);
+      updateSourceToggle(toggle, next, null);
       workspace.dataset.campaignResultSource = next;
       const refresh = workspace.querySelector('[data-testid="marketing-platform-refresh"]');
       if (refresh && !refresh.disabled) refresh.click();
@@ -136,7 +167,7 @@ function ensureResultSourceToggle(workspace, platform) {
   }
   const source = campaignResultsSource(platform);
   workspace.dataset.campaignResultSource = source;
-  updateSourceToggle(toggle, source);
+  updateSourceToggle(toggle, source, getCampaignReportSnapshot(platform));
 }
 
 function headerIndex(table, matcher) {
@@ -157,12 +188,17 @@ function moneyText(value, currency) {
 
 function writeMetricCell(cell, value, currency, secondary = "") {
   if (!cell) return;
+  const parsed = Number(value);
+  const normalizedValue = Number.isFinite(parsed) ? parsed : null;
+  const signature = JSON.stringify([normalizedValue, currency, secondary]);
+  if (cell.dataset.nativeCurrencySignature === signature) return;
+
   cell.replaceChildren();
   const wrapper = document.createElement("div");
   wrapper.className = "font-mono";
   const primary = document.createElement("div");
   primary.className = "font-extrabold text-slate-800";
-  primary.textContent = moneyText(value, currency);
+  primary.textContent = moneyText(normalizedValue, currency);
   wrapper.appendChild(primary);
   if (secondary) {
     const note = document.createElement("div");
@@ -172,6 +208,7 @@ function writeMetricCell(cell, value, currency, secondary = "") {
   }
   cell.appendChild(wrapper);
   cell.dataset.nativeCurrencyApplied = currency;
+  cell.dataset.nativeCurrencySignature = signature;
 }
 
 function campaignIdForRow(row, campaigns) {
