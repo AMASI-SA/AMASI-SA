@@ -31,7 +31,7 @@ const MARKETING_LOCATION = {
 
 const FULFILLMENT_LOCATION = {
     pathname: "/fulfillment-v2",
-    search: "?stage=reviewed",
+    search: "?stage=reviewed&view=products",
 };
 
 test("Mezan 2 shell is limited to Mezan 2 routes", () => {
@@ -45,6 +45,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/integrations-v2",
         "/customer-intelligence",
         "/ads-manager",
+        "/settings/ads-currencies",
     ].forEach((pathname) => expect(isMezanV2Route(pathname)).toBe(true));
 
     [
@@ -61,7 +62,11 @@ test("orders and fulfillment are independent top-level sections", () => {
     const fulfillment = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "fulfillment");
 
     expect(orders.items.map((item) => item.to)).toEqual(["/orders-v2"]);
-    expect(fulfillment.items.map((item) => item.to)).toEqual(["/fulfillment-v2"]);
+    expect(fulfillment.items.map((item) => item.to)).toEqual([
+        "/fulfillment-v2",
+        "/fulfillment-v2?stage=reviewed&view=products",
+        "/fulfillment-v2?stage=reviewed&view=files",
+    ]);
     expect(orders.items.some((item) => item.to.startsWith("/fulfillment-v2"))).toBe(false);
     expect(orders.items.some((item) => item.to === "/inventory-receiving-v2")).toBe(false);
 
@@ -76,7 +81,9 @@ test("orders and fulfillment are independent top-level sections", () => {
     );
     expect(markup).toContain('data-testid="mezan-v2-primary-orders"');
     expect(markup).toContain('data-testid="mezan-v2-primary-fulfillment"');
-    expect(markup).not.toContain('data-testid="mezan-v2-secondary-fulfillment"');
+    expect(markup).toContain('data-testid="mezan-v2-secondary-fulfillment"');
+    expect(markup).toContain("تم المراجعة");
+    expect(markup).toContain("سجل ملفات التجهيز");
 });
 
 test("products section exposes a Salla-style primary group and secondary page rail", () => {
@@ -117,7 +124,7 @@ test("inventory receiving belongs to products rather than orders", () => {
     expect(section?.id).toBe("products");
 });
 
-test("marketing report routes are separate from app integration routes", () => {
+test("marketing report and cost routes are separate from app integration routes", () => {
     const section = activeNavigationSection(MARKETING_LOCATION);
     expect(section?.id).toBe("marketing");
     expect(section.items.map((item) => item.to)).toEqual([
@@ -126,6 +133,7 @@ test("marketing report routes are separate from app integration routes", () => {
         "/ads-manager?provider=tiktok",
         "/ads-manager?provider=meta",
         "/ads-manager?provider=google",
+        "/settings/ads-currencies",
     ]);
     expect(section.items.some((item) => item.to.startsWith("/integrations-v2"))).toBe(false);
 
@@ -146,6 +154,7 @@ test("opening marketing selects a visible secondary rail outside the primary scr
         "تيك توك",
         "ميتا",
         "إعلانات Google",
+        "العمولات وسعر الصرف",
     ]);
 });
 

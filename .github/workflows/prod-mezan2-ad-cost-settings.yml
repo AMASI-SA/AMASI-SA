@@ -1,0 +1,131 @@
+name: Production Mezan2 Ad Cost Settings
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/ads_manager/__init__.py"
+      - "backend/ads_manager/account_cost_settings.py"
+      - "backend/ads_manager/routes.py"
+      - "backend/tests/test_mezan2_ad_account_cost_settings_v1.py"
+      - "frontend/src/pages/AdsCostSettingsV2.jsx"
+      - "frontend/src/pages/AdsCurrencySettings.jsx"
+      - "frontend/src/services/adsAccountCostSettingsV2.js"
+      - "frontend/src/services/adsAccountCostSettingsV2.test.js"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.adCosts.test.jsx"
+      - ".github/workflows/prod-mezan2-ad-cost-settings.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          cryptography
+          pytest
+          pytest-asyncio
+          openpyxl
+
+      - name: Compile Mezan 2 account cost settings
+        run: >-
+          python -m py_compile
+          ads_manager/__init__.py
+          ads_manager/account_cost_settings.py
+          ads_manager/routes.py
+          tests/test_mezan2_ad_account_cost_settings_v1.py
+
+      - name: Test native account settings
+        run: >-
+          python -m pytest
+          tests/test_mezan2_ad_account_cost_settings_v1.py
+          tests/test_unified_ads_manager_phase1.py
+          -q --tb=short
+
+      - name: Enforce backend isolation
+        working-directory: .
+        run: |
+          MODULE=backend/ads_manager/account_cost_settings.py
+          PACKAGE=backend/ads_manager/__init__.py
+          ROUTES=backend/ads_manager/routes.py
+
+          grep -q 'mezan_integration_accounts_v2' "$MODULE"
+          grep -q 'mezan_ad_account_cost_settings_v2' "$MODULE"
+          grep -q 'attach_account_cost_settings_routes' "$PACKAGE"
+          grep -q '_make_overview_router' "$PACKAGE"
+          grep -q '/account-cost-settings' "$MODULE"
+          grep -q 'legacy_counterparties_read.*False' "$MODULE"
+          grep -q 'legacy_ads_currency_settings_read.*False' "$MODULE"
+          grep -q 'make_ads_manager_router' "$ROUTES"
+          ! grep -q 'attach_account_cost_settings_routes' "$ROUTES"
+          ! grep -q 'db\.counterparties' "$MODULE"
+          ! grep -q 'db\.ads_currency_settings' "$MODULE"
+          ! grep -q 'qoyod' "$MODULE" || grep -q 'qoyod_write_reached.*False' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test Mezan 2 page, service, and navigation
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/services/adsAccountCostSettingsV2.test.js
+          src/components/MezanV2NavigationShell.adCosts.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce frontend isolation
+        working-directory: .
+        run: |
+          PAGE=frontend/src/pages/AdsCostSettingsV2.jsx
+          SERVICE=frontend/src/services/adsAccountCostSettingsV2.js
+          LEGACY=frontend/src/pages/AdsCurrencySettings.jsx
+          NAV=frontend/src/components/MezanV2NavigationShell.jsx
+
+          grep -q 'mezan2-ad-cost-settings-page' "$PAGE"
+          grep -q '/ads-manager/account-cost-settings' "$SERVICE"
+          grep -q 'export { default } from "./AdsCostSettingsV2"' "$LEGACY"
+          grep -q 'العمولات وسعر الصرف' "$NAV"
+          grep -q '"/settings/ads-currencies"' "$NAV"
+          ! grep -q '/counterparties' "$PAGE" "$SERVICE"
+          ! grep -q '/ads-currency-settings' "$PAGE" "$SERVICE"
+          ! grep -q 'AdsCurrencySettings' "$LEGACY"
