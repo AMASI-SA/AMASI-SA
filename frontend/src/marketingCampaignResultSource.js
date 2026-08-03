@@ -71,6 +71,17 @@ function writeSelectedAccount(accountId) {
   }
 }
 
+function clearStoredSnapchatAccounts() {
+  writeSelectedAccount("");
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(SNAPCHAT_ACCOUNTS_STORAGE);
+    } catch {
+      // Retry can still proceed without mutating storage.
+    }
+  }
+}
+
 export function campaignResultsSource(platform = "snapchat") {
   if (typeof window === "undefined") return "salla";
   try {
@@ -163,19 +174,12 @@ api.interceptors.request.use((config) => {
   const selectedAccountId = snapchatSelectedAccountId();
   if (selectedAccountId) params.account_id = selectedAccountId;
 
-  // The React page historically opened month-to-date in Riyadh. On the first
-  // account-scoped request we must instead ask the backend for that account's
-  // local current day. If account metadata is already cached, send the exact
-  // date; otherwise omit dates and let the backend resolve local today.
+  // Never trust a cached date as "today". On page entry or account switch,
+  // omit the old Riyadh/month range and let the backend resolve the current
+  // calendar day in the selected account's native timezone.
   if (forceAccountToday && !manualRangeSelected) {
-    const account = snapchatSelectedAccount();
-    if (account?.local_today) {
-      params.from_date = account.local_today;
-      params.to_date = account.local_today;
-    } else {
-      delete params.from_date;
-      delete params.to_date;
-    }
+    delete params.from_date;
+    delete params.to_date;
     forceAccountToday = false;
   }
 
@@ -214,4 +218,27 @@ api.interceptors.response.use((response) => {
     }
   }
   return response;
+}, async (error) => {
+  const config = error?.config;
+  const code = error?.response?.data?.detail?.code;
+  if (
+    isSnapchatCampaignReport(config)
+    && code === "snapchat_account_not_selected"
+    && config?._mezanSnapchatAccountRetry !== true
+  ) {
+    clearStoredSnapchatAccounts();
+    snapshots.delete("snapchat");
+    forceAccountToday = true;
+    manualRangeSelected = false;
+    const retryConfig = {
+      ...config,
+      _mezanSnapchatAccountRetry: true,
+      params: { ...(config.params || {}) },
+    };
+    delete retryConfig.params.account_id;
+    delete retryConfig.params.from_date;
+    delete retryConfig.params.to_date;
+    return api.request(retryConfig);
+  }
+  return Promise.reject(error);
 });
