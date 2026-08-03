@@ -21,6 +21,7 @@ from dashboard_v2_ad_costs import (
     apply_mezan_v2_ad_account_costs,
     merge_ad_bank_fees_into_dashboard,
 )
+from dashboard_v2_ads_executive import build_salla_ads_executive_breakdown
 from integrations_control_center.meta_oauth_security import META_PROVIDER_ID
 from integrations_control_center.snapchat_oauth_security import SNAPCHAT_PROVIDER_ID
 from integrations_control_center.tiktok_oauth_security import TIKTOK_PROVIDER_ID
@@ -895,6 +896,10 @@ def make_dashboard_v2_router(
             user_id,
             from_date=from_date,
             to_date=to_date,
+        )
+        ads["executive_breakdown"] = build_salla_ads_executive_breakdown(
+            orders,
+            ads,
         )
         totals = response["totals"]
         previous_product = _float(totals.get("total_product_cost"))

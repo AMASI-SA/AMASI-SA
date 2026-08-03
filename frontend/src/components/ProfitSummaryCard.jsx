@@ -19,6 +19,7 @@ import { Link } from "react-router-dom";
 import { buildMezanProductCostHref } from "../lib/mezanV2CostLinks";
 import ExcludedOrdersModal from "./ExcludedOrdersModal";
 import AdsCostBreakdownModal from "./AdsCostBreakdownModal";
+import AdsExecutiveBreakdownTable from "./AdsExecutiveBreakdownTable";
 import DailyProductCostModal from "./DailyProductCostModal";
 
 const fmtSar = (v) => {
@@ -206,10 +207,12 @@ export default function ProfitSummaryCard({
     periodLabel,
     productCostBreakdown = null,
     adsBreakdownEndpoint = "/dashboard/ads-cost-breakdown",
+    adsExecutiveBreakdown = null,
 }) {
     const t = totals || {};
     const [excludedOpen, setExcludedOpen] = useState(false);
     const [adsBreakdownOpen, setAdsBreakdownOpen] = useState(false);
+    const [adsExpanded, setAdsExpanded] = useState(false);
     // iter-250b · Dashboard hover/click enhancements.
     const [productCostOpen, setProductCostOpen] = useState(false);
     // iter-256 · Inline accordion expanders (replaces hover tooltips so
@@ -480,6 +483,13 @@ export default function ProfitSummaryCard({
         </div>
     );
 
+    const hasAdsExecutiveBreakdown = Boolean(
+        adsExecutiveBreakdown?.providers && adsExecutiveBreakdown?.total
+    );
+    const adsExecutiveTooltip = hasAdsExecutiveBreakdown
+        ? <AdsExecutiveBreakdownTable data={adsExecutiveBreakdown} />
+        : null;
+
     // 2) Operating expenses breakdown — sourced from `totals.operating_*`.
     const opRows = [
         { name: "رواتب الموظفين",
@@ -589,7 +599,7 @@ export default function ProfitSummaryCard({
             <div className="p-3 space-y-0">
                 <Line icon={Coins}      label="المبيعات"                      value={fmtSar(sales)}          color="green"  isFirst />
                 <Line icon={Package}    label="− تكاليف المنتجات"             value={fmtSar(productCost)}    share={sharePct(productCost, sales)}     color="amber"  onClick={() => setProductCostOpen(true)} testid="profit-line-product-cost" />
-                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   onClick={() => setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
+                <Line icon={Megaphone}  label="− إجمالي تكاليف الإعلانات"      value={fmtSar(adsCost)}        share={sharePct(adsCost, sales)}         color="rose"   tooltip={adsExecutiveTooltip} expandable={hasAdsExecutiveBreakdown} expanded={adsExpanded} onClick={() => hasAdsExecutiveBreakdown ? setAdsExpanded((value) => !value) : setAdsBreakdownOpen(true)} testid="profit-line-ads-cost" />
                 <Line icon={Truck}      label="− إجمالي تكاليف الشحن (مقدم + آجل)" value={fmtSar(shippingTotal)}  share={sharePct(shippingTotal, sales)}   color="sky"    tooltip={shippingTooltip} testid="profit-line-shipping" expandable expanded={shippingExpanded} onClick={() => setShippingExpanded(v => !v)} />
                 <Line icon={Receipt}    label="− إجمالي رسوم جميع طرق الدفع"    value={fmtSar(allPaymentFees)} share={sharePct(allPaymentFees, sales)}  color="violet" tooltip={paymentFeesTooltip} testid="profit-line-payment-fees" expandable expanded={paymentFeesExpanded} onClick={() => setPaymentFeesExpanded((value) => !value)} />
                 {operatingExpenses > 0 && (
@@ -633,7 +643,7 @@ export default function ProfitSummaryCard({
                 periodLabel={periodLabel}
             />
             <AdsCostBreakdownModal
-                open={adsBreakdownOpen}
+                open={adsBreakdownOpen && !hasAdsExecutiveBreakdown}
                 onClose={() => setAdsBreakdownOpen(false)}
                 fromDate={fromDate}
                 toDate={toDate}
