@@ -1,168 +1,99 @@
-"""Complete customer-history lookup tests."""
+"""Complete direct-Salla customer-history pagination tests."""
 from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta
-import re
 
 import pytest
 
 from order_engine.customer_history import get_customer_history
-from order_engine.customer_history_store import _mobile_regex
 from order_engine.repository import OrderDiscoveryRow
 
 
-def make_raw(order_number: str, created_at: str, mobile: str) -> dict:
+def make_raw(order_number: str, created_at: str) -> dict:
     return {
         "id": f"id-{order_number}",
         "reference_id": order_number,
         "date": {"date": created_at},
-        "status": {
-            "slug": "completed",
-            "name": "تم التنفيذ",
-        },
+        "status": {"slug": "completed", "name": "تم التنفيذ"},
         "customer": {
+            "id": "cust-history-1",
             "full_name": "عميل السجل الكامل",
-            "mobile": mobile,
+            "mobile": "+966570076958",
         },
-        "amounts": {
-            "total": {"amount": 100, "currency": "SAR"},
-        },
+        "amounts": {"total": {"amount": 100, "currency": "SAR"}},
         "items": [
             {
                 "id": f"item-{order_number}",
                 "quantity": 1,
-                "product": {
-                    "id": "p1",
-                    "name": "منتج",
-                    "sku": "SKU-1",
-                },
+                "product": {"id": "p1", "name": "منتج", "sku": "SKU-1"},
             }
         ],
     }
 
 
-class FakeCursor:
-    def __init__(self, rows):
-        self.rows = list(rows)
-        self.index = 0
-
-    def sort(self, fields):
-        self.rows.sort(
-            key=lambda row: (row["order_date"], row["order_number"]),
-            reverse=True,
-        )
-        return self
-
-    def __aiter__(self):
-        self.index = 0
-        return self
-
-    async def __anext__(self):
-        if self.index >= len(self.rows):
-            raise StopAsyncIteration
-        row = self.rows[self.index]
-        self.index += 1
-        return deepcopy(row)
-
-
-class FakeCollection:
-    def __init__(self, rows):
-        self.rows = deepcopy(rows)
-        self.last_query = None
-
-    def find(self, query, projection):
-        self.last_query = deepcopy(query)
-        excluded = query["order_number"]["$ne"]
-        rows = [
-            row
-            for row in self.rows
-            if row["user_id"] == query["user_id"]
-            and row["order_number"] != excluded
-        ]
-        return FakeCursor(rows)
-
-
-class FakeMongoRepository:
-    def __init__(self, rows):
-        self.rows = deepcopy(rows)
-        self._collection = FakeCollection(rows)
-        self.pagination_calls = 0
+class CurrentOrderRepository:
+    def __init__(self, current: dict):
+        self.current = deepcopy(current)
+        self.history_reads = 0
 
     async def get_salla_order(self, *, user_id, order_number):
-        for row in self.rows:
-            if row["user_id"] == user_id and row["order_number"] == order_number:
-                return OrderDiscoveryRow(
-                    order_number=row["order_number"],
-                    order_date=row["order_date"],
-                    salla_raw=deepcopy(row["raw_by_source"]["salla_direct"]),
-                    current_status=row.get("order_status"),
-                )
-        return None
+        return OrderDiscoveryRow(
+            order_number=order_number,
+            order_date=self.current["date"]["date"][:10],
+            salla_raw=deepcopy(self.current),
+        )
 
     async def list_salla_orders(self, **kwargs):
-        self.pagination_calls += 1
-        raise AssertionError("complete Mongo lookup must not paginate all orders")
+        self.history_reads += 1
+        raise AssertionError("local pagination must not be used for this card")
 
 
-def mongo_row(order_number: str, created_at: str, mobile: str) -> dict:
-    return {
-        "user_id": "owner-1",
-        "order_number": order_number,
-        "order_date": created_at[:10],
-        "order_status": "تم التنفيذ",
-        "customer_mobile": mobile,
-        "raw_by_source": {
-            "salla_direct": make_raw(order_number, created_at, mobile),
-        },
-    }
+class PaginatedSallaRequest:
+    def __init__(self, pages: list[list[dict]]):
+        self.pages = deepcopy(pages)
+        self.params: list[dict] = []
 
-
-def test_mobile_regex_accepts_supported_formatted_variants():
-    pattern = _mobile_regex("966570076958")
-    assert pattern is not None
-    for value in (
-        "570076958",
-        "0570076958",
-        "+966570076958",
-        "00966570076958",
-        "+966 57 007 6958",
-        "05-700-76958",
-    ):
-        assert re.fullmatch(pattern, value)
+    async def __call__(self, db, user_id, method, path, *, params=None, json=None):
+        self.params.append(deepcopy(params))
+        page = int(params["page"])
+        return {
+            "data": deepcopy(self.pages[page - 1]),
+            "pagination": {
+                "currentPage": page,
+                "totalPages": len(self.pages),
+            },
+        }
 
 
 @pytest.mark.asyncio
-async def test_complete_lookup_finds_history_beyond_three_hundred_orders():
-    rows = [
-        mongo_row("999", "2026-07-31 10:00:00", "+966570076958")
-    ]
+async def test_complete_lookup_fetches_all_salla_pages_and_excludes_current_order():
+    current = make_raw("999", "2026-07-31 10:00:00")
     start = datetime(2025, 1, 1, 10, 0, 0)
-    for index in range(350):
-        created_at = (start + timedelta(days=index)).strftime("%Y-%m-%d %H:%M:%S")
-        mobile = (
-            "0570076958"
-            if index % 3 == 0
-            else "570076958"
-            if index % 3 == 1
-            else "+966570076958"
+    historical = [
+        make_raw(
+            f"{index + 1:03d}",
+            (start + timedelta(days=index)).strftime("%Y-%m-%d %H:%M:%S"),
         )
-        rows.append(mongo_row(f"{index + 1:03d}", created_at, mobile))
+        for index in range(350)
+    ]
+    all_rows = [current, *historical]
+    pages = [all_rows[index:index + 50] for index in range(0, len(all_rows), 50)]
+    repository = CurrentOrderRepository(current)
+    salla_request = PaginatedSallaRequest(pages)
 
-    repository = FakeMongoRepository(rows)
     result = await get_customer_history(
         repository,
+        db=object(),
         user_id="owner-1",
         order_number="999",
+        salla_request=salla_request,
     )
 
     assert result.customer_found is True
     assert result.scan_complete is True
-    assert result.scanned_orders == 350
+    assert result.scanned_orders == 351
     assert len(result.previous_orders) == 350
-    assert repository.pagination_calls == 0
-
-    query = repository._collection.last_query
-    assert query["order_number"] == {"$ne": "999"}
-    assert query["raw_by_source.salla_direct"] == {"$exists": True}
-    assert len(query["$or"]) >= 6
+    assert repository.history_reads == 0
+    assert [params["page"] for params in salla_request.params] == list(range(1, 9))
+    assert all(params["customer_id"] == "cust-history-1" for params in salla_request.params)
