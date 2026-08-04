@@ -96,6 +96,7 @@ def make_order_engine_router(
     current_user: Callable,
     *,
     repository_factory: Callable[[Any], OrderRepository] = MongoOrderRepository,
+    customer_history_salla_request: Optional[Callable] = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2", tags=["order-engine"])
 
@@ -170,8 +171,14 @@ def make_order_engine_router(
         try:
             result = await get_customer_history(
                 repository(),
+                db=db,
                 user_id=str(owner["id"]),
                 order_number=str(order_number),
+                **(
+                    {"salla_request": customer_history_salla_request}
+                    if customer_history_salla_request is not None
+                    else {}
+                ),
             )
         except OrderNotFoundError as exc:
             raise HTTPException(

@@ -21,6 +21,7 @@ def make_raw(order_number: str, created_at: str, mobile: str) -> dict:
             "name": "قيد التنفيذ",
         },
         "customer": {
+            "id": "cust-route-1",
             "full_name": "عميل اختبار",
             "mobile": mobile,
         },
@@ -115,6 +116,29 @@ def test_customer_history_endpoint_returns_200_and_customer_found():
     ]
     repository = FakeOrderRepository(rows)
 
+    salla_rows = [row["raw"] for row in rows]
+    salla_calls = []
+
+    async def customer_history_salla_request(
+        db,
+        user_id,
+        method,
+        path,
+        *,
+        params=None,
+        json=None,
+    ):
+        salla_calls.append({
+            "user_id": user_id,
+            "method": method,
+            "path": path,
+            "params": deepcopy(params),
+        })
+        return {
+            "data": deepcopy(salla_rows),
+            "pagination": {"currentPage": 1, "totalPages": 1},
+        }
+
     async def current_user():
         return {"id": "owner-1", "role": "owner"}
 
@@ -124,6 +148,7 @@ def test_customer_history_endpoint_returns_200_and_customer_found():
             db=object(),
             current_user=current_user,
             repository_factory=lambda db: repository,
+            customer_history_salla_request=customer_history_salla_request,
         ),
         prefix="/api",
     )
@@ -137,3 +162,14 @@ def test_customer_history_endpoint_returns_200_and_customer_found():
     assert payload["normalized_mobile"] == "966570076958"
     assert payload["previous_order_count"] == 2
     assert [row["order_number"] for row in payload["previous_orders"]] == ["200", "100"]
+    assert salla_calls == [{
+        "user_id": "owner-1",
+        "method": "GET",
+        "path": "/orders",
+        "params": {
+            "customer_id": "cust-route-1",
+            "page": 1,
+            "per_page": 50,
+            "format": "light",
+        },
+    }]
