@@ -11,6 +11,9 @@ on:
       - "backend/integrations_control_center/snapchat_dashboard_summary_routes.py"
       - "backend/tests/test_google_analytics_realtime_dashboard_v2.py"
       - "backend/tests/test_google_analytics_source_attribution_v2.py"
+      - "frontend/src/components/AdvancedFilters.jsx"
+      - "frontend/src/components/DashboardAdsSpendCard.jsx"
+      - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
       - "frontend/src/components/GoogleAnalyticsRealtimeCards.jsx"
       - "frontend/src/components/GoogleAnalyticsRealtimeCards.test.jsx"
       - "frontend/src/components/GoogleAnalyticsTrafficSourcesCard.jsx"
@@ -31,7 +34,7 @@ jobs:
       - name: Install focused dependencies
         run: >-
           pip install pytest fastapi "pydantic>=2" httpx pymongo motor
-          cryptography openpyxl
+          cryptography openpyxl bcrypt
       - name: Compile GA4 routes
         working-directory: backend
         run: |
@@ -78,6 +81,7 @@ jobs:
           CI=true yarn test --watchAll=false --runInBand
           src/components/GoogleAnalyticsRealtimeCards.test.jsx
           src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx
+          src/components/DashboardAdsSpendCard.test.jsx
           src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
         run: CI=false yarn build
