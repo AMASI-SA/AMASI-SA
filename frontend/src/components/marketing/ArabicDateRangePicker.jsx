@@ -7,6 +7,8 @@ import {
     CaretRight,
 } from "@phosphor-icons/react";
 
+export const ADS_DATE_RANGE_APPLIED_EVENT = "mezan:ads-date-range-applied";
+
 const MONTHS_AR = [
     "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
     "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
@@ -232,6 +234,11 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
             ? { dateFrom: draftFrom, dateTo: draftTo }
             : { dateFrom: draftTo, dateTo: draftFrom };
         onApply?.(normalized);
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
+                detail: { ...normalized, source: "arabic_date_range_picker" },
+            }));
+        }
         setOpen(false);
     }
 
