@@ -7,10 +7,19 @@ import {
     Eye,
     FileText,
     Funnel,
+    Package,
     PencilSimple,
     Trash,
     UploadSimple,
+    WarningCircle,
+    X,
 } from "@phosphor-icons/react";
+
+const PROFITABILITY_COLUMNS = Object.freeze([
+    "product_cost",
+    "profit",
+    "profit_margin",
+]);
 
 export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "name",
@@ -18,13 +27,16 @@ export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "delivery",
     "orders",
     "cpa",
+    "roas",
+    "sales",
+    "product_cost",
+    "profit",
+    "profit_margin",
     "spend",
     "impressions",
     "cpm",
     "clicks",
     "cpc",
-    "roas",
-    "sales",
     "ctr",
     "budget",
     "account",
@@ -36,13 +48,16 @@ const COLUMN_DEFINITIONS = Object.freeze([
     { id: "delivery", label: "حالة التسليم", width: 190, sortable: true },
     { id: "orders", label: "النتائج", sublabel: "المشتريات", width: 125, sortable: true },
     { id: "cpa", label: "تكلفة النتيجة", sublabel: "تكلفة الشراء", width: 145, sortable: true },
+    { id: "roas", label: "ROAS الشراء", width: 130, sortable: true },
+    { id: "sales", label: "مبيعات سلة", width: 145, sortable: true },
+    { id: "product_cost", label: "تكلفة المنتجات", sublabel: "محرك تكلفة ميزان", width: 160, sortable: true },
+    { id: "profit", label: "ربح الحملة", sublabel: "بعد المنتج والإعلان", width: 175, sortable: true },
+    { id: "profit_margin", label: "هامش الربح", sublabel: "قبل رسوم الدفع والشحن", width: 150, sortable: true },
     { id: "spend", label: "المبلغ المصروف", width: 145, sortable: true },
     { id: "impressions", label: "مرات الظهور المدفوعة", width: 165, sortable: true },
     { id: "cpm", label: "eCPM المدفوع", width: 135, sortable: true },
     { id: "clicks", label: "النقرات", width: 115, sortable: true },
     { id: "cpc", label: "eCPC", width: 115, sortable: true },
-    { id: "roas", label: "ROAS الشراء", width: 130, sortable: true },
-    { id: "sales", label: "مبيعات الشراء", width: 145, sortable: true },
     { id: "ctr", label: "CTR", width: 105, sortable: true },
     { id: "budget", label: "الميزانية اليومية", width: 150, sortable: true },
     { id: "account", label: "الحساب الإعلاني", width: 230, sortable: true },
@@ -115,6 +130,14 @@ function deliveryLabel(campaign) {
     return isActiveStatus(campaign.status) ? "يتم التسليم" : "غير نشط";
 }
 
+function defaultColumnsForPlatform(platform) {
+    return platform === "snapchat"
+        ? [...CAMPAIGN_MANAGER_DEFAULT_COLUMNS]
+        : CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
+            (id) => !PROFITABILITY_COLUMNS.includes(id),
+        );
+}
+
 export function campaignRowKey(campaign) {
     return `${campaign?.account_id || "unknown"}:${campaign?.campaign_id || "unknown"}`;
 }
@@ -126,13 +149,16 @@ function valueForColumn(campaign, columnId) {
         case "delivery": return deliveryLabel(campaign);
         case "orders": return finiteNumber(campaign.orders);
         case "cpa": return finiteNumber(campaign.cpa_sar);
+        case "roas": return finiteNumber(campaign.roas);
+        case "sales": return finiteNumber(campaign.sales_sar);
+        case "product_cost": return finiteNumber(campaign.profitability?.product_cost_sar);
+        case "profit": return finiteNumber(campaign.profitability?.contribution_profit_sar);
+        case "profit_margin": return finiteNumber(campaign.profitability?.profit_margin_pct);
         case "spend": return finiteNumber(campaign.spend_sar);
         case "impressions": return finiteNumber(campaign.impressions);
         case "cpm": return finiteNumber(campaign.cpm_sar);
         case "clicks": return finiteNumber(campaign.swipes);
         case "cpc": return finiteNumber(campaign.cpc_sar);
-        case "roas": return finiteNumber(campaign.roas);
-        case "sales": return finiteNumber(campaign.sales_sar);
         case "ctr": return finiteNumber(campaign.ctr_pct);
         case "budget": return finiteNumber(campaign.budget?.daily_native);
         case "account": return String(campaign.account_name || campaign.account_id || "");
@@ -162,23 +188,71 @@ export function sortCampaignRows(rows, sort) {
 
 export function campaignTotalsForColumn(totals, columnId) {
     const value = totals || {};
+    const profitability = value.profitability || {};
     switch (columnId) {
         case "name": return "إجمالي الفترة";
         case "orders": return formatNumber(value.orders);
         case "cpa": return formatMoney(value.cpa_sar);
+        case "roas": return formatRatio(value.roas, "×");
+        case "sales": return formatMoney(value.sales_sar);
+        case "product_cost": return formatMoney(profitability.product_cost_sar);
+        case "profit": return formatMoney(profitability.contribution_profit_sar);
+        case "profit_margin": return formatRatio(profitability.profit_margin_pct, "%");
         case "spend": return formatMoney(value.spend_sar);
         case "impressions": return formatNumber(value.impressions);
         case "cpm": return formatMoney(value.cpm_sar);
         case "clicks": return formatNumber(value.swipes);
         case "cpc": return formatMoney(value.cpc_sar);
-        case "roas": return formatRatio(value.roas, "×");
-        case "sales": return formatMoney(value.sales_sar);
         case "ctr": return formatRatio(value.ctr_pct, "%");
         default: return "";
     }
 }
 
-function cellValue(campaign, columnId) {
+function ProfitMetric({ campaign, onOpen }) {
+    const profitability = campaign.profitability || {};
+    const profit = finiteNumber(profitability.contribution_profit_sar);
+    const attributedOrders = Number(profitability.orders || 0);
+    const missing = Number(profitability.missing_cost_orders || 0);
+    if (!attributedOrders) {
+        return <MetricValue primary="—" secondary="لا توجد طلبات سلة مطابقة" />;
+    }
+    if (profit === null) {
+        return (
+            <button type="button" onClick={() => onOpen?.(campaign)} className="text-right">
+                <div className="font-black text-amber-700">غير محسوم</div>
+                <div className="mt-1 text-[10px] font-bold text-amber-600">
+                    {missing} طلب بتكلفة ناقصة · عرض التفاصيل
+                </div>
+            </button>
+        );
+    }
+    return (
+        <button type="button" onClick={() => onOpen?.(campaign)} className="text-right">
+            <div className={`font-mono font-black ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                {formatMoney(profit)}
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-blue-600">تفاصيل المنتجات</div>
+        </button>
+    );
+}
+
+function ProductCostMetric({ campaign }) {
+    const profitability = campaign.profitability || {};
+    const cost = finiteNumber(profitability.product_cost_sar);
+    const known = finiteNumber(profitability.known_product_cost_sar);
+    if (!Number(profitability.orders || 0)) {
+        return <MetricValue primary="—" secondary="لا توجد طلبات مطابقة" />;
+    }
+    if (cost === null) {
+        return <MetricValue primary="غير مكتملة" secondary={`المعروف ${formatMoney(known)}`} />;
+    }
+    const secondary = profitability.cost_status === "salla_fallback"
+        ? "تتضمن تكلفة سلة احتياطية"
+        : "تكلفة ميزان V2";
+    return <MetricValue primary={formatMoney(cost)} secondary={secondary} />;
+}
+
+function cellValue(campaign, columnId, onOpenProfit) {
     switch (columnId) {
         case "name":
             return (
@@ -221,13 +295,25 @@ function cellValue(campaign, columnId) {
         }
         case "orders": return <MetricValue primary={formatNumber(campaign.orders)} secondary="مشتريات" />;
         case "cpa": return <MetricValue primary={formatMoney(campaign.cpa_sar)} secondary="لكل عملية شراء" />;
+        case "roas": return <MetricValue primary={formatRatio(campaign.roas, "×")} />;
+        case "sales": return <MetricValue primary={formatMoney(campaign.sales_sar)} />;
+        case "product_cost": return <ProductCostMetric campaign={campaign} />;
+        case "profit": return <ProfitMetric campaign={campaign} onOpen={onOpenProfit} />;
+        case "profit_margin": {
+            const profitability = campaign.profitability || {};
+            const margin = finiteNumber(profitability.profit_margin_pct);
+            return (
+                <MetricValue
+                    primary={formatRatio(margin, "%")}
+                    secondary={margin === null ? "غير محسوم" : "قبل رسوم الدفع والشحن"}
+                />
+            );
+        }
         case "spend": return <MetricValue primary={formatMoney(campaign.spend_sar)} />;
         case "impressions": return <MetricValue primary={formatNumber(campaign.impressions)} />;
         case "cpm": return <MetricValue primary={formatMoney(campaign.cpm_sar)} />;
         case "clicks": return <MetricValue primary={formatNumber(campaign.swipes)} />;
         case "cpc": return <MetricValue primary={formatMoney(campaign.cpc_sar)} />;
-        case "roas": return <MetricValue primary={formatRatio(campaign.roas, "×")} />;
-        case "sales": return <MetricValue primary={formatMoney(campaign.sales_sar)} />;
         case "ctr": return <MetricValue primary={formatRatio(campaign.ctr_pct, "%")} />;
         case "budget": {
             const amount = finiteNumber(campaign.budget?.daily_native);
@@ -257,6 +343,94 @@ function MetricValue({ primary, secondary = "" }) {
     );
 }
 
+function ProfitabilityDialog({ campaign, onClose }) {
+    if (!campaign) return null;
+    const profitability = campaign.profitability || {};
+    const products = profitability.products || [];
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" data-testid="campaign-profitability-dialog">
+            <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl" dir="rtl">
+                <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                    <div>
+                        <div className="text-xs font-black text-emerald-700">ربحية الحملة من طلبات سلة المطابقة بدقة</div>
+                        <h2 className="mt-1 text-xl font-black text-slate-950">{campaign.campaign_name || campaign.campaign_id}</h2>
+                        <div className="mt-1 font-mono text-xs text-slate-400">{campaign.campaign_id}</div>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" aria-label="إغلاق تفاصيل الربحية"><X size={22} /></button>
+                </header>
+
+                <div className="max-h-[calc(92vh-84px)] overflow-y-auto p-5">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        {[
+                            ["مبيعات سلة", formatMoney(profitability.sales_sar)],
+                            ["تكلفة المنتجات", formatMoney(profitability.product_cost_sar)],
+                            ["الصرف الإعلاني", formatMoney(profitability.ad_spend_sar)],
+                            ["ربح المساهمة", formatMoney(profitability.contribution_profit_sar)],
+                            ["هامش الربح", formatRatio(profitability.profit_margin_pct, "%")],
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <div className="text-xs font-black text-slate-500">{label}</div>
+                                <div className="mt-2 font-mono text-lg font-black text-slate-950">{value}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                        <WarningCircle size={21} weight="fill" className="mt-0.5 shrink-0" />
+                        <span>
+                            الربح الحالي = مبيعات سلة − تكلفة المنتجات − الصرف الإعلاني. رسوم بوابات الدفع وBNPL وتكلفة الشحن التشغيلية ستضاف في المرحلة التالية. توزيع الصرف على المنتجات يتم حسب حصة مبيعات كل منتج داخل الحملة.
+                        </span>
+                    </div>
+
+                    <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-max min-w-full text-right text-sm">
+                            <thead className="bg-slate-50 text-slate-600">
+                                <tr>
+                                    <th className="min-w-[300px] px-4 py-3 font-black">المنتج</th>
+                                    <th className="min-w-[100px] px-4 py-3 font-black">الكمية</th>
+                                    <th className="min-w-[135px] px-4 py-3 font-black">المبيعات</th>
+                                    <th className="min-w-[145px] px-4 py-3 font-black">تكلفة المنتج</th>
+                                    <th className="min-w-[155px] px-4 py-3 font-black">الصرف الموزع</th>
+                                    <th className="min-w-[155px] px-4 py-3 font-black">الربح</th>
+                                    <th className="min-w-[115px] px-4 py-3 font-black">الهامش</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {products.map((product) => (
+                                    <tr key={product.identity} className="border-t border-slate-100">
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-3">
+                                                {product.image_url ? (
+                                                    <img src={product.image_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                                                ) : (
+                                                    <span className="rounded-xl bg-slate-100 p-3 text-slate-500"><Package size={22} /></span>
+                                                )}
+                                                <div>
+                                                    <div className="max-w-[230px] truncate font-black text-slate-900">{product.name}</div>
+                                                    <div className="mt-1 font-mono text-[10px] text-slate-400">{product.sku || product.salla_product_id || product.identity}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 font-mono font-black">{formatNumber(product.units)}</td>
+                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.sales_sar)}</td>
+                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.product_cost_sar)}</td>
+                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.allocated_ad_spend_sar)}</td>
+                                        <td className={`px-4 py-4 font-mono font-black ${finiteNumber(product.contribution_profit_sar) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{formatMoney(product.contribution_profit_sar)}</td>
+                                        <td className="px-4 py-4 font-mono font-black">{formatRatio(product.profit_margin_pct, "%")}</td>
+                                    </tr>
+                                ))}
+                                {!products.length && (
+                                    <tr><td colSpan={7} className="px-6 py-12 text-center font-bold text-slate-500">لا توجد منتجات قابلة للتوزيع داخل الطلبات المطابقة.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function csvEscape(value) {
     const text = String(value ?? "");
     return `"${text.replaceAll('"', '""')}"`;
@@ -266,6 +440,7 @@ function campaignCsv(rows) {
     const headers = [
         "اسم الحملة", "معرف الحملة", "الحالة", "حالة التسليم", "الحساب",
         "الصرف بالريال", "المشتريات", "المبيعات بالريال", "ROAS", "CPA",
+        "تكلفة المنتجات", "ربح الحملة بعد الإعلان", "هامش الربح",
         "الظهور", "النقرات", "CTR", "eCPC", "eCPM", "الميزانية اليومية", "عملة الميزانية",
     ];
     const body = rows.map((campaign) => [
@@ -279,6 +454,9 @@ function campaignCsv(rows) {
         campaign.sales_sar,
         campaign.roas,
         campaign.cpa_sar,
+        campaign.profitability?.product_cost_sar,
+        campaign.profitability?.contribution_profit_sar,
+        campaign.profitability?.profit_margin_pct,
         campaign.impressions,
         campaign.swipes,
         campaign.ctr_pct,
@@ -329,25 +507,32 @@ export default function CampaignManagerTable({
     readOnly = true,
 }) {
     const storageKey = `mezan-campaign-manager-columns-v1:${platform || "all"}`;
+    const availableDefinitions = COLUMN_DEFINITIONS.filter(
+        (column) => platform === "snapchat" || !PROFITABILITY_COLUMNS.includes(column.id),
+    );
+    const defaultColumns = defaultColumnsForPlatform(platform);
     const [selected, setSelected] = useState(() => new Set());
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
     const [sort, setSort] = useState({ key: "spend", direction: "desc" });
+    const [profitCampaign, setProfitCampaign] = useState(null);
     const [visibleColumns, setVisibleColumns] = useState(() => {
-        if (typeof window === "undefined") return CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+        if (typeof window === "undefined") return defaultColumns;
         try {
             const stored = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+            const validIds = new Set(availableDefinitions.map((column) => column.id));
             const valid = Array.isArray(stored)
-                ? stored.filter((id) => CAMPAIGN_MANAGER_DEFAULT_COLUMNS.includes(id))
+                ? stored.filter((id) => validIds.has(id))
                 : [];
-            return valid.length ? valid : CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+            return valid.length ? valid : defaultColumns;
         } catch {
-            return CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+            return defaultColumns;
         }
     });
 
     useEffect(() => {
         setSelected(new Set());
         setShowSelectedOnly(false);
+        setProfitCampaign(null);
     }, [campaigns]);
 
     useEffect(() => {
@@ -365,13 +550,9 @@ export default function CampaignManagerTable({
             : sortedRows,
         [selected, showSelectedOnly, sortedRows],
     );
-    const selectedRows = useMemo(
-        () => sortedRows.filter((campaign) => selected.has(campaignRowKey(campaign))),
-        [selected, sortedRows],
-    );
     const allVisibleSelected = rows.length > 0
         && rows.every((campaign) => selected.has(campaignRowKey(campaign)));
-    const columns = COLUMN_DEFINITIONS.filter((column) => visibleColumns.includes(column.id));
+    const columns = availableDefinitions.filter((column) => visibleColumns.includes(column.id));
 
     function toggleRow(campaign) {
         const key = campaignRowKey(campaign);
@@ -398,7 +579,7 @@ export default function CampaignManagerTable({
                 if (current.length <= 4 || columnId === "name") return current;
                 return current.filter((id) => id !== columnId);
             }
-            return CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
+            return defaultColumns.filter(
                 (id) => current.includes(id) || id === columnId,
             );
         });
@@ -455,14 +636,14 @@ export default function CampaignManagerTable({
                                 <span className="text-xs font-black text-slate-800">تخصيص الأعمدة</span>
                                 <button
                                     type="button"
-                                    onClick={() => setVisibleColumns(CAMPAIGN_MANAGER_DEFAULT_COLUMNS)}
+                                    onClick={() => setVisibleColumns(defaultColumns)}
                                     className="text-[10px] font-bold text-emerald-700 hover:underline"
                                 >
                                     إعادة الافتراضي
                                 </button>
                             </div>
                             <div className="grid max-h-80 gap-1 overflow-auto">
-                                {COLUMN_DEFINITIONS.map((column) => (
+                                {availableDefinitions.map((column) => (
                                     <label key={column.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                                         <span>{column.label}</span>
                                         <input
@@ -549,7 +730,7 @@ export default function CampaignManagerTable({
                                             className={`${column.id === "name" ? `${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-l` : ""} border-b border-slate-100 px-4 py-4 align-middle`}
                                             style={{ minWidth: column.width, width: column.width }}
                                         >
-                                            {cellValue(campaign, column.id)}
+                                            {cellValue(campaign, column.id, setProfitCampaign)}
                                         </td>
                                     ))}
                                 </tr>
@@ -617,6 +798,7 @@ export default function CampaignManagerTable({
                     )}
                 </div>
             </div>
+            <ProfitabilityDialog campaign={profitCampaign} onClose={() => setProfitCampaign(null)} />
         </section>
     );
 }
