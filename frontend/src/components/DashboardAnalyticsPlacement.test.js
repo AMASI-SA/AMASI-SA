@@ -10,13 +10,17 @@ const placementSource = fs.readFileSync(
     path.join(componentsDir, "DashboardAnalyticsPlacement.jsx"),
     "utf8",
 );
+const filtersSource = fs.readFileSync(
+    path.join(componentsDir, "AdvancedFilters.jsx"),
+    "utf8",
+);
 const dashboardSource = fs.readFileSync(
     path.join(componentsDir, "../pages/Dashboard.jsx"),
     "utf8",
 );
 
 
-test("Layout delegates GA4 cards to the profit-summary placement", () => {
+test("Layout delegates dashboard reports to the profit-summary placement", () => {
     expect(layoutSource).toContain(
         'import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement"',
     );
@@ -41,15 +45,41 @@ test("Layout delegates GA4 cards to the profit-summary placement", () => {
 });
 
 
-test("GA4 cards are inserted immediately after the executive profit summary", () => {
+test("GA4, profit summary, and ads spend share one RTL report grid", () => {
     expect(placementSource).toContain(
         "'[data-testid=\"profit-summary-card\"]'",
     );
     expect(placementSource).toContain(
-        'profitSummary.insertAdjacentElement("afterend", currentHost)',
+        'currentGrid.className = "mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-stretch"',
+    );
+    expect(placementSource).toContain(
+        "currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost)",
+    );
+    expect(placementSource).toContain(
+        "currentProfitHost.appendChild(candidate)",
     );
     expect(placementSource).toContain("<GoogleAnalyticsRealtimeCards />");
+    expect(placementSource).toContain("<DashboardAdsSpendCard");
+    expect(placementSource).toContain("fromDate={dateRange.fromDate}");
+    expect(placementSource).toContain("toDate={dateRange.toDate}");
     expect(placementSource).toContain("<GoogleAnalyticsTrafficSourcesCard />");
+});
+
+
+test("dashboard date filters expose one date source for profit and ads reports", () => {
+    expect(filtersSource).toContain('data-testid="advanced-filters"');
+    expect(filtersSource).toContain('data-date-preset={value.preset || ""}');
+    expect(filtersSource).toContain('data-from-date={value.from || ""}');
+    expect(filtersSource).toContain('data-to-date={value.to || value.from || ""}');
+    expect(placementSource).toContain(
+        'const FILTER_SELECTOR = \'[data-testid="advanced-filters"]\'',
+    );
+    expect(placementSource).toContain(
+        'filters?.getAttribute("data-from-date")',
+    );
+    expect(placementSource).toContain(
+        'filters?.getAttribute("data-to-date")',
+    );
 });
 
 
