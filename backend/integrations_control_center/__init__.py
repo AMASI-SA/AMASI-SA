@@ -46,6 +46,10 @@ from .snapchat_account_timezone_retention import (
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
+from .snapchat_adsquad_performance import (
+    attach_snapchat_adsquad_routes,
+    install_snapchat_adsquad_performance_refresh,
+)
 from .snapchat_campaign_catalog_refresh import (
     install_snapchat_campaign_catalog_refresh,
 )
@@ -98,11 +102,13 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Campaign identity and
-    # status are refreshed before performance, then account-level delivery is
-    # read last so billing/budget blocks become the effective UI status.
+    # status are refreshed before performance, Ad Squad performance is refreshed
+    # at a bounded 15-minute cadence, and account-level delivery is read last so
+    # billing/budget blocks become the effective UI status.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_campaign_catalog_refresh()
+    install_snapchat_adsquad_performance_refresh()
     install_snapchat_account_delivery_refresh()
     install_snapchat_effective_delivery_report()
     install_tiktok_native_catalog()
@@ -127,6 +133,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)
     attach_snapchat_account_selection_routes(router, db, current_user, _require_owner)
     attach_snapchat_campaign_report_routes(
+        router, db, current_user, _require_owner
+    )
+    attach_snapchat_adsquad_routes(
         router, db, current_user, _require_owner
     )
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)

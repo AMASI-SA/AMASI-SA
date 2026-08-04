@@ -1,0 +1,119 @@
+name: Production Snapchat Ad Squads V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_adsquad_performance.py"
+      - "backend/tests/test_snapchat_adsquad_performance_v1.py"
+      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/services/snapchatAdSquadPerformance.js"
+      - "frontend/src/services/snapchatAdSquadPerformance.test.js"
+      - ".github/workflows/prod-snapchat-ad-squads-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile Ad Squad reporting modules
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_adsquad_performance.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_adsquad_performance_v1.py
+      - name: Run focused backend tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_adsquad_performance_v1.py
+          tests/test_snapchat_account_timezone_manager_v1.py
+          tests/test_snapchat_campaign_catalog_refresh_v1.py
+          -q --tb=short
+      - name: Enforce provider-read-only Ad Squad contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_adsquad_performance.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'ADSQUAD_BREAKDOWN = "adsquad"' "$MODULE"
+          grep -q 'granularity": "HOUR"' "$MODULE"
+          grep -q 'entity_type": "ad_squad"' "$MODULE"
+          grep -q 'stored_granularity="ACCOUNT_LOCAL_DAY"' "$MODULE"
+          grep -q 'salla_results_supported": False' "$MODULE"
+          grep -q 'attach_snapchat_adsquad_routes' "$INIT"
+          grep -q 'install_snapchat_adsquad_performance_refresh' "$INIT"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ad Squad navigation and normalization
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+          src/services/snapchatAdSquadPerformance.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce read-only entity-level UI contract
+        working-directory: .
+        run: |
+          WORKSPACE=frontend/src/pages/MarketingPlatformWorkspace.jsx
+          LEVELS=frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          TABLE=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          SERVICE=frontend/src/services/snapchatAdSquadPerformance.js
+          grep -q 'getSnapchatAdSquadPerformance' "$WORKSPACE"
+          grep -q 'id: "ad_squads"' "$LEVELS"
+          grep -q 'id: "ads"' "$LEVELS"
+          grep -q 'data-testid={`ads-entity-level-${item.id}`}' "$LEVELS"
+          grep -q 'نتائج المنصة على مستوى المجموعة' "$TABLE"
+          grep -q '/integrations-v2/snapchat_ads/ad-squad-report' "$SERVICE"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SERVICE" "$TABLE" "$LEVELS"
