@@ -1,13 +1,16 @@
-"""Keep Snapchat campaign names and active/paused state current.
+"""Keep Snapchat campaign and Ad Squad delivery metadata current.
 
-The five-minute performance scheduler already reads a campaign breakdown for
-spend and conversions, but those rows only contain campaign IDs.  Names and
-status come from the separate campaign entity catalogue.  This installer wraps
-the existing account refresh so the campaign catalogue is refreshed first on
-every selected account, then the unchanged performance refresh runs.
+The five-minute performance scheduler reads campaign stats, but status and
+current delivery reasons live on the Campaign and Ad Squad entities. This
+installer refreshes both read-only catalogues before the unchanged performance
+pull, allowing Ads Manager to distinguish:
 
-All provider calls are read-only.  The module does not modify campaigns,
-accounting, Salla, or Qoyod.
+* configured campaign ACTIVE/PAUSED state;
+* actual delivery or no-delivery state;
+* campaign budget exhaustion;
+* campaigns with no active Ad Squad.
+
+No provider, campaign, accounting, Salla, or Qoyod mutation is performed.
 """
 from __future__ import annotations
 
@@ -22,10 +25,12 @@ from .snapchat_native_data_common import (
 )
 from .snapchat_native_entities_sync import _sync_entity_type
 
-CAMPAIGN_CATALOG_SOURCE_MODE = "snapchat_campaign_catalog_5m_v1"
-CAMPAIGN_ENTITY_TYPE = "campaign"
-CAMPAIGN_PLURAL_KEY = "campaigns"
-CAMPAIGN_SINGULAR_KEY = "campaign"
+CAMPAIGN_CATALOG_SOURCE_MODE = "snapchat_campaign_adsquad_catalog_5m_v2"
+
+ENTITY_SPECS = (
+    ("campaign", "campaigns", "campaign", {}),
+    ("ad_squad", "adsquads", "adsquad", {"return_placement_v2": "true"}),
+)
 
 AccountRefresh = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -34,15 +39,19 @@ def _safe_text(value: Any, limit: int = 300) -> str:
     return str(value or "").strip()[:limit]
 
 
-def _normalized_catalog_error(item: dict[str, Any]) -> dict[str, Any]:
+def _normalized_catalog_error(
+    item: dict[str, Any],
+    *,
+    entity_type: str,
+) -> dict[str, Any]:
     raw_code = _safe_text(item.get("error") or item.get("code"), 120)
-    code = raw_code or "snapchat_campaign_catalog_partial"
+    code = raw_code or f"snapchat_{entity_type}_catalog_partial"
     return {
-        "kind": "campaign_catalog",
+        "kind": f"{entity_type}_catalog",
         "code": code,
         "error": code,
         "message": (
-            "Snapchat campaign names/status refresh was incomplete: "
+            f"Snapchat {entity_type} delivery metadata refresh was incomplete: "
             f"{code}"
         ),
         "retryable": code not in {
@@ -59,26 +68,57 @@ async def refresh_snapchat_campaign_catalog(
     access_token: str,
     account: dict[str, Any],
 ) -> dict[str, Any]:
-    """Refresh only campaign entities for one selected Snapchat account."""
-    saved, observed, raw_errors = await _sync_entity_type(
-        context,
-        client,
-        access_token,
-        account,
-        entity_type=CAMPAIGN_ENTITY_TYPE,
-        plural_key=CAMPAIGN_PLURAL_KEY,
-        singular_key=CAMPAIGN_SINGULAR_KEY,
-        extra_params={},
-    )
-    errors = [
-        _normalized_catalog_error(item)
-        for item in raw_errors
-        if isinstance(item, dict)
-    ]
+    """Refresh Campaign and Ad Squad entities for one selected account."""
+    counts: dict[str, dict[str, int]] = {}
+    errors: list[dict[str, Any]] = []
+
+    for entity_type, plural_key, singular_key, extra_params in ENTITY_SPECS:
+        try:
+            saved, observed, raw_errors = await _sync_entity_type(
+                context,
+                client,
+                access_token,
+                account,
+                entity_type=entity_type,
+                plural_key=plural_key,
+                singular_key=singular_key,
+                extra_params=extra_params,
+            )
+            counts[entity_type] = {
+                "saved": int(saved),
+                "observed": int(observed),
+            }
+            errors.extend(
+                _normalized_catalog_error(item, entity_type=entity_type)
+                for item in raw_errors
+                if isinstance(item, dict)
+            )
+        except SnapchatNativeSyncError as exc:
+            if exc.code == "snapchat_needs_reauth":
+                raise
+            counts[entity_type] = {"saved": 0, "observed": 0}
+            errors.append({
+                "kind": f"{entity_type}_catalog",
+                "code": exc.code,
+                "error": exc.code,
+                "message": exc.message[:300],
+                "retryable": bool(exc.retryable),
+            })
+
+    campaign = counts.get("campaign", {"saved": 0, "observed": 0})
+    ad_squad = counts.get("ad_squad", {"saved": 0, "observed": 0})
     return {
         "source_mode": CAMPAIGN_CATALOG_SOURCE_MODE,
-        "campaign_entities_saved": int(saved),
-        "campaign_entities_observed": int(observed),
+        "campaign_entities_saved": campaign["saved"],
+        "campaign_entities_observed": campaign["observed"],
+        "ad_squad_entities_saved": ad_squad["saved"],
+        "ad_squad_entities_observed": ad_squad["observed"],
+        "delivery_catalog_entities_saved": (
+            campaign["saved"] + ad_squad["saved"]
+        ),
+        "delivery_catalog_entities_observed": (
+            campaign["observed"] + ad_squad["observed"]
+        ),
         "errors_count": len(errors),
         "errors": errors,
         "source_only": True,
@@ -98,7 +138,7 @@ async def _refresh_with_campaign_catalog(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Refresh metadata first, while preserving performance on metadata errors."""
+    """Refresh delivery metadata first, preserving performance on errors."""
     try:
         catalogue = await refresh_snapchat_campaign_catalog(
             context,
@@ -113,9 +153,13 @@ async def _refresh_with_campaign_catalog(
             "source_mode": CAMPAIGN_CATALOG_SOURCE_MODE,
             "campaign_entities_saved": 0,
             "campaign_entities_observed": 0,
+            "ad_squad_entities_saved": 0,
+            "ad_squad_entities_observed": 0,
+            "delivery_catalog_entities_saved": 0,
+            "delivery_catalog_entities_observed": 0,
             "errors_count": 1,
             "errors": [{
-                "kind": "campaign_catalog",
+                "kind": "delivery_catalog",
                 "code": exc.code,
                 "error": exc.code,
                 "message": exc.message[:300],
@@ -182,6 +226,7 @@ def install_snapchat_campaign_catalog_refresh() -> None:
 
 __all__ = [
     "CAMPAIGN_CATALOG_SOURCE_MODE",
+    "ENTITY_SPECS",
     "install_snapchat_campaign_catalog_refresh",
     "refresh_snapchat_campaign_catalog",
 ]
