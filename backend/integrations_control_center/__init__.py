@@ -66,6 +66,9 @@ from .snapchat_adsquad_status_delivery_separation import (
 from .snapchat_campaign_catalog_refresh import (
     install_snapchat_campaign_catalog_refresh,
 )
+from .snapchat_campaign_created_order_semantics import (
+    install_fixed_created_order_semantics,
+)
 from .snapchat_campaign_profitability import (
     install_snapchat_campaign_profitability,
 )
@@ -120,6 +123,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_salla_campaign_outcomes()
     install_snapchat_campaign_profitability()
     install_exact_salla_profitability_reuse()
+    install_fixed_created_order_semantics()
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Hourly rows are captured
@@ -127,9 +131,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # Campaign identity and status are refreshed before performance. Ad Squad
     # and Ad performance are refreshed at a bounded 15-minute cadence, and
     # account-level delivery is read last so billing/budget blocks become the
-    # effective delivery status. Configured switches remain separate from those
-    # blockers. Campaign profitability reuses the exact Salla matches already
-    # displayed in the report and remains a read-only Mezan V2 cost projection.
+    # effective delivery status. Campaign order counts remain fixed by Salla
+    # creation time across all statuses, while sales and profitability use only
+    # the current financially included order set. All projections are read-only.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_account_hourly_chart()
