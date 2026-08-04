@@ -15,6 +15,8 @@ from order_item_engine.models import (
 )
 from order_review_routes import (
     _can_review,
+    _find_pending_review_order,
+    _is_pending_review_order,
     _merchant_user_id,
     _review_item_identities,
     _reviewed_status_id,
@@ -103,6 +105,96 @@ def test_salla_reviewed_status_id_accepts_both_arabic_names():
         ]
     }
     assert _reviewed_status_id(response) == 22
+
+
+class _SearchWorkflowCollection:
+    def __init__(self, stage=None):
+        self.stage = stage
+
+    async def find_one(self, _query, _projection=None):
+        return {"stage": self.stage} if self.stage else None
+
+
+class _SearchDB:
+    def __init__(self, stage=None):
+        self.order_review_workflows = _SearchWorkflowCollection(stage)
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+
+def _search_order(status_name="بانتظار المراجعة", status_slug="under_review"):
+    return map_salla_order({
+        "id": 604952191,
+        "reference_id": "276218536",
+        "date": "2026-08-04T01:00:00+03:00",
+        "status": {"slug": status_slug, "name": status_name},
+        "customer": {"full_name": "عميل اختبار"},
+        "amounts": {"total": {"amount": 213.84, "currency": "SAR"}},
+        "items": [{
+            "id": 1471692337,
+            "product_id": 1008190362,
+            "name": "منتج اختبار",
+            "quantity": 1,
+        }],
+    })
+
+
+def test_exact_search_accepts_salla_pending_review_status():
+    assert _is_pending_review_order(_search_order()) is True
+    assert _is_pending_review_order(
+        _search_order(status_name="قيد التنفيذ", status_slug="in_progress")
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_exact_search_refreshes_from_salla_without_auto_advancing_workflow():
+    order = _search_order()
+    db = _SearchDB()
+    with (
+        patch(
+            "order_review_routes.refresh_order_from_salla",
+            new=AsyncMock(return_value={"ok": True, "found": True}),
+        ) as refresh,
+        patch("order_review_routes.get_order", new=AsyncMock(return_value=order)),
+    ):
+        found = await _find_pending_review_order(
+            db,
+            object(),
+            user_id="owner-1",
+            order_number="#276218536",
+        )
+
+    assert found is order
+    refresh.assert_awaited_once_with(
+        db,
+        "owner-1",
+        "276218536",
+        force=False,
+        minimum_fresh_seconds=30,
+        allow_auto_fulfillment=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_exact_search_hides_orders_already_completed_in_mezan():
+    order = _search_order()
+    db = _SearchDB(stage="reviewed")
+    with (
+        patch(
+            "order_review_routes.refresh_order_from_salla",
+            new=AsyncMock(return_value={"ok": True, "found": True}),
+        ),
+        patch("order_review_routes.get_order", new=AsyncMock(return_value=order)),
+    ):
+        found = await _find_pending_review_order(
+            db,
+            object(),
+            user_id="owner-1",
+            order_number="276218536",
+        )
+
+    assert found is None
 
 
 class _GalleryCursor:

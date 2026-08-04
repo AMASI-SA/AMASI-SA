@@ -407,6 +407,7 @@ async def refresh_order_from_salla(
     *,
     force: bool = False,
     minimum_fresh_seconds: int = 120,
+    allow_auto_fulfillment: bool = True,
 ) -> dict[str, Any]:
     """Refresh one Order Engine V2 order from Salla Order Details and Items."""
     normalized = str(order_number or "").strip()
@@ -553,28 +554,34 @@ async def refresh_order_from_salla(
             {"$set": canonical_updates},
         )
         auto_fulfillment = {
-            "attempted": True,
+            "attempted": False,
             "promoted": False,
-            "reason": "evaluation_failed",
+            "reason": "disabled_for_read_only_lookup",
         }
-        try:
-            from fulfillment_v2_routes import auto_route_instant_order
-            from order_engine.repository import MongoOrderRepository
-            from order_engine.service import get_order
+        if allow_auto_fulfillment:
+            auto_fulfillment = {
+                "attempted": True,
+                "promoted": False,
+                "reason": "evaluation_failed",
+            }
+            try:
+                from fulfillment_v2_routes import auto_route_instant_order
+                from order_engine.repository import MongoOrderRepository
+                from order_engine.service import get_order
 
-            canonical_order = await get_order(
-                MongoOrderRepository(db),
-                user_id=str(user_id),
-                order_number=normalized,
-            )
-            auto_fulfillment = await auto_route_instant_order(
-                db,
-                user_id=str(user_id),
-                order=canonical_order,
-            )
-            auto_fulfillment["attempted"] = True
-        except Exception as exc:
-            auto_fulfillment["error"] = str(exc)[:300]
+                canonical_order = await get_order(
+                    MongoOrderRepository(db),
+                    user_id=str(user_id),
+                    order_number=normalized,
+                )
+                auto_fulfillment = await auto_route_instant_order(
+                    db,
+                    user_id=str(user_id),
+                    order=canonical_order,
+                )
+                auto_fulfillment["attempted"] = True
+            except Exception as exc:
+                auto_fulfillment["error"] = str(exc)[:300]
 
         return {
             "ok": True,

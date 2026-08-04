@@ -36,6 +36,14 @@ REVIEW_COMPLETED_STAGES = {
     "delivering",
     "delivered",
 }
+PENDING_REVIEW_STATUS_KEYS = {
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
+}
 
 _PERSONAL_OPTION_HINTS = (
     "اسم", "نقش", "كتابة", "رسالة", "اهداء", "إهداء", "تهنئة", "رقم الجوال",
@@ -57,6 +65,59 @@ def _text(value: Any) -> str:
 
 def _normalized(value: Any) -> str:
     return " ".join(_text(value).casefold().replace("_", " ").split())
+
+
+def _is_pending_review_order(order: OrderDTO) -> bool:
+    return any(
+        _normalized(value) in PENDING_REVIEW_STATUS_KEYS
+        for value in (order.status_native, order.status)
+        if _text(value)
+    )
+
+
+async def _find_pending_review_order(
+    db: Any,
+    repository: MongoOrderRepository,
+    *,
+    user_id: str,
+    order_number: str,
+) -> Optional[OrderDTO]:
+    """Resolve one queue result globally without advancing its workflow.
+
+    Exact search first refreshes the Salla snapshot so a new order can be found
+    before the background ingestion cycle reaches it.  Auto-fulfillment is
+    explicitly disabled because typing in a search box must remain read-only.
+    """
+    normalized_number = _text(order_number).lstrip("#").strip()
+    if not normalized_number:
+        return None
+
+    await refresh_order_from_salla(
+        db,
+        user_id,
+        normalized_number,
+        force=False,
+        minimum_fresh_seconds=30,
+        allow_auto_fulfillment=False,
+    )
+    try:
+        order = await get_order(
+            repository,
+            user_id=user_id,
+            order_number=normalized_number,
+        )
+    except OrderNotFoundError:
+        return None
+    if not _is_pending_review_order(order):
+        return None
+
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": user_id, "order_number": normalized_number},
+        {"_id": 0, "stage": 1},
+    )
+    if _text((workflow or {}).get("stage")) in REVIEW_COMPLETED_STAGES:
+        return None
+    return order
 
 
 def _is_personal_option(name: str) -> bool:
@@ -440,6 +501,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     async def list_pending_reviews(
         limit: int = Query(15, ge=1, le=50),
         cursor: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None, max_length=50),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
@@ -448,6 +510,19 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         # light order list and order items, performs no Qoyod API calls, and
         # never delays the local queue response.
         schedule_salla_auto_sync(db, merchant_id)
+        exact_order_number = _text(search).lstrip("#").strip()
+        if exact_order_number:
+            order = await _find_pending_review_order(
+                db,
+                repository,
+                user_id=merchant_id,
+                order_number=exact_order_number,
+            )
+            return {
+                "items": [order.model_dump(mode="json")] if order else [],
+                "next_cursor": None,
+                "skipped_invalid": 0,
+            }
         try:
             page = await list_orders(
                 repository, user_id=merchant_id, limit=limit,
