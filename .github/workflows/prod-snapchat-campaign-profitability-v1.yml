@@ -1,0 +1,113 @@
+name: Production Snapchat Campaign Profitability V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_campaign_profitability.py"
+      - "backend/tests/test_snapchat_campaign_profitability_v1.py"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/marketingCampaignColumnOrder.js"
+      - "frontend/src/marketingCampaignColumnOrder.test.js"
+      - ".github/workflows/prod-snapchat-campaign-profitability-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile profitability modules
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_campaign_profitability.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_campaign_profitability_v1.py
+      - name: Run focused profitability tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_campaign_profitability_v1.py
+          tests/test_snapchat_campaign_result_source_v1.py
+          tests/test_dashboard_v2_product_profit_rows.py
+          -q --tb=short
+      - name: Enforce conservative read-only profitability contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_campaign_profitability.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'campaign_rows_exact_match_only' "$MODULE"
+          grep -q 'product_ad_spend_is_allocated_not_provider_fact' "$MODULE"
+          grep -q 'before_payment_shipping_bnpl' "$MODULE"
+          grep -q 'CAMPAIGN_PROFITABILITY_CACHE_TTL_SECONDS = 5 \* 60' "$MODULE"
+          grep -q 'install_snapchat_campaign_profitability' "$INIT"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test profitability columns and product details
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/marketingCampaignColumnOrder.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce visible profitability contract
+        working-directory: .
+        run: |
+          TABLE=frontend/src/components/marketing/CampaignManagerTable.jsx
+          ORDER=frontend/src/marketingCampaignColumnOrder.js
+          grep -q 'id: "product_cost"' "$TABLE"
+          grep -q 'id: "profit"' "$TABLE"
+          grep -q 'id: "profit_margin"' "$TABLE"
+          grep -q 'campaign-profitability-dialog' "$TABLE"
+          grep -q 'قبل رسوم الدفع والشحن' "$TABLE"
+          grep -q 'insertSnapchatProfitabilityColumns' "$ORDER"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TABLE" "$ORDER"
