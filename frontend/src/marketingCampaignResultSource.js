@@ -42,6 +42,24 @@ function safeAccount(value = {}) {
   };
 }
 
+export function applyEffectiveCampaignDelivery(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (!Array.isArray(payload.campaigns)) return payload;
+  payload.campaigns.forEach((campaign) => {
+    if (!campaign || typeof campaign !== "object") return;
+    const effective = String(campaign.effective_status || "").trim().toUpperCase();
+    if (!effective.startsWith("ACCOUNT_")) return;
+    campaign.configured_status = campaign.configured_status || campaign.status;
+    campaign.status = "PAUSED";
+    campaign.delivery_status = String(
+      campaign.effective_delivery_label
+      || campaign.effective_status_label
+      || "متوقفة على مستوى الحساب الإعلاني",
+    );
+  });
+  return payload;
+}
+
 function readStoredAccounts() {
   if (typeof window === "undefined") return [];
   try {
@@ -197,6 +215,7 @@ api.interceptors.response.use((response) => {
     ? response.data.data
     : response.data;
   if (payload && typeof payload === "object") {
+    applyEffectiveCampaignDelivery(payload);
     const accounts = Array.isArray(payload.available_accounts)
       ? payload.available_accounts.map(safeAccount).filter(Boolean)
       : [];

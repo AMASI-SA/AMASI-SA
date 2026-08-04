@@ -1,5 +1,6 @@
 import api from "./lib/api";
 import {
+  applyEffectiveCampaignDelivery,
   campaignResultsSource,
   clearCampaignReportSnapshot,
   getCampaignReportSnapshot,
@@ -105,5 +106,23 @@ describe("campaign result source transport", () => {
     expect(response.config.params.from_date).toBe("2026-08-03");
     expect(response.config.params.to_date).toBe("2026-08-03");
     expect(getCampaignReportSnapshot("snapchat")?.campaigns?.[0]?.display_currency).toBe("USD");
+  });
+
+  test("account payment block renders active campaign as stopped", () => {
+    const payload = {
+      campaigns: [{
+        campaign_id: "campaign-2",
+        status: "ACTIVE",
+        effective_status: "ACCOUNT_PAYMENT_BLOCKED",
+        effective_status_label: "متوقفة بسبب الدفع",
+        effective_delivery_label: "الحساب الإعلاني لا يسلّم بسبب الدفع أو الرصيد",
+      }],
+    };
+
+    applyEffectiveCampaignDelivery(payload);
+
+    expect(payload.campaigns[0].configured_status).toBe("ACTIVE");
+    expect(payload.campaigns[0].status).toBe("PAUSED");
+    expect(payload.campaigns[0].delivery_status).toContain("الدفع");
   });
 });
