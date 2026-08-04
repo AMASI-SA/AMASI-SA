@@ -150,6 +150,9 @@ function CalendarMonth({ monthDate, from, to, onSelect }) {
 
 export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
     const rootRef = useRef(null);
+    const nativeFromRef = useRef(null);
+    const nativeToRef = useRef(null);
+    const nativeSyncQueued = useRef(false);
     const [open, setOpen] = useState(false);
     const [draftFrom, setDraftFrom] = useState(valueFrom);
     const [draftTo, setDraftTo] = useState(valueTo);
@@ -173,6 +176,22 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
         document.addEventListener("mousedown", close);
         return () => document.removeEventListener("mousedown", close);
     }, []);
+
+    function scheduleNativeCompatibilityApply() {
+        if (nativeSyncQueued.current) return;
+        nativeSyncQueued.current = true;
+        queueMicrotask(() => {
+            nativeSyncQueued.current = false;
+            const dateFrom = nativeFromRef.current?.value;
+            const dateTo = nativeToRef.current?.value;
+            if (!validISO(dateFrom) || !validISO(dateTo)) return;
+            onApply?.(
+                compareISO(dateFrom, dateTo) <= 0
+                    ? { dateFrom, dateTo }
+                    : { dateFrom: dateTo, dateTo: dateFrom },
+            );
+        });
+    }
 
     function selectDate(value) {
         if (!awaitingEnd) {
@@ -209,6 +228,25 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
 
     return (
         <div ref={rootRef} className="relative" data-testid="ads-arabic-date-range-picker">
+            <div className="sr-only" aria-hidden="true" data-testid="ads-native-date-compatibility">
+                <input
+                    ref={nativeFromRef}
+                    type="date"
+                    value={valueFrom}
+                    onChange={scheduleNativeCompatibilityApply}
+                    tabIndex={-1}
+                    data-mezan-native-date="from"
+                />
+                <input
+                    ref={nativeToRef}
+                    type="date"
+                    value={valueTo}
+                    onChange={scheduleNativeCompatibilityApply}
+                    tabIndex={-1}
+                    data-mezan-native-date="to"
+                />
+            </div>
+
             <button
                 type="button"
                 onClick={() => setOpen((value) => !value)}
