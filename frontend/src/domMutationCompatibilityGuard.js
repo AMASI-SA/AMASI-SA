@@ -19,16 +19,16 @@ export function safeRemoveChild(parent, child, nativeRemoveChild) {
     return nativeRemoveChild?.call(parent, child);
   }
   if (child.parentNode !== parent) {
+    const parentDescription = describeNode(parent);
+    const childDescription = describeNode(child);
     recordSpaFailure(
       "dom_remove_child_parent_mismatch",
       new DOMException(
-        "Skipped removeChild because the target node was already detached or moved.",
+        `Skipped removeChild because ${childDescription} was no longer a child of ${parentDescription}.`,
         "NotFoundError",
       ),
       {
         source: "dom_mutation_compatibility_guard",
-        parent: describeNode(parent),
-        child: describeNode(child),
       },
     );
     return child;
