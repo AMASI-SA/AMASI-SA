@@ -1,10 +1,17 @@
 import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import DashboardAdsSpendCard from "./DashboardAdsSpendCard";
 import GoogleAnalyticsRealtimeCards from "./GoogleAnalyticsRealtimeCards";
 import GoogleAnalyticsTrafficSourcesCard from "./GoogleAnalyticsTrafficSourcesCard";
 
 const PROFIT_SUMMARY_SELECTOR = '[data-testid="profit-summary-card"]';
+const FILTER_SELECTOR = '[data-testid="advanced-filters"]';
 const HOST_TEST_ID = "dashboard-ga4-analytics-wrap";
+const GRID_TEST_ID = "dashboard-unified-reports-grid";
+const GA_HOST_TEST_ID = "dashboard-unified-ga4-host";
+const PROFIT_HOST_TEST_ID = "dashboard-unified-profit-host";
+const ADS_HOST_TEST_ID = "dashboard-unified-ads-host";
+const TRAFFIC_HOST_TEST_ID = "dashboard-ga4-traffic-host";
 const LEGACY_SECTION_SELECTORS = [
     '[data-testid="dashboard-salary-accrual-section"]',
 ];
@@ -24,7 +31,7 @@ function hideDashboardSection(node) {
  * Remove obsolete legacy-only cards from the merchant Dashboard surface.
  *
  * These blocks duplicate information already available in dedicated pages or
- * in the executive profit summary.  We hide their outer card before paint and
+ * in the executive profit summary. We hide their outer card before paint and
  * re-apply the rule whenever Dashboard refreshes replace DOM nodes.
  */
 export function pruneLegacyDashboardSections(root = document) {
@@ -41,82 +48,228 @@ export function pruneLegacyDashboardSections(root = document) {
     });
 }
 
+function readDashboardDateRange(root = document) {
+    const filters = root.querySelector(FILTER_SELECTOR);
+    const fromDate = filters?.getAttribute("data-from-date") || "";
+    const toDate = filters?.getAttribute("data-to-date") || fromDate;
+    return { fromDate, toDate };
+}
+
+function sameRange(left, right) {
+    return left.fromDate === right.fromDate && left.toDate === right.toDate;
+}
+
+function compactGaStyles() {
+    return `
+        [data-dashboard-compact-ga4] [data-testid="ga4-realtime-section"] {
+            height: 100%;
+            padding: 0.75rem !important;
+            border-width: 2px;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-realtime-cards-grid"] {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 0.75rem !important;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-key-events-card"] {
+            display: none !important;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-top-pages-card"],
+        [data-dashboard-compact-ga4] [data-testid="ga4-active-users-card"] {
+            min-height: 0 !important;
+            padding: 0.875rem !important;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-top-pages-card"] {
+            max-height: 330px;
+            overflow: hidden;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-active-users-card"] > div:last-child {
+            height: 9rem !important;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-realtime-section-loading"] > div {
+            grid-template-columns: minmax(0, 1fr) !important;
+        }
+        [data-dashboard-compact-ga4] [data-testid="ga4-realtime-section-loading"] > div > :nth-child(3) {
+            display: none !important;
+        }
+    `;
+}
+
 /**
- * Mount the Google Analytics cards immediately after the executive profit
- * summary without coupling the generic Layout to Dashboard internals.
+ * Build the requested full-screen report row without coupling Dashboard.jsx
+ * to integrations that are mounted by the global Layout.
  *
- * The Dashboard refreshes its data every minute, so the host is re-checked
- * with a MutationObserver and reattached if React replaces the surrounding
- * dashboard nodes during a refresh.
+ * Desktop order (RTL): GA4 live report on the right, executive profit summary
+ * in the centre, and the yellow advertising-spend report on the left. On
+ * smaller screens the same three reports stack vertically.
+ *
+ * The advertising card reads the exact `from/to` range exposed by
+ * AdvancedFilters, so choosing today, yesterday, or a custom period refreshes
+ * both the profit summary and advertising chart from the same date source.
  */
 export default function DashboardAnalyticsPlacement({ active = false }) {
-    const [host, setHost] = useState(null);
+    const [hosts, setHosts] = useState(null);
+    const [dateRange, setDateRange] = useState({ fromDate: "", toDate: "" });
 
     useLayoutEffect(() => {
         if (!active) {
-            setHost(null);
+            setHosts(null);
             return undefined;
         }
 
         let disposed = false;
         let frame = null;
-        let currentHost = null;
+        let currentGrid = null;
+        let currentGaHost = null;
+        let currentProfitHost = null;
+        let currentAdsHost = null;
+        let currentTrafficHost = null;
+        let currentProfit = null;
+        let originalParent = null;
+        let originalNextSibling = null;
 
-        const removeHost = () => {
-            if (currentHost?.parentNode) currentHost.parentNode.removeChild(currentHost);
-            currentHost = null;
-            if (!disposed) setHost(null);
+        const syncRange = () => {
+            const next = readDashboardDateRange(document);
+            setDateRange((current) => sameRange(current, next) ? current : next);
+        };
+
+        const restoreProfit = () => {
+            if (!currentProfit || !originalParent?.isConnected) return;
+            if (originalNextSibling?.parentElement === originalParent) {
+                originalParent.insertBefore(currentProfit, originalNextSibling);
+            } else {
+                originalParent.appendChild(currentProfit);
+            }
+            currentProfit.classList.remove("h-full");
+        };
+
+        const removeHosts = () => {
+            restoreProfit();
+            if (currentGrid?.parentNode) currentGrid.parentNode.removeChild(currentGrid);
+            if (currentTrafficHost?.parentNode) {
+                currentTrafficHost.parentNode.removeChild(currentTrafficHost);
+            }
+            currentGrid = null;
+            currentGaHost = null;
+            currentProfitHost = null;
+            currentAdsHost = null;
+            currentTrafficHost = null;
+            currentProfit = null;
+            originalParent = null;
+            originalNextSibling = null;
+            if (!disposed) setHosts(null);
+        };
+
+        const createColumn = (testid) => {
+            const column = document.createElement("div");
+            column.className = "min-w-0 h-full";
+            column.setAttribute("data-testid", testid);
+            return column;
         };
 
         const ensurePlacement = () => {
             if (disposed) return;
             pruneLegacyDashboardSections(document);
+            syncRange();
 
-            const profitSummary = document.querySelector(PROFIT_SUMMARY_SELECTOR);
-            if (!profitSummary?.parentElement) {
+            const candidate = document.querySelector(PROFIT_SUMMARY_SELECTOR);
+            if (!candidate) {
                 frame = window.requestAnimationFrame(ensurePlacement);
                 return;
             }
 
-            if (!currentHost || !currentHost.isConnected) {
-                const existing = document.querySelector(`[data-testid="${HOST_TEST_ID}"]`);
-                currentHost = existing || document.createElement("div");
-                currentHost.className = "mt-6 space-y-6";
-                currentHost.setAttribute("data-testid", HOST_TEST_ID);
-                setHost(currentHost);
-            }
+            const candidateAlreadyPlaced = candidate.parentElement === currentProfitHost;
+            if (!currentGrid || !currentGrid.isConnected || !candidateAlreadyPlaced) {
+                if (currentGrid?.isConnected) removeHosts();
 
-            if (profitSummary.nextElementSibling !== currentHost) {
-                profitSummary.insertAdjacentElement("afterend", currentHost);
+                originalParent = candidate.parentElement;
+                originalNextSibling = candidate.nextSibling;
+                if (!originalParent) {
+                    frame = window.requestAnimationFrame(ensurePlacement);
+                    return;
+                }
+
+                currentProfit = candidate;
+                currentGrid = document.createElement("div");
+                currentGrid.className = "mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-stretch";
+                currentGrid.setAttribute("data-testid", GRID_TEST_ID);
+                currentGrid.setAttribute("dir", "rtl");
+
+                currentGaHost = createColumn(GA_HOST_TEST_ID);
+                currentProfitHost = createColumn(PROFIT_HOST_TEST_ID);
+                currentAdsHost = createColumn(ADS_HOST_TEST_ID);
+                currentTrafficHost = document.createElement("div");
+                currentTrafficHost.className = "mt-6";
+                currentTrafficHost.setAttribute("data-testid", TRAFFIC_HOST_TEST_ID);
+
+                // RTL auto-placement: first child = right, second = centre,
+                // third = left.
+                currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost);
+                originalParent.insertBefore(currentGrid, candidate);
+                currentProfitHost.appendChild(candidate);
+                candidate.classList.add("h-full");
+                currentGrid.insertAdjacentElement("afterend", currentTrafficHost);
+
+                setHosts({
+                    ga: currentGaHost,
+                    ads: currentAdsHost,
+                    traffic: currentTrafficHost,
+                });
             }
         };
 
         ensurePlacement();
         const observer = new MutationObserver(ensurePlacement);
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["data-from-date", "data-to-date"],
+        });
 
         return () => {
             disposed = true;
             if (frame) window.cancelAnimationFrame(frame);
             observer.disconnect();
-            removeHost();
+            removeHosts();
         };
     }, [active]);
 
-    if (!active || !host) return null;
+    if (!active || !hosts) return null;
 
-    return createPortal(
+    return (
         <>
-            <GoogleAnalyticsRealtimeCards />
-            <GoogleAnalyticsTrafficSourcesCard />
-        </>,
-        host,
+            {createPortal(
+                <div className="h-full" data-dashboard-compact-ga4="true">
+                    <style>{compactGaStyles()}</style>
+                    <GoogleAnalyticsRealtimeCards />
+                </div>,
+                hosts.ga,
+            )}
+            {createPortal(
+                <DashboardAdsSpendCard
+                    fromDate={dateRange.fromDate}
+                    toDate={dateRange.toDate}
+                />,
+                hosts.ads,
+            )}
+            {createPortal(
+                <GoogleAnalyticsTrafficSourcesCard />,
+                hosts.traffic,
+            )}
+        </>
     );
 }
 
 export {
+    ADS_HOST_TEST_ID,
+    FILTER_SELECTOR,
+    GA_HOST_TEST_ID,
+    GRID_TEST_ID,
     HOST_TEST_ID,
     LEGACY_SECTION_HEADINGS,
     LEGACY_SECTION_SELECTORS,
+    PROFIT_HOST_TEST_ID,
     PROFIT_SUMMARY_SELECTOR,
+    TRAFFIC_HOST_TEST_ID,
+    readDashboardDateRange,
 };
