@@ -30,7 +30,7 @@ describe("AdsPerformanceExplorer", () => {
         expect(toggleMetricVisibility(hidden, "roas").has("roas")).toBe(true);
     });
 
-    test("clicking a metric card changes its visible state", async () => {
+    test("renders a clear one-day snapshot and keeps metric toggles interactive", async () => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
         const container = document.createElement("div");
         document.body.appendChild(container);
@@ -45,6 +45,10 @@ describe("AdsPerformanceExplorer", () => {
                 />,
             );
         });
+
+        expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
+        expect(container.textContent).toContain("ملخص أداء يوم واحد");
+        expect(container.textContent).toContain("50.00 ر.س");
 
         const roas = container.querySelector('[data-testid="ads-performance-metric-roas"]');
         expect(roas.getAttribute("aria-pressed")).toBe("true");
