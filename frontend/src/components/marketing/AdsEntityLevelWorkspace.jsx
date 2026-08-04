@@ -1,5 +1,6 @@
 import CampaignManagerTable from "./CampaignManagerTable";
 import AdSquadManagerTable from "./AdSquadManagerTable";
+import AdSquadSortControls from "./AdSquadSortControls";
 
 function EntityTabs({
     platformLabel,
@@ -93,15 +94,18 @@ export default function AdsEntityLevelWorkspace({
                 />
             )}
             {entityLevel === "ad_squads" && (
-                <AdSquadManagerTable
-                    rows={adSquadReport?.ad_squads || []}
-                    totals={adSquadReport?.totals || {}}
-                    pagination={adSquadReport?.pagination || {}}
-                    page={adSquadPage}
-                    onPageChange={onAdSquadPageChange}
-                    loading={adSquadLoading}
-                    error={adSquadError}
-                />
+                <>
+                    <AdSquadSortControls />
+                    <AdSquadManagerTable
+                        rows={adSquadReport?.ad_squads || []}
+                        totals={adSquadReport?.totals || {}}
+                        pagination={adSquadReport?.pagination || {}}
+                        page={adSquadPage}
+                        onPageChange={onAdSquadPageChange}
+                        loading={adSquadLoading}
+                        error={adSquadError}
+                    />
+                </>
             )}
         </section>
     );

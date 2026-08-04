@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import {
+    Bar,
+    BarChart,
     CartesianGrid,
+    Cell,
     Line,
     LineChart,
     ResponsiveContainer,
@@ -133,13 +136,13 @@ function MetricToggle({ series, value, active, onToggle }) {
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="text-sm font-black opacity-90">{series.label}</div>
-                    <div className="mt-4 break-words font-mono text-3xl font-black sm:text-4xl">
+                    <div className="text-base font-black opacity-95">{series.label}</div>
+                    <div className="mt-4 break-words font-mono text-4xl font-black sm:text-[2.7rem]">
                         {formatMetric(value, series.format)}
                     </div>
-                    <div className="mt-2 text-xs font-bold opacity-75">{series.hint}</div>
+                    <div className="mt-2 text-sm font-bold opacity-80">{series.hint}</div>
                 </div>
-                <span className="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black">
+                <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-black">
                     {active ? "ظاهر" : "مخفي"}
                 </span>
             </div>
@@ -150,50 +153,63 @@ function MetricToggle({ series, value, active, onToggle }) {
     );
 }
 
+function SingleDayBarTooltip({ active, payload, series }) {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-right shadow-lg" dir="rtl">
+            <div className="text-xs font-black text-slate-500">{series.label}</div>
+            <div className="mt-1 font-mono text-base font-black text-slate-950">
+                {formatMetric(payload[0]?.payload?.raw, series.format)}
+            </div>
+        </div>
+    );
+}
+
 function SingleDaySnapshot({ row, visibleSeries }) {
     return (
         <div className="min-h-80 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6" data-testid="ads-performance-single-day-chart">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <h3 className="font-black text-slate-900">ملخص أداء يوم واحد</h3>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                        الفترة المحددة يوم واحد؛ لذلك يعرض ميزان مخطط القيم المؤكدة بدل خط زمني مضلل.
+                    <h3 className="text-lg font-black text-slate-900">رسم أداء يوم واحد</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">
+                        كل مؤشر يظهر كرسم أعمدة مستقل بمقياسه الحقيقي، وتظهر القيمة الأصلية فوق الرسم وعند المرور.
                     </p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm">
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700 shadow-sm">
                     {row?.date || "اليوم"}
                 </span>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {visibleSeries.map((series) => {
-                    const raw = row?.[`${series.id}_raw`];
-                    const hasValue = finite(raw) !== null;
+                    const raw = finite(row?.[`${series.id}_raw`]);
+                    const safeValue = raw === null ? 0 : Math.max(0, raw);
+                    const domainMax = safeValue > 0 ? safeValue * 1.18 : 1;
+                    const chartData = [{ id: series.id, value: safeValue, raw }];
                     return (
-                        <div key={series.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="font-black text-slate-700">{series.label}</div>
-                                <div className="font-mono text-lg font-black text-slate-950">
-                                    {formatMetric(raw, series.format)}
-                                </div>
+                        <article
+                            key={series.id}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                            data-testid={`ads-performance-single-day-bar-${series.id}`}
+                        >
+                            <div className="text-center text-sm font-black text-slate-700">{series.label}</div>
+                            <div className="mt-2 text-center font-mono text-xl font-black text-slate-950">
+                                {formatMetric(raw, series.format)}
                             </div>
-                            <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                                <div
-                                    className="relative h-full rounded-full transition-all"
-                                    style={{
-                                        width: hasValue ? "100%" : "0%",
-                                        backgroundColor: series.stroke,
-                                    }}
-                                >
-                                    {hasValue && (
-                                        <span
-                                            className="absolute left-0 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
-                                            style={{ backgroundColor: series.stroke }}
-                                        />
-                                    )}
-                                </div>
+                            <div className="mt-3 h-52">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chartData} margin={{ top: 12, right: 18, bottom: 4, left: 18 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <YAxis domain={[0, domainMax]} hide />
+                                        <XAxis dataKey="id" hide />
+                                        <Tooltip content={<SingleDayBarTooltip series={series} />} cursor={{ fill: "rgba(148, 163, 184, 0.08)" }} />
+                                        <Bar dataKey="value" radius={[12, 12, 3, 3]} maxBarSize={92} animationDuration={350}>
+                                            <Cell fill={series.stroke} />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
-                            <div className="mt-2 text-[11px] font-bold text-slate-400">{series.hint}</div>
-                        </div>
+                            <div className="mt-1 text-center text-xs font-bold text-slate-400">{series.hint}</div>
+                        </article>
                     );
                 })}
             </div>
@@ -233,12 +249,12 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
             <div className="border-t border-slate-200 bg-white p-4 sm:p-6">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <h2 className="font-black text-slate-900">اتجاه الأداء اليومي</h2>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
-                            اضغط على أي بطاقة لإخفاء خطها أو إظهاره. القيم الأصلية تظهر عند المرور، واليوم الواحد يظهر كمخطط ملخص واضح.
+                        <h2 className="text-xl font-black text-slate-900">اتجاه الأداء اليومي</h2>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                            اضغط على أي بطاقة لإخفاء مؤشرها أو إظهاره. الفترات المتعددة تظهر كرسم زمني، واليوم الواحد يظهر كرسم أعمدة فعلي.
                         </p>
                     </div>
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
                         {visibleSeries.length} من {SERIES.length} مؤشرات ظاهرة
                     </div>
                 </div>
@@ -246,11 +262,11 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                 {chartRows.length === 1 && visibleSeries.length ? (
                     <SingleDaySnapshot row={chartRows[0]} visibleSeries={visibleSeries} />
                 ) : chartRows.length > 1 && visibleSeries.length ? (
-                    <div className="h-80" data-testid="ads-performance-chart">
+                    <div className="h-96" data-testid="ads-performance-chart">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartRows} margin={{ top: 10, right: 8, bottom: 5, left: 8 }}>
+                            <LineChart data={chartRows} margin={{ top: 12, right: 12, bottom: 8, left: 12 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="date" tickMargin={10} />
+                                <XAxis dataKey="date" tickMargin={12} tick={{ fontSize: 14, fontWeight: 800 }} />
                                 <YAxis domain={[0, 100]} hide />
                                 <Tooltip content={<ChartTooltip />} />
                                 {visibleSeries.map((series) => (
@@ -260,9 +276,9 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                                         dataKey={series.id}
                                         name={series.label}
                                         stroke={series.stroke}
-                                        strokeWidth={3}
-                                        dot={{ r: 3 }}
-                                        activeDot={{ r: 6 }}
+                                        strokeWidth={4}
+                                        dot={{ r: 4, strokeWidth: 2 }}
+                                        activeDot={{ r: 7 }}
                                         connectNulls={false}
                                         animationDuration={300}
                                     />

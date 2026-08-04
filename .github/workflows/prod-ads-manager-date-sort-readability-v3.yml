@@ -1,0 +1,88 @@
+name: Production Ads Manager Date Sort Readability V3
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsManagerReadability.css"
+      - "frontend/src/marketingCampaignResultSource.js"
+      - "frontend/src/marketingCampaignStaleResponseGuard.js"
+      - "frontend/src/marketingCampaignStaleResponseGuard.test.js"
+      - "frontend/src/marketingSnapchatAccountTimezoneEnhancer.js"
+      - "frontend/src/marketingSnapchatManualRangeGuard.js"
+      - "frontend/src/marketingSnapchatManualRangeGuard.test.js"
+      - "frontend/src/components/marketing/ArabicDateRangePicker.jsx"
+      - "frontend/src/components/marketing/ArabicDateRangePicker.test.jsx"
+      - "frontend/src/components/marketing/AdsPerformanceExplorer.jsx"
+      - "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+      - "frontend/src/components/marketing/AdSquadSortControls.jsx"
+      - "frontend/src/components/marketing/AdSquadSortControls.test.jsx"
+      - ".github/workflows/prod-ads-manager-date-sort-readability-v3.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ads Manager interactions
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/ArabicDateRangePicker.test.jsx
+          src/components/marketing/AdsPerformanceExplorer.test.jsx
+          src/components/marketing/AdSquadSortControls.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/marketingSnapchatManualRangeGuard.test.js
+          src/marketingCampaignStaleResponseGuard.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce date, chart, sort and readability contracts
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          CSS=frontend/src/marketingAdsManagerReadability.css
+          SOURCE=frontend/src/marketingCampaignResultSource.js
+          STALE=frontend/src/marketingCampaignStaleResponseGuard.js
+          TIMEZONE=frontend/src/marketingSnapchatAccountTimezoneEnhancer.js
+          PICKER=frontend/src/components/marketing/ArabicDateRangePicker.jsx
+          CHART=frontend/src/components/marketing/AdsPerformanceExplorer.jsx
+          LEVELS=frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          SORT=frontend/src/components/marketing/AdSquadSortControls.jsx
+
+          grep -q 'marketingAdsManagerReadability.css' "$INDEX"
+          grep -q 'marketingCampaignStaleResponseGuard' "$INDEX"
+          grep -q 'marketingSnapchatManualRangeGuard' "$INDEX"
+          grep -q 'snapchatManualRangeIsSelected' "$SOURCE"
+          grep -q 'campaignRequestSequence' "$SOURCE"
+          grep -q 'older_responses_cannot_replace_newer_range' "$STALE"
+          grep -q 'if (snapchatManualRangeIsSelected()) return' "$TIMEZONE"
+          grep -q 'ADS_DATE_RANGE_APPLIED_EVENT' "$PICKER"
+          grep -q 'ads-performance-single-day-bar-' "$CHART"
+          grep -q 'BarChart' "$CHART"
+          grep -q 'AdSquadSortControls' "$LEVELS"
+          grep -q 'id: "spend"' "$SORT"
+          grep -q 'id: "active"' "$SORT"
+          grep -q 'data-testid={`ad-squad-sort-${option.id}`}' "$SORT"
+          grep -q 'font-size: 17px' "$CSS"
+          grep -q 'min-width: 360px' "$CSS"
+          grep -q '\[data-mezan-adsquad-sort-controls\]' "$CSS"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SORT" "$CHART" "$STALE"

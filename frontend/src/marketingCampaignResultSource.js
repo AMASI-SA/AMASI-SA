@@ -11,6 +11,8 @@ const SNAPCHAT_ACCOUNTS_STORAGE = "mezan-snapchat-manager-accounts-v1";
 const snapshots = new Map();
 let forceAccountToday = true;
 let manualRangeSelected = false;
+let campaignRequestSequence = 0;
+let latestCampaignResponseSequence = 0;
 
 function pathOnly(config = {}) {
   const raw = String(config?.url || "");
@@ -48,9 +50,6 @@ export function applyEffectiveCampaignDelivery(payload) {
   payload.campaigns.forEach((campaign) => {
     if (!campaign || typeof campaign !== "object") return;
 
-    // The status column reflects only Snapchat's configured campaign switch.
-    // Payment, budget, Ad Squad, review and schedule blockers belong only in
-    // the delivery column.
     const configured = String(
       campaign.configured_status || campaign.status || "unknown",
     ).trim();
@@ -194,6 +193,10 @@ export function markSnapchatManualRange() {
   forceAccountToday = false;
 }
 
+export function snapchatManualRangeIsSelected() {
+  return manualRangeSelected;
+}
+
 export function getCampaignReportSnapshot(platform = "snapchat") {
   return snapshots.get(platform) || null;
 }
@@ -217,16 +220,24 @@ api.interceptors.request.use((config) => {
     forceAccountToday = false;
   }
 
+  const requestSequence = ++campaignRequestSequence;
   return {
     ...config,
     params,
     _mezanCampaignResultSource: true,
     _mezanSnapchatAccountTimezone: true,
+    _mezanCampaignRequestSequence: requestSequence,
   };
 });
 
 api.interceptors.response.use((response) => {
   if (!isSnapchatCampaignReport(response?.config)) return response;
+  const responseSequence = Number(response?.config?._mezanCampaignRequestSequence || 0);
+  if (responseSequence > 0 && responseSequence < latestCampaignResponseSequence) {
+    return response;
+  }
+  if (responseSequence > 0) latestCampaignResponseSequence = responseSequence;
+
   const payload = response?.data?.data && typeof response.data.data === "object"
     ? response.data.data
     : response.data;
@@ -248,6 +259,7 @@ api.interceptors.response.use((response) => {
           source: safeSource(payload.result_source),
           account_id: selectedId || null,
           account_timezone: payload.account_timezone || null,
+          request_sequence: responseSequence || null,
         },
       }));
     }
