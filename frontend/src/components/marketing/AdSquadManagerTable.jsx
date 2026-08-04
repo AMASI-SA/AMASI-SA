@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ChartBar,
     Check,
@@ -21,6 +21,9 @@ const STATUS_LABELS = {
     deleted: "محذوفة",
     unknown: "غير محسومة",
 };
+const SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
+const SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
+const VALID_SORTS = new Set(["newest", "spend", "active"]);
 
 function finite(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -75,6 +78,41 @@ function rowKey(row) {
     return `${row.account_id || "unknown"}:${row.ad_squad_id || "unknown"}`;
 }
 
+function timestamp(value) {
+    const parsed = Date.parse(String(value || ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function readAdSquadSortPreference(storage = typeof window !== "undefined" ? window.localStorage : null) {
+    try {
+        const value = String(storage?.getItem(SORT_STORAGE_KEY) || "newest");
+        return VALID_SORTS.has(value) ? value : "newest";
+    } catch {
+        return "newest";
+    }
+}
+
+export function sortAdSquadRows(rows = [], mode = "newest") {
+    const normalized = VALID_SORTS.has(mode) ? mode : "newest";
+    return [...rows].sort((left, right) => {
+        const leftActive = activeStatus(left.status) ? 1 : 0;
+        const rightActive = activeStatus(right.status) ? 1 : 0;
+        const leftSpend = finite(left.spend_sar) || 0;
+        const rightSpend = finite(right.spend_sar) || 0;
+        const leftTime = timestamp(left.created_at_provider || left.start_time || left.updated_at_provider);
+        const rightTime = timestamp(right.created_at_provider || right.start_time || right.updated_at_provider);
+        if (normalized === "active" && leftActive !== rightActive) return rightActive - leftActive;
+        if (normalized === "spend" && leftSpend !== rightSpend) return rightSpend - leftSpend;
+        if (normalized === "active" && leftSpend !== rightSpend) return rightSpend - leftSpend;
+        if (leftTime !== rightTime) return rightTime - leftTime;
+        return String(left.ad_squad_name || "").localeCompare(
+            String(right.ad_squad_name || ""),
+            "ar",
+            { numeric: true },
+        );
+    });
+}
+
 function csvEscape(value) {
     return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
@@ -84,7 +122,7 @@ function csv(rows) {
         "اسم المجموعة الإعلانية", "معرف المجموعة", "اسم الحملة", "معرف الحملة",
         "الحالة", "حالة التسليم", "الصرف", "المشتريات", "المبيعات", "ROAS",
         "CPA", "الظهور", "النقرات", "CTR", "eCPC", "eCPM", "الميزانية اليومية",
-        "عملة الميزانية", "هدف التحسين", "إستراتيجية المزايدة", "الحساب",
+        "عملة الميزانية", "هدف التحسين", "إستراتيجية المزايدة", "الحساب", "تاريخ البدء",
     ];
     const body = rows.map((row) => [
         row.ad_squad_name,
@@ -108,6 +146,7 @@ function csv(rows) {
         row.optimization_goal,
         row.bid_strategy,
         row.account_name,
+        row.start_time,
     ]);
     return [headers, ...body].map((line) => line.map(csvEscape).join(",")).join("\n");
 }
@@ -178,20 +217,33 @@ export default function AdSquadManagerTable({
 }) {
     const [selected, setSelected] = useState(() => new Set());
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
-    const [sort, setSort] = useState({ key: "spend_sar", direction: "desc" });
+    const [preferredSort, setPreferredSort] = useState(() => readAdSquadSortPreference());
+    const [columnSort, setColumnSort] = useState(null);
+
+    useEffect(() => {
+        const update = (event) => {
+            const next = String(event?.detail?.sort_by || readAdSquadSortPreference());
+            setPreferredSort(VALID_SORTS.has(next) ? next : "newest");
+            setColumnSort(null);
+        };
+        window.addEventListener(SORT_EVENT, update);
+        return () => window.removeEventListener(SORT_EVENT, update);
+    }, []);
 
     const sorted = useMemo(() => {
-        const direction = sort.direction === "asc" ? 1 : -1;
-        return [...rows].sort((left, right) => {
-            const a = sort.key === "name" ? left.ad_squad_name : finite(left[sort.key]);
-            const b = sort.key === "name" ? right.ad_squad_name : finite(right[sort.key]);
+        const preferred = sortAdSquadRows(rows, preferredSort);
+        if (!columnSort?.key) return preferred;
+        const direction = columnSort.direction === "asc" ? 1 : -1;
+        return [...preferred].sort((left, right) => {
+            const a = columnSort.key === "name" ? left.ad_squad_name : finite(left[columnSort.key]);
+            const b = columnSort.key === "name" ? right.ad_squad_name : finite(right[columnSort.key]);
             if (a === null && b === null) return 0;
             if (a === null) return 1;
             if (b === null) return -1;
             if (typeof a === "number" && typeof b === "number") return (a - b) * direction;
             return String(a).localeCompare(String(b), "ar", { numeric: true }) * direction;
         });
-    }, [rows, sort]);
+    }, [rows, preferredSort, columnSort]);
     const visible = showSelectedOnly
         ? sorted.filter((row) => selected.has(rowKey(row)))
         : sorted;
@@ -219,14 +271,14 @@ export default function AdSquadManagerTable({
     }
 
     function sortBy(key) {
-        setSort((current) => ({
+        setColumnSort((current) => ({
             key,
-            direction: current.key === key && current.direction === "desc" ? "asc" : "desc",
+            direction: current?.key === key && current.direction === "desc" ? "asc" : "desc",
         }));
     }
 
     return (
-        <section className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm" data-testid="ad-squad-manager-table" dir="rtl">
+        <section className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm" data-testid="ad-squad-manager-table" dir="rtl" data-sort-mode={preferredSort}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
                 <div className="flex items-center gap-1">
                     <button
@@ -287,7 +339,7 @@ export default function AdSquadManagerTable({
                             return (
                                 <tr key={key} className={`${checked ? "bg-emerald-50/60" : "bg-white"} group hover:bg-slate-50`}>
                                     <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-0 z-10 border-b border-l border-slate-100 px-3 py-4 text-center`}><input type="checkbox" checked={checked} onChange={() => toggle(row)} aria-label={`تحديد ${row.ad_squad_name}`} className="h-4 w-4 accent-emerald-600" /></td>
-                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`}><div className="max-w-[270px] truncate font-extrabold text-slate-950" title={row.ad_squad_name}>{row.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div></td>
+                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`}><div className="max-w-[270px] truncate font-extrabold text-slate-950" title={row.ad_squad_name}>{row.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div>{row.start_time && <div className="mt-1 text-[10px] font-bold text-slate-400">بدء: {new Date(row.start_time).toLocaleDateString("ar-SA")}</div>}</td>
                                     <td className="border-b border-slate-100 px-4 py-4"><div className="max-w-[210px] truncate font-bold text-slate-700" title={row.campaign_name}>{row.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.campaign_id || "—"}</div></td>
                                     <td className="border-b border-slate-100 px-4 py-4"><StatusCell row={row} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4"><DeliveryCell row={row} /></td>

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Funnel, CalendarBlank, CaretDown, X } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { Funnel, CaretDown, X } from "@phosphor-icons/react";
 import api from "../lib/api";
-import { todayISO } from "../lib/format";
 import { todaySA, addDaysISO, monthStartSA, yearStartSA } from "../lib/dates";
-import DateInput from "./DateInput";
+import ArabicDateRangePicker from "./ArabicDateRangePicker";
 
 /** Compute date range from preset key (returns {from, to} ISO strings).
  *  All boundaries are computed in Asia/Riyadh — independent of the
@@ -55,8 +54,17 @@ const PRESETS = [
     { key: "custom", label: "فترة مخصَّصة" },
 ];
 
+function presetForRange(from, to) {
+    return PRESETS
+        .filter((item) => item.key !== "custom")
+        .find((item) => {
+            const range = presetRange(item.key);
+            return range.from === from && range.to === to;
+        })?.key || "custom";
+}
+
 /**
- * AdvancedFilters — shared filter bar for dashboard/reports.
+ * AdvancedFilters — shared filter bar for Dashboard and Mezan reports.
  *
  * Props:
  *   value: { preset, from, to, payment_methods: [], shipping_companies: [] }
@@ -73,7 +81,7 @@ export default function AdvancedFilters({
 }) {
     const [paymentOptions, setPaymentOptions] = useState([]);
     const [shippingOptions, setShippingOptions] = useState([]);
-    const [openMenu, setOpenMenu] = useState(null); // "preset" | "pay" | "ship" | null
+    const [openMenu, setOpenMenu] = useState(null); // "pay" | "ship" | null
 
     useEffect(() => {
         (async () => {
@@ -85,25 +93,19 @@ export default function AdvancedFilters({
         })();
     }, []);
 
-    const presetLabel = useMemo(() => {
-        if (value.preset === "custom") return `${value.from || "—"} → ${value.to || "—"}`;
-        return PRESETS.find((p) => p.key === value.preset)?.label || "اختر فترة";
-    }, [value.preset, value.from, value.to]);
-
-    const setPreset = (key) => {
-        if (key === "custom") {
-            onChange({ ...value, preset: key });
-        } else {
-            const r = presetRange(key);
-            onChange({ ...value, preset: key, from: r.from, to: r.to });
-        }
-        setOpenMenu(null);
-    };
-
     const toggle = (field, item) => {
         const cur = value[field] || [];
         const next = cur.includes(item) ? cur.filter((x) => x !== item) : [...cur, item];
         onChange({ ...value, [field]: next });
+    };
+
+    const applyDateRange = ({ dateFrom, dateTo }) => {
+        onChange({
+            ...value,
+            preset: presetForRange(dateFrom, dateTo),
+            from: dateFrom,
+            to: dateTo,
+        });
     };
 
     const clearAll = () => onChange({
@@ -117,53 +119,14 @@ export default function AdvancedFilters({
 
     return (
         <div className="rounded-xl border border-border bg-white p-3 md:p-4 flex flex-wrap items-center gap-2" data-testid="advanced-filters">
-            {/* Date preset dropdown */}
-            <div className="relative">
-                <button
-                    type="button"
-                    onClick={() => setOpenMenu(openMenu === "preset" ? null : "preset")}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-accent transition-colors"
-                    data-testid="filter-date-btn"
-                >
-                    <CalendarBlank size={16} weight="bold" />
-                    <span className="max-w-[200px] truncate">{presetLabel}</span>
-                    <CaretDown size={14} weight="bold" />
-                </button>
-                {openMenu === "preset" && (
-                    <div className="absolute z-20 mt-1 w-56 rounded-lg border border-border bg-white shadow-lg p-1" data-testid="filter-date-menu">
-                        {PRESETS.map((p) => (
-                            <button
-                                key={p.key}
-                                type="button"
-                                onClick={() => setPreset(p.key)}
-                                className={`w-full text-start px-3 py-2 rounded-md text-sm font-semibold hover:bg-accent transition-colors ${value.preset === p.key ? "bg-brand/10 text-brand" : ""}`}
-                                data-testid={`filter-date-${p.key}`}
-                            >{p.label}</button>
-                        ))}
-                    </div>
-                )}
+            <div className="min-w-[280px] flex-1 md:max-w-xl" data-testid="filter-date-range">
+                <ArabicDateRangePicker
+                    valueFrom={value.from || todaySA()}
+                    valueTo={value.to || value.from || todaySA()}
+                    onApply={applyDateRange}
+                />
             </div>
 
-            {/* Custom date inputs (visible only when preset=custom) */}
-            {value.preset === "custom" && (
-                <>
-                    <DateInput
-                        value={value.from || ""}
-                        onChange={(e) => onChange({ ...value, from: e.target.value })}
-                        className="px-3 py-2 text-sm"
-                        data-testid="filter-custom-from"
-                    />
-                    <span className="text-muted-foreground text-sm">→</span>
-                    <DateInput
-                        value={value.to || ""}
-                        onChange={(e) => onChange({ ...value, to: e.target.value })}
-                        className="px-3 py-2 text-sm"
-                        data-testid="filter-custom-to"
-                    />
-                </>
-            )}
-
-            {/* Payment methods multi-select */}
             {showPaymentFilter && paymentOptions.length > 0 && (
                 <MultiSelect
                     label="طرق الدفع"
@@ -176,7 +139,6 @@ export default function AdvancedFilters({
                 />
             )}
 
-            {/* Shipping companies multi-select */}
             {showShippingFilter && shippingOptions.length > 0 && (
                 <MultiSelect
                     label="شركات الشحن"
@@ -189,7 +151,6 @@ export default function AdvancedFilters({
                 />
             )}
 
-            {/* Reset */}
             {(activeCount > 0 || value.preset !== defaultPreset) && (
                 <button
                     type="button"
@@ -262,3 +223,5 @@ export function defaultFilters(preset = "this_month") {
     const r = presetRange(preset);
     return { preset, from: r.from, to: r.to, payment_methods: [], shipping_companies: [] };
 }
+
+export { presetForRange, presetRange };
