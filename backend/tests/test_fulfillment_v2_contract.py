@@ -94,6 +94,27 @@ def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
     assert "append: true" not in source
 
 
+def test_pending_review_search_is_global_exact_and_read_only():
+    frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(
+        encoding="utf-8"
+    )
+    service_source = (ROOT / "frontend/src/services/orderReviewEngine.js").read_text(
+        encoding="utf-8"
+    )
+    backend_source = (ROOT / "backend/order_review_routes.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'search: Optional[str] = Query(default=None, max_length=50)' in backend_source
+    assert 'allow_auto_fulfillment=False' in backend_source
+    assert 'params.search = String(search).trim()' in service_source
+    assert 'search: query' in frontend_source
+    assert 'requestId !== latestRequestId.current' in frontend_source
+    assert 'if (searchQuery || document.hidden || !navigator.onLine) return;' in frontend_source
+    assert 'ابحث برقم الطلب في جميع طلبات انتظار المراجعة' in frontend_source
+    assert 'لا توجد نتائج في هذه الصفحة' not in frontend_source
+
+
 def test_order_review_product_cards_keep_titles_and_specs_readable():
     source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
 

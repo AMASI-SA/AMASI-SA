@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowLeft, ArrowSquareOut, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
     FloppyDisk, MagnifyingGlass, Plus, SpinnerGap, WarningCircle, WhatsappLogo, X,
@@ -664,34 +664,54 @@ export default function OrderReview() {
     const [error, setError] = useState("");
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [search, setSearch] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const latestRequestId = useRef(0);
 
     const pageNumber = previousCursors.length + 1;
     const hasPreviousPage = previousCursors.length > 0;
 
-    const load = useCallback(async ({ cursor = null, background = false } = {}) => {
+    const load = useCallback(async ({ cursor = null, query = "", background = false } = {}) => {
+        const requestId = latestRequestId.current + 1;
+        latestRequestId.current = requestId;
         if (!background) {
             setLoading(true);
             setError("");
         }
         try {
-            const result = await listPendingOrderReviews({ limit: REVIEW_PAGE_SIZE, cursor });
+            const result = await listPendingOrderReviews({
+                limit: REVIEW_PAGE_SIZE,
+                cursor: query ? null : cursor,
+                search: query,
+            });
+            if (requestId !== latestRequestId.current) return;
             setOrders(result.items);
             setNextCursor(result.nextCursor);
         } catch (loadError) {
-            if (!background) setError(loadError.message);
+            if (!background && requestId === latestRequestId.current) {
+                setError(loadError.message);
+            }
         } finally {
-            if (!background) setLoading(false);
+            if (!background && requestId === latestRequestId.current) {
+                setLoading(false);
+            }
         }
     }, []);
 
     useEffect(() => {
-        load({ cursor: currentCursor });
-    }, [currentCursor, load]);
+        load({ cursor: currentCursor, query: searchQuery });
+    }, [currentCursor, load, searchQuery]);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setSearchQuery(search.trim());
+        }, 350);
+        return () => window.clearTimeout(timeoutId);
+    }, [search]);
 
     useEffect(() => {
         const refresh = () => {
-            if (document.hidden || !navigator.onLine) return;
-            load({ cursor: currentCursor, background: true });
+            if (searchQuery || document.hidden || !navigator.onLine) return;
+            load({ cursor: currentCursor, query: searchQuery, background: true });
         };
         const intervalId = window.setInterval(refresh, 10_000);
         window.addEventListener("focus", refresh);
@@ -703,7 +723,7 @@ export default function OrderReview() {
             window.removeEventListener("online", refresh);
             document.removeEventListener("visibilitychange", refresh);
         };
-    }, [currentCursor, load]);
+    }, [currentCursor, load, searchQuery]);
 
     const goToPreviousPage = () => {
         if (!hasPreviousPage || loading) return;
@@ -714,27 +734,32 @@ export default function OrderReview() {
     };
 
     const goToNextPage = () => {
-        if (!nextCursor || loading) return;
+        if (searchQuery || !nextCursor || loading) return;
         setPreviousCursors((history) => [...history, currentCursor]);
         setCurrentCursor(nextCursor);
         setSearch("");
     };
-
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return orders;
-        return orders.filter((order) => [order.order_number, order.customer?.name, order.customer?.mobile, paymentText(order)].some((value) => String(value || "").toLowerCase().includes(q)));
-    }, [orders, search]);
 
     return (
         <div className="mx-auto max-w-7xl space-y-5 p-4" dir="rtl">
             <header className="rounded-2xl border bg-white p-5 shadow-sm">
                 <h1 className="text-2xl font-extrabold text-slate-900">طلبات بانتظار المراجعة</h1>
                 <p className="mt-1 text-sm text-slate-500">المرحلة الأولى من محرك تجهيز الطلب — مراجعة بيانات العميل والدفع والشحن والمنتجات.</p>
-                <p className="mt-1 text-xs font-semibold text-violet-700">يعرض الجدول آخر 10 طلبات في كل صفحة، واستخدم الأسهم للانتقال بين الصفحات.</p>
+                <p className="mt-1 text-xs font-semibold text-violet-700">يعرض الجدول آخر 10 طلبات في كل صفحة، والبحث برقم الطلب يشمل جميع طلبات انتظار المراجعة.</p>
                 <div className="relative mt-4 max-w-xl">
                     <MagnifyingGlass className="absolute right-3 top-3 text-slate-400" />
-                    <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border py-2.5 pr-10 pl-3 outline-none focus:border-violet-500" placeholder="ابحث في الصفحة الحالية برقم الطلب أو العميل أو طريقة الدفع" />
+                    <input
+                        value={search}
+                        onChange={(event) => {
+                            setSearch(event.target.value);
+                            setCurrentCursor(null);
+                            setPreviousCursors([]);
+                        }}
+                        inputMode="numeric"
+                        dir="ltr"
+                        className="w-full rounded-xl border py-2.5 pr-10 pl-3 outline-none focus:border-violet-500"
+                        placeholder="ابحث برقم الطلب في جميع طلبات انتظار المراجعة"
+                    />
                 </div>
             </header>
 
@@ -746,9 +771,9 @@ export default function OrderReview() {
                     <div className="flex min-h-64 items-center justify-center"><SpinnerGap size={32} className="animate-spin text-violet-600" /></div>
                 ) : error ? (
                     <div className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>
-                ) : filtered.length === 0 ? (
-                    <div className="flex min-h-64 items-center justify-center text-slate-500">{search.trim() ? "لا توجد نتائج في هذه الصفحة" : "لا توجد طلبات بانتظار المراجعة"}</div>
-                ) : filtered.map((order) => (
+                ) : orders.length === 0 ? (
+                    <div className="flex min-h-64 items-center justify-center text-slate-500">{searchQuery ? "لم يتم العثور على طلب بهذا الرقم ضمن انتظار المراجعة" : "لا توجد طلبات بانتظار المراجعة"}</div>
+                ) : orders.map((order) => (
                     <button key={order.order_number} type="button" onClick={() => setSelectedOrder(order.order_number)} className={`grid w-full gap-2 border-b px-4 py-4 text-right last:border-b-0 md:grid-cols-[70px_1fr_1fr_1fr_1fr] md:items-center ${rowTone(order)}`}>
                         <span className="inline-flex items-center gap-1 font-bold text-violet-700"><ArrowLeft /> <span className="md:hidden">التفاصيل</span></span>
                         <span className="font-extrabold" dir="ltr">#{order.order_number}</span>
@@ -758,7 +783,7 @@ export default function OrderReview() {
                     </button>
                 ))}
 
-                {!loading && !error && (orders.length > 0 || hasPreviousPage) && (
+                {!searchQuery && !loading && !error && (orders.length > 0 || hasPreviousPage) && (
                     <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-xs font-bold text-slate-500">10 طلبات كحد أقصى في الصفحة</div>
                         <div className="flex items-center justify-center gap-2" aria-label="التنقل بين صفحات الطلبات">

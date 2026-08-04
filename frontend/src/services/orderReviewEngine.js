@@ -17,10 +17,11 @@ function message(error, fallback) {
     return error?.message || fallback;
 }
 
-export async function listPendingOrderReviews({ limit = 15, cursor = null } = {}) {
+export async function listPendingOrderReviews({ limit = 15, cursor = null, search = "" } = {}) {
     try {
         const params = { limit };
         if (cursor) params.cursor = cursor;
+        if (String(search || "").trim()) params.search = String(search).trim();
         const { data } = await api.get("/order-reviews-v1", { params });
         return { items: Array.isArray(data?.items) ? data.items : [], nextCursor: data?.next_cursor || null };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات بانتظار المراجعة.")); }
