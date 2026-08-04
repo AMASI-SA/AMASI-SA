@@ -69,6 +69,9 @@ from .snapchat_campaign_catalog_refresh import (
 from .snapchat_campaign_profitability import (
     install_snapchat_campaign_profitability,
 )
+from .snapchat_campaign_profitability_exact_reuse import (
+    install_exact_salla_profitability_reuse,
+)
 from .snapchat_campaign_result_source_routes import (
     attach_snapchat_campaign_result_source_routes,
 )
@@ -116,6 +119,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_ads_manager_attribution()
     install_snapchat_salla_campaign_outcomes()
     install_snapchat_campaign_profitability()
+    install_exact_salla_profitability_reuse()
     # Install before importing the scheduler below. The scheduler then receives
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Hourly rows are captured
@@ -124,8 +128,8 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # and Ad performance are refreshed at a bounded 15-minute cadence, and
     # account-level delivery is read last so billing/budget blocks become the
     # effective delivery status. Configured switches remain separate from those
-    # blockers. Campaign profitability is an exact-match, read-only Salla and
-    # Mezan V2 cost projection and does not mutate accounting records.
+    # blockers. Campaign profitability reuses the exact Salla matches already
+    # displayed in the report and remains a read-only Mezan V2 cost projection.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_account_hourly_chart()
