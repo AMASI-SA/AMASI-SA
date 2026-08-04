@@ -362,6 +362,36 @@ def build_piece_documents(
     return documents
 
 
+def _piece_upsert_update(
+    piece: dict[str, Any],
+    *,
+    updated_at: datetime | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build a MongoDB upsert without conflicting update paths.
+
+    MongoDB rejects an update when the same field appears in both ``$set`` and
+    ``$setOnInsert``.  These mutable assignment fields must therefore be
+    removed from the insert-only snapshot before an existing piece is
+    reconciled with its current file and employee.
+    """
+    mutable_values = {
+        "file_number": piece["file_number"],
+        "file_title": piece["file_title"],
+        "responsible_employee_id": piece["responsible_employee_id"],
+        "responsible_employee_name": piece["responsible_employee_name"],
+        "updated_at": updated_at or _now(),
+    }
+    insert_values = {
+        key: value
+        for key, value in piece.items()
+        if key not in mutable_values
+    }
+    return {
+        "$setOnInsert": insert_values,
+        "$set": mutable_values,
+    }
+
+
 async def ensure_piece_operation_indexes(db: Any) -> None:
     await db[PIECES].create_index(
         [
@@ -502,8 +532,6 @@ async def materialize_preparation_pieces(
         pieces=pieces,
     )
     for piece in pieces:
-        insert_values = dict(piece)
-        insert_values.pop("updated_at", None)
         await db[PIECES].update_one(
             {
                 "user_id": user_id,
@@ -512,16 +540,7 @@ async def materialize_preparation_pieces(
                 "order_item_id": piece["order_item_id"],
                 "unit_index": piece["unit_index"],
             },
-            {
-                "$setOnInsert": insert_values,
-                "$set": {
-                    "file_number": piece["file_number"],
-                    "file_title": piece["file_title"],
-                    "responsible_employee_id": piece["responsible_employee_id"],
-                    "responsible_employee_name": piece["responsible_employee_name"],
-                    "updated_at": _now(),
-                },
-            },
+            _piece_upsert_update(piece),
             upsert=True,
         )
     now = _now()
