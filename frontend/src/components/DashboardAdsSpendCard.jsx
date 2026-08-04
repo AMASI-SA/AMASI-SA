@@ -15,9 +15,10 @@ import {
     YAxis,
 } from "recharts";
 import { addDaysISO, todaySA } from "../lib/dates";
-import { getAdsManagerOverview } from "../services/adsManager";
+import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const PLATFORM_KEYS = Object.freeze(["snapchat", "meta", "tiktok"]);
 
 function money(value) {
     const numeric = Number(value || 0);
@@ -39,8 +40,34 @@ function selectedPeriodLabel(fromDate, toDate) {
     return `من ${from} إلى ${to}`;
 }
 
-function chartPoints(data) {
+function isSingleDay(fromDate, toDate) {
+    return Boolean(fromDate && toDate && fromDate === toDate);
+}
+
+function chartPoints(data, singleDay) {
+    if (singleDay) {
+        return Array.isArray(data?.hourly_spend) ? data.hourly_spend : [];
+    }
     return Array.isArray(data?.daily_spend) ? data.daily_spend : [];
+}
+
+function platformTotal(data) {
+    const daily = Array.isArray(data?.daily_spend) ? data.daily_spend : [];
+    return daily.reduce(
+        (total, point) => total + PLATFORM_KEYS.reduce(
+            (dayTotal, key) => dayTotal + Number(point?.[key] || 0),
+            0,
+        ),
+        0,
+    );
+}
+
+function hasSeries(points, key) {
+    return points.some((point) => (
+        point?.[key] !== null
+        && point?.[key] !== undefined
+        && Number.isFinite(Number(point[key]))
+    ));
 }
 
 export function DashboardAdsSpendCardContent({
@@ -52,15 +79,21 @@ export function DashboardAdsSpendCardContent({
     error = "",
     onRefresh,
 }) {
-    const points = useMemo(() => chartPoints(data), [data]);
-    const singleDay = Boolean(fromDate && toDate && fromDate === toDate);
-    const platformSpend = points.reduce(
-        (total, point) => total
-            + Number(point.snapchat || 0)
-            + Number(point.tiktok || 0)
-            + Number(point.meta || 0),
-        0,
+    const singleDay = isSingleDay(fromDate, toDate);
+    const points = useMemo(
+        () => chartPoints(data, singleDay),
+        [data, singleDay],
     );
+    const total = useMemo(() => platformTotal(data), [data]);
+    const displayError = error || data?.hourly_error || "";
+    const xKey = singleDay ? "hour" : "date";
+    const availableSeries = useMemo(() => ({
+        snapchat: hasSeries(points, "snapchat"),
+        meta: hasSeries(points, "meta"),
+        tiktok: hasSeries(points, "tiktok"),
+    }), [points]);
+    const hasAnySeries = Object.values(availableSeries).some(Boolean);
+    const hasHourlyRows = singleDay && points.length > 0;
 
     return (
         <section
@@ -68,6 +101,7 @@ export function DashboardAdsSpendCardContent({
             data-testid="dashboard-ads-spend-card"
             data-from-date={fromDate || ""}
             data-to-date={toDate || ""}
+            data-chart-granularity={singleDay ? "hour" : "day"}
         >
             <div className="flex min-h-14 items-center justify-between gap-3 bg-yellow-400 px-4 py-3 text-black">
                 <div className="flex min-w-0 items-center gap-2">
@@ -107,32 +141,50 @@ export function DashboardAdsSpendCardContent({
                             سناب شات + ميتا + تيك توك · العرض بتوقيت الرياض
                         </div>
                     </div>
-                    <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
-                        إجمالي المنصات: {money(platformSpend)}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
+                            {singleDay ? "عرض ساعي" : "عرض يومي"}
+                        </div>
+                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
+                            إجمالي المنصات: {money(total)}
+                        </div>
                     </div>
                 </div>
 
-                {error && (
+                {singleDay && (
+                    <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600">
+                        الرسم الساعي يعرض فقط المنصات التي تملك بيانات ساعية أصلية، بينما إجمالي المنصات أعلاه يشمل كل صرف الفترة.
+                    </div>
+                )}
+
+                {displayError && (
                     <div
                         className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
                         data-testid="dashboard-ads-spend-error"
                     >
                         <WarningCircle size={17} weight="fill" className="mt-0.5 shrink-0" />
-                        <span>{error}</span>
+                        <span>{displayError}</span>
                     </div>
                 )}
 
                 {loading && !points.length ? (
                     <div className="h-[360px] animate-pulse rounded-xl bg-slate-100" data-testid="dashboard-ads-spend-loading" />
-                ) : points.length ? (
-                    <div className="h-[360px] min-w-0" dir="ltr">
+                ) : points.length && hasAnySeries ? (
+                    <div
+                        className="h-[360px] min-w-0"
+                        dir="ltr"
+                        data-testid={singleDay
+                            ? "dashboard-ads-spend-hourly-chart"
+                            : "dashboard-ads-spend-daily-chart"}
+                    >
                         <ResponsiveContainer width="99%" height="100%" minWidth={0} minHeight={0}>
                             <LineChart data={points} margin={{ top: 12, right: 12, left: 2, bottom: 8 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                 <XAxis
-                                    dataKey="date"
+                                    dataKey={xKey}
                                     tick={{ fontSize: 10, fill: "#64748b" }}
-                                    minTickGap={16}
+                                    minTickGap={singleDay ? 8 : 16}
+                                    interval={singleDay ? 2 : "preserveStartEnd"}
                                 />
                                 <YAxis
                                     tick={{ fontSize: 10, fill: "#64748b" }}
@@ -141,7 +193,9 @@ export function DashboardAdsSpendCardContent({
                                 />
                                 <Tooltip
                                     formatter={(value, name) => [money(value), name]}
-                                    labelFormatter={(value) => `التاريخ: ${value}`}
+                                    labelFormatter={(value) => singleDay
+                                        ? `الساعة: ${value}`
+                                        : `التاريخ: ${value}`}
                                     contentStyle={{
                                         direction: "rtl",
                                         borderRadius: 12,
@@ -150,49 +204,52 @@ export function DashboardAdsSpendCardContent({
                                     }}
                                 />
                                 <Legend wrapperStyle={{ direction: "rtl", fontSize: 11 }} />
-                                <Line
-                                    type="monotone"
-                                    dataKey="snapchat"
-                                    name="سناب شات"
-                                    stroke="#eab308"
-                                    strokeWidth={2.5}
-                                    connectNulls={false}
-                                    dot={singleDay ? { r: 4 } : false}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="meta"
-                                    name="ميتا"
-                                    stroke="#2563eb"
-                                    strokeWidth={2.25}
-                                    connectNulls={false}
-                                    dot={singleDay ? { r: 4 } : false}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="tiktok"
-                                    name="تيك توك"
-                                    stroke="#0f172a"
-                                    strokeWidth={2.25}
-                                    connectNulls={false}
-                                    dot={singleDay ? { r: 4 } : false}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="booked_ad_expense_sar"
-                                    name="المصروف المحاسبي"
-                                    stroke="#7c3aed"
-                                    strokeWidth={2.5}
-                                    strokeDasharray="5 4"
-                                    connectNulls={false}
-                                    dot={singleDay ? { r: 4 } : false}
-                                />
+                                {availableSeries.snapchat && (
+                                    <Line
+                                        type="monotone"
+                                        dataKey="snapchat"
+                                        name="سناب شات"
+                                        stroke="#eab308"
+                                        strokeWidth={2.5}
+                                        connectNulls={false}
+                                        dot={false}
+                                    />
+                                )}
+                                {availableSeries.meta && (
+                                    <Line
+                                        type="monotone"
+                                        dataKey="meta"
+                                        name="ميتا"
+                                        stroke="#2563eb"
+                                        strokeWidth={2.25}
+                                        connectNulls={false}
+                                        dot={false}
+                                    />
+                                )}
+                                {availableSeries.tiktok && (
+                                    <Line
+                                        type="monotone"
+                                        dataKey="tiktok"
+                                        name="تيك توك"
+                                        stroke="#0f172a"
+                                        strokeWidth={2.25}
+                                        connectNulls={false}
+                                        dot={false}
+                                    />
+                                )}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
                 ) : (
-                    <div className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm font-bold text-slate-500">
-                        لا توجد صرفيات إعلانية ضمن التاريخ المحدد.
+                    <div
+                        className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm font-bold text-slate-500"
+                        data-testid={singleDay
+                            ? "dashboard-ads-spend-hourly-empty"
+                            : "dashboard-ads-spend-daily-empty"}
+                    >
+                        {singleDay && !hasHourlyRows
+                            ? "لا تتوفر بيانات صرف ساعية أصلية لليوم المحدد حتى الآن."
+                            : "لا توجد صرفيات إعلانية ضمن التاريخ المحدد."}
                     </div>
                 )}
             </div>
@@ -213,12 +270,9 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
         if (!silent) setRefreshing(true);
         if (!data) setLoading(true);
         try {
-            const next = await getAdsManagerOverview({
+            const next = await getDashboardAdsSpend({
                 dateFrom: fromDate,
                 dateTo: toDate,
-                provider: "all",
-                page: 1,
-                limit: 10,
             });
             if (requestId.current !== currentRequest) return;
             setData(next);

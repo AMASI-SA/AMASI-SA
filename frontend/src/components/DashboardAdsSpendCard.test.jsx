@@ -9,16 +9,16 @@ import {
 jest.mock("recharts", () => ({
     ResponsiveContainer: ({ children }) => <div>{children}</div>,
     LineChart: ({ children }) => <div>{children}</div>,
-    Line: ({ name }) => <div>{name}</div>,
+    Line: ({ name }) => <div>{`line:${name}`}</div>,
     CartesianGrid: () => null,
     Legend: () => null,
     Tooltip: () => null,
-    XAxis: () => null,
+    XAxis: ({ dataKey }) => <div>{`axis:${dataKey}`}</div>,
     YAxis: () => null,
 }));
 
 
-test("renders the yellow ads report for the same dashboard date range", () => {
+test("renders a 24-hour provider-only chart for one dashboard day", () => {
     const html = renderToStaticMarkup(
         <DashboardAdsSpendCardContent
             fromDate="2026-07-15"
@@ -30,9 +30,17 @@ test("renders the yellow ads report for the same dashboard date range", () => {
                         snapchat: 8188.42,
                         meta: 668.05,
                         tiktok: 10,
-                        booked_ad_expense_sar: 8866.47,
+                        booked_ad_expense_sar: 999999,
                     },
                 ],
+                hourly_spend: Array.from({ length: 24 }, (_, hourIndex) => ({
+                    date: "2026-07-15",
+                    hour_index: hourIndex,
+                    hour: `${String(hourIndex).padStart(2, "0")}:00`,
+                    snapchat: hourIndex === 10 ? 350.25 : 0,
+                    meta: null,
+                    tiktok: null,
+                })),
             }}
             onRefresh={() => {}}
         />,
@@ -41,11 +49,38 @@ test("renders the yellow ads report for the same dashboard date range", () => {
     expect(html).toContain("صرفيات منصات الإعلانات");
     expect(html).toContain("مرتبطة بتاريخ الملخص التنفيذي للأرباح");
     expect(html).toContain("صرفيات يوم 2026-07-15");
+    expect(html).toContain("عرض ساعي");
     expect(html).toContain("8,866.47 ر.س");
-    expect(html).toContain("سناب شات");
-    expect(html).toContain("ميتا");
-    expect(html).toContain("تيك توك");
-    expect(html).toContain("المصروف المحاسبي");
+    expect(html).toContain("axis:hour");
+    expect(html).toContain("line:سناب شات");
+    expect(html).not.toContain("line:المصروف المحاسبي");
+    expect(html).not.toContain("999,999.00 ر.س");
+    expect(html).toContain("dashboard-ads-spend-hourly-chart");
+});
+
+
+test("renders all platform lines by day for a multi-day range", () => {
+    const html = renderToStaticMarkup(
+        <DashboardAdsSpendCardContent
+            fromDate="2026-07-14"
+            toDate="2026-07-15"
+            data={{
+                daily_spend: [
+                    { date: "2026-07-14", snapchat: 10, meta: 20, tiktok: 30 },
+                    { date: "2026-07-15", snapchat: 40, meta: 50, tiktok: 60 },
+                ],
+            }}
+            onRefresh={() => {}}
+        />,
+    );
+
+    expect(html).toContain("عرض يومي");
+    expect(html).toContain("axis:date");
+    expect(html).toContain("line:سناب شات");
+    expect(html).toContain("line:ميتا");
+    expect(html).toContain("line:تيك توك");
+    expect(html).not.toContain("المصروف المحاسبي");
+    expect(html).toContain("210.00 ر.س");
 });
 
 
