@@ -12,14 +12,18 @@ from integrations_control_center.snapchat_native_data_common import (
 
 
 @pytest.mark.asyncio
-async def test_campaign_catalog_reads_only_campaign_entities(monkeypatch):
-    captured = {}
+async def test_delivery_catalog_reads_campaigns_and_ad_squads(monkeypatch):
+    captured = []
 
     async def fake_sync(context, client, access_token, account, **kwargs):
-        captured.update(kwargs)
-        captured["account"] = account
-        captured["access_token"] = access_token
-        return 4, 4, []
+        captured.append({
+            **kwargs,
+            "account": account,
+            "access_token": access_token,
+        })
+        if kwargs["entity_type"] == "campaign":
+            return 4, 4, []
+        return 7, 7, []
 
     monkeypatch.setattr(catalog, "_sync_entity_type", fake_sync)
     result = await catalog.refresh_snapchat_campaign_catalog(
@@ -29,16 +33,16 @@ async def test_campaign_catalog_reads_only_campaign_entities(monkeypatch):
         {"ad_account_id": "account-1"},
     )
 
-    assert captured == {
-        "entity_type": "campaign",
-        "plural_key": "campaigns",
-        "singular_key": "campaign",
-        "extra_params": {},
-        "account": {"ad_account_id": "account-1"},
-        "access_token": "token",
-    }
+    assert [item["entity_type"] for item in captured] == [
+        "campaign",
+        "ad_squad",
+    ]
+    assert captured[0]["plural_key"] == "campaigns"
+    assert captured[1]["plural_key"] == "adsquads"
+    assert captured[1]["extra_params"] == {"return_placement_v2": "true"}
     assert result["campaign_entities_saved"] == 4
-    assert result["campaign_entities_observed"] == 4
+    assert result["ad_squad_entities_saved"] == 7
+    assert result["delivery_catalog_entities_observed"] == 11
     assert result["errors_count"] == 0
     assert result["provider_write_reached"] is False
     assert result["accounting_write_reached"] is False
@@ -46,7 +50,30 @@ async def test_campaign_catalog_reads_only_campaign_entities(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_installer_refreshes_catalog_before_performance(monkeypatch):
+async def test_one_catalog_type_can_fail_without_losing_the_other(monkeypatch):
+    async def fake_sync(context, client, access_token, account, **kwargs):
+        if kwargs["entity_type"] == "campaign":
+            return 3, 3, []
+        raise SnapchatNativeSyncError(
+            "snapchat_adsquad_catalog_failed",
+            "temporary ad squad read failure",
+            status_code=502,
+            retryable=True,
+        )
+
+    monkeypatch.setattr(catalog, "_sync_entity_type", fake_sync)
+    result = await catalog.refresh_snapchat_campaign_catalog(
+        object(), object(), "token", {"ad_account_id": "account-1"}
+    )
+
+    assert result["campaign_entities_observed"] == 3
+    assert result["ad_squad_entities_observed"] == 0
+    assert result["errors_count"] == 1
+    assert result["errors"][0]["kind"] == "ad_squad_catalog"
+
+
+@pytest.mark.asyncio
+async def test_installer_refreshes_delivery_catalog_before_performance(monkeypatch):
     events = []
     original = hourly.refresh_snapchat_account_hours
 
@@ -64,6 +91,8 @@ async def test_installer_refreshes_catalog_before_performance(monkeypatch):
             "source_mode": catalog.CAMPAIGN_CATALOG_SOURCE_MODE,
             "campaign_entities_saved": 12,
             "campaign_entities_observed": 12,
+            "ad_squad_entities_saved": 20,
+            "ad_squad_entities_observed": 20,
             "errors_count": 0,
             "errors": [],
         }
@@ -85,6 +114,7 @@ async def test_installer_refreshes_catalog_before_performance(monkeypatch):
         assert events == ["catalog", "performance"]
         assert result["rows_saved"] == 7
         assert result["campaign_catalog"]["campaign_entities_saved"] == 12
+        assert result["campaign_catalog"]["ad_squad_entities_saved"] == 20
         assert result["errors_count"] == 0
         assert getattr(
             hourly.refresh_snapchat_account_hours,
@@ -110,8 +140,8 @@ async def test_catalog_failure_does_not_block_spend_refresh(monkeypatch):
     async def failed_catalog(context, client, access_token, account):
         events.append("catalog")
         raise SnapchatNativeSyncError(
-            "snapchat_campaign_catalog_failed",
-            "campaign catalogue temporarily unavailable",
+            "snapchat_delivery_catalog_failed",
+            "delivery catalogue temporarily unavailable",
             status_code=502,
             retryable=True,
         )
@@ -130,8 +160,8 @@ async def test_catalog_failure_does_not_block_spend_refresh(monkeypatch):
     assert events == ["catalog", "performance"]
     assert result["rows_saved"] == 5
     assert result["errors_count"] == 1
-    assert result["errors"][0]["kind"] == "campaign_catalog"
-    assert result["errors"][0]["code"] == "snapchat_campaign_catalog_failed"
+    assert result["errors"][0]["kind"] == "delivery_catalog"
+    assert result["errors"][0]["code"] == "snapchat_delivery_catalog_failed"
 
 
 @pytest.mark.asyncio

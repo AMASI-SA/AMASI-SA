@@ -10,9 +10,32 @@ from integrations_control_center.snapchat_native_data_common import (
 )
 
 
+class FakeCursor:
+    def __init__(self, rows: list[dict[str, Any]]):
+        self.rows = list(rows)
+
+    async def to_list(self, length: int):
+        return list(self.rows[:length])
+
+    def __aiter__(self):
+        self._iterator = iter(self.rows)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iterator)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
 class FakeCollection:
-    def __init__(self, row: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        row: dict[str, Any] | None = None,
+        rows: list[dict[str, Any]] | None = None,
+    ):
         self.row = row or {}
+        self.rows = rows or []
         self.updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
 
     async def update_one(self, query, update, **kwargs):
@@ -22,14 +45,25 @@ class FakeCollection:
     async def find_one(self, query, projection=None):
         return dict(self.row)
 
+    def find(self, query, projection=None):
+        return FakeCursor(self.rows)
+
 
 class FakeDB:
-    def __init__(self, row: dict[str, Any] | None = None):
-        self.accounts = FakeCollection(row)
+    def __init__(
+        self,
+        account_row: dict[str, Any] | None = None,
+        entity_rows: list[dict[str, Any]] | None = None,
+    ):
+        self.accounts = FakeCollection(account_row)
+        self.entities = FakeCollection(rows=entity_rows)
 
     def __getitem__(self, name: str):
-        assert name == "mezan_integration_accounts_v2"
-        return self.accounts
+        if name == "mezan_integration_accounts_v2":
+            return self.accounts
+        if name == "mezan_snapchat_entities_v2":
+            return self.entities
+        raise AssertionError(name)
 
 
 class FakeContext:
@@ -55,20 +89,55 @@ def test_normalizes_provider_delivery_shapes() -> None:
     ]) == ["VALID", "INVALID_REMAINING_AD_ACCOUNT_BUDGET"]
 
 
-def test_payment_budget_block_has_explicit_effective_reason() -> None:
+def test_payment_budget_block_is_a_delivery_reason_not_campaign_pause() -> None:
     block = delivery.account_delivery_block(
         "ACTIVE",
         ["INVALID_REMAINING_AD_ACCOUNT_BUDGET"],
     )
     assert block is not None
     assert block["code"] == "ACCOUNT_PAYMENT_BLOCKED"
-    assert block["label"] == "متوقفة بسبب الدفع"
+    assert block["delivery_label"].startswith("لا تسليم")
     assert "الدفع" in block["delivery_label"]
 
 
-def test_active_valid_account_is_not_blocked() -> None:
-    assert delivery.account_delivery_block("ACTIVE", ["VALID"]) is None
-    assert delivery.account_delivery_block("ENABLED", ["DELIVERING"]) is None
+def test_campaign_daily_budget_keeps_active_switch_and_stops_delivery() -> None:
+    result = delivery.campaign_delivery_state(
+        "ACTIVE",
+        ["INVALID_OVER_BUDGET_CAMPAIGN_DAILY_SPEND"],
+        account_block=None,
+        ad_squads=[],
+    )
+    assert result["state"] == "NOT_DELIVERING"
+    assert result["code"] == "CAMPAIGN_DAILY_BUDGET_EXHAUSTED"
+    assert "خارج الميزانية اليومية" in result["label"]
+
+
+def test_active_campaign_with_all_ad_squads_paused_is_not_delivering() -> None:
+    result = delivery.campaign_delivery_state(
+        "ACTIVE",
+        [],
+        account_block=None,
+        ad_squads=[
+            {"status": "PAUSED", "delivery_status": ["INVALID_NOT_ACTIVE"]},
+            {"status": "PAUSED", "delivery_status": ["INVALID_NOT_ACTIVE"]},
+        ],
+    )
+    assert result["state"] == "NOT_DELIVERING"
+    assert result["code"] == "NO_ACTIVE_AD_SQUAD"
+    assert "لا توجد مجموعة إعلانية نشطة" in result["label"]
+
+
+def test_active_campaign_with_valid_active_ad_squad_is_delivering() -> None:
+    result = delivery.campaign_delivery_state(
+        "ACTIVE",
+        [],
+        account_block=None,
+        ad_squads=[
+            {"status": "ACTIVE", "delivery_status": ["VALID"]},
+        ],
+    )
+    assert result["state"] == "DELIVERING"
+    assert result["deliverable"] is True
 
 
 @pytest.mark.asyncio
@@ -110,8 +179,8 @@ async def test_refresh_reads_ad_account_and_persists_delivery() -> None:
 
 
 @pytest.mark.asyncio
-async def test_report_preserves_configured_status_but_exposes_payment_block() -> None:
-    db = FakeDB({
+async def test_report_keeps_active_status_and_marks_account_payment_no_delivery() -> None:
+    db = FakeDB(account_row={
         "account_status": "ACTIVE",
         "account_delivery_status": [
             "INVALID_REMAINING_AD_ACCOUNT_BUDGET",
@@ -128,6 +197,7 @@ async def test_report_preserves_configured_status_but_exposes_payment_block() ->
             "campaigns": [{
                 "campaign_id": "campaign-1",
                 "status": "ACTIVE",
+                "delivery_status": ["VALID"],
             }],
             "source": {},
         }
@@ -140,9 +210,56 @@ async def test_report_preserves_configured_status_but_exposes_payment_block() ->
     campaign = result["campaigns"][0]
     assert campaign["status"] == "ACTIVE"
     assert campaign["configured_status"] == "ACTIVE"
-    assert campaign["effective_status"] == "ACCOUNT_PAYMENT_BLOCKED"
-    assert campaign["effective_status_label"] == "متوقفة بسبب الدفع"
+    assert campaign["effective_status"] == "ACTIVE"
+    assert campaign["delivery_state"] == "NOT_DELIVERING"
+    assert campaign["delivery_reason_code"] == "ACCOUNT_PAYMENT_BLOCKED"
+    assert campaign["delivery_label"].startswith("لا تسليم")
     assert result["source"]["account_delivery_blocked"] is True
+
+
+@pytest.mark.asyncio
+async def test_report_uses_current_ad_squads_for_delivery_truth() -> None:
+    db = FakeDB(
+        account_row={
+            "account_status": "ACTIVE",
+            "account_delivery_status": ["VALID"],
+            "account_delivery_updated_at": "2026-08-04T00:00:00+00:00",
+        },
+        entity_rows=[
+            {
+                "external_id": "squad-1",
+                "campaign_id": "campaign-1",
+                "status": "PAUSED",
+                "delivery_status": ["INVALID_NOT_ACTIVE"],
+                "last_observed_at": "2026-08-04T00:00:01+00:00",
+            },
+        ],
+    )
+
+    async def base_builder(db_value, user_id, *args, **kwargs):
+        return {
+            "selected_account_id": "account-2",
+            "selected_account": {"account_id": "account-2"},
+            "available_accounts": [{"account_id": "account-2"}],
+            "accounts": [{"account_id": "account-2"}],
+            "campaigns": [{
+                "campaign_id": "campaign-1",
+                "status": "ACTIVE",
+                "delivery_status": [],
+            }],
+            "source": {},
+        }
+
+    result = await delivery._build_report_with_effective_delivery(
+        base_builder,
+        db,
+        "owner-1",
+    )
+    campaign = result["campaigns"][0]
+    assert campaign["status"] == "ACTIVE"
+    assert campaign["delivery_state"] == "NOT_DELIVERING"
+    assert campaign["delivery_reason_code"] == "NO_ACTIVE_AD_SQUAD"
+    assert result["source"]["ad_squad_delivery_rows"] == 1
 
 
 @pytest.mark.asyncio

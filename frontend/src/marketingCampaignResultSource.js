@@ -47,15 +47,34 @@ export function applyEffectiveCampaignDelivery(payload) {
   if (!Array.isArray(payload.campaigns)) return payload;
   payload.campaigns.forEach((campaign) => {
     if (!campaign || typeof campaign !== "object") return;
-    const effective = String(campaign.effective_status || "").trim().toUpperCase();
-    if (!effective.startsWith("ACCOUNT_")) return;
-    campaign.configured_status = campaign.configured_status || campaign.status;
-    campaign.status = "PAUSED";
-    campaign.delivery_status = String(
-      campaign.effective_delivery_label
-      || campaign.effective_status_label
-      || "متوقفة على مستوى الحساب الإعلاني",
-    );
+
+    // The status column reflects only Snapchat's configured campaign switch.
+    // Payment, budget, Ad Squad, review and schedule blockers belong only in
+    // the delivery column.
+    const configured = String(
+      campaign.configured_status || campaign.status || "unknown",
+    ).trim();
+    campaign.configured_status = configured;
+    campaign.status = configured;
+
+    const deliveryLabel = String(
+      campaign.delivery_label
+      || campaign.effective_delivery_label
+      || campaign.delivery_status
+      || "",
+    ).trim();
+    if (deliveryLabel) campaign.delivery_status = deliveryLabel;
+
+    if (!campaign.delivery_state) {
+      const code = String(
+        campaign.effective_delivery_code
+        || campaign.delivery_reason_code
+        || "",
+      ).toUpperCase();
+      if (code && code !== "DELIVERING") {
+        campaign.delivery_state = code === "PENDING" ? "PENDING" : "NOT_DELIVERING";
+      }
+    }
   });
   return payload;
 }
@@ -192,9 +211,6 @@ api.interceptors.request.use((config) => {
   const selectedAccountId = snapchatSelectedAccountId();
   if (selectedAccountId) params.account_id = selectedAccountId;
 
-  // Never trust a cached date as "today". On page entry or account switch,
-  // omit the old Riyadh/month range and let the backend resolve the current
-  // calendar day in the selected account's native timezone.
   if (forceAccountToday && !manualRangeSelected) {
     delete params.from_date;
     delete params.to_date;

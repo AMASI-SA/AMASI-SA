@@ -1,4 +1,4 @@
-name: Production Snapchat Account Delivery V1
+name: Production Snapchat Configured Status and Delivery V2
 
 on:
   pull_request:
@@ -7,9 +7,14 @@ on:
     paths:
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_account_delivery_refresh.py"
+      - "backend/integrations_control_center/snapchat_campaign_catalog_refresh.py"
       - "backend/tests/test_snapchat_account_delivery_refresh_v1.py"
+      - "backend/tests/test_snapchat_campaign_catalog_refresh_v1.py"
+      - "frontend/src/index.js"
       - "frontend/src/marketingCampaignResultSource.js"
       - "frontend/src/marketingCampaignResultSource.test.js"
+      - "frontend/src/marketingSnapchatDeliveryStateEnhancer.js"
+      - "frontend/src/marketingSnapchatDeliveryStateEnhancer.test.js"
       - ".github/workflows/prod-snapchat-account-delivery-v1.yml"
 
 permissions:
@@ -46,12 +51,14 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile account delivery refresh
+      - name: Compile delivery truth modules
         run: >-
           python -m py_compile
           integrations_control_center/snapchat_account_delivery_refresh.py
+          integrations_control_center/snapchat_campaign_catalog_refresh.py
           integrations_control_center/__init__.py
           tests/test_snapchat_account_delivery_refresh_v1.py
+          tests/test_snapchat_campaign_catalog_refresh_v1.py
       - name: Run focused backend tests
         run: >-
           python -m pytest
@@ -60,19 +67,23 @@ jobs:
           tests/test_snapchat_account_timezone_manager_v1.py
           tests/test_ads_auto_sync_scheduler_v2.py
           -q --tb=short
-      - name: Enforce account-payment delivery contract
+      - name: Enforce configured-status and delivery separation
         working-directory: .
         run: |
           DELIVERY=backend/integrations_control_center/snapchat_account_delivery_refresh.py
+          CATALOG=backend/integrations_control_center/snapchat_campaign_catalog_refresh.py
           INIT=backend/integrations_control_center/__init__.py
-          grep -q 'ACCOUNT_DELIVERY_SOURCE_MODE = "snapchat_ad_account_delivery_5m_v1"' "$DELIVERY"
-          grep -q 'INVALID_REMAINING_AD_ACCOUNT_BUDGET' "$DELIVERY"
-          grep -q 'ACCOUNT_PAYMENT_BLOCKED' "$DELIVERY"
-          grep -q 'GET /adaccounts' "$DELIVERY" || grep -q 'SNAPCHAT_API_BASE}/adaccounts/{account_id}' "$DELIVERY"
+          grep -q 'ACCOUNT_DELIVERY_SOURCE_MODE = "snapchat_delivery_truth_5m_v2"' "$DELIVERY"
+          grep -q 'INVALID_OVER_BUDGET_CAMPAIGN_DAILY_SPEND' "$DELIVERY"
+          grep -q 'NO_ACTIVE_AD_SQUAD' "$DELIVERY"
+          grep -q 'configured_status_separate_from_delivery' "$DELIVERY"
+          grep -q '"effective_status": configured' "$DELIVERY"
+          grep -q '"entity_type": "ad_squad"' "$DELIVERY"
+          grep -q 'snapchat_campaign_adsquad_catalog_5m_v2' "$CATALOG"
           grep -q 'install_snapchat_account_delivery_refresh' "$INIT"
           grep -q 'install_snapchat_effective_delivery_report' "$INIT"
-          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$DELIVERY"
-          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|qoyod_write_reached": True' "$DELIVERY"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$DELIVERY" "$CATALOG"
+          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|qoyod_write_reached": True' "$DELIVERY" "$CATALOG"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -88,23 +99,27 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test effective campaign delivery
+      - name: Test campaign switch and delivery presentation
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/marketingCampaignResultSource.test.js
-          src/components/marketing/CampaignManagerTable.test.jsx
+          src/marketingSnapchatDeliveryStateEnhancer.test.js
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce payment-block UI contract
+      - name: Enforce delivery-only blockers in UI
         working-directory: .
         run: |
           TRANSPORT=frontend/src/marketingCampaignResultSource.js
-          grep -q 'applyEffectiveCampaignDelivery' "$TRANSPORT"
-          grep -q 'effective_status.startsWith' "$TRANSPORT" || grep -q 'effective.startsWith("ACCOUNT_")' "$TRANSPORT"
-          grep -q 'campaign.status = "PAUSED"' "$TRANSPORT"
-          grep -q 'effective_delivery_label' "$TRANSPORT"
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TRANSPORT"
+          ENHANCER=frontend/src/marketingSnapchatDeliveryStateEnhancer.js
+          INDEX=frontend/src/index.js
+          grep -q 'campaign.status = configured' "$TRANSPORT"
+          grep -q 'delivery_state' "$TRANSPORT"
+          ! grep -q 'campaign.status = "PAUSED"' "$TRANSPORT"
+          grep -q 'حالة التسليم' "$ENHANCER"
+          grep -q 'bg-amber-500' "$ENHANCER"
+          grep -q 'marketingSnapchatDeliveryStateEnhancer' "$INDEX"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$TRANSPORT" "$ENHANCER"

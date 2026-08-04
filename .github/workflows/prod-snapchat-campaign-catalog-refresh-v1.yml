@@ -1,4 +1,4 @@
-name: Production Snapchat Campaign Catalog Refresh V1
+name: Production Snapchat Campaign and Ad Squad Catalog V2
 
 on:
   pull_request:
@@ -10,6 +10,7 @@ on:
       - "backend/integrations_control_center/snapchat_native_entities_sync.py"
       - "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
       - "backend/tests/test_snapchat_campaign_catalog_refresh_v1.py"
+      - "backend/tests/test_snapchat_account_delivery_refresh_v1.py"
       - "backend/tests/test_ads_auto_sync_scheduler_v2.py"
       - ".github/workflows/prod-snapchat-campaign-catalog-refresh-v1.yml"
 
@@ -17,7 +18,7 @@ permissions:
   contents: read
 
 jobs:
-  campaign-catalog-contract:
+  delivery-catalog-contract:
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -47,7 +48,7 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile Snapchat campaign catalogue refresh
+      - name: Compile Snapchat delivery catalogue refresh
         run: >-
           python -m py_compile
           integrations_control_center/snapchat_campaign_catalog_refresh.py
@@ -58,18 +59,21 @@ jobs:
         run: >-
           python -m pytest
           tests/test_snapchat_campaign_catalog_refresh_v1.py
+          tests/test_snapchat_account_delivery_refresh_v1.py
           tests/test_ads_auto_sync_scheduler_v2.py
           tests/test_snapchat_account_timezone_manager_v1.py
           -q --tb=short
-      - name: Enforce current campaign identity contract
+      - name: Enforce current Campaign and Ad Squad contract
         working-directory: .
         run: |
           REFRESH=backend/integrations_control_center/snapchat_campaign_catalog_refresh.py
           ENTITIES=backend/integrations_control_center/snapchat_native_entities_sync.py
           INIT=backend/integrations_control_center/__init__.py
-          grep -q 'CAMPAIGN_CATALOG_SOURCE_MODE = "snapchat_campaign_catalog_5m_v1"' "$REFRESH"
-          grep -q 'plural_key=CAMPAIGN_PLURAL_KEY' "$REFRESH"
-          grep -q 'singular_key=CAMPAIGN_SINGULAR_KEY' "$REFRESH"
+          grep -q 'CAMPAIGN_CATALOG_SOURCE_MODE = "snapchat_campaign_adsquad_catalog_5m_v2"' "$REFRESH"
+          grep -q '("campaign", "campaigns", "campaign", {})' "$REFRESH"
+          grep -q '("ad_squad", "adsquads", "adsquad"' "$REFRESH"
+          grep -q 'return_placement_v2' "$REFRESH"
+          grep -q 'ad_squad_entities_observed' "$REFRESH"
           grep -q 'install_snapchat_campaign_catalog_refresh' "$INIT"
           grep -q '"display_name": entity.get("name") or external_id' "$ENTITIES"
           grep -q '"status": entity.get("status")' "$ENTITIES"
