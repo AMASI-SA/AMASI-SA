@@ -12,6 +12,10 @@ import {
     toLegacySnapDailySpend,
 } from "./dashboardMezanV2Adapter";
 import {
+    createLatestResponseBroker,
+    dashboardRequestRangeKey,
+} from "./dashboardLatestResponseBroker";
+import {
     isAiAnalysisAsyncResponse,
     isAiAnalysisRequest,
     pollAiAnalysisJob,
@@ -38,6 +42,8 @@ const api = axios.create({
     baseURL: API_BASE,
     withCredentials: true,
 });
+
+const dashboardV2ResponseBroker = createLatestResponseBroker();
 
 function currentAccessToken() {
     try {
@@ -88,6 +94,11 @@ api.interceptors.request.use((config) => {
     }
 
     let nextConfig = rewriteDashboardMezanV2Request(config);
+    if (nextConfig?._mezanDashboardV2 === true) {
+        nextConfig._mezanDashboardRequestToken = dashboardV2ResponseBroker.begin({
+            rangeKey: dashboardRequestRangeKey(nextConfig),
+        });
+    }
     if (isSnapchatSyncRequest(nextConfig)) {
         nextConfig._mezanSyncStartedAt = Date.now();
         nextConfig = rewriteSnapchatSyncRequest(nextConfig);
@@ -294,6 +305,26 @@ api.interceptors.response.use(
             config: error?.config || {},
             request: error?.request,
         };
+    },
+);
+
+// Dashboard date changes can create overlapping requests: an older "today"
+// response may finish after the newer "yesterday" response. Resolve every
+// stale caller with the newest completed Dashboard V2 payload so stale totals
+// can never overwrite the currently selected period in ProfitSummaryCard.
+api.interceptors.response.use(
+    (response) => {
+        const requestToken = response?.config?._mezanDashboardRequestToken;
+        return requestToken
+            ? dashboardV2ResponseBroker.resolve(requestToken, response)
+            : response;
+    },
+    (error) => {
+        const requestToken = error?.config?._mezanDashboardRequestToken
+            || error?.response?.config?._mezanDashboardRequestToken;
+        return requestToken
+            ? dashboardV2ResponseBroker.reject(requestToken, error)
+            : Promise.reject(error);
     },
 );
 

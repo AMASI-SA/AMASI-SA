@@ -1,0 +1,58 @@
+name: Production Dashboard Profit Date Race V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/dashboardLatestResponseBroker.js"
+      - "frontend/src/lib/dashboardLatestResponseBroker.test.js"
+      - "frontend/src/lib/dashboardMezanV2Adapter.js"
+      - "frontend/src/pages/Dashboard.jsx"
+      - ".github/workflows/prod-dashboard-profit-date-race-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test latest Dashboard date response contract
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/dashboardLatestResponseBroker.test.js
+          src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+          src/components/DashboardAdsSpendCard.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce latest-date-wins integration
+        working-directory: .
+        run: |
+          API=frontend/src/lib/api.js
+          BROKER=frontend/src/lib/dashboardLatestResponseBroker.js
+          grep -q '_mezanDashboardRequestToken' "$API"
+          grep -q 'dashboardV2ResponseBroker.begin' "$API"
+          grep -q 'dashboardV2ResponseBroker.resolve' "$API"
+          grep -q 'dashboardV2ResponseBroker.reject' "$API"
+          grep -q 'createLatestResponseBroker' "$BROKER"
+          grep -q 'waitForLatest' "$BROKER"
+          grep -q 'latestCompleted' "$BROKER"
+          ! grep -Eq '(axios|api)\.(post|put|patch|delete)\(' "$BROKER"
