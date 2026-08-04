@@ -1,17 +1,19 @@
 import CampaignManagerTable from "./CampaignManagerTable";
 import AdSquadManagerTable from "./AdSquadManagerTable";
 import AdSquadSortControls from "./AdSquadSortControls";
+import AdManagerTable from "./AdManagerTable";
 
 function EntityTabs({
     platformLabel,
     entityLevel,
     onChange,
     adSquadsEnabled,
+    adsEnabled,
 }) {
     const items = [
         { id: "campaigns", label: "الحملات", enabled: true },
         { id: "ad_squads", label: "المجموعات الإعلانية", enabled: adSquadsEnabled },
-        { id: "ads", label: "الإعلانات", enabled: false },
+        { id: "ads", label: "الإعلانات", enabled: adsEnabled },
     ];
     return (
         <div className="flex min-h-14 items-end gap-6 overflow-x-auto rounded-t-2xl border border-b-0 border-slate-200 bg-white px-4" data-testid="ads-entity-level-tabs">
@@ -64,6 +66,7 @@ export default function AdsEntityLevelWorkspace({
     adSquadError,
 }) {
     const adSquadsEnabled = platform === "snapchat";
+    const adsEnabled = platform === "snapchat";
     return (
         <section data-testid="ads-entity-level-workspace">
             <style>{`
@@ -80,6 +83,7 @@ export default function AdsEntityLevelWorkspace({
                 entityLevel={entityLevel}
                 onChange={onEntityLevelChange}
                 adSquadsEnabled={adSquadsEnabled}
+                adsEnabled={adsEnabled}
             />
             {entityLevel === "campaigns" && (
                 <CampaignManagerTable
@@ -107,6 +111,7 @@ export default function AdsEntityLevelWorkspace({
                     />
                 </>
             )}
+            {entityLevel === "ads" && <AdManagerTable />}
         </section>
     );
 }
