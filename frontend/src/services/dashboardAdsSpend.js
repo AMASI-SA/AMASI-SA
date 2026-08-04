@@ -27,7 +27,7 @@ export function normalizeDashboardAdsHourlySpend(payload = {}) {
                     date: ISO_DATE_RE.test(point?.date || "") ? point.date : null,
                     hour_index: hourIndex,
                     hour,
-                    snapchat: nonnegative(point?.snapchat) ?? 0,
+                    snapchat: nonnegative(point?.snapchat),
                     meta: nonnegative(point?.meta),
                     tiktok: nonnegative(point?.tiktok),
                     observed: point?.observed === true,
@@ -48,7 +48,7 @@ export function normalizeDashboardAdsHourlySpend(payload = {}) {
     return {
         date: ISO_DATE_RE.test(value.date || "") ? value.date : null,
         timezone: value.timezone === "Asia/Riyadh" ? value.timezone : "Asia/Riyadh",
-        granularity: value.granularity === "hour" ? "hour" : "hour",
+        granularity: "hour",
         hourly,
         available_hourly_providers: available,
         unavailable_hourly_providers: unavailable,
