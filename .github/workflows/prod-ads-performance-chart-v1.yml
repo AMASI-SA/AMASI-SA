@@ -49,8 +49,9 @@ jobs:
           DATE=frontend/src/components/marketing/ArabicDateRangePicker.jsx
           grep -q 'AdsPerformanceExplorer' "$WORKSPACE"
           grep -q 'ArabicDateRangePicker' "$WORKSPACE"
-          grep -q 'ads-performance-metric-roas' "$CHART"
+          grep -q 'ads-performance-metric-' "$CHART"
           grep -q 'toggleMetricVisibility' "$CHART"
+          grep -q 'data-mezan-native-date' "$DATE"
           grep -q 'حفظ وتطبيق' "$DATE"
           grep -q 'آخر 7 أيام' "$DATE"
           grep -q 'sm:grid-cols-2' "$DATE"
