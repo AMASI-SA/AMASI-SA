@@ -7,7 +7,9 @@ on:
     paths:
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_adsquad_parent_delivery.py"
+      - "backend/integrations_control_center/snapchat_adsquad_status_delivery_separation.py"
       - "backend/tests/test_snapchat_adsquad_parent_delivery_v1.py"
+      - "backend/tests/test_snapchat_adsquad_status_delivery_separation_v2.py"
       - "frontend/src/services/snapchatAdSquadPerformance.js"
       - "frontend/src/services/snapchatAdSquadPerformance.test.js"
       - ".github/workflows/prod-snapchat-adsquad-parent-delivery-v1.yml"
@@ -46,30 +48,38 @@ jobs:
           qrcode
           arabic-reshaper
           python-bidi
-      - name: Compile parent delivery projection
+      - name: Compile Ad Squad delivery projections
         run: >-
           python -m py_compile
           integrations_control_center/snapchat_adsquad_parent_delivery.py
+          integrations_control_center/snapchat_adsquad_status_delivery_separation.py
           integrations_control_center/__init__.py
           tests/test_snapchat_adsquad_parent_delivery_v1.py
+          tests/test_snapchat_adsquad_status_delivery_separation_v2.py
       - name: Run focused delivery tests
         run: >-
           python -m pytest
           tests/test_snapchat_adsquad_parent_delivery_v1.py
+          tests/test_snapchat_adsquad_status_delivery_separation_v2.py
           tests/test_snapchat_account_delivery_refresh_v1.py
           tests/test_snapchat_adsquad_performance_v1.py
           -q --tb=short
-      - name: Enforce read-only inheritance contract
+      - name: Enforce read-only status-delivery separation contract
         working-directory: .
         run: |
-          MODULE=backend/integrations_control_center/snapchat_adsquad_parent_delivery.py
+          PARENT=backend/integrations_control_center/snapchat_adsquad_parent_delivery.py
+          SEPARATION=backend/integrations_control_center/snapchat_adsquad_status_delivery_separation.py
           INIT=backend/integrations_control_center/__init__.py
-          grep -q 'effective_status="PAUSED"' "$MODULE"
-          grep -q 'status_inherited_from_campaign' "$MODULE"
-          grep -q 'PARENT_' "$MODULE"
+          grep -q 'status_inherited_from_campaign' "$PARENT"
+          grep -q 'PARENT_' "$PARENT"
+          grep -q 'ad_squad_status_column_uses_configured_switch' "$SEPARATION"
+          grep -q 'ad_squad_status_never_inferred_from_delivery' "$SEPARATION"
+          grep -q '"status": configured' "$SEPARATION"
+          grep -q 'delivery_inherited_from_account' "$SEPARATION"
           grep -q 'install_snapchat_adsquad_parent_delivery_report' "$INIT"
-          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
-          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+          grep -q 'install_snapchat_adsquad_status_delivery_separation' "$INIT"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$PARENT" "$SEPARATION"
+          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$PARENT" "$SEPARATION"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -85,7 +95,7 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test inherited Ad Squad status normalization
+      - name: Test Ad Squad configured status normalization
         env:
           CI: "true"
         run: >-
@@ -96,12 +106,13 @@ jobs:
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce effective status client contract
+      - name: Enforce configured status client contract
         working-directory: .
         run: |
           SERVICE=frontend/src/services/snapchatAdSquadPerformance.js
-          grep -q 'configured_status' "$SERVICE"
-          grep -q 'effective_status' "$SERVICE"
-          grep -q 'status_inherited_from_campaign' "$SERVICE"
-          grep -q 'parent_campaign_delivery_state' "$SERVICE"
+          grep -q 'status: configuredStatus' "$SERVICE"
+          grep -q 'configured_status: configuredStatus' "$SERVICE"
+          grep -q 'delivery_inherited_from_account' "$SERVICE"
+          grep -q 'delivery_inherited_from_campaign' "$SERVICE"
+          grep -q 'status_inherited_from_campaign: false' "$SERVICE"
           ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SERVICE"
