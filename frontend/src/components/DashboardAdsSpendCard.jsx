@@ -15,10 +15,18 @@ import {
     YAxis,
 } from "recharts";
 import { addDaysISO, todaySA } from "../lib/dates";
-import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
+import {
+    DASHBOARD_ADS_PROVIDERS,
+    getDashboardAdsSpend,
+} from "../services/dashboardAdsSpend";
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
-const PLATFORM_KEYS = Object.freeze(["snapchat", "meta", "tiktok"]);
+const PROVIDER_META = Object.freeze({
+    snapchat: { label: "سناب شات", stroke: "#eab308" },
+    meta: { label: "ميتا", stroke: "#2563eb" },
+    tiktok: { label: "تيك توك", stroke: "#0f172a" },
+    google: { label: "Google Ads", stroke: "#4285f4" },
+});
 
 function money(value) {
     const numeric = Number(value || 0);
@@ -51,23 +59,22 @@ function chartPoints(data, singleDay) {
     return Array.isArray(data?.daily_spend) ? data.daily_spend : [];
 }
 
-function platformTotal(data) {
-    const daily = Array.isArray(data?.daily_spend) ? data.daily_spend : [];
-    return daily.reduce(
-        (total, point) => total + PLATFORM_KEYS.reduce(
-            (dayTotal, key) => dayTotal + Number(point?.[key] || 0),
-            0,
-        ),
-        0,
-    );
-}
-
 function hasSeries(points, key) {
     return points.some((point) => (
         point?.[key] !== null
         && point?.[key] !== undefined
         && Number.isFinite(Number(point[key]))
     ));
+}
+
+function providerValue(data, provider) {
+    const state = data?.providers?.[provider] || {};
+    const total = data?.provider_totals_sar?.[provider];
+    if (total !== null && total !== undefined && Number.isFinite(Number(total))) {
+        return money(total);
+    }
+    if (!state.connected) return "غير مربوط";
+    return "لا بيانات";
 }
 
 export function DashboardAdsSpendCardContent({
@@ -84,16 +91,19 @@ export function DashboardAdsSpendCardContent({
         () => chartPoints(data, singleDay),
         [data, singleDay],
     );
-    const total = useMemo(() => platformTotal(data), [data]);
-    const displayError = error || data?.hourly_error || "";
+    const total = Number(data?.total_sar || 0);
+    const displayError = error || data?.refresh_error || "";
     const xKey = singleDay ? "hour" : "date";
-    const availableSeries = useMemo(() => ({
-        snapchat: hasSeries(points, "snapchat"),
-        meta: hasSeries(points, "meta"),
-        tiktok: hasSeries(points, "tiktok"),
-    }), [points]);
+    const availableSeries = useMemo(
+        () => Object.fromEntries(
+            DASHBOARD_ADS_PROVIDERS.map((provider) => [
+                provider,
+                hasSeries(points, provider),
+            ]),
+        ),
+        [points],
+    );
     const hasAnySeries = Object.values(availableSeries).some(Boolean);
-    const hasHourlyRows = singleDay && points.length > 0;
 
     return (
         <section
@@ -138,7 +148,7 @@ export function DashboardAdsSpendCardContent({
                             {selectedPeriodLabel(fromDate, toDate)}
                         </div>
                         <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                            سناب شات + ميتا + تيك توك · العرض بتوقيت الرياض
+                            سناب شات + ميتا + تيك توك + Google Ads · العرض بتوقيت الرياض
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -151,9 +161,49 @@ export function DashboardAdsSpendCardContent({
                     </div>
                 </div>
 
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="dashboard-ads-provider-totals">
+                    {DASHBOARD_ADS_PROVIDERS.map((provider) => {
+                        const meta = PROVIDER_META[provider];
+                        const state = data?.providers?.[provider] || {};
+                        return (
+                            <div
+                                key={provider}
+                                className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"
+                                data-testid={`dashboard-ads-provider-${provider}`}
+                            >
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                                    <span
+                                        className="h-2 w-2 rounded-full"
+                                        style={{ backgroundColor: meta.stroke }}
+                                    />
+                                    <span>{meta.label}</span>
+                                </div>
+                                <div className="mt-1 text-[11px] font-extrabold text-slate-900">
+                                    {providerValue(data, provider)}
+                                </div>
+                                <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
+                                    {singleDay
+                                        ? state.hourly_available
+                                            ? "بيانات ساعية أصلية"
+                                            : state.daily_available
+                                                ? "إجمالي اليوم متاح"
+                                                : state.connected
+                                                    ? "بانتظار البيانات"
+                                                    : "غير متصل"
+                                        : state.daily_available
+                                            ? "بيانات يومية أصلية"
+                                            : state.connected
+                                                ? "بانتظار البيانات"
+                                                : "غير متصل"}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
                 {singleDay && (
                     <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600">
-                        الرسم الساعي يعرض فقط المنصات التي تملك بيانات ساعية أصلية، بينما إجمالي المنصات أعلاه يشمل كل صرف الفترة.
+                        خطوط الساعات مبنية على ساعات المنصات الأصلية فقط، ولا يتم توزيع إجمالي اليوم على الساعات بالتخمين.
                     </div>
                 )}
 
@@ -204,39 +254,20 @@ export function DashboardAdsSpendCardContent({
                                     }}
                                 />
                                 <Legend wrapperStyle={{ direction: "rtl", fontSize: 11 }} />
-                                {availableSeries.snapchat && (
-                                    <Line
-                                        type="monotone"
-                                        dataKey="snapchat"
-                                        name="سناب شات"
-                                        stroke="#eab308"
-                                        strokeWidth={2.5}
-                                        connectNulls={false}
-                                        dot={false}
-                                    />
-                                )}
-                                {availableSeries.meta && (
-                                    <Line
-                                        type="monotone"
-                                        dataKey="meta"
-                                        name="ميتا"
-                                        stroke="#2563eb"
-                                        strokeWidth={2.25}
-                                        connectNulls={false}
-                                        dot={false}
-                                    />
-                                )}
-                                {availableSeries.tiktok && (
-                                    <Line
-                                        type="monotone"
-                                        dataKey="tiktok"
-                                        name="تيك توك"
-                                        stroke="#0f172a"
-                                        strokeWidth={2.25}
-                                        connectNulls={false}
-                                        dot={false}
-                                    />
-                                )}
+                                {DASHBOARD_ADS_PROVIDERS.map((provider) => (
+                                    availableSeries[provider] ? (
+                                        <Line
+                                            key={provider}
+                                            type="monotone"
+                                            dataKey={provider}
+                                            name={PROVIDER_META[provider].label}
+                                            stroke={PROVIDER_META[provider].stroke}
+                                            strokeWidth={provider === "snapchat" ? 2.5 : 2.25}
+                                            connectNulls={false}
+                                            dot={false}
+                                        />
+                                    ) : null
+                                ))}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
@@ -247,9 +278,7 @@ export function DashboardAdsSpendCardContent({
                             ? "dashboard-ads-spend-hourly-empty"
                             : "dashboard-ads-spend-daily-empty"}
                     >
-                        {singleDay && !hasHourlyRows
-                            ? "لا تتوفر بيانات صرف ساعية أصلية لليوم المحدد حتى الآن."
-                            : "لا توجد صرفيات إعلانية ضمن التاريخ المحدد."}
+                        لا توجد صرفيات إعلانية أصلية ضمن التاريخ المحدد حتى الآن.
                     </div>
                 )}
             </div>
@@ -264,7 +293,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
     const [error, setError] = useState("");
     const requestId = useRef(0);
 
-    const load = useCallback(async ({ silent = false } = {}) => {
+    const load = useCallback(async ({ silent = false, refresh = !silent } = {}) => {
         const currentRequest = requestId.current + 1;
         requestId.current = currentRequest;
         if (!silent) setRefreshing(true);
@@ -273,6 +302,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
             const next = await getDashboardAdsSpend({
                 dateFrom: fromDate,
                 dateTo: toDate,
+                refresh,
             });
             if (requestId.current !== currentRequest) return;
             setData(next);
@@ -294,15 +324,19 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
     }, [data, fromDate, toDate]);
 
     useEffect(() => {
-        load();
+        load({ refresh: true });
     }, [fromDate, toDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const timer = window.setInterval(() => {
-            if (document.visibilityState === "visible") load({ silent: true });
+            if (document.visibilityState === "visible") {
+                load({ silent: true, refresh: false });
+            }
         }, AUTO_REFRESH_MS);
         const onVisible = () => {
-            if (document.visibilityState === "visible") load({ silent: true });
+            if (document.visibilityState === "visible") {
+                load({ silent: true, refresh: false });
+            }
         };
         document.addEventListener("visibilitychange", onVisible);
         return () => {
@@ -319,7 +353,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
             loading={loading}
             refreshing={refreshing}
             error={error}
-            onRefresh={() => load()}
+            onRefresh={() => load({ refresh: true })}
         />
     );
 }
