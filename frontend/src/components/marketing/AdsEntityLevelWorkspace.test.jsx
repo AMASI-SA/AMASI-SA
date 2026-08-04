@@ -9,6 +9,14 @@ jest.mock("./AdSquadManagerTable", () => function AdSquadTable() {
     return <div data-testid="mock-ad-squad-table">المجموعات الإعلانية</div>;
 });
 
+jest.mock("./AdSquadSortControls", () => function AdSquadSortControls() {
+    return <div data-testid="mock-ad-squad-sort">ترتيب المجموعات</div>;
+});
+
+jest.mock("./AdManagerTable", () => function AdManagerTable() {
+    return <div data-testid="mock-ad-manager-table">الإعلانات</div>;
+});
+
 import AdsEntityLevelWorkspace from "./AdsEntityLevelWorkspace";
 
 describe("AdsEntityLevelWorkspace", () => {
@@ -27,7 +35,7 @@ describe("AdsEntityLevelWorkspace", () => {
         container.remove();
     });
 
-    test("enables Snapchat Ad Squads and keeps Ads disabled", async () => {
+    test("enables Snapchat Ad Squads and Ads", async () => {
         const onChange = jest.fn();
         await act(async () => {
             root.render(
@@ -48,10 +56,10 @@ describe("AdsEntityLevelWorkspace", () => {
         const groups = container.querySelector('[data-testid="ads-entity-level-ad_squads"]');
         const ads = container.querySelector('[data-testid="ads-entity-level-ads"]');
         expect(groups.disabled).toBe(false);
-        expect(ads.disabled).toBe(true);
+        expect(ads.disabled).toBe(false);
 
-        await act(async () => groups.click());
-        expect(onChange).toHaveBeenCalledWith("ad_squads");
+        await act(async () => ads.click());
+        expect(onChange).toHaveBeenCalledWith("ads");
     });
 
     test("renders the Ad Squad table for the selected entity level", async () => {
@@ -70,6 +78,26 @@ describe("AdsEntityLevelWorkspace", () => {
             );
         });
 
+        expect(container.querySelector('[data-testid="mock-ad-squad-sort"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="mock-ad-squad-table"]')).not.toBeNull();
+    });
+
+    test("renders the Ads table for the selected entity level", async () => {
+        await act(async () => {
+            root.render(
+                <AdsEntityLevelWorkspace
+                    platform="snapchat"
+                    platformLabel="سناب شات"
+                    entityLevel="ads"
+                    onEntityLevelChange={() => {}}
+                    campaigns={[]}
+                    campaignTotals={{}}
+                    campaignPagination={{}}
+                    adSquadReport={null}
+                />,
+            );
+        });
+
+        expect(container.querySelector('[data-testid="mock-ad-manager-table"]')).not.toBeNull();
     });
 });

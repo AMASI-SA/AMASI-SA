@@ -1,0 +1,116 @@
+name: Production Snapchat Ads V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_ad_performance.py"
+      - "backend/tests/test_snapchat_ad_performance_v1.py"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/services/snapchatAdPerformance.js"
+      - "frontend/src/services/snapchatAdPerformance.test.js"
+      - ".github/workflows/prod-snapchat-ads-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile ad-level modules
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_ad_performance.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_ad_performance_v1.py
+      - name: Run focused backend tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_ad_performance_v1.py
+          tests/test_snapchat_adsquad_performance_v1.py
+          tests/test_snapchat_adsquad_status_delivery_separation_v2.py
+          -q --tb=short
+      - name: Enforce read-only ad-level contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_ad_performance.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'AD_BREAKDOWN = "ad"' "$MODULE"
+          grep -q 'granularity": "HOUR"' "$MODULE"
+          grep -q 'entity_type": "ad"' "$MODULE"
+          grep -q 'stored_granularity="ACCOUNT_LOCAL_DAY"' "$MODULE"
+          grep -q 'salla_results_supported": False' "$MODULE"
+          grep -q 'attach_snapchat_ad_routes' "$INIT"
+          grep -q 'install_snapchat_ad_performance_refresh' "$INIT"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|ad_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ads navigation and normalization
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+          src/services/snapchatAdPerformance.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce read-only Ads UI contract
+        working-directory: .
+        run: |
+          LEVELS=frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          TABLE=frontend/src/components/marketing/AdManagerTable.jsx
+          SERVICE=frontend/src/services/snapchatAdPerformance.js
+          grep -q 'AdManagerTable' "$LEVELS"
+          grep -q 'adsEnabled' "$LEVELS"
+          grep -q 'data-testid="ad-manager-table"' "$TABLE"
+          grep -q 'نتائج Snapchat على مستوى الإعلان' "$TABLE"
+          grep -q '/integrations-v2/snapchat_ads/ad-report' "$SERVICE"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SERVICE" "$TABLE" "$LEVELS"
