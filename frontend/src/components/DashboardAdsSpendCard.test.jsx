@@ -18,18 +18,53 @@ jest.mock("recharts", () => ({
 }));
 
 
-test("renders a 24-hour provider-only chart for one dashboard day", () => {
+function providers({ hourly = true } = {}) {
+    return {
+        snapchat: {
+            connected: true,
+            daily_available: true,
+            hourly_available: hourly,
+        },
+        meta: {
+            connected: true,
+            daily_available: true,
+            hourly_available: hourly,
+        },
+        tiktok: {
+            connected: true,
+            daily_available: true,
+            hourly_available: hourly,
+        },
+        google: {
+            connected: true,
+            daily_available: true,
+            hourly_available: hourly,
+        },
+    };
+}
+
+
+test("renders four original hourly provider lines for one selected day", () => {
     const html = renderToStaticMarkup(
         <DashboardAdsSpendCardContent
             fromDate="2026-07-15"
             toDate="2026-07-15"
             data={{
+                total_sar: 8873.97,
+                provider_totals_sar: {
+                    snapchat: 8188.42,
+                    meta: 668.05,
+                    tiktok: 10,
+                    google: 7.5,
+                },
+                providers: providers(),
                 daily_spend: [
                     {
                         date: "2026-07-15",
                         snapchat: 8188.42,
                         meta: 668.05,
                         tiktok: 10,
+                        google: 7.5,
                         booked_ad_expense_sar: 999999,
                     },
                 ],
@@ -38,8 +73,9 @@ test("renders a 24-hour provider-only chart for one dashboard day", () => {
                     hour_index: hourIndex,
                     hour: `${String(hourIndex).padStart(2, "0")}:00`,
                     snapchat: hourIndex === 10 ? 350.25 : 0,
-                    meta: null,
-                    tiktok: null,
+                    meta: hourIndex === 10 ? 25 : 0,
+                    tiktok: hourIndex === 10 ? 5 : 0,
+                    google: hourIndex === 10 ? 7.5 : 0,
                 })),
             }}
             onRefresh={() => {}}
@@ -47,27 +83,40 @@ test("renders a 24-hour provider-only chart for one dashboard day", () => {
     );
 
     expect(html).toContain("صرفيات منصات الإعلانات");
-    expect(html).toContain("مرتبطة بتاريخ الملخص التنفيذي للأرباح");
+    expect(html).toContain("سناب شات + ميتا + تيك توك + Google Ads");
     expect(html).toContain("صرفيات يوم 2026-07-15");
     expect(html).toContain("عرض ساعي");
-    expect(html).toContain("8,866.47 ر.س");
+    expect(html).toContain("8,873.97 ر.س");
     expect(html).toContain("axis:hour");
     expect(html).toContain("line:سناب شات");
-    expect(html).not.toContain("line:المصروف المحاسبي");
+    expect(html).toContain("line:ميتا");
+    expect(html).toContain("line:تيك توك");
+    expect(html).toContain("line:Google Ads");
+    expect(html).toContain("dashboard-ads-provider-google");
+    expect(html).toContain("بيانات ساعية أصلية");
+    expect(html).not.toContain("المصروف المحاسبي");
     expect(html).not.toContain("999,999.00 ر.س");
     expect(html).toContain("dashboard-ads-spend-hourly-chart");
 });
 
 
-test("renders all platform lines by day for a multi-day range", () => {
+test("renders four platform lines by day for a multi-day range", () => {
     const html = renderToStaticMarkup(
         <DashboardAdsSpendCardContent
             fromDate="2026-07-14"
             toDate="2026-07-15"
             data={{
+                total_sar: 220,
+                provider_totals_sar: {
+                    snapchat: 50,
+                    meta: 70,
+                    tiktok: 90,
+                    google: 10,
+                },
+                providers: providers({ hourly: false }),
                 daily_spend: [
-                    { date: "2026-07-14", snapchat: 10, meta: 20, tiktok: 30 },
-                    { date: "2026-07-15", snapchat: 40, meta: 50, tiktok: 60 },
+                    { date: "2026-07-14", snapchat: 10, meta: 20, tiktok: 30, google: 4 },
+                    { date: "2026-07-15", snapchat: 40, meta: 50, tiktok: 60, google: 6 },
                 ],
             }}
             onRefresh={() => {}}
@@ -79,8 +128,51 @@ test("renders all platform lines by day for a multi-day range", () => {
     expect(html).toContain("line:سناب شات");
     expect(html).toContain("line:ميتا");
     expect(html).toContain("line:تيك توك");
+    expect(html).toContain("line:Google Ads");
     expect(html).not.toContain("المصروف المحاسبي");
-    expect(html).toContain("210.00 ر.س");
+    expect(html).toContain("220.00 ر.س");
+    expect(html).toContain("بيانات يومية أصلية");
+});
+
+
+test("shows a truthful state for a connected platform without hourly facts", () => {
+    const html = renderToStaticMarkup(
+        <DashboardAdsSpendCardContent
+            fromDate="2026-07-15"
+            toDate="2026-07-15"
+            data={{
+                total_sar: 100,
+                provider_totals_sar: {
+                    snapchat: 100,
+                    meta: null,
+                    tiktok: null,
+                    google: null,
+                },
+                providers: {
+                    ...providers(),
+                    google: {
+                        connected: true,
+                        daily_available: false,
+                        hourly_available: false,
+                    },
+                },
+                hourly_spend: Array.from({ length: 24 }, (_, hourIndex) => ({
+                    date: "2026-07-15",
+                    hour_index: hourIndex,
+                    hour: `${String(hourIndex).padStart(2, "0")}:00`,
+                    snapchat: 1,
+                    meta: null,
+                    tiktok: null,
+                    google: null,
+                })),
+            }}
+            onRefresh={() => {}}
+        />,
+    );
+
+    expect(html).toContain("بانتظار البيانات");
+    expect(html).toContain("لا بيانات");
+    expect(html).not.toContain("line:Google Ads");
 });
 
 

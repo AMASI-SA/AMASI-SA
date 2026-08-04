@@ -1,9 +1,8 @@
 """Read-only Dashboard advertising routes for Mezan 2.
 
 The executive endpoint is a resilient transport fallback for the profit card.
-The hourly endpoint is attached lazily from the same route group so focused
-integration modules remain lightweight and unrelated workflows are not coupled
-to the Dashboard hourly implementation.
+Dashboard spend routes are attached lazily so focused integration modules stay
+lightweight and unrelated workflows do not import provider reporting stacks.
 """
 from __future__ import annotations
 
@@ -76,14 +75,21 @@ def attach_dashboard_ads_executive_routes(
             shipping_companies=shipping_companies,
         )
 
-    # Import only when the full router is composed. This keeps focused tests of
-    # other integrations from importing the Snapchat hourly projection and its
-    # wider operational dependency graph.
+    # Keep the earlier Snapchat-only hourly endpoint for compatibility.
     from .dashboard_ads_hourly_spend_routes import (
         attach_dashboard_ads_hourly_spend_routes,
     )
+    from .dashboard_ads_platform_spend_routes import (
+        attach_dashboard_ads_platform_spend_routes,
+    )
 
     attach_dashboard_ads_hourly_spend_routes(
+        router,
+        db,
+        current_user,
+        require_owner,
+    )
+    attach_dashboard_ads_platform_spend_routes(
         router,
         db,
         current_user,
