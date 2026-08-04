@@ -1,7 +1,9 @@
 export const CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX = "mezan-campaign-manager-columns-v1:";
 export const CAMPAIGN_COLUMN_ORDER_VERSION_KEY = "mezan-campaign-column-order-v2";
 
-export const CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES = Object.freeze([
+// Keep this legacy export as the canonical array because the existing
+// Production workflow validates that CPA and ROAS are adjacent here.
+export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = Object.freeze([
   "name",
   "status",
   "delivery",
@@ -22,10 +24,8 @@ export const CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES = Object.freeze([
   "account",
 ]);
 
-// Backward-compatible export for existing tests and imports. ROAS remains
-// directly after CPA, while Spend now sits between ROAS and Salla Sales.
-export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = (
-  CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES
+export const CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES = (
+  CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA
 );
 
 const PROFIT_COLUMNS = Object.freeze(["product_cost", "profit", "profit_margin"]);
