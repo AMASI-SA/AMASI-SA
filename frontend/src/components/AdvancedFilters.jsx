@@ -118,7 +118,13 @@ export default function AdvancedFilters({
     const activeCount = (value.payment_methods?.length || 0) + (value.shipping_companies?.length || 0);
 
     return (
-        <div className="rounded-xl border border-border bg-white p-3 md:p-4 flex flex-wrap items-center gap-2" data-testid="advanced-filters">
+        <div
+            className="rounded-xl border border-border bg-white p-3 md:p-4 flex flex-wrap items-center gap-2"
+            data-testid="advanced-filters"
+            data-date-preset={value.preset || ""}
+            data-from-date={value.from || ""}
+            data-to-date={value.to || value.from || ""}
+        >
             <div className="min-w-[280px] flex-1 md:max-w-xl" data-testid="filter-date-range">
                 <ArabicDateRangePicker
                     valueFrom={value.from || todaySA()}
