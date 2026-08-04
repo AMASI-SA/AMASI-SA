@@ -14,6 +14,7 @@ const SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
 const SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
 const SORT_CONTROL_ATTRIBUTE = "data-mezan-adsquad-sort-controls";
 const VALID_SORTS = new Set(["newest", "spend", "active"]);
+const ADSQUAD_SORTING_PAGE_SIZE = 100;
 
 let lastRefreshAt = 0;
 let timer = 0;
@@ -146,6 +147,7 @@ api.interceptors.request.use((config) => {
   const params = {
     ...(config.params || {}),
     sort_by: adsquadSortPreference(),
+    limit: Math.max(Number(config.params?.limit || 0), ADSQUAD_SORTING_PAGE_SIZE),
   };
   const accountId = snapchatSelectedAccountId();
   if (accountId) params.account_id = accountId;
@@ -191,5 +193,6 @@ export const ADS_LIVE_WORKSPACE_POLICY = Object.freeze({
   auto_refresh_ms: AUTO_REFRESH_MS,
   refresh_only_when_visible: true,
   adsquad_default_sort: "newest",
+  adsquad_sorting_page_size: ADSQUAD_SORTING_PAGE_SIZE,
   provider_mutations_allowed: false,
 });
