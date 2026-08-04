@@ -86,7 +86,10 @@ def test_missing_product_cost_prevents_false_campaign_profit():
     assert result["contribution_profit_sar"] is None
     assert result["profit_margin_pct"] is None
     assert result["cost_status"] == "missing"
-    assert result["products"][0]["product_cost_sar"] is None
+    products = {row["identity"]: row for row in result["products"]}
+    assert products["product-a"]["product_cost_sar"] is None
+    assert products["product-a"]["contribution_profit_sar"] is None
+    assert products["product-b"]["product_cost_sar"] == 180.0
 
 
 def test_salla_fallback_is_reported_but_profit_remains_calculable():
@@ -98,7 +101,8 @@ def test_salla_fallback_is_reported_but_profit_remains_calculable():
     assert result["product_cost_sar"] == 400.0
     assert result["contribution_profit_sar"] == 400.0
     assert result["cost_status"] == "salla_fallback"
-    assert result["products"][0]["cost_status"] == "salla_fallback"
+    products = {row["identity"]: row for row in result["products"]}
+    assert products["product-a"]["cost_status"] == "salla_fallback"
 
 
 def test_order_addition_preserves_product_grain_and_missing_coverage():
