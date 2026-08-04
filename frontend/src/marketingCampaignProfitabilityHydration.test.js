@@ -4,7 +4,7 @@ import {
 } from "./marketingCampaignProfitabilityHydration";
 
 describe("Campaign profitability hydration", () => {
-  test("joins profitability by exact account and campaign identity", () => {
+  test("joins profitability and stable created orders by exact identity", () => {
     const normalizedCampaigns = [
       {
         account_id: "account-1",
@@ -39,15 +39,24 @@ describe("Campaign profitability hydration", () => {
           {
             account_id: "account-1",
             campaign_id: "campaign-1",
+            created_orders: 17,
+            financial_orders: 13,
+            cancelled_orders: 3,
+            excluded_orders: 4,
             profitability: rawProfitability,
           },
           {
             account_id: "different-account",
             campaign_id: "campaign-2",
+            created_orders: 99,
             profitability: { orders: 99 },
           },
         ],
         totals: {
+          created_orders: 18,
+          financial_orders: 14,
+          cancelled_orders: 3,
+          excluded_orders: 4,
           profitability: {
             product_cost_sar: 900,
             contribution_profit_sar: 852.94,
@@ -57,11 +66,26 @@ describe("Campaign profitability hydration", () => {
     );
 
     expect(hydrated.campaigns[0].profitability).toBe(rawProfitability);
-    expect(hydrated.campaigns[0].sales_sar).toBe(2402.94);
+    expect(hydrated.campaigns[0]).toMatchObject({
+      orders: 17,
+      created_orders: 17,
+      financial_orders: 13,
+      cancelled_orders: 3,
+      excluded_orders: 4,
+      sales_sar: 2402.94,
+    });
+    expect(hydrated.campaigns[1].orders).toBe(1);
     expect(hydrated.campaigns[1].profitability).toBeUndefined();
-    expect(hydrated.totals.profitability).toEqual({
-      product_cost_sar: 900,
-      contribution_profit_sar: 852.94,
+    expect(hydrated.totals).toMatchObject({
+      orders: 18,
+      created_orders: 18,
+      financial_orders: 14,
+      cancelled_orders: 3,
+      excluded_orders: 4,
+      profitability: {
+        product_cost_sar: 900,
+        contribution_profit_sar: 852.94,
+      },
     });
     expect(hydrated.hydrated_campaigns).toBe(1);
   });
@@ -80,6 +104,8 @@ describe("Campaign profitability hydration", () => {
     expect(CAMPAIGN_PROFITABILITY_HYDRATION_POLICY).toEqual({
       exact_account_campaign_key: true,
       preserves_normalized_campaign_metrics: true,
+      hydrates_created_orders_all_statuses: true,
+      keeps_financial_orders_separate: true,
       reads_raw_snapshot_only: true,
       provider_writes_allowed: false,
     });
