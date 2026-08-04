@@ -1,0 +1,114 @@
+name: Production Dashboard Four Platform Spend V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/ads_platform_hourly.py"
+      - "backend/integrations_control_center/google_ads_reporting.py"
+      - "backend/integrations_control_center/dashboard_ads_platform_refresh.py"
+      - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
+      - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
+      - "backend/tests/test_dashboard_four_platform_spend_v1.py"
+      - "backend/tests/test_google_ads_reporting_v1.py"
+      - "frontend/src/components/DashboardAdsSpendCard.jsx"
+      - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/services/dashboardAdsSpend.js"
+      - "frontend/src/services/dashboardAdsSpend.test.js"
+      - ".github/workflows/prod-dashboard-four-platform-spend-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          pytest pytest-asyncio fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl bcrypt PyJWT reportlab pillow
+          python-multipart qrcode arabic-reshaper python-bidi
+      - name: Compile four-platform reporting
+        run: >-
+          python -m py_compile
+          integrations_control_center/ads_platform_hourly.py
+          integrations_control_center/google_ads_reporting.py
+          integrations_control_center/dashboard_ads_platform_refresh.py
+          integrations_control_center/dashboard_ads_platform_spend_routes.py
+          integrations_control_center/dashboard_ads_executive_routes.py
+          tests/test_dashboard_four_platform_spend_v1.py
+          tests/test_google_ads_reporting_v1.py
+      - name: Run focused backend tests
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_dashboard_four_platform_spend_v1.py
+          tests/test_google_ads_reporting_v1.py
+          tests/test_dashboard_ads_hourly_spend_v1.py
+      - name: Enforce original four-provider read contract
+        working-directory: .
+        run: |
+          ROUTE=backend/integrations_control_center/dashboard_ads_platform_spend_routes.py
+          REFRESH=backend/integrations_control_center/dashboard_ads_platform_refresh.py
+          GOOGLE=backend/integrations_control_center/google_ads_reporting.py
+          HOURS=backend/integrations_control_center/ads_platform_hourly.py
+          grep -q '"/dashboard/ads-platform-spend"' "$ROUTE"
+          grep -q '"/dashboard/ads-platform-spend/refresh"' "$ROUTE"
+          grep -q 'FOUR_PLATFORM_KEYS = ("snapchat", "meta", "tiktok", "google")' "$REFRESH"
+          grep -q 'hourly_stats_aggregated_by_advertiser_time_zone' "$REFRESH"
+          grep -q 'stat_time_hour' "$REFRESH"
+          grep -q 'segments.hour' "$GOOGLE"
+          grep -q 'metrics.cost_micros' "$GOOGLE"
+          grep -q 'accounting_eligible": False' "$HOURS"
+          ! grep -q 'booked_ad_expense_sar' "$ROUTE" "$REFRESH" "$GOOGLE" "$HOURS"
+          ! grep -Eq '(campaigns|adsets|ads)/(create|update|delete|pause|resume)' "$ROUTE" "$REFRESH" "$GOOGLE" "$HOURS"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test four-platform Dashboard card
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/DashboardAdsSpendCard.test.jsx
+          src/services/dashboardAdsSpend.test.js
+          src/components/DashboardAnalyticsPlacement.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce four provider UI contract
+        working-directory: .
+        run: |
+          CARD=frontend/src/components/DashboardAdsSpendCard.jsx
+          SERVICE=frontend/src/services/dashboardAdsSpend.js
+          grep -q '"snapchat"' "$SERVICE"
+          grep -q '"meta"' "$SERVICE"
+          grep -q '"tiktok"' "$SERVICE"
+          grep -q '"google"' "$SERVICE"
+          grep -q 'line:Google Ads' frontend/src/components/DashboardAdsSpendCard.test.jsx
+          grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$SERVICE"
+          grep -q 'سناب شات + ميتا + تيك توك + Google Ads' "$CARD"
+          ! grep -q 'المصروف المحاسبي' "$CARD"
+          ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE"
