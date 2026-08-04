@@ -10,7 +10,7 @@ const LOOKUP_NAME_PARAM = "lookup_name";
 const RESOLVING_KEY = "mezan-profit-product-cost-link-resolving";
 
 function normalized(value) {
-  return String(value || "").trim().casefold?.() || String(value || "").trim().toLowerCase();
+  return String(value || "").trim().toLowerCase();
 }
 
 function clean(value) {
@@ -86,16 +86,17 @@ export function enhanceProfitabilityProductRows(root = document) {
     const identity = textFromProductCell(productCell);
     if (!identity.sku && !identity.name) continue;
 
+    const missingCost = missingCostFromRow(row);
     const link = document.createElement("a");
     link.setAttribute(LINK_ATTRIBUTE, "true");
     link.href = buildProfitabilityProductCostHref(identity);
     link.className = [
       "mt-2 inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-black transition",
-      missingCostFromRow(row)
+      missingCost
         ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
         : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
     ].join(" ");
-    link.textContent = missingCostFromRow(row)
+    link.textContent = missingCost
       ? "فتح المنتج وإضافة التكلفة"
       : "فتح المنتج";
     link.setAttribute(
@@ -148,6 +149,7 @@ export async function resolveProductCostDeepLink(locationLike = window.location)
   next.searchParams.delete(LOOKUP_NAME_PARAM);
   next.searchParams.set("product", productId);
   next.searchParams.set("focus", "cost");
+  window.sessionStorage.removeItem(RESOLVING_KEY);
   window.location.replace(`${next.pathname}${next.search}${next.hash}`);
   return true;
 }
