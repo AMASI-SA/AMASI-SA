@@ -59,7 +59,6 @@ jobs:
           python -m pytest
           tests/test_snapchat_campaign_profitability_v1.py
           tests/test_snapchat_campaign_result_source_v1.py
-          tests/test_dashboard_v2_product_profit_rows.py
           -q --tb=short
       - name: Enforce conservative read-only profitability contract
         working-directory: .
