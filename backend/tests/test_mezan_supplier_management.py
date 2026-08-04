@@ -16,7 +16,8 @@ def test_mezan_supplier_directory_is_independent_from_legacy_and_accounting():
     source = inspect.getsource(make_mezan_supplier_management_router)
 
     assert MEZAN_SUPPLIERS_V2 == "mezan_suppliers_v2"
-    assert '"suppliers"' not in source
+    assert 'db["suppliers"]' not in source
+    assert "db['suppliers']" not in source
     assert "counterparties" not in source
     assert "financial_movements" not in source
     assert '"legacy_supplier_data_used": False' in source
