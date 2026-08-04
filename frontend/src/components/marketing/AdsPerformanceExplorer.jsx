@@ -150,6 +150,57 @@ function MetricToggle({ series, value, active, onToggle }) {
     );
 }
 
+function SingleDaySnapshot({ row, visibleSeries }) {
+    return (
+        <div className="min-h-80 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6" data-testid="ads-performance-single-day-chart">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h3 className="font-black text-slate-900">ملخص أداء يوم واحد</h3>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                        الفترة المحددة يوم واحد؛ لذلك يعرض ميزان مخطط القيم المؤكدة بدل خط زمني مضلل.
+                    </p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm">
+                    {row?.date || "اليوم"}
+                </span>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+                {visibleSeries.map((series) => {
+                    const raw = row?.[`${series.id}_raw`];
+                    const hasValue = finite(raw) !== null;
+                    return (
+                        <div key={series.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="font-black text-slate-700">{series.label}</div>
+                                <div className="font-mono text-lg font-black text-slate-950">
+                                    {formatMetric(raw, series.format)}
+                                </div>
+                            </div>
+                            <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                    className="relative h-full rounded-full transition-all"
+                                    style={{
+                                        width: hasValue ? "100%" : "0%",
+                                        backgroundColor: series.stroke,
+                                    }}
+                                >
+                                    {hasValue && (
+                                        <span
+                                            className="absolute left-0 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
+                                            style={{ backgroundColor: series.stroke }}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                            <div className="mt-2 text-[11px] font-bold text-slate-400">{series.hint}</div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 export default function AdsPerformanceExplorer({ totals = {}, daily = [], platformLabel = "المنصة" }) {
     const [visibleMetrics, setVisibleMetrics] = useState(
         () => new Set(SERIES.map((series) => series.id)),
@@ -184,7 +235,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                     <div>
                         <h2 className="font-black text-slate-900">اتجاه الأداء اليومي</h2>
                         <p className="mt-1 text-xs font-semibold text-slate-500">
-                            اضغط على أي بطاقة لإخفاء خطها أو إظهاره. الخطوط مطبّعة لعرض الاتجاه، والقيم الأصلية تظهر عند المرور.
+                            اضغط على أي بطاقة لإخفاء خطها أو إظهاره. القيم الأصلية تظهر عند المرور، واليوم الواحد يظهر كمخطط ملخص واضح.
                         </p>
                     </div>
                     <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
@@ -192,7 +243,9 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                     </div>
                 </div>
 
-                {chartRows.length && visibleSeries.length ? (
+                {chartRows.length === 1 && visibleSeries.length ? (
+                    <SingleDaySnapshot row={chartRows[0]} visibleSeries={visibleSeries} />
+                ) : chartRows.length > 1 && visibleSeries.length ? (
                     <div className="h-80" data-testid="ads-performance-chart">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartRows} margin={{ top: 10, right: 8, bottom: 5, left: 8 }}>
@@ -220,7 +273,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                 ) : (
                     <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-sm font-bold text-slate-500">
                         {chartRows.length
-                            ? "كل المؤشرات مخفية. اضغط على بطاقة لإظهار خطها."
+                            ? "كل المؤشرات مخفية. اضغط على بطاقة لإظهارها."
                             : "لا توجد نقاط يومية موثقة ضمن الفترة المحددة."}
                     </div>
                 )}
