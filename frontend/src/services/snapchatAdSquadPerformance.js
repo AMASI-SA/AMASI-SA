@@ -38,7 +38,11 @@ function normalizeTotals(value = {}) {
 export function normalizeAdSquad(value = {}) {
     const id = text(value.ad_squad_id);
     if (!id) return null;
-    const effectiveStatus = text(value.effective_status, value.status || "unknown");
+    const configuredStatus = text(
+        value.configured_status,
+        value.provider_configured_status || value.status || "unknown",
+    );
+    const effectiveStatus = text(value.effective_status, configuredStatus);
     return {
         account_id: text(value.account_id),
         account_name: text(value.account_name, value.account_id || "حساب غير معروف"),
@@ -46,10 +50,21 @@ export function normalizeAdSquad(value = {}) {
         ad_squad_name: text(value.ad_squad_name, id),
         campaign_id: text(value.campaign_id) || null,
         campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),
-        status: effectiveStatus,
-        configured_status: text(value.configured_status, value.status || "unknown"),
+        // The status column is the configured Snapchat switch. Delivery blocks
+        // such as debt, budget or a stopped parent Campaign belong only in the
+        // delivery fields below.
+        status: configuredStatus,
+        configured_status: configuredStatus,
+        provider_configured_status: text(
+            value.provider_configured_status,
+            configuredStatus,
+        ),
         effective_status: effectiveStatus,
-        status_inherited_from_campaign: value.status_inherited_from_campaign === true,
+        previous_operational_status: text(value.previous_operational_status) || null,
+        status_inherited_from_campaign: false,
+        delivery_inherited_from_campaign: value.delivery_inherited_from_campaign === true
+            || value.status_inherited_from_campaign === true,
+        delivery_inherited_from_account: value.delivery_inherited_from_account === true,
         delivery_state: text(value.delivery_state) || null,
         delivery_reason_code: text(value.delivery_reason_code) || null,
         delivery_status: text(value.delivery_status || value.delivery_label) || null,

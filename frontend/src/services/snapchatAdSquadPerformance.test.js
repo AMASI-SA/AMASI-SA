@@ -36,29 +36,52 @@ describe("Snapchat Ad Squad performance service", () => {
         });
     });
 
-    test("uses the effective parent-inherited status while preserving the configured switch", () => {
+    test("keeps configured status active while debt blocks delivery", () => {
         expect(normalizeAdSquad({
             ad_squad_id: "squad-2",
             status: "PAUSED",
             configured_status: "ACTIVE",
-            effective_status: "PAUSED",
-            status_inherited_from_campaign: true,
+            effective_status: "ACTIVE",
+            previous_operational_status: "PAUSED",
+            delivery_inherited_from_account: true,
+            delivery_state: "NOT_DELIVERING",
+            delivery_reason_code: "ACCOUNT_PAYMENT_BLOCKED",
+            delivery_status: "لا تسليم — الحساب موقوف بسبب الدفع أو الرصيد",
+            delivery_detail: "رصيد الحساب أو وسيلة الدفع لا تسمح بالتسليم.",
+        })).toMatchObject({
+            status: "ACTIVE",
+            configured_status: "ACTIVE",
+            effective_status: "ACTIVE",
+            previous_operational_status: "PAUSED",
+            status_inherited_from_campaign: false,
+            delivery_inherited_from_account: true,
+            delivery_state: "NOT_DELIVERING",
+            delivery_reason_code: "ACCOUNT_PAYMENT_BLOCKED",
+            delivery_status: "لا تسليم — الحساب موقوف بسبب الدفع أو الرصيد",
+        });
+    });
+
+    test("keeps the configured switch active while parent delivery is blocked", () => {
+        expect(normalizeAdSquad({
+            ad_squad_id: "squad-3",
+            status: "PAUSED",
+            configured_status: "ACTIVE",
+            effective_status: "ACTIVE",
+            delivery_inherited_from_campaign: true,
             delivery_state: "NOT_DELIVERING",
             delivery_reason_code: "PARENT_CAMPAIGN_DAILY_BUDGET_EXHAUSTED",
             delivery_status: "لا تسليم — الحملة خارج الميزانية اليومية",
-            delivery_detail: "بلغت الحملة حد الإنفاق اليومي في Snapchat.",
             parent_campaign_configured_status: "ACTIVE",
             parent_campaign_delivery_state: "NOT_DELIVERING",
         })).toMatchObject({
-            status: "PAUSED",
+            status: "ACTIVE",
             configured_status: "ACTIVE",
-            effective_status: "PAUSED",
-            status_inherited_from_campaign: true,
+            effective_status: "ACTIVE",
+            status_inherited_from_campaign: false,
+            delivery_inherited_from_campaign: true,
             delivery_state: "NOT_DELIVERING",
             delivery_reason_code: "PARENT_CAMPAIGN_DAILY_BUDGET_EXHAUSTED",
             delivery_status: "لا تسليم — الحملة خارج الميزانية اليومية",
-            parent_campaign_configured_status: "ACTIVE",
-            parent_campaign_delivery_state: "NOT_DELIVERING",
         });
     });
 

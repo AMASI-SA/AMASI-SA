@@ -53,6 +53,9 @@ from .snapchat_adsquad_performance import (
     attach_snapchat_adsquad_routes,
     install_snapchat_adsquad_performance_refresh,
 )
+from .snapchat_adsquad_status_delivery_separation import (
+    install_snapchat_adsquad_status_delivery_separation,
+)
 from .snapchat_campaign_catalog_refresh import (
     install_snapchat_campaign_catalog_refresh,
 )
@@ -107,7 +110,8 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # the original Riyadh-day collection and semantics. Campaign identity and
     # status are refreshed before performance, Ad Squad performance is refreshed
     # at a bounded 15-minute cadence, and account-level delivery is read last so
-    # billing/budget blocks become the effective UI status.
+    # billing/budget blocks become the effective delivery status. The configured
+    # campaign/Ad Squad switches remain separate from those delivery blockers.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_campaign_catalog_refresh()
@@ -115,6 +119,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_account_delivery_refresh()
     install_snapchat_effective_delivery_report()
     install_snapchat_adsquad_parent_delivery_report()
+    install_snapchat_adsquad_status_delivery_separation()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
