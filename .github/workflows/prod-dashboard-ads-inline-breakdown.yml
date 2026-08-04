@@ -41,6 +41,12 @@ jobs:
           pytest
           pytest-asyncio
           openpyxl
+          reportlab
+          pillow
+          python-multipart
+          qrcode
+          arabic-reshaper
+          python-bidi
       - name: Compile fallback route
         run: >-
           python -m py_compile

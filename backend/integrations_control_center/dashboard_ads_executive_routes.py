@@ -1,9 +1,9 @@
-"""Read-only fallback route for the Mezan 2 advertising executive table.
+"""Read-only Dashboard advertising routes for Mezan 2.
 
-The main Dashboard V2 response already carries this payload. This focused
-endpoint exists as a resilient transport fallback so the Mezan 2 profit card
-never falls back to the legacy advertising-cost modal when an intermediate
-adapter or cached response omits ``ads_v2.executive_breakdown``.
+The executive endpoint is a resilient transport fallback for the profit card.
+The hourly endpoint is attached lazily from the same route group so focused
+integration modules remain lightweight and unrelated workflows are not coupled
+to the Dashboard hourly implementation.
 """
 from __future__ import annotations
 
@@ -75,6 +75,20 @@ def attach_dashboard_ads_executive_routes(
             payment_methods=payment_methods,
             shipping_companies=shipping_companies,
         )
+
+    # Import only when the full router is composed. This keeps focused tests of
+    # other integrations from importing the Snapchat hourly projection and its
+    # wider operational dependency graph.
+    from .dashboard_ads_hourly_spend_routes import (
+        attach_dashboard_ads_hourly_spend_routes,
+    )
+
+    attach_dashboard_ads_hourly_spend_routes(
+        router,
+        db,
+        current_user,
+        require_owner,
+    )
 
 
 __all__ = [
