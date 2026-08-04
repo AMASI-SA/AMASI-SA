@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "@/index.css";
 import "@/marketingAdsManagerWorkspace.css";
 import "@/marketingAdsManagerReadability.css";
+import "@/marketingCampaignColumnOrder";
 import "@/marketingCampaignResultSource.css";
 import "@/marketingSnapchatAccountTimezone.css";
 import "@/marketingAdsManagerWorkspaceEnhancer";
