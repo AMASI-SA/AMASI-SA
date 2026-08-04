@@ -8,17 +8,21 @@ export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = Object.freeze([
   "orders",
   "cpa",
   "roas",
+  "sales",
+  "product_cost",
+  "profit",
+  "profit_margin",
   "spend",
   "impressions",
   "cpm",
   "clicks",
   "cpc",
-  "sales",
   "ctr",
   "budget",
   "account",
 ]);
 
+const PROFIT_COLUMNS = Object.freeze(["product_cost", "profit", "profit_margin"]);
 const KNOWN_COLUMNS = new Set(CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA);
 const PLATFORM_KEYS = Object.freeze(["snapchat", "meta", "tiktok", "google", "all"]);
 
@@ -45,6 +49,22 @@ export function placeRoasAfterCostPerPurchase(columns) {
   return withoutRoas;
 }
 
+function profitabilityInsertIndex(columns) {
+  for (const anchor of ["sales", "roas", "cpa"]) {
+    const index = columns.indexOf(anchor);
+    if (index >= 0) return index + 1;
+  }
+  const spendIndex = columns.indexOf("spend");
+  return spendIndex >= 0 ? spendIndex : columns.length;
+}
+
+export function insertSnapchatProfitabilityColumns(columns) {
+  const current = placeRoasAfterCostPerPurchase(columns);
+  const withoutProfit = current.filter((column) => !PROFIT_COLUMNS.includes(column));
+  withoutProfit.splice(profitabilityInsertIndex(withoutProfit), 0, ...PROFIT_COLUMNS);
+  return withoutProfit;
+}
+
 export function migrateCampaignColumnOrder(
   storage = typeof window !== "undefined" ? window.localStorage : null,
 ) {
@@ -60,7 +80,11 @@ export function migrateCampaignColumnOrder(
       current = null;
     }
 
-    const next = placeRoasAfterCostPerPurchase(current);
+    const next = platform === "snapchat"
+      ? insertSnapchatProfitabilityColumns(current)
+      : placeRoasAfterCostPerPurchase(current).filter(
+          (column) => !PROFIT_COLUMNS.includes(column),
+        );
     const serialized = JSON.stringify(next);
     if (storage.getItem(key) !== serialized) {
       storage.setItem(key, serialized);
@@ -68,7 +92,10 @@ export function migrateCampaignColumnOrder(
     }
   });
 
-  storage.setItem(CAMPAIGN_COLUMN_ORDER_VERSION_KEY, "roas-after-cpa-v1");
+  storage.setItem(
+    CAMPAIGN_COLUMN_ORDER_VERSION_KEY,
+    "snapchat-profitability-v1",
+  );
   return changed;
 }
 
