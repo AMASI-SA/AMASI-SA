@@ -30,7 +30,7 @@ describe("AdsPerformanceExplorer", () => {
         expect(toggleMetricVisibility(hidden, "roas").has("roas")).toBe(true);
     });
 
-    test("renders a clear one-day snapshot and keeps metric toggles interactive", async () => {
+    test("renders real one-day bar charts and keeps metric toggles interactive", async () => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
         const container = document.createElement("div");
         document.body.appendChild(container);
@@ -47,7 +47,11 @@ describe("AdsPerformanceExplorer", () => {
         });
 
         expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
-        expect(container.textContent).toContain("ملخص أداء يوم واحد");
+        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-orders"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-sales"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-roas"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-spend"]')).not.toBeNull();
+        expect(container.textContent).toContain("رسم أداء يوم واحد");
         expect(container.textContent).toContain("50.00 ر.س");
 
         const roas = container.querySelector('[data-testid="ads-performance-metric-roas"]');
@@ -57,6 +61,7 @@ describe("AdsPerformanceExplorer", () => {
             roas.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         });
         expect(roas.getAttribute("aria-pressed")).toBe("false");
+        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-roas"]')).toBeNull();
         expect(container.textContent).toContain("3 من 4 مؤشرات ظاهرة");
 
         await act(async () => root.unmount());
