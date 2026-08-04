@@ -8,6 +8,8 @@ on:
       - "frontend/src/index.js"
       - "frontend/src/spaRuntimeRecovery.js"
       - "frontend/src/spaRuntimeRecovery.test.js"
+      - "frontend/src/domMutationCompatibilityGuard.js"
+      - "frontend/src/domMutationCompatibilityGuard.test.js"
       - "frontend/src/components/AppCrashBoundary.jsx"
       - "frontend/src/components/AppCrashBoundary.test.jsx"
       - ".github/workflows/prod-spa-intermittent-blank-recovery-v2.yml"
@@ -30,12 +32,13 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test crash boundary and navigation watchdog
+      - name: Test crash boundary, navigation watchdog and DOM guard
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/spaRuntimeRecovery.test.js
+          src/domMutationCompatibilityGuard.test.js
           src/components/AppCrashBoundary.test.jsx
       - name: Build Production frontend
         env:
@@ -46,12 +49,17 @@ jobs:
         run: |
           INDEX=frontend/src/index.js
           RUNTIME=frontend/src/spaRuntimeRecovery.js
+          GUARD=frontend/src/domMutationCompatibilityGuard.js
           BOUNDARY=frontend/src/components/AppCrashBoundary.jsx
           grep -q 'AppCrashBoundary' "$INDEX"
+          grep -q 'installDomMutationCompatibilityGuard' "$INDEX"
           grep -q 'installSpaRuntimeRecovery' "$INDEX"
           grep -q 'data-mezan-crash-recovery' "$BOUNDARY"
           grep -q 'RECOVERY_COOLDOWN_MS = 15 \* 60 \* 1000' "$RUNTIME"
           grep -q 'blank_application_shell' "$RUNTIME"
           grep -q 'unhandledrejection' "$RUNTIME"
           grep -q 'MutationObserver' "$RUNTIME"
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$RUNTIME" "$BOUNDARY"
+          grep -q 'child.parentNode !== parent' "$GUARD"
+          grep -q 'dom_remove_child_parent_mismatch' "$GUARD"
+          grep -q 'only_skips_parent_mismatch: true' "$GUARD"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$RUNTIME" "$GUARD" "$BOUNDARY"

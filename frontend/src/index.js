@@ -32,9 +32,11 @@ import App from "@/App";
 import AppCrashBoundary from "@/components/AppCrashBoundary";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
+import { installDomMutationCompatibilityGuard } from "@/domMutationCompatibilityGuard";
 import { installSpaRuntimeRecovery } from "@/spaRuntimeRecovery";
 
 applyPublicLegalNoIndex(window.location.pathname);
+installDomMutationCompatibilityGuard();
 
 const rootElement = document.getElementById("root");
 const root = ReactDOM.createRoot(rootElement);
