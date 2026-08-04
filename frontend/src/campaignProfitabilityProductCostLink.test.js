@@ -1,6 +1,7 @@
 import {
   buildProfitabilityProductCostHref,
   enhanceProfitabilityProductRows,
+  productHrefFromTarget,
   productWorkspaceId,
   resolveProductFromWorkspace,
 } from "./campaignProfitabilityProductCostLink";
@@ -22,7 +23,7 @@ describe("Campaign profitability product cost links", () => {
     expect(url.searchParams.get("lookup_name")).toBe("تعليقة سيارة بالاسم شكل خيل");
   });
 
-  test("adds an Add Cost link to a missing-cost product row", () => {
+  test("makes the missing-cost product cell and CTA open the exact product", () => {
     document.body.innerHTML = `
       <div data-testid="campaign-profitability-dialog">
         <table><tbody><tr>
@@ -34,9 +35,14 @@ describe("Campaign profitability product cost links", () => {
 
     expect(enhanceProfitabilityProductRows(document)).toBe(1);
     const link = document.querySelector('[data-mezan-profit-product-link="true"]');
+    const cell = document.querySelector('[data-mezan-profit-product-cell="true"]');
+    const productName = cell.querySelector(".font-black");
     expect(link).not.toBeNull();
     expect(link.textContent).toBe("فتح المنتج وإضافة التكلفة");
     expect(link.getAttribute("href")).toContain("lookup_sku=AMS10060");
+    expect(cell.getAttribute("role")).toBe("link");
+    expect(cell.getAttribute("tabindex")).toBe("0");
+    expect(productHrefFromTarget(productName)).toBe(link.getAttribute("href"));
     expect(enhanceProfitabilityProductRows(document)).toBe(0);
   });
 
