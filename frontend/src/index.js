@@ -29,18 +29,25 @@ import "@/reviewedProductSortEnhancer";
 import "@/reviewedProductSortThumbnailEnhancer";
 import "@/reviewHideReviewedSecondaryTab";
 import App from "@/App";
+import AppCrashBoundary from "@/components/AppCrashBoundary";
 import PublicLegalApp, { isPublicLegalPath } from "@/PublicLegalApp";
 import { applyPublicLegalNoIndex } from "@/publicLegalNoIndex";
+import { installSpaRuntimeRecovery } from "@/spaRuntimeRecovery";
 
 applyPublicLegalNoIndex(window.location.pathname);
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+const rootElement = document.getElementById("root");
+const root = ReactDOM.createRoot(rootElement);
 const RootComponent = isPublicLegalPath(window.location.pathname)
   ? PublicLegalApp
   : App;
 
 root.render(
   <React.StrictMode>
-    <RootComponent />
+    <AppCrashBoundary>
+      <RootComponent />
+    </AppCrashBoundary>
   </React.StrictMode>,
 );
+
+installSpaRuntimeRecovery();
