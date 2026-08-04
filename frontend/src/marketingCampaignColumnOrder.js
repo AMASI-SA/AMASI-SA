@@ -1,18 +1,18 @@
 export const CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX = "mezan-campaign-manager-columns-v1:";
 export const CAMPAIGN_COLUMN_ORDER_VERSION_KEY = "mezan-campaign-column-order-v2";
 
-export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = Object.freeze([
+export const CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES = Object.freeze([
   "name",
   "status",
   "delivery",
   "orders",
   "cpa",
   "roas",
+  "spend",
   "sales",
   "product_cost",
   "profit",
   "profit_margin",
-  "spend",
   "impressions",
   "cpm",
   "clicks",
@@ -22,13 +22,19 @@ export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = Object.freeze([
   "account",
 ]);
 
+// Backward-compatible export for existing tests and imports. ROAS remains
+// directly after CPA, while Spend now sits between ROAS and Salla Sales.
+export const CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA = (
+  CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES
+);
+
 const PROFIT_COLUMNS = Object.freeze(["product_cost", "profit", "profit_margin"]);
-const KNOWN_COLUMNS = new Set(CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA);
+const KNOWN_COLUMNS = new Set(CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES);
 const PLATFORM_KEYS = Object.freeze(["snapchat", "meta", "tiktok", "google", "all"]);
 
 export function placeRoasAfterCostPerPurchase(columns) {
   if (!Array.isArray(columns)) {
-    return [...CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA];
+    return [...CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES];
   }
 
   const unique = [];
@@ -40,7 +46,7 @@ export function placeRoasAfterCostPerPurchase(columns) {
     unique.push(id);
   });
 
-  if (!unique.length) return [...CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA];
+  if (!unique.length) return [...CAMPAIGN_COLUMN_ORDER_SPEND_BEFORE_SALLA_SALES];
   if (!unique.includes("roas") || !unique.includes("cpa")) return unique;
 
   const withoutRoas = unique.filter((column) => column !== "roas");
@@ -49,17 +55,26 @@ export function placeRoasAfterCostPerPurchase(columns) {
   return withoutRoas;
 }
 
+export function placeSpendBeforeSallaSales(columns) {
+  const current = placeRoasAfterCostPerPurchase(columns);
+  if (!current.includes("spend") || !current.includes("sales")) return current;
+
+  const withoutSpend = current.filter((column) => column !== "spend");
+  const salesIndex = withoutSpend.indexOf("sales");
+  withoutSpend.splice(salesIndex, 0, "spend");
+  return withoutSpend;
+}
+
 function profitabilityInsertIndex(columns) {
-  for (const anchor of ["sales", "roas", "cpa"]) {
+  for (const anchor of ["sales", "spend", "roas", "cpa"]) {
     const index = columns.indexOf(anchor);
     if (index >= 0) return index + 1;
   }
-  const spendIndex = columns.indexOf("spend");
-  return spendIndex >= 0 ? spendIndex : columns.length;
+  return columns.length;
 }
 
 export function insertSnapchatProfitabilityColumns(columns) {
-  const current = placeRoasAfterCostPerPurchase(columns);
+  const current = placeSpendBeforeSallaSales(columns);
   const withoutProfit = current.filter((column) => !PROFIT_COLUMNS.includes(column));
   withoutProfit.splice(profitabilityInsertIndex(withoutProfit), 0, ...PROFIT_COLUMNS);
   return withoutProfit;
@@ -82,7 +97,7 @@ export function migrateCampaignColumnOrder(
 
     const next = platform === "snapchat"
       ? insertSnapchatProfitabilityColumns(current)
-      : placeRoasAfterCostPerPurchase(current).filter(
+      : placeSpendBeforeSallaSales(current).filter(
           (column) => !PROFIT_COLUMNS.includes(column),
         );
     const serialized = JSON.stringify(next);
@@ -94,7 +109,7 @@ export function migrateCampaignColumnOrder(
 
   storage.setItem(
     CAMPAIGN_COLUMN_ORDER_VERSION_KEY,
-    "snapchat-profitability-v1",
+    "spend-before-salla-sales-v1",
   );
   return changed;
 }
