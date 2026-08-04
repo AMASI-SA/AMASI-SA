@@ -15,8 +15,8 @@ import {
 } from "@phosphor-icons/react";
 
 import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
+import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
-import CampaignManagerTable from "../components/marketing/CampaignManagerTable";
 import { isValidISODate } from "../components/DateInput";
 import { todaySA } from "../lib/dates";
 import {
@@ -25,6 +25,7 @@ import {
     MARKETING_PLATFORM_CONFIG,
     MARKETING_PLATFORMS,
 } from "../services/marketingPerformance";
+import { getSnapchatAdSquadPerformance } from "../services/snapchatAdSquadPerformance";
 
 export const MARKETING_PLATFORM_PROVIDERS = MARKETING_PLATFORMS;
 export { isMarketingPerformanceProvider as isMarketingPlatformProvider };
@@ -193,6 +194,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
     const [activeTab, setActiveTab] = useState("overview");
+    const [entityLevel, setEntityLevel] = useState("campaigns");
+    const [adSquadPage, setAdSquadPage] = useState(1);
+    const [adSquadReport, setAdSquadReport] = useState(null);
+    const [adSquadLoading, setAdSquadLoading] = useState(false);
+    const [adSquadError, setAdSquadError] = useState("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (silent) setRefreshing(true);
@@ -221,20 +227,57 @@ export default function MarketingPlatformWorkspace({ provider }) {
         }
     }, [appliedQuery, appliedRange, page, platform]);
 
+    const selectedAccountId = data?.accounts?.[0]?.account_id || null;
+    const loadAdSquads = useCallback(async () => {
+        if (platform !== "snapchat" || !selectedAccountId) return;
+        setAdSquadLoading(true);
+        setAdSquadError("");
+        try {
+            const result = await getSnapchatAdSquadPerformance({
+                accountId: selectedAccountId,
+                dateFrom: appliedRange.dateFrom,
+                dateTo: appliedRange.dateTo,
+                query: appliedQuery,
+                page: adSquadPage,
+                limit: 25,
+            });
+            setAdSquadReport(result);
+        } catch (loadError) {
+            const detail = loadError?.response?.data?.detail;
+            setAdSquadError(
+                typeof detail === "string"
+                    ? detail
+                    : detail?.message || "تعذر تحميل المجموعات الإعلانية.",
+            );
+        } finally {
+            setAdSquadLoading(false);
+        }
+    }, [adSquadPage, appliedQuery, appliedRange, platform, selectedAccountId]);
+
     useEffect(() => {
         const currentToday = todaySA();
         setDateFrom(currentToday);
         setDateTo(currentToday);
         setAppliedRange({ dateFrom: currentToday, dateTo: currentToday });
         setPage(1);
+        setAdSquadPage(1);
         setAppliedQuery("");
         setQuery("");
         setActiveTab("overview");
+        setEntityLevel("campaigns");
+        setAdSquadReport(null);
+        setAdSquadError("");
     }, [platform]);
 
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        if (activeTab === "campaigns" && entityLevel === "ad_squads") {
+            loadAdSquads();
+        }
+    }, [activeTab, entityLevel, loadAdSquads]);
 
     const totals = data?.totals || {};
     const connection = data?.connection || {};
@@ -251,6 +294,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
             return;
         }
         setPage(1);
+        setAdSquadPage(1);
         setAppliedRange({ dateFrom, dateTo });
         setAppliedQuery(query.trim());
     }
@@ -260,7 +304,13 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setDateFrom(range.dateFrom);
         setDateTo(range.dateTo);
         setPage(1);
+        setAdSquadPage(1);
         setAppliedRange(range);
+    }
+
+    function refreshReports() {
+        load({ silent: true });
+        if (entityLevel === "ad_squads") loadAdSquads();
     }
 
     if (loading && !data) return <LoadingState />;
@@ -298,12 +348,12 @@ export default function MarketingPlatformWorkspace({ provider }) {
                         </button>
                         <button
                             type="button"
-                            onClick={() => load({ silent: true })}
-                            disabled={refreshing}
+                            onClick={refreshReports}
+                            disabled={refreshing || adSquadLoading}
                             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-200 px-5 text-sm font-black text-slate-950 transition hover:bg-emerald-100 disabled:opacity-60"
                             data-testid="marketing-platform-refresh"
                         >
-                            <ArrowClockwise size={19} weight="bold" className={refreshing ? "animate-spin" : ""} />
+                            <ArrowClockwise size={19} weight="bold" className={refreshing || adSquadLoading ? "animate-spin" : ""} />
                             تحديث التقرير
                         </button>
                     </div>
@@ -330,13 +380,13 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     />
                 </label>
                 <label className="block">
-                    <span className="mb-1 block text-xs font-black text-slate-600">بحث في الحملات</span>
+                    <span className="mb-1 block text-xs font-black text-slate-600">بحث في الحملات والمجموعات</span>
                     <span className="relative block">
                         <MagnifyingGlass size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
-                            placeholder="اسم الحملة أو رقمها أو الحساب"
+                            placeholder="اسم الحملة أو المجموعة أو رقمها"
                             className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pr-10 pl-3 text-sm outline-none focus:border-emerald-400 focus:bg-white"
                         />
                     </span>
@@ -385,15 +435,25 @@ export default function MarketingPlatformWorkspace({ provider }) {
             {activeTab === "overview" && <InsightPanel insights={data?.insights || []} />}
 
             {activeTab === "campaigns" && (
-                <CampaignManagerTable
+                <AdsEntityLevelWorkspace
                     platform={platform}
                     platformLabel={config.label}
+                    entityLevel={entityLevel}
+                    onEntityLevelChange={(level) => {
+                        setEntityLevel(level);
+                        setAdSquadPage(1);
+                    }}
                     campaigns={data?.campaigns || []}
-                    totals={totals}
-                    pagination={pagination}
-                    page={page}
-                    onPageChange={setPage}
+                    campaignTotals={totals}
+                    campaignPagination={pagination}
+                    campaignPage={page}
+                    onCampaignPageChange={setPage}
                     readOnly={data?.policy?.mutations_allowed !== true}
+                    adSquadReport={adSquadReport}
+                    adSquadPage={adSquadPage}
+                    onAdSquadPageChange={setAdSquadPage}
+                    adSquadLoading={adSquadLoading}
+                    adSquadError={adSquadError}
                 />
             )}
 
