@@ -33,6 +33,7 @@ export const MARKETING_PLATFORM_CONFIG = Object.freeze({
 });
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const HOUR_RE = /^(?:[01]\d|2[0-3]):00$/;
 
 export function isMarketingPerformanceProvider(value) {
     return MARKETING_PLATFORMS.includes(String(value || "").trim());
@@ -73,6 +74,25 @@ function normalizeTotals(value = {}) {
         last_observed_at: nullableText(value.last_observed_at),
         last_observed_date: nullableText(value.last_observed_date),
         data_complete: value.data_complete === true,
+    };
+}
+
+function normalizeHourly(value = {}) {
+    const hour = HOUR_RE.test(value.hour || "")
+        ? value.hour
+        : `${String(number(value.hour_index, { min: 0, integer: true }) || 0).padStart(2, "0")}:00`;
+    return {
+        date: ISO_DATE_RE.test(value.date || "") ? value.date : null,
+        hour,
+        hour_index: number(value.hour_index, { min: 0, integer: true }) || 0,
+        spend_sar: number(value.spend_sar, { min: 0 }) || 0,
+        sales_sar: number(value.sales_sar, { min: 0 }) || 0,
+        orders: number(value.orders, { min: 0, integer: true }) || 0,
+        roas: number(value.roas, { min: 0 }),
+        cpa_sar: number(value.cpa_sar, { min: 0 }),
+        observed: value.observed === true,
+        is_future: value.is_future === true,
+        result_source: text(value.result_source, "platform"),
     };
 }
 
@@ -160,6 +180,9 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
                 .filter((row) => ISO_DATE_RE.test(row?.date || ""))
                 .map((row) => ({ date: row.date, ...normalizeTotals(row) }))
             : [],
+        hourly: Array.isArray(value.hourly)
+            ? value.hourly.map(normalizeHourly).sort((left, right) => left.hour_index - right.hour_index)
+            : [],
         accounts: Array.isArray(value.accounts)
             ? value.accounts.map(normalizeAccount).filter(Boolean)
             : [],
@@ -174,6 +197,10 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
         },
         source: {
             performance_collection: text(value.source?.performance_collection),
+            hourly_collection: text(value.source?.hourly_collection),
+            hourly_source_mode: text(value.source?.hourly_source_mode),
+            hourly_rows: number(value.source?.hourly_rows, { min: 0, integer: true }) || 0,
+            hourly_available: value.source?.hourly_available === true,
             entity_collection: text(value.source?.entity_collection),
             attribution_model: text(value.source?.attribution_model),
             selected_account_count: number(value.source?.selected_account_count, { min: 0, integer: true }) || 0,
@@ -246,6 +273,7 @@ export function adaptAdsManager(platform, overview) {
             date: row.date,
             ...normalizeTotals({ spend_sar: row[config.adsProvider] }),
         })),
+        hourly: [],
         accounts: [],
         campaigns: (overview.campaigns || [])
             .filter((row) => row.provider === config.adsProvider)
@@ -304,6 +332,7 @@ async function googleWorkspace() {
         connection: connectionFromIntegration(integration),
         totals: normalizeTotals({}),
         daily: [],
+        hourly: [],
         accounts: [],
         campaigns: [],
         campaign_pagination: { page: 1, limit: 25, total: 0, pages: 0 },
