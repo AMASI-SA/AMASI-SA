@@ -5,6 +5,8 @@ import {
 
 const DIALOG_SELECTOR = '[data-testid="campaign-profitability-dialog"]';
 const LINK_ATTRIBUTE = "data-mezan-profit-product-link";
+const CELL_ATTRIBUTE = "data-mezan-profit-product-cell";
+const CELL_HREF_ATTRIBUTE = "data-mezan-profit-product-href";
 const LOOKUP_SKU_PARAM = "lookup_sku";
 const LOOKUP_NAME_PARAM = "lookup_name";
 const RESOLVING_KEY = "mezan-profit-product-cost-link-resolving";
@@ -75,6 +77,11 @@ function missingCostFromRow(row) {
   return value === "—" || value.includes("غير مكتملة") || value.includes("غير محسوم");
 }
 
+export function productHrefFromTarget(target) {
+  const cell = target?.closest?.(`[${CELL_ATTRIBUTE}]`);
+  return clean(cell?.getAttribute(CELL_HREF_ATTRIBUTE));
+}
+
 export function enhanceProfitabilityProductRows(root = document) {
   const dialog = root.querySelector(DIALOG_SELECTOR);
   if (!dialog) return 0;
@@ -87,9 +94,20 @@ export function enhanceProfitabilityProductRows(root = document) {
     if (!identity.sku && !identity.name) continue;
 
     const missingCost = missingCostFromRow(row);
+    const href = buildProfitabilityProductCostHref(identity);
+    productCell.setAttribute(CELL_ATTRIBUTE, "true");
+    productCell.setAttribute(CELL_HREF_ATTRIBUTE, href);
+    productCell.setAttribute("role", "link");
+    productCell.setAttribute("tabindex", "0");
+    productCell.classList.add("cursor-pointer");
+    productCell.setAttribute(
+      "aria-label",
+      `فتح المنتج: ${identity.name || identity.sku}`,
+    );
+
     const link = document.createElement("a");
     link.setAttribute(LINK_ATTRIBUTE, "true");
-    link.href = buildProfitabilityProductCostHref(identity);
+    link.href = href;
     link.className = [
       "mt-2 inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-black transition",
       missingCost
@@ -163,6 +181,20 @@ function scheduleEnhancement() {
   });
 }
 
+function navigateFromProductCell(event) {
+  if (event.target?.closest?.("a,button,input,select,textarea")) return;
+  const href = productHrefFromTarget(event.target);
+  if (href) window.location.assign(href);
+}
+
+function navigateFromProductCellKeyboard(event) {
+  if (!['Enter', ' '].includes(event.key)) return;
+  const href = productHrefFromTarget(event.target);
+  if (!href) return;
+  event.preventDefault();
+  window.location.assign(href);
+}
+
 export function installCampaignProfitabilityProductCostLinks() {
   if (typeof window === "undefined" || typeof document === "undefined") return false;
   if (window.__mezanCampaignProfitabilityProductCostLinksInstalled) return false;
@@ -170,6 +202,8 @@ export function installCampaignProfitabilityProductCostLinks() {
 
   const observer = new MutationObserver(scheduleEnhancement);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("click", navigateFromProductCell);
+  document.addEventListener("keydown", navigateFromProductCellKeyboard);
   scheduleEnhancement();
 
   const params = new URLSearchParams(window.location.search || "");
