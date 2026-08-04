@@ -9,6 +9,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_ASSIGNED,
     FileSchedulePatchRequest,
     _can_start_assigned_file,
+    _piece_upsert_update,
     build_duration_history,
     build_piece_documents,
     inherit_required_services,
@@ -136,6 +137,33 @@ def test_batch_units_become_assigned_piece_records_for_file_employee():
     assert all(row["responsible_employee_id"] == "employee-1" for row in documents)
     assert all(row["remaining_service_count"] == 1 for row in documents)
     assert documents[0]["estimated_due_at"] == assigned_at + timedelta(minutes=90)
+
+
+def test_piece_upsert_never_reuses_a_path_across_mongodb_operators():
+    updated_at = datetime(2026, 8, 4, 1, 0, tzinfo=timezone.utc)
+    update = _piece_upsert_update(
+        {
+            "id": "piece-1",
+            "user_id": "owner-1",
+            "batch_id": "batch-1",
+            "file_number": "PF-20260804-0005",
+            "file_title": "تجهيز المنتجات",
+            "responsible_employee_id": "employee-1",
+            "responsible_employee_name": "محمد",
+            "status": PIECE_STATUS_ASSIGNED,
+            "created_at": updated_at - timedelta(minutes=5),
+            "updated_at": updated_at - timedelta(minutes=5),
+        },
+        updated_at=updated_at,
+    )
+
+    insert_paths = set(update["$setOnInsert"])
+    mutable_paths = set(update["$set"])
+    assert insert_paths.isdisjoint(mutable_paths)
+    assert update["$setOnInsert"]["id"] == "piece-1"
+    assert update["$set"]["file_number"] == "PF-20260804-0005"
+    assert update["$set"]["responsible_employee_id"] == "employee-1"
+    assert update["$set"]["updated_at"] == updated_at
 
 
 def test_ready_file_cannot_materialize_with_zero_or_partial_piece_records():
