@@ -58,6 +58,8 @@ PERMISSIONS = {
     "inventory.preparation.create",
     "inventory.preparation.work",
     "inventory.preparation.receive",
+    "suppliers.read",
+    "suppliers.manage",
     "inventory.salla_sync.read",
     "inventory.salla_sync.manage_mappings",
     "inventory.salla_sync.publish",
@@ -70,6 +72,7 @@ ROLE_CATALOG = {
         "products.cost.read", "products.media.read", "products.media.upload",
         "products.media.edit", "products.media.delete", "products.media.reorder",
         "products.media.publish", "products.ai.recommend", "audit.read",
+        "suppliers.read",
     }),
     "product_operator": sorted({
         "products.read", "products.create", "products.review", "products.cost.read",
@@ -82,6 +85,7 @@ ROLE_CATALOG = {
         "inventory.preparation.read", "inventory.preparation.create",
         "inventory.preparation.receive",
         "inventory.salla_sync.read",
+        "suppliers.read",
     }),
     "warehouse_operator": sorted({
         "products.read", "products.cost.read",
@@ -91,6 +95,7 @@ ROLE_CATALOG = {
         "inventory.preparation.read", "inventory.preparation.create",
         "inventory.preparation.work", "inventory.preparation.receive",
         "inventory.salla_sync.read",
+        "suppliers.read",
     }),
     "shipping_operator": sorted({
         "products.read",

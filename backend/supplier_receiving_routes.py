@@ -2,8 +2,8 @@
 
 An authorised receiver opens a temporary supplier-scoped session and scans
 physical preparation pieces.  A scan records who prepared and who received
-the piece independently, while deliberately deferring supplier service
-attribution, invoices, liabilities and every Salla/Qoyod write.
+the piece independently, applies the approved Mezan 2 supplier-service link,
+and deliberately defers invoices, liabilities and every Salla/Qoyod write.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from fulfillment_v2_routes import _actor_context, _require_permission
+from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from preparation_piece_barcode import parse_preparation_piece_barcode
 from preparation_piece_operations import (
     PIECES,
@@ -31,7 +32,7 @@ from preparation_piece_operations import (
 )
 from tz_utils import riyadh_now_aware
 
-SUPPLIERS = "suppliers"
+SUPPLIERS = MEZAN_SUPPLIERS_V2
 SESSIONS = "mezan_supplier_receiving_sessions_v1"
 RECEIVING_EVENTS = "mezan_supplier_receiving_events_v1"
 RECEIVE_PERMISSION = "inventory.preparation.receive"
@@ -98,9 +99,10 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "reference": _text(row.get("reference")),
         "status": _text(row.get("status")),
         "supplier": dict(row.get("supplier_snapshot") or {}),
-        "supplier_context_only": True,
+        "supplier_context_only": False,
+        "supplier_operational_linked": True,
         "supplier_service_link_status": _text(row.get("supplier_service_link_status"))
-        or "pending_service_approval",
+        or "catalog_linked",
         "opened_by": _text(row.get("opened_by")),
         "opened_by_name": _text(row.get("opened_by_name")),
         "opened_at": row.get("opened_at"),
@@ -161,6 +163,52 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def supplier_piece_service_blocker(
+    piece: dict[str, Any],
+    session: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Require the selected Mezan 2 supplier to cover every piece service."""
+    required_services = [
+        row for row in (piece.get("services") or [])
+        if _text(row.get("service_id"))
+    ]
+    if not required_services:
+        return {
+            "code": "supplier_piece_services_missing",
+            "message": (
+                "هذه القطعة لا تحتوي على خدمة تجهيز مرتبطة. "
+                "اربط المنتج بخدمة من مكونات المنتجات قبل الاستلام من المورد."
+            ),
+        }
+    supplier = dict(session.get("supplier_snapshot") or {})
+    provided_ids = {
+        _text(row.get("service_id"))
+        for row in (supplier.get("service_links") or [])
+        if _text(row.get("service_id"))
+    }
+    missing = [
+        {
+            "service_id": _text(row.get("service_id")),
+            "service_name": _text(row.get("service_name"))
+            or _text(row.get("service_code"))
+            or _text(row.get("service_id")),
+        }
+        for row in required_services
+        if _text(row.get("service_id")) not in provided_ids
+    ]
+    if not missing:
+        return None
+    return {
+        "code": "supplier_piece_service_mismatch",
+        "message": (
+            "المورد المحدد لا يقدم جميع الخدمات المطلوبة لهذه القطعة."
+        ),
+        "supplier_id": _text(supplier.get("id")),
+        "supplier_name": _text(supplier.get("company_name")),
+        "missing_services": missing,
+    }
+
+
 def supplier_receipt_piece_patch(
     *,
     session: dict[str, Any],
@@ -169,7 +217,13 @@ def supplier_receipt_piece_patch(
     barcode: str,
     received_at: datetime,
 ) -> dict[str, Any]:
-    """Build the piece mutation without creating a formal supplier link."""
+    """Build the operational supplier link without accounting side effects."""
+    supplier = dict(session.get("supplier_snapshot") or {})
+    supplier_service_ids = [
+        _text(row.get("service_id"))
+        for row in (supplier.get("service_links") or [])
+        if _text(row.get("service_id"))
+    ]
     return {
         "status": PIECE_STATUS_RECEIVED,
         "execution_status": "received_from_supplier",
@@ -178,7 +232,10 @@ def supplier_receipt_piece_patch(
         "received_by_name": _actor_name(actor),
         "supplier_receiving_session_id": _text(session.get("id")),
         "supplier_receiving_reference": _text(session.get("reference")),
-        "supplier_service_link_status": "pending_service_approval",
+        "supplier_id": _text(supplier.get("id")),
+        "supplier_name": _text(supplier.get("company_name")),
+        "supplier_service_ids": supplier_service_ids,
+        "supplier_service_link_status": "catalog_linked",
         "supplier_receiving_scanned_barcode": _text(barcode),
         "receipt_event_id": uuid.uuid5(
             uuid.NAMESPACE_URL,
@@ -379,13 +436,19 @@ def make_supplier_receiving_router(
         suppliers = (
             await db[SUPPLIERS]
             .find(
-                {"user_id": merchant_id, "status": {"$ne": "inactive"}},
+                {
+                    "user_id": merchant_id,
+                    "status": {"$ne": "inactive"},
+                    "service_ids.0": {"$exists": True},
+                },
                 {
                     "_id": 0,
                     "id": 1,
                     "company_name": 1,
                     "contact_person": 1,
                     "status": 1,
+                    "service_ids": 1,
+                    "service_links": 1,
                 },
             )
             .sort("company_name", 1)
@@ -426,6 +489,8 @@ def make_supplier_receiving_router(
             "legacy_order_barcode_requires_unique_piece": True,
             "financial_invoice_created_automatically": False,
             "liability_created_automatically": False,
+            "supplier_source": "mezan_suppliers_v2",
+            "legacy_supplier_data_used": False,
             "mezan_only": True,
         }
 
@@ -484,12 +549,19 @@ def make_supplier_receiving_router(
                 "company_name": 1,
                 "contact_person": 1,
                 "status": 1,
+                "service_ids": 1,
+                "service_links": 1,
             },
         )
         if not supplier:
             raise HTTPException(
                 status_code=404,
                 detail={"code": "supplier_receiving_supplier_not_found"},
+            )
+        if not list(supplier.get("service_links") or []):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_supplier_services_required"},
             )
         now = _now()
         session_id = f"supplier-receiving-{uuid.uuid4().hex}"
@@ -501,8 +573,9 @@ def make_supplier_receiving_router(
             "status": "open",
             "supplier_id": _text(supplier.get("id")),
             "supplier_snapshot": supplier,
-            "supplier_context_only": True,
-            "supplier_service_link_status": "pending_service_approval",
+            "supplier_context_only": False,
+            "supplier_operational_linked": True,
+            "supplier_service_link_status": "catalog_linked",
             "opened_by": context["actor_id"],
             "opened_by_name": _actor_name(user),
             "opened_at": now,
@@ -635,6 +708,9 @@ def make_supplier_receiving_router(
             blocker = piece_scan_blocker(piece)
             if blocker:
                 raise HTTPException(status_code=409, detail=blocker)
+            service_blocker = supplier_piece_service_blocker(piece, session)
+            if service_blocker:
+                raise HTTPException(status_code=409, detail=service_blocker)
 
             now = _now()
             patch = supplier_receipt_piece_patch(
@@ -760,7 +836,7 @@ def make_supplier_receiving_router(
                 updated_piece.get("remaining_service_count") or 0
             ),
             "supplier_context": dict(session.get("supplier_snapshot") or {}),
-            "supplier_service_link_status": "pending_service_approval",
+            "supplier_service_link_status": "catalog_linked",
             "scanned_barcode": barcode,
             "occurred_at": now,
             "financial_invoice_created": False,
@@ -784,7 +860,7 @@ def make_supplier_receiving_router(
             "piece": _public_piece(updated_piece),
             "session": _public_session(session),
             "scan": {key: value for key, value in event.items() if key != "user_id"},
-            "supplier_service_link_created": False,
+            "supplier_service_link_applied": True,
             "financial_invoice_created": False,
             "liability_created": False,
             "salla_updated": False,
@@ -839,7 +915,7 @@ def make_supplier_receiving_router(
                     "closed_by": context["actor_id"],
                     "closed_by_name": _actor_name(user),
                     "close_note": _text(payload.note) or None,
-                    "supplier_service_link_status": "pending_service_approval",
+                    "supplier_service_link_status": "catalog_linked",
                     "updated_at": now,
                 }
             },
@@ -877,7 +953,7 @@ def make_supplier_receiving_router(
                     "actor_name": _actor_name(user),
                     "note": _text(payload.note) or None,
                     "occurred_at": now,
-                    "supplier_service_link_status": "pending_service_approval",
+                    "supplier_service_link_status": "catalog_linked",
                     "financial_invoice_created": False,
                     "liability_created": False,
                     "mezan_only": True,
@@ -891,7 +967,7 @@ def make_supplier_receiving_router(
             "ok": True,
             "session": _public_session(updated),
             "next_step": "supplier_service_invoice_draft",
-            "supplier_service_link_created": False,
+            "supplier_service_link_applied": True,
             "financial_invoice_created": False,
             "liability_created": False,
             "salla_updated": False,

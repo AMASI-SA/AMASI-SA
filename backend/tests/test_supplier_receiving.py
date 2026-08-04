@@ -18,6 +18,7 @@ from reviewed_preparation_batches import _line_from_batch_storage
 from supplier_receiving_routes import (
     make_supplier_receiving_router,
     piece_scan_blocker,
+    supplier_piece_service_blocker,
     supplier_receipt_piece_patch,
 )
 
@@ -90,7 +91,7 @@ def test_receiving_rejects_duplicate_cancelled_and_blocked_pieces():
     )
 
 
-def test_receipt_records_preparer_and_receiver_without_formal_supplier_link():
+def test_receipt_records_operational_supplier_link_without_accounting_write():
     received_at = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
     patch = supplier_receipt_piece_patch(
         session={
@@ -98,6 +99,11 @@ def test_receipt_records_preparer_and_receiver_without_formal_supplier_link():
             "reference": "SR-20260804-ABC123",
             "user_id": "owner-1",
             "supplier_id": "supplier-1",
+            "supplier_snapshot": {
+                "id": "supplier-1",
+                "company_name": "مورد أماسي",
+                "service_links": [{"service_id": "engrave"}],
+            },
         },
         actor={"id": "receiver-2", "name": "موظف الاستلام"},
         piece_id="piece-1",
@@ -108,12 +114,39 @@ def test_receipt_records_preparer_and_receiver_without_formal_supplier_link():
     assert patch["status"] == PIECE_STATUS_RECEIVED
     assert patch["received_by_id"] == "receiver-2"
     assert patch["supplier_receiving_session_id"] == "session-1"
-    assert patch["supplier_service_link_status"] == "pending_service_approval"
-    assert "supplier_id" not in patch
-    assert "supplier_name" not in patch
+    assert patch["supplier_service_link_status"] == "catalog_linked"
+    assert patch["supplier_id"] == "supplier-1"
+    assert patch["supplier_name"] == "مورد أماسي"
+    assert patch["supplier_service_ids"] == ["engrave"]
     assert "invoice_id" not in patch
     assert patch["salla_updated"] is False
     assert patch["qoyod_updated"] is False
+
+
+def test_piece_services_must_be_covered_by_selected_mezan_supplier():
+    session = {
+        "supplier_snapshot": {
+            "id": "supplier-1",
+            "company_name": "مورد الحفر",
+            "service_links": [{"service_id": "engrave"}],
+        }
+    }
+    assert supplier_piece_service_blocker(
+        {"services": [{"service_id": "engrave", "service_name": "حفر الاسم"}]},
+        session,
+    ) is None
+
+    mismatch = supplier_piece_service_blocker(
+        {"services": [{"service_id": "print", "service_name": "طباعة"}]},
+        session,
+    )
+    assert mismatch["code"] == "supplier_piece_service_mismatch"
+    assert mismatch["missing_services"] == [
+        {"service_id": "print", "service_name": "طباعة"}
+    ]
+
+    missing_plan = supplier_piece_service_blocker({"services": []}, session)
+    assert missing_plan["code"] == "supplier_piece_services_missing"
 
 
 def test_router_exposes_catalog_open_scan_get_and_close_contracts():
@@ -132,7 +165,7 @@ def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     assert ("/supplier-receiving-v1/sessions/{session_id}/close", "POST") in routes
 
 
-def test_scan_contract_is_atomic_and_never_completes_services_or_accounting():
+def test_scan_contract_is_atomic_and_never_creates_accounting():
     source = inspect.getsource(make_supplier_receiving_router)
 
     assert "find_one_and_update" in source
@@ -140,5 +173,6 @@ def test_scan_contract_is_atomic_and_never_completes_services_or_accounting():
     assert '"supplier_piece_already_received"' not in source  # central blocker owns it
     assert '"financial_invoice_created": False' in source
     assert '"liability_created": False' in source
-    assert '"supplier_service_link_created": False' in source
+    assert '"supplier_service_link_applied": True' in source
+    assert "supplier_piece_service_blocker(piece, session)" in source
     assert '"completed_at"' not in source

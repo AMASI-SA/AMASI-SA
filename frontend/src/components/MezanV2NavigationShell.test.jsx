@@ -42,6 +42,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/inventory-receiving-v2",
         "/products-v2",
         "/components-v2",
+        "/suppliers-v2",
         "/integrations-v2",
         "/customer-intelligence",
         "/ads-manager",
@@ -122,6 +123,14 @@ test("inventory receiving belongs to products rather than orders", () => {
         search: "",
     });
     expect(section?.id).toBe("products");
+});
+
+test("Mezan 2 exposes an independent suppliers section", () => {
+    const suppliers = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "suppliers");
+    expect(suppliers.items).toEqual([
+        { to: "/suppliers-v2", label: "الموردون", exactSearch: true },
+    ]);
+    expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
 });
 
 test("marketing report and cost routes are separate from app integration routes", () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     ArrowClockwise,
     Barcode,
@@ -345,7 +346,7 @@ export default function SupplierReceivingWorkspace() {
 
             <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950">
                 <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
-                <div>هذه الجلسة تشغيلية فقط. اختيار المورد لا يربطه رسميًا بالقطعة، ولا ينشئ فاتورة أو مديونية ولا يرسل شيئًا إلى قيود أو سلة.</div>
+                <div>هذه الجلسة تربط مورد ميزان 2 بالقطعة وخدماتها تشغيليًا فقط. لا تنشئ فاتورة أو مديونية ولا ترسل شيئًا إلى قيود أو سلة.</div>
             </div>
 
             {error && (
@@ -363,7 +364,7 @@ export default function SupplierReceivingWorkspace() {
                     <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,2fr)_auto]">
                         <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} disabled={loading || busy === "open"} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black outline-none focus:border-violet-500" aria-label="المورد">
                             <option value="">اختر المورد</option>
-                            {(data?.suppliers || []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.company_name}</option>)}
+                            {(data?.suppliers || []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.company_name} · {supplier.service_links?.map((service) => service.service_name).filter(Boolean).join("، ") || "بلا خدمات"}</option>)}
                         </select>
                         <input value={openNote} onChange={(event) => setOpenNote(event.target.value)} placeholder="ملاحظة للجلسة — اختياري" className="min-h-12 rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-violet-500" />
                         <button type="submit" disabled={!supplierId || loading || busy === "open"} className="min-h-12 rounded-xl bg-violet-700 px-5 text-sm font-black text-white disabled:opacity-50">
@@ -371,7 +372,7 @@ export default function SupplierReceivingWorkspace() {
                         </button>
                     </div>
                     {loading && <div className="mt-4 text-xs font-bold text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جارٍ تحميل الموردين والجلسات…</div>}
-                    {!loading && !(data?.suppliers || []).length && <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">لا يوجد مورد نشط. أضف المورد أولًا من قائمة الموردين.</div>}
+                    {!loading && !(data?.suppliers || []).length && <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">لا يوجد مورد نشط مرتبط بخدمات في ميزان 2. <Link to="/suppliers-v2" className="underline">افتح صفحة الموردين لإضافة المورد وخدماته.</Link></div>}
                 </form>
             ) : (
                 <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
