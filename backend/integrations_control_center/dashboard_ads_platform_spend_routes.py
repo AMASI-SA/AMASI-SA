@@ -20,13 +20,25 @@ from .dashboard_ads_platform_refresh import (
     MAX_REFRESH_DAYS,
     refresh_dashboard_platform_spend,
 )
-from .google_ads_reporting import GOOGLE_ADS_DAILY_COLLECTION
+from .google_ads_reporting import (
+    GOOGLE_ADS_DAILY_COLLECTION,
+    GOOGLE_ADS_PROVIDER_ID,
+)
 from .meta_native_reporting import META_REPORTING_COLLECTION
+from .meta_oauth_security import META_PROVIDER_ID
 from .snapchat_account_hourly_chart import SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION
-from .snapchat_native_data_common import SNAPCHAT_PERFORMANCE_COLLECTION
+from .snapchat_native_data_common import (
+    SNAPCHAT_PERFORMANCE_COLLECTION,
+    SNAPCHAT_PROVIDER_ID,
+)
 from .tiktok_native_reporting import TIKTOK_REPORTING_COLLECTION
+from .tiktok_oauth_security import TIKTOK_PROVIDER_ID
 
 RIYADH_TZ = ZoneInfo("Asia/Riyadh")
+MAX_READ_DAYS = 90
+MAX_DAILY_ROWS = 20_000
+MAX_HOURLY_ROWS = 20_000
+
 DAILY_COLLECTION_BY_PROVIDER = {
     "snapchat": SNAPCHAT_PERFORMANCE_COLLECTION,
     "meta": META_REPORTING_COLLECTION,
@@ -34,13 +46,11 @@ DAILY_COLLECTION_BY_PROVIDER = {
     "google": GOOGLE_ADS_DAILY_COLLECTION,
 }
 INTEGRATION_PROVIDER_BY_KEY = {
-    "snapchat": "snapchat_ads",
-    "meta": "meta_ads",
-    "tiktok": "tiktok_ads",
-    "google": "google_ads",
+    "snapchat": SNAPCHAT_PROVIDER_ID,
+    "meta": META_PROVIDER_ID,
+    "tiktok": TIKTOK_PROVIDER_ID,
+    "google": GOOGLE_ADS_PROVIDER_ID,
 }
-MAX_DAILY_ROWS = 20_000
-MAX_HOURLY_ROWS = 20_000
 
 
 class DashboardPlatformSpendRefreshInput(BaseModel):
@@ -96,6 +106,29 @@ def _date_list(start: date, end: date) -> list[date]:
     return [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
 
 
+async def _selected_account_ids(
+    db: Any,
+    user_id: str,
+    provider: str,
+) -> list[str]:
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "provider": provider,
+        "connection_status": "connected",
+    }
+    if provider == SNAPCHAT_PROVIDER_ID:
+        query["mezan_selected"] = True
+    cursor = db.mezan_integration_accounts_v2.find(
+        query,
+        {"_id": 0, "external_account_id": 1, "ad_account_id": 1},
+    )
+    ids = {
+        str(row.get("ad_account_id") or row.get("external_account_id") or "").strip()
+        for row in await _to_list(cursor, 250)
+    }
+    return sorted(account_id for account_id in ids if account_id)
+
+
 async def _connection_states(db: Any, user_id: str) -> dict[str, dict[str, Any]]:
     cursor = db.mezan_integrations_v2.find(
         {
@@ -137,16 +170,32 @@ async def _daily_spend(
         for day in dates
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
+    selected_snapchat_ids = await _selected_account_ids(
+        db,
+        user_id,
+        SNAPCHAT_PROVIDER_ID,
+    )
 
     for provider, collection_name in DAILY_COLLECTION_BY_PROVIDER.items():
-        cursor = db[collection_name].find(
-            {
-                "user_id": user_id,
-                "date": {
-                    "$gte": start.isoformat(),
-                    "$lte": end.isoformat(),
-                },
+        query: dict[str, Any] = {
+            "user_id": user_id,
+            "provider": INTEGRATION_PROVIDER_BY_KEY[provider],
+            "date": {
+                "$gte": start.isoformat(),
+                "$lte": end.isoformat(),
             },
+        }
+        if provider == "snapchat":
+            # The Snapchat collection contains multiple entity grains. Reading
+            # account rows only prevents campaign/ad duplication in totals.
+            query.update(
+                {
+                    "entity_type": "ad_account",
+                    "ad_account_id": {"$in": selected_snapchat_ids},
+                }
+            )
+        cursor = db[collection_name].find(
+            query,
             {"_id": 0, "date": 1, "spend_sar": 1},
         )
         rows = await _to_list(cursor, MAX_DAILY_ROWS)
@@ -181,10 +230,17 @@ async def _hourly_spend(
         provider: [0.0 for _ in range(24)] for provider in FOUR_PLATFORM_KEYS
     }
     facts = {provider: False for provider in FOUR_PLATFORM_KEYS}
+    selected_snapchat_ids = await _selected_account_ids(
+        db,
+        user_id,
+        SNAPCHAT_PROVIDER_ID,
+    )
 
     snap_cursor = db[SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION].find(
         {
             "user_id": user_id,
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "ad_account_id": {"$in": selected_snapchat_ids},
             "hour_start_utc": {
                 "$gte": utc_start.isoformat(timespec="seconds"),
                 "$lt": utc_end.isoformat(timespec="seconds"),
@@ -260,7 +316,7 @@ async def build_dashboard_platform_spend(
         end = date.fromisoformat(date_to)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="invalid_date_range") from exc
-    if end < start or (end - start).days + 1 > MAX_REFRESH_DAYS:
+    if end < start or (end - start).days + 1 > MAX_READ_DAYS:
         raise HTTPException(status_code=422, detail="invalid_date_range")
 
     daily, daily_facts = await _daily_spend(db, user_id, start, end)
@@ -288,7 +344,12 @@ async def build_dashboard_platform_spend(
             "provider": provider,
             "integration_provider": INTEGRATION_PROVIDER_BY_KEY[provider],
             "connection_status": connection_status,
-            "connected": connection_status in {"connected", "active", "healthy", "data_available"},
+            "connected": connection_status in {
+                "connected",
+                "active",
+                "healthy",
+                "data_available",
+            },
             "daily_available": daily_facts[provider],
             "hourly_available": hourly_facts[provider],
             "total_sar": totals[provider],
@@ -363,6 +424,7 @@ def attach_dashboard_ads_platform_spend_routes(
 
 __all__ = [
     "DashboardPlatformSpendRefreshInput",
+    "MAX_READ_DAYS",
     "attach_dashboard_ads_platform_spend_routes",
     "build_dashboard_platform_spend",
 ]
