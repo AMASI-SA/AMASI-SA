@@ -11,6 +11,7 @@ import {
     XAxis,
     YAxis,
 } from "recharts";
+import { getCampaignReportSnapshot } from "../../marketingCampaignResultSource";
 
 const SERIES = Object.freeze([
     {
@@ -73,6 +74,38 @@ function displayDate(value) {
     return `${Number(match[3])}/${Number(match[2])}`;
 }
 
+export function formatAdsHourLabel(value) {
+    const match = String(value || "").match(/^(\d{2}):00$/);
+    if (!match) return String(value || "");
+    const hour = Number(match[1]);
+    const period = hour < 12 ? "ص" : "م";
+    const display = hour % 12 || 12;
+    return `${display} ${period}`;
+}
+
+export function buildAdsHourlyChartInput(snapshot = {}) {
+    if (
+        snapshot?.date_from !== snapshot?.date_to
+        || snapshot?.source?.hourly_available !== true
+        || !Array.isArray(snapshot?.hourly)
+    ) {
+        return [];
+    }
+    return snapshot.hourly
+        .filter((row) => /^\d{2}:00$/.test(String(row?.hour || "")))
+        .sort((left, right) => Number(left.hour_index || 0) - Number(right.hour_index || 0))
+        .map((row) => ({
+            date: formatAdsHourLabel(row.hour),
+            date_iso: `${row.date || snapshot.date_from}T${row.hour}`,
+            orders: finite(row.orders) || 0,
+            sales_sar: finite(row.sales_sar) || 0,
+            roas: finite(row.roas),
+            spend_sar: finite(row.spend_sar) || 0,
+            observed: row.observed === true,
+            is_future: row.is_future === true,
+        }));
+}
+
 export function buildAdsChartRows(daily = []) {
     const source = Array.isArray(daily) ? daily : [];
     const maximums = Object.fromEntries(SERIES.map((series) => [
@@ -82,7 +115,9 @@ export function buildAdsChartRows(daily = []) {
     return source.map((row) => {
         const output = {
             date: displayDate(row?.date),
-            date_iso: row?.date,
+            date_iso: row?.date_iso || row?.date,
+            observed: row?.observed === true,
+            is_future: row?.is_future === true,
         };
         SERIES.forEach((series) => {
             const raw = finite(row?.[series.valueKey]);
@@ -102,11 +137,13 @@ export function toggleMetricVisibility(current, metricId) {
     return next;
 }
 
-function ChartTooltip({ active, label, payload }) {
+function ChartTooltip({ active, label, payload, granularity = "day" }) {
     if (!active || !Array.isArray(payload) || !payload.length) return null;
     return (
         <div className="min-w-56 rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-xl" dir="rtl">
-            <div className="mb-3 font-black text-slate-900">التاريخ: {label}</div>
+            <div className="mb-3 font-black text-slate-900">
+                {granularity === "hour" ? "الوقت" : "التاريخ"}: {label}
+            </div>
             <div className="space-y-2">
                 {payload.map((entry) => {
                     const series = SERIES.find((item) => item.id === entry.dataKey);
@@ -172,7 +209,7 @@ function SingleDaySnapshot({ row, visibleSeries }) {
                 <div>
                     <h3 className="text-lg font-black text-slate-900">رسم أداء يوم واحد</h3>
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        كل مؤشر يظهر كرسم أعمدة مستقل بمقياسه الحقيقي، وتظهر القيمة الأصلية فوق الرسم وعند المرور.
+                        بيانات الساعات قيد أول مزامنة؛ يظهر هذا الرسم المؤقت حتى وصول صفوف HOUR من Snapchat.
                     </p>
                 </div>
                 <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700 shadow-sm">
@@ -221,7 +258,13 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
     const [visibleMetrics, setVisibleMetrics] = useState(
         () => new Set(SERIES.map((series) => series.id)),
     );
-    const chartRows = useMemo(() => buildAdsChartRows(daily), [daily]);
+    const hourlyInput = useMemo(() => {
+        if (platformLabel !== "سناب شات") return [];
+        return buildAdsHourlyChartInput(getCampaignReportSnapshot("snapchat") || {});
+    }, [daily, platformLabel]);
+    const chartInput = hourlyInput.length ? hourlyInput : daily;
+    const chartRows = useMemo(() => buildAdsChartRows(chartInput), [chartInput]);
+    const hourlyMode = hourlyInput.length > 0;
     const visibleSeries = SERIES.filter((series) => visibleMetrics.has(series.id));
 
     function toggleMetric(metricId) {
@@ -232,6 +275,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
         <section
             className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
             data-testid="ads-performance-explorer"
+            data-chart-granularity={hourlyMode ? "hour" : "day"}
             aria-label={`الرسم البياني لأداء ${platformLabel}`}
         >
             <div className="grid sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="اختيار خطوط الرسم البياني">
@@ -249,9 +293,13 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
             <div className="border-t border-slate-200 bg-white p-4 sm:p-6">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <h2 className="text-xl font-black text-slate-900">اتجاه الأداء اليومي</h2>
+                        <h2 className="text-xl font-black text-slate-900">
+                            {hourlyMode ? "اتجاه الأداء بالساعة" : "اتجاه الأداء اليومي"}
+                        </h2>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                            اضغط على أي بطاقة لإخفاء مؤشرها أو إظهاره. الفترات المتعددة تظهر كرسم زمني، واليوم الواحد يظهر كرسم أعمدة فعلي.
+                            {hourlyMode
+                                ? "عند اختيار يوم واحد يعرض ميزان ساعات اليوم من 12 صباحًا إلى 11 مساءً مثل Snapchat، وتتحدث الساعة الحالية تلقائيًا."
+                                : "اضغط على أي بطاقة لإخفاء مؤشرها أو إظهاره، وتظهر الفترات المتعددة كرسم زمني يومي."}
                         </p>
                     </div>
                     <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
@@ -262,22 +310,27 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                 {chartRows.length === 1 && visibleSeries.length ? (
                     <SingleDaySnapshot row={chartRows[0]} visibleSeries={visibleSeries} />
                 ) : chartRows.length > 1 && visibleSeries.length ? (
-                    <div className="h-96" data-testid="ads-performance-chart">
+                    <div className="h-96" data-testid={hourlyMode ? "ads-performance-hourly-chart" : "ads-performance-chart"}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartRows} margin={{ top: 12, right: 12, bottom: 8, left: 12 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="date" tickMargin={12} tick={{ fontSize: 14, fontWeight: 800 }} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={hourlyMode} />
+                                <XAxis
+                                    dataKey="date"
+                                    interval={hourlyMode ? 1 : 0}
+                                    tickMargin={12}
+                                    tick={{ fontSize: 14, fontWeight: 800 }}
+                                />
                                 <YAxis domain={[0, 100]} hide />
-                                <Tooltip content={<ChartTooltip />} />
+                                <Tooltip content={<ChartTooltip granularity={hourlyMode ? "hour" : "day"} />} />
                                 {visibleSeries.map((series) => (
                                     <Line
                                         key={series.id}
-                                        type="monotone"
+                                        type={hourlyMode ? "linear" : "monotone"}
                                         dataKey={series.id}
                                         name={series.label}
                                         stroke={series.stroke}
-                                        strokeWidth={4}
-                                        dot={{ r: 4, strokeWidth: 2 }}
+                                        strokeWidth={hourlyMode ? 3 : 4}
+                                        dot={hourlyMode ? false : { r: 4, strokeWidth: 2 }}
                                         activeDot={{ r: 7 }}
                                         connectNulls={false}
                                         animationDuration={300}
@@ -290,7 +343,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                     <div className="flex h-80 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center text-sm font-bold text-slate-500">
                         {chartRows.length
                             ? "كل المؤشرات مخفية. اضغط على بطاقة لإظهارها."
-                            : "لا توجد نقاط يومية موثقة ضمن الفترة المحددة."}
+                            : "لا توجد نقاط موثقة ضمن الفترة المحددة."}
                     </div>
                 )}
             </div>

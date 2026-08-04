@@ -1,11 +1,25 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+
+const mockGetCampaignReportSnapshot = jest.fn();
+
+jest.mock("../../marketingCampaignResultSource", () => ({
+    getCampaignReportSnapshot: (...args) => mockGetCampaignReportSnapshot(...args),
+}));
+
 import AdsPerformanceExplorer, {
     buildAdsChartRows,
+    buildAdsHourlyChartInput,
+    formatAdsHourLabel,
     toggleMetricVisibility,
 } from "./AdsPerformanceExplorer";
 
 describe("AdsPerformanceExplorer", () => {
+    beforeEach(() => {
+        mockGetCampaignReportSnapshot.mockReset();
+        mockGetCampaignReportSnapshot.mockReturnValue(null);
+    });
+
     test("normalizes each metric independently while retaining raw values", () => {
         const rows = buildAdsChartRows([
             { date: "2026-08-01", spend_sar: 50, sales_sar: 100, orders: 2, roas: 2 },
@@ -21,6 +35,22 @@ describe("AdsPerformanceExplorer", () => {
         expect(rows[1].roas_raw).toBe(0.5);
     });
 
+    test("builds a 24-hour Snapchat input with Arabic hour labels", () => {
+        expect(formatAdsHourLabel("00:00")).toBe("12 ص");
+        expect(formatAdsHourLabel("13:00")).toBe("1 م");
+        const input = buildAdsHourlyChartInput({
+            date_from: "2026-08-04",
+            date_to: "2026-08-04",
+            source: { hourly_available: true },
+            hourly: [
+                { date: "2026-08-04", hour: "02:00", hour_index: 2, spend_sar: 20, orders: 1, sales_sar: 50, roas: 2.5 },
+                { date: "2026-08-04", hour: "00:00", hour_index: 0, spend_sar: 10, orders: 0, sales_sar: 0, roas: null },
+            ],
+        });
+        expect(input.map((row) => row.date)).toEqual(["12 ص", "2 ص"]);
+        expect(input[1]).toMatchObject({ spend_sar: 20, orders: 1, sales_sar: 50, roas: 2.5 });
+    });
+
     test("toggles exactly the selected metric", () => {
         const current = new Set(["orders", "sales", "roas", "spend"]);
         const hidden = toggleMetricVisibility(current, "roas");
@@ -30,7 +60,7 @@ describe("AdsPerformanceExplorer", () => {
         expect(toggleMetricVisibility(hidden, "roas").has("roas")).toBe(true);
     });
 
-    test("renders real one-day bar charts and keeps metric toggles interactive", async () => {
+    test("renders fallback one-day bars until hourly rows arrive", async () => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
         const container = document.createElement("div");
         document.body.appendChild(container);
@@ -47,22 +77,49 @@ describe("AdsPerformanceExplorer", () => {
         });
 
         expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-orders"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-sales"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-roas"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-spend"]')).not.toBeNull();
-        expect(container.textContent).toContain("رسم أداء يوم واحد");
-        expect(container.textContent).toContain("50.00 ر.س");
+        expect(container.textContent).toContain("بيانات الساعات قيد أول مزامنة");
 
-        const roas = container.querySelector('[data-testid="ads-performance-metric-roas"]');
-        expect(roas.getAttribute("aria-pressed")).toBe("true");
+        await act(async () => root.unmount());
+        container.remove();
+    });
+
+    test("renders a single selected day as an hourly line chart", async () => {
+        global.IS_REACT_ACT_ENVIRONMENT = true;
+        mockGetCampaignReportSnapshot.mockReturnValue({
+            date_from: "2026-08-04",
+            date_to: "2026-08-04",
+            source: { hourly_available: true },
+            hourly: Array.from({ length: 24 }, (_, hour) => ({
+                date: "2026-08-04",
+                hour: `${String(hour).padStart(2, "0")}:00`,
+                hour_index: hour,
+                spend_sar: hour < 9 ? 10 + hour : 0,
+                sales_sar: hour === 8 ? 100 : 0,
+                orders: hour === 8 ? 2 : 0,
+                roas: hour === 8 ? 100 / 18 : null,
+                observed: hour <= 8,
+                is_future: hour > 8,
+            })),
+        });
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+        const root = createRoot(container);
 
         await act(async () => {
-            roas.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            root.render(
+                <AdsPerformanceExplorer
+                    totals={{ orders: 2, sales_sar: 100, roas: 5.56, spend_sar: 126 }}
+                    daily={[{ date: "2026-08-04", orders: 2, sales_sar: 100, roas: 5.56, spend_sar: 126 }]}
+                    platformLabel="سناب شات"
+                />,
+            );
         });
-        expect(roas.getAttribute("aria-pressed")).toBe("false");
-        expect(container.querySelector('[data-testid="ads-performance-single-day-bar-roas"]')).toBeNull();
-        expect(container.textContent).toContain("3 من 4 مؤشرات ظاهرة");
+
+        expect(container.querySelector('[data-testid="ads-performance-hourly-chart"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).toBeNull();
+        expect(container.querySelector('[data-testid="ads-performance-explorer"]').dataset.chartGranularity).toBe("hour");
+        expect(container.textContent).toContain("اتجاه الأداء بالساعة");
+        expect(container.textContent).toContain("12 صباحًا إلى 11 مساءً");
 
         await act(async () => root.unmount());
         container.remove();
