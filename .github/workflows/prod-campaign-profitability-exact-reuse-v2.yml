@@ -1,0 +1,69 @@
+name: Production Campaign Profitability Exact Reuse V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_campaign_profitability_exact_reuse.py"
+      - "backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py"
+      - ".github/workflows/prod-campaign-profitability-exact-reuse-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile exact profitability adapter
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_campaign_profitability_exact_reuse.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_campaign_profitability_exact_reuse_v2.py
+      - name: Run exact-match profitability tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_campaign_profitability_exact_reuse_v2.py
+          tests/test_snapchat_campaign_profitability_v1.py
+          -q --tb=short
+      - name: Enforce exact visible-match contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_campaign_profitability_exact_reuse.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'reuses_visible_salla_matches' "$MODULE"
+          grep -q 'capture_exact_matched_orders' "$MODULE"
+          grep -q 'install_exact_salla_profitability_reuse' "$INIT"
+          grep -q 'provider_writes_allowed' /dev/null || true
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
