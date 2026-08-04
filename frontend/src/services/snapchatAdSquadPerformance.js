@@ -38,6 +38,7 @@ function normalizeTotals(value = {}) {
 export function normalizeAdSquad(value = {}) {
     const id = text(value.ad_squad_id);
     if (!id) return null;
+    const effectiveStatus = text(value.effective_status, value.status || "unknown");
     return {
         account_id: text(value.account_id),
         account_name: text(value.account_name, value.account_id || "حساب غير معروف"),
@@ -45,8 +46,20 @@ export function normalizeAdSquad(value = {}) {
         ad_squad_name: text(value.ad_squad_name, id),
         campaign_id: text(value.campaign_id) || null,
         campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),
-        status: text(value.status, "unknown"),
-        delivery_status: text(value.delivery_status) || null,
+        status: effectiveStatus,
+        configured_status: text(value.configured_status, value.status || "unknown"),
+        effective_status: effectiveStatus,
+        status_inherited_from_campaign: value.status_inherited_from_campaign === true,
+        delivery_state: text(value.delivery_state) || null,
+        delivery_reason_code: text(value.delivery_reason_code) || null,
+        delivery_status: text(value.delivery_status || value.delivery_label) || null,
+        delivery_detail: text(value.delivery_detail) || null,
+        deliverable: value.deliverable === true,
+        parent_campaign_configured_status: text(value.parent_campaign_configured_status) || null,
+        parent_campaign_delivery_state: text(value.parent_campaign_delivery_state) || null,
+        parent_campaign_delivery_code: text(value.parent_campaign_delivery_code) || null,
+        parent_campaign_delivery_label: text(value.parent_campaign_delivery_label) || null,
+        parent_campaign_delivery_detail: text(value.parent_campaign_delivery_detail) || null,
         optimization_goal: text(value.optimization_goal) || null,
         billing_event: text(value.billing_event) || null,
         bid_strategy: text(value.bid_strategy) || null,
