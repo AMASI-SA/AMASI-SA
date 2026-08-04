@@ -3,6 +3,7 @@ import {
     ArrowClockwise,
     Barcode,
     Buildings,
+    Camera,
     CheckCircle,
     ClockCounterClockwise,
     Package,
@@ -71,6 +72,124 @@ function ScanRow({ scan }) {
     );
 }
 
+export function SupplierPieceCameraScanner({ onDetected, onClose }) {
+    const videoRef = useRef(null);
+    const [cameraError, setCameraError] = useState("");
+    const [cameraReady, setCameraReady] = useState(false);
+
+    useEffect(() => {
+        let stopped = false;
+        let detected = false;
+        let stream;
+        let animationFrame;
+
+        async function startCamera() {
+            if (!navigator.mediaDevices?.getUserMedia || !globalThis.BarcodeDetector) {
+                setCameraError("هذا المتصفح لا يدعم قراءة QR بالكاميرا. افتح ميزان من Chrome أو Edge على الجوال، أو استخدم قارئ الباركود الخارجي.");
+                return;
+            }
+
+            try {
+                const getSupportedFormats = globalThis.BarcodeDetector.getSupportedFormats;
+                const supported = typeof getSupportedFormats === "function"
+                    ? await getSupportedFormats.call(globalThis.BarcodeDetector)
+                    : [];
+                const formats = ["qr_code", "code_128"].filter((value) => supported.includes(value));
+                const detector = new globalThis.BarcodeDetector(formats.length ? { formats } : undefined);
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                    audio: false,
+                });
+
+                if (stopped || !videoRef.current) {
+                    for (const track of stream?.getTracks?.() || []) track.stop();
+                    return;
+                }
+
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+                if (stopped) return;
+                setCameraReady(true);
+
+                const detectFrame = async () => {
+                    if (stopped || detected || !videoRef.current) return;
+                    try {
+                        const rows = await detector.detect(videoRef.current);
+                        const value = String(rows?.[0]?.rawValue || "").trim();
+                        if (value) {
+                            detected = true;
+                            onDetected(value);
+                            return;
+                        }
+                    } catch {
+                        // A frame without a readable QR is expected while the camera is moving.
+                    }
+                    animationFrame = requestAnimationFrame(detectFrame);
+                };
+
+                animationFrame = requestAnimationFrame(detectFrame);
+            } catch (cameraStartError) {
+                const messages = {
+                    NotAllowedError: "اسمح لميزان باستخدام الكاميرا من إعدادات المتصفح ثم حاول مرة أخرى.",
+                    NotFoundError: "لم يتم العثور على كاميرا في هذا الجهاز.",
+                    NotReadableError: "الكاميرا مستخدمة في تطبيق آخر. أغلقه ثم حاول مرة أخرى.",
+                    SecurityError: "تشغيل الكاميرا يحتاج فتح ميزان عبر اتصال آمن HTTPS.",
+                };
+                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا. استخدم قارئ الباركود الخارجي أو الإدخال اليدوي.");
+            }
+        }
+
+        startCamera();
+        return () => {
+            stopped = true;
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            for (const track of stream?.getTracks?.() || []) track.stop();
+        };
+    }, [onDetected]);
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-3" dir="rtl" role="dialog" aria-modal="true" aria-label="تصوير QR القطعة" data-testid="supplier-receiving-camera-dialog">
+            <div className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+                    <div>
+                        <h3 className="flex items-center gap-2 text-lg font-black text-slate-950"><Camera size={24} className="text-emerald-700" weight="duotone" /> تصوير QR القطعة</h3>
+                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">وجّه الكاميرا الخلفية إلى QR الموجود في بطاقة القطعة؛ سيستلمها ميزان تلقائيًا بعد القراءة.</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="shrink-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-800">إغلاق</button>
+                </div>
+
+                <div className="p-4">
+                    {cameraError ? (
+                        <div className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-950">
+                            <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
+                            <span>{cameraError}</span>
+                        </div>
+                    ) : (
+                        <div className="relative overflow-hidden rounded-2xl bg-black">
+                            <video ref={videoRef} muted playsInline className="aspect-[3/4] max-h-[70vh] w-full object-cover sm:aspect-[4/3]" />
+                            {!cameraReady && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-sm font-black text-white">
+                                    <SpinnerGap size={24} className="ml-2 animate-spin" /> جارٍ تشغيل الكاميرا…
+                                </div>
+                            )}
+                            {cameraReady && (
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-10">
+                                    <div className="aspect-square w-full max-w-72 rounded-3xl border-4 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.35)]" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <p className="mt-3 text-center text-xs font-bold text-slate-600">ثبّت QR داخل الإطار الأخضر وقرّب الكاميرا حتى تصبح الصورة واضحة.</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function SupplierReceivingWorkspace() {
     const [data, setData] = useState({ suppliers: [], sessions: [], active_session_scans: [] });
     const [loading, setLoading] = useState(true);
@@ -79,6 +198,7 @@ export default function SupplierReceivingWorkspace() {
     const [openNote, setOpenNote] = useState("");
     const [closeNote, setCloseNote] = useState("");
     const [barcode, setBarcode] = useState("");
+    const [cameraOpen, setCameraOpen] = useState(false);
     const [error, setError] = useState("");
     const [lastScan, setLastScan] = useState(null);
     const barcodeRef = useRef(null);
@@ -134,9 +254,8 @@ export default function SupplierReceivingWorkspace() {
         }
     }
 
-    async function scanPiece(event) {
-        event.preventDefault();
-        const value = barcode.trim();
+    const receivePiece = useCallback(async (rawValue, { refocus = true } = {}) => {
+        const value = String(rawValue || "").trim();
         if (!active?.id || !value || busy) return;
         setBusy("scan");
         setError("");
@@ -162,9 +281,20 @@ export default function SupplierReceivingWorkspace() {
             setBarcode("");
         } finally {
             setBusy("");
-            window.setTimeout(() => barcodeRef.current?.focus(), 0);
+            if (refocus) window.setTimeout(() => barcodeRef.current?.focus(), 0);
         }
+    }, [active?.id, busy]);
+
+    function scanPiece(event) {
+        event.preventDefault();
+        receivePiece(barcode);
     }
+
+    const handleCameraDetected = useCallback((value) => {
+        setCameraOpen(false);
+        setBarcode(value);
+        receivePiece(value, { refocus: false });
+    }, [receivePiece]);
 
     async function closeSession() {
         if (!active?.id || busy) return;
@@ -255,16 +385,19 @@ export default function SupplierReceivingWorkspace() {
                                 </div>
                                 <button type="button" onClick={() => load()} disabled={loading || !!busy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 text-xs font-black text-emerald-900 disabled:opacity-50"><ArrowClockwise size={17} className={loading ? "animate-spin" : ""} /> تحديث</button>
                             </div>
-                            <form onSubmit={scanPiece} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="supplier-receiving-scan-form">
+                            <form onSubmit={scanPiece} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]" data-testid="supplier-receiving-scan-form">
                                 <label className="relative block">
                                     <Barcode size={22} className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-700" />
                                     <input ref={barcodeRef} value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" inputMode="text" placeholder="امسح QR القطعة هنا" disabled={busy === "scan"} className="min-h-14 w-full rounded-2xl border-2 border-emerald-300 bg-white pr-12 pl-4 font-mono text-base font-black outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100" data-testid="supplier-receiving-barcode-input" />
                                 </label>
+                                <button type="button" onClick={() => setCameraOpen(true)} disabled={busy === "scan"} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white px-5 text-base font-black text-emerald-800 disabled:opacity-50" data-testid="supplier-receiving-camera-button">
+                                    <Camera size={22} weight="duotone" /> فتح الكاميرا
+                                </button>
                                 <button type="submit" disabled={!barcode.trim() || busy === "scan"} className="min-h-14 rounded-2xl bg-emerald-700 px-7 text-base font-black text-white disabled:opacity-50">
                                     {busy === "scan" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} استلام القطعة
                                 </button>
                             </form>
-                            <p className="mt-3 text-xs font-bold leading-5 text-emerald-800">الماسح يعمل مثل لوحة المفاتيح: امسح الباركود واضغط Enter. ملفات التجهيز المعاد تنزيلها تحمل QR فريدًا لكل قطعة.</p>
+                            <p className="mt-3 text-xs font-bold leading-5 text-emerald-800">من الجوال اضغط «فتح الكاميرا»، أو استخدم قارئ الباركود مثل لوحة المفاتيح واضغط Enter. ملفات التجهيز المعاد تنزيلها تحمل QR فريدًا لكل قطعة.</p>
                         </section>
 
                         {lastScan && (
@@ -307,6 +440,13 @@ export default function SupplierReceivingWorkspace() {
                     </article>
                 ))}</div>}
             </section>
+
+            {cameraOpen && active && (
+                <SupplierPieceCameraScanner
+                    onDetected={handleCameraDetected}
+                    onClose={() => setCameraOpen(false)}
+                />
+            )}
         </section>
     );
 }
