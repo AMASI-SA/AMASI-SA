@@ -49,14 +49,19 @@ export function placeRoasAfterCostPerPurchase(columns) {
   return withoutRoas;
 }
 
+function profitabilityInsertIndex(columns) {
+  for (const anchor of ["sales", "roas", "cpa"]) {
+    const index = columns.indexOf(anchor);
+    if (index >= 0) return index + 1;
+  }
+  const spendIndex = columns.indexOf("spend");
+  return spendIndex >= 0 ? spendIndex : columns.length;
+}
+
 export function insertSnapchatProfitabilityColumns(columns) {
   const current = placeRoasAfterCostPerPurchase(columns);
   const withoutProfit = current.filter((column) => !PROFIT_COLUMNS.includes(column));
-  const salesIndex = withoutProfit.indexOf("sales");
-  const insertAt = salesIndex >= 0
-    ? salesIndex + 1
-    : Math.max(withoutProfit.indexOf("roas") + 1, 0);
-  withoutProfit.splice(insertAt, 0, ...PROFIT_COLUMNS);
+  withoutProfit.splice(profitabilityInsertIndex(withoutProfit), 0, ...PROFIT_COLUMNS);
   return withoutProfit;
 }
 
