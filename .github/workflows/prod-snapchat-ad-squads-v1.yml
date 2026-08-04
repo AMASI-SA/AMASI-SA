@@ -111,8 +111,9 @@ jobs:
           TABLE=frontend/src/components/marketing/AdSquadManagerTable.jsx
           SERVICE=frontend/src/services/snapchatAdSquadPerformance.js
           grep -q 'getSnapchatAdSquadPerformance' "$WORKSPACE"
-          grep -q 'ads-entity-level-ad_squads' "$LEVELS"
-          grep -q 'ads-entity-level-ads' "$LEVELS"
+          grep -q 'id: "ad_squads"' "$LEVELS"
+          grep -q 'id: "ads"' "$LEVELS"
+          grep -q 'data-testid={`ads-entity-level-${item.id}`}' "$LEVELS"
           grep -q 'نتائج المنصة على مستوى المجموعة' "$TABLE"
           grep -q '/integrations-v2/snapchat_ads/ad-squad-report' "$SERVICE"
           ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SERVICE" "$TABLE" "$LEVELS"
