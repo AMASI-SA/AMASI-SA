@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     CaretDown,
+    Buildings,
     Cube,
     House,
     List,
@@ -56,6 +57,14 @@ export const MEZAN_V2_NAV_SECTIONS = [
         ],
     },
     {
+        id: "suppliers",
+        label: "الموردون",
+        Icon: Buildings,
+        items: [
+            { to: "/suppliers-v2", label: "الموردون", exactSearch: true },
+        ],
+    },
+    {
         id: "marketing",
         label: "التسويق",
         Icon: Megaphone,
@@ -94,6 +103,7 @@ const MEZAN_V2_PATHS = [
     "/inventory-receiving-v2",
     "/products-v2",
     "/components-v2",
+    "/suppliers-v2",
     "/integrations-v2",
     "/customer-intelligence",
     "/ads-manager",

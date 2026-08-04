@@ -96,6 +96,9 @@ def make_order_engine_router(*args, **kwargs):
         install_preparation_piece_execution_guard,
     )
     from supplier_receiving_routes import make_supplier_receiving_router
+    from mezan_supplier_management_routes import (
+        make_mezan_supplier_management_router,
+    )
     from preparation_file_failure_safety import (
         install_preparation_finalize_safety,
         make_preparation_file_failure_safety_router,
@@ -183,6 +186,7 @@ def make_order_engine_router(*args, **kwargs):
         make_preparation_file_registry_router(db, current_user),
         make_preparation_file_failure_safety_router(db, current_user),
         make_preparation_piece_operations_router(db, current_user),
+        make_mezan_supplier_management_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
     ]

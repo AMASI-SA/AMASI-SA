@@ -2,6 +2,10 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 
+jest.mock("react-router-dom", () => ({
+    Link: ({ to, children }) => <a href={to}>{children}</a>,
+}));
+
 jest.mock("../../services/supplierReceiving", () => ({
     closeSupplierReceivingSession: jest.fn(),
     loadSupplierReceivingCatalog: jest.fn(),
@@ -24,8 +28,8 @@ test("supplier receiving stage exposes governed barcode session controls", () =>
     expect(markup).toContain('data-testid="supplier-receiving-workspace"');
     expect(markup).toContain("استلام منتجات المورد بالباركود");
     expect(markup).toContain('data-testid="supplier-receiving-open-form"');
-    expect(markup).toContain("لا ينشئ فاتورة أو مديونية");
-    expect(markup).toContain("لا يرسل شيئًا إلى قيود أو سلة");
+    expect(markup).toContain("لا تنشئ فاتورة أو مديونية");
+    expect(markup).toContain("لا ترسل شيئًا إلى قيود أو سلة");
     expect(markup).toContain("من المورد");
 });
 

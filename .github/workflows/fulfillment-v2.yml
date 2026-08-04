@@ -19,6 +19,7 @@ on:
       - "backend/preparation_pdf_compact_operational_layout.py"
       - "backend/preparation_piece_barcode.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/mezan_supplier_management_routes.py"
       - "backend/supplier_receiving_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -36,6 +37,7 @@ on:
       - "backend/tests/test_reviewed_preparation_batches.py"
       - "backend/tests/test_preparation_file_registry.py"
       - "backend/tests/test_preparation_piece_operations.py"
+      - "backend/tests/test_mezan_supplier_management.py"
       - "backend/tests/test_supplier_receiving.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
@@ -73,10 +75,15 @@ on:
       - "frontend/src/reviewPreparationFileRegistryEnhancer.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.test.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
+      - "frontend/src/pages/MezanSuppliersV2.jsx"
+      - "frontend/src/pages/MezanSuppliersV2.test.jsx"
       - "frontend/src/components/fulfillment/SupplierReceivingWorkspace.jsx"
       - "frontend/src/components/fulfillment/SupplierReceivingWorkspace.test.jsx"
+      - "frontend/src/services/mezanSuppliersV2.js"
       - "frontend/src/services/supplierReceiving.js"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
@@ -105,6 +112,7 @@ on:
       - "backend/preparation_pdf_compact_operational_layout.py"
       - "backend/preparation_piece_barcode.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/mezan_supplier_management_routes.py"
       - "backend/supplier_receiving_routes.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
@@ -122,6 +130,7 @@ on:
       - "backend/tests/test_reviewed_preparation_batches.py"
       - "backend/tests/test_preparation_file_registry.py"
       - "backend/tests/test_preparation_piece_operations.py"
+      - "backend/tests/test_mezan_supplier_management.py"
       - "backend/tests/test_supplier_receiving.py"
       - "backend/tests/test_order_engine_mapper.py"
       - "backend/tests/test_order_engine_repository.py"
@@ -159,10 +168,15 @@ on:
       - "frontend/src/reviewPreparationFileRegistryEnhancer.js"
       - "frontend/src/components/Layout.jsx"
       - "frontend/src/components/Sidebar.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.test.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
+      - "frontend/src/pages/MezanSuppliersV2.jsx"
+      - "frontend/src/pages/MezanSuppliersV2.test.jsx"
       - "frontend/src/components/fulfillment/SupplierReceivingWorkspace.jsx"
       - "frontend/src/components/fulfillment/SupplierReceivingWorkspace.test.jsx"
+      - "frontend/src/services/mezanSuppliersV2.js"
       - "frontend/src/services/supplierReceiving.js"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
@@ -216,6 +230,7 @@ jobs:
           tests/test_reviewed_preparation_batches.py
           tests/test_preparation_file_registry.py
           tests/test_preparation_piece_operations.py
+          tests/test_mezan_supplier_management.py
           tests/test_supplier_receiving.py
           tests/test_order_engine_mapper.py
           tests/test_order_engine_repository.py
@@ -254,7 +269,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
