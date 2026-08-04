@@ -1,15 +1,15 @@
 """Read-only Snapchat Ad Squad performance for Ads Manager.
 
 Campaign reporting remains the authoritative account-level source already used by
-Mezan.  This module adds a separate Ad Squad projection by reading Campaign
-Stats with ``breakdown=adsquad``.  It persists both the Riyadh-day projection
-and the selected account's native calendar projection, but neither projection
-is accounting eligible and no Snapchat mutation is performed.
+Mezan. This module adds a separate Ad Squad projection by reading Campaign Stats
+with ``breakdown=adsquad``. It persists both the Riyadh-day projection and the
+selected account's native calendar projection, but neither projection is
+accounting eligible and no Snapchat mutation is performed.
 """
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -121,6 +121,7 @@ def extract_adsquad_hour_rows(
     *,
     campaign_id: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Extract HOUR Ad Squad rows from a Campaign Stats response."""
     wrapped_stats = payload.get("timeseries_stats") or []
     if not isinstance(wrapped_stats, list):
         raise SnapchatNativeSyncError(
@@ -153,7 +154,9 @@ def extract_adsquad_hour_rows(
             for key in ("adsquad", "ad_squad", "adsquads"):
                 value = breakdown.get(key)
                 if isinstance(value, list):
-                    candidates.extend(item for item in value if isinstance(item, dict))
+                    candidates.extend(
+                        item for item in value if isinstance(item, dict)
+                    )
         if not candidates and stat.get("type") in {"AD_SQUAD", "AD_SQUAD_V2"}:
             candidates = [stat]
         for entity in candidates:
@@ -206,7 +209,12 @@ async def _fetch_campaign_adsquad_hours(
     errors: list[dict[str, Any]] = []
     successful = 0
     for _ in range(MAX_PAGES):
-        payload = await context.get_json(client, url, headers=headers, params=params)
+        payload = await context.get_json(
+            client,
+            url,
+            headers=headers,
+            params=params,
+        )
         page_rows, page_errors, page_success = extract_adsquad_hour_rows(
             payload,
             campaign_id=campaign_id,
@@ -286,14 +294,22 @@ async def _upsert_projection(
     spend_micro = _as_number(metrics.get("spend"))
     value_micro = _as_number(metrics.get("conversion_purchases_value"))
     purchases = _as_number(metrics.get("conversion_purchases"))
-    spend_native = round(float(spend_micro) / 1_000_000, 6) if spend_micro is not None else None
-    value_native = round(float(value_micro) / 1_000_000, 6) if value_micro is not None else None
+    spend_native = (
+        round(float(spend_micro) / 1_000_000, 6)
+        if spend_micro is not None else None
+    )
+    value_native = (
+        round(float(value_micro) / 1_000_000, 6)
+        if value_micro is not None else None
+    )
     now_iso = context.now_iso()
     document = {
         "user_id": context.user_id,
         "provider": SNAPCHAT_PROVIDER_ID,
         "ad_account_id": account["ad_account_id"],
-        "mezan_integration_account_id": account.get("mezan_integration_account_id"),
+        "mezan_integration_account_id": account.get(
+            "mezan_integration_account_id"
+        ),
         "entity_type": "ad_squad",
         "external_id": adsquad_id,
         "ad_squad_id": adsquad_id,
@@ -361,7 +377,9 @@ async def _recent_refresh(
         return False
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=timezone.utc)
-    return (now - observed.astimezone(timezone.utc)).total_seconds() < ADSQUAD_REFRESH_INTERVAL_SECONDS
+    return (
+        now - observed.astimezone(timezone.utc)
+    ).total_seconds() < ADSQUAD_REFRESH_INTERVAL_SECONDS
 
 
 async def refresh_snapchat_adsquad_performance(
@@ -375,9 +393,21 @@ async def refresh_snapchat_adsquad_performance(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     account_id = _text(account.get("ad_account_id"))
+    if not account_id:
+        raise SnapchatNativeSyncError(
+            "snapchat_account_id_missing",
+            "Selected Snapchat account is missing its ad account ID.",
+            status_code=409,
+            retryable=False,
+        )
     timezone_name = _valid_timezone_name(account.get("timezone"))
     current = _aware_now(now)
-    if await _recent_refresh(context.db, context.user_id, account_id, now=current):
+    if await _recent_refresh(
+        context.db,
+        context.user_id,
+        account_id,
+        now=current,
+    ):
         return {
             "source_mode": ADSQUAD_SOURCE_MODE,
             "skipped": True,
@@ -448,7 +478,9 @@ async def refresh_snapchat_adsquad_performance(
         end_date=request["account_local_to"],
     )
     saved = 0
-    for (campaign_id, adsquad_id, date_string), bucket in sorted(business.items()):
+    for (campaign_id, adsquad_id, date_string), bucket in sorted(
+        business.items()
+    ):
         await _upsert_projection(
             context,
             collection_name=SNAPCHAT_PERFORMANCE_COLLECTION,
@@ -475,7 +507,10 @@ async def refresh_snapchat_adsquad_performance(
         )
         saved += 1
     now_iso = context.now_iso()
-    await _collection(context.db, ADSQUAD_REFRESH_STATE_COLLECTION).update_one(
+    await _collection(
+        context.db,
+        ADSQUAD_REFRESH_STATE_COLLECTION,
+    ).update_one(
         {"user_id": context.user_id, "ad_account_id": account_id},
         {
             "$set": {
@@ -525,27 +560,35 @@ def install_snapchat_adsquad_performance_refresh() -> None:
         *args: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        output = dict(await current(
-            context,
-            client,
-            access_token,
-            account,
-            *args,
-            **kwargs,
-        ) or {})
-        start_date = kwargs.get("start_date")
-        end_date = kwargs.get("end_date")
-        if not isinstance(start_date, date) or not isinstance(end_date, date):
-            return output
-        try:
-            output["ad_squad_performance"] = await refresh_snapchat_adsquad_performance(
+        output = dict(
+            await current(
                 context,
                 client,
                 access_token,
                 account,
-                start_date=start_date,
-                end_date=end_date,
-                now=kwargs.get("now"),
+                *args,
+                **kwargs,
+            ) or {}
+        )
+        start_date = kwargs.get("start_date")
+        end_date = kwargs.get("end_date")
+        if not isinstance(start_date, date) and len(args) >= 1:
+            start_date = args[0]
+        if not isinstance(end_date, date) and len(args) >= 2:
+            end_date = args[1]
+        if not isinstance(start_date, date) or not isinstance(end_date, date):
+            return output
+        try:
+            output["ad_squad_performance"] = (
+                await refresh_snapchat_adsquad_performance(
+                    context,
+                    client,
+                    access_token,
+                    account,
+                    start_date=start_date,
+                    end_date=end_date,
+                    now=kwargs.get("now"),
+                )
             )
         except SnapchatNativeSyncError as exc:
             if exc.code == "snapchat_needs_reauth":
@@ -591,7 +634,11 @@ async def build_account_timezone_adsquad_report(
         )
     requested_id = _text(account_id)
     selected = next(
-        (row for row in accounts if _text(row.get("ad_account_id")) == requested_id),
+        (
+            row
+            for row in accounts
+            if _text(row.get("ad_account_id")) == requested_id
+        ),
         None,
     ) if requested_id else accounts[0]
     if selected is None:
@@ -608,9 +655,13 @@ async def build_account_timezone_adsquad_report(
         timezone_name=timezone_name,
         now=current,
     )
-    date_query = {"$gte": dates[0].isoformat(), "$lte": dates[-1].isoformat()}
+    date_query = {
+        "$gte": dates[0].isoformat(),
+        "$lte": dates[-1].isoformat(),
+    }
     performance_cursor = _collection(
-        db, SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
+        db,
+        SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
     ).find(
         {
             "user_id": user_id,
@@ -638,12 +689,14 @@ async def build_account_timezone_adsquad_report(
     campaigns = {
         _text(row.get("external_id")): row
         for row in entity_rows
-        if row.get("entity_type") == "campaign" and _text(row.get("external_id"))
+        if row.get("entity_type") == "campaign"
+        and _text(row.get("external_id"))
     }
     squads = {
         _text(row.get("external_id")): row
         for row in entity_rows
-        if row.get("entity_type") == "ad_squad" and _text(row.get("external_id"))
+        if row.get("entity_type") == "ad_squad"
+        and _text(row.get("external_id"))
     }
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in performance_rows:
@@ -652,22 +705,29 @@ async def build_account_timezone_adsquad_report(
             groups[adsquad_id].append(row)
     requested_days = len(dates)
     from ads_manager.account_cost_settings import list_account_cost_settings
+
     settings = await list_account_cost_settings(db, user_id)
     setting = next(
         (
-            item for item in settings.get("items") or []
-            if _text(item.get("external_account_id")) == account["account_id"]
+            item
+            for item in settings.get("items") or []
+            if _text(item.get("external_account_id"))
+            == account["account_id"]
         ),
         None,
     )
     currency, rate = _effective_currency(selected, setting)
     rows: list[dict[str, Any]] = []
     identity_matches = 0
-    for adsquad_id, facts in groups.items():
+    all_adsquad_ids = sorted(set(groups) | set(squads))
+    for adsquad_id in all_adsquad_ids:
+        facts = groups.get(adsquad_id, [])
         entity = squads.get(adsquad_id, {})
         if entity:
             identity_matches += 1
-        campaign_id = _text(entity.get("campaign_id")) or _text(facts[0].get("campaign_id"))
+        campaign_id = _text(entity.get("campaign_id"))
+        if not campaign_id and facts:
+            campaign_id = _text(facts[0].get("campaign_id"))
         campaign = campaigns.get(campaign_id, {})
         metrics = _aggregate_rows(facts, requested_days=requested_days)
         rows.append({
@@ -676,7 +736,11 @@ async def build_account_timezone_adsquad_report(
             "ad_squad_id": adsquad_id,
             "ad_squad_name": _text(entity.get("display_name")) or adsquad_id,
             "campaign_id": campaign_id or None,
-            "campaign_name": _text(campaign.get("display_name")) or campaign_id or "حملة غير معروفة",
+            "campaign_name": (
+                _text(campaign.get("display_name"))
+                or campaign_id
+                or "حملة غير معروفة"
+            ),
             "status": entity.get("status") or "unknown",
             "delivery_status": entity.get("delivery_status"),
             "optimization_goal": entity.get("optimization_goal"),
@@ -692,7 +756,10 @@ async def build_account_timezone_adsquad_report(
                     else None
                 ),
                 "lifetime_native": (
-                    round(float(entity["lifetime_spend_cap_micro"]) / 1_000_000, 6)
+                    round(
+                        float(entity["lifetime_spend_cap_micro"]) / 1_000_000,
+                        6,
+                    )
                     if _number(entity.get("lifetime_spend_cap_micro")) is not None
                     else None
                 ),
@@ -700,13 +767,16 @@ async def build_account_timezone_adsquad_report(
             "display_currency": currency,
             "exchange_rate_to_sar": round(rate, 6),
             "result_source": "platform",
-            "commercial_results_scope": "snapchat_ad_squad_conversion_reporting",
+            "commercial_results_scope": (
+                "snapchat_ad_squad_conversion_reporting"
+            ),
             **metrics,
         })
     search = _text(query).casefold()[:120]
     if search:
         rows = [
-            item for item in rows
+            item
+            for item in rows
             if search in " ".join([
                 _text(item.get("ad_squad_name")),
                 _text(item.get("ad_squad_id")),
@@ -728,11 +798,17 @@ async def build_account_timezone_adsquad_report(
     daily = [
         {
             "date": day.isoformat(),
-            **_aggregate_rows(daily_groups.get(day.isoformat(), []), requested_days=1),
+            **_aggregate_rows(
+                daily_groups.get(day.isoformat(), []),
+                requested_days=1,
+            ),
         }
         for day in dates
     ]
-    totals = _aggregate_rows(performance_rows, requested_days=requested_days)
+    totals = _aggregate_rows(
+        performance_rows,
+        requested_days=requested_days,
+    )
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
         "entity_level": "ad_squad",
@@ -753,14 +829,19 @@ async def build_account_timezone_adsquad_report(
             "pages": pages,
         },
         "source": {
-            "performance_collection": SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
+            "performance_collection": (
+                SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
+            ),
             "entity_collection": SNAPCHAT_ENTITY_COLLECTION,
             "source_mode": ADSQUAD_SOURCE_MODE,
             "performance_rows": len(performance_rows),
             "entity_rows": len(entity_rows),
+            "ad_squad_entities": len(squads),
+            "ad_squads_returned_before_pagination": total,
             "identity_matches": identity_matches,
             "identity_coverage_pct": (
-                round(identity_matches / len(groups) * 100, 2) if groups else None
+                round(identity_matches / len(all_adsquad_ids) * 100, 2)
+                if all_adsquad_ids else None
             ),
             "row_limit_reached": row_limit_reached,
             "entity_limit_reached": entity_limit_reached,
