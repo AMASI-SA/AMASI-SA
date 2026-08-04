@@ -1,7 +1,7 @@
-const markSnapchatManualRange = jest.fn();
+const mockMarkSnapchatManualRange = jest.fn();
 
 jest.mock("./marketingCampaignResultSource", () => ({
-  markSnapchatManualRange: (...args) => markSnapchatManualRange(...args),
+  markSnapchatManualRange: (...args) => mockMarkSnapchatManualRange(...args),
 }));
 
 import {
@@ -12,7 +12,7 @@ import {
 
 describe("Snapchat manual range guard", () => {
   beforeEach(() => {
-    markSnapchatManualRange.mockClear();
+    mockMarkSnapchatManualRange.mockClear();
     delete window.__mezanSnapchatManualRangeGuardInstalled;
     window.history.replaceState({}, "", "/ads-manager?provider=snapchat");
   });
@@ -37,7 +37,7 @@ describe("Snapchat manual range guard", () => {
     window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
       detail: { dateFrom: "2026-08-01", dateTo: "2026-08-04" },
     }));
-    expect(markSnapchatManualRange).toHaveBeenCalledTimes(1);
+    expect(mockMarkSnapchatManualRange).toHaveBeenCalledTimes(1);
   });
 
   test("does not mark ranges on other provider pages", () => {
@@ -46,6 +46,6 @@ describe("Snapchat manual range guard", () => {
     window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
       detail: { dateFrom: "2026-08-01", dateTo: "2026-08-04" },
     }));
-    expect(markSnapchatManualRange).not.toHaveBeenCalled();
+    expect(mockMarkSnapchatManualRange).not.toHaveBeenCalled();
   });
 });
