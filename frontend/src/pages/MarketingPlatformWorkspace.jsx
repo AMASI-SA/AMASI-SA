@@ -1,36 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     ArrowClockwise,
     ArrowRight,
     ChartLineUp,
     CheckCircle,
-    Coins,
-    CurrencyDollar,
     Database,
     Gear,
     MagnifyingGlass,
     Megaphone,
-    Package,
     Robot,
     ShieldCheck,
-    Target,
     WarningCircle,
 } from "@phosphor-icons/react";
-import {
-    CartesianGrid,
-    Legend,
-    Line,
-    LineChart,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from "recharts";
 
-import DateInput, { isValidISODate } from "../components/DateInput";
+import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
+import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
 import CampaignManagerTable from "../components/marketing/CampaignManagerTable";
-import { monthStartSA, todaySA } from "../lib/dates";
+import { isValidISODate } from "../components/DateInput";
+import { todaySA } from "../lib/dates";
 import {
     getMarketingPerformance,
     isMarketingPerformanceProvider,
@@ -99,31 +87,6 @@ function dateTime(value) {
     });
 }
 
-function MetricCard({ label, value, hint, tone = "slate", Icon, testid }) {
-    const tones = {
-        emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
-        blue: "border-blue-200 bg-blue-50 text-blue-900",
-        amber: "border-amber-200 bg-amber-50 text-amber-900",
-        rose: "border-rose-200 bg-rose-50 text-rose-900",
-        violet: "border-violet-200 bg-violet-50 text-violet-900",
-        slate: "border-slate-200 bg-slate-50 text-slate-900",
-    };
-    return (
-        <article className={`rounded-2xl border p-4 ${tones[tone]}`} data-testid={testid}>
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <div className="text-xs font-extrabold opacity-70">{label}</div>
-                    <div className="mt-2 break-words font-mono text-2xl font-black">{value}</div>
-                    <div className="mt-1 text-xs font-semibold leading-5 opacity-60">{hint}</div>
-                </div>
-                <span className="shrink-0 rounded-xl bg-white/75 p-2 shadow-sm">
-                    <Icon size={22} weight="duotone" />
-                </span>
-            </div>
-        </article>
-    );
-}
-
 function ReadinessItem({ label, ready, detail }) {
     return (
         <div className={`rounded-2xl border p-4 ${ready ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
@@ -142,13 +105,75 @@ function LoadingState() {
     return (
         <div className="space-y-4" data-testid="marketing-platform-loading">
             <div className="h-44 animate-pulse rounded-3xl bg-slate-200" />
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-                {[0, 1, 2, 3, 4, 5].map((key) => (
-                    <div key={key} className="h-28 animate-pulse rounded-2xl bg-slate-100" />
-                ))}
-            </div>
+            <div className="h-[34rem] animate-pulse rounded-3xl bg-slate-100" />
             <div className="h-96 animate-pulse rounded-3xl bg-slate-100" />
         </div>
+    );
+}
+
+function InsightPanel({ insights = [] }) {
+    return (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="font-black text-slate-900">ملاحظات التحليل</h2>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {insights.length ? insights.map((item) => (
+                    <article
+                        key={`${item.code}-${item.campaign_id || "all"}`}
+                        className={`rounded-xl border p-3 ${item.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-blue-100 bg-blue-50"}`}
+                    >
+                        <div className="font-black text-slate-900">{item.title}</div>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{item.detail}</p>
+                    </article>
+                )) : (
+                    <div className="rounded-xl bg-slate-50 p-5 text-center text-sm font-bold text-slate-500 lg:col-span-2">
+                        لا توجد ملاحظات مؤكدة ضمن الفترة.
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function AccountSummaries({ accounts = [] }) {
+    return (
+        <section className="grid gap-4 lg:grid-cols-2" data-testid="marketing-account-summaries">
+            {accounts.map((account) => (
+                <article key={account.account_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 className="font-black text-slate-900">{account.account_name}</h2>
+                            <div className="mt-1 font-mono text-xs text-slate-400">{account.account_id}</div>
+                        </div>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                            {account.currency || "عملة غير معروفة"}
+                        </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[10px] font-black text-slate-500">الصرف</div>
+                            <div className="mt-1 font-mono font-black">{money(account.spend_sar)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[10px] font-black text-slate-500">الطلبات</div>
+                            <div className="mt-1 font-mono font-black">{numeric(account.orders)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[10px] font-black text-slate-500">المبيعات</div>
+                            <div className="mt-1 font-mono font-black">{money(account.sales_sar)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[10px] font-black text-slate-500">ROAS</div>
+                            <div className="mt-1 font-mono font-black">{ratio(account.roas, "×")}</div>
+                        </div>
+                    </div>
+                </article>
+            ))}
+            {!accounts.length && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center font-bold text-slate-500 lg:col-span-2">
+                    لا توجد بيانات أداء موزعة على الحسابات.
+                </div>
+            )}
+        </section>
     );
 }
 
@@ -156,12 +181,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const navigate = useNavigate();
     const platform = isMarketingPerformanceProvider(provider) ? provider : "snapchat";
     const config = MARKETING_PLATFORM_CONFIG[platform];
-    const [dateFrom, setDateFrom] = useState(monthStartSA());
-    const [dateTo, setDateTo] = useState(todaySA());
-    const [appliedRange, setAppliedRange] = useState({
-        dateFrom: monthStartSA(),
-        dateTo: todaySA(),
-    });
+    const today = todaySA();
+    const [dateFrom, setDateFrom] = useState(today);
+    const [dateTo, setDateTo] = useState(today);
+    const [appliedRange, setAppliedRange] = useState({ dateFrom: today, dateTo: today });
     const [query, setQuery] = useState("");
     const [appliedQuery, setAppliedQuery] = useState("");
     const [page, setPage] = useState(1);
@@ -199,6 +222,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
     }, [appliedQuery, appliedRange, page, platform]);
 
     useEffect(() => {
+        const currentToday = todaySA();
+        setDateFrom(currentToday);
+        setDateTo(currentToday);
+        setAppliedRange({ dateFrom: currentToday, dateTo: currentToday });
         setPage(1);
         setAppliedQuery("");
         setQuery("");
@@ -216,14 +243,6 @@ export default function MarketingPlatformWorkspace({ provider }) {
         pages: 0,
         total: 0,
     };
-    const chartData = useMemo(
-        () => (data?.daily || []).map((row) => ({
-            date: row.date.slice(5),
-            spend: row.spend_sar,
-            sales: row.sales_sar,
-        })),
-        [data?.daily],
-    );
 
     function applyFilters(event) {
         event.preventDefault();
@@ -234,6 +253,14 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setPage(1);
         setAppliedRange({ dateFrom, dateTo });
         setAppliedQuery(query.trim());
+    }
+
+    function applyDateRange(range) {
+        if (!isValidISODate(range.dateFrom) || !isValidISODate(range.dateTo)) return;
+        setDateFrom(range.dateFrom);
+        setDateTo(range.dateTo);
+        setPage(1);
+        setAppliedRange(range);
     }
 
     if (loading && !data) return <LoadingState />;
@@ -256,8 +283,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             إدارة حملات {config.label}
                         </h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                            تقرير الصرف والطلبات والمبيعات المنسوبة وأداء الحملات، وهو مصدر التحليل
-                            الذي سيستخدمه ذكاء ميزان لاقتراح الحملات وإدارتها بعد اكتمال دورة الاعتماد.
+                            تقرير موحد لأداء المنصة. بطاقات الرسم البياني تتيح إخفاء وإظهار كل مؤشر مباشرة.
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -293,15 +319,15 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
             <form
                 onSubmit={applyFilters}
-                className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[180px_180px_minmax(220px,1fr)_auto] lg:items-end"
+                className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(280px,420px)_minmax(240px,1fr)_auto] lg:items-end"
             >
-                <label>
-                    <span className="mb-1 block text-xs font-black text-slate-600">من تاريخ</span>
-                    <DateInput value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-                </label>
-                <label>
-                    <span className="mb-1 block text-xs font-black text-slate-600">إلى تاريخ</span>
-                    <DateInput value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+                <label className="block">
+                    <span className="mb-1 block text-xs font-black text-slate-600">الفترة الزمنية</span>
+                    <ArabicDateRangePicker
+                        valueFrom={dateFrom}
+                        valueTo={dateTo}
+                        onApply={applyDateRange}
+                    />
                 </label>
                 <label className="block">
                     <span className="mb-1 block text-xs font-black text-slate-600">بحث في الحملات</span>
@@ -315,7 +341,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                         />
                     </span>
                 </label>
-                <button type="submit" className="h-11 rounded-xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-slate-800">
+                <button type="submit" className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-black text-white hover:bg-slate-800">
                     تطبيق التقرير
                 </button>
             </form>
@@ -327,14 +353,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 </div>
             )}
 
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="مؤشرات المنصة">
-                <MetricCard label="الصرف" value={money(totals.spend_sar)} hint="صرف المنصة ضمن الفترة" tone="amber" Icon={Coins} testid="marketing-spend" />
-                <MetricCard label="الطلبات" value={numeric(totals.orders)} hint="طلبات منسوبة بواسطة المنصة" tone="blue" Icon={Package} testid="marketing-orders" />
-                <MetricCard label="المبيعات" value={money(totals.sales_sar)} hint="مبيعات منسوبة بواسطة المنصة" tone="emerald" Icon={CurrencyDollar} testid="marketing-sales" />
-                <MetricCard label="ROAS" value={ratio(totals.roas, "×")} hint="المبيعات المنسوبة ÷ الصرف" tone="violet" Icon={ChartLineUp} testid="marketing-roas" />
-                <MetricCard label="CPA" value={money(totals.cpa_sar)} hint="الصرف ÷ الطلبات المنسوبة" tone="rose" Icon={Target} testid="marketing-cpa" />
-                <MetricCard label="CTR" value={ratio(totals.ctr_pct, "%")} hint={`${numeric(totals.swipes)} نقرة/سحبة`} tone="slate" Icon={Megaphone} testid="marketing-ctr" />
-            </section>
+            <AdsPerformanceExplorer
+                totals={totals}
+                daily={data?.daily || []}
+                platformLabel={config.label}
+            />
 
             {(data?.source?.row_limit_reached || data?.source?.entity_limit_reached) && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
@@ -359,42 +382,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 ))}
             </nav>
 
-            {activeTab === "overview" && (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="marketing-performance-chart">
-                        <div className="mb-4">
-                            <h2 className="font-black text-slate-900">الصرف والمبيعات اليومية</h2>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">القيم الفارغة تعني أن المصدر لم يثبت بيانات ذلك اليوم.</p>
-                        </div>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis />
-                                    <Tooltip formatter={(value, name) => [money(value), name === "spend" ? "الصرف" : "المبيعات"]} />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="spend" name="الصرف" connectNulls={false} strokeWidth={2} />
-                                    <Line type="monotone" dataKey="sales" name="المبيعات" connectNulls={false} strokeWidth={2} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </section>
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h2 className="font-black text-slate-900">ملاحظات التحليل</h2>
-                        <div className="mt-4 space-y-3">
-                            {(data?.insights || []).length ? data.insights.map((item) => (
-                                <article key={`${item.code}-${item.campaign_id || "all"}`} className={`rounded-xl border p-3 ${item.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-blue-100 bg-blue-50"}`}>
-                                    <div className="font-black text-slate-900">{item.title}</div>
-                                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{item.detail}</p>
-                                </article>
-                            )) : (
-                                <div className="rounded-xl bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">لا توجد ملاحظات مؤكدة ضمن الفترة.</div>
-                            )}
-                        </div>
-                    </section>
-                </div>
-            )}
+            {activeTab === "overview" && <InsightPanel insights={data?.insights || []} />}
 
             {activeTab === "campaigns" && (
                 <CampaignManagerTable
@@ -409,17 +397,47 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 />
             )}
 
-            {activeTab === "accounts" && (
-                <section className="grid gap-4 lg:grid-cols-2" data-testid="marketing-account-summaries">
-                    {(data?.accounts || []).map((account) => <article key={account.account_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="font-black text-slate-900">{account.account_name}</h2><div className="mt-1 font-mono text-xs text-slate-400">{account.account_id}</div></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{account.currency || "عملة غير معروفة"}</span></div><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4"><div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] font-black text-slate-500">الصرف</div><div className="mt-1 font-mono font-black">{money(account.spend_sar)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] font-black text-slate-500">الطلبات</div><div className="mt-1 font-mono font-black">{numeric(account.orders)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] font-black text-slate-500">المبيعات</div><div className="mt-1 font-mono font-black">{money(account.sales_sar)}</div></div><div className="rounded-xl bg-slate-50 p-3"><div className="text-[10px] font-black text-slate-500">ROAS</div><div className="mt-1 font-mono font-black">{ratio(account.roas, "×")}</div></div></div></article>)}
-                    {!(data?.accounts || []).length && <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center font-bold text-slate-500 lg:col-span-2">لا توجد بيانات أداء موزعة على الحسابات.</div>}
-                </section>
-            )}
+            {activeTab === "accounts" && <AccountSummaries accounts={data?.accounts || []} />}
 
             {activeTab === "ai" && (
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-2xl bg-violet-100 p-3 text-violet-700"><Robot size={26} weight="duotone" /></span><div><h2 className="text-xl font-black text-slate-900">جاهزية ذكاء ميزان</h2><p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط.</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><ReadinessItem label="بيانات التقرير" ready={data?.ai_readiness?.report_ready} detail="وجود صفوف أداء كاملة دون تجاوز حد القراءة." /><ReadinessItem label="هوية الحملات" ready={data?.ai_readiness?.campaign_identity_ready} detail="مطابقة معرف الحملة مع الاسم والحالة والميزانية." /><ReadinessItem label="الصرف" ready={data?.ai_readiness?.spend_ready} detail="توفر صرف موثق بالريال ضمن الفترة." /><ReadinessItem label="الطلبات" ready={data?.ai_readiness?.orders_ready} detail="توفر عدد مشتريات منسوب بواسطة المنصة." /><ReadinessItem label="المبيعات" ready={data?.ai_readiness?.sales_ready} detail="توفر قيمة مشتريات منسوبة بواسطة المنصة." /><ReadinessItem label="التحليل والمقارنة" ready={data?.ai_readiness?.ratios_ready} detail="إمكانية حساب ROAS وCPA دون خلط فترات ناقصة." /></div></section>
-                    <aside className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white shadow-xl"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={22} weight="fill" /><span className="font-black">حوكمة التنفيذ</span></div><h2 className="mt-4 text-xl font-black">الذكاء يحلل الآن، ولا ينفذ بعد</h2><p className="mt-2 text-sm font-semibold leading-6 text-slate-300">إنشاء الحملات وتعديل الميزانية والإيقاف والاستئناف تبقى مقفلة حتى اكتمال دورة آمنة يمكن مراجعتها والتراجع عنها.</p><div className="mt-5 space-y-2">{(data?.ai_readiness?.required_lifecycle || []).map((step, index) => <div key={step} className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm font-bold"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-200 font-mono text-xs font-black text-slate-950">{index + 1}</span>{step}</div>)}</div></aside>
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <span className="rounded-2xl bg-violet-100 p-3 text-violet-700">
+                                <Robot size={26} weight="duotone" />
+                            </span>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900">جاهزية ذكاء ميزان</h2>
+                                <p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط.</p>
+                            </div>
+                        </div>
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                            <ReadinessItem label="بيانات التقرير" ready={data?.ai_readiness?.report_ready} detail="وجود صفوف أداء كاملة دون تجاوز حد القراءة." />
+                            <ReadinessItem label="هوية الحملات" ready={data?.ai_readiness?.campaign_identity_ready} detail="مطابقة معرف الحملة مع الاسم والحالة والميزانية." />
+                            <ReadinessItem label="الصرف" ready={data?.ai_readiness?.spend_ready} detail="توفر صرف موثق بالريال ضمن الفترة." />
+                            <ReadinessItem label="الطلبات" ready={data?.ai_readiness?.orders_ready} detail="توفر عدد مشتريات منسوب بواسطة المنصة." />
+                            <ReadinessItem label="المبيعات" ready={data?.ai_readiness?.sales_ready} detail="توفر قيمة مشتريات منسوبة بواسطة المنصة." />
+                            <ReadinessItem label="التحليل والمقارنة" ready={data?.ai_readiness?.ratios_ready} detail="إمكانية حساب ROAS وCPA دون خلط فترات ناقصة." />
+                        </div>
+                    </section>
+                    <aside className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white shadow-xl">
+                        <div className="flex items-center gap-2 text-emerald-200">
+                            <ShieldCheck size={22} weight="fill" />
+                            <span className="font-black">حوكمة التنفيذ</span>
+                        </div>
+                        <h2 className="mt-4 text-xl font-black">الذكاء يحلل الآن، ولا ينفذ بعد</h2>
+                        <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
+                            إنشاء الحملات وتعديل الميزانية والإيقاف والاستئناف تبقى مقفلة حتى اكتمال دورة آمنة يمكن مراجعتها والتراجع عنها.
+                        </p>
+                        <div className="mt-5 space-y-2">
+                            {(data?.ai_readiness?.required_lifecycle || []).map((step, index) => (
+                                <div key={step} className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm font-bold">
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-200 font-mono text-xs font-black text-slate-950">{index + 1}</span>
+                                    {step}
+                                </div>
+                            ))}
+                        </div>
+                    </aside>
                 </div>
             )}
         </div>
