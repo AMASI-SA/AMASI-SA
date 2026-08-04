@@ -7,6 +7,7 @@ on:
     paths:
       - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
       - "backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py"
+      - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
       - "backend/tests/test_dashboard_ads_hourly_spend_v1.py"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
@@ -34,29 +35,34 @@ jobs:
           pytest pytest-asyncio fastapi "pydantic>=2" httpx pymongo motor
           cryptography openpyxl bcrypt PyJWT reportlab pillow
           python-multipart qrcode arabic-reshaper python-bidi
-      - name: Compile hourly Dashboard reader
+      - name: Compile hourly Dashboard readers
         run: >-
           python -m py_compile
           integrations_control_center/dashboard_ads_executive_routes.py
           integrations_control_center/dashboard_ads_hourly_spend_routes.py
+          integrations_control_center/dashboard_ads_platform_spend_routes.py
           tests/test_dashboard_ads_hourly_spend_v1.py
       - name: Run focused backend tests
         run: >-
           pytest -q
           tests/test_dashboard_ads_hourly_spend_v1.py
           tests/test_snapchat_account_hourly_chart_v1.py
+          tests/test_dashboard_four_platform_spend_v1.py
       - name: Enforce provider-only read contract
         working-directory: .
         run: |
-          ROUTE=backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py
+          LEGACY=backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py
+          FOUR=backend/integrations_control_center/dashboard_ads_platform_spend_routes.py
           EXECUTIVE=backend/integrations_control_center/dashboard_ads_executive_routes.py
-          grep -q '"/dashboard/ads-hourly-spend"' "$ROUTE"
-          grep -q 'for hour_index in range(24)' "$ROUTE"
-          grep -q '"timezone": "Asia/Riyadh"' "$ROUTE"
+          grep -q '"/dashboard/ads-hourly-spend"' "$LEGACY"
+          grep -q '"/dashboard/ads-platform-spend"' "$FOUR"
+          grep -q 'for hour_index in range(24)' "$LEGACY" "$FOUR"
+          grep -q '"timezone": "Asia/Riyadh"' "$LEGACY" "$FOUR"
           grep -q 'attach_dashboard_ads_hourly_spend_routes' "$EXECUTIVE"
-          ! grep -q 'booked_ad_expense_sar' "$ROUTE"
-          ! grep -q 'general_ledger' "$ROUTE"
-          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$ROUTE"
+          grep -q 'attach_dashboard_ads_platform_spend_routes' "$EXECUTIVE"
+          ! grep -q 'booked_ad_expense_sar' "$LEGACY" "$FOUR"
+          ! grep -q 'general_ledger' "$LEGACY" "$FOUR"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$LEGACY" "$FOUR"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
@@ -91,10 +97,13 @@ jobs:
           SERVICE=frontend/src/services/dashboardAdsSpend.js
           grep -q 'dashboard-ads-spend-hourly-chart' "$CARD"
           grep -q 'dashboard-ads-spend-daily-chart' "$CARD"
-          grep -q 'dataKey="snapchat"' "$CARD"
-          grep -q 'dataKey="meta"' "$CARD"
-          grep -q 'dataKey="tiktok"' "$CARD"
-          grep -q '/integrations-v2/dashboard/ads-hourly-spend' "$SERVICE"
+          grep -q 'DASHBOARD_ADS_PROVIDERS' "$CARD" "$SERVICE"
+          grep -q '"snapchat"' "$SERVICE"
+          grep -q '"meta"' "$SERVICE"
+          grep -q '"tiktok"' "$SERVICE"
+          grep -q '"google"' "$SERVICE"
+          grep -q '/integrations-v2/dashboard/ads-platform-spend' "$SERVICE"
+          grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$SERVICE"
           ! grep -q 'المصروف المحاسبي' "$CARD"
-          ! grep -q 'booked_ad_expense_sar' "$CARD"
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$CARD" "$SERVICE"
+          ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE"
+          ! grep -Eq '(api|axios)\.(put|patch|delete)\(' "$CARD" "$SERVICE"
