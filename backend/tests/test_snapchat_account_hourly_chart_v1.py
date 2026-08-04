@@ -210,12 +210,12 @@ async def test_salla_hourly_series_uses_exact_campaign_attribution(monkeypatch):
             {
                 "created_at": "2026-08-04T09:25:00+03:00",
                 "total_amount": 100,
-                "snapchat_campaign_id": "campaign-1",
+                "campaign_id": "campaign-1",
             },
             {
                 "created_at": "2026-08-04T10:15:00+03:00",
                 "total_amount": 50,
-                "snapchat_campaign_id": "campaign-1",
+                "campaign_id": "campaign-1",
             },
         ]
 
