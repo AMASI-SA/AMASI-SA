@@ -1,0 +1,58 @@
+import {
+    normalizeAdSquad,
+    normalizeSnapchatAdSquadReport,
+} from "./snapchatAdSquadPerformance";
+
+describe("Snapchat Ad Squad performance service", () => {
+    test("normalizes identity, parent campaign and metrics", () => {
+        expect(normalizeAdSquad({
+            account_id: "account-1",
+            account_name: "سناب الرياض",
+            ad_squad_id: "squad-1",
+            ad_squad_name: "مجموعة التحويلات",
+            campaign_id: "campaign-1",
+            campaign_name: "حملة المبيعات",
+            status: "ACTIVE",
+            delivery_status: "يتم التسليم",
+            spend_sar: "125.5",
+            orders: "4",
+            sales_sar: "500",
+            roas: "3.984",
+            budget: { currency: "SAR", daily_native: "200" },
+        })).toMatchObject({
+            ad_squad_id: "squad-1",
+            ad_squad_name: "مجموعة التحويلات",
+            campaign_id: "campaign-1",
+            campaign_name: "حملة المبيعات",
+            status: "ACTIVE",
+            spend_sar: 125.5,
+            orders: 4,
+            sales_sar: 500,
+            roas: 3.984,
+            budget: { currency: "SAR", daily_native: 200 },
+            result_source: "platform",
+        });
+    });
+
+    test("keeps pagination and platform-only policy", () => {
+        const report = normalizeSnapchatAdSquadReport({
+            date_from: "2026-08-04",
+            date_to: "2026-08-04",
+            account_timezone: "Asia/Riyadh",
+            selected_account_id: "account-1",
+            totals: { spend_sar: 100, orders: 2 },
+            daily: [{ date: "2026-08-04", spend_sar: 100, orders: 2 }],
+            ad_squads: [{ ad_squad_id: "squad-1" }],
+            pagination: { page: 1, limit: 25, total: 1, pages: 1 },
+            policy: { mode: "observe_only", mutations_allowed: false },
+        });
+
+        expect(report.entity_level).toBe("ad_squad");
+        expect(report.account_timezone).toBe("Asia/Riyadh");
+        expect(report.totals.spend_sar).toBe(100);
+        expect(report.ad_squads).toHaveLength(1);
+        expect(report.pagination.total).toBe(1);
+        expect(report.result_source).toBe("platform");
+        expect(report.policy.mutations_allowed).toBe(false);
+    });
+});
