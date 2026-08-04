@@ -1,0 +1,195 @@
+import {
+  listWorkspaceProducts,
+  syncRecentProductsV2,
+} from "./services/mezanProductsV2";
+
+const DIALOG_SELECTOR = '[data-testid="campaign-profitability-dialog"]';
+const LINK_ATTRIBUTE = "data-mezan-profit-product-link";
+const LOOKUP_SKU_PARAM = "lookup_sku";
+const LOOKUP_NAME_PARAM = "lookup_name";
+const RESOLVING_KEY = "mezan-profit-product-cost-link-resolving";
+
+function normalized(value) {
+  return String(value || "").trim().casefold?.() || String(value || "").trim().toLowerCase();
+}
+
+function clean(value) {
+  return String(value || "").trim();
+}
+
+export function buildProfitabilityProductCostHref({ sku = "", name = "" } = {}) {
+  const params = new URLSearchParams({ focus: "cost" });
+  if (clean(sku)) params.set(LOOKUP_SKU_PARAM, clean(sku));
+  if (clean(name)) params.set(LOOKUP_NAME_PARAM, clean(name));
+  return `/products-v2?${params.toString()}`;
+}
+
+function productSkus(product = {}) {
+  const values = [product.sku];
+  for (const variant of product.variants || []) {
+    if (variant && typeof variant === "object") values.push(variant.sku);
+  }
+  return values.map(normalized).filter(Boolean);
+}
+
+export function resolveProductFromWorkspace(items = [], { sku = "", name = "" } = {}) {
+  const rows = Array.isArray(items) ? items : [];
+  const expectedSku = normalized(sku);
+  const expectedName = normalized(name);
+  if (expectedSku) {
+    const bySku = rows.find((product) => productSkus(product).includes(expectedSku));
+    if (bySku) return bySku;
+  }
+  if (expectedName) {
+    const byName = rows.find((product) => normalized(product?.name) === expectedName);
+    if (byName) return byName;
+  }
+  return rows.length === 1 ? rows[0] : null;
+}
+
+export function productWorkspaceId(product = {}) {
+  return clean(
+    product.mezan_product_id
+    || product.id
+    || product.salla_product_id,
+  );
+}
+
+function textFromProductCell(cell) {
+  const skuNode = cell.querySelector(".font-mono");
+  const nameNode = [...cell.querySelectorAll("div")].find((node) => (
+    node !== skuNode
+    && node.className.includes("font-black")
+    && clean(node.textContent)
+  ));
+  return {
+    sku: clean(skuNode?.textContent),
+    name: clean(nameNode?.textContent),
+  };
+}
+
+function missingCostFromRow(row) {
+  const cells = row.querySelectorAll("td");
+  if (cells.length < 4) return false;
+  const value = clean(cells[3]?.textContent);
+  return value === "—" || value.includes("غير مكتملة") || value.includes("غير محسوم");
+}
+
+export function enhanceProfitabilityProductRows(root = document) {
+  const dialog = root.querySelector(DIALOG_SELECTOR);
+  if (!dialog) return 0;
+  let enhanced = 0;
+  for (const row of dialog.querySelectorAll("tbody tr")) {
+    const cells = row.querySelectorAll("td");
+    if (cells.length < 7 || row.querySelector(`[${LINK_ATTRIBUTE}]`)) continue;
+    const productCell = cells[0];
+    const identity = textFromProductCell(productCell);
+    if (!identity.sku && !identity.name) continue;
+
+    const link = document.createElement("a");
+    link.setAttribute(LINK_ATTRIBUTE, "true");
+    link.href = buildProfitabilityProductCostHref(identity);
+    link.className = [
+      "mt-2 inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-black transition",
+      missingCostFromRow(row)
+        ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+        : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
+    ].join(" ");
+    link.textContent = missingCostFromRow(row)
+      ? "فتح المنتج وإضافة التكلفة"
+      : "فتح المنتج";
+    link.setAttribute(
+      "aria-label",
+      `${link.textContent}: ${identity.name || identity.sku}`,
+    );
+    productCell.appendChild(link);
+    enhanced += 1;
+  }
+  return enhanced;
+}
+
+async function searchProduct(lookup) {
+  const query = lookup.sku || lookup.name;
+  if (!query) return null;
+  const result = await listWorkspaceProducts({
+    page: 1,
+    perPage: 30,
+    query,
+    sort: "newest",
+  });
+  return resolveProductFromWorkspace(result?.items, lookup);
+}
+
+export async function resolveProductCostDeepLink(locationLike = window.location) {
+  const pathname = String(locationLike?.pathname || "").replace(/\/+$/, "") || "/";
+  if (pathname !== "/products-v2") return false;
+  const params = new URLSearchParams(locationLike?.search || "");
+  if (params.get("product")) return false;
+  const lookup = {
+    sku: clean(params.get(LOOKUP_SKU_PARAM)),
+    name: clean(params.get(LOOKUP_NAME_PARAM)),
+  };
+  if (!lookup.sku && !lookup.name) return false;
+
+  let product = await searchProduct(lookup);
+  if (!product) {
+    try {
+      await syncRecentProductsV2({ force: true });
+      product = await searchProduct(lookup);
+    } catch {
+      // Keep the product list reachable even when a refresh is temporarily unavailable.
+    }
+  }
+
+  const productId = productWorkspaceId(product);
+  if (!productId) return false;
+  const next = new URL(locationLike.href);
+  next.searchParams.delete(LOOKUP_SKU_PARAM);
+  next.searchParams.delete(LOOKUP_NAME_PARAM);
+  next.searchParams.set("product", productId);
+  next.searchParams.set("focus", "cost");
+  window.location.replace(`${next.pathname}${next.search}${next.hash}`);
+  return true;
+}
+
+let frame = 0;
+function scheduleEnhancement() {
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    enhanceProfitabilityProductRows(document);
+  });
+}
+
+export function installCampaignProfitabilityProductCostLinks() {
+  if (typeof window === "undefined" || typeof document === "undefined") return false;
+  if (window.__mezanCampaignProfitabilityProductCostLinksInstalled) return false;
+  window.__mezanCampaignProfitabilityProductCostLinksInstalled = true;
+
+  const observer = new MutationObserver(scheduleEnhancement);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  scheduleEnhancement();
+
+  const params = new URLSearchParams(window.location.search || "");
+  const hasLookup = params.has(LOOKUP_SKU_PARAM) || params.has(LOOKUP_NAME_PARAM);
+  if (hasLookup && window.sessionStorage.getItem(RESOLVING_KEY) !== window.location.search) {
+    window.sessionStorage.setItem(RESOLVING_KEY, window.location.search);
+    window.setTimeout(async () => {
+      try {
+        const resolved = await resolveProductCostDeepLink(window.location);
+        if (!resolved) window.sessionStorage.removeItem(RESOLVING_KEY);
+      } catch {
+        window.sessionStorage.removeItem(RESOLVING_KEY);
+      }
+    }, 80);
+  }
+  return true;
+}
+
+if (
+  typeof window !== "undefined"
+  && typeof document !== "undefined"
+  && process.env.NODE_ENV !== "test"
+) {
+  installCampaignProfitabilityProductCostLinks();
+}
