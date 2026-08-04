@@ -1,0 +1,100 @@
+name: Production Dashboard Platform Spend Hourly V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py"
+      - "backend/tests/test_dashboard_ads_hourly_spend_v1.py"
+      - "frontend/src/components/DashboardAdsSpendCard.jsx"
+      - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/services/dashboardAdsSpend.js"
+      - "frontend/src/services/dashboardAdsSpend.test.js"
+      - ".github/workflows/prod-dashboard-platform-spend-hourly-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          pytest fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl bcrypt PyJWT reportlab pillow
+          python-multipart qrcode arabic-reshaper python-bidi
+      - name: Compile hourly Dashboard reader
+        run: >-
+          python -m py_compile
+          integrations_control_center/dashboard_ads_hourly_spend_routes.py
+          integrations_control_center/__init__.py
+          tests/test_dashboard_ads_hourly_spend_v1.py
+      - name: Run focused backend tests
+        run: >-
+          pytest -q
+          tests/test_dashboard_ads_hourly_spend_v1.py
+          tests/test_snapchat_account_hourly_chart_v1.py
+      - name: Enforce provider-only read contract
+        working-directory: .
+        run: |
+          ROUTE=backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q '"/dashboard/ads-hourly-spend"' "$ROUTE"
+          grep -q 'for hour_index in range(24)' "$ROUTE"
+          grep -q '"timezone": "Asia/Riyadh"' "$ROUTE"
+          grep -q 'attach_dashboard_ads_hourly_spend_routes' "$INIT"
+          ! grep -q 'booked_ad_expense_sar' "$ROUTE"
+          ! grep -q 'general_ledger' "$ROUTE"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$ROUTE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test hourly provider-only Dashboard chart
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/DashboardAdsSpendCard.test.jsx
+          src/services/dashboardAdsSpend.test.js
+          src/components/DashboardAnalyticsPlacement.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce hourly and daily chart contract
+        working-directory: .
+        run: |
+          CARD=frontend/src/components/DashboardAdsSpendCard.jsx
+          SERVICE=frontend/src/services/dashboardAdsSpend.js
+          grep -q 'dashboard-ads-spend-hourly-chart' "$CARD"
+          grep -q 'dashboard-ads-spend-daily-chart' "$CARD"
+          grep -q 'dataKey="snapchat"' "$CARD"
+          grep -q 'dataKey="meta"' "$CARD"
+          grep -q 'dataKey="tiktok"' "$CARD"
+          grep -q '/integrations-v2/dashboard/ads-hourly-spend' "$SERVICE"
+          ! grep -q 'المصروف المحاسبي' "$CARD"
+          ! grep -q 'booked_ad_expense_sar' "$CARD"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$CARD" "$SERVICE"
