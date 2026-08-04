@@ -46,6 +46,9 @@ from .snapchat_account_timezone_retention import (
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
+from .snapchat_adsquad_parent_delivery import (
+    install_snapchat_adsquad_parent_delivery_report,
+)
 from .snapchat_adsquad_performance import (
     attach_snapchat_adsquad_routes,
     install_snapchat_adsquad_performance_refresh,
@@ -111,6 +114,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_adsquad_performance_refresh()
     install_snapchat_account_delivery_refresh()
     install_snapchat_effective_delivery_report()
+    install_snapchat_adsquad_parent_delivery_report()
     install_tiktok_native_catalog()
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)

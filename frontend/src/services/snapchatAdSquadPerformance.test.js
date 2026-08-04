@@ -25,12 +25,40 @@ describe("Snapchat Ad Squad performance service", () => {
             campaign_id: "campaign-1",
             campaign_name: "حملة المبيعات",
             status: "ACTIVE",
+            configured_status: "ACTIVE",
+            effective_status: "ACTIVE",
             spend_sar: 125.5,
             orders: 4,
             sales_sar: 500,
             roas: 3.984,
             budget: { currency: "SAR", daily_native: 200 },
             result_source: "platform",
+        });
+    });
+
+    test("uses the effective parent-inherited status while preserving the configured switch", () => {
+        expect(normalizeAdSquad({
+            ad_squad_id: "squad-2",
+            status: "PAUSED",
+            configured_status: "ACTIVE",
+            effective_status: "PAUSED",
+            status_inherited_from_campaign: true,
+            delivery_state: "NOT_DELIVERING",
+            delivery_reason_code: "PARENT_CAMPAIGN_DAILY_BUDGET_EXHAUSTED",
+            delivery_status: "لا تسليم — الحملة خارج الميزانية اليومية",
+            delivery_detail: "بلغت الحملة حد الإنفاق اليومي في Snapchat.",
+            parent_campaign_configured_status: "ACTIVE",
+            parent_campaign_delivery_state: "NOT_DELIVERING",
+        })).toMatchObject({
+            status: "PAUSED",
+            configured_status: "ACTIVE",
+            effective_status: "PAUSED",
+            status_inherited_from_campaign: true,
+            delivery_state: "NOT_DELIVERING",
+            delivery_reason_code: "PARENT_CAMPAIGN_DAILY_BUDGET_EXHAUSTED",
+            delivery_status: "لا تسليم — الحملة خارج الميزانية اليومية",
+            parent_campaign_configured_status: "ACTIVE",
+            parent_campaign_delivery_state: "NOT_DELIVERING",
         });
     });
 

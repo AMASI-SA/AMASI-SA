@@ -1,0 +1,107 @@
+name: Production Snapchat Ad Squad Parent Delivery V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_adsquad_parent_delivery.py"
+      - "backend/tests/test_snapchat_adsquad_parent_delivery_v1.py"
+      - "frontend/src/services/snapchatAdSquadPerformance.js"
+      - "frontend/src/services/snapchatAdSquadPerformance.test.js"
+      - ".github/workflows/prod-snapchat-adsquad-parent-delivery-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile parent delivery projection
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_adsquad_parent_delivery.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_adsquad_parent_delivery_v1.py
+      - name: Run focused delivery tests
+        run: >-
+          python -m pytest
+          tests/test_snapchat_adsquad_parent_delivery_v1.py
+          tests/test_snapchat_account_delivery_refresh_v1.py
+          tests/test_snapchat_adsquad_performance_v1.py
+          -q --tb=short
+      - name: Enforce read-only inheritance contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_adsquad_parent_delivery.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'effective_status="PAUSED"' "$MODULE"
+          grep -q 'status_inherited_from_campaign' "$MODULE"
+          grep -q 'PARENT_' "$MODULE"
+          grep -q 'install_snapchat_adsquad_parent_delivery_report' "$INIT"
+          ! grep -Eq 'client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|campaign_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test inherited Ad Squad status normalization
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/services/snapchatAdSquadPerformance.test.js
+          src/components/marketing/AdSquadManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce effective status client contract
+        working-directory: .
+        run: |
+          SERVICE=frontend/src/services/snapchatAdSquadPerformance.js
+          grep -q 'configured_status' "$SERVICE"
+          grep -q 'effective_status' "$SERVICE"
+          grep -q 'status_inherited_from_campaign' "$SERVICE"
+          grep -q 'parent_campaign_delivery_state' "$SERVICE"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$SERVICE"
