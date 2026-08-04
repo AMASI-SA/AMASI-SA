@@ -46,6 +46,10 @@ from .snapchat_account_timezone_manager import (
 from .snapchat_account_timezone_retention import (
     install_snapchat_account_timezone_retention,
 )
+from .snapchat_ad_performance import (
+    attach_snapchat_ad_routes,
+    install_snapchat_ad_performance_refresh,
+)
 from .snapchat_ads_manager_attribution import (
     install_snapchat_ads_manager_attribution,
 )
@@ -112,15 +116,17 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # the account-local wrapper while all Dashboard/accounting readers retain
     # the original Riyadh-day collection and semantics. Hourly rows are captured
     # from the same provider HOUR response without adding another provider call.
-    # Campaign identity and status are refreshed before performance, Ad Squad
-    # performance is refreshed at a bounded 15-minute cadence, and account-level
-    # delivery is read last so billing/budget blocks become the effective
-    # delivery status. Configured switches remain separate from those blockers.
+    # Campaign identity and status are refreshed before performance. Ad Squad
+    # and Ad performance are refreshed at a bounded 15-minute cadence, and
+    # account-level delivery is read last so billing/budget blocks become the
+    # effective delivery status. Configured switches remain separate from those
+    # blockers.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_account_hourly_chart()
     install_snapchat_campaign_catalog_refresh()
     install_snapchat_adsquad_performance_refresh()
+    install_snapchat_ad_performance_refresh()
     install_snapchat_account_delivery_refresh()
     install_snapchat_effective_delivery_report()
     install_snapchat_adsquad_parent_delivery_report()
@@ -152,9 +158,12 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_snapchat_adsquad_routes(
         router, db, current_user, _require_owner
     )
+    attach_snapchat_ad_routes(
+        router, db, current_user, _require_owner
+    )
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)
 
-    # Keep package imports lightweight for focused Dashboard tests.  PyMongo
+    # Keep package imports lightweight for focused Dashboard tests. PyMongo
     # and the CAPI worker are loaded only when the full V2 router is composed.
     from .snapchat_capi_purchases import attach_snapchat_capi_purchase_routes
 
