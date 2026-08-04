@@ -69,6 +69,9 @@ from .snapchat_campaign_catalog_refresh import (
 from .snapchat_campaign_created_order_semantics import (
     install_fixed_created_order_semantics,
 )
+from .snapchat_campaign_current_catalog_cost import (
+    install_current_catalog_salla_cost_resolution,
+)
 from .snapchat_campaign_profitability import (
     install_snapchat_campaign_profitability,
 )
@@ -122,6 +125,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_snapchat_ads_manager_attribution()
     install_snapchat_salla_campaign_outcomes()
     install_snapchat_campaign_profitability()
+    install_current_catalog_salla_cost_resolution()
     install_exact_salla_profitability_reuse()
     install_fixed_created_order_semantics()
     # Install before importing the scheduler below. The scheduler then receives
@@ -133,7 +137,10 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # account-level delivery is read last so billing/budget blocks become the
     # effective delivery status. Campaign order counts remain fixed by Salla
     # creation time across all statuses, while sales and profitability use only
-    # the current financially included order set. All projections are read-only.
+    # the current financially included order set. Product costs resolve against
+    # the same current catalog used by Products V2, including a unique exact-name
+    # fallback when historical Salla line identities no longer match. All
+    # projections remain read-only.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
     install_snapchat_account_hourly_chart()
