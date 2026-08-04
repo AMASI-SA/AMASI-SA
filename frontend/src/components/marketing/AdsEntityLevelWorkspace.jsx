@@ -2,6 +2,7 @@ import CampaignManagerTable from "./CampaignManagerTable";
 import AdSquadManagerTable from "./AdSquadManagerTable";
 import AdSquadSortControls from "./AdSquadSortControls";
 import AdManagerTable from "./AdManagerTable";
+import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
 
 function EntityTabs({
     platformLabel,
@@ -67,6 +68,10 @@ export default function AdsEntityLevelWorkspace({
 }) {
     const adSquadsEnabled = platform === "snapchat";
     const adsEnabled = platform === "snapchat";
+    const campaignReport = platform === "snapchat"
+        ? hydrateCampaignProfitability(campaigns, campaignTotals)
+        : { campaigns, totals: campaignTotals };
+
     return (
         <section data-testid="ads-entity-level-workspace">
             <style>{`
@@ -89,8 +94,8 @@ export default function AdsEntityLevelWorkspace({
                 <CampaignManagerTable
                     platform={platform}
                     platformLabel={platformLabel}
-                    campaigns={campaigns}
-                    totals={campaignTotals}
+                    campaigns={campaignReport.campaigns}
+                    totals={campaignReport.totals}
                     pagination={campaignPagination}
                     page={campaignPage}
                     onPageChange={onCampaignPageChange}
