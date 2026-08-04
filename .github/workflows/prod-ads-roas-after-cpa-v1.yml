@@ -1,0 +1,52 @@
+name: Production Ads ROAS After CPA V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingCampaignColumnOrder.js"
+      - "frontend/src/marketingCampaignColumnOrder.test.js"
+      - ".github/workflows/prod-ads-roas-after-cpa-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test campaign column migration
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignColumnOrder.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce ROAS placement contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          ORDER=frontend/src/marketingCampaignColumnOrder.js
+          grep -q 'marketingCampaignColumnOrder' "$INDEX"
+          grep -A8 'CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA' "$ORDER" | grep -q '"cpa"'
+          grep -A9 'CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA' "$ORDER" | grep -q '"roas"'
+          grep -q 'cpaIndex + 1' "$ORDER"
+          grep -q 'preserve' frontend/src/marketingCampaignColumnOrder.test.js
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$ORDER"
