@@ -108,21 +108,40 @@ describe("campaign result source transport", () => {
     expect(getCampaignReportSnapshot("snapchat")?.campaigns?.[0]?.display_currency).toBe("USD");
   });
 
-  test("account payment block renders active campaign as stopped", () => {
+  test("delivery block never changes the configured active campaign switch", () => {
     const payload = {
       campaigns: [{
         campaign_id: "campaign-2",
         status: "ACTIVE",
-        effective_status: "ACCOUNT_PAYMENT_BLOCKED",
-        effective_status_label: "متوقفة بسبب الدفع",
-        effective_delivery_label: "الحساب الإعلاني لا يسلّم بسبب الدفع أو الرصيد",
+        configured_status: "ACTIVE",
+        delivery_state: "NOT_DELIVERING",
+        delivery_reason_code: "ACCOUNT_PAYMENT_BLOCKED",
+        delivery_label: "لا تسليم — الحساب موقوف بسبب الدفع أو الرصيد",
       }],
     };
 
     applyEffectiveCampaignDelivery(payload);
 
     expect(payload.campaigns[0].configured_status).toBe("ACTIVE");
-    expect(payload.campaigns[0].status).toBe("PAUSED");
-    expect(payload.campaigns[0].delivery_status).toContain("الدفع");
+    expect(payload.campaigns[0].status).toBe("ACTIVE");
+    expect(payload.campaigns[0].delivery_state).toBe("NOT_DELIVERING");
+    expect(payload.campaigns[0].delivery_status).toContain("لا تسليم");
+  });
+
+  test("campaign daily budget reason remains delivery-only", () => {
+    const payload = {
+      campaigns: [{
+        campaign_id: "campaign-3",
+        status: "ACTIVE",
+        delivery_state: "NOT_DELIVERING",
+        effective_delivery_code: "CAMPAIGN_DAILY_BUDGET_EXHAUSTED",
+        effective_delivery_label: "لا تسليم — خارج الميزانية اليومية",
+      }],
+    };
+
+    applyEffectiveCampaignDelivery(payload);
+
+    expect(payload.campaigns[0].status).toBe("ACTIVE");
+    expect(payload.campaigns[0].delivery_status).toContain("خارج الميزانية اليومية");
   });
 });
