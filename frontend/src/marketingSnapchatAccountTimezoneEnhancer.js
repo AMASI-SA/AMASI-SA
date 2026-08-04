@@ -6,6 +6,7 @@ import {
   prepareSnapchatAccountPage,
   setSnapchatSelectedAccount,
   snapchatAvailableAccounts,
+  snapchatManualRangeIsSelected,
   snapchatSelectedAccountId,
 } from "./marketingCampaignResultSource";
 
@@ -180,12 +181,13 @@ function ensureFormTracking(workspace) {
 }
 
 function syncReportedRange(workspace, snapshot) {
+  if (snapchatManualRangeIsSelected()) return;
   const dateFrom = String(snapshot?.date_from || "");
   const dateTo = String(snapshot?.date_to || "");
   if (!dateFrom || !dateTo) return;
-  // The first backend request intentionally omits the old month-to-date Riyadh
-  // range. Reflect the account-local dates in React state, then submit once so
-  // every later source toggle/refresh uses the same explicit range.
+  // Only the initial account-local-day response may initialize the form.
+  // Once the user applies a range, React owns that range and no later or stale
+  // response is allowed to overwrite it back to one day.
   syncDateInputs(workspace, dateFrom, dateTo, { submit: true });
 }
 
