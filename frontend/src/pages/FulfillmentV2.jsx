@@ -18,6 +18,7 @@ import ReviewedOrders from "./ReviewedOrders";
 import PreparationFilesRegistry from "../components/fulfillment/PreparationFilesRegistry";
 import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
+import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
 
 export const FULFILLMENT_STAGES = [
     {
@@ -85,15 +86,6 @@ export const FULFILLMENT_STAGES = [
     },
 ];
 
-const PREPARATION_TRACKS = [
-    "من المستودع",
-    "من المورد",
-    "تصنيع داخلي",
-    "ينتظر توريد",
-    "قيد التجميع",
-    "متوقف بسبب نقص منتج",
-];
-
 function PlannedStage({ stage }) {
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid={`fulfillment-stage-${stage.key}`}>
@@ -120,18 +112,6 @@ function PlannedStage({ stage }) {
                     </div>
                 </div>
 
-                {stage.key === "preparation" && (
-                    <div className="mt-5">
-                        <div className="mb-3 text-sm font-extrabold text-slate-700">مسارات التجهيز المعتمدة</div>
-                        <div className="flex flex-wrap gap-2">
-                            {PREPARATION_TRACKS.map((track) => (
-                                <span key={track} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-800">
-                                    {track}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
         </section>
     );
@@ -231,6 +211,8 @@ export default function FulfillmentV2() {
                     : <ReviewedOrders />
             ) : activeStage.key === "in_progress" ? (
                 <PreparationWorkDashboard />
+            ) : activeStage.key === "preparation" ? (
+                <SupplierReceivingWorkspace />
             ) : activeStage.key === "ready_to_ship" ? (
                 <ReadyToShipOrders />
             ) : (

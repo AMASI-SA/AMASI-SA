@@ -38,6 +38,7 @@ from reviewed_products_catalog import (
 )
 from reviewed_preparation_batches import BATCHES
 from preparation_file_registry import REGISTRY
+from preparation_piece_barcode import preparation_piece_id
 from tz_utils import riyadh_now_aware
 
 
@@ -83,11 +84,13 @@ def _piece_id(
     order_item_id: str,
     unit_index: int,
 ) -> str:
-    raw = (
-        f"mezan-piece:{user_id}:{batch_id}:{order_number}:"
-        f"{order_item_id}:{unit_index}"
+    return preparation_piece_id(
+        user_id=user_id,
+        batch_id=batch_id,
+        order_number=order_number,
+        order_item_id=order_item_id,
+        unit_index=unit_index,
     )
-    return uuid.uuid5(uuid.NAMESPACE_URL, raw).hex
 
 
 def _positive_unit_indices(line: dict[str, Any]) -> list[int]:

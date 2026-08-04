@@ -227,7 +227,9 @@ def generate_compact_operational_preparation_pdf(
         media_y = media_top - MEDIA_SIZE
         image_x, qr_x = compact_media_positions(x, card_width)
 
-        qr_bytes = reference._qr_with_center_mark(line.order_number)
+        qr_bytes = reference._qr_with_center_mark(
+            line.barcode_payload or line.order_number
+        )
         pdf.drawImage(
             ImageReader(io.BytesIO(qr_bytes)),
             qr_x,

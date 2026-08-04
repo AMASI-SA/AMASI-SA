@@ -40,6 +40,7 @@ from order_review_spec_replacements import (
     supplier_file_spec_fields,
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
+from preparation_piece_barcode import preparation_piece_barcode
 from reviewed_products_catalog import (
     ACTIVE_PREPARATION_ALLOCATION_STATUSES,
     MAX_REVIEWED_ORDERS,
@@ -318,13 +319,36 @@ def _card_field_projection(
     }
 
 
-def _line_from_batch_storage(row: dict[str, Any]) -> ProductLine:
+def _line_from_batch_storage(
+    row: dict[str, Any],
+    batch: dict[str, Any] | None = None,
+) -> ProductLine:
     image_bytes = None
     if row.get("image_b64"):
         try:
             image_bytes = base64.b64decode(row["image_b64"])
         except Exception:
             image_bytes = None
+    batch = batch or {}
+    barcode_payload = None
+    unit_index = row.get("unit_index")
+    if unit_index in (None, ""):
+        unit_indices = row.get("unit_indices") or []
+        unit_index = unit_indices[0] if len(unit_indices) == 1 else None
+    if all((
+        _text(batch.get("user_id")),
+        _text(batch.get("id")),
+        _text(row.get("order_number")),
+        _text(row.get("order_item_id")),
+        unit_index not in (None, ""),
+    )):
+        barcode_payload = preparation_piece_barcode(
+            user_id=batch.get("user_id"),
+            batch_id=batch.get("id"),
+            order_number=row.get("order_number"),
+            order_item_id=row.get("order_item_id"),
+            unit_index=unit_index,
+        )
     return ProductLine(
         order_number=_text(row.get("order_number")),
         order_date=_text(row.get("order_date")) or None,
@@ -342,12 +366,13 @@ def _line_from_batch_storage(row: dict[str, Any]) -> ProductLine:
         product_id=_text(row.get("product_id")) or None,
         sku=_text(row.get("sku")) or None,
         product_options=dict(row.get("product_options") or {}),
+        barcode_payload=barcode_payload,
     )
 
 
 def render_preparation_batch_pdf(batch: dict[str, Any]) -> bytes:
     lines = [
-        _line_from_batch_storage(row)
+        _line_from_batch_storage(row, batch)
         for row in batch.get("lines") or []
         if isinstance(row, dict)
     ]
@@ -846,7 +871,13 @@ def make_reviewed_preparation_batches_router(
         try:
             batch_lines = await _build_batch_lines(context, planned)
             pdf_bytes = generate_preparation_pdf(
-                [_line_from_batch_storage(row) for row in batch_lines],
+                [
+                    _line_from_batch_storage(
+                        row,
+                        {"id": batch_id, "user_id": user_id},
+                    )
+                    for row in batch_lines
+                ],
                 serial_start=1,
                 title="تجهيز المنتجات",
             )

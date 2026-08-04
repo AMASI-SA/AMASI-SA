@@ -243,7 +243,7 @@ def generate_reference_preparation_pdf(
         qr_x = right - media_size
         image_x = left
 
-        qr_bytes = _qr_with_center_mark(line.order_number)
+        qr_bytes = _qr_with_center_mark(line.barcode_payload or line.order_number)
         pdf.drawImage(
             ImageReader(io.BytesIO(qr_bytes)),
             qr_x,
