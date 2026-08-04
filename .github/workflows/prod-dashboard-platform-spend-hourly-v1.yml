@@ -5,7 +5,7 @@ on:
     branches:
       - hotfix/prod-snap-meta-final
     paths:
-      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/dashboard_ads_executive_routes.py"
       - "backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py"
       - "backend/tests/test_dashboard_ads_hourly_spend_v1.py"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
@@ -37,8 +37,8 @@ jobs:
       - name: Compile hourly Dashboard reader
         run: >-
           python -m py_compile
+          integrations_control_center/dashboard_ads_executive_routes.py
           integrations_control_center/dashboard_ads_hourly_spend_routes.py
-          integrations_control_center/__init__.py
           tests/test_dashboard_ads_hourly_spend_v1.py
       - name: Run focused backend tests
         run: >-
@@ -49,11 +49,11 @@ jobs:
         working-directory: .
         run: |
           ROUTE=backend/integrations_control_center/dashboard_ads_hourly_spend_routes.py
-          INIT=backend/integrations_control_center/__init__.py
+          EXECUTIVE=backend/integrations_control_center/dashboard_ads_executive_routes.py
           grep -q '"/dashboard/ads-hourly-spend"' "$ROUTE"
           grep -q 'for hour_index in range(24)' "$ROUTE"
           grep -q '"timezone": "Asia/Riyadh"' "$ROUTE"
-          grep -q 'attach_dashboard_ads_hourly_spend_routes' "$INIT"
+          grep -q 'attach_dashboard_ads_hourly_spend_routes' "$EXECUTIVE"
           ! grep -q 'booked_ad_expense_sar' "$ROUTE"
           ! grep -q 'general_ledger' "$ROUTE"
           ! grep -Eq 'client\.(post|put|patch|delete)\(' "$ROUTE"
