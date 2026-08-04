@@ -8,6 +8,7 @@ const WORKSPACE_SELECTOR = '[data-testid="marketing-platform-workspace"]';
 const REFRESH_BUTTON_SELECTOR = '[data-testid="marketing-platform-refresh"]';
 const CAMPAIGNS_TAB_SELECTOR = '[data-testid="marketing-platform-tab-campaigns"]';
 const ENTITY_TABS_SELECTOR = '[data-testid="ads-entity-level-tabs"]';
+const AD_SQUADS_TAB_SELECTOR = '[data-testid="ads-entity-level-ad_squads"]';
 const AUTO_REFRESH_MS = 60_000;
 const MIN_FOCUS_REFRESH_MS = 20_000;
 const SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
@@ -107,7 +108,8 @@ export function updateSortControls(root = document, forcedSort = null) {
   if (!isSnapchatPage()) return false;
   const workspace = root.querySelector(WORKSPACE_SELECTOR);
   const tabs = workspace?.querySelector(ENTITY_TABS_SELECTOR);
-  if (!workspace || !tabs) return false;
+  const adSquadsTab = workspace?.querySelector(AD_SQUADS_TAB_SELECTOR);
+  if (!workspace || !tabs || !adSquadsTab) return false;
   const current = forcedSort || adsquadSortPreference();
   let controls = workspace.querySelector(`[${SORT_CONTROL_ATTRIBUTE}]`);
   if (!controls) {
@@ -116,6 +118,7 @@ export function updateSortControls(root = document, forcedSort = null) {
     controls.className = "flex flex-wrap items-center justify-between gap-2 border-x border-t border-slate-200 bg-slate-50 px-3 py-2";
     tabs.insertAdjacentElement("afterend", controls);
   }
+  controls.hidden = adSquadsTab.getAttribute("aria-pressed") !== "true";
   if (controls.dataset.sortSignature === current) return true;
   controls.replaceChildren();
   const label = document.createElement("div");
