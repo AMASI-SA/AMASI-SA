@@ -21,12 +21,12 @@ jest.mock("recharts", () => ({
 test("renders the yellow ads report for the same dashboard date range", () => {
     const html = renderToStaticMarkup(
         <DashboardAdsSpendCardContent
-            fromDate="2026-08-03"
-            toDate="2026-08-03"
+            fromDate="2026-07-15"
+            toDate="2026-07-15"
             data={{
                 daily_spend: [
                     {
-                        date: "2026-08-03",
+                        date: "2026-07-15",
                         snapchat: 8188.42,
                         meta: 668.05,
                         tiktok: 10,
@@ -40,7 +40,7 @@ test("renders the yellow ads report for the same dashboard date range", () => {
 
     expect(html).toContain("صرفيات منصات الإعلانات");
     expect(html).toContain("مرتبطة بتاريخ الملخص التنفيذي للأرباح");
-    expect(html).toContain("صرفيات يوم 2026-08-03");
+    expect(html).toContain("صرفيات يوم 2026-07-15");
     expect(html).toContain("8,866.47 ر.س");
     expect(html).toContain("سناب شات");
     expect(html).toContain("ميتا");
