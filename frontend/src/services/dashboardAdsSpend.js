@@ -1,9 +1,13 @@
 import api from "../lib/api";
-import { getAdsManagerOverview } from "./adsManager";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HOUR_RE = /^(?:[01]\d|2[0-3]):00$/;
-const PROVIDERS = Object.freeze(["snapchat", "meta", "tiktok"]);
+export const DASHBOARD_ADS_PROVIDERS = Object.freeze([
+    "snapchat",
+    "meta",
+    "tiktok",
+    "google",
+]);
 
 function nonnegative(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -11,106 +15,157 @@ function nonnegative(value) {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function normalizeDashboardAdsHourlySpend(payload = {}) {
-    const value = payload && typeof payload === "object" ? payload : {};
-    const hourly = Array.isArray(value.hourly)
-        ? value.hourly
-            .map((point) => {
-                const hourIndex = Math.trunc(Number(point?.hour_index));
-                if (!Number.isInteger(hourIndex) || hourIndex < 0 || hourIndex > 23) {
-                    return null;
-                }
-                const hour = HOUR_RE.test(point?.hour || "")
-                    ? point.hour
-                    : `${String(hourIndex).padStart(2, "0")}:00`;
-                return {
-                    date: ISO_DATE_RE.test(point?.date || "") ? point.date : null,
-                    hour_index: hourIndex,
-                    hour,
-                    snapchat: nonnegative(point?.snapchat),
-                    meta: nonnegative(point?.meta),
-                    tiktok: nonnegative(point?.tiktok),
-                    observed: point?.observed === true,
-                    is_future: point?.is_future === true,
-                };
-            })
-            .filter(Boolean)
-            .sort((left, right) => left.hour_index - right.hour_index)
-        : [];
+function safeDate(value) {
+    return ISO_DATE_RE.test(value || "") ? value : null;
+}
 
-    const available = Array.isArray(value.available_hourly_providers)
-        ? value.available_hourly_providers.filter((provider) => PROVIDERS.includes(provider))
-        : [];
-    const unavailable = Array.isArray(value.unavailable_hourly_providers)
-        ? value.unavailable_hourly_providers.filter((provider) => PROVIDERS.includes(provider))
-        : [];
-
+function normalizePoint(point = {}, hourly = false) {
+    const base = {
+        date: safeDate(point.date),
+        ...Object.fromEntries(
+            DASHBOARD_ADS_PROVIDERS.map((provider) => [
+                provider,
+                nonnegative(point?.[provider]),
+            ]),
+        ),
+    };
+    if (!hourly) return base;
+    const hourIndex = Math.trunc(Number(point.hour_index));
+    if (!Number.isInteger(hourIndex) || hourIndex < 0 || hourIndex > 23) {
+        return null;
+    }
     return {
-        date: ISO_DATE_RE.test(value.date || "") ? value.date : null,
-        timezone: value.timezone === "Asia/Riyadh" ? value.timezone : "Asia/Riyadh",
-        granularity: "hour",
-        hourly,
-        available_hourly_providers: available,
-        unavailable_hourly_providers: unavailable,
-        selected_snapchat_accounts: Math.max(0, Math.trunc(Number(value.selected_snapchat_accounts) || 0)),
-        source_rows: Math.max(0, Math.trunc(Number(value.source_rows) || 0)),
-        row_limit_reached: value.row_limit_reached === true,
-        source_only: value.source_only === true,
-        accounting_write_reached: false,
+        ...base,
+        hour_index: hourIndex,
+        hour: HOUR_RE.test(point.hour || "")
+            ? point.hour
+            : `${String(hourIndex).padStart(2, "0")}:00`,
     };
 }
 
-export async function getDashboardAdsSpend({ dateFrom, dateTo } = {}) {
-    const overviewPromise = getAdsManagerOverview({
-        dateFrom,
-        dateTo,
-        provider: "all",
-        page: 1,
-        limit: 10,
-    });
-    const singleDay = Boolean(
-        ISO_DATE_RE.test(dateFrom || "")
-        && dateFrom === dateTo,
-    );
+function normalizeProvider(provider, value = {}) {
+    const row = value && typeof value === "object" ? value : {};
+    return {
+        provider,
+        integration_provider: String(row.integration_provider || ""),
+        connection_status: String(row.connection_status || "not_connected"),
+        connected: row.connected === true,
+        daily_available: row.daily_available === true,
+        hourly_available: row.hourly_available === true,
+        total_sar: nonnegative(row.total_sar),
+        data_quality: row.data_quality ? String(row.data_quality) : null,
+        last_sync_at: row.last_sync_at ? String(row.last_sync_at) : null,
+        data_delay_minutes: nonnegative(row.data_delay_minutes),
+    };
+}
 
-    if (!singleDay) {
-        const overview = await overviewPromise;
-        return {
-            ...overview,
-            chart_granularity: "day",
-            hourly_spend: [],
-            hourly_source: null,
-            hourly_error: "",
-        };
+export function normalizeDashboardAdsSpend(payload = {}) {
+    const value = payload && typeof payload === "object" ? payload : {};
+    const providers = Object.fromEntries(
+        DASHBOARD_ADS_PROVIDERS.map((provider) => [
+            provider,
+            normalizeProvider(provider, value?.providers?.[provider]),
+        ]),
+    );
+    const daily = Array.isArray(value.daily_spend)
+        ? value.daily_spend
+            .map((point) => normalizePoint(point, false))
+            .filter((point) => point?.date)
+        : [];
+    const hourly = Array.isArray(value.hourly_spend)
+        ? value.hourly_spend
+            .map((point) => normalizePoint(point, true))
+            .filter(Boolean)
+            .sort((left, right) => left.hour_index - right.hour_index)
+        : [];
+    const totals = Object.fromEntries(
+        DASHBOARD_ADS_PROVIDERS.map((provider) => [
+            provider,
+            nonnegative(value?.provider_totals_sar?.[provider]),
+        ]),
+    );
+    return {
+        date_from: safeDate(value.date_from),
+        date_to: safeDate(value.date_to),
+        timezone: value.timezone === "Asia/Riyadh" ? value.timezone : "Asia/Riyadh",
+        chart_granularity: value.chart_granularity === "hour" ? "hour" : "day",
+        daily_spend: daily,
+        hourly_spend: hourly,
+        providers,
+        provider_totals_sar: totals,
+        total_sar: nonnegative(value.total_sar) ?? 0,
+        refresh: value.refresh && typeof value.refresh === "object"
+            ? value.refresh
+            : null,
+        source_only: value.source_only === true,
+        provider_write_reached: false,
+        campaign_write_reached: false,
+        accounting_write_reached: false,
+        qoyod_write_reached: false,
+    };
+}
+
+// Backwards-compatible export retained for the focused test suite.
+export function normalizeDashboardAdsHourlySpend(payload = {}) {
+    const normalized = normalizeDashboardAdsSpend({
+        ...payload,
+        hourly_spend: payload.hourly_spend || payload.hourly || [],
+    });
+    return {
+        ...normalized,
+        date: normalized.date_from || safeDate(payload.date),
+        granularity: "hour",
+        hourly: normalized.hourly_spend,
+    };
+}
+
+function errorMessage(requestError, fallback) {
+    const detail = requestError?.response?.data?.detail;
+    return (
+        (typeof detail === "object" ? detail?.message : detail)
+        || requestError?.message
+        || fallback
+    );
+}
+
+export async function getDashboardAdsSpend({
+    dateFrom,
+    dateTo,
+    refresh = false,
+} = {}) {
+    const safeFrom = safeDate(dateFrom);
+    const safeTo = safeDate(dateTo || dateFrom);
+    if (!safeFrom || !safeTo) {
+        throw new Error("invalid_dashboard_ads_date_range");
     }
 
-    const [overview, hourlyResult] = await Promise.all([
-        overviewPromise,
-        api.get("/integrations-v2/dashboard/ads-hourly-spend", {
-            params: { date: dateFrom },
-        })
-            .then((response) => ({
-                data: normalizeDashboardAdsHourlySpend(response.data),
-                error: "",
-            }))
-            .catch((requestError) => {
-                const detail = requestError?.response?.data?.detail;
-                return {
-                    data: normalizeDashboardAdsHourlySpend({ date: dateFrom }),
-                    error: (
-                        (typeof detail === "object" ? detail?.message : detail)
-                        || requestError?.message
-                        || "تعذر قراءة الصرف الساعي لمنصات الإعلانات."
-                    ),
-                };
-            }),
-    ]);
+    let responseData = null;
+    let refreshError = "";
+    if (refresh) {
+        try {
+            const response = await api.post(
+                "/integrations-v2/dashboard/ads-platform-spend/refresh",
+                { date_from: safeFrom, date_to: safeTo },
+            );
+            responseData = response.data;
+        } catch (requestError) {
+            refreshError = errorMessage(
+                requestError,
+                "تعذر تحديث إحدى منصات الإعلانات؛ سيتم عرض آخر بيانات محفوظة.",
+            );
+        }
+    }
+
+    if (!responseData) {
+        const response = await api.get(
+            "/integrations-v2/dashboard/ads-platform-spend",
+            { params: { date_from: safeFrom, date_to: safeTo } },
+        );
+        responseData = response.data;
+    }
 
     return {
-        ...overview,
-        chart_granularity: "hour",
-        hourly_spend: hourlyResult.data.hourly,
-        hourly_source: hourlyResult.data,
-        hourly_error: hourlyResult.error,
+        ...normalizeDashboardAdsSpend(responseData),
+        refresh_error: refreshError,
     };
 }
