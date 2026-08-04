@@ -1,0 +1,54 @@
+name: Production Campaign Profitability Normalization V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+      - "frontend/src/components/marketing/AdsEntityLevelWorkspace.test.jsx"
+      - "frontend/src/marketingCampaignProfitabilityHydration.js"
+      - "frontend/src/marketingCampaignProfitabilityHydration.test.js"
+      - ".github/workflows/prod-campaign-profitability-normalization-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test profitability hydration and entity workspace
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignProfitabilityHydration.test.js
+          src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+          src/components/marketing/CampaignManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce exact read-only hydration contract
+        working-directory: .
+        run: |
+          HYDRATION=frontend/src/marketingCampaignProfitabilityHydration.js
+          WORKSPACE=frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          grep -q 'exact_account_campaign_key: true' "$HYDRATION"
+          grep -q 'snapshot?.totals?.profitability' "$HYDRATION"
+          grep -q 'hydrateCampaignProfitability' "$WORKSPACE"
+          grep -q 'campaigns={campaignReport.campaigns}' "$WORKSPACE"
+          grep -q 'totals={campaignReport.totals}' "$WORKSPACE"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$HYDRATION" "$WORKSPACE"
