@@ -79,13 +79,18 @@ def aggregate_riyadh_hourly_spend(
         buckets[local.hour] += spend_sar
         observed_hours.add(local.hour)
 
+    has_hourly_facts = bool(observed_hours)
     is_today = selected_date == current_riyadh.date()
     return [
         {
             "date": date_string,
             "hour_index": hour_index,
             "hour": f"{hour_index:02d}:00",
-            "snapchat": round(buckets[hour_index], 2),
+            "snapchat": (
+                round(buckets[hour_index], 2)
+                if has_hourly_facts
+                else None
+            ),
             "meta": None,
             "tiktok": None,
             "observed": hour_index in observed_hours,
@@ -167,12 +172,13 @@ async def build_dashboard_ads_hourly_spend(
         date_string=date_string,
         now=now,
     )
+    has_hourly_facts = any(point["snapchat"] is not None for point in hourly)
     return {
         "date": date_string,
         "timezone": "Asia/Riyadh",
         "granularity": "hour",
         "hourly": hourly,
-        "available_hourly_providers": ["snapchat"] if rows else [],
+        "available_hourly_providers": ["snapchat"] if has_hourly_facts else [],
         "unavailable_hourly_providers": ["meta", "tiktok"],
         "selected_snapchat_accounts": len(selected_ids),
         "source_rows": len(rows),
