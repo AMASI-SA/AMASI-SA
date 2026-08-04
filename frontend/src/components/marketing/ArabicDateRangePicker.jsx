@@ -170,6 +170,15 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
     }, [open, valueFrom, valueTo]);
 
     useEffect(() => {
+        if (nativeFromRef.current && nativeFromRef.current.value !== valueFrom) {
+            nativeFromRef.current.value = valueFrom;
+        }
+        if (nativeToRef.current && nativeToRef.current.value !== valueTo) {
+            nativeToRef.current.value = valueTo;
+        }
+    }, [valueFrom, valueTo]);
+
+    useEffect(() => {
         const close = (event) => {
             if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
         };
@@ -232,7 +241,7 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
                 <input
                     ref={nativeFromRef}
                     type="date"
-                    value={valueFrom}
+                    defaultValue={valueFrom}
                     onChange={scheduleNativeCompatibilityApply}
                     tabIndex={-1}
                     data-mezan-native-date="from"
@@ -240,7 +249,7 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
                 <input
                     ref={nativeToRef}
                     type="date"
-                    value={valueTo}
+                    defaultValue={valueTo}
                     onChange={scheduleNativeCompatibilityApply}
                     tabIndex={-1}
                     data-mezan-native-date="to"
