@@ -27,6 +27,10 @@ jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToS
     return <div data-testid="ready-to-ship-window">جاهز للشحن</div>;
 });
 
+jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function SupplierReceivingFixture() {
+    return <div data-testid="supplier-receiving-workspace">استلام منتجات المورد بالباركود · من المستودع · من المورد · تصنيع داخلي · ينتظر توريد · قيد التجميع · متوقف بسبب نقص منتج</div>;
+});
+
 import FulfillmentV2, { FULFILLMENT_STAGES } from "./FulfillmentV2";
 
 const EXPECTED_STAGE_KEYS = [
@@ -125,5 +129,8 @@ test("preparation stage exposes warehouse supplier manufacturing and shortage tr
         "متوقف بسبب نقص منتج",
     ].forEach((track) => expect(markup).toContain(track));
 
+    expect(markup).toContain('data-testid="supplier-receiving-workspace"');
+    expect(markup).toContain("استلام منتجات المورد بالباركود");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
     expect(markup).not.toContain("قائمة انتظار المراجعة");
 });

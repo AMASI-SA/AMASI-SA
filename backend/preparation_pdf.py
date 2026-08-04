@@ -96,6 +96,7 @@ class ProductLine:
     product_id: Optional[str] = None
     sku: Optional[str] = None
     product_options: dict[str, str] = field(default_factory=dict)
+    barcode_payload: Optional[str] = None
 
 
     @property
@@ -845,7 +846,7 @@ def generate_preparation_pdf(
         c.drawRightString(right_edge, y + card_h - pad - 8, f"#{serial}")
 
         qr_size = 36
-        qr_buf = io.BytesIO(_qr_png_bytes(line.order_number))
+        qr_buf = io.BytesIO(_qr_png_bytes(line.barcode_payload or line.order_number))
         c.drawImage(ImageReader(qr_buf),
                     left_edge, y + card_h - pad - qr_size,
                     width=qr_size, height=qr_size, mask="auto")

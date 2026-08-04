@@ -321,7 +321,9 @@ def generate_wrapped_reference_preparation_pdf(
         media_y = media_top - media_size
         qr_x = right - media_size
         image_x = left
-        qr_bytes = reference._qr_with_center_mark(line.order_number)
+        qr_bytes = reference._qr_with_center_mark(
+            line.barcode_payload or line.order_number
+        )
         pdf.drawImage(
             ImageReader(io.BytesIO(qr_bytes)),
             qr_x,
