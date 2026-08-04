@@ -1,6 +1,7 @@
 import {
   CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA,
   CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX,
+  insertSnapchatProfitabilityColumns,
   migrateCampaignColumnOrder,
   placeRoasAfterCostPerPurchase,
 } from "./marketingCampaignColumnOrder";
@@ -19,7 +20,7 @@ class MemoryStorage {
   }
 }
 
-describe("Campaign Manager ROAS column order", () => {
+describe("Campaign Manager column order", () => {
   test("places ROAS immediately after cost per purchase", () => {
     const current = [
       "name",
@@ -38,24 +39,32 @@ describe("Campaign Manager ROAS column order", () => {
 
     const next = placeRoasAfterCostPerPurchase(current);
     expect(next.indexOf("roas")).toBe(next.indexOf("cpa") + 1);
-    expect(next).toEqual([
+  });
+
+  test("inserts Snapchat profitability columns immediately after sales", () => {
+    const next = insertSnapchatProfitabilityColumns([
       "name",
-      "status",
-      "delivery",
       "orders",
       "cpa",
       "roas",
-      "spend",
-      "impressions",
-      "cpm",
-      "clicks",
-      "cpc",
       "sales",
+      "spend",
+    ]);
+    expect(next).toEqual([
+      "name",
+      "orders",
+      "cpa",
+      "roas",
+      "sales",
+      "product_cost",
+      "profit",
+      "profit_margin",
+      "spend",
     ]);
   });
 
-  test("preserves hidden columns instead of re-enabling them", () => {
-    expect(placeRoasAfterCostPerPurchase([
+  test("preserves hidden operational columns while enabling new Snapchat profit columns", () => {
+    expect(insertSnapchatProfitabilityColumns([
       "name",
       "orders",
       "cpa",
@@ -64,24 +73,35 @@ describe("Campaign Manager ROAS column order", () => {
       "name",
       "orders",
       "cpa",
+      "product_cost",
+      "profit",
+      "profit_margin",
       "spend",
     ]);
   });
 
-  test("initializes every Ads Manager platform with the new default", () => {
+  test("initializes Snapchat with profit columns and keeps other platforms clean", () => {
     const storage = new MemoryStorage();
     expect(migrateCampaignColumnOrder(storage)).toBe(true);
 
-    ["snapchat", "meta", "tiktok", "google", "all"].forEach((platform) => {
+    const snapchat = JSON.parse(
+      storage.getItem(`${CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX}snapchat`),
+    );
+    expect(snapchat).toEqual(CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA);
+    expect(snapchat.indexOf("roas")).toBe(snapchat.indexOf("cpa") + 1);
+    expect(snapchat.indexOf("product_cost")).toBe(snapchat.indexOf("sales") + 1);
+
+    ["meta", "tiktok", "google", "all"].forEach((platform) => {
       const value = JSON.parse(
         storage.getItem(`${CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX}${platform}`),
       );
-      expect(value).toEqual(CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA);
-      expect(value.indexOf("roas")).toBe(value.indexOf("cpa") + 1);
+      expect(value).not.toContain("product_cost");
+      expect(value).not.toContain("profit");
+      expect(value).not.toContain("profit_margin");
     });
   });
 
-  test("migrates an existing Snapchat column preference once without duplicates", () => {
+  test("migrates an existing Snapchat preference without duplicates", () => {
     const storage = new MemoryStorage();
     storage.setItem(
       `${CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX}snapchat`,
@@ -91,6 +111,16 @@ describe("Campaign Manager ROAS column order", () => {
     migrateCampaignColumnOrder(storage);
     expect(JSON.parse(
       storage.getItem(`${CAMPAIGN_COLUMN_ORDER_STORAGE_PREFIX}snapchat`),
-    )).toEqual(["name", "orders", "cpa", "roas", "spend", "ctr"]);
+    )).toEqual([
+      "name",
+      "orders",
+      "cpa",
+      "roas",
+      "product_cost",
+      "profit",
+      "profit_margin",
+      "spend",
+      "ctr",
+    ]);
   });
 });
