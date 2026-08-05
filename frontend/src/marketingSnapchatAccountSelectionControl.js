@@ -13,6 +13,8 @@ let installed = false;
 let animationFrame = 0;
 let loadSequence = 0;
 let currentLocationKey = "";
+let lastRenderedHost = null;
+let lastRenderSignature = "";
 let viewState = initialViewState();
 
 function initialViewState() {
@@ -92,6 +94,23 @@ function hasSelectionChanged(selection, draftIds) {
   const saved = selectionDraftFromResponse(selection);
   if (saved.size !== draftIds.size) return true;
   return [...saved].some((id) => !draftIds.has(id));
+}
+
+function renderSignature(state) {
+  return JSON.stringify({
+    loading: Boolean(state.loading),
+    saving: Boolean(state.saving),
+    error: clean(state.error),
+    success: clean(state.success),
+    draftIds: [...(state.draftIds instanceof Set ? state.draftIds : [])].sort(),
+    accounts: (Array.isArray(state.selection?.accounts) ? state.selection.accounts : []).map((account) => ({
+      account_id: clean(account?.account_id),
+      display_name: clean(account?.display_name),
+      currency: clean(account?.currency),
+      timezone: clean(account?.timezone),
+      selected: account?.selected === true,
+    })),
+  });
 }
 
 export function renderSnapchatAccountSelectionControl(
@@ -213,6 +232,10 @@ function ensureHost() {
 function renderCurrent() {
   const host = ensureHost();
   if (!host) return;
+  const signature = renderSignature(viewState);
+  if (host === lastRenderedHost && signature === lastRenderSignature) return;
+  lastRenderedHost = host;
+  lastRenderSignature = signature;
   renderSnapchatAccountSelectionControl(host, viewState, {
     onReload: () => loadSelection(true),
     onToggle: (accountId, checked) => {
@@ -294,12 +317,18 @@ async function saveSelection() {
   }
 }
 
+function resetRuntimeState() {
+  currentLocationKey = "";
+  lastRenderedHost = null;
+  lastRenderSignature = "";
+  viewState = initialViewState();
+}
+
 function reconcile() {
   animationFrame = 0;
   if (!isSnapchatAdsManagerLocation(window.location)) {
     document.querySelector(`[${CONTROL_ATTRIBUTE}]`)?.remove();
-    currentLocationKey = "";
-    viewState = initialViewState();
+    resetRuntimeState();
     return;
   }
   const nextKey = locationKey();
@@ -307,6 +336,8 @@ function reconcile() {
   if (!host) return;
   if (currentLocationKey !== nextKey) {
     currentLocationKey = nextKey;
+    lastRenderedHost = null;
+    lastRenderSignature = "";
     viewState = initialViewState();
     loadSelection();
     return;
@@ -338,6 +369,7 @@ export const SNAPCHAT_ACCOUNT_SELECTION_CONTROL_POLICY = Object.freeze({
   requires_owner_selected_account: true,
   refreshes_report_after_save: true,
   preserves_report_date_range: true,
+  prevents_observer_render_loop: true,
   provider_writes_allowed: false,
   campaign_writes_allowed: false,
   accounting_writes_allowed: false,
