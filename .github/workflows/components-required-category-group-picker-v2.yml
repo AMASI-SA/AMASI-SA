@@ -37,7 +37,7 @@ jobs:
       - name: Install focused dependencies
         run: >-
           python -m pip install -q
-          pytest fastapi "pydantic>=2" pymongo
+          pytest fastapi "pydantic>=2" pymongo openpyxl
       - name: Compile changed backend
         run: >-
           python -m py_compile
