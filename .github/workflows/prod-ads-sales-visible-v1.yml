@@ -1,0 +1,57 @@
+name: Production Ads Sales Visible V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsSalesVisibilityFix.js"
+      - "frontend/src/marketingAdsSalesVisibilityFix.css"
+      - "frontend/src/marketingAdsSalesVisibilityFix.test.js"
+      - ".github/workflows/prod-ads-sales-visible-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ads sales visibility
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingAdsSalesVisibilityFix.test.js
+          src/marketingAdsTableUXEnhancer.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce sales visibility contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          FIX=frontend/src/marketingAdsSalesVisibilityFix.js
+          CSS=frontend/src/marketingAdsSalesVisibilityFix.css
+          grep -q 'marketingAdsSalesVisibilityFix.css' "$INDEX"
+          grep -q 'marketingAdsSalesVisibilityFix' "$INDEX"
+          grep -q 'data-mezan-sales-display' "$FIX"
+          grep -q 'data-mezan-sales-visibility-fixed' "$FIX"
+          grep -q 'attr(data-mezan-sales-display)' "$CSS"
+          grep -q 'attr(data-mezan-spend-display)' "$CSS"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$FIX"
