@@ -15,7 +15,7 @@ beforeEach(() => {
     localStorage.clear();
 });
 
-test("deduplicates concurrent selected-period refreshes and caches the result", async () => {
+test("deduplicates concurrent selected-period refreshes", async () => {
     localStorage.setItem("access_token", "token-1");
     let resolveRequest;
     axios.post.mockReturnValue(new Promise((resolve) => {
@@ -44,18 +44,89 @@ test("deduplicates concurrent selected-period refreshes and caches the result", 
 
     await expect(first).resolves.toEqual(expect.objectContaining({ total_sar: 7378.7 }));
     await expect(second).resolves.toEqual(expect.objectContaining({ total_sar: 7378.7 }));
-
-    const cached = await loadDashboardPlatformSpend({
-        dateFrom: "2026-08-04",
-        dateTo: "2026-08-04",
-        refresh: true,
-    });
-    expect(cached.total_sar).toBe(7378.7);
-    expect(axios.post).toHaveBeenCalledTimes(1);
     expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({
         withCredentials: true,
         headers: { Authorization: "Bearer token-1" },
     }));
+});
+
+test("explicit refresh bypasses the four-minute cache and replaces stale Google spend", async () => {
+    axios.post
+        .mockResolvedValueOnce({
+            data: {
+                date_from: "2026-08-04",
+                date_to: "2026-08-04",
+                provider_totals_sar: { google: 0 },
+                total_sar: 3157.12,
+            },
+        })
+        .mockResolvedValueOnce({
+            data: {
+                date_from: "2026-08-04",
+                date_to: "2026-08-04",
+                provider_totals_sar: { google: 302.99 },
+                total_sar: 3460.11,
+            },
+        });
+
+    const stale = await loadDashboardPlatformSpend({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-04",
+        refresh: true,
+    });
+    const fresh = await loadDashboardPlatformSpend({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-04",
+        refresh: true,
+    });
+
+    expect(stale.provider_totals_sar.google).toBe(0);
+    expect(fresh.provider_totals_sar.google).toBe(302.99);
+    expect(axios.post).toHaveBeenCalledTimes(2);
+
+    const cachedRead = await loadDashboardPlatformSpend({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-04",
+        refresh: false,
+    });
+    expect(cachedRead.provider_totals_sar.google).toBe(302.99);
+    expect(axios.get).not.toHaveBeenCalled();
+});
+
+test("saved reads reuse an in-flight refresh for the same selected period", async () => {
+    let resolveRequest;
+    axios.post.mockReturnValue(new Promise((resolve) => {
+        resolveRequest = resolve;
+    }));
+
+    const refreshRequest = loadDashboardPlatformSpend({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-04",
+        refresh: true,
+    });
+    const savedRead = loadDashboardPlatformSpend({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-04",
+        refresh: false,
+        maxAgeMs: 0,
+    });
+
+    resolveRequest({
+        data: {
+            date_from: "2026-08-04",
+            date_to: "2026-08-04",
+            provider_totals_sar: { google: 302.99 },
+        },
+    });
+
+    await expect(refreshRequest).resolves.toEqual(expect.objectContaining({
+        provider_totals_sar: { google: 302.99 },
+    }));
+    await expect(savedRead).resolves.toEqual(expect.objectContaining({
+        provider_totals_sar: { google: 302.99 },
+    }));
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(axios.get).not.toHaveBeenCalled();
 });
 
 test("reads saved platform spend without triggering a provider refresh", async () => {
