@@ -195,6 +195,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [error, setError] = useState("");
     const [activeTab, setActiveTab] = useState("overview");
     const [entityLevel, setEntityLevel] = useState("campaigns");
+    const [activeCampaignsOnly, setActiveCampaignsOnly] = useState(true);
+    const [adSquadSort, setAdSquadSort] = useState("orders");
     const [adSquadPage, setAdSquadPage] = useState(1);
     const [adSquadReport, setAdSquadReport] = useState(null);
     const [adSquadLoading, setAdSquadLoading] = useState(false);
@@ -212,6 +214,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 campaignQuery: appliedQuery,
                 page,
                 limit: 25,
+                activeCampaignsOnly,
             });
             setData(result);
         } catch (loadError) {
@@ -225,7 +228,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [appliedQuery, appliedRange, page, platform]);
+    }, [activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);
 
     const selectedAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
@@ -240,6 +243,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 query: appliedQuery,
                 page: adSquadPage,
                 limit: 25,
+                activeCampaignsOnly,
+                sortBy: adSquadSort,
             });
             setAdSquadReport(result);
         } catch (loadError) {
@@ -252,7 +257,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
         } finally {
             setAdSquadLoading(false);
         }
-    }, [adSquadPage, appliedQuery, appliedRange, platform, selectedAccountId]);
+    }, [activeCampaignsOnly, adSquadPage, adSquadSort, appliedQuery, appliedRange, platform, selectedAccountId]);
 
     useEffect(() => {
         const currentToday = todaySA();
@@ -265,6 +270,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setQuery("");
         setActiveTab("overview");
         setEntityLevel("campaigns");
+        setActiveCampaignsOnly(true);
+        setAdSquadSort("orders");
         setAdSquadReport(null);
         setAdSquadError("");
     }, [platform]);
@@ -449,6 +456,17 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     campaignPage={page}
                     onCampaignPageChange={setPage}
                     readOnly={data?.policy?.mutations_allowed !== true}
+                    activeCampaignsOnly={activeCampaignsOnly}
+                    onActiveCampaignsOnlyChange={(value) => {
+                        setPage(1);
+                        setAdSquadPage(1);
+                        setActiveCampaignsOnly(value);
+                    }}
+                    adSquadSort={adSquadSort}
+                    onAdSquadSortChange={(value) => {
+                        setAdSquadPage(1);
+                        setAdSquadSort(value);
+                    }}
                     adSquadReport={adSquadReport}
                     adSquadPage={adSquadPage}
                     onAdSquadPageChange={setAdSquadPage}

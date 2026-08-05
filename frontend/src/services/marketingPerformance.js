@@ -105,6 +105,7 @@ function normalizeCampaign(value = {}) {
         campaign_id: campaignId,
         campaign_name: text(value.campaign_name, campaignId),
         status: text(value.status, "unknown"),
+        campaign_active: value.campaign_active === true,
         delivery_status: nullableText(value.delivery_status),
         objective: nullableText(value.objective),
         start_time: nullableText(value.start_time),
@@ -369,6 +370,7 @@ export async function getMarketingPerformance({
     campaignQuery = "",
     page = 1,
     limit = 25,
+    activeCampaignsOnly = true,
 } = {}) {
     if (!isMarketingPerformanceProvider(platform)) {
         throw new Error("invalid_marketing_platform");
@@ -382,6 +384,7 @@ export async function getMarketingPerformance({
                     campaign_query: String(campaignQuery || "").trim().slice(0, 120) || undefined,
                     page,
                     limit,
+                    active_campaigns_only: activeCampaignsOnly,
                 },
             }),
             getIntegrationsOverview(),

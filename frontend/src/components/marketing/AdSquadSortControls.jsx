@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 
-export const AD_SQUAD_SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
+export const AD_SQUAD_SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v2";
 export const AD_SQUAD_SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
-
-const OPTIONS = [
-    { id: "newest", label: "الأحدث أولًا" },
+export const AD_SQUAD_SORT_OPTIONS = Object.freeze([
+    { id: "orders", label: "الأكثر طلبًا" },
     { id: "spend", label: "الأكثر صرفًا" },
+    { id: "newest", label: "الأحدث أولًا" },
     { id: "active", label: "النشطة أولًا" },
-];
-const VALID = new Set(OPTIONS.map((item) => item.id));
+]);
+const VALID = new Set(AD_SQUAD_SORT_OPTIONS.map((item) => item.id));
 
 export function readAdSquadSort(storage = typeof window !== "undefined" ? window.localStorage : null) {
     try {
@@ -24,7 +24,7 @@ export function writeAdSquadSort(value, storage = typeof window !== "undefined" 
     try {
         storage?.setItem(AD_SQUAD_SORT_STORAGE_KEY, normalized);
     } catch {
-        // The current component state still updates even if storage is blocked.
+        // Controlled React state remains authoritative when storage is unavailable.
     }
     if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(AD_SQUAD_SORT_EVENT, {
@@ -34,17 +34,19 @@ export function writeAdSquadSort(value, storage = typeof window !== "undefined" 
     return normalized;
 }
 
-export default function AdSquadSortControls() {
-    const [value, setValue] = useState(() => readAdSquadSort());
+export default function AdSquadSortControls({ value: controlledValue = null, onChange }) {
+    const [localValue, setLocalValue] = useState(() => readAdSquadSort());
+    const value = VALID.has(controlledValue) ? controlledValue : localValue;
 
     useEffect(() => {
-        const sync = (event) => {
-            const next = String(event?.detail?.sort_by || readAdSquadSort());
-            setValue(VALID.has(next) ? next : "newest");
-        };
-        window.addEventListener(AD_SQUAD_SORT_EVENT, sync);
-        return () => window.removeEventListener(AD_SQUAD_SORT_EVENT, sync);
-    }, []);
+        if (VALID.has(controlledValue)) setLocalValue(controlledValue);
+    }, [controlledValue]);
+
+    function choose(next) {
+        const normalized = writeAdSquadSort(next);
+        setLocalValue(normalized);
+        onChange?.(normalized);
+    }
 
     return (
         <div
@@ -52,15 +54,18 @@ export default function AdSquadSortControls() {
             data-testid="ad-squad-native-sort-controls"
             dir="rtl"
         >
-            <div className="text-sm font-black text-slate-700">ترتيب المجموعات الإعلانية</div>
+            <div>
+                <div className="text-sm font-black text-slate-700">ترتيب المجموعات الإعلانية</div>
+                <div className="mt-0.5 text-[11px] font-bold text-slate-400">يطبق الترتيب على جميع النتائج قبل تقسيم الصفحات.</div>
+            </div>
             <div className="flex flex-wrap gap-2">
-                {OPTIONS.map((option) => {
+                {AD_SQUAD_SORT_OPTIONS.map((option) => {
                     const active = value === option.id;
                     return (
                         <button
                             key={option.id}
                             type="button"
-                            onClick={() => setValue(writeAdSquadSort(option.id))}
+                            onClick={() => choose(option.id)}
                             aria-pressed={active}
                             data-testid={`ad-squad-sort-${option.id}`}
                             className={[

@@ -204,14 +204,21 @@ function sortableValue(ad, key) {
     return finite(ad[key]);
 }
 
-export default function AdManagerTable() {
+export const AD_MANAGER_SORT_OPTIONS = Object.freeze([
+    { id: "orders", label: "الأكثر طلبًا" },
+    { id: "spend", label: "الأكثر صرفًا" },
+    { id: "newest", label: "الأحدث أولًا" },
+]);
+
+export default function AdManagerTable({ activeCampaignsOnly = true }) {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [query, setQuery] = useState("");
     const [appliedQuery, setAppliedQuery] = useState("");
     const [page, setPage] = useState(1);
-    const [sort, setSort] = useState({ key: "spend_sar", direction: "desc" });
+    const [sort, setSort] = useState({ key: null, direction: "desc" });
+    const [serverSort, setServerSort] = useState("orders");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
@@ -230,6 +237,8 @@ export default function AdManagerTable() {
                 query: appliedQuery,
                 page,
                 limit: 100,
+                activeCampaignsOnly,
+                sortBy: serverSort,
             });
             setReport(result);
         } catch (loadError) {
@@ -242,7 +251,7 @@ export default function AdManagerTable() {
         } finally {
             setLoading(false);
         }
-    }, [appliedQuery, page]);
+    }, [activeCampaignsOnly, appliedQuery, page, serverSort]);
 
     useEffect(() => {
         load();
@@ -268,6 +277,7 @@ export default function AdManagerTable() {
     }, [load]);
 
     const rows = useMemo(() => {
+        if (!sort.key) return [...(report?.ads || [])];
         const direction = sort.direction === "asc" ? 1 : -1;
         return [...(report?.ads || [])].sort((left, right) => {
             const a = sortableValue(left, sort.key);
@@ -318,7 +328,24 @@ export default function AdManagerTable() {
                     </span>
                     <button type="submit" className="h-10 rounded-xl bg-slate-950 px-4 text-sm font-black text-white">بحث</button>
                 </form>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap gap-1" data-testid="ad-server-sort-controls">
+                        {AD_MANAGER_SORT_OPTIONS.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => {
+                                    setPage(1);
+                                    setSort({ key: null, direction: "desc" });
+                                    setServerSort(option.id);
+                                }}
+                                aria-pressed={serverSort === option.id}
+                                className={`rounded-lg px-3 py-2 text-xs font-black ${serverSort === option.id ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-700"}`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
                     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
                         نتائج Snapchat على مستوى الإعلان · قراءة فقط
                     </span>

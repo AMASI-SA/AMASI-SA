@@ -18,6 +18,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from . import snapchat_account_hourly_refresh as hourly
 from . import snapchat_adsquad_performance as adsquad_report
 from .snapchat_account_selection import _load_selected_accounts
+from .snapchat_active_campaign_filtering import (
+    aggregate_entity_rows,
+    is_active_provider_status,
+    normalize_entity_sort,
+    sort_entity_rows,
+)
 from .snapchat_account_timezone_manager import (
     SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
     _account_public_row,
@@ -669,6 +675,8 @@ async def build_account_timezone_ad_report(
     query: str | None,
     page: int,
     limit: int,
+    active_campaigns_only: bool = False,
+    sort_by: str = "orders",
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     current = _aware_now(now())
@@ -743,6 +751,8 @@ async def build_account_timezone_ad_report(
         query=None,
         page=1,
         limit=100,
+        active_campaigns_only=False,
+        sort_by="spend",
         now=lambda: current,
     )
     parent_rows = {
@@ -797,6 +807,9 @@ async def build_account_timezone_ad_report(
             "ad_squad_name": _text(squad.get("display_name")) or ad_squad_id or "مجموعة غير معروفة",
             "campaign_id": campaign_id or None,
             "campaign_name": _text(campaign.get("display_name")) or campaign_id or "حملة غير معروفة",
+            "campaign_status": campaign.get("status") or "unknown",
+            "campaign_active": is_active_provider_status(campaign.get("status")),
+            "ad_squad_status": squad.get("status") or "unknown",
             "status": delivery["configured_status"],
             "review_status": entity.get("review_status"),
             "created_at_provider": entity.get("created_at_provider"),
@@ -824,19 +837,21 @@ async def build_account_timezone_ad_report(
                 _text(item.get("creative_id")),
             ]).casefold()
         ]
-    rows.sort(key=lambda item: (
-        -(float(item.get("spend_sar") or 0)),
-        -(
-            _parse_datetime(item.get("created_at_provider")).timestamp()
-            if _parse_datetime(item.get("created_at_provider")) else 0
-        ),
-        _text(item.get("ad_name")).casefold(),
-    ))
+    if active_campaigns_only:
+        rows = [item for item in rows if item.get("campaign_active") is True]
+    sort_mode = normalize_entity_sort(sort_by)
+    rows = sort_entity_rows(
+        rows,
+        sort_mode,
+        name_field="ad_name",
+        status_field="status",
+    )
+    filtered_totals = aggregate_entity_rows(rows)
     total = len(rows)
     pages = (total + limit - 1) // limit if total else 0
     offset = (page - 1) * limit
     page_rows = rows[offset:offset + limit]
-    totals = _aggregate_rows(performance_rows, requested_days=requested_days)
+    totals = filtered_totals
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
         "entity_level": "ad",
@@ -847,6 +862,8 @@ async def build_account_timezone_ad_report(
         "selected_account": account,
         "result_source": "platform",
         "supported_result_sources": ["platform"],
+        "active_campaigns_only": bool(active_campaigns_only),
+        "sort_by": sort_mode,
         "totals": totals,
         "ads": page_rows,
         "pagination": {
@@ -901,6 +918,8 @@ def attach_snapchat_ad_routes(
         query: str | None = Query(default=None, max_length=120),
         page: int = Query(default=1, ge=1),
         limit: int = Query(default=25, ge=10, le=100),
+        active_campaigns_only: bool = Query(default=True),
+        sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
@@ -914,6 +933,8 @@ def attach_snapchat_ad_routes(
                 query=query,
                 page=page,
                 limit=limit,
+                active_campaigns_only=active_campaigns_only,
+                sort_by=sort_by,
             )
         except SnapchatNativeSyncError as exc:
             raise HTTPException(

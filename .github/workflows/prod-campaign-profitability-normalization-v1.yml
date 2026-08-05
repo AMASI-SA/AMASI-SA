@@ -47,7 +47,8 @@ jobs:
           HYDRATION=frontend/src/marketingCampaignProfitabilityHydration.js
           WORKSPACE=frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
           grep -q 'exact_account_campaign_key: true' "$HYDRATION"
-          grep -q 'snapshot?.totals?.profitability' "$HYDRATION"
+          grep -q 'const rawTotals = snapshot?.totals' "$HYDRATION"
+          grep -q 'rawTotals.profitability' "$HYDRATION"
           grep -q 'hydrateCampaignProfitability' "$WORKSPACE"
           grep -q 'campaigns={campaignReport.campaigns}' "$WORKSPACE"
           grep -q 'totals={campaignReport.totals}' "$WORKSPACE"
