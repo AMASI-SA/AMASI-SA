@@ -4,6 +4,10 @@ const ERROR_LABELS = {
     supplier_receiving_session_not_found: "جلسة الاستلام غير موجودة.",
     supplier_receiving_session_owner_required: "هذه الجلسة مفتوحة باسم موظف آخر.",
     supplier_receiving_session_closed: "الجلسة مغلقة ولا تقبل قطعًا جديدة.",
+    supplier_receiving_session_not_open: "هذه الجلسة لم تعد مفتوحة.",
+    supplier_receiving_session_cancel_conflict: "تغيّرت الجلسة أثناء الإلغاء. حدّث الصفحة وحاول من جديد.",
+    supplier_receiving_cancel_piece_conflict: "تغيّرت إحدى القطع أثناء الإلغاء. حدّث الصفحة وحاول من جديد.",
+    supplier_receiving_cancel_rollback_unavailable: "لا يمكن إلغاء جلسة قديمة تحتوي قطعًا مستلمة بأمان. احفظها أو تواصل مع المسؤول.",
     supplier_receiving_open_session_exists: "لديك جلسة استلام مفتوحة بالفعل.",
     supplier_receiving_scan_busy: "يوجد مسح جارٍ في الجلسة. انتظر لحظة ثم أعد المحاولة.",
     supplier_receiving_supplier_not_found: "المورد غير موجود أو غير نشط.",
@@ -74,6 +78,17 @@ export async function closeSupplierReceivingSession(sessionId, { note = "", invo
         )).data;
     } catch (error) {
         throw receivingError(error, "تعذّر إغلاق جلسة الاستلام.");
+    }
+}
+
+export async function cancelSupplierReceivingSession(sessionId, { note = "" } = {}) {
+    try {
+        return (await api.post(
+            `/supplier-receiving-v1/sessions/${encodeURIComponent(sessionId)}/cancel`,
+            { note: note || null },
+        )).data;
+    } catch (error) {
+        throw receivingError(error, "تعذّر إلغاء جلسة الاستلام.");
     }
 }
 
