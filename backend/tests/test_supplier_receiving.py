@@ -16,9 +16,12 @@ from preparation_piece_operations import (
 )
 from reviewed_preparation_batches import _line_from_batch_storage
 from supplier_receiving_routes import (
+    SupplierReceivingInvoiceLineRequest,
+    build_supplier_receiving_invoice,
     make_supplier_receiving_router,
     piece_scan_blocker,
     supplier_piece_service_blocker,
+    supplier_piece_reference_price,
     supplier_receipt_piece_patch,
 )
 
@@ -149,6 +152,57 @@ def test_piece_services_must_be_covered_by_selected_mezan_supplier():
     assert missing_plan["code"] == "supplier_piece_services_missing"
 
 
+def test_supplier_reference_price_uses_service_quantity_and_flags_missing_costs():
+    priced = supplier_piece_reference_price({
+        "services": [
+            {"service_id": "engrave", "reference_unit_cost": 4.25, "required_quantity": 2},
+            {"service_id": "box", "reference_unit_cost": "1.50", "required_quantity": 1},
+        ]
+    })
+    assert priced == {
+        "reference_unit_price_halalas": 1000,
+        "reference_price_complete": True,
+        "missing_price_service_ids": [],
+    }
+
+    missing = supplier_piece_reference_price({
+        "services": [{"service_id": "print", "reference_unit_cost": None}]
+    })
+    assert missing["reference_unit_price_halalas"] == 0
+    assert missing["reference_price_complete"] is False
+    assert missing["missing_price_service_ids"] == ["print"]
+
+
+def test_operational_invoice_covers_every_scan_once_and_never_creates_liability():
+    saved_at = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
+    base = {
+        "product_id": "product-1",
+        "product_name": "سلسال بالاسم",
+        "sku": "N-1",
+        "services": [{"service_id": "engrave", "required_quantity": 1}],
+    }
+    invoice = build_supplier_receiving_invoice(
+        session={"reference": "SR-20260805-ABC123"},
+        scans=[
+            {**base, "piece_id": "piece-1"},
+            {**base, "piece_id": "piece-2"},
+        ],
+        requested_lines=[SupplierReceivingInvoiceLineRequest(
+            piece_ids=["piece-1", "piece-2"],
+            unit_price_halalas=850,
+        )],
+        saved_at=saved_at,
+    )
+
+    assert invoice["piece_count"] == 2
+    assert invoice["line_count"] == 1
+    assert invoice["lines"][0]["quantity"] == 2
+    assert invoice["lines"][0]["total_halalas"] == 1700
+    assert invoice["total_halalas"] == 1700
+    assert invoice["financial_invoice_created"] is False
+    assert invoice["liability_created"] is False
+
+
 def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     router = make_supplier_receiving_router(
         SimpleNamespace(),
@@ -173,6 +227,7 @@ def test_scan_contract_is_atomic_and_never_creates_accounting():
     assert '"supplier_piece_already_received"' not in source  # central blocker owns it
     assert '"financial_invoice_created": False' in source
     assert '"liability_created": False' in source
+    assert '"operational_invoice": operational_invoice' in source
     assert '"supplier_service_link_applied": True' in source
     assert "supplier_piece_service_blocker(piece, session)" in source
     assert '"completed_at"' not in source

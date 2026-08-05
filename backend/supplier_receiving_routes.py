@@ -1,15 +1,17 @@
 """Supplier receiving sessions for customer-order preparation pieces.
 
 An authorised receiver opens a temporary supplier-scoped session and scans
-physical preparation pieces.  A scan records who prepared and who received
+physical preparation pieces. A scan records who prepared and who received
 the piece independently, applies the approved Mezan 2 supplier-service link,
-and deliberately defers invoices, liabilities and every Salla/Qoyod write.
+and the final save stores a Mezan-only operational invoice snapshot. Financial
+invoices, liabilities and every Salla/Qoyod write remain deliberately deferred.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -58,10 +60,21 @@ class SupplierPieceScanRequest(BaseModel):
     barcode: str = Field(min_length=1, max_length=500)
 
 
+class SupplierReceivingInvoiceLineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    piece_ids: list[str] = Field(min_length=1, max_length=5000)
+    unit_price_halalas: int = Field(ge=0, le=100_000_000_000)
+
+
 class SupplierReceivingSessionCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str | None = Field(default=None, max_length=1000)
+    invoice_lines: list[SupplierReceivingInvoiceLineRequest] = Field(
+        default_factory=list,
+        max_length=5000,
+    )
 
 
 def _now() -> datetime:
@@ -74,6 +87,142 @@ def _text(value: Any) -> str:
 
 def _actor_name(user: dict[str, Any]) -> str:
     return _text(user.get("name") or user.get("email"))
+
+
+def _halalas(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not amount.is_finite() or amount < 0:
+        return None
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def supplier_piece_reference_price(piece: dict[str, Any]) -> dict[str, Any]:
+    """Calculate one piece's suggested supplier price from its service plan."""
+    total_halalas = 0
+    missing_service_ids: list[str] = []
+    services = list(piece.get("services") or [])
+    for service in services:
+        unit_cost_halalas = _halalas(service.get("reference_unit_cost"))
+        service_id = _text(service.get("service_id"))
+        try:
+            quantity = Decimal(str(service.get("required_quantity") or 1))
+        except (InvalidOperation, TypeError, ValueError):
+            quantity = Decimal("1")
+        if not quantity.is_finite() or quantity <= 0:
+            quantity = Decimal("1")
+        if unit_cost_halalas is None:
+            missing_service_ids.append(service_id)
+            continue
+        total_halalas += int(
+            (Decimal(unit_cost_halalas) * quantity).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+    return {
+        "reference_unit_price_halalas": total_halalas,
+        "reference_price_complete": bool(services) and not missing_service_ids,
+        "missing_price_service_ids": missing_service_ids,
+    }
+
+
+def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
+    services = tuple(sorted(
+        (
+            _text(service.get("service_id")),
+            str(service.get("required_quantity") or 1),
+        )
+        for service in (scan.get("services") or [])
+        if _text(service.get("service_id"))
+    ))
+    return (
+        _text(scan.get("product_id")),
+        _text(scan.get("sku")),
+        _text(scan.get("product_name")).casefold(),
+        services,
+    )
+
+
+def build_supplier_receiving_invoice(
+    *,
+    session: dict[str, Any],
+    scans: list[dict[str, Any]],
+    requested_lines: list[SupplierReceivingInvoiceLineRequest],
+    saved_at: datetime,
+) -> dict[str, Any]:
+    """Validate the full scanned set and create a Mezan-only invoice snapshot."""
+    scans_by_piece = {
+        _text(scan.get("piece_id")): scan
+        for scan in scans
+        if _text(scan.get("piece_id"))
+    }
+    requested_piece_ids: list[str] = []
+    public_lines: list[dict[str, Any]] = []
+    for line_number, line in enumerate(requested_lines, start=1):
+        piece_ids = [_text(piece_id) for piece_id in line.piece_ids if _text(piece_id)]
+        if len(piece_ids) != len(line.piece_ids) or len(set(piece_ids)) != len(piece_ids):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_invoice_duplicate_piece"},
+            )
+        line_scans = [scans_by_piece.get(piece_id) for piece_id in piece_ids]
+        if any(scan is None for scan in line_scans):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_invoice_piece_mismatch"},
+            )
+        group_keys = {_invoice_group_key(scan or {}) for scan in line_scans}
+        if len(group_keys) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_invoice_group_mismatch"},
+            )
+        first = line_scans[0] or {}
+        quantity = len(piece_ids)
+        total_halalas = quantity * int(line.unit_price_halalas)
+        public_lines.append({
+            "line_number": line_number,
+            "product_id": _text(first.get("product_id")) or None,
+            "product_name": _text(first.get("product_name")) or "منتج",
+            "sku": _text(first.get("sku")) or None,
+            "quantity": quantity,
+            "unit_price_halalas": int(line.unit_price_halalas),
+            "total_halalas": total_halalas,
+            "piece_ids": piece_ids,
+            "services": list(first.get("services") or []),
+        })
+        requested_piece_ids.extend(piece_ids)
+
+    expected_piece_ids = set(scans_by_piece)
+    if (
+        len(requested_piece_ids) != len(set(requested_piece_ids))
+        or set(requested_piece_ids) != expected_piece_ids
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_invoice_piece_mismatch"},
+        )
+
+    subtotal_halalas = sum(line["total_halalas"] for line in public_lines)
+    return {
+        "reference": _text(session.get("reference")),
+        "status": "saved",
+        "currency": "SAR",
+        "line_count": len(public_lines),
+        "piece_count": len(expected_piece_ids),
+        "subtotal_halalas": subtotal_halalas,
+        "total_halalas": subtotal_halalas,
+        "lines": public_lines,
+        "saved_at": saved_at,
+        "financial_invoice_created": False,
+        "liability_created": False,
+        "mezan_only": True,
+    }
 
 
 def _session_reference(now: datetime, session_id: str) -> str:
@@ -116,6 +265,7 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "file_numbers": list(row.get("file_numbers") or []),
         "preparation_employee_ids": list(row.get("preparation_employee_ids") or []),
         "last_scanned_at": row.get("last_scanned_at"),
+        "operational_invoice": dict(row.get("operational_invoice") or {}) or None,
         "financial_invoice_created": False,
         "liability_created": False,
         "mezan_only": True,
@@ -474,6 +624,7 @@ def make_supplier_receiving_router(
                     db,
                     user_id=merchant_id,
                     session_id=_text(active.get("id")),
+                    limit=MAX_SESSION_SCANS,
                 )
                 if active
                 else []
@@ -635,7 +786,7 @@ def make_supplier_receiving_router(
                 db,
                 user_id=context["merchant_id"],
                 session_id=session_id,
-                limit=200,
+                limit=MAX_SESSION_SCANS,
             ),
         }
 
@@ -845,6 +996,7 @@ def make_supplier_receiving_router(
             "salla_updated": False,
             "qoyod_updated": False,
         }
+        event.update(supplier_piece_reference_price(updated_piece))
         await db[RECEIVING_EVENTS].update_one(
             {"id": event["id"]},
             {"$setOnInsert": event},
@@ -887,14 +1039,20 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_not_open"},
             )
-        actual_count = await db[PIECES].count_documents(
-            {
-                "user_id": context["merchant_id"],
-                "supplier_receiving_session_id": session_id,
-                "status": PIECE_STATUS_RECEIVED,
-            }
+        scans = await _recent_session_events(
+            db,
+            user_id=context["merchant_id"],
+            session_id=session_id,
+            limit=MAX_SESSION_SCANS,
         )
+        actual_count = len(scans)
         now = _now()
+        operational_invoice = build_supplier_receiving_invoice(
+            session=session,
+            scans=scans,
+            requested_lines=payload.invoice_lines,
+            saved_at=now,
+        )
         updated = await db[SESSIONS].find_one_and_update(
             {
                 "user_id": context["merchant_id"],
@@ -916,6 +1074,7 @@ def make_supplier_receiving_router(
                     "closed_by_name": _actor_name(user),
                     "close_note": _text(payload.note) or None,
                     "supplier_service_link_status": "catalog_linked",
+                    "operational_invoice": operational_invoice,
                     "updated_at": now,
                 }
             },
@@ -954,6 +1113,7 @@ def make_supplier_receiving_router(
                     "note": _text(payload.note) or None,
                     "occurred_at": now,
                     "supplier_service_link_status": "catalog_linked",
+                    "operational_invoice": operational_invoice,
                     "financial_invoice_created": False,
                     "liability_created": False,
                     "mezan_only": True,
@@ -966,7 +1126,8 @@ def make_supplier_receiving_router(
         return {
             "ok": True,
             "session": _public_session(updated),
-            "next_step": "supplier_service_invoice_draft",
+            "operational_invoice": operational_invoice,
+            "next_step": "supplier_service_invoice_saved",
             "supplier_service_link_applied": True,
             "financial_invoice_created": False,
             "liability_created": False,
@@ -982,11 +1143,14 @@ __all__ = [
     "RECEIVING_EVENTS",
     "SESSIONS",
     "SupplierPieceScanRequest",
+    "SupplierReceivingInvoiceLineRequest",
     "SupplierReceivingSessionCloseRequest",
     "SupplierReceivingSessionCreateRequest",
     "ensure_supplier_receiving_indexes",
     "make_supplier_receiving_router",
     "piece_scan_blocker",
+    "build_supplier_receiving_invoice",
     "resolve_scanned_piece",
     "supplier_receipt_piece_patch",
+    "supplier_piece_reference_price",
 ]
