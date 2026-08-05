@@ -215,7 +215,7 @@ export default function MezanComponentsOrganization() {
       </header>
 
       <nav className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <button onClick={() => setTab("organization")} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "organization" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Stack className="ml-1 inline" />التصنيفات والقروبات</button>
+        <button onClick={() => { setTab("organization"); load({ quiet: true }); }} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "organization" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Stack className="ml-1 inline" />التصنيفات والقروبات</button>
         <button onClick={() => setTab("catalog")} className={`rounded-xl px-4 py-3 text-sm font-black ${tab === "catalog" ? "bg-violet-700 text-white" : "text-slate-700"}`}><Cube className="ml-1 inline" />إدارة العناصر والتكاليف</button>
       </nav>
 
