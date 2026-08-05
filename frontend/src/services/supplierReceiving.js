@@ -16,6 +16,9 @@ const ERROR_LABELS = {
     supplier_piece_not_started: "ابدأ ملف التجهيز أولًا قبل استلام القطعة.",
     supplier_piece_services_missing: "القطعة لا تحتوي على خدمة تجهيز. اربط المنتج بخدمة من مكونات المنتجات أولًا.",
     supplier_piece_service_mismatch: "المورد المحدد لا يقدم جميع الخدمات المطلوبة لهذه القطعة.",
+    supplier_receiving_invoice_duplicate_piece: "تحتوي مسودة الفاتورة على قطعة مكررة.",
+    supplier_receiving_invoice_piece_mismatch: "تغيّرت قطع الجلسة. حدّث الفاتورة ثم احفظ من جديد.",
+    supplier_receiving_invoice_group_mismatch: "لا يمكن جمع منتجات أو خدمات مختلفة في سطر فاتورة واحد.",
     legacy_order_barcode_ambiguous: "باركود الطلب القديم يطابق أكثر من قطعة. أعد تنزيل ملف التجهيز لطباعته بباركود القطعة الفريد.",
     fulfillment_permission_required: "تحتاج صلاحية استلام منتجات التجهيز.",
 };
@@ -63,11 +66,11 @@ export async function scanSupplierReceivingPiece(sessionId, barcode) {
     }
 }
 
-export async function closeSupplierReceivingSession(sessionId, note = "") {
+export async function closeSupplierReceivingSession(sessionId, { note = "", invoice_lines = [] } = {}) {
     try {
         return (await api.post(
             `/supplier-receiving-v1/sessions/${encodeURIComponent(sessionId)}/close`,
-            { note: note || null },
+            { note: note || null, invoice_lines },
         )).data;
     } catch (error) {
         throw receivingError(error, "تعذّر إغلاق جلسة الاستلام.");
