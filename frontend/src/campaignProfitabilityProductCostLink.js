@@ -2,8 +2,10 @@ import {
   listWorkspaceProducts,
   syncRecentProductsV2,
 } from "./services/mezanProductsV2";
+import { rememberSnapchatAdsManagerReturnRange } from "./marketingCampaignResultSource";
 
 const DIALOG_SELECTOR = '[data-testid="campaign-profitability-dialog"]';
+const WORKSPACE_SELECTOR = '[data-testid="marketing-platform-workspace"]';
 const LINK_ATTRIBUTE = "data-mezan-profit-product-link";
 const CELL_ATTRIBUTE = "data-mezan-profit-product-cell";
 const CELL_HREF_ATTRIBUTE = "data-mezan-profit-product-href";
@@ -17,6 +19,17 @@ function normalized(value) {
 
 function clean(value) {
   return String(value || "").trim();
+}
+
+function isSnapchatAdsManagerLocation(locationLike = window.location) {
+  try {
+    const pathname = String(locationLike?.pathname || "").replace(/\/+$/, "") || "/";
+    if (pathname !== "/ads-manager") return false;
+    const provider = new URLSearchParams(locationLike?.search || "").get("provider");
+    return normalized(provider) === "snapchat";
+  } catch {
+    return false;
+  }
 }
 
 export function buildProfitabilityProductCostHref({ sku = "", name = "" } = {}) {
@@ -80,6 +93,33 @@ function missingCostFromRow(row) {
 export function productHrefFromTarget(target) {
   const cell = target?.closest?.(`[${CELL_ATTRIBUTE}]`);
   return clean(cell?.getAttribute(CELL_HREF_ATTRIBUTE));
+}
+
+export function snapchatAdsManagerRangeFromPage(
+  root = document,
+  locationLike = window.location,
+) {
+  if (!isSnapchatAdsManagerLocation(locationLike)) return null;
+  const workspace = root.querySelector(WORKSPACE_SELECTOR);
+  const inputs = [...(workspace?.querySelectorAll('form input[type="date"]') || [])].slice(0, 2);
+  const dateFrom = clean(inputs[0]?.value);
+  const dateTo = clean(inputs[1]?.value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) return null;
+  return {
+    dateFrom,
+    dateTo,
+    accountId: clean(workspace?.dataset?.snapchatSelectedAccount),
+  };
+}
+
+export function rememberSnapchatRangeBeforeProductNavigation(
+  root = document,
+  locationLike = window.location,
+) {
+  const range = snapchatAdsManagerRangeFromPage(root, locationLike);
+  if (!range) return null;
+  return rememberSnapchatAdsManagerReturnRange(range);
 }
 
 export function enhanceProfitabilityProductRows(root = document) {
@@ -181,17 +221,33 @@ function scheduleEnhancement() {
   });
 }
 
+function rememberProductLinkReturnState(event) {
+  if (
+    event.defaultPrevented
+    || event.button !== 0
+    || event.metaKey
+    || event.ctrlKey
+    || event.shiftKey
+    || event.altKey
+  ) return;
+  const link = event.target?.closest?.(`[${LINK_ATTRIBUTE}]`);
+  if (link) rememberSnapchatRangeBeforeProductNavigation(document, window.location);
+}
+
 function navigateFromProductCell(event) {
   if (event.target?.closest?.("a,button,input,select,textarea")) return;
   const href = productHrefFromTarget(event.target);
-  if (href) window.location.assign(href);
+  if (!href) return;
+  rememberSnapchatRangeBeforeProductNavigation(document, window.location);
+  window.location.assign(href);
 }
 
 function navigateFromProductCellKeyboard(event) {
-  if (!['Enter', ' '].includes(event.key)) return;
+  if (!["Enter", " "].includes(event.key)) return;
   const href = productHrefFromTarget(event.target);
   if (!href) return;
   event.preventDefault();
+  rememberSnapchatRangeBeforeProductNavigation(document, window.location);
   window.location.assign(href);
 }
 
@@ -202,6 +258,7 @@ export function installCampaignProfitabilityProductCostLinks() {
 
   const observer = new MutationObserver(scheduleEnhancement);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("click", rememberProductLinkReturnState, true);
   document.addEventListener("click", navigateFromProductCell);
   document.addEventListener("keydown", navigateFromProductCellKeyboard);
   scheduleEnhancement();

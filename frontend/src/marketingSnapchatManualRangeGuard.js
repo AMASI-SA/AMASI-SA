@@ -17,9 +17,9 @@ export function installSnapchatManualRangeGuard() {
   if (typeof window === "undefined") return false;
   if (window.__mezanSnapchatManualRangeGuardInstalled) return false;
   window.__mezanSnapchatManualRangeGuardInstalled = true;
-  window.addEventListener(ADS_DATE_RANGE_APPLIED_EVENT, () => {
+  window.addEventListener(ADS_DATE_RANGE_APPLIED_EVENT, (event) => {
     if (isSnapchatAdsManagerLocation(window.location)) {
-      markSnapchatManualRange();
+      markSnapchatManualRange(event?.detail || null);
     }
   });
   return true;

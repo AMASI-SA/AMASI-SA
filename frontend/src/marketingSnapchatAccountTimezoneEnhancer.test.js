@@ -2,7 +2,10 @@ import api from "./lib/api";
 import { enhanceSnapchatAccountTimezone } from "./marketingSnapchatAccountTimezoneEnhancer";
 import {
   clearCampaignReportSnapshot,
+  clearSnapchatRestoredReturnRange,
   prepareSnapchatAccountPage,
+  rememberSnapchatAdsManagerReturnRange,
+  snapchatRestoredReturnRange,
   snapchatSelectedAccountId,
 } from "./marketingCampaignResultSource";
 
@@ -10,8 +13,10 @@ describe("Snapchat account-timezone campaign interface", () => {
   const originalAdapter = api.defaults.adapter;
 
   beforeEach(() => {
-    window.history.pushState({}, "", "/ads-manager?provider=snapchat");
+    window.history.replaceState({}, "", "/ads-manager?provider=snapchat");
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    clearSnapchatRestoredReturnRange();
     clearCampaignReportSnapshot("snapchat");
     prepareSnapchatAccountPage();
     document.body.innerHTML = `
@@ -34,14 +39,19 @@ describe("Snapchat account-timezone campaign interface", () => {
     document.body.innerHTML = "";
   });
 
-  async function storeSnapshot() {
+  async function storeSnapshot({
+    dateFrom = "2026-08-04",
+    dateTo = "2026-08-04",
+    accountId = "riyadh-account",
+    timezone = "Asia/Riyadh",
+  } = {}) {
     api.defaults.adapter = async (config) => ({
       data: {
         result_source: "salla",
-        selected_account_id: "riyadh-account",
-        account_timezone: "Asia/Riyadh",
-        date_from: "2026-08-04",
-        date_to: "2026-08-04",
+        selected_account_id: accountId,
+        account_timezone: timezone,
+        date_from: dateFrom,
+        date_to: dateTo,
         totals: { spend_sar: 100 },
         source: { account_rows: 1, campaign_rows: 0 },
         available_accounts: [
@@ -67,7 +77,9 @@ describe("Snapchat account-timezone campaign interface", () => {
       headers: {},
       config,
     });
-    await api.get("/integrations-v2/snapchat_ads/campaign-report");
+    await api.get("/integrations-v2/snapchat_ads/campaign-report", {
+      params: { from_date: dateFrom, to_date: dateTo },
+    });
   }
 
   test("runs only on the explicit Snapchat Ads Manager route", async () => {
@@ -118,6 +130,31 @@ describe("Snapchat account-timezone campaign interface", () => {
     expect(snapchatSelectedAccountId()).toBe("us-account");
     expect(dates).toEqual(["2026-08-03", "2026-08-03"]);
     expect(form.requestSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  test("restores the saved range after returning from Products V2 without submitting today", async () => {
+    window.localStorage.setItem("mezan-snapchat-manager-account-v1", "us-account");
+    rememberSnapchatAdsManagerReturnRange({
+      dateFrom: "2026-07-28",
+      dateTo: "2026-08-04",
+      accountId: "us-account",
+    });
+    prepareSnapchatAccountPage();
+    await storeSnapshot({
+      dateFrom: "2026-07-28",
+      dateTo: "2026-08-04",
+      accountId: "us-account",
+      timezone: "America/Los_Angeles",
+    });
+    const form = document.querySelector("form");
+    form.requestSubmit = jest.fn();
+
+    expect(enhanceSnapchatAccountTimezone(document)).toBe(true);
+
+    const dates = [...document.querySelectorAll('input[type="date"]')].map((input) => input.value);
+    expect(dates).toEqual(["2026-07-28", "2026-08-04"]);
+    expect(form.requestSubmit).not.toHaveBeenCalled();
+    expect(snapchatRestoredReturnRange()).toBeNull();
   });
 
   test("does not claim there are no campaigns when account totals exist", async () => {

@@ -3,12 +3,15 @@ import {
   applyEffectiveCampaignDelivery,
   campaignResultsSource,
   clearCampaignReportSnapshot,
+  clearSnapchatRestoredReturnRange,
   getCampaignReportSnapshot,
   markSnapchatManualRange,
   prepareSnapchatAccountPage,
+  rememberSnapchatAdsManagerReturnRange,
   setCampaignResultsSource,
   setSnapchatSelectedAccount,
   snapchatAvailableAccounts,
+  snapchatRestoredReturnRange,
   snapchatSelectedAccountId,
 } from "./marketingCampaignResultSource";
 
@@ -16,7 +19,10 @@ describe("campaign result source transport", () => {
   const originalAdapter = api.defaults.adapter;
 
   beforeEach(() => {
+    window.history.replaceState({}, "", "/ads-manager?provider=snapchat");
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    clearSnapchatRestoredReturnRange();
     clearCampaignReportSnapshot("snapchat");
     prepareSnapchatAccountPage();
   });
@@ -106,6 +112,58 @@ describe("campaign result source transport", () => {
     expect(response.config.params.from_date).toBe("2026-08-03");
     expect(response.config.params.to_date).toBe("2026-08-03");
     expect(getCampaignReportSnapshot("snapchat")?.campaigns?.[0]?.display_currency).toBe("USD");
+  });
+
+  test("restores the last selected range before the first request after returning from a product", async () => {
+    window.localStorage.setItem("mezan-snapchat-manager-account-v1", "us-account");
+    expect(rememberSnapchatAdsManagerReturnRange({
+      dateFrom: "2026-07-28",
+      dateTo: "2026-08-04",
+      accountId: "us-account",
+    })).toMatchObject({
+      date_from: "2026-07-28",
+      date_to: "2026-08-04",
+      account_id: "us-account",
+    });
+    prepareSnapchatAccountPage();
+
+    api.defaults.adapter = async (config) => ({
+      data: {
+        result_source: "salla",
+        selected_account_id: "us-account",
+        account_timezone: "America/Los_Angeles",
+        date_from: config.params.from_date,
+        date_to: config.params.to_date,
+        available_accounts: [{
+          account_id: "us-account",
+          account_name: "US",
+          currency: "USD",
+          timezone: "America/Los_Angeles",
+          local_today: "2026-08-04",
+        }],
+        campaigns: [],
+      },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    });
+
+    const response = await api.get("/integrations-v2/snapchat_ads/campaign-report", {
+      params: {
+        from_date: "2026-08-05",
+        to_date: "2026-08-05",
+        page: 1,
+      },
+    });
+
+    expect(response.config.params.account_id).toBe("us-account");
+    expect(response.config.params.from_date).toBe("2026-07-28");
+    expect(response.config.params.to_date).toBe("2026-08-04");
+    expect(snapchatRestoredReturnRange()).toMatchObject({
+      date_from: "2026-07-28",
+      date_to: "2026-08-04",
+    });
   });
 
   test("delivery block never changes the configured active campaign switch", () => {

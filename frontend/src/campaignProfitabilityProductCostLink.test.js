@@ -1,14 +1,26 @@
+const mockRememberSnapchatAdsManagerReturnRange = jest.fn();
+
+jest.mock("./marketingCampaignResultSource", () => ({
+  rememberSnapchatAdsManagerReturnRange: (...args) => (
+    mockRememberSnapchatAdsManagerReturnRange(...args)
+  ),
+}));
+
 import {
   buildProfitabilityProductCostHref,
   enhanceProfitabilityProductRows,
   productHrefFromTarget,
   productWorkspaceId,
+  rememberSnapchatRangeBeforeProductNavigation,
   resolveProductFromWorkspace,
+  snapchatAdsManagerRangeFromPage,
 } from "./campaignProfitabilityProductCostLink";
 
 describe("Campaign profitability product cost links", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
+    mockRememberSnapchatAdsManagerReturnRange.mockReset();
+    window.history.replaceState({}, "", "/ads-manager?provider=snapchat");
   });
 
   test("builds a cost-focused Products V2 lookup URL", () => {
@@ -44,6 +56,50 @@ describe("Campaign profitability product cost links", () => {
     expect(cell.getAttribute("tabindex")).toBe("0");
     expect(productHrefFromTarget(productName)).toBe(link.getAttribute("href"));
     expect(enhanceProfitabilityProductRows(document)).toBe(0);
+  });
+
+  test("remembers the selected Snapchat dates before opening a product", () => {
+    document.body.innerHTML = `
+      <div data-testid="marketing-platform-workspace" data-snapchat-selected-account="us-account">
+        <form>
+          <input type="date" value="2026-07-28" />
+          <input type="date" value="2026-08-04" />
+        </form>
+      </div>
+    `;
+    mockRememberSnapchatAdsManagerReturnRange.mockReturnValue({
+      date_from: "2026-07-28",
+      date_to: "2026-08-04",
+      account_id: "us-account",
+    });
+
+    expect(snapchatAdsManagerRangeFromPage(document, window.location)).toEqual({
+      dateFrom: "2026-07-28",
+      dateTo: "2026-08-04",
+      accountId: "us-account",
+    });
+    expect(rememberSnapchatRangeBeforeProductNavigation(document, window.location)).toEqual({
+      date_from: "2026-07-28",
+      date_to: "2026-08-04",
+      account_id: "us-account",
+    });
+    expect(mockRememberSnapchatAdsManagerReturnRange).toHaveBeenCalledWith({
+      dateFrom: "2026-07-28",
+      dateTo: "2026-08-04",
+      accountId: "us-account",
+    });
+  });
+
+  test("does not save a return range outside Snapchat Ads Manager", () => {
+    window.history.replaceState({}, "", "/ads-manager?provider=meta");
+    document.body.innerHTML = `
+      <div data-testid="marketing-platform-workspace">
+        <form><input type="date" value="2026-08-01" /><input type="date" value="2026-08-04" /></form>
+      </div>
+    `;
+
+    expect(rememberSnapchatRangeBeforeProductNavigation(document, window.location)).toBeNull();
+    expect(mockRememberSnapchatAdsManagerReturnRange).not.toHaveBeenCalled();
   });
 
   test("adds a normal product link when the cost exists", () => {
