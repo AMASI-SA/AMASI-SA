@@ -1,4 +1,5 @@
 import api from "../lib/api";
+import { toast } from "sonner";
 
 const ERROR_LABELS = {
   component_category_name_required: "أدخل اسم التصنيف.",
@@ -11,7 +12,7 @@ const ERROR_LABELS = {
   component_group_resource_missing: "أحد عناصر القروب لم يعد موجودًا.",
   component_group_category_mismatch: "أحد العناصر لا يتبع التصنيف المحدد.",
   component_group_kind_mismatch: "لا يمكن خلط الخدمات والمكونات داخل القروب نفسه.",
-  component_group_exists: "يوجد قروب سابق يحتوي على العناصر نفسها.",
+  component_group_exists: "يوجد مجموعة لهذا التصنيف بنفس المكونات أو الخدمات.",
   component_group_not_found: "القروب غير موجود.",
 };
 
@@ -69,7 +70,9 @@ export async function saveComponentGroup(group) {
     }
     return (await api.post("/components-v2/groups", payload)).data;
   } catch (error) {
-    throw organizationError(error, "تعذر حفظ القروب.");
+    const result = organizationError(error, "تعذر حفظ القروب.");
+    if (result.code === "component_group_exists") toast.error(result.message);
+    throw result;
   }
 }
 

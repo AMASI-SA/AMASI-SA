@@ -1,7 +1,9 @@
 import {
     changeComponentKind,
     componentFormCanSave,
+    componentNameAlreadyExists,
     newComponentForm,
+    normalizeComponentName,
     toggleComponentCategory,
 } from "./componentCreationRules";
 
@@ -32,4 +34,17 @@ test("switching to a service enables preparation and stock disables it", () => {
     const service = changeComponentKind(stock, "service");
     expect(service.requires_preparation).toBe(true);
     expect(service.unit).toBe("job");
+});
+
+test("duplicate component names are blocked after normalizing spaces and case", () => {
+    const rows = [
+        { id: "cut", name: "قص" },
+        { id: "paint", name: "  طلاء   ذهبي " },
+        { id: "latin", name: "LASER" },
+    ];
+    expect(normalizeComponentName("  طلاء   ذهبي ")).toBe("طلاء ذهبي");
+    expect(componentNameAlreadyExists(rows, "طلاء ذهبي")).toBe(true);
+    expect(componentNameAlreadyExists(rows, "laser")).toBe(true);
+    expect(componentNameAlreadyExists(rows, "قص", "cut")).toBe(false);
+    expect(componentNameAlreadyExists(rows, "نحت")).toBe(false);
 });
