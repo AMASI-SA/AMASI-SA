@@ -45,7 +45,7 @@ test("Layout delegates dashboard reports to the profit-summary placement", () =>
 });
 
 
-test("GA4, profit summary, and ads spend share one RTL report grid", () => {
+test("GA4, one live profit summary, and ads spend share one RTL report grid", () => {
     expect(placementSource).toContain(
         "'[data-testid=\"profit-summary-card\"]'",
     );
@@ -56,6 +56,18 @@ test("GA4, profit summary, and ads spend share one RTL report grid", () => {
         "currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost)",
     );
     expect(placementSource).toContain(
+        "currentProfitHost.replaceChildren(currentProfit)",
+    );
+    expect(placementSource).toContain(
+        "const candidate = newestLiveProfitCandidate(document, currentProfitHost)",
+    );
+    expect(placementSource).toContain(
+        "const outsideHost = candidates.filter((node) => node.parentElement !== profitHost)",
+    );
+    expect(placementSource).not.toContain(
+        "const candidate = document.querySelector(PROFIT_SUMMARY_SELECTOR)",
+    );
+    expect(placementSource).not.toContain(
         "currentProfitHost.appendChild(candidate)",
     );
     expect(placementSource).toContain("<GoogleAnalyticsRealtimeCards />");
@@ -63,6 +75,14 @@ test("GA4, profit summary, and ads spend share one RTL report grid", () => {
     expect(placementSource).toContain("fromDate={dateRange.fromDate}");
     expect(placementSource).toContain("toDate={dateRange.toDate}");
     expect(placementSource).toContain("<GoogleAnalyticsTrafficSourcesCard />");
+
+    // Dashboard owns exactly one React ProfitSummaryCard. The placement may
+    // relocate the newest live DOM node, but it must never render a second JSX
+    // summary or leave the older moved node visible after a date refresh.
+    expect((dashboardSource.match(/<ProfitSummaryCard\b/g) || [])).toHaveLength(1);
+    expect(placementSource).toContain(
+        "currentProfitHost.removeChild(currentProfit)",
+    );
 });
 
 
