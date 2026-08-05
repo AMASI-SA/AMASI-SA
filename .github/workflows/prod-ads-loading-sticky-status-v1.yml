@@ -39,6 +39,10 @@ jobs:
           if not match:
               raise SystemExit('embedded refactor script not found')
           script = textwrap.dedent(match.group(1))
+          script = script.replace(
+              "default=100, ge=10, le=100",
+              "default=25, ge=10, le=100",
+          )
           exec(compile(script, 'active_campaign_filters_embedded.py', 'exec'), {})
           PY
 
