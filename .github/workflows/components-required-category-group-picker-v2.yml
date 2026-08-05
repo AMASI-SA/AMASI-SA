@@ -19,6 +19,7 @@ on:
       - "frontend/src/lib/componentCreationRules.test.js"
       - "frontend/src/lib/productGroupPicker.js"
       - "frontend/src/lib/productGroupPicker.test.js"
+      - "frontend/src/lib/componentInlineGroupsContract.test.js"
       - ".github/workflows/components-required-category-group-picker-v2.yml"
 
 permissions:
@@ -84,6 +85,7 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/lib/componentCreationRules.test.js
           src/lib/productGroupPicker.test.js
+          src/lib/componentInlineGroupsContract.test.js
       - name: Build Production frontend
         env:
           CI: "false"
