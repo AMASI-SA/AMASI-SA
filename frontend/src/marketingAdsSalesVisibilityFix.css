@@ -1,0 +1,72 @@
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"] {
+  position: relative !important;
+  box-sizing: border-box;
+  min-width: calc(var(--mezan-spend-width) + var(--mezan-sales-width)) !important;
+  width: calc(var(--mezan-spend-width) + var(--mezan-sales-width)) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"] > * {
+  visibility: hidden !important;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::before,
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0 16px;
+  color: rgb(30 41 59);
+  background: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+  pointer-events: none;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::before {
+  content: attr(data-mezan-spend-display);
+  right: 0;
+  width: var(--mezan-spend-width);
+  justify-content: flex-start;
+  border-left: 1px solid rgb(226 232 240);
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::after {
+  content: attr(data-mezan-sales-display);
+  left: 0;
+  width: var(--mezan-sales-width);
+  justify-content: flex-start;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"][data-mezan-spend-header="true"]::before,
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"][data-mezan-spend-header="true"]::after {
+  color: rgb(51 65 85);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::after {
+  border-right: 1px solid rgb(241 245 249);
+}
+
+@media (max-width: 768px) {
+  [data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::before,
+  [data-mezan-sales-with-spend="true"][data-mezan-sales-visibility-fixed="true"]::after {
+    padding-right: 10px;
+    padding-left: 10px;
+    font-size: 11px;
+  }
+}
