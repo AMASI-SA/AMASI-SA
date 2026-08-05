@@ -2,6 +2,7 @@ import api from "../lib/api";
 
 const ERROR_LABELS = {
   component_category_name_required: "أدخل اسم التصنيف.",
+  component_category_required: "يجب أن يتبع المكوّن أو الخدمة تصنيفًا واحدًا على الأقل.",
   component_category_exists: "يوجد تصنيف بالاسم نفسه.",
   component_category_not_found: "التصنيف المحدد غير موجود.",
   component_category_used_by_group: "لا يمكن إزالة التصنيف لأن العنصر مستخدم داخل قروب تابع له.",
