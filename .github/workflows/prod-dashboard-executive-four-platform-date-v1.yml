@@ -6,6 +6,8 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "frontend/src/index.js"
+      - "frontend/src/dashboardVisibleRangeRequestGuard.js"
+      - "frontend/src/dashboardVisibleRangeRequestGuard.test.js"
       - "frontend/src/dashboardExecutivePlatformSpendInterceptor.js"
       - "frontend/src/dashboardExecutivePlatformSpendInterceptor.test.js"
       - "frontend/src/lib/dashboardPlatformSpendClient.js"
@@ -39,6 +41,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
+          src/dashboardVisibleRangeRequestGuard.test.js
           src/lib/dashboardPlatformSpendClient.test.js
           src/lib/dashboardPlatformSpendMerge.test.js
           src/dashboardExecutivePlatformSpendInterceptor.test.js
@@ -50,11 +53,15 @@ jobs:
       - name: Enforce selected-period four-platform contract
         working-directory: .
         run: |
+          RANGE_GUARD=frontend/src/dashboardVisibleRangeRequestGuard.js
           CLIENT=frontend/src/lib/dashboardPlatformSpendClient.js
           SERVICE=frontend/src/services/dashboardAdsSpend.js
           MERGE=frontend/src/lib/dashboardPlatformSpendMerge.js
           INTERCEPTOR=frontend/src/dashboardExecutivePlatformSpendInterceptor.js
           INDEX=frontend/src/index.js
+          grep -q 'advanced-filters' "$RANGE_GUARD"
+          grep -q '_mezanDashboardVisibleRangeGuard' "$RANGE_GUARD"
+          grep -q 'dashboardVisibleRangeRequestGuard' "$INDEX"
           grep -q 'ads-platform-spend/refresh' "$CLIENT"
           grep -q '!refresh' "$CLIENT"
           grep -q 'loadDashboardPlatformSpend' "$SERVICE"
@@ -64,5 +71,5 @@ jobs:
           grep -q 'net_profit' "$MERGE"
           grep -q 'mergeDashboardWithPlatformSpend' "$INTERCEPTOR"
           grep -q 'dashboardExecutivePlatformSpendInterceptor' "$INDEX"
-          ! grep -q 'general_ledger' "$CLIENT" "$MERGE" "$INTERCEPTOR"
-          ! grep -q 'qoyod' "$CLIENT" "$INTERCEPTOR"
+          ! grep -q 'general_ledger' "$RANGE_GUARD" "$CLIENT" "$MERGE" "$INTERCEPTOR"
+          ! grep -q 'qoyod' "$RANGE_GUARD" "$CLIENT" "$INTERCEPTOR"
