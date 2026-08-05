@@ -8,11 +8,11 @@ jest.mock("./lib/api", () => ({
   },
 }));
 
-const snapshotMock = jest.fn(() => null);
+const mockSnapshot = jest.fn(() => null);
 
 jest.mock("./marketingCampaignResultSource", () => ({
   campaignResultsSource: jest.fn(() => "salla"),
-  getCampaignReportSnapshot: (...args) => snapshotMock(...args),
+  getCampaignReportSnapshot: (...args) => mockSnapshot(...args),
 }));
 
 import {
@@ -75,8 +75,8 @@ function platformPayload() {
 }
 
 beforeEach(() => {
-  snapshotMock.mockReset();
-  snapshotMock.mockReturnValue(null);
+  mockSnapshot.mockReset();
+  mockSnapshot.mockReturnValue(null);
 });
 
 test("recognizes only the Snapchat campaign report response", () => {
