@@ -59,8 +59,11 @@ jobs:
           MERGE=frontend/src/lib/dashboardPlatformSpendMerge.js
           INTERCEPTOR=frontend/src/dashboardExecutivePlatformSpendInterceptor.js
           INDEX=frontend/src/index.js
-          grep -q 'advanced-filters' "$RANGE_GUARD"
-          grep -q '_mezanDashboardVisibleRangeGuard' "$RANGE_GUARD"
+          grep -q 'mezan:ads-date-range-applied' "$RANGE_GUARD"
+          grep -q '_mezanDashboardAppliedRangeGuard' "$RANGE_GUARD"
+          grep -q 'APPLIED_RANGE_GUARD_WINDOW_MS' "$RANGE_GUARD"
+          ! grep -q 'querySelector' "$RANGE_GUARD"
+          ! grep -q 'advanced-filters' "$RANGE_GUARD"
           grep -q 'dashboardVisibleRangeRequestGuard' "$INDEX"
           grep -q 'ads-platform-spend/refresh' "$CLIENT"
           grep -q '!refresh' "$CLIENT"
