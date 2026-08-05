@@ -14,9 +14,13 @@ jest.mock("../../lib/api", () => ({
 
 beforeEach(() => api.get.mockReset());
 
-test("native sort controls include orders spend and newest", () => {
-    expect(AD_SQUAD_SORT_OPTIONS.map((item) => item.id)).toEqual(["orders", "spend", "newest"]);
-    expect(AD_MANAGER_SORT_OPTIONS.map((item) => item.id)).toEqual(["orders", "spend", "newest"]);
+test("native sort controls preserve active and add orders spend and newest", () => {
+    expect(AD_SQUAD_SORT_OPTIONS.map((item) => item.id)).toEqual([
+        "orders", "spend", "newest", "active",
+    ]);
+    expect(AD_MANAGER_SORT_OPTIONS.map((item) => item.id)).toEqual([
+        "orders", "spend", "newest",
+    ]);
 });
 
 test("Ad Squad request filters active Campaigns and sorts before pagination", async () => {
@@ -24,7 +28,12 @@ test("Ad Squad request filters active Campaigns and sorts before pagination", as
     await getSnapchatAdSquadPerformance({ activeCampaignsOnly: true, sortBy: "orders" });
     expect(api.get).toHaveBeenCalledWith(
         "/integrations-v2/snapchat_ads/ad-squad-report",
-        expect.objectContaining({ params: expect.objectContaining({ active_campaigns_only: true, sort_by: "orders" }) }),
+        expect.objectContaining({
+            params: expect.objectContaining({
+                active_campaigns_only: true,
+                sort_by: "orders",
+            }),
+        }),
     );
 });
 
@@ -33,6 +42,11 @@ test("Ad request filters active Campaigns and supports spend ordering", async ()
     await getSnapchatAdPerformance({ activeCampaignsOnly: true, sortBy: "spend" });
     expect(api.get).toHaveBeenCalledWith(
         "/integrations-v2/snapchat_ads/ad-report",
-        expect.objectContaining({ params: expect.objectContaining({ active_campaigns_only: true, sort_by: "spend" }) }),
+        expect.objectContaining({
+            params: expect.objectContaining({
+                active_campaigns_only: true,
+                sort_by: "spend",
+            }),
+        }),
     );
 });
