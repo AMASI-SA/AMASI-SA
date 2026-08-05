@@ -1,4 +1,4 @@
-name: Production Ads ROAS After CPA V1
+name: Production Ads Native Metric Order V2
 
 on:
   pull_request:
@@ -6,8 +6,12 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "frontend/src/index.js"
-      - "frontend/src/marketingCampaignColumnOrder.js"
-      - "frontend/src/marketingCampaignColumnOrder.test.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.test.jsx"
       - ".github/workflows/prod-ads-roas-after-cpa-v1.yml"
 
 permissions:
@@ -28,25 +32,37 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test campaign column migration
+      - name: Test native metric order
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
-          src/marketingCampaignColumnOrder.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/components/marketing/AdManagerTable.test.jsx
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce ROAS placement contract
+      - name: Enforce canonical metric sequence
         working-directory: .
         run: |
           INDEX=frontend/src/index.js
-          ORDER=frontend/src/marketingCampaignColumnOrder.js
-          grep -q 'marketingCampaignColumnOrder' "$INDEX"
-          grep -A8 'CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA' "$ORDER" | grep -q '"cpa"'
-          grep -A9 'CAMPAIGN_COLUMN_ORDER_ROAS_AFTER_CPA' "$ORDER" | grep -q '"roas"'
-          grep -q 'cpaIndex + 1' "$ORDER"
-          grep -q 'preserve' frontend/src/marketingCampaignColumnOrder.test.js
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$ORDER"
+          CAMPAIGNS=frontend/src/components/marketing/CampaignManagerTable.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          ADS=frontend/src/components/marketing/AdManagerTable.jsx
+          ! grep -q 'marketingCampaignColumnOrder' "$INDEX"
+          python - <<'PY'
+          from pathlib import Path
+          for path, marker in [
+              ('frontend/src/components/marketing/CampaignManagerTable.jsx', 'CAMPAIGN_MANAGER_DEFAULT_COLUMNS'),
+              ('frontend/src/components/marketing/AdSquadManagerTable.jsx', 'AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER'),
+              ('frontend/src/components/marketing/AdManagerTable.jsx', 'AD_MANAGER_NATIVE_COLUMN_ORDER'),
+          ]:
+              text = Path(path).read_text()
+              start = text.index(marker)
+              block = text[start:text.index(']);', start)]
+              positions = [block.index(f'"{key}"') for key in ('cpa', 'roas', 'spend', 'sales')]
+              assert positions == sorted(positions), (path, positions)
+          PY
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$CAMPAIGNS" "$SQUADS" "$ADS"
