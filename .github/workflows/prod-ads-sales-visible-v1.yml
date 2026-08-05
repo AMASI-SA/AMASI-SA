@@ -54,13 +54,21 @@ jobs:
           ADS=frontend/src/components/marketing/AdManagerTable.jsx
           ! grep -q 'marketingAdsSalesVisibilityFix' "$INDEX"
           ! grep -q 'marketingCampaignColumnOrder' "$INDEX"
-          grep -q '"spend",' "$CAMPAIGNS"
-          grep -q '"sales",' "$CAMPAIGNS"
-          grep -q 'data-column-id="spend"' "$CAMPAIGNS"
-          grep -q 'data-column-id="sales"' "$CAMPAIGNS"
+          grep -q 'CAMPAIGN_MANAGER_NATIVE_COLUMN_ORDER' "$CAMPAIGNS"
+          grep -q 'data-column-id={column.id}' "$CAMPAIGNS"
           grep -q 'data-column-id="spend"' "$SQUADS"
           grep -q 'data-column-id="sales"' "$SQUADS"
           grep -q 'data-column-id="spend"' "$ADS"
           grep -q 'data-column-id="sales"' "$ADS"
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path('frontend/src/components/marketing/CampaignManagerTable.jsx').read_text()
+          start = text.index('CAMPAIGN_MANAGER_DEFAULT_COLUMNS')
+          block = text[start:text.index(']);', start)]
+          ids = re.findall(r'"([a-z_]+)"', block)
+          assert ids.index('spend') + 1 == ids.index('sales'), ids
+          PY
           ! grep -R -q 'data-mezan-sales-with-spend' "$CAMPAIGNS" "$SQUADS" "$ADS"
           ! grep -R -q 'data-mezan-folded-spend-cell' "$CAMPAIGNS" "$SQUADS" "$ADS"
