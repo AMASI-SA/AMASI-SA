@@ -7,6 +7,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 jest.mock("../../services/supplierReceiving", () => ({
+    cancelSupplierReceivingSession: jest.fn(),
     closeSupplierReceivingSession: jest.fn(),
     loadSupplierReceivingCatalog: jest.fn(),
     newSupplierReceivingRequestId: jest.fn(() => "supplier-receiving:test-1"),
@@ -22,6 +23,7 @@ import SupplierReceivingWorkspace, {
     supplierDisplayName,
 } from "./SupplierReceivingWorkspace";
 import {
+    cancelSupplierReceivingSession,
     closeSupplierReceivingSession,
     loadSupplierReceivingCatalog,
 } from "../../services/supplierReceiving";
@@ -60,7 +62,8 @@ test("supplier camera stays open beside the live invoice draft", () => {
     expect(markup).toContain("الكاميرا تبقى مفتوحة");
     expect(markup).toContain("فاتورة المورد");
     expect(markup).toContain("حفظ الفاتورة وإنهاء الجلسة");
-    expect(markup).toContain("إغلاق");
+    expect(markup).toContain("إغلاق الكاميرا");
+    expect(markup).toContain("إلغاء الجلسة والخروج");
 });
 
 test("invoice lines group identical scanned products and calculate totals", () => {
@@ -203,6 +206,70 @@ test("saving sends every grouped piece and edited unit price in one request", as
     } finally {
         act(() => root.unmount());
         container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("an empty session can be cancelled and exited without saving an invoice", async () => {
+    loadSupplierReceivingCatalog
+        .mockResolvedValueOnce({
+            suppliers: [],
+            sessions: [],
+            active_session_scans: [],
+            eligible_piece_count: 1,
+            active_session: {
+                id: "session-cancel-1",
+                reference: "SR-CANCEL-1",
+                scan_count: 0,
+                opened_by_name: "أبو جبل",
+                opened_at: "2026-08-05T10:00:00Z",
+                supplier: { company_name: "مورد أماسي" },
+            },
+        })
+        .mockResolvedValueOnce({
+            suppliers: [],
+            sessions: [],
+            active_session_scans: [],
+            eligible_piece_count: 1,
+            active_session: null,
+        });
+    cancelSupplierReceivingSession.mockResolvedValue({
+        ok: true,
+        cancelled: true,
+    });
+    const originalConfirm = window.confirm;
+    window.confirm = jest.fn(() => true);
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(<SupplierReceivingWorkspace />);
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+        const cancelButton = container.querySelector('[data-testid="supplier-receiving-cancel-session"]');
+        expect(cancelButton).not.toBeNull();
+        expect(cancelButton.disabled).toBe(false);
+
+        await act(async () => {
+            cancelButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+
+        expect(window.confirm).toHaveBeenCalledWith(
+            "هل تريد إلغاء الجلسة والخروج؟ لن تُحفظ فاتورة أو جلسة استلام.",
+        );
+        expect(cancelSupplierReceivingSession).toHaveBeenCalledWith(
+            "session-cancel-1",
+            { note: "" },
+        );
+        expect(container.querySelector('[data-testid="supplier-receiving-open-form"]')).not.toBeNull();
+    } finally {
+        act(() => root.unmount());
+        container.remove();
+        window.confirm = originalConfirm;
         globalThis.IS_REACT_ACT_ENVIRONMENT = false;
     }
 });
