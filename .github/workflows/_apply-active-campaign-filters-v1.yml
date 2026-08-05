@@ -1,0 +1,831 @@
+name: Apply Active Campaign Entity Filters V1
+
+on:
+  push:
+    branches:
+      - fix/prod-active-campaign-entity-filters-v1
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-active-campaign-entity-filters-v1
+          fetch-depth: 0
+
+      - name: Apply native active-campaign filtering and global sorting
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          ROOT = Path('.')
+
+          def read(path):
+              return (ROOT / path).read_text(encoding='utf-8')
+
+          def write(path, content):
+              target = ROOT / path
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content, encoding='utf-8')
+
+          def replace_once(path, old, new):
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise AssertionError(f'{path}: expected one match, found {count}: {old[:120]!r}')
+              write(path, text.replace(old, new, 1))
+
+          def regex_once(path, pattern, replacement, flags=0):
+              text = read(path)
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise AssertionError(f'{path}: expected one regex match, found {count}: {pattern!r}')
+              write(path, updated)
+
+          helper = '''"""Shared active-Campaign filtering and global entity sorting for Snapchat Ads Manager."""
+          from __future__ import annotations
+
+          from datetime import datetime, timezone
+          from typing import Any, Iterable
+
+          ACTIVE_PROVIDER_STATUSES = frozenset({"ACTIVE", "ENABLED", "DELIVERING"})
+          VALID_ENTITY_SORTS = frozenset({"orders", "spend", "newest", "active"})
+
+
+          def _text(value: Any) -> str:
+              return str(value or "").strip()
+
+
+          def _number(value: Any) -> float | None:
+              if value is None or isinstance(value, bool):
+                  return None
+              try:
+                  parsed = float(value)
+              except (TypeError, ValueError, OverflowError):
+                  return None
+              return parsed if parsed == parsed and abs(parsed) != float("inf") else None
+
+
+          def _ratio(numerator: float | None, denominator: float | None, scale: float = 1.0) -> float | None:
+              if numerator is None or denominator is None or denominator == 0:
+                  return None
+              return round(float(numerator) / float(denominator) * scale, 6)
+
+
+          def is_active_provider_status(value: Any) -> bool:
+              return _text(value).upper() in ACTIVE_PROVIDER_STATUSES
+
+
+          def normalize_entity_sort(value: Any, default: str = "orders") -> str:
+              normalized = _text(value).lower()
+              return normalized if normalized in VALID_ENTITY_SORTS else default
+
+
+          def _timestamp(row: dict[str, Any], fields: Iterable[str]) -> float:
+              for field in fields:
+                  raw = _text(row.get(field))
+                  if not raw:
+                      continue
+                  try:
+                      parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                  except ValueError:
+                      continue
+                  if parsed.tzinfo is None:
+                      parsed = parsed.replace(tzinfo=timezone.utc)
+                  return parsed.timestamp()
+              return 0.0
+
+
+          def sort_entity_rows(
+              rows: list[dict[str, Any]],
+              mode: str,
+              *,
+              name_field: str,
+              status_field: str = "status",
+              created_fields: tuple[str, ...] = (
+                  "created_at_provider",
+                  "start_time",
+                  "updated_at_provider",
+              ),
+          ) -> list[dict[str, Any]]:
+              normalized = normalize_entity_sort(mode)
+
+              def key(row: dict[str, Any]):
+                  orders = _number(row.get("orders")) or 0.0
+                  spend = _number(row.get("spend_sar")) or 0.0
+                  active = 1 if is_active_provider_status(row.get(status_field)) else 0
+                  created = _timestamp(row, created_fields)
+                  name = _text(row.get(name_field)).casefold()
+                  if normalized == "spend":
+                      return (-spend, -orders, -created, name)
+                  if normalized == "newest":
+                      return (-created, -spend, -orders, name)
+                  if normalized == "active":
+                      return (-active, -orders, -spend, -created, name)
+                  return (-orders, -spend, -created, name)
+
+              return sorted((dict(row) for row in rows), key=key)
+
+
+          def aggregate_entity_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+              numeric_fields = (
+                  "spend_sar",
+                  "spend_native",
+                  "sales_sar",
+                  "sales_native",
+                  "orders",
+                  "impressions",
+                  "swipes",
+                  "video_views",
+              )
+              totals: dict[str, float | None] = {}
+              for field in numeric_fields:
+                  values = [number for row in rows if (number := _number(row.get(field))) is not None]
+                  totals[field] = round(sum(values), 6) if values else None
+              orders = totals.get("orders")
+              impressions = totals.get("impressions")
+              swipes = totals.get("swipes")
+              spend_sar = totals.get("spend_sar")
+              spend_native = totals.get("spend_native")
+              sales_sar = totals.get("sales_sar")
+              totals.update({
+                  "orders": int(round(orders)) if orders is not None else None,
+                  "impressions": int(round(impressions)) if impressions is not None else None,
+                  "swipes": int(round(swipes)) if swipes is not None else None,
+                  "video_views": int(round(totals["video_views"])) if totals.get("video_views") is not None else None,
+                  "roas": _ratio(sales_sar, spend_sar),
+                  "cpa_sar": _ratio(spend_sar, orders),
+                  "cpa_native": _ratio(spend_native, orders),
+                  "cpc_sar": _ratio(spend_sar, swipes),
+                  "cpc_native": _ratio(spend_native, swipes),
+                  "cpm_sar": _ratio(spend_sar, impressions, 1000.0),
+                  "cpm_native": _ratio(spend_native, impressions, 1000.0),
+                  "ctr_pct": _ratio(swipes, impressions, 100.0),
+                  "observed_days": max((int(row.get("observed_days") or 0) for row in rows), default=0),
+                  "source_rows": sum(int(row.get("source_rows") or 0) for row in rows),
+                  "data_complete": bool(rows) and all(row.get("data_complete") is not False for row in rows),
+              })
+              return totals
+
+
+          __all__ = [
+              "ACTIVE_PROVIDER_STATUSES",
+              "VALID_ENTITY_SORTS",
+              "aggregate_entity_rows",
+              "is_active_provider_status",
+              "normalize_entity_sort",
+              "sort_entity_rows",
+          ]
+          '''
+          write('backend/integrations_control_center/snapchat_active_campaign_filtering.py', helper)
+
+          # Campaign report: filter active campaigns before search/pagination.
+          path = 'backend/integrations_control_center/snapchat_account_timezone_manager.py'
+          replace_once(path,
+              'from .snapchat_account_selection import _load_selected_accounts\n',
+              'from .snapchat_account_selection import _load_selected_accounts\nfrom .snapchat_active_campaign_filtering import is_active_provider_status\n',
+          )
+          replace_once(path,
+              '    result_source: str,\n    now: Callable[[], datetime] = _utcnow,\n',
+              '    result_source: str,\n    active_campaigns_only: bool = False,\n    now: Callable[[], datetime] = _utcnow,\n',
+          )
+          replace_once(path,
+              '    campaigns_query = _text(campaign_query).casefold()[:120]\n',
+              '    for campaign in campaigns:\n        campaign["campaign_active"] = is_active_provider_status(campaign.get("status"))\n    if active_campaigns_only:\n        campaigns = [campaign for campaign in campaigns if campaign.get("campaign_active") is True]\n\n    campaigns_query = _text(campaign_query).casefold()[:120]\n',
+          )
+          replace_once(path,
+              '        "supported_result_sources": list(SUPPORTED_RESULT_SOURCES),\n',
+              '        "supported_result_sources": list(SUPPORTED_RESULT_SOURCES),\n        "active_campaigns_only": bool(active_campaigns_only),\n',
+          )
+          replace_once(path,
+              '        result_source: str = Query(default=RESULT_SOURCE_SALLA, pattern="^(salla|platform)$"),\n        user: dict = Depends(current_user),\n',
+              '        result_source: str = Query(default=RESULT_SOURCE_SALLA, pattern="^(salla|platform)$"),\n        active_campaigns_only: bool = Query(default=True),\n        user: dict = Depends(current_user),\n',
+          )
+          replace_once(path,
+              '                result_source=result_source,\n            )\n',
+              '                result_source=result_source,\n                active_campaigns_only=active_campaigns_only,\n            )\n',
+          )
+
+          # Ad Squad report: parent Campaign status, active filter, server-side sorting, filtered totals.
+          path = 'backend/integrations_control_center/snapchat_adsquad_performance.py'
+          replace_once(path,
+              'from .snapchat_account_selection import _load_selected_accounts\n',
+              'from .snapchat_account_selection import _load_selected_accounts\nfrom .snapchat_active_campaign_filtering import (\n    aggregate_entity_rows,\n    is_active_provider_status,\n    normalize_entity_sort,\n    sort_entity_rows,\n)\n',
+          )
+          replace_once(path,
+              '    limit: int,\n    now: Callable[[], datetime] = _utcnow,\n',
+              '    limit: int,\n    active_campaigns_only: bool = False,\n    sort_by: str = "orders",\n    now: Callable[[], datetime] = _utcnow,\n',
+          )
+          replace_once(path,
+              '            "campaign_name": (\n                _text(campaign.get("display_name"))\n                or campaign_id\n                or "حملة غير معروفة"\n            ),\n            "status": entity.get("status") or "unknown",\n',
+              '            "campaign_name": (\n                _text(campaign.get("display_name"))\n                or campaign_id\n                or "حملة غير معروفة"\n            ),\n            "campaign_status": campaign.get("status") or "unknown",\n            "campaign_active": is_active_provider_status(campaign.get("status")),\n            "status": entity.get("status") or "unknown",\n            "created_at_provider": entity.get("created_at_provider"),\n            "updated_at_provider": entity.get("updated_at_provider"),\n',
+          )
+          replace_once(path,
+              '    rows.sort(key=lambda item: (\n        -(float(item.get("spend_sar") or 0)),\n        _text(item.get("ad_squad_name")).casefold(),\n    ))\n    total = len(rows)\n',
+              '    if active_campaigns_only:\n        rows = [item for item in rows if item.get("campaign_active") is True]\n    sort_mode = normalize_entity_sort(sort_by)\n    rows = sort_entity_rows(\n        rows,\n        sort_mode,\n        name_field="ad_squad_name",\n        status_field="status",\n    )\n    filtered_totals = aggregate_entity_rows(rows)\n    total = len(rows)\n',
+          )
+          replace_once(path,
+              '    totals = _aggregate_rows(\n        performance_rows,\n        requested_days=requested_days,\n    )\n',
+              '    totals = filtered_totals\n',
+          )
+          replace_once(path,
+              '        "supported_result_sources": ["platform"],\n',
+              '        "supported_result_sources": ["platform"],\n        "active_campaigns_only": bool(active_campaigns_only),\n        "sort_by": sort_mode,\n',
+          )
+          replace_once(path,
+              '        limit: int = Query(default=25, ge=10, le=100),\n        user: dict = Depends(current_user),\n',
+              '        limit: int = Query(default=25, ge=10, le=100),\n        active_campaigns_only: bool = Query(default=True),\n        sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),\n        user: dict = Depends(current_user),\n',
+          )
+          replace_once(path,
+              '                limit=limit,\n            )\n',
+              '                limit=limit,\n                active_campaigns_only=active_campaigns_only,\n                sort_by=sort_by,\n            )\n',
+          )
+
+          # Ad report: same parent Campaign filter and global sort before pagination.
+          path = 'backend/integrations_control_center/snapchat_ad_performance.py'
+          replace_once(path,
+              'from .snapchat_account_selection import _load_selected_accounts\n',
+              'from .snapchat_account_selection import _load_selected_accounts\nfrom .snapchat_active_campaign_filtering import (\n    aggregate_entity_rows,\n    is_active_provider_status,\n    normalize_entity_sort,\n    sort_entity_rows,\n)\n',
+          )
+          replace_once(path,
+              '    limit: int,\n    now: Callable[[], datetime] = _utcnow,\n',
+              '    limit: int,\n    active_campaigns_only: bool = False,\n    sort_by: str = "orders",\n    now: Callable[[], datetime] = _utcnow,\n',
+          )
+          replace_once(path,
+              '        limit=100,\n        now=lambda: current,\n',
+              '        limit=100,\n        active_campaigns_only=False,\n        sort_by="spend",\n        now=lambda: current,\n',
+          )
+          replace_once(path,
+              '            "campaign_name": _text(campaign.get("display_name")) or campaign_id or "حملة غير معروفة",\n            "status": delivery["configured_status"],\n',
+              '            "campaign_name": _text(campaign.get("display_name")) or campaign_id or "حملة غير معروفة",\n            "campaign_status": campaign.get("status") or "unknown",\n            "campaign_active": is_active_provider_status(campaign.get("status")),\n            "ad_squad_status": squad.get("status") or "unknown",\n            "status": delivery["configured_status"],\n',
+          )
+          regex_once(path,
+              r'    rows\.sort\(key=lambda item: \(\n        -\(float\(item\.get\("spend_sar"\) or 0\)\),\n        -\(\n            _parse_datetime\(item\.get\("created_at_provider"\)\)\.timestamp\(\)\n            if _parse_datetime\(item\.get\("created_at_provider"\)\) else 0\n        \),\n        _text\(item\.get\("ad_name"\)\)\.casefold\(\),\n    \)\)\n    total = len\(rows\)\n',
+              '    if active_campaigns_only:\n        rows = [item for item in rows if item.get("campaign_active") is True]\n    sort_mode = normalize_entity_sort(sort_by)\n    rows = sort_entity_rows(\n        rows,\n        sort_mode,\n        name_field="ad_name",\n        status_field="status",\n    )\n    filtered_totals = aggregate_entity_rows(rows)\n    total = len(rows)\n',
+          )
+          replace_once(path,
+              '    totals = _aggregate_rows(performance_rows, requested_days=requested_days)\n',
+              '    totals = filtered_totals\n',
+          )
+          replace_once(path,
+              '        "supported_result_sources": ["platform"],\n',
+              '        "supported_result_sources": ["platform"],\n        "active_campaigns_only": bool(active_campaigns_only),\n        "sort_by": sort_mode,\n',
+          )
+          replace_once(path,
+              '        limit: int = Query(default=100, ge=10, le=100),\n        user: dict = Depends(current_user),\n',
+              '        limit: int = Query(default=100, ge=10, le=100),\n        active_campaigns_only: bool = Query(default=True),\n        sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),\n        user: dict = Depends(current_user),\n',
+          )
+          replace_once(path,
+              '                limit=limit,\n            )\n',
+              '                limit=limit,\n                active_campaigns_only=active_campaigns_only,\n                sort_by=sort_by,\n            )\n',
+          )
+
+          # Frontend Campaign API filter.
+          path = 'frontend/src/services/marketingPerformance.js'
+          replace_once(path,
+              '        status: text(value.status, "unknown"),\n',
+              '        status: text(value.status, "unknown"),\n        campaign_active: value.campaign_active === true,\n',
+          )
+          replace_once(path,
+              '    limit = 25,\n} = {}) {\n',
+              '    limit = 25,\n    activeCampaignsOnly = true,\n} = {}) {\n',
+          )
+          replace_once(path,
+              '                    limit,\n                },\n',
+              '                    limit,\n                    active_campaigns_only: activeCampaignsOnly,\n                },\n',
+          )
+
+          # Frontend Ad Squad service.
+          path = 'frontend/src/services/snapchatAdSquadPerformance.js'
+          replace_once(path,
+              '        campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),\n',
+              '        campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),\n        campaign_status: text(value.campaign_status, "unknown"),\n        campaign_active: value.campaign_active === true,\n',
+          )
+          replace_once(path,
+              '    limit = 25,\n} = {}) {\n',
+              '    limit = 25,\n    activeCampaignsOnly = true,\n    sortBy = "orders",\n} = {}) {\n',
+          )
+          replace_once(path,
+              '            limit,\n        },\n',
+              '            limit,\n            active_campaigns_only: activeCampaignsOnly,\n            sort_by: sortBy,\n        },\n',
+          )
+
+          # Frontend Ad service.
+          path = 'frontend/src/services/snapchatAdPerformance.js'
+          replace_once(path,
+              '        campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),\n',
+              '        campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),\n        campaign_status: text(value.campaign_status, "unknown"),\n        campaign_active: value.campaign_active === true,\n        ad_squad_status: text(value.ad_squad_status, "unknown"),\n',
+          )
+          replace_once(path,
+              '    limit = 100,\n} = {}) {\n',
+              '    limit = 100,\n    activeCampaignsOnly = true,\n    sortBy = "orders",\n} = {}) {\n',
+          )
+          replace_once(path,
+              '            limit,\n        },\n',
+              '            limit,\n            active_campaigns_only: activeCampaignsOnly,\n            sort_by: sortBy,\n        },\n',
+          )
+
+          # Controlled native Ad Squad sort controls: orders/spend/newest.
+          controls = '''import { useEffect, useState } from "react";
+
+          export const AD_SQUAD_SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v2";
+          export const AD_SQUAD_SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
+          export const AD_SQUAD_SORT_OPTIONS = Object.freeze([
+              { id: "orders", label: "الأكثر طلبًا" },
+              { id: "spend", label: "الأكثر صرفًا" },
+              { id: "newest", label: "الأحدث أولًا" },
+          ]);
+          const VALID = new Set(AD_SQUAD_SORT_OPTIONS.map((item) => item.id));
+
+          export function readAdSquadSort(storage = typeof window !== "undefined" ? window.localStorage : null) {
+              try {
+                  const value = String(storage?.getItem(AD_SQUAD_SORT_STORAGE_KEY) || "orders");
+                  return VALID.has(value) ? value : "orders";
+              } catch {
+                  return "orders";
+              }
+          }
+
+          export function writeAdSquadSort(value, storage = typeof window !== "undefined" ? window.localStorage : null) {
+              const normalized = VALID.has(String(value || "")) ? String(value) : "orders";
+              try {
+                  storage?.setItem(AD_SQUAD_SORT_STORAGE_KEY, normalized);
+              } catch {
+                  // Controlled state still updates when storage is unavailable.
+              }
+              if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent(AD_SQUAD_SORT_EVENT, {
+                      detail: { sort_by: normalized, source: "react_controls" },
+                  }));
+              }
+              return normalized;
+          }
+
+          export default function AdSquadSortControls({ value: controlledValue = null, onChange }) {
+              const [localValue, setLocalValue] = useState(() => readAdSquadSort());
+              const value = VALID.has(controlledValue) ? controlledValue : localValue;
+
+              useEffect(() => {
+                  if (VALID.has(controlledValue)) setLocalValue(controlledValue);
+              }, [controlledValue]);
+
+              function choose(next) {
+                  const normalized = writeAdSquadSort(next);
+                  setLocalValue(normalized);
+                  onChange?.(normalized);
+              }
+
+              return (
+                  <div
+                      className="flex flex-wrap items-center justify-between gap-3 border-x border-t border-slate-200 bg-slate-50 px-4 py-3"
+                      data-testid="ad-squad-native-sort-controls"
+                      dir="rtl"
+                  >
+                      <div>
+                          <div className="text-sm font-black text-slate-700">ترتيب المجموعات الإعلانية</div>
+                          <div className="mt-0.5 text-[11px] font-bold text-slate-400">يطبق الترتيب على جميع النتائج قبل تقسيم الصفحات.</div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                          {AD_SQUAD_SORT_OPTIONS.map((option) => {
+                              const active = value === option.id;
+                              return (
+                                  <button
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() => choose(option.id)}
+                                      aria-pressed={active}
+                                      data-testid={`ad-squad-sort-${option.id}`}
+                                      className={[
+                                          "min-h-10 rounded-xl px-4 text-sm font-black transition",
+                                          active
+                                              ? "bg-slate-950 text-white shadow-sm"
+                                              : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100",
+                                      ].join(" ")}
+                                  >
+                                      {option.label}
+                                  </button>
+                              );
+                          })}
+                      </div>
+                  </div>
+              );
+          }
+          '''
+          write('frontend/src/components/marketing/AdSquadSortControls.jsx', controls)
+
+          # Shared active-Campaign toggle is native React and controls all levels.
+          workspace = '''import CampaignManagerTable from "./CampaignManagerTable";
+          import AdSquadManagerTable from "./AdSquadManagerTable";
+          import AdSquadSortControls from "./AdSquadSortControls";
+          import AdManagerTable from "./AdManagerTable";
+          import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
+
+          function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled }) {
+              const items = [
+                  { id: "campaigns", label: "الحملات", enabled: true },
+                  { id: "ad_squads", label: "المجموعات الإعلانية", enabled: adSquadsEnabled },
+                  { id: "ads", label: "الإعلانات", enabled: adsEnabled },
+              ];
+              return (
+                  <div className="flex min-h-14 items-end gap-6 overflow-x-auto rounded-t-2xl border border-b-0 border-slate-200 bg-white px-4" data-testid="ads-entity-level-tabs">
+                      {items.map((item) => {
+                          const active = entityLevel === item.id;
+                          return (
+                              <button
+                                  key={item.id}
+                                  type="button"
+                                  disabled={!item.enabled}
+                                  onClick={() => item.enabled && onChange?.(item.id)}
+                                  className={["relative shrink-0 px-1 pb-3 pt-4 text-sm transition", active ? "font-black text-slate-950" : item.enabled ? "font-bold text-slate-600 hover:text-slate-950" : "cursor-not-allowed font-bold text-slate-300"].join(" ")}
+                                  aria-pressed={active}
+                                  data-testid={`ads-entity-level-${item.id}`}
+                              >
+                                  {item.label}
+                                  {active && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-amber-400" />}
+                              </button>
+                          );
+                      })}
+                      <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">{platformLabel || "المنصة"} · قراءة فقط</span>
+                  </div>
+              );
+          }
+
+          function ActiveCampaignFilter({ checked, onChange, entityLevel }) {
+              const entityLabel = entityLevel === "ad_squads" ? "المجموعات" : entityLevel === "ads" ? "الإعلانات" : "الحملات";
+              return (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-x border-t border-slate-200 bg-white px-4 py-3" data-testid="active-campaign-filter">
+                      <div>
+                          <div className="text-sm font-black text-slate-800">{checked ? `${entityLabel} التابعة لحملات نشطة فقط` : `عرض كل ${entityLabel}`}</div>
+                          <div className="mt-0.5 text-[11px] font-bold text-slate-400">الفلترة تتم من المصدر قبل Pagination، وليست فلترة للصفحة الحالية.</div>
+                      </div>
+                      <button
+                          type="button"
+                          onClick={() => onChange?.(!checked)}
+                          aria-pressed={checked}
+                          data-testid="active-campaigns-only-toggle"
+                          className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-sm font-black transition ${checked ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700"}`}
+                      >
+                          <span className={`relative inline-flex h-5 w-9 rounded-full ${checked ? "bg-emerald-500" : "bg-slate-300"}`}>
+                              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm ${checked ? "right-[18px]" : "right-0.5"}`} />
+                          </span>
+                          الحملات النشطة فقط
+                      </button>
+                  </div>
+              );
+          }
+
+          export default function AdsEntityLevelWorkspace({
+              platform,
+              platformLabel,
+              entityLevel,
+              onEntityLevelChange,
+              campaigns,
+              campaignTotals,
+              campaignPagination,
+              campaignPage,
+              onCampaignPageChange,
+              readOnly,
+              activeCampaignsOnly = true,
+              onActiveCampaignsOnlyChange,
+              adSquadSort = "orders",
+              onAdSquadSortChange,
+              adSquadReport,
+              adSquadPage,
+              onAdSquadPageChange,
+              adSquadLoading,
+              adSquadError,
+          }) {
+              const adSquadsEnabled = platform === "snapchat";
+              const adsEnabled = platform === "snapchat";
+              const campaignReport = platform === "snapchat"
+                  ? hydrateCampaignProfitability(campaigns, campaignTotals)
+                  : { campaigns, totals: campaignTotals };
+
+              return (
+                  <section data-testid="ads-entity-level-workspace">
+                      <style>{`
+                          [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] > div:first-child { display: none; }
+                          [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] { border-top-left-radius: 0; border-top-right-radius: 0; }
+                      `}</style>
+                      <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} />
+                      {platform === "snapchat" && (
+                          <ActiveCampaignFilter checked={activeCampaignsOnly} onChange={onActiveCampaignsOnlyChange} entityLevel={entityLevel} />
+                      )}
+                      {entityLevel === "campaigns" && (
+                          <CampaignManagerTable
+                              platform={platform}
+                              platformLabel={platformLabel}
+                              campaigns={campaignReport.campaigns}
+                              totals={campaignReport.totals}
+                              pagination={campaignPagination}
+                              page={campaignPage}
+                              onPageChange={onCampaignPageChange}
+                              readOnly={readOnly}
+                          />
+                      )}
+                      {entityLevel === "ad_squads" && (
+                          <>
+                              <AdSquadSortControls value={adSquadSort} onChange={onAdSquadSortChange} />
+                              <AdSquadManagerTable
+                                  rows={adSquadReport?.ad_squads || []}
+                                  totals={adSquadReport?.totals || {}}
+                                  pagination={adSquadReport?.pagination || {}}
+                                  page={adSquadPage}
+                                  onPageChange={onAdSquadPageChange}
+                                  loading={adSquadLoading}
+                                  error={adSquadError}
+                                  sortMode={adSquadSort}
+                              />
+                          </>
+                      )}
+                      {entityLevel === "ads" && <AdManagerTable activeCampaignsOnly={activeCampaignsOnly} />}
+                  </section>
+              );
+          }
+          '''
+          write('frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx', workspace)
+
+          # Top-level state drives server requests and resets pagination.
+          path = 'frontend/src/pages/MarketingPlatformWorkspace.jsx'
+          replace_once(path,
+              '    const [entityLevel, setEntityLevel] = useState("campaigns");\n    const [adSquadPage, setAdSquadPage] = useState(1);\n',
+              '    const [entityLevel, setEntityLevel] = useState("campaigns");\n    const [activeCampaignsOnly, setActiveCampaignsOnly] = useState(true);\n    const [adSquadSort, setAdSquadSort] = useState("orders");\n    const [adSquadPage, setAdSquadPage] = useState(1);\n',
+          )
+          replace_once(path,
+              '                limit: 25,\n            });\n',
+              '                limit: 25,\n                activeCampaignsOnly,\n            });\n',
+          )
+          replace_once(path,
+              '    }, [appliedQuery, appliedRange, page, platform]);\n',
+              '    }, [activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);\n',
+          )
+          replace_once(path,
+              '                limit: 25,\n            });\n            setAdSquadReport(result);\n',
+              '                limit: 25,\n                activeCampaignsOnly,\n                sortBy: adSquadSort,\n            });\n            setAdSquadReport(result);\n',
+          )
+          replace_once(path,
+              '    }, [adSquadPage, appliedQuery, appliedRange, platform, selectedAccountId]);\n',
+              '    }, [activeCampaignsOnly, adSquadPage, adSquadSort, appliedQuery, appliedRange, platform, selectedAccountId]);\n',
+          )
+          replace_once(path,
+              '        setEntityLevel("campaigns");\n        setAdSquadReport(null);\n',
+              '        setEntityLevel("campaigns");\n        setActiveCampaignsOnly(true);\n        setAdSquadSort("orders");\n        setAdSquadReport(null);\n',
+          )
+          replace_once(path,
+              '                    readOnly={data?.policy?.mutations_allowed !== true}\n                    adSquadReport={adSquadReport}\n',
+              '                    readOnly={data?.policy?.mutations_allowed !== true}\n                    activeCampaignsOnly={activeCampaignsOnly}\n                    onActiveCampaignsOnlyChange={(value) => {\n                        setPage(1);\n                        setAdSquadPage(1);\n                        setActiveCampaignsOnly(value);\n                    }}\n                    adSquadSort={adSquadSort}\n                    onAdSquadSortChange={(value) => {\n                        setAdSquadPage(1);\n                        setAdSquadSort(value);\n                    }}\n                    adSquadReport={adSquadReport}\n',
+          )
+
+          # Ad Squad local rendering understands orders mode and controlled server sort.
+          path = 'frontend/src/components/marketing/AdSquadManagerTable.jsx'
+          replace_once(path,
+              'const VALID_SORTS = new Set(["newest", "spend", "active"]);\n',
+              'const VALID_SORTS = new Set(["orders", "newest", "spend", "active"]);\n',
+          )
+          replace_once(path,
+              '    const normalized = VALID_SORTS.has(mode) ? mode : "newest";\n',
+              '    const normalized = VALID_SORTS.has(mode) ? mode : "orders";\n',
+          )
+          replace_once(path,
+              '        if (normalized === "active" && leftActive !== rightActive) return rightActive - leftActive;\n        if (normalized === "spend" && leftSpend !== rightSpend) return rightSpend - leftSpend;\n',
+              '        const leftOrders = finite(left.orders) || 0;\n        const rightOrders = finite(right.orders) || 0;\n        if (normalized === "active" && leftActive !== rightActive) return rightActive - leftActive;\n        if (normalized === "orders" && leftOrders !== rightOrders) return rightOrders - leftOrders;\n        if (normalized === "spend" && leftSpend !== rightSpend) return rightSpend - leftSpend;\n',
+          )
+          replace_once(path,
+              '    error = "",\n}) {\n',
+              '    error = "",\n    sortMode = "orders",\n}) {\n',
+          )
+          replace_once(path,
+              '    const sorted = useMemo(() => {\n        const preferred = sortAdSquadRows(rows, preferredSort);\n',
+              '    const effectiveSort = VALID_SORTS.has(sortMode) ? sortMode : preferredSort;\n    const sorted = useMemo(() => {\n        const preferred = sortAdSquadRows(rows, effectiveSort);\n',
+          )
+          replace_once(path,
+              '    }, [rows, preferredSort, columnSort]);\n',
+              '    }, [rows, effectiveSort, columnSort]);\n',
+          )
+          replace_once(path,
+              '            data-sort-mode={preferredSort}\n',
+              '            data-sort-mode={effectiveSort}\n',
+          )
+
+          # Ad table: active parent filter plus global orders/spend/newest server sort.
+          path = 'frontend/src/components/marketing/AdManagerTable.jsx'
+          replace_once(path,
+              'export default function AdManagerTable() {\n',
+              'export const AD_MANAGER_SORT_OPTIONS = Object.freeze([\n    { id: "orders", label: "الأكثر طلبًا" },\n    { id: "spend", label: "الأكثر صرفًا" },\n    { id: "newest", label: "الأحدث أولًا" },\n]);\n\nexport default function AdManagerTable({ activeCampaignsOnly = true }) {\n',
+          )
+          replace_once(path,
+              '    const [sort, setSort] = useState({ key: "spend_sar", direction: "desc" });\n',
+              '    const [sort, setSort] = useState({ key: null, direction: "desc" });\n    const [serverSort, setServerSort] = useState("orders");\n',
+          )
+          replace_once(path,
+              '                limit: 100,\n            });\n',
+              '                limit: 100,\n                activeCampaignsOnly,\n                sortBy: serverSort,\n            });\n',
+          )
+          replace_once(path,
+              '    }, [appliedQuery, page]);\n',
+              '    }, [activeCampaignsOnly, appliedQuery, page, serverSort]);\n',
+          )
+          replace_once(path,
+              '    const rows = useMemo(() => {\n        const direction = sort.direction === "asc" ? 1 : -1;\n        return [...(report?.ads || [])].sort((left, right) => {\n',
+              '    const rows = useMemo(() => {\n        if (!sort.key) return [...(report?.ads || [])];\n        const direction = sort.direction === "asc" ? 1 : -1;\n        return [...(report?.ads || [])].sort((left, right) => {\n',
+          )
+          replace_once(path,
+              '                <div className="flex items-center gap-2">\n                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">\n',
+              '                <div className="flex flex-wrap items-center gap-2">\n                    <div className="flex flex-wrap gap-1" data-testid="ad-server-sort-controls">\n                        {AD_MANAGER_SORT_OPTIONS.map((option) => (\n                            <button\n                                key={option.id}\n                                type="button"\n                                onClick={() => {\n                                    setPage(1);\n                                    setSort({ key: null, direction: "desc" });\n                                    setServerSort(option.id);\n                                }}\n                                aria-pressed={serverSort === option.id}\n                                className={`rounded-lg px-3 py-2 text-xs font-black ${serverSort === option.id ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-700"}`}\n                            >\n                                {option.label}\n                            </button>\n                        ))}\n                    </div>\n                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">\n',
+          )
+
+          # Focused tests.
+          backend_test = '''from integrations_control_center.snapchat_active_campaign_filtering import (
+              aggregate_entity_rows,
+              is_active_provider_status,
+              sort_entity_rows,
+          )
+
+
+          def test_active_provider_status_is_explicit():
+              assert is_active_provider_status("ACTIVE") is True
+              assert is_active_provider_status("enabled") is True
+              assert is_active_provider_status("PAUSED") is False
+              assert is_active_provider_status(None) is False
+
+
+          def test_entity_sorting_happens_globally_before_pagination():
+              rows = [
+                  {"name": "قديم", "orders": 1, "spend_sar": 100, "created_at_provider": "2026-08-01T00:00:00Z"},
+                  {"name": "طلبات", "orders": 7, "spend_sar": 20, "created_at_provider": "2026-08-02T00:00:00Z"},
+                  {"name": "صرف", "orders": 2, "spend_sar": 300, "created_at_provider": "2026-08-03T00:00:00Z"},
+              ]
+              assert [row["name"] for row in sort_entity_rows(rows, "orders", name_field="name")] == ["طلبات", "صرف", "قديم"]
+              assert [row["name"] for row in sort_entity_rows(rows, "spend", name_field="name")] == ["صرف", "قديم", "طلبات"]
+              assert [row["name"] for row in sort_entity_rows(rows, "newest", name_field="name")] == ["صرف", "طلبات", "قديم"]
+
+
+          def test_filtered_entity_totals_match_visible_rows():
+              totals = aggregate_entity_rows([
+                  {"orders": 2, "spend_sar": 50, "sales_sar": 100, "impressions": 1000, "swipes": 20},
+                  {"orders": 3, "spend_sar": 70, "sales_sar": 210, "impressions": 2000, "swipes": 30},
+              ])
+              assert totals["orders"] == 5
+              assert totals["spend_sar"] == 120
+              assert totals["sales_sar"] == 310
+              assert round(totals["roas"], 6) == round(310 / 120, 6)
+              assert totals["cpa_sar"] == 24
+          '''
+          write('backend/tests/test_snapchat_active_campaign_entity_filters_v1.py', backend_test)
+
+          frontend_test = '''import api from "../../lib/api";
+          import { getSnapchatAdSquadPerformance } from "../../services/snapchatAdSquadPerformance";
+          import { getSnapchatAdPerformance } from "../../services/snapchatAdPerformance";
+          import { AD_SQUAD_SORT_OPTIONS } from "./AdSquadSortControls";
+          import { AD_MANAGER_SORT_OPTIONS } from "./AdManagerTable";
+
+          jest.mock("../../lib/api", () => ({ get: jest.fn() }));
+
+          beforeEach(() => api.get.mockReset());
+
+          test("native sort controls include orders spend and newest", () => {
+              expect(AD_SQUAD_SORT_OPTIONS.map((item) => item.id)).toEqual(["orders", "spend", "newest"]);
+              expect(AD_MANAGER_SORT_OPTIONS.map((item) => item.id)).toEqual(["orders", "spend", "newest"]);
+          });
+
+          test("Ad Squad request filters active Campaigns and sorts before pagination", async () => {
+              api.get.mockResolvedValueOnce({ data: { ad_squads: [], totals: {}, pagination: {} } });
+              await getSnapchatAdSquadPerformance({ activeCampaignsOnly: true, sortBy: "orders" });
+              expect(api.get).toHaveBeenCalledWith(
+                  "/integrations-v2/snapchat_ads/ad-squad-report",
+                  expect.objectContaining({ params: expect.objectContaining({ active_campaigns_only: true, sort_by: "orders" }) }),
+              );
+          });
+
+          test("Ad request filters active Campaigns and supports spend ordering", async () => {
+              api.get.mockResolvedValueOnce({ data: { ads: [], totals: {}, pagination: {} } });
+              await getSnapchatAdPerformance({ activeCampaignsOnly: true, sortBy: "spend" });
+              expect(api.get).toHaveBeenCalledWith(
+                  "/integrations-v2/snapchat_ads/ad-report",
+                  expect.objectContaining({ params: expect.objectContaining({ active_campaigns_only: true, sort_by: "spend" }) }),
+              );
+          });
+          '''
+          write('frontend/src/components/marketing/ActiveCampaignEntityFilters.test.jsx', frontend_test)
+
+          # Dedicated CI contract.
+          workflow = '''name: Production Active Campaign Entity Filters V1
+
+          on:
+            pull_request:
+              branches:
+                - hotfix/prod-snap-meta-final
+              paths:
+                - "backend/integrations_control_center/snapchat_active_campaign_filtering.py"
+                - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
+                - "backend/integrations_control_center/snapchat_adsquad_performance.py"
+                - "backend/integrations_control_center/snapchat_ad_performance.py"
+                - "backend/tests/test_snapchat_active_campaign_entity_filters_v1.py"
+                - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+                - "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+                - "frontend/src/components/marketing/AdSquadSortControls.jsx"
+                - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+                - "frontend/src/components/marketing/AdManagerTable.jsx"
+                - "frontend/src/components/marketing/ActiveCampaignEntityFilters.test.jsx"
+                - "frontend/src/services/marketingPerformance.js"
+                - "frontend/src/services/snapchatAdSquadPerformance.js"
+                - "frontend/src/services/snapchatAdPerformance.js"
+                - ".github/workflows/prod-active-campaign-entity-filters-v1.yml"
+
+          permissions:
+            contents: read
+
+          jobs:
+            backend-contract:
+              runs-on: ubuntu-24.04
+              defaults:
+                run:
+                  working-directory: backend
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-python@v5
+                  with:
+                    python-version: "3.11"
+                - run: python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest pytest-asyncio openpyxl cryptography bcrypt PyJWT reportlab python-multipart
+                - run: python -m py_compile integrations_control_center/snapchat_active_campaign_filtering.py integrations_control_center/snapchat_account_timezone_manager.py integrations_control_center/snapchat_adsquad_performance.py integrations_control_center/snapchat_ad_performance.py
+                - run: python -m pytest -q --tb=short tests/test_snapchat_active_campaign_entity_filters_v1.py tests/test_snapchat_adsquad_performance_v1.py tests/test_snapchat_ad_performance_v1.py
+                - name: Enforce pre-pagination filtering
+                  working-directory: .
+                  run: |
+                    grep -q 'active_campaigns_only: bool = Query(default=True)' backend/integrations_control_center/snapchat_account_timezone_manager.py
+                    grep -q 'active_campaigns_only: bool = Query(default=True)' backend/integrations_control_center/snapchat_adsquad_performance.py
+                    grep -q 'active_campaigns_only: bool = Query(default=True)' backend/integrations_control_center/snapchat_ad_performance.py
+                    grep -q 'filtered_totals = aggregate_entity_rows(rows)' backend/integrations_control_center/snapchat_adsquad_performance.py
+                    grep -q 'filtered_totals = aggregate_entity_rows(rows)' backend/integrations_control_center/snapchat_ad_performance.py
+                    ! grep -Eq 'provider_write_reached.*True|campaign_write_reached.*True|accounting_write_reached.*True|qoyod_write_reached.*True' backend/integrations_control_center/snapchat_active_campaign_filtering.py
+
+            frontend-test-and-build:
+              runs-on: ubuntu-24.04
+              defaults:
+                run:
+                  working-directory: frontend
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: "22"
+                - run: corepack enable && corepack prepare yarn@1.22.22 --activate
+                - run: yarn install --non-interactive
+                - env:
+                    CI: "true"
+                  run: yarn test --watchAll=false --runInBand --runTestsByPath src/components/marketing/ActiveCampaignEntityFilters.test.jsx src/components/marketing/AdSquadManagerTable.test.jsx src/components/marketing/AdManagerTable.test.jsx src/components/marketing/AdsEntityLevelWorkspace.test.jsx src/services/snapchatAdSquadPerformance.test.js src/services/snapchatAdPerformance.test.js
+                - env:
+                    CI: "false"
+                  run: yarn build
+                - name: Enforce native filter controls
+                  working-directory: .
+                  run: |
+                    grep -q 'data-testid="active-campaign-filter"' frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+                    grep -q 'الأكثر طلبًا' frontend/src/components/marketing/AdSquadSortControls.jsx
+                    grep -q 'active_campaigns_only: activeCampaignsOnly' frontend/src/services/marketingPerformance.js
+                    grep -q 'sort_by: sortBy' frontend/src/services/snapchatAdSquadPerformance.js
+                    grep -q 'sort_by: sortBy' frontend/src/services/snapchatAdPerformance.js
+          '''
+          write('.github/workflows/prod-active-campaign-entity-filters-v1.yml', workflow)
+
+          # Remove the self-applying workflow from the final branch.
+          (ROOT / '.github/workflows/_apply-active-campaign-filters-v1.yml').unlink()
+          PY
+
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest pytest-asyncio openpyxl cryptography bcrypt PyJWT reportlab python-multipart
+          python -m py_compile integrations_control_center/snapchat_active_campaign_filtering.py integrations_control_center/snapchat_account_timezone_manager.py integrations_control_center/snapchat_adsquad_performance.py integrations_control_center/snapchat_ad_performance.py
+          python -m pytest -q --tb=short tests/test_snapchat_active_campaign_entity_filters_v1.py tests/test_snapchat_adsquad_performance_v1.py tests/test_snapchat_ad_performance_v1.py
+
+      - name: Verify frontend
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          yarn install --non-interactive
+          yarn test --watchAll=false --runInBand --runTestsByPath \
+            src/components/marketing/ActiveCampaignEntityFilters.test.jsx \
+            src/components/marketing/AdSquadManagerTable.test.jsx \
+            src/components/marketing/AdManagerTable.test.jsx \
+            src/components/marketing/AdsEntityLevelWorkspace.test.jsx \
+            src/services/snapchatAdSquadPerformance.test.js \
+            src/services/snapchatAdPerformance.test.js
+          CI=false yarn build
+
+      - name: Commit generated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(prod-ads): filter child entities by active campaigns"
+          git push origin HEAD:fix/prod-active-campaign-entity-filters-v1
