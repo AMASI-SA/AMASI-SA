@@ -43,6 +43,17 @@ jobs:
               "default=100, ge=10, le=100",
               "default=25, ge=10, le=100",
           )
+          ambiguous = """replace_once(path,
+              '                limit: 25,\\n            });\\n',
+              '                limit: 25,\\n                activeCampaignsOnly,\\n            });\\n',
+          )"""
+          specific = """replace_once(path,
+              '                campaignQuery: appliedQuery,\\n                page,\\n                limit: 25,\\n            });\\n',
+              '                campaignQuery: appliedQuery,\\n                page,\\n                limit: 25,\\n                activeCampaignsOnly,\\n            });\\n',
+          )"""
+          if ambiguous not in script:
+              raise SystemExit('ambiguous campaign request replacement not found')
+          script = script.replace(ambiguous, specific, 1)
           exec(compile(script, 'active_campaign_filters_embedded.py', 'exec'), {})
           PY
 
