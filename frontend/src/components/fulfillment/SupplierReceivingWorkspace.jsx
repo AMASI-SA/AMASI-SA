@@ -11,9 +11,11 @@ import {
     SpinnerGap,
     UserCircle,
     WarningCircle,
+    XCircle,
 } from "@phosphor-icons/react";
 
 import {
+    cancelSupplierReceivingSession,
     closeSupplierReceivingSession,
     loadSupplierReceivingCatalog,
     newSupplierReceivingRequestId,
@@ -142,7 +144,9 @@ function ScanRow({ scan }) {
 export function SupplierPieceCameraScanner({
     onDetected,
     onClose,
+    onCancel,
     onSave,
+    cancelling = false,
     saving = false,
     scanning = false,
     error = "",
@@ -241,7 +245,7 @@ export function SupplierPieceCameraScanner({
                         <h3 className="flex items-center gap-2 text-lg font-black text-slate-950"><Camera size={24} className="text-emerald-700" weight="duotone" /> تصوير QR القطعة</h3>
                         <p className="mt-1 text-xs font-bold leading-5 text-slate-500">الكاميرا تبقى مفتوحة. وجّهها إلى كل QR، ثم احفظ فاتورة المورد بعد اكتمال التصوير.</p>
                     </div>
-                    <button type="button" onClick={onClose} className="shrink-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-800">إغلاق</button>
+                    <button type="button" onClick={onClose} disabled={saving || cancelling} className="shrink-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-800 disabled:opacity-50">إغلاق الكاميرا</button>
                 </div>
 
                 <div className="grid min-h-0 flex-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" data-testid="supplier-receiving-camera-split-layout">
@@ -308,6 +312,9 @@ export function SupplierPieceCameraScanner({
                             <button type="button" onClick={onSave} disabled={saving || scanning || !invoiceLines.length} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
                                 {saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} حفظ الفاتورة وإنهاء الجلسة
                             </button>
+                            <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-white px-5 text-sm font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-camera">
+                                {cancelling ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
+                            </button>
                             <p className="mt-2 text-center text-[11px] font-bold text-slate-500">يحفظ سجلًا تشغيليًا في ميزان فقط، دون مديونية أو إرسال إلى قيود.</p>
                         </footer>
                     </section>
@@ -347,6 +354,7 @@ export default function SupplierReceivingWorkspace() {
 
     useEffect(() => { load(); }, [load]);
     const active = data?.active_session || null;
+    const sessionCancelling = active?.status === "cancelling";
     const scans = useMemo(
         () => (Array.isArray(data?.active_session_scans) ? data.active_session_scans : []),
         [data?.active_session_scans],
@@ -470,6 +478,38 @@ export default function SupplierReceivingWorkspace() {
         }
     }
 
+    async function cancelSession() {
+        if (!active?.id || busy) return;
+        const pieceCount = invoiceLines.reduce((sum, line) => sum + line.quantity, 0);
+        const message = pieceCount
+            ? `هل تريد إلغاء الجلسة والخروج؟ ستُهمل الفاتورة وتُعاد ${pieceCount} قطعة إلى حالتها قبل المسح، ولن يُحفظ استلام.`
+            : "هل تريد إلغاء الجلسة والخروج؟ لن تُحفظ فاتورة أو جلسة استلام.";
+        if (!window.confirm(message)) return;
+        setBusy("cancel");
+        setError("");
+        try {
+            await cancelSupplierReceivingSession(active.id, {
+                note: closeNote.trim(),
+            });
+            setCameraOpen(false);
+            setCloseNote("");
+            setLastScan(null);
+            setUnitPrices({});
+            setBarcode("");
+            setData((current) => ({
+                ...current,
+                active_session: null,
+                active_session_scans: [],
+                sessions: (current.sessions || []).filter((row) => row.id !== active.id),
+            }));
+            await load({ quiet: true });
+        } catch (cancelError) {
+            setError(cancelError.message);
+        } finally {
+            setBusy("");
+        }
+    }
+
     return (
         <section className="space-y-5" dir="rtl" data-testid="supplier-receiving-workspace">
             <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
@@ -537,7 +577,7 @@ export default function SupplierReceivingWorkspace() {
                         <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm" data-testid="supplier-receiving-active-session">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-black text-white">جلسة مفتوحة</span><span className="font-mono text-xs font-bold text-emerald-900">{active.reference}</span></div>
+                                    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${sessionCancelling ? "bg-rose-700" : "bg-emerald-700"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : "جلسة مفتوحة"}</span><span className="font-mono text-xs font-bold text-emerald-900">{active.reference}</span></div>
                                     <h3 className="mt-2 text-xl font-black text-emerald-950">{supplierDisplayName(active)}</h3>
                                     <p className="mt-1 text-xs font-bold text-emerald-800">فتحها: {active.opened_by_name || "—"} · {formatReceivingDate(active.opened_at)}</p>
                                 </div>
@@ -546,15 +586,16 @@ export default function SupplierReceivingWorkspace() {
                             <form onSubmit={scanPiece} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]" data-testid="supplier-receiving-scan-form">
                                 <label className="relative block">
                                     <Barcode size={22} className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-700" />
-                                    <input ref={barcodeRef} value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" inputMode="text" placeholder="امسح QR القطعة هنا" disabled={busy === "scan"} className="min-h-14 w-full rounded-2xl border-2 border-emerald-300 bg-white pr-12 pl-4 font-mono text-base font-black outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100" data-testid="supplier-receiving-barcode-input" />
+                                    <input ref={barcodeRef} value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" inputMode="text" placeholder="امسح QR القطعة هنا" disabled={busy === "scan" || sessionCancelling} className="min-h-14 w-full rounded-2xl border-2 border-emerald-300 bg-white pr-12 pl-4 font-mono text-base font-black outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100 disabled:opacity-50" data-testid="supplier-receiving-barcode-input" />
                                 </label>
-                                <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} disabled={busy === "scan"} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white px-5 text-base font-black text-emerald-800 disabled:opacity-50" data-testid="supplier-receiving-camera-button">
+                                <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white px-5 text-base font-black text-emerald-800 disabled:opacity-50" data-testid="supplier-receiving-camera-button">
                                     <Camera size={22} weight="duotone" /> فتح الكاميرا
                                 </button>
-                                <button type="submit" disabled={!barcode.trim() || busy === "scan"} className="min-h-14 rounded-2xl bg-emerald-700 px-7 text-base font-black text-white disabled:opacity-50">
+                                <button type="submit" disabled={!barcode.trim() || busy === "scan" || sessionCancelling} className="min-h-14 rounded-2xl bg-emerald-700 px-7 text-base font-black text-white disabled:opacity-50">
                                     {busy === "scan" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} استلام القطعة
                                 </button>
                             </form>
+                            {sessionCancelling && <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">تعذر إكمال إلغاء سابق. اضغط «إلغاء الجلسة والخروج» مرة أخرى لإكمال إعادة القطع.</div>}
                             <p className="mt-3 text-xs font-bold leading-5 text-emerald-800">من الجوال اضغط «فتح الكاميرا»، أو استخدم قارئ الباركود مثل لوحة المفاتيح واضغط Enter. ملفات التجهيز المعاد تنزيلها تحمل QR فريدًا لكل قطعة.</p>
                         </section>
 
@@ -580,10 +621,14 @@ export default function SupplierReceivingWorkspace() {
                             </div>
                         </section>
                         <section className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
-                            <h3 className="font-black text-slate-950">إغلاق الجلسة</h3>
-                            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">الحفظ يثبت العدد وفاتورة التشغيل وسجل التدقيق، دون إنشاء مديونية محاسبية.</p>
+                            <h3 className="font-black text-slate-950">إنهاء الجلسة</h3>
+                            <p className="mt-1 text-xs font-bold leading-5 text-slate-500">احفظ الفاتورة لاعتماد الاستلام، أو ألغِ الجلسة للخروج دون حفظ.</p>
                             <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={3} placeholder="ملاحظة الإغلاق — اختياري" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-400" />
-                            <button type="button" onClick={closeSession} disabled={!!busy || !invoiceLines.length} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">{busy === "close" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} حفظ الفاتورة وإنهاء الجلسة</button>
+                            <button type="button" onClick={closeSession} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">{busy === "close" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} حفظ الفاتورة وإنهاء الجلسة</button>
+                            <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-800 disabled:opacity-50" data-testid="supplier-receiving-cancel-session">
+                                {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
+                            </button>
+                            <p className="mt-2 text-center text-[11px] font-bold text-rose-700">الإلغاء لا ينشئ فاتورة، ويعيد أي قطع صُوّرت إلى حالتها السابقة.</p>
                         </section>
                     </aside>
                 </div>
@@ -603,7 +648,9 @@ export default function SupplierReceivingWorkspace() {
                 <SupplierPieceCameraScanner
                     onDetected={handleCameraDetected}
                     onClose={() => setCameraOpen(false)}
+                    onCancel={cancelSession}
                     onSave={closeSession}
+                    cancelling={busy === "cancel"}
                     saving={busy === "close"}
                     scanning={busy === "scan"}
                     error={error}
