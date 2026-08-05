@@ -1,3 +1,3 @@
-import MezanComponentsProduction from "./MezanComponentsProduction";
+import MezanComponentsOrganization from "./MezanComponentsOrganization";
 
-export default MezanComponentsProduction;
+export default MezanComponentsOrganization;
