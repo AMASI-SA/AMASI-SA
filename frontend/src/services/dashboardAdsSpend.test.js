@@ -1,4 +1,4 @@
-import api from "../lib/api";
+import { loadDashboardPlatformSpend } from "../lib/dashboardPlatformSpendClient";
 import {
     DASHBOARD_ADS_PROVIDERS,
     getDashboardAdsSpend,
@@ -6,9 +6,8 @@ import {
     normalizeDashboardAdsSpend,
 } from "./dashboardAdsSpend";
 
-jest.mock("../lib/api", () => ({
-    __esModule: true,
-    default: { get: jest.fn(), post: jest.fn() },
+jest.mock("../lib/dashboardPlatformSpendClient", () => ({
+    loadDashboardPlatformSpend: jest.fn(),
 }));
 
 beforeEach(() => {
@@ -113,8 +112,8 @@ test("retains the backwards-compatible hourly normalizer", () => {
 });
 
 
-test("refreshes and returns four provider facts for the selected day", async () => {
-    api.post.mockResolvedValue({ data: fourPlatformPayload() });
+test("refreshes through the shared client and returns four provider facts", async () => {
+    loadDashboardPlatformSpend.mockResolvedValue(fourPlatformPayload());
 
     const result = await getDashboardAdsSpend({
         dateFrom: "2026-08-05",
@@ -122,20 +121,22 @@ test("refreshes and returns four provider facts for the selected day", async () 
         refresh: true,
     });
 
-    expect(api.post).toHaveBeenCalledWith(
-        "/integrations-v2/dashboard/ads-platform-spend/refresh",
-        { date_from: "2026-08-05", date_to: "2026-08-05" },
-    );
-    expect(api.get).not.toHaveBeenCalled();
+    expect(loadDashboardPlatformSpend).toHaveBeenCalledWith({
+        dateFrom: "2026-08-05",
+        dateTo: "2026-08-05",
+        refresh: true,
+        maxAgeMs: 0,
+    });
     expect(result.chart_granularity).toBe("hour");
     expect(result.hourly_spend[0].google).toBe(1);
     expect(result.refresh_error).toBe("");
 });
 
 
-test("falls back to saved facts when one provider refresh cannot run", async () => {
-    api.post.mockRejectedValue(new Error("provider unavailable"));
-    api.get.mockResolvedValue({ data: fourPlatformPayload() });
+test("falls back to saved shared facts when provider refresh cannot run", async () => {
+    loadDashboardPlatformSpend
+        .mockRejectedValueOnce(new Error("provider unavailable"))
+        .mockResolvedValueOnce(fourPlatformPayload());
 
     const result = await getDashboardAdsSpend({
         dateFrom: "2026-08-05",
@@ -143,28 +144,28 @@ test("falls back to saved facts when one provider refresh cannot run", async () 
         refresh: true,
     });
 
-    expect(api.get).toHaveBeenCalledWith(
-        "/integrations-v2/dashboard/ads-platform-spend",
-        { params: { date_from: "2026-08-05", date_to: "2026-08-05" } },
-    );
+    expect(loadDashboardPlatformSpend).toHaveBeenNthCalledWith(2, {
+        dateFrom: "2026-08-05",
+        dateTo: "2026-08-05",
+        refresh: false,
+        maxAgeMs: 0,
+    });
     expect(result.total_sar).toBe(132.5);
     expect(result.refresh_error).toContain("provider unavailable");
 });
 
 
 test("reads a multi-day four-platform series without forcing refresh", async () => {
-    api.get.mockResolvedValue({
-        data: fourPlatformPayload({
-            date_from: "2026-08-04",
-            date_to: "2026-08-05",
-            chart_granularity: "day",
-            hourly_spend: [],
-            daily_spend: [
-                { date: "2026-08-04", snapchat: 1, meta: 2, tiktok: 3, google: 4 },
-                { date: "2026-08-05", snapchat: 5, meta: 6, tiktok: 7, google: 8 },
-            ],
-        }),
-    });
+    loadDashboardPlatformSpend.mockResolvedValue(fourPlatformPayload({
+        date_from: "2026-08-04",
+        date_to: "2026-08-05",
+        chart_granularity: "day",
+        hourly_spend: [],
+        daily_spend: [
+            { date: "2026-08-04", snapchat: 1, meta: 2, tiktok: 3, google: 4 },
+            { date: "2026-08-05", snapchat: 5, meta: 6, tiktok: 7, google: 8 },
+        ],
+    }));
 
     const result = await getDashboardAdsSpend({
         dateFrom: "2026-08-04",
@@ -172,7 +173,12 @@ test("reads a multi-day four-platform series without forcing refresh", async () 
         refresh: false,
     });
 
-    expect(api.post).not.toHaveBeenCalled();
+    expect(loadDashboardPlatformSpend).toHaveBeenCalledWith({
+        dateFrom: "2026-08-04",
+        dateTo: "2026-08-05",
+        refresh: false,
+        maxAgeMs: 0,
+    });
     expect(result.chart_granularity).toBe("day");
     expect(result.daily_spend).toHaveLength(2);
     expect(result.daily_spend[1].google).toBe(8);
