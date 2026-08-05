@@ -1,12 +1,14 @@
 import {
   CAMPAIGN_ACCOUNT_EVENT,
   CAMPAIGN_REPORT_UPDATED_EVENT,
+  clearSnapchatRestoredReturnRange,
   getCampaignReportSnapshot,
   markSnapchatManualRange,
   prepareSnapchatAccountPage,
   setSnapchatSelectedAccount,
   snapchatAvailableAccounts,
   snapchatManualRangeIsSelected,
+  snapchatRestoredReturnRange,
   snapchatSelectedAccountId,
 } from "./marketingCampaignResultSource";
 
@@ -180,7 +182,23 @@ function ensureFormTracking(workspace) {
   form.addEventListener("submit", () => markSnapchatManualRange());
 }
 
+function syncRestoredReturnRange(workspace) {
+  const restored = snapchatRestoredReturnRange();
+  if (!restored) return false;
+  const [fromInput, toInput] = reportDateInputs(workspace);
+  if (!fromInput || !toInput) return true;
+  syncDateInputs(workspace, restored.date_from, restored.date_to, { submit: false });
+  if (
+    fromInput.value === restored.date_from
+    && toInput.value === restored.date_to
+  ) {
+    clearSnapchatRestoredReturnRange();
+  }
+  return true;
+}
+
 function syncReportedRange(workspace, snapshot) {
+  if (syncRestoredReturnRange(workspace)) return;
   if (snapchatManualRangeIsSelected()) return;
   const dateFrom = String(snapshot?.date_from || "");
   const dateTo = String(snapshot?.date_to || "");
@@ -235,6 +253,8 @@ export function enhanceSnapchatAccountTimezone(root = document) {
   if (snapshot) {
     syncReportedRange(workspace, snapshot);
     ensureCampaignCoverageMessage(workspace, snapshot);
+  } else {
+    syncRestoredReturnRange(workspace);
   }
   return true;
 }
