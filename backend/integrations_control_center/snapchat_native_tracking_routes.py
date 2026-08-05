@@ -4,9 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .snapchat_native_data_common import SnapchatNativeSyncError
+from .snapchat_order_source_audit import build_snapchat_order_source_audit
 from .snapchat_native_data_sync import snapchat_native_sync_enabled
 from .snapchat_native_tracking_diagnostics import (
     SnapchatTrackingDiagnosticsInput,
@@ -118,6 +119,40 @@ def attach_snapchat_native_tracking_routes(
 ) -> None:
     install_snapchat_tracking_error_detail_persistence()
     install_snapchat_native_tracking_actions()
+
+    @router.get(
+        f"/{SNAPCHAT_PROVIDER_ID}/order-source-audit",
+        name="get_snapchat_order_source_audit",
+    )
+    async def get_snapchat_order_source_audit(
+        account_id: str | None = Query(default=None, max_length=120),
+        from_date: str | None = Query(default=None),
+        to_date: str | None = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = require_owner(user)
+        try:
+            return await build_snapchat_order_source_audit(
+                db,
+                str(owner["id"]),
+                account_id=account_id,
+                from_date=from_date,
+                to_date=to_date,
+            )
+        except SnapchatNativeSyncError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": exc.message,
+                    "retryable": exc.retryable,
+                    "source_only": True,
+                    "provider_write_reached": False,
+                    "campaign_write_reached": False,
+                    "accounting_write_reached": False,
+                    "qoyod_write_reached": False,
+                },
+            ) from exc
 
     @router.post(
         f"/{SNAPCHAT_PROVIDER_ID}/tracking-diagnostics",
