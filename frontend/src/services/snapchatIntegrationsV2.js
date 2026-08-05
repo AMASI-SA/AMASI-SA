@@ -27,6 +27,25 @@ function normalizeSelectionAccount(account = {}) {
     };
 }
 
+function normalizeSelectionPayload(payload = {}) {
+    const accounts = Array.isArray(payload?.accounts)
+        ? payload.accounts.map(normalizeSelectionAccount).filter((account) => account.account_id)
+        : [];
+    return {
+        provider: "snapchat_ads",
+        discovered_count: Math.max(0, number(payload?.discovered_count, accounts.length)),
+        selected_count: Math.max(
+            0,
+            number(
+                payload?.selected_count,
+                accounts.filter((account) => account.selected).length,
+            ),
+        ),
+        selection_required: payload?.selection_required === true,
+        accounts,
+    };
+}
+
 function normalizePerformanceAccount(account = {}) {
     return {
         account_id: text(account.account_id),
@@ -71,22 +90,25 @@ export async function getSnapchatAccountSelection() {
     const response = await api.get(
         "/integrations-v2/snapchat_ads/accounts-selection",
     );
-    const accounts = Array.isArray(response.data?.accounts)
-        ? response.data.accounts.map(normalizeSelectionAccount)
-        : [];
-    return {
-        provider: "snapchat_ads",
-        discovered_count: Math.max(0, number(response.data?.discovered_count, accounts.length)),
-        selected_count: Math.max(
-            0,
-            number(
-                response.data?.selected_count,
-                accounts.filter((account) => account.selected).length,
-            ),
-        ),
-        selection_required: response.data?.selection_required === true,
-        accounts,
-    };
+    return normalizeSelectionPayload(response.data);
+}
+
+export async function saveSnapchatAccountSelection(accountIds = []) {
+    const normalizedIds = [...new Set(
+        (Array.isArray(accountIds) ? accountIds : [])
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+    )];
+    if (!normalizedIds.length) {
+        const error = new Error("snapchat_account_selection_required");
+        error.code = "snapchat_account_selection_required";
+        throw error;
+    }
+    const response = await api.put(
+        "/integrations-v2/snapchat_ads/accounts-selection",
+        { account_ids: normalizedIds },
+    );
+    return normalizeSelectionPayload(response.data);
 }
 
 export async function getSnapchatSelectedPerformanceSummary({
@@ -135,3 +157,12 @@ export async function getSnapchatSelectedPerformanceSummary({
         qoyod_write_reached: false,
     };
 }
+
+export const SNAPCHAT_ACCOUNT_SELECTION_CLIENT_POLICY = Object.freeze({
+    endpoint: "/integrations-v2/snapchat_ads/accounts-selection",
+    requires_at_least_one_account: true,
+    deduplicates_account_ids: true,
+    provider_writes_allowed: false,
+    campaign_writes_allowed: false,
+    accounting_writes_allowed: false,
+});
