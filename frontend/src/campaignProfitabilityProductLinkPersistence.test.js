@@ -4,13 +4,6 @@ import {
 } from "./campaignProfitabilityProductLinkPersistence";
 import { buildProfitabilityProductCostHref } from "./campaignProfitabilityProductCostLink";
 
-jest.mock("./campaignProfitabilityProductCostLink", () => ({
-  buildProfitabilityProductCostHref: jest.fn(({ sku = "", name = "" }) => (
-    `/products-v2?focus=cost&lookup_sku=${encodeURIComponent(sku)}&lookup_name=${encodeURIComponent(name)}`
-  )),
-  rememberSnapchatRangeBeforeProductNavigation: jest.fn(),
-}));
-
 function dialogRow({ cost = "81.00 ر.س", legacy = false } = {}) {
   return `
     <div data-testid="campaign-profitability-dialog">
@@ -42,7 +35,6 @@ function dialogRow({ cost = "81.00 ر.س", legacy = false } = {}) {
 
 beforeEach(() => {
   document.body.innerHTML = "";
-  jest.clearAllMocks();
 });
 
 test("reads the current React product name and SKU structure", () => {
@@ -61,13 +53,14 @@ test("shows a persistent Open Product action when React removed the injected lin
   const cell = document.querySelector("tbody td");
   expect(cell.dataset.mezanProfitProductPersistentLink).toBe("true");
   expect(cell.dataset.mezanProfitProductPersistentLabel).toBe("فتح المنتج");
-  expect(cell.dataset.mezanProfitProductPersistentHref).toContain("lookup_sku=AMS13037");
+  expect(cell.dataset.mezanProfitProductPersistentHref).toBe(
+    buildProfitabilityProductCostHref({
+      sku: "AMS13037",
+      name: "غلاف جوال نساء",
+    }),
+  );
   expect(cell.getAttribute("role")).toBe("link");
   expect(cell.getAttribute("tabindex")).toBe("0");
-  expect(buildProfitabilityProductCostHref).toHaveBeenCalledWith({
-    sku: "AMS13037",
-    name: "غلاف جوال نساء",
-  });
 });
 
 test("uses the add-cost label when the product cost is missing", () => {
