@@ -1,4 +1,5 @@
 import api from "../lib/api";
+import { componentNameAlreadyExists } from "../lib/componentCreationRules";
 
 export const MEZAN_COMPONENT_PREVIEW_META = {
     mode: "production",
@@ -35,6 +36,10 @@ export async function saveMezanComponentPreviewCost(componentId, amount) {
 
 export async function addMezanComponentPreview(component) {
     try {
+        const workspace = await getMezanComponentWorkspace();
+        if (componentNameAlreadyExists(workspace?.components, component.name)) {
+            return { ok: false, code: "component_name_exists" };
+        }
         const response = await api.post("/components-v2", {
             code: component.code,
             name: component.name,
@@ -58,6 +63,10 @@ export async function addMezanComponentPreview(component) {
 
 export async function updateMezanComponent(componentId, component) {
     try {
+        const workspace = await getMezanComponentWorkspace();
+        if (componentNameAlreadyExists(workspace?.components, component.name, componentId)) {
+            return { ok: false, code: "component_name_exists" };
+        }
         const response = await api.put(`/components-v2/${encodeURIComponent(componentId)}`, {
             code: component.code,
             name: component.name,
