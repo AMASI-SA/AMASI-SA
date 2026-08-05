@@ -64,11 +64,20 @@ jobs:
               },
           }));''',
           )
+          script = script.replace(
+              "(ROOT / '.github/workflows/_apply-active-campaign-filters-v1.yml').unlink()",
+              "pass",
+          )
           exec(compile(script, 'active_campaign_filters_embedded.py', 'exec'), {})
           PY
 
           rm -f tmp/trigger-active-campaign-filters-v1
-          git checkout origin/hotfix/prod-snap-meta-final -- .github/workflows/prod-ads-loading-sticky-status-v1.yml
+          git checkout HEAD -- \
+            .github/workflows/prod-ads-loading-sticky-status-v1.yml \
+            .github/workflows/_apply-active-campaign-filters-v1.yml
+          rm -f \
+            .github/workflows/prod-active-campaign-entity-filters-v1.yml \
+            frontend/yarn.lock
 
       - name: Verify backend
         working-directory: backend
@@ -94,7 +103,7 @@ jobs:
             src/services/snapchatAdPerformance.test.js
           CI=false yarn build
 
-      - name: Commit generated refactor
+      - name: Commit generated source refactor
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
