@@ -1,0 +1,194 @@
+[data-mezan-ads-report-load-indicator] {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgb(226 232 240);
+  background: rgb(248 250 252);
+  padding: 9px 12px;
+  color: rgb(51 65 85);
+}
+
+[data-mezan-ads-report-load-indicator][hidden] {
+  display: none !important;
+}
+
+[data-mezan-ads-report-load-indicator][data-state="loading"] {
+  border-color: rgb(191 219 254);
+  background: rgb(239 246 255);
+  color: rgb(30 64 175);
+}
+
+[data-mezan-ads-report-load-indicator][data-state="success"] {
+  border-color: rgb(167 243 208);
+  background: rgb(236 253 245);
+  color: rgb(4 120 87);
+}
+
+[data-mezan-ads-report-load-indicator][data-state="error"] {
+  border-color: rgb(254 202 202);
+  background: rgb(254 242 242);
+  color: rgb(190 18 60);
+}
+
+.mezan-ads-report-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 9999px;
+  border: 2px solid rgb(147 197 253);
+  border-top-color: rgb(29 78 216);
+  animation: mezan-ads-report-spin 0.75s linear infinite;
+}
+
+.mezan-ads-report-state-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: white;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mezan-ads-report-state-icon--success {
+  background: rgb(16 185 129);
+}
+
+.mezan-ads-report-state-icon--error {
+  background: rgb(225 29 72);
+}
+
+.mezan-ads-report-state-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+
+.mezan-ads-report-state-copy strong {
+  font-weight: 900;
+}
+
+.mezan-ads-report-state-copy small {
+  overflow: hidden;
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes mezan-ads-report-spin {
+  to { transform: rotate(360deg); }
+}
+
+[data-mezan-folded-status-cell="true"],
+[data-mezan-folded-spend-cell="true"] {
+  display: none !important;
+}
+
+[data-mezan-sticky-identity-status="true"] {
+  position: sticky !important;
+  right: var(--mezan-sticky-right) !important;
+  z-index: 32 !important;
+  box-sizing: border-box;
+  min-width: calc(var(--mezan-identity-width) + var(--mezan-status-width)) !important;
+  width: calc(var(--mezan-identity-width) + var(--mezan-status-width)) !important;
+  padding-left: calc(var(--mezan-status-width) + 1rem) !important;
+  background-clip: padding-box;
+  box-shadow: -1px 0 0 rgb(226 232 240);
+}
+
+tbody [data-mezan-sticky-identity-status="true"] {
+  z-index: 18 !important;
+}
+
+tfoot [data-mezan-sticky-identity-status="true"] {
+  z-index: 20 !important;
+}
+
+[data-mezan-sticky-identity-status="true"]::after {
+  content: attr(data-mezan-status-display);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: var(--mezan-status-width);
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1px solid rgb(226 232 240);
+  background: inherit;
+  padding: 0 10px;
+  color: rgb(71 85 105);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+[data-mezan-sticky-identity-status="true"][data-mezan-status-header="true"]::after {
+  color: rgb(51 65 85);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+[data-mezan-sticky-identity-status="true"][data-mezan-status-active="true"]::after {
+  color: rgb(5 150 105);
+}
+
+[data-mezan-sales-with-spend="true"] {
+  position: relative;
+  box-sizing: border-box;
+  min-width: calc(var(--mezan-spend-width) + var(--mezan-sales-width)) !important;
+  width: calc(var(--mezan-spend-width) + var(--mezan-sales-width)) !important;
+  padding-right: calc(var(--mezan-spend-width) + 1rem) !important;
+}
+
+[data-mezan-sales-with-spend="true"]::before {
+  content: attr(data-mezan-spend-display);
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: var(--mezan-spend-width);
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  border-left: 1px solid rgb(226 232 240);
+  background: inherit;
+  padding: 0 16px;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: inherit;
+  font-weight: 800;
+  unicode-bidi: plaintext;
+  white-space: nowrap;
+}
+
+[data-mezan-sales-with-spend="true"][data-mezan-spend-header="true"]::before {
+  color: rgb(51 65 85);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 768px) {
+  [data-mezan-ads-report-load-indicator] {
+    align-items: flex-start;
+  }
+}

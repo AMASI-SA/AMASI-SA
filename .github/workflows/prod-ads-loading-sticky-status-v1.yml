@@ -1,0 +1,58 @@
+name: Production Ads Loading and Sticky Status V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsTableUXEnhancer.js"
+      - "frontend/src/marketingAdsTableUXEnhancer.css"
+      - "frontend/src/marketingAdsTableUXEnhancer.test.js"
+      - ".github/workflows/prod-ads-loading-sticky-status-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ads table UX
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingAdsTableUXEnhancer.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/marketingCampaignColumnOrder.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce Ads UX contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          UX=frontend/src/marketingAdsTableUXEnhancer.js
+          CSS=frontend/src/marketingAdsTableUXEnhancer.css
+          grep -q 'marketingAdsTableUXEnhancer.css' "$INDEX"
+          grep -q 'marketingAdsTableUXEnhancer' "$INDEX"
+          grep -q 'data-mezan-sticky-identity-status' "$UX"
+          grep -q 'data-mezan-sales-with-spend' "$UX"
+          grep -q 'جاري تحميل الفترة المحددة' "$UX"
+          grep -q 'تم تحميل التقرير بنجاح' "$UX"
+          grep -q 'mezan-ads-report-spinner' "$CSS"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$UX"
