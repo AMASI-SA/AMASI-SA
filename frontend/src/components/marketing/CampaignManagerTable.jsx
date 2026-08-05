@@ -15,11 +15,22 @@ import {
     X,
 } from "@phosphor-icons/react";
 
+import {
+    buildProfitabilityProductCostHref,
+    rememberSnapchatRangeBeforeProductNavigation,
+} from "../../campaignProfitabilityProductNavigation";
+
 const PROFITABILITY_COLUMNS = Object.freeze([
     "product_cost",
     "profit",
     "profit_margin",
 ]);
+
+const REQUIRED_COLUMNS = Object.freeze(["name", "status", "spend", "sales"]);
+const REQUIRED_COLUMN_SET = new Set(REQUIRED_COLUMNS);
+const CHECKBOX_WIDTH = 48;
+const NAME_WIDTH = 300;
+const STATUS_WIDTH = 120;
 
 export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "name",
@@ -28,11 +39,11 @@ export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "orders",
     "cpa",
     "roas",
+    "spend",
     "sales",
     "product_cost",
     "profit",
     "profit_margin",
-    "spend",
     "impressions",
     "cpm",
     "clicks",
@@ -42,18 +53,20 @@ export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "account",
 ]);
 
+export const CAMPAIGN_MANAGER_NATIVE_COLUMN_ORDER = CAMPAIGN_MANAGER_DEFAULT_COLUMNS;
+
 const COLUMN_DEFINITIONS = Object.freeze([
-    { id: "name", label: "اسم الحملة", width: 300, sortable: true },
-    { id: "status", label: "الحالة", width: 120, sortable: true },
+    { id: "name", label: "اسم الحملة", width: NAME_WIDTH, sortable: true },
+    { id: "status", label: "الحالة", width: STATUS_WIDTH, sortable: true },
     { id: "delivery", label: "حالة التسليم", width: 190, sortable: true },
     { id: "orders", label: "النتائج", sublabel: "المشتريات", width: 125, sortable: true },
     { id: "cpa", label: "تكلفة النتيجة", sublabel: "تكلفة الشراء", width: 145, sortable: true },
     { id: "roas", label: "ROAS الشراء", width: 130, sortable: true },
+    { id: "spend", label: "المبلغ المصروف", width: 145, sortable: true },
     { id: "sales", label: "مبيعات سلة", width: 145, sortable: true },
     { id: "product_cost", label: "تكلفة المنتجات", sublabel: "محرك تكلفة ميزان", width: 160, sortable: true },
     { id: "profit", label: "ربح الحملة", sublabel: "بعد المنتج والإعلان", width: 175, sortable: true },
     { id: "profit_margin", label: "هامش الربح", sublabel: "قبل رسوم الدفع والشحن", width: 150, sortable: true },
-    { id: "spend", label: "المبلغ المصروف", width: 145, sortable: true },
     { id: "impressions", label: "مرات الظهور المدفوعة", width: 165, sortable: true },
     { id: "cpm", label: "eCPM المدفوع", width: 135, sortable: true },
     { id: "clicks", label: "النقرات", width: 115, sortable: true },
@@ -138,6 +151,17 @@ function defaultColumnsForPlatform(platform) {
         );
 }
 
+function normalizeVisibleColumns(stored, availableDefinitions, defaults) {
+    const allowed = new Set(availableDefinitions.map((column) => column.id));
+    const requested = new Set(Array.isArray(stored) ? stored : defaults);
+    REQUIRED_COLUMNS.forEach((id) => {
+        if (allowed.has(id)) requested.add(id);
+    });
+    return availableDefinitions
+        .map((column) => column.id)
+        .filter((id) => requested.has(id));
+}
+
 export function campaignRowKey(campaign) {
     return `${campaign?.account_id || "unknown"}:${campaign?.campaign_id || "unknown"}`;
 }
@@ -150,11 +174,11 @@ function valueForColumn(campaign, columnId) {
         case "orders": return finiteNumber(campaign.orders);
         case "cpa": return finiteNumber(campaign.cpa_sar);
         case "roas": return finiteNumber(campaign.roas);
+        case "spend": return finiteNumber(campaign.spend_sar);
         case "sales": return finiteNumber(campaign.sales_sar);
         case "product_cost": return finiteNumber(campaign.profitability?.product_cost_sar);
         case "profit": return finiteNumber(campaign.profitability?.contribution_profit_sar);
         case "profit_margin": return finiteNumber(campaign.profitability?.profit_margin_pct);
-        case "spend": return finiteNumber(campaign.spend_sar);
         case "impressions": return finiteNumber(campaign.impressions);
         case "cpm": return finiteNumber(campaign.cpm_sar);
         case "clicks": return finiteNumber(campaign.swipes);
@@ -194,11 +218,11 @@ export function campaignTotalsForColumn(totals, columnId) {
         case "orders": return formatNumber(value.orders);
         case "cpa": return formatMoney(value.cpa_sar);
         case "roas": return formatRatio(value.roas, "×");
+        case "spend": return formatMoney(value.spend_sar);
         case "sales": return formatMoney(value.sales_sar);
         case "product_cost": return formatMoney(profitability.product_cost_sar);
         case "profit": return formatMoney(profitability.contribution_profit_sar);
         case "profit_margin": return formatRatio(profitability.profit_margin_pct, "%");
-        case "spend": return formatMoney(value.spend_sar);
         case "impressions": return formatNumber(value.impressions);
         case "cpm": return formatMoney(value.cpm_sar);
         case "clicks": return formatNumber(value.swipes);
@@ -206,6 +230,15 @@ export function campaignTotalsForColumn(totals, columnId) {
         case "ctr": return formatRatio(value.ctr_pct, "%");
         default: return "";
     }
+}
+
+function MetricValue({ primary, secondary = "" }) {
+    return (
+        <div className="font-mono">
+            <div className="font-extrabold text-slate-800">{primary}</div>
+            {secondary && <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{secondary}</div>}
+        </div>
+    );
 }
 
 function ProfitMetric({ campaign, onOpen }) {
@@ -296,6 +329,7 @@ function cellValue(campaign, columnId, onOpenProfit) {
         case "orders": return <MetricValue primary={formatNumber(campaign.orders)} secondary="مشتريات" />;
         case "cpa": return <MetricValue primary={formatMoney(campaign.cpa_sar)} secondary="لكل عملية شراء" />;
         case "roas": return <MetricValue primary={formatRatio(campaign.roas, "×")} />;
+        case "spend": return <MetricValue primary={formatMoney(campaign.spend_sar)} />;
         case "sales": return <MetricValue primary={formatMoney(campaign.sales_sar)} />;
         case "product_cost": return <ProductCostMetric campaign={campaign} />;
         case "profit": return <ProfitMetric campaign={campaign} onOpen={onOpenProfit} />;
@@ -309,7 +343,6 @@ function cellValue(campaign, columnId, onOpenProfit) {
                 />
             );
         }
-        case "spend": return <MetricValue primary={formatMoney(campaign.spend_sar)} />;
         case "impressions": return <MetricValue primary={formatNumber(campaign.impressions)} />;
         case "cpm": return <MetricValue primary={formatMoney(campaign.cpm_sar)} />;
         case "clicks": return <MetricValue primary={formatNumber(campaign.swipes)} />;
@@ -334,13 +367,14 @@ function cellValue(campaign, columnId, onOpenProfit) {
     }
 }
 
-function MetricValue({ primary, secondary = "" }) {
-    return (
-        <div className="font-mono">
-            <div className="font-extrabold text-slate-800">{primary}</div>
-            {secondary && <div className="mt-0.5 text-[10px] font-semibold text-slate-400">{secondary}</div>}
-        </div>
-    );
+function productNavigation(product) {
+    return {
+        href: buildProfitabilityProductCostHref({
+            sku: product.sku || "",
+            name: product.name || "",
+        }),
+        missingCost: finiteNumber(product.product_cost_sar) === null,
+    };
 }
 
 function ProfitabilityDialog({ campaign, onClose }) {
@@ -386,7 +420,7 @@ function ProfitabilityDialog({ campaign, onClose }) {
                         <table className="w-max min-w-full text-right text-sm">
                             <thead className="bg-slate-50 text-slate-600">
                                 <tr>
-                                    <th className="min-w-[300px] px-4 py-3 font-black">المنتج</th>
+                                    <th className="min-w-[330px] px-4 py-3 font-black">المنتج</th>
                                     <th className="min-w-[100px] px-4 py-3 font-black">الكمية</th>
                                     <th className="min-w-[135px] px-4 py-3 font-black">المبيعات</th>
                                     <th className="min-w-[145px] px-4 py-3 font-black">تكلفة المنتج</th>
@@ -396,29 +430,40 @@ function ProfitabilityDialog({ campaign, onClose }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {products.map((product) => (
-                                    <tr key={product.identity} className="border-t border-slate-100">
-                                        <td className="px-4 py-4">
-                                            <div className="flex items-center gap-3">
-                                                {product.image_url ? (
-                                                    <img src={product.image_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-                                                ) : (
-                                                    <span className="rounded-xl bg-slate-100 p-3 text-slate-500"><Package size={22} /></span>
-                                                )}
-                                                <div>
-                                                    <div className="max-w-[230px] truncate font-black text-slate-900">{product.name}</div>
-                                                    <div className="mt-1 font-mono text-[10px] text-slate-400">{product.sku || product.salla_product_id || product.identity}</div>
+                                {products.map((product) => {
+                                    const navigation = productNavigation(product);
+                                    return (
+                                        <tr key={product.identity} className="border-t border-slate-100">
+                                            <td className="px-4 py-4">
+                                                <div className="flex items-start gap-3">
+                                                    {product.image_url ? (
+                                                        <img src={product.image_url} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                                                    ) : (
+                                                        <span className="rounded-xl bg-slate-100 p-3 text-slate-500"><Package size={22} /></span>
+                                                    )}
+                                                    <div>
+                                                        <div className="max-w-[230px] truncate font-black text-slate-900">{product.name}</div>
+                                                        <div className="mt-1 font-mono text-[10px] text-slate-400">{product.sku || product.salla_product_id || product.identity}</div>
+                                                        <a
+                                                            href={navigation.href}
+                                                            onClick={() => rememberSnapchatRangeBeforeProductNavigation()}
+                                                            className={`mt-2 inline-flex rounded-lg border px-3 py-1.5 text-xs font-black transition ${navigation.missingCost ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
+                                                            data-testid="campaign-profitability-product-link"
+                                                        >
+                                                            {navigation.missingCost ? "فتح المنتج وإضافة التكلفة" : "فتح المنتج"}
+                                                        </a>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-4 font-mono font-black">{formatNumber(product.units)}</td>
-                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.sales_sar)}</td>
-                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.product_cost_sar)}</td>
-                                        <td className="px-4 py-4 font-mono font-black">{formatMoney(product.allocated_ad_spend_sar)}</td>
-                                        <td className={`px-4 py-4 font-mono font-black ${finiteNumber(product.contribution_profit_sar) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{formatMoney(product.contribution_profit_sar)}</td>
-                                        <td className="px-4 py-4 font-mono font-black">{formatRatio(product.profit_margin_pct, "%")}</td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="px-4 py-4 font-mono font-black">{formatNumber(product.units)}</td>
+                                            <td className="px-4 py-4 font-mono font-black">{formatMoney(product.sales_sar)}</td>
+                                            <td className="px-4 py-4 font-mono font-black">{formatMoney(product.product_cost_sar)}</td>
+                                            <td className="px-4 py-4 font-mono font-black">{formatMoney(product.allocated_ad_spend_sar)}</td>
+                                            <td className={`px-4 py-4 font-mono font-black ${finiteNumber(product.contribution_profit_sar) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{formatMoney(product.contribution_profit_sar)}</td>
+                                            <td className="px-4 py-4 font-mono font-black">{formatRatio(product.profit_margin_pct, "%")}</td>
+                                        </tr>
+                                    );
+                                })}
                                 {!products.length && (
                                     <tr><td colSpan={7} className="px-6 py-12 text-center font-bold text-slate-500">لا توجد منتجات قابلة للتوزيع داخل الطلبات المطابقة.</td></tr>
                                 )}
@@ -496,6 +541,20 @@ function ToolButton({ Icon, label, disabled = false, onClick, testid }) {
     );
 }
 
+function stickyOffset(columnId) {
+    if (columnId === "name") return CHECKBOX_WIDTH;
+    if (columnId === "status") return CHECKBOX_WIDTH + NAME_WIDTH;
+    return null;
+}
+
+function columnCellClass(columnId, background, z = "z-10") {
+    const sticky = stickyOffset(columnId) !== null;
+    return [
+        sticky ? `sticky ${z} border-l ${background}` : "",
+        "border-b border-slate-100 px-4 py-4 align-middle",
+    ].join(" ");
+}
+
 export default function CampaignManagerTable({
     platform,
     platformLabel,
@@ -506,7 +565,7 @@ export default function CampaignManagerTable({
     onPageChange,
     readOnly = true,
 }) {
-    const storageKey = `mezan-campaign-manager-columns-v1:${platform || "all"}`;
+    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}`;
     const availableDefinitions = COLUMN_DEFINITIONS.filter(
         (column) => platform === "snapchat" || !PROFITABILITY_COLUMNS.includes(column.id),
     );
@@ -519,11 +578,7 @@ export default function CampaignManagerTable({
         if (typeof window === "undefined") return defaultColumns;
         try {
             const stored = JSON.parse(window.localStorage.getItem(storageKey) || "null");
-            const validIds = new Set(availableDefinitions.map((column) => column.id));
-            const valid = Array.isArray(stored)
-                ? stored.filter((id) => validIds.has(id))
-                : [];
-            return valid.length ? valid : defaultColumns;
+            return normalizeVisibleColumns(stored, availableDefinitions, defaultColumns);
         } catch {
             return defaultColumns;
         }
@@ -553,6 +608,8 @@ export default function CampaignManagerTable({
     const allVisibleSelected = rows.length > 0
         && rows.every((campaign) => selected.has(campaignRowKey(campaign)));
     const columns = availableDefinitions.filter((column) => visibleColumns.includes(column.id));
+    const totalPages = Number(pagination.pages || 0);
+    const currentPage = Number(pagination.page || page || 1);
 
     function toggleRow(campaign) {
         const key = campaignRowKey(campaign);
@@ -574,14 +631,12 @@ export default function CampaignManagerTable({
     }
 
     function toggleColumn(columnId) {
+        if (REQUIRED_COLUMN_SET.has(columnId)) return;
         setVisibleColumns((current) => {
-            if (current.includes(columnId)) {
-                if (current.length <= 4 || columnId === "name") return current;
-                return current.filter((id) => id !== columnId);
-            }
-            return defaultColumns.filter(
-                (id) => current.includes(id) || id === columnId,
-            );
+            const next = current.includes(columnId)
+                ? current.filter((id) => id !== columnId)
+                : [...current, columnId];
+            return normalizeVisibleColumns(next, availableDefinitions, defaultColumns);
         });
     }
 
@@ -592,13 +647,11 @@ export default function CampaignManagerTable({
         }));
     }
 
-    const totalPages = Number(pagination.pages || 0);
-    const currentPage = Number(pagination.page || page || 1);
-
     return (
         <section
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             data-testid="campaign-manager-table"
+            data-native-column-layout="true"
             dir="rtl"
         >
             <div className="flex min-h-14 items-end gap-6 overflow-x-auto border-b border-slate-200 px-4">
@@ -649,7 +702,7 @@ export default function CampaignManagerTable({
                                         <input
                                             type="checkbox"
                                             checked={visibleColumns.includes(column.id)}
-                                            disabled={column.id === "name"}
+                                            disabled={REQUIRED_COLUMN_SET.has(column.id)}
                                             onChange={() => toggleColumn(column.id)}
                                             className="h-4 w-4 accent-emerald-600"
                                         />
@@ -675,7 +728,7 @@ export default function CampaignManagerTable({
                 <table className="w-max min-w-full border-separate border-spacing-0 text-right text-xs">
                     <thead className="sticky top-0 z-20 bg-slate-50 text-slate-600">
                         <tr>
-                            <th className="sticky right-0 z-30 w-12 border-b border-l border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                            <th className="sticky right-0 z-40 w-12 border-b border-l border-slate-200 bg-slate-50 px-3 py-3 text-center">
                                 <input
                                     type="checkbox"
                                     checked={allVisibleSelected}
@@ -684,38 +737,47 @@ export default function CampaignManagerTable({
                                     className="h-4 w-4 accent-emerald-600"
                                 />
                             </th>
-                            {columns.map((column) => (
-                                <th
-                                    key={column.id}
-                                    className={`${column.id === "name" ? "sticky right-12 z-30 border-l bg-slate-50" : ""} border-b border-slate-200 px-4 py-3 align-bottom`}
-                                    style={{ minWidth: column.width, width: column.width }}
-                                >
-                                    {column.sortable ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => changeSort(column.id)}
-                                            className="flex w-full items-end justify-between gap-2 text-right font-black hover:text-slate-950"
-                                        >
-                                            <span>
-                                                <span className="block">{column.label}</span>
-                                                {column.sublabel && <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">{column.sublabel}</span>}
-                                            </span>
-                                            {sort.key === column.id && (
-                                                <span className="text-[10px] text-emerald-700">{sort.direction === "desc" ? "↓" : "↑"}</span>
-                                            )}
-                                        </button>
-                                    ) : column.label}
-                                </th>
-                            ))}
+                            {columns.map((column) => {
+                                const offset = stickyOffset(column.id);
+                                return (
+                                    <th
+                                        key={column.id}
+                                        className={`${offset !== null ? "sticky z-30 border-l bg-slate-50" : ""} border-b border-slate-200 px-4 py-3 align-bottom`}
+                                        style={{
+                                            minWidth: column.width,
+                                            width: column.width,
+                                            ...(offset !== null ? { right: offset } : {}),
+                                        }}
+                                        data-column-id={column.id}
+                                    >
+                                        {column.sortable ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => changeSort(column.id)}
+                                                className="flex w-full items-end justify-between gap-2 text-right font-black hover:text-slate-950"
+                                            >
+                                                <span>
+                                                    <span className="block">{column.label}</span>
+                                                    {column.sublabel && <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">{column.sublabel}</span>}
+                                                </span>
+                                                {sort.key === column.id && (
+                                                    <span className="text-[10px] text-emerald-700">{sort.direction === "desc" ? "↓" : "↑"}</span>
+                                                )}
+                                            </button>
+                                        ) : column.label}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map((campaign) => {
                             const key = campaignRowKey(campaign);
                             const checked = selected.has(key);
+                            const background = checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50";
                             return (
                                 <tr key={key} className={`${checked ? "bg-emerald-50/60" : "bg-white"} group hover:bg-slate-50`}>
-                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-0 z-10 border-b border-l border-slate-100 px-3 py-4 text-center`}>
+                                    <td className={`${background} sticky right-0 z-20 border-b border-l border-slate-100 px-3 py-4 text-center`}>
                                         <input
                                             type="checkbox"
                                             checked={checked}
@@ -724,15 +786,23 @@ export default function CampaignManagerTable({
                                             className="h-4 w-4 accent-emerald-600"
                                         />
                                     </td>
-                                    {columns.map((column) => (
-                                        <td
-                                            key={column.id}
-                                            className={`${column.id === "name" ? `${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-l` : ""} border-b border-slate-100 px-4 py-4 align-middle`}
-                                            style={{ minWidth: column.width, width: column.width }}
-                                        >
-                                            {cellValue(campaign, column.id, setProfitCampaign)}
-                                        </td>
-                                    ))}
+                                    {columns.map((column) => {
+                                        const offset = stickyOffset(column.id);
+                                        return (
+                                            <td
+                                                key={column.id}
+                                                className={columnCellClass(column.id, background)}
+                                                style={{
+                                                    minWidth: column.width,
+                                                    width: column.width,
+                                                    ...(offset !== null ? { right: offset } : {}),
+                                                }}
+                                                data-column-id={column.id}
+                                            >
+                                                {cellValue(campaign, column.id, setProfitCampaign)}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             );
                         })}
@@ -750,15 +820,24 @@ export default function CampaignManagerTable({
                     {rows.length > 0 && (
                         <tfoot className="bg-slate-50/95 font-black text-slate-800">
                             <tr>
-                                <td className="sticky right-0 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-3 py-3" />
-                                {columns.map((column) => (
-                                    <td
-                                        key={column.id}
-                                        className={`${column.id === "name" ? "sticky right-12 z-10 border-l bg-slate-50" : ""} border-t-2 border-slate-300 px-4 py-3 font-mono`}
-                                    >
-                                        {campaignTotalsForColumn(totals, column.id)}
-                                    </td>
-                                ))}
+                                <td className="sticky right-0 z-20 border-l border-t-2 border-slate-300 bg-slate-50 px-3 py-3" />
+                                {columns.map((column) => {
+                                    const offset = stickyOffset(column.id);
+                                    return (
+                                        <td
+                                            key={column.id}
+                                            className={`${offset !== null ? "sticky z-10 border-l bg-slate-50" : ""} border-t-2 border-slate-300 px-4 py-3 font-mono`}
+                                            style={{
+                                                ...(offset !== null ? { right: offset } : {}),
+                                                minWidth: column.width,
+                                                width: column.width,
+                                            }}
+                                            data-column-id={column.id}
+                                        >
+                                            {campaignTotalsForColumn(totals, column.id)}
+                                        </td>
+                                    );
+                                })}
                             </tr>
                         </tfoot>
                     )}
