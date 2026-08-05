@@ -76,6 +76,8 @@ export async function getProductOperations(productId) { return (await api.get(`/
 export async function saveProductOperationProfile(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/operations/profile`, payload)).data; }
 export async function linkProductResource(productId, resourceId, quantity = 1) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`, { quantity })).data; }
 export async function unlinkProductResource(productId, resourceId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`)).data; }
+export async function linkProductGroups(productId, groupIds) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/group-links`, { group_ids: groupIds })).data; }
+export async function unlinkProductGroup(productId, groupId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/group-links/${encodeURIComponent(groupId)}`)).data; }
 export async function listProductCreationDrafts(params = {}) { return (await api.get("/products-v2/creation-drafts", { params })).data; }
 export async function createProductCreationDraft(payload) { return (await api.post("/products-v2/creation-drafts", payload)).data; }
 export async function updateProductCreationDraft(draftId, payload) { return (await api.put(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}`, payload)).data; }
