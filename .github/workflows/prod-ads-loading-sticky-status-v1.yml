@@ -1,112 +1,75 @@
-name: Apply Active Campaign Entity Filters Through PR
+name: Production Ads Native Tables and Loading V2
 
 on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
     paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsTableUXEnhancer.js"
+      - "frontend/src/marketingAdsTableUXEnhancer.css"
+      - "frontend/src/marketingAdsTableUXEnhancer.test.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.test.jsx"
       - ".github/workflows/prod-ads-loading-sticky-status-v1.yml"
-      - ".github/workflows/_apply-active-campaign-filters-v1.yml"
-      - "tmp/trigger-active-campaign-filters-v1"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-and-verify:
-    if: github.head_ref == 'fix/prod-active-campaign-entity-filters-v1'
+  frontend-test-and-build:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: fix/prod-active-campaign-entity-filters-v1
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fetch Production base
-        run: git fetch origin hotfix/prod-snap-meta-final
-
-      - name: Execute embedded refactor script
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          import textwrap
-
-          workflow = Path('.github/workflows/_apply-active-campaign-filters-v1.yml').read_text(encoding='utf-8')
-          match = re.search(r"          python - <<'PY'\n(.*?)\n          PY\n", workflow, re.S)
-          if not match:
-              raise SystemExit('embedded refactor script not found')
-          script = textwrap.dedent(match.group(1))
-          script = script.replace(
-              "default=100, ge=10, le=100",
-              "default=25, ge=10, le=100",
-          )
-          ambiguous = """replace_once(path,
-              '                limit: 25,\\n            });\\n',
-              '                limit: 25,\\n                activeCampaignsOnly,\\n            });\\n',
-          )"""
-          specific = """replace_once(path,
-              '                campaignQuery: appliedQuery,\\n                page,\\n                limit: 25,\\n            });\\n',
-              '                campaignQuery: appliedQuery,\\n                page,\\n                limit: 25,\\n                activeCampaignsOnly,\\n            });\\n',
-          )"""
-          if ambiguous not in script:
-              raise SystemExit('ambiguous campaign request replacement not found')
-          script = script.replace(ambiguous, specific, 1)
-          script = script.replace(
-              'jest.mock("../../lib/api", () => ({ get: jest.fn() }));',
-              '''jest.mock("../../lib/api", () => ({
-              get: jest.fn(),
-              interceptors: {
-                  request: { use: jest.fn() },
-                  response: { use: jest.fn() },
-              },
-          }));''',
-          )
-          script = script.replace(
-              "(ROOT / '.github/workflows/_apply-active-campaign-filters-v1.yml').unlink()",
-              "pass",
-          )
-          exec(compile(script, 'active_campaign_filters_embedded.py', 'exec'), {})
-          PY
-
-          rm -f tmp/trigger-active-campaign-filters-v1
-          git checkout HEAD -- \
-            .github/workflows/prod-ads-loading-sticky-status-v1.yml \
-            .github/workflows/_apply-active-campaign-filters-v1.yml
-          rm -f \
-            .github/workflows/prod-active-campaign-entity-filters-v1.yml \
-            frontend/yarn.lock
-
-      - name: Verify backend
-        working-directory: backend
-        run: |
-          python -m pip install -q fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 httpx pytest pytest-asyncio openpyxl cryptography bcrypt PyJWT reportlab python-multipart
-          python -m py_compile integrations_control_center/snapchat_active_campaign_filtering.py integrations_control_center/snapchat_account_timezone_manager.py integrations_control_center/snapchat_adsquad_performance.py integrations_control_center/snapchat_ad_performance.py
-          python -m pytest -q --tb=short tests/test_snapchat_active_campaign_entity_filters_v1.py tests/test_snapchat_adsquad_performance_v1.py tests/test_snapchat_ad_performance_v1.py
-
-      - name: Verify frontend
-        working-directory: frontend
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test native Ads tables
         env:
           CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingAdsTableUXEnhancer.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/components/marketing/AdManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce native Ads table contract
+        working-directory: .
         run: |
-          corepack enable
-          corepack prepare yarn@1.22.22 --activate
-          yarn install --non-interactive
-          yarn test --watchAll=false --runInBand --runTestsByPath \
-            src/components/marketing/ActiveCampaignEntityFilters.test.jsx \
-            src/components/marketing/AdSquadManagerTable.test.jsx \
-            src/components/marketing/AdManagerTable.test.jsx \
-            src/components/marketing/AdsEntityLevelWorkspace.test.jsx \
-            src/services/snapchatAdSquadPerformance.test.js \
-            src/services/snapchatAdPerformance.test.js
-          CI=false yarn build
-
-      - name: Commit generated source refactor
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix(prod-ads): filter child entities by active campaigns"
-          git push origin HEAD:fix/prod-active-campaign-entity-filters-v1
+          INDEX=frontend/src/index.js
+          UX=frontend/src/marketingAdsTableUXEnhancer.js
+          CSS=frontend/src/marketingAdsTableUXEnhancer.css
+          CAMPAIGNS=frontend/src/components/marketing/CampaignManagerTable.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          ADS=frontend/src/components/marketing/AdManagerTable.jsx
+          grep -q 'marketingAdsTableUXEnhancer.css' "$INDEX"
+          grep -q 'marketingAdsTableUXEnhancer' "$INDEX"
+          grep -q 'table_dom_mutations_enabled: false' "$UX"
+          grep -q 'columns_rendered_by_react: true' "$UX"
+          grep -q 'data-native-column-layout="true"' "$CAMPAIGNS"
+          grep -q 'data-native-column-layout="true"' "$SQUADS"
+          grep -q 'data-native-column-layout="true"' "$ADS"
+          grep -q 'CAMPAIGN_MANAGER_NATIVE_COLUMN_ORDER' "$CAMPAIGNS"
+          grep -q 'AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER' "$SQUADS"
+          grep -q 'AD_MANAGER_NATIVE_COLUMN_ORDER' "$ADS"
+          grep -q 'جاري تحميل الفترة المحددة' "$UX"
+          grep -q 'تم تحميل التقرير بنجاح' "$UX"
+          grep -q 'mezan-ads-report-spinner' "$CSS"
+          ! grep -q 'data-mezan-sticky-identity-status' "$UX"
+          ! grep -q 'data-mezan-sales-with-spend' "$UX"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$UX"
