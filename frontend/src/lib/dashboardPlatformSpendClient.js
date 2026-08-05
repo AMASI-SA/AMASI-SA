@@ -24,6 +24,10 @@ function rangeKey(dateFrom, dateTo) {
     return `${dateFrom}:${dateTo}`;
 }
 
+function requestKey(key, refresh) {
+    return `${key}:${refresh ? "refresh" : "read"}`;
+}
+
 function validateRange(dateFrom, dateTo) {
     if (!ISO_DATE_RE.test(dateFrom || "") || !ISO_DATE_RE.test(dateTo || "")) {
         throw new Error("invalid_dashboard_platform_spend_range");
@@ -46,11 +50,31 @@ export async function loadDashboardPlatformSpend({
     const key = rangeKey(safeFrom, safeTo);
     const cached = cache.get(key);
     const now = Date.now();
-    if (cached && now - cached.loadedAt <= Math.max(0, Number(maxAgeMs) || 0)) {
+
+    // A user-triggered or Dashboard-triggered refresh must never reuse a stale
+    // payload. The old behavior returned the four-minute cache even when
+    // refresh=true, which let the yellow card show fresh Google Ads spend while
+    // the executive summary kept an older zero value for the same date.
+    if (
+        !refresh
+        && cached
+        && now - cached.loadedAt <= Math.max(0, Number(maxAgeMs) || 0)
+    ) {
         return cached.payload;
     }
-    if (inFlight.has(key)) return inFlight.get(key);
 
+    const refreshKey = requestKey(key, true);
+    const readKey = requestKey(key, false);
+    if (refresh) {
+        if (inFlight.has(refreshKey)) return inFlight.get(refreshKey);
+    } else {
+        // A fresh provider refresh is stronger than a saved read. Reuse it so
+        // the card and executive summary receive exactly the same payload.
+        if (inFlight.has(refreshKey)) return inFlight.get(refreshKey);
+        if (inFlight.has(readKey)) return inFlight.get(readKey);
+    }
+
+    const activeKey = refresh ? refreshKey : readKey;
     const request = (async () => {
         const config = {
             withCredentials: true,
@@ -79,11 +103,11 @@ export async function loadDashboardPlatformSpend({
         return payload;
     })();
 
-    inFlight.set(key, request);
+    inFlight.set(activeKey, request);
     try {
         return await request;
     } finally {
-        if (inFlight.get(key) === request) inFlight.delete(key);
+        if (inFlight.get(activeKey) === request) inFlight.delete(activeKey);
     }
 }
 
