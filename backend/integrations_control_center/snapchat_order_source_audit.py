@@ -95,6 +95,25 @@ def _is_gift(order: dict[str, Any]) -> bool:
     return any(token in value for token in ("gift", "هدية", "هديه", "إهداء", "اهداء"))
 
 
+def platform_purchases_for_audit(
+    account_rows: list[dict[str, Any]],
+    campaign_rows: list[dict[str, Any]],
+    *,
+    requested_days: int,
+) -> tuple[int, str]:
+    """Use campaign-grain purchases for the campaign audit when available.
+
+    Account-day projections can trail campaign rows during the current account
+    day. The audit compares campaign attribution, so campaign rows are the
+    authoritative grain. Account rows remain a safe fallback when campaign
+    detail has not arrived yet.
+    """
+    source_rows = campaign_rows or account_rows
+    source = "campaign_rows" if campaign_rows else "account_rows_fallback"
+    summary = manager._aggregate_rows(source_rows, requested_days=requested_days)
+    return int(summary.get("orders") or 0), source
+
+
 def build_order_audit_rows(
     orders: list[dict[str, Any]],
     *,
@@ -282,9 +301,11 @@ async def build_snapchat_order_source_audit(
     )
     account_rows = [row for row in performance_rows if row.get("entity_type") == "ad_account"]
     campaign_rows = [row for row in performance_rows if row.get("entity_type") == "campaign"]
-    summary_rows = account_rows or campaign_rows
-    platform_summary = manager._aggregate_rows(summary_rows, requested_days=len(dates))
-    platform_purchases = int(platform_summary.get("orders") or 0)
+    platform_purchases, platform_purchase_source = platform_purchases_for_audit(
+        account_rows,
+        campaign_rows,
+        requested_days=len(dates),
+    )
 
     campaign_ids = sorted({
         str(row.get("campaign_id") or row.get("external_id") or "").strip()
@@ -340,6 +361,7 @@ async def build_snapchat_order_source_audit(
         included_statuses=included_statuses,
         platform_attributed_purchases=platform_purchases,
     )
+    result["summary"]["platform_purchase_source"] = platform_purchase_source
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
         "account": selected_meta,
@@ -365,4 +387,5 @@ __all__ = [
     "build_order_audit_rows",
     "build_snapchat_order_source_audit",
     "classify_order_origin",
+    "platform_purchases_for_audit",
 ]

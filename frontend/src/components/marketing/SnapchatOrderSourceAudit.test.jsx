@@ -79,6 +79,8 @@ describe("SnapchatOrderSourceAudit", () => {
         expect(container.textContent).toContain("10");
         expect(container.textContent).toContain("52");
         expect(container.textContent).toContain("48");
+        expect(container.textContent).toContain("طلبات كل الحملات المؤكدة");
+        expect(container.textContent).toContain("قد يختلف عن جدول النشطة فقط");
 
         const openButton = container.querySelector('[data-testid="open-snapchat-order-audit"]');
         expect(openButton).not.toBeNull();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     ArrowClockwise,
@@ -201,8 +201,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [adSquadReport, setAdSquadReport] = useState(null);
     const [adSquadLoading, setAdSquadLoading] = useState(false);
     const [adSquadError, setAdSquadError] = useState("");
+    const loadSequenceRef = useRef(0);
 
     const load = useCallback(async ({ silent = false } = {}) => {
+        const requestId = ++loadSequenceRef.current;
         if (silent) setRefreshing(true);
         else setLoading(true);
         setError("");
@@ -216,8 +218,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 limit: 25,
                 activeCampaignsOnly,
             });
+            if (requestId !== loadSequenceRef.current) return;
             setData(result);
+            setError("");
         } catch (loadError) {
+            if (requestId !== loadSequenceRef.current) return;
             const detail = loadError?.response?.data?.detail;
             setError(
                 typeof detail === "string"
@@ -225,8 +230,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     : detail?.message || "تعذر تحميل تقرير المنصة الإعلانية.",
             );
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (requestId === loadSequenceRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     }, [activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);
 

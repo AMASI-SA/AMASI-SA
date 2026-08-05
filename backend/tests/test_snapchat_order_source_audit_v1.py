@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from integrations_control_center.snapchat_order_source_audit import (
     build_order_audit_rows,
     classify_order_origin,
+    platform_purchases_for_audit,
 )
 
 
@@ -81,3 +82,27 @@ def test_audit_uses_account_timezone_day_boundary():
     )
     assert result["summary"]["total_salla_created_orders"] == 1
     assert result["orders"][0]["local_date"] == "2026-08-05"
+
+
+def test_platform_purchase_audit_prefers_campaign_rows_over_stale_account_row():
+    purchases, source = platform_purchases_for_audit(
+        [{"date": "2026-08-05", "purchases": 11}],
+        [
+            {"date": "2026-08-05", "purchases": 26},
+            {"date": "2026-08-05", "purchases": 13},
+            {"date": "2026-08-05", "purchases": 9},
+        ],
+        requested_days=1,
+    )
+    assert purchases == 48
+    assert source == "campaign_rows"
+
+
+def test_platform_purchase_audit_falls_back_to_account_rows_without_campaign_detail():
+    purchases, source = platform_purchases_for_audit(
+        [{"date": "2026-08-05", "purchases": 11}],
+        [],
+        requested_days=1,
+    )
+    assert purchases == 11
+    assert source == "account_rows_fallback"

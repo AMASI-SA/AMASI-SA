@@ -168,9 +168,9 @@ export default function SnapchatOrderSourceAudit({
                 ) : data ? (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <SummaryCard
-                            title="طلبات الحملات المؤكدة"
+                            title="طلبات كل الحملات المؤكدة"
                             value={summary.campaign_matched_orders}
-                            note="مطابقة دقيقة بمعرف الحملة أو اسم Snapchat الفريد"
+                            note="يشمل الحملات النشطة والمتوقفة؛ قد يختلف عن جدول النشطة فقط"
                             tone="emerald"
                         />
                         <SummaryCard
@@ -188,7 +188,7 @@ export default function SnapchatOrderSourceAudit({
                         <SummaryCard
                             title="مشتريات Snapchat المنسوبة"
                             value={summary.platform_attributed_purchases}
-                            note="إسناد المنصة، وليس سجل الطلبات المحاسبي"
+                            note="مجموع صفوف حملات Snapchat، وليس سجل الطلبات المحاسبي"
                             tone="violet"
                         />
                     </div>
