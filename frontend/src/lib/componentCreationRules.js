@@ -48,6 +48,24 @@ export function toggleComponentCategory(form, categoryId) {
     };
 }
 
+export function normalizeComponentName(value) {
+    return String(value || "")
+        .normalize("NFKC")
+        .toLocaleLowerCase("ar")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+export function componentNameAlreadyExists(components, name, excludeId = "") {
+    const target = normalizeComponentName(name);
+    const excluded = String(excludeId || "");
+    if (!target) return false;
+    return (components || []).some((component) => (
+        String(component?.id || "") !== excluded
+        && normalizeComponentName(component?.name) === target
+    ));
+}
+
 export function componentFormCanSave(form) {
     return Boolean(
         form?.name?.trim()
