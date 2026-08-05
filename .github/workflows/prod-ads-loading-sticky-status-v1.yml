@@ -1,4 +1,4 @@
-name: Production Ads Loading and Sticky Status V1
+name: Production Ads Native Tables and Loading V2
 
 on:
   pull_request:
@@ -9,6 +9,12 @@ on:
       - "frontend/src/marketingAdsTableUXEnhancer.js"
       - "frontend/src/marketingAdsTableUXEnhancer.css"
       - "frontend/src/marketingAdsTableUXEnhancer.test.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.test.jsx"
       - ".github/workflows/prod-ads-loading-sticky-status-v1.yml"
 
 permissions:
@@ -29,7 +35,7 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test Ads table UX
+      - name: Test native Ads tables
         env:
           CI: "true"
         run: >-
@@ -37,22 +43,33 @@ jobs:
           src/marketingAdsTableUXEnhancer.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
           src/components/marketing/AdSquadManagerTable.test.jsx
-          src/marketingCampaignColumnOrder.test.js
+          src/components/marketing/AdManagerTable.test.jsx
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce Ads UX contract
+      - name: Enforce native Ads table contract
         working-directory: .
         run: |
           INDEX=frontend/src/index.js
           UX=frontend/src/marketingAdsTableUXEnhancer.js
           CSS=frontend/src/marketingAdsTableUXEnhancer.css
+          CAMPAIGNS=frontend/src/components/marketing/CampaignManagerTable.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          ADS=frontend/src/components/marketing/AdManagerTable.jsx
           grep -q 'marketingAdsTableUXEnhancer.css' "$INDEX"
           grep -q 'marketingAdsTableUXEnhancer' "$INDEX"
-          grep -q 'data-mezan-sticky-identity-status' "$UX"
-          grep -q 'data-mezan-sales-with-spend' "$UX"
+          grep -q 'table_dom_mutations_enabled: false' "$UX"
+          grep -q 'columns_rendered_by_react: true' "$UX"
+          grep -q 'data-native-column-layout="true"' "$CAMPAIGNS"
+          grep -q 'data-native-column-layout="true"' "$SQUADS"
+          grep -q 'data-native-column-layout="true"' "$ADS"
+          grep -q 'CAMPAIGN_MANAGER_NATIVE_COLUMN_ORDER' "$CAMPAIGNS"
+          grep -q 'AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER' "$SQUADS"
+          grep -q 'AD_MANAGER_NATIVE_COLUMN_ORDER' "$ADS"
           grep -q 'جاري تحميل الفترة المحددة' "$UX"
           grep -q 'تم تحميل التقرير بنجاح' "$UX"
           grep -q 'mezan-ads-report-spinner' "$CSS"
+          ! grep -q 'data-mezan-sticky-identity-status' "$UX"
+          ! grep -q 'data-mezan-sales-with-spend' "$UX"
           ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$UX"

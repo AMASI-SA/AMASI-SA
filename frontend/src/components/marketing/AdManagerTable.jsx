@@ -18,6 +18,24 @@ import { ADS_DATE_RANGE_APPLIED_EVENT } from "./ArabicDateRangePicker";
 import { getSnapchatAdPerformance } from "../../services/snapchatAdPerformance";
 
 const AUTO_REFRESH_MS = 60_000;
+const NAME_WIDTH = 330;
+
+export const AD_MANAGER_NATIVE_COLUMN_ORDER = Object.freeze([
+    "name",
+    "status",
+    "review",
+    "delivery",
+    "ad_squad",
+    "campaign",
+    "orders",
+    "cpa",
+    "roas",
+    "spend",
+    "sales",
+    "impressions",
+    "clicks",
+    "ctr",
+]);
 
 const STATUS_LABELS = Object.freeze({
     ACTIVE: "نشط",
@@ -144,8 +162,8 @@ function exportCsv(rows) {
     if (!rows.length) return;
     const headers = [
         "اسم الإعلان", "معرف الإعلان", "الحالة", "المراجعة", "حالة التسليم",
-        "المجموعة الإعلانية", "الحملة", "الصرف", "المشتريات", "المبيعات",
-        "CPA", "ROAS", "الظهور", "النقرات", "CTR", "الإبداع", "نوع الإبداع",
+        "المجموعة الإعلانية", "الحملة", "المشتريات", "CPA", "ROAS", "الصرف",
+        "المبيعات", "الظهور", "النقرات", "CTR", "الإبداع", "نوع الإبداع",
     ];
     const body = rows.map((ad) => [
         ad.ad_name,
@@ -155,11 +173,11 @@ function exportCsv(rows) {
         ad.delivery_status,
         ad.ad_squad_name,
         ad.campaign_name,
-        ad.spend_sar,
         ad.orders,
-        ad.sales_sar,
         ad.cpa_sar,
         ad.roas,
+        ad.spend_sar,
+        ad.sales_sar,
         ad.impressions,
         ad.swipes,
         ad.ctr_pct,
@@ -178,6 +196,12 @@ function exportCsv(rows) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+}
+
+function sortableValue(ad, key) {
+    if (key === "name") return String(ad.ad_name || "");
+    if (key === "status") return activeStatus(ad.status) ? 1 : 0;
+    return finite(ad[key]);
 }
 
 export default function AdManagerTable() {
@@ -246,8 +270,8 @@ export default function AdManagerTable() {
     const rows = useMemo(() => {
         const direction = sort.direction === "asc" ? 1 : -1;
         return [...(report?.ads || [])].sort((left, right) => {
-            const a = sort.key === "name" ? left.ad_name : finite(left[sort.key]);
-            const b = sort.key === "name" ? right.ad_name : finite(right[sort.key]);
+            const a = sortableValue(left, sort.key);
+            const b = sortableValue(right, sort.key);
             if (a === null && b === null) return 0;
             if (a === null) return 1;
             if (b === null) return -1;
@@ -275,7 +299,12 @@ export default function AdManagerTable() {
     const totals = report?.totals || {};
 
     return (
-        <section className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm" data-testid="ad-manager-table" dir="rtl">
+        <section
+            className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm"
+            data-testid="ad-manager-table"
+            data-native-column-layout="true"
+            dir="rtl"
+        >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
                 <form onSubmit={submitSearch} className="flex min-w-[280px] flex-1 items-center gap-2">
                     <span className="relative block min-w-0 flex-1">
@@ -308,26 +337,26 @@ export default function AdManagerTable() {
                 <table className="w-max min-w-full border-separate border-spacing-0 text-right text-sm">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
-                            <th className="sticky right-0 z-20 min-w-[330px] border-b border-l border-slate-200 bg-slate-50 px-5 py-4"><button type="button" onClick={() => sortBy("name")} className="font-black">الإعلان والإبداع</button></th>
-                            <th className="min-w-[120px] border-b border-slate-200 px-5 py-4 font-black">الحالة</th>
-                            <th className="min-w-[135px] border-b border-slate-200 px-5 py-4 font-black">المراجعة</th>
-                            <th className="min-w-[250px] border-b border-slate-200 px-5 py-4 font-black">حالة التسليم</th>
-                            <th className="min-w-[220px] border-b border-slate-200 px-5 py-4 font-black">المجموعة الإعلانية</th>
-                            <th className="min-w-[220px] border-b border-slate-200 px-5 py-4 font-black">الحملة</th>
-                            <th className="min-w-[120px] border-b border-slate-200 px-5 py-4"><button type="button" onClick={() => sortBy("orders")} className="font-black">النتائج</button></th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4"><button type="button" onClick={() => sortBy("cpa_sar")} className="font-black">تكلفة الشراء</button></th>
-                            <th className="min-w-[120px] border-b border-slate-200 px-5 py-4"><button type="button" onClick={() => sortBy("roas")} className="font-black">ROAS</button></th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4 font-black">المبيعات</th>
-                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black">مرات الظهور</th>
-                            <th className="min-w-[110px] border-b border-slate-200 px-5 py-4 font-black">النقرات</th>
-                            <th className="min-w-[100px] border-b border-slate-200 px-5 py-4 font-black">CTR</th>
+                            <th className="sticky right-0 z-30 min-w-[330px] border-b border-l border-slate-200 bg-slate-50 px-5 py-4" data-column-id="name"><button type="button" onClick={() => sortBy("name")} className="font-black">الإعلان والإبداع</button></th>
+                            <th className="sticky z-30 min-w-[120px] border-b border-l border-slate-200 bg-slate-50 px-5 py-4" style={{ right: NAME_WIDTH }} data-column-id="status"><button type="button" onClick={() => sortBy("status")} className="font-black">الحالة</button></th>
+                            <th className="min-w-[135px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="review">المراجعة</th>
+                            <th className="min-w-[250px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="delivery">حالة التسليم</th>
+                            <th className="min-w-[220px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="ad_squad">المجموعة الإعلانية</th>
+                            <th className="min-w-[220px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="campaign">الحملة</th>
+                            <th className="min-w-[120px] border-b border-slate-200 px-5 py-4" data-column-id="orders"><button type="button" onClick={() => sortBy("orders")} className="font-black">النتائج</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4" data-column-id="cpa"><button type="button" onClick={() => sortBy("cpa_sar")} className="font-black">تكلفة الشراء</button></th>
+                            <th className="min-w-[120px] border-b border-slate-200 px-5 py-4" data-column-id="roas"><button type="button" onClick={() => sortBy("roas")} className="font-black">ROAS</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4" data-column-id="spend"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="sales">المبيعات</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="impressions">مرات الظهور</th>
+                            <th className="min-w-[110px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="clicks">النقرات</th>
+                            <th className="min-w-[100px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="ctr">CTR</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map((ad) => (
                             <tr key={`${ad.account_id}:${ad.ad_id}`} className="group bg-white hover:bg-slate-50">
-                                <td className="sticky right-0 z-10 border-b border-l border-slate-100 bg-white px-5 py-5 group-hover:bg-slate-50">
+                                <td className="sticky right-0 z-10 border-b border-l border-slate-100 bg-white px-5 py-5 group-hover:bg-slate-50" data-column-id="name">
                                     <div className="flex items-start gap-3">
                                         <span className="rounded-xl bg-violet-50 p-2 text-violet-700"><FilmStrip size={22} weight="duotone" /></span>
                                         <div className="min-w-0">
@@ -338,19 +367,19 @@ export default function AdManagerTable() {
                                         </div>
                                     </div>
                                 </td>
-                                <td className="border-b border-slate-100 px-5 py-5"><StatusCell ad={ad} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><span className={`rounded-full px-3 py-1 text-xs font-black ${String(ad.review_status || "").toUpperCase().includes("REJECT") ? "bg-rose-50 text-rose-700" : String(ad.review_status || "").toUpperCase().includes("PEND") ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{reviewLabel(ad.review_status)}</span></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><DeliveryCell ad={ad} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><div className="max-w-[190px] truncate font-black text-slate-700">{ad.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{ad.ad_squad_id || "—"}</div></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><div className="max-w-[190px] truncate font-black text-slate-700">{ad.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{ad.campaign_id || "—"}</div></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={number(ad.orders)} secondary="مشتريات" /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={money(ad.cpa_sar)} secondary="لكل عملية شراء" /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={ratio(ad.roas, "×")} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={money(ad.spend_sar)} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={money(ad.sales_sar)} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={number(ad.impressions)} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={number(ad.swipes)} /></td>
-                                <td className="border-b border-slate-100 px-5 py-5"><Metric primary={ratio(ad.ctr_pct, "%")} /></td>
+                                <td className="sticky z-10 border-b border-l border-slate-100 bg-white px-5 py-5 group-hover:bg-slate-50" style={{ right: NAME_WIDTH }} data-column-id="status"><StatusCell ad={ad} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="review"><span className={`rounded-full px-3 py-1 text-xs font-black ${String(ad.review_status || "").toUpperCase().includes("REJECT") ? "bg-rose-50 text-rose-700" : String(ad.review_status || "").toUpperCase().includes("PEND") ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{reviewLabel(ad.review_status)}</span></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="delivery"><DeliveryCell ad={ad} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="ad_squad"><div className="max-w-[190px] truncate font-black text-slate-700">{ad.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{ad.ad_squad_id || "—"}</div></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="campaign"><div className="max-w-[190px] truncate font-black text-slate-700">{ad.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{ad.campaign_id || "—"}</div></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="orders"><Metric primary={number(ad.orders)} secondary="مشتريات" /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="cpa"><Metric primary={money(ad.cpa_sar)} secondary="لكل عملية شراء" /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="roas"><Metric primary={ratio(ad.roas, "×")} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="spend"><Metric primary={money(ad.spend_sar)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="sales"><Metric primary={money(ad.sales_sar)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="impressions"><Metric primary={number(ad.impressions)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="clicks"><Metric primary={number(ad.swipes)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="ctr"><Metric primary={ratio(ad.ctr_pct, "%")} /></td>
                             </tr>
                         ))}
                         {!rows.length && (
@@ -360,8 +389,9 @@ export default function AdManagerTable() {
                     {!!rows.length && (
                         <tfoot className="bg-slate-50 font-black text-slate-900">
                             <tr>
-                                <td className="sticky right-0 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-5 py-4">إجمالي الفترة</td>
-                                <td colSpan={5} className="border-t-2 border-slate-300" />
+                                <td className="sticky right-0 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-5 py-4" data-column-id="name">إجمالي الفترة</td>
+                                <td className="sticky z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-5 py-4" style={{ right: NAME_WIDTH }} data-column-id="status" />
+                                <td colSpan={4} className="border-t-2 border-slate-300" />
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.orders)}</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{money(totals.cpa_sar)}</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{ratio(totals.roas, "×")}</td>
