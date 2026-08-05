@@ -23,6 +23,8 @@ from supplier_receiving_routes import (
     supplier_piece_service_blocker,
     supplier_piece_reference_price,
     supplier_receipt_piece_patch,
+    supplier_receipt_piece_rollback_update,
+    supplier_receipt_previous_piece_state,
 )
 
 
@@ -126,6 +128,28 @@ def test_receipt_records_operational_supplier_link_without_accounting_write():
     assert patch["qoyod_updated"] is False
 
 
+def test_receipt_cancel_snapshot_restores_the_exact_previous_piece_state():
+    original_updated_at = datetime(2026, 8, 5, 9, 0, tzinfo=timezone.utc)
+    previous_piece = {
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "execution_status": "in_progress",
+        "updated_at": original_updated_at,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    }
+
+    snapshot = supplier_receipt_previous_piece_state(previous_piece)
+    rollback = supplier_receipt_piece_rollback_update(snapshot)
+
+    assert rollback["$set"]["status"] == PIECE_STATUS_IN_PROGRESS
+    assert rollback["$set"]["execution_status"] == "in_progress"
+    assert rollback["$set"]["updated_at"] == original_updated_at
+    assert "supplier_receiving_session_id" in rollback["$unset"]
+    assert "receipt_event_id" in rollback["$unset"]
+    assert "received_at" in rollback["$unset"]
+
+
 def test_piece_services_must_be_covered_by_selected_mezan_supplier():
     session = {
         "supplier_snapshot": {
@@ -216,6 +240,7 @@ def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     assert ("/supplier-receiving-v1/sessions", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}", "GET") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/scan", "POST") in routes
+    assert ("/supplier-receiving-v1/sessions/{session_id}/cancel", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/close", "POST") in routes
 
 
@@ -230,4 +255,7 @@ def test_scan_contract_is_atomic_and_never_creates_accounting():
     assert '"operational_invoice": operational_invoice' in source
     assert '"supplier_service_link_applied": True' in source
     assert "supplier_piece_service_blocker(piece, session)" in source
+    assert "supplier_receipt_previous_piece_state(piece)" in source
+    assert '"status": "cancelled"' in source
+    assert '"operational_invoice_created": False' in source
     assert '"completed_at"' not in source
