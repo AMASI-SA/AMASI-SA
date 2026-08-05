@@ -3,6 +3,8 @@ import { loadDashboardPlatformSpend } from "./lib/dashboardPlatformSpendClient";
 import { mergeDashboardWithPlatformSpend } from "./lib/dashboardPlatformSpendMerge";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const FAST_SAVED_SPEND_WAIT_MS = 750;
+const SAVED_SPEND_CACHE_MAX_AGE_MS = 30 * 1000;
 let installed = false;
 
 function pathOnly(config = {}) {
@@ -40,20 +42,25 @@ function isDashboardV2Response(response = {}) {
     return method === "get" && pathOnly(response?.config) === "/dashboard-v2";
 }
 
-async function platformSpendForRange(range) {
+function timeoutValue(ms, value = null) {
+    return new Promise((resolve) => {
+        window.setTimeout(() => resolve(value), ms);
+    });
+}
+
+async function savedPlatformSpendForRange(range) {
     try {
-        return await loadDashboardPlatformSpend({
-            dateFrom: range.from,
-            dateTo: range.to,
-            refresh: true,
-        });
+        return await Promise.race([
+            loadDashboardPlatformSpend({
+                dateFrom: range.from,
+                dateTo: range.to,
+                refresh: false,
+                maxAgeMs: SAVED_SPEND_CACHE_MAX_AGE_MS,
+            }),
+            timeoutValue(FAST_SAVED_SPEND_WAIT_MS),
+        ]);
     } catch {
-        return loadDashboardPlatformSpend({
-            dateFrom: range.from,
-            dateTo: range.to,
-            refresh: false,
-            maxAgeMs: 0,
-        });
+        return null;
     }
 }
 
@@ -66,27 +73,27 @@ export function installDashboardExecutivePlatformSpendInterceptor() {
         const range = selectedRange(response.config);
         if (!range) return response;
 
-        try {
-            const platformSpend = await platformSpendForRange(range);
-            if (
-                platformSpend?.date_from !== range.from
-                || platformSpend?.date_to !== range.to
-            ) {
-                return response;
-            }
-            return {
-                ...response,
-                data: mergeDashboardWithPlatformSpend(
-                    response.data,
-                    platformSpend,
-                ),
-                statusText: "Dashboard V2 aligned with selected-period four-platform spend",
-            };
-        } catch {
-            // Keep the original Dashboard response available when a provider
-            // refresh and the saved read both fail. The next refresh retries.
+        // Never wait for Snapchat/Meta/TikTok/Google external refreshes before
+        // rendering the Dashboard. The yellow spend card owns provider refresh.
+        // Here we only read the latest saved projection, with a strict 750 ms
+        // ceiling, then let the core Dashboard render immediately.
+        const platformSpend = await savedPlatformSpendForRange(range);
+        if (
+            !platformSpend
+            || platformSpend?.date_from !== range.from
+            || platformSpend?.date_to !== range.to
+        ) {
             return response;
         }
+
+        return {
+            ...response,
+            data: mergeDashboardWithPlatformSpend(
+                response.data,
+                platformSpend,
+            ),
+            statusText: "Dashboard V2 rendered with saved selected-period platform spend",
+        };
     });
 }
 
