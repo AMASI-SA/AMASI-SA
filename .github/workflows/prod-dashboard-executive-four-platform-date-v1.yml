@@ -1,0 +1,61 @@
+name: Production Dashboard Executive Four Platform Date V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/dashboardExecutivePlatformSpendInterceptor.js"
+      - "frontend/src/dashboardExecutivePlatformSpendInterceptor.test.js"
+      - "frontend/src/lib/dashboardPlatformSpendClient.js"
+      - "frontend/src/lib/dashboardPlatformSpendClient.test.js"
+      - "frontend/src/lib/dashboardPlatformSpendMerge.js"
+      - "frontend/src/lib/dashboardPlatformSpendMerge.test.js"
+      - ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test selected-period executive platform spend
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/dashboardPlatformSpendClient.test.js
+          src/lib/dashboardPlatformSpendMerge.test.js
+          src/dashboardExecutivePlatformSpendInterceptor.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce selected-period four-platform contract
+        working-directory: .
+        run: |
+          CLIENT=frontend/src/lib/dashboardPlatformSpendClient.js
+          MERGE=frontend/src/lib/dashboardPlatformSpendMerge.js
+          INTERCEPTOR=frontend/src/dashboardExecutivePlatformSpendInterceptor.js
+          INDEX=frontend/src/index.js
+          grep -q 'ads-platform-spend/refresh' "$CLIENT"
+          grep -q 'total_ads_cost: newAdsTotal' "$MERGE"
+          grep -q 'avg_cost_per_order' "$MERGE"
+          grep -q 'net_profit' "$MERGE"
+          grep -q 'mergeDashboardWithPlatformSpend' "$INTERCEPTOR"
+          grep -q 'dashboardExecutivePlatformSpendInterceptor' "$INDEX"
+          ! grep -q 'general_ledger' "$CLIENT" "$MERGE" "$INTERCEPTOR"
+          ! grep -q 'qoyod' "$CLIENT" "$INTERCEPTOR"

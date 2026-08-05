@@ -13,6 +13,7 @@ import "@/marketingSnapchatManualRangeGuard";
 import "@/marketingSnapchatDeliveryStateEnhancer";
 import "@/marketingAdsLiveWorkspaceEnhancer";
 import "@/campaignProfitabilityProductCostLink";
+import "@/dashboardExecutivePlatformSpendInterceptor";
 import "@/reviewedPreparationSelection.css";
 import "@/reviewMezanImageEnhancer";
 import "@/reviewMezanImageGlobalDelete";
