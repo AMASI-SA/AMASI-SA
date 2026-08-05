@@ -1,4 +1,4 @@
-name: Production Ads Sales Visible V1
+name: Production Ads Native Spend and Sales V2
 
 on:
   pull_request:
@@ -6,9 +6,12 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "frontend/src/index.js"
-      - "frontend/src/marketingAdsSalesVisibilityFix.js"
-      - "frontend/src/marketingAdsSalesVisibilityFix.css"
-      - "frontend/src/marketingAdsSalesVisibilityFix.test.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.test.jsx"
       - ".github/workflows/prod-ads-sales-visible-v1.yml"
 
 permissions:
@@ -29,29 +32,35 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Test Ads sales visibility
+      - name: Test native spend and sales columns
         env:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
-          src/marketingAdsSalesVisibilityFix.test.js
-          src/marketingAdsTableUXEnhancer.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
           src/components/marketing/AdSquadManagerTable.test.jsx
+          src/components/marketing/AdManagerTable.test.jsx
+          src/marketingAdsTableUXEnhancer.test.js
       - name: Build Production frontend
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce sales visibility contract
+      - name: Enforce separate spend and sales cells
         working-directory: .
         run: |
           INDEX=frontend/src/index.js
-          FIX=frontend/src/marketingAdsSalesVisibilityFix.js
-          CSS=frontend/src/marketingAdsSalesVisibilityFix.css
-          grep -q 'marketingAdsSalesVisibilityFix.css' "$INDEX"
-          grep -q 'marketingAdsSalesVisibilityFix' "$INDEX"
-          grep -q 'data-mezan-sales-display' "$FIX"
-          grep -q 'data-mezan-sales-visibility-fixed' "$FIX"
-          grep -q 'attr(data-mezan-sales-display)' "$CSS"
-          grep -q 'attr(data-mezan-spend-display)' "$CSS"
-          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$FIX"
+          CAMPAIGNS=frontend/src/components/marketing/CampaignManagerTable.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          ADS=frontend/src/components/marketing/AdManagerTable.jsx
+          ! grep -q 'marketingAdsSalesVisibilityFix' "$INDEX"
+          ! grep -q 'marketingCampaignColumnOrder' "$INDEX"
+          grep -q '"spend",' "$CAMPAIGNS"
+          grep -q '"sales",' "$CAMPAIGNS"
+          grep -q 'data-column-id="spend"' "$CAMPAIGNS"
+          grep -q 'data-column-id="sales"' "$CAMPAIGNS"
+          grep -q 'data-column-id="spend"' "$SQUADS"
+          grep -q 'data-column-id="sales"' "$SQUADS"
+          grep -q 'data-column-id="spend"' "$ADS"
+          grep -q 'data-column-id="sales"' "$ADS"
+          ! grep -R -q 'data-mezan-sales-with-spend' "$CAMPAIGNS" "$SQUADS" "$ADS"
+          ! grep -R -q 'data-mezan-folded-spend-cell' "$CAMPAIGNS" "$SQUADS" "$ADS"
