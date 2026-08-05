@@ -54,13 +54,13 @@ jobs:
       - name: Enforce safety boundary
         working-directory: .
         run: |
-          REQUIRED=backend/component_category_required_routes.py
-          GROUPS=backend/product_group_link_routes.py
-          grep -q 'component_category_required' "$REQUIRED"
-          grep -q 'return True' "$REQUIRED"
-          grep -q 'historical_order_snapshots_unchanged' "$GROUPS"
-          grep -q 'group_unlink_preserves_manual_and_other_group_links' "$GROUPS"
-          ! grep -Eq 'call_salla|general_ledger|qoyod' "$REQUIRED" "$GROUPS"
+          REQUIRED_MODULE=backend/component_category_required_routes.py
+          GROUP_MODULE=backend/product_group_link_routes.py
+          grep -q 'component_category_required' "$REQUIRED_MODULE"
+          grep -q 'return True' "$REQUIRED_MODULE"
+          grep -q 'historical_order_snapshots_unchanged' "$GROUP_MODULE"
+          grep -q 'group_unlink_preserves_manual_and_other_group_links' "$GROUP_MODULE"
+          ! grep -Eq 'call_salla|general_ledger|qoyod' "$REQUIRED_MODULE" "$GROUP_MODULE"
 
   frontend-test-and-build:
     runs-on: ubuntu-24.04
