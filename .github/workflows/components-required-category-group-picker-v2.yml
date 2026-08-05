@@ -10,6 +10,7 @@ on:
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_component_category_required_group_picker_v2.py"
       - "frontend/src/pages/MezanComponentsProduction.jsx"
+      - "frontend/src/pages/MezanComponentsOrganization.jsx"
       - "frontend/src/components/products/ProductOperationsEditor.jsx"
       - "frontend/src/services/mezanComponentCatalog.js"
       - "frontend/src/services/mezanComponentOrganization.js"
@@ -91,8 +92,17 @@ jobs:
         working-directory: .
         run: |
           COMPONENT=frontend/src/pages/MezanComponentsProduction.jsx
+          ORGANIZATION=frontend/src/pages/MezanComponentsOrganization.jsx
           PRODUCT=frontend/src/components/products/ProductOperationsEditor.jsx
+          CATALOG_SERVICE=frontend/src/services/mezanComponentCatalog.js
+          GROUP_SERVICE=frontend/src/services/mezanComponentOrganization.js
           grep -q 'تصنيف التجهيز — إلزامي' "$COMPONENT"
           grep -q 'تمنع شحن المنتج حتى تكتمل الخدمة' "$COMPONENT"
-          grep -q 'إضافة مجموعة' "$PRODUCT"
-          grep -q 'product-group-picker-modal' "$PRODUCT"
+          grep -q 'load({ quiet: true })' "$ORGANIZATION"
+          grep -q 'product-groups-inline' "$PRODUCT"
+          grep -q 'الخدمات المفردة' "$PRODUCT"
+          grep -q 'المكوّنات المفردة' "$PRODUCT"
+          ! grep -q 'product-group-picker-modal' "$PRODUCT"
+          ! grep -q 'open-product-group-picker' "$PRODUCT"
+          grep -q 'يوجد مكوّن أو خدمة بهذا الاسم من قبل' "$CATALOG_SERVICE"
+          grep -q 'يوجد مجموعة لهذا التصنيف بنفس المكونات أو الخدمات' "$GROUP_SERVICE"
