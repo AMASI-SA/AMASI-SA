@@ -54,6 +54,16 @@ jobs:
           if ambiguous not in script:
               raise SystemExit('ambiguous campaign request replacement not found')
           script = script.replace(ambiguous, specific, 1)
+          script = script.replace(
+              'jest.mock("../../lib/api", () => ({ get: jest.fn() }));',
+              '''jest.mock("../../lib/api", () => ({
+              get: jest.fn(),
+              interceptors: {
+                  request: { use: jest.fn() },
+                  response: { use: jest.fn() },
+              },
+          }));''',
+          )
           exec(compile(script, 'active_campaign_filters_embedded.py', 'exec'), {})
           PY
 
