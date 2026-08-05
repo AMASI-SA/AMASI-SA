@@ -7,6 +7,7 @@ import "@/marketingAdsTableUXEnhancer.css";
 import "@/marketingAdsSalesVisibilityFix.css";
 import "@/marketingCampaignColumnOrder";
 import "@/marketingCampaignResultSource.css";
+import "@/marketingCampaignSelectedSourceGuard";
 import "@/marketingSnapchatAccountTimezone.css";
 import "@/marketingAdsManagerWorkspaceEnhancer";
 import "@/marketingCampaignStaleResponseGuard";
