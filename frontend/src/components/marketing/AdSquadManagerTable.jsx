@@ -24,7 +24,7 @@ const STATUS_LABELS = Object.freeze({
 
 const SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
 const SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
-const VALID_SORTS = new Set(["newest", "spend", "active"]);
+const VALID_SORTS = new Set(["orders", "newest", "spend", "active"]);
 const CHECKBOX_WIDTH = 48;
 const NAME_WIDTH = 300;
 
@@ -114,7 +114,7 @@ export function readAdSquadSortPreference(storage = typeof window !== "undefined
 }
 
 export function sortAdSquadRows(rows = [], mode = "newest") {
-    const normalized = VALID_SORTS.has(mode) ? mode : "newest";
+    const normalized = VALID_SORTS.has(mode) ? mode : "orders";
     return [...rows].sort((left, right) => {
         const leftActive = activeStatus(left.status) ? 1 : 0;
         const rightActive = activeStatus(right.status) ? 1 : 0;
@@ -122,7 +122,10 @@ export function sortAdSquadRows(rows = [], mode = "newest") {
         const rightSpend = finite(right.spend_sar) || 0;
         const leftTime = timestamp(left.created_at_provider || left.start_time || left.updated_at_provider);
         const rightTime = timestamp(right.created_at_provider || right.start_time || right.updated_at_provider);
+        const leftOrders = finite(left.orders) || 0;
+        const rightOrders = finite(right.orders) || 0;
         if (normalized === "active" && leftActive !== rightActive) return rightActive - leftActive;
+        if (normalized === "orders" && leftOrders !== rightOrders) return rightOrders - leftOrders;
         if (normalized === "spend" && leftSpend !== rightSpend) return rightSpend - leftSpend;
         if (normalized === "active" && leftSpend !== rightSpend) return rightSpend - leftSpend;
         if (leftTime !== rightTime) return rightTime - leftTime;
@@ -239,6 +242,7 @@ export default function AdSquadManagerTable({
     onPageChange,
     loading = false,
     error = "",
+    sortMode = "orders",
 }) {
     const [selected, setSelected] = useState(() => new Set());
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
@@ -255,8 +259,9 @@ export default function AdSquadManagerTable({
         return () => window.removeEventListener(SORT_EVENT, update);
     }, []);
 
+    const effectiveSort = VALID_SORTS.has(sortMode) ? sortMode : preferredSort;
     const sorted = useMemo(() => {
-        const preferred = sortAdSquadRows(rows, preferredSort);
+        const preferred = sortAdSquadRows(rows, effectiveSort);
         if (!columnSort?.key) return preferred;
         const direction = columnSort.direction === "asc" ? 1 : -1;
         return [...preferred].sort((left, right) => {
@@ -268,7 +273,7 @@ export default function AdSquadManagerTable({
             if (typeof a === "number" && typeof b === "number") return (a - b) * direction;
             return String(a).localeCompare(String(b), "ar", { numeric: true }) * direction;
         });
-    }, [rows, preferredSort, columnSort]);
+    }, [rows, effectiveSort, columnSort]);
 
     const visible = showSelectedOnly
         ? sorted.filter((row) => selected.has(rowKey(row)))
@@ -311,7 +316,7 @@ export default function AdSquadManagerTable({
             data-testid="ad-squad-manager-table"
             data-native-column-layout="true"
             dir="rtl"
-            data-sort-mode={preferredSort}
+            data-sort-mode={effectiveSort}
         >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
                 <div className="flex items-center gap-1">

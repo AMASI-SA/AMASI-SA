@@ -44,6 +44,9 @@ export function normalizeSnapchatAd(value = {}) {
         ad_squad_name: text(value.ad_squad_name, value.ad_squad_id || "مجموعة غير معروفة"),
         campaign_id: text(value.campaign_id) || null,
         campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),
+        campaign_status: text(value.campaign_status, "unknown"),
+        campaign_active: value.campaign_active === true,
+        ad_squad_status: text(value.ad_squad_status, "unknown"),
         status: text(value.status, value.configured_status || "unknown"),
         configured_status: text(value.configured_status, value.status || "unknown"),
         review_status: text(value.review_status) || null,
@@ -105,6 +108,8 @@ export async function getSnapchatAdPerformance({
     query = "",
     page = 1,
     limit = 100,
+    activeCampaignsOnly = true,
+    sortBy = "orders",
 } = {}) {
     const response = await api.get("/integrations-v2/snapchat_ads/ad-report", {
         params: {
@@ -114,6 +119,8 @@ export async function getSnapchatAdPerformance({
             query: String(query || "").trim().slice(0, 120) || undefined,
             page,
             limit,
+            active_campaigns_only: activeCampaignsOnly,
+            sort_by: sortBy,
         },
     });
     return normalizeSnapchatAdReport(response.data);

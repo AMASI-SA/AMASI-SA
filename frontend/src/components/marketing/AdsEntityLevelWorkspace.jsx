@@ -4,13 +4,7 @@ import AdSquadSortControls from "./AdSquadSortControls";
 import AdManagerTable from "./AdManagerTable";
 import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
 
-function EntityTabs({
-    platformLabel,
-    entityLevel,
-    onChange,
-    adSquadsEnabled,
-    adsEnabled,
-}) {
+function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled }) {
     const items = [
         { id: "campaigns", label: "الحملات", enabled: true },
         { id: "ad_squads", label: "المجموعات الإعلانية", enabled: adSquadsEnabled },
@@ -26,14 +20,7 @@ function EntityTabs({
                         type="button"
                         disabled={!item.enabled}
                         onClick={() => item.enabled && onChange?.(item.id)}
-                        className={[
-                            "relative shrink-0 px-1 pb-3 pt-4 text-sm transition",
-                            active
-                                ? "font-black text-slate-950"
-                                : item.enabled
-                                    ? "font-bold text-slate-600 hover:text-slate-950"
-                                    : "cursor-not-allowed font-bold text-slate-300",
-                        ].join(" ")}
+                        className={["relative shrink-0 px-1 pb-3 pt-4 text-sm transition", active ? "font-black text-slate-950" : item.enabled ? "font-bold text-slate-600 hover:text-slate-950" : "cursor-not-allowed font-bold text-slate-300"].join(" ")}
                         aria-pressed={active}
                         data-testid={`ads-entity-level-${item.id}`}
                     >
@@ -42,9 +29,31 @@ function EntityTabs({
                     </button>
                 );
             })}
-            <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">
-                {platformLabel || "المنصة"} · قراءة فقط
-            </span>
+            <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">{platformLabel || "المنصة"} · قراءة فقط</span>
+        </div>
+    );
+}
+
+function ActiveCampaignFilter({ checked, onChange, entityLevel }) {
+    const entityLabel = entityLevel === "ad_squads" ? "المجموعات" : entityLevel === "ads" ? "الإعلانات" : "الحملات";
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-x border-t border-slate-200 bg-white px-4 py-3" data-testid="active-campaign-filter">
+            <div>
+                <div className="text-sm font-black text-slate-800">{checked ? `${entityLabel} التابعة لحملات نشطة فقط` : `عرض كل ${entityLabel}`}</div>
+                <div className="mt-0.5 text-[11px] font-bold text-slate-400">الفلترة تتم من المصدر قبل Pagination، وليست فلترة للصفحة الحالية.</div>
+            </div>
+            <button
+                type="button"
+                onClick={() => onChange?.(!checked)}
+                aria-pressed={checked}
+                data-testid="active-campaigns-only-toggle"
+                className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-sm font-black transition ${checked ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-700"}`}
+            >
+                <span className={`relative inline-flex h-5 w-9 rounded-full ${checked ? "bg-emerald-500" : "bg-slate-300"}`}>
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm ${checked ? "right-[18px]" : "right-0.5"}`} />
+                </span>
+                الحملات النشطة فقط
+            </button>
         </div>
     );
 }
@@ -60,6 +69,10 @@ export default function AdsEntityLevelWorkspace({
     campaignPage,
     onCampaignPageChange,
     readOnly,
+    activeCampaignsOnly = true,
+    onActiveCampaignsOnlyChange,
+    adSquadSort = "orders",
+    onAdSquadSortChange,
     adSquadReport,
     adSquadPage,
     onAdSquadPageChange,
@@ -75,21 +88,13 @@ export default function AdsEntityLevelWorkspace({
     return (
         <section data-testid="ads-entity-level-workspace">
             <style>{`
-                [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] > div:first-child {
-                    display: none;
-                }
-                [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] {
-                    border-top-left-radius: 0;
-                    border-top-right-radius: 0;
-                }
+                [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] > div:first-child { display: none; }
+                [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] { border-top-left-radius: 0; border-top-right-radius: 0; }
             `}</style>
-            <EntityTabs
-                platformLabel={platformLabel}
-                entityLevel={entityLevel}
-                onChange={onEntityLevelChange}
-                adSquadsEnabled={adSquadsEnabled}
-                adsEnabled={adsEnabled}
-            />
+            <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} />
+            {platform === "snapchat" && (
+                <ActiveCampaignFilter checked={activeCampaignsOnly} onChange={onActiveCampaignsOnlyChange} entityLevel={entityLevel} />
+            )}
             {entityLevel === "campaigns" && (
                 <CampaignManagerTable
                     platform={platform}
@@ -104,7 +109,7 @@ export default function AdsEntityLevelWorkspace({
             )}
             {entityLevel === "ad_squads" && (
                 <>
-                    <AdSquadSortControls />
+                    <AdSquadSortControls value={adSquadSort} onChange={onAdSquadSortChange} />
                     <AdSquadManagerTable
                         rows={adSquadReport?.ad_squads || []}
                         totals={adSquadReport?.totals || {}}
@@ -113,10 +118,11 @@ export default function AdsEntityLevelWorkspace({
                         onPageChange={onAdSquadPageChange}
                         loading={adSquadLoading}
                         error={adSquadError}
+                        sortMode={adSquadSort}
                     />
                 </>
             )}
-            {entityLevel === "ads" && <AdManagerTable />}
+            {entityLevel === "ads" && <AdManagerTable activeCampaignsOnly={activeCampaignsOnly} />}
         </section>
     );
 }

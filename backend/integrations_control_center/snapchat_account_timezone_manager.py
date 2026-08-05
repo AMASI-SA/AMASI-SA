@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from . import snapchat_account_hourly_refresh as hourly
 from .snapchat_account_selection import _load_selected_accounts
+from .snapchat_active_campaign_filtering import is_active_provider_status
 from .snapchat_campaign_result_source_routes import (
     RESULT_SOURCE_PLATFORM,
     RESULT_SOURCE_SALLA,
@@ -762,6 +763,7 @@ async def build_account_timezone_campaign_report(
     page: int,
     limit: int,
     result_source: str,
+    active_campaigns_only: bool = False,
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     current = _aware_now(now())
@@ -972,6 +974,11 @@ async def build_account_timezone_campaign_report(
     totals.update(select_metrics(platform_totals, exact_salla_total))
     totals["result_source"] = result_source
 
+    for campaign in campaigns:
+        campaign["campaign_active"] = is_active_provider_status(campaign.get("status"))
+    if active_campaigns_only:
+        campaigns = [campaign for campaign in campaigns if campaign.get("campaign_active") is True]
+
     campaigns_query = _text(campaign_query).casefold()[:120]
     if campaigns_query:
         campaigns = [
@@ -1043,6 +1050,7 @@ async def build_account_timezone_campaign_report(
         "available_accounts": public_accounts,
         "result_source": result_source,
         "supported_result_sources": list(SUPPORTED_RESULT_SOURCES),
+        "active_campaigns_only": bool(active_campaigns_only),
         "totals": totals,
         "daily": daily,
         "accounts": [account_output],
@@ -1126,6 +1134,7 @@ def attach_snapchat_account_timezone_campaign_routes(
         page: int = Query(default=1, ge=1),
         limit: int = Query(default=25, ge=10, le=100),
         result_source: str = Query(default=RESULT_SOURCE_SALLA, pattern="^(salla|platform)$"),
+        active_campaigns_only: bool = Query(default=True),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
@@ -1140,6 +1149,7 @@ def attach_snapchat_account_timezone_campaign_routes(
                 page=page,
                 limit=limit,
                 result_source=result_source,
+                active_campaigns_only=active_campaigns_only,
             )
         except SnapchatNativeSyncError as exc:
             raise HTTPException(

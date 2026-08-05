@@ -50,6 +50,8 @@ export function normalizeAdSquad(value = {}) {
         ad_squad_name: text(value.ad_squad_name, id),
         campaign_id: text(value.campaign_id) || null,
         campaign_name: text(value.campaign_name, value.campaign_id || "حملة غير معروفة"),
+        campaign_status: text(value.campaign_status, "unknown"),
+        campaign_active: value.campaign_active === true,
         // The status column is the configured Snapchat switch. Delivery blocks
         // such as debt, budget or a stopped parent Campaign belong only in the
         // delivery fields below.
@@ -134,6 +136,8 @@ export async function getSnapchatAdSquadPerformance({
     query = "",
     page = 1,
     limit = 25,
+    activeCampaignsOnly = true,
+    sortBy = "orders",
 } = {}) {
     const response = await api.get("/integrations-v2/snapchat_ads/ad-squad-report", {
         params: {
@@ -143,6 +147,8 @@ export async function getSnapchatAdSquadPerformance({
             query: String(query || "").trim().slice(0, 120) || undefined,
             page,
             limit,
+            active_campaigns_only: activeCampaignsOnly,
+            sort_by: sortBy,
         },
     });
     return normalizeSnapchatAdSquadReport(response.data);
