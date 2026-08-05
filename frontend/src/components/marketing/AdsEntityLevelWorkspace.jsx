@@ -2,6 +2,7 @@ import CampaignManagerTable from "./CampaignManagerTable";
 import AdSquadManagerTable from "./AdSquadManagerTable";
 import AdSquadSortControls from "./AdSquadSortControls";
 import AdManagerTable from "./AdManagerTable";
+import SnapchatOrderSourceAudit from "./SnapchatOrderSourceAudit";
 import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
 
 function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled }) {
@@ -58,6 +59,11 @@ function ActiveCampaignFilter({ checked, onChange, entityLevel }) {
     );
 }
 
+function nativeAppliedDate(kind) {
+    if (typeof document === "undefined") return null;
+    return document.querySelector(`[data-mezan-native-date="${kind}"]`)?.value || null;
+}
+
 export default function AdsEntityLevelWorkspace({
     platform,
     platformLabel,
@@ -84,6 +90,9 @@ export default function AdsEntityLevelWorkspace({
     const campaignReport = platform === "snapchat"
         ? hydrateCampaignProfitability(campaigns, campaignTotals)
         : { campaigns, totals: campaignTotals };
+    const auditAccountId = campaignReport.campaigns?.[0]?.account_id || campaigns?.[0]?.account_id || null;
+    const auditDateFrom = nativeAppliedDate("from");
+    const auditDateTo = nativeAppliedDate("to");
 
     return (
         <section data-testid="ads-entity-level-workspace">
@@ -92,6 +101,13 @@ export default function AdsEntityLevelWorkspace({
                 [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] { border-top-left-radius: 0; border-top-right-radius: 0; }
             `}</style>
             <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} />
+            {platform === "snapchat" && entityLevel === "campaigns" && (
+                <SnapchatOrderSourceAudit
+                    accountId={auditAccountId}
+                    dateFrom={auditDateFrom}
+                    dateTo={auditDateTo}
+                />
+            )}
             {platform === "snapchat" && (
                 <ActiveCampaignFilter checked={activeCampaignsOnly} onChange={onActiveCampaignsOnlyChange} entityLevel={entityLevel} />
             )}
