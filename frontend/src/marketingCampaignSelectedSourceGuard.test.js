@@ -8,12 +8,17 @@ jest.mock("./lib/api", () => ({
   },
 }));
 
+const snapshotMock = jest.fn(() => null);
+
 jest.mock("./marketingCampaignResultSource", () => ({
   campaignResultsSource: jest.fn(() => "salla"),
+  getCampaignReportSnapshot: (...args) => snapshotMock(...args),
 }));
 
 import {
+  SELECTED_SOURCE_GUARD_POLICY,
   applySelectedSallaCampaignMetrics,
+  finalizeSelectedCampaignSource,
   isSnapchatCampaignReportResponse,
   shouldRetrySelectedCampaignSource,
 } from "./marketingCampaignSelectedSourceGuard";
@@ -68,6 +73,11 @@ function platformPayload() {
     ],
   };
 }
+
+beforeEach(() => {
+  snapshotMock.mockReset();
+  snapshotMock.mockReturnValue(null);
+});
 
 test("recognizes only the Snapchat campaign report response", () => {
   expect(isSnapchatCampaignReportResponse({
@@ -142,8 +152,43 @@ test("uses fixed Salla created orders and financial sales for period totals", ()
     orders: "salla_results.created_orders",
     sales: "salla_results.sales_sar",
     spend: "snapchat",
+    final_response_stage: true,
+    snapshot_hydrated: true,
     read_only: true,
   }));
+});
+
+test("finalizes both the response replaced by the stale guard and the raw snapshot", () => {
+  const payload = platformPayload();
+  const snapshot = platformPayload();
+  const response = {
+    config: {
+      url: "/integrations-v2/snapchat_ads/campaign-report",
+      _mezanStaleCampaignResponseReplaced: true,
+    },
+    data: payload,
+  };
+
+  const finalized = finalizeSelectedCampaignSource(response, "salla", snapshot);
+
+  expect(finalized).toBe(response);
+  expect(finalized.config._mezanSallaSourceFinalized).toBe(true);
+  expect(payload.campaigns[0]).toMatchObject({ orders: 3, sales_sar: 250 });
+  expect(snapshot.campaigns[0]).toMatchObject({ orders: 3, sales_sar: 250 });
+  expect(payload.result_source).toBe("salla");
+  expect(snapshot.result_source).toBe("salla");
+});
+
+test("leaves platform mode unchanged", () => {
+  const payload = platformPayload();
+  const response = {
+    config: { url: "/integrations-v2/snapchat_ads/campaign-report" },
+    data: payload,
+  };
+
+  expect(finalizeSelectedCampaignSource(response, "platform", null)).toBe(response);
+  expect(payload.result_source).toBe("platform");
+  expect(payload.campaigns[0]).toMatchObject({ orders: 7, sales_sar: 900 });
 });
 
 test("does not fabricate campaign values when explicit Salla results are absent", () => {
@@ -155,4 +200,17 @@ test("does not fabricate campaign values when explicit Salla results are absent"
   applySelectedSallaCampaignMetrics(payload);
 
   expect(payload.campaigns[0]).toEqual({ spend_sar: 10, orders: 1, sales_sar: 20 });
+});
+
+test("declares the final-stage read-only source contract", () => {
+  expect(SELECTED_SOURCE_GUARD_POLICY).toEqual({
+    salla_orders_field: "salla_results.created_orders",
+    salla_sales_field: "salla_results.sales_sar",
+    spend_source: "snapchat",
+    retries_stale_platform_response_once: true,
+    runs_after_stale_response_guard: true,
+    hydrates_raw_snapshot_after_final_response: true,
+    provider_writes_allowed: false,
+    accounting_writes_allowed: false,
+  });
 });
