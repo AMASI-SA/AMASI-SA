@@ -6,24 +6,25 @@ export const AD_SQUAD_SORT_OPTIONS = Object.freeze([
     { id: "orders", label: "الأكثر طلبًا" },
     { id: "spend", label: "الأكثر صرفًا" },
     { id: "newest", label: "الأحدث أولًا" },
+    { id: "active", label: "النشطة أولًا" },
 ]);
 const VALID = new Set(AD_SQUAD_SORT_OPTIONS.map((item) => item.id));
 
 export function readAdSquadSort(storage = typeof window !== "undefined" ? window.localStorage : null) {
     try {
-        const value = String(storage?.getItem(AD_SQUAD_SORT_STORAGE_KEY) || "orders");
-        return VALID.has(value) ? value : "orders";
+        const value = String(storage?.getItem(AD_SQUAD_SORT_STORAGE_KEY) || "newest");
+        return VALID.has(value) ? value : "newest";
     } catch {
-        return "orders";
+        return "newest";
     }
 }
 
 export function writeAdSquadSort(value, storage = typeof window !== "undefined" ? window.localStorage : null) {
-    const normalized = VALID.has(String(value || "")) ? String(value) : "orders";
+    const normalized = VALID.has(String(value || "")) ? String(value) : "newest";
     try {
         storage?.setItem(AD_SQUAD_SORT_STORAGE_KEY, normalized);
     } catch {
-        // Controlled state still updates when storage is unavailable.
+        // Controlled React state remains authoritative when storage is unavailable.
     }
     if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(AD_SQUAD_SORT_EVENT, {
