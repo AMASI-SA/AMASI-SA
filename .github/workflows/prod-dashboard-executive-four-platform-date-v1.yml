@@ -12,6 +12,8 @@ on:
       - "frontend/src/lib/dashboardPlatformSpendClient.test.js"
       - "frontend/src/lib/dashboardPlatformSpendMerge.js"
       - "frontend/src/lib/dashboardPlatformSpendMerge.test.js"
+      - "frontend/src/services/dashboardAdsSpend.js"
+      - "frontend/src/services/dashboardAdsSpend.test.js"
       - ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml"
 
 permissions:
@@ -40,6 +42,7 @@ jobs:
           src/lib/dashboardPlatformSpendClient.test.js
           src/lib/dashboardPlatformSpendMerge.test.js
           src/dashboardExecutivePlatformSpendInterceptor.test.js
+          src/services/dashboardAdsSpend.test.js
       - name: Build Production frontend
         env:
           CI: "false"
@@ -48,10 +51,14 @@ jobs:
         working-directory: .
         run: |
           CLIENT=frontend/src/lib/dashboardPlatformSpendClient.js
+          SERVICE=frontend/src/services/dashboardAdsSpend.js
           MERGE=frontend/src/lib/dashboardPlatformSpendMerge.js
           INTERCEPTOR=frontend/src/dashboardExecutivePlatformSpendInterceptor.js
           INDEX=frontend/src/index.js
           grep -q 'ads-platform-spend/refresh' "$CLIENT"
+          grep -q '!refresh' "$CLIENT"
+          grep -q 'loadDashboardPlatformSpend' "$SERVICE"
+          ! grep -q 'from "../lib/api"' "$SERVICE"
           grep -q 'total_ads_cost: newAdsTotal' "$MERGE"
           grep -q 'avg_cost_per_order' "$MERGE"
           grep -q 'net_profit' "$MERGE"
