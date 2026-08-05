@@ -1,4 +1,5 @@
 import {
+  AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER,
   readAdSquadSortPreference,
   sortAdSquadRows,
 } from "./AdSquadManagerTable";
@@ -41,7 +42,29 @@ const rows = [
   },
 ];
 
-describe("Ad Squad display sorting", () => {
+describe("Ad Squad native table", () => {
+  test("owns the canonical native column order", () => {
+    expect(AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER).toEqual([
+      "name",
+      "status",
+      "campaign",
+      "delivery",
+      "orders",
+      "cpa",
+      "roas",
+      "spend",
+      "sales",
+      "impressions",
+      "clicks",
+      "ctr",
+      "budget",
+      "optimization",
+      "account",
+    ]);
+    expect(AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER.indexOf("spend") + 1)
+      .toBe(AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER.indexOf("sales"));
+  });
+
   test("defaults to newest and handles invalid stored values safely", () => {
     const storage = new MemoryStorage();
     expect(readAdSquadSortPreference(storage)).toBe("newest");
