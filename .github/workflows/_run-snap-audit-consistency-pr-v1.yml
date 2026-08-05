@@ -68,7 +68,6 @@ jobs:
             frontend/src/pages/MarketingPlatformWorkspace.jsx \
             frontend/src/pages/MarketingPlatformWorkspaceLatestRequest.test.js \
             frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx \
-            frontend/src/components/marketing/SnapchatOrderSourceAudit.test.jsx \
-            .github/workflows/prod-snap-order-source-audit-v1.yml
+            frontend/src/components/marketing/SnapchatOrderSourceAudit.test.jsx
           git commit -m "fix(prod-snap): align audit totals and ignore stale report errors"
           git push origin HEAD:${{ github.head_ref }}
