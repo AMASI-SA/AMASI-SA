@@ -54,9 +54,13 @@ def make_order_engine_router(*args, **kwargs):
         make_product_category_catalog_router,
     )
     from product_v2_recent_sync_routes import make_product_v2_recent_sync_router
+    from component_category_required_routes import (
+        make_component_category_required_router,
+    )
     from component_workspace_cost_compat_routes import make_component_workspace_cost_compat_router
     from component_edit_routes import make_component_edit_router
     from product_option_cost_routes import make_product_option_cost_router
+    from product_group_link_routes import make_product_group_link_router
     from product_fulfillment_routes import make_product_fulfillment_router
     from order_option_cost_snapshot_routes import make_order_option_cost_snapshot_router
     from fulfillment_v2_routes import make_fulfillment_v2_router
@@ -165,11 +169,17 @@ def make_order_engine_router(*args, **kwargs):
         make_product_media_ai_draft_router(db, current_user),
         make_product_v2_router(db, current_user),
         make_product_v2_details_router(db, current_user),
+        # Required-category writes must be registered before the older component
+        # routes so create/edit can never save an unclassified item.
+        make_component_category_required_router(db, current_user),
         # This GET route must be registered before the older workspace route.
         # It exposes the current cost consistently for legacy and new rows so
         # the component edit modal is always pre-filled.
         make_component_workspace_cost_compat_router(db, current_user),
         make_component_edit_router(db, current_user),
+        # Group-aware operations and resource-link routes must precede the
+        # legacy product fulfillment routes with the same path/method keys.
+        make_product_group_link_router(db, current_user),
         make_product_fulfillment_router(db, current_user),
         make_product_option_cost_router(db, current_user),
         make_order_option_cost_snapshot_router(db, current_user),

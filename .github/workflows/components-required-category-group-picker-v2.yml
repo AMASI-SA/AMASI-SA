@@ -1,0 +1,98 @@
+name: Components Required Category and Group Picker V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/component_category_required_routes.py"
+      - "backend/product_group_link_routes.py"
+      - "backend/order_engine/__init__.py"
+      - "backend/tests/test_component_category_required_group_picker_v2.py"
+      - "frontend/src/pages/MezanComponentsProduction.jsx"
+      - "frontend/src/components/products/ProductOperationsEditor.jsx"
+      - "frontend/src/services/mezanComponentCatalog.js"
+      - "frontend/src/services/mezanComponentOrganization.js"
+      - "frontend/src/services/mezanProductsV2.js"
+      - "frontend/src/lib/componentCreationRules.js"
+      - "frontend/src/lib/componentCreationRules.test.js"
+      - "frontend/src/lib/productGroupPicker.js"
+      - "frontend/src/lib/productGroupPicker.test.js"
+      - ".github/workflows/components-required-category-group-picker-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Products V2-compatible dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0
+          httpx pytest pytest-asyncio openpyxl cryptography reportlab
+          python-multipart
+      - name: Compile changed backend
+        run: >-
+          python -m py_compile
+          component_category_required_routes.py
+          product_group_link_routes.py
+          order_engine/__init__.py
+          tests/test_component_category_required_group_picker_v2.py
+      - name: Run focused backend tests
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_component_category_required_group_picker_v2.py
+      - name: Enforce safety boundary
+        working-directory: .
+        run: |
+          REQUIRED_MODULE=backend/component_category_required_routes.py
+          GROUP_MODULE=backend/product_group_link_routes.py
+          grep -q 'component_category_required' "$REQUIRED_MODULE"
+          grep -q 'return True' "$REQUIRED_MODULE"
+          grep -q 'historical_order_snapshots_unchanged' "$GROUP_MODULE"
+          grep -q 'group_unlink_preserves_manual_and_other_group_links' "$GROUP_MODULE"
+          ! grep -Eq 'call_salla|general_ledger|qoyod' "$REQUIRED_MODULE" "$GROUP_MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install dependencies
+        run: yarn install --non-interactive
+      - name: Run focused helper tests
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/componentCreationRules.test.js
+          src/lib/productGroupPicker.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce visible UI contract
+        working-directory: .
+        run: |
+          COMPONENT=frontend/src/pages/MezanComponentsProduction.jsx
+          PRODUCT=frontend/src/components/products/ProductOperationsEditor.jsx
+          grep -q 'تصنيف التجهيز — إلزامي' "$COMPONENT"
+          grep -q 'تمنع شحن المنتج حتى تكتمل الخدمة' "$COMPONENT"
+          grep -q 'إضافة مجموعة' "$PRODUCT"
+          grep -q 'product-group-picker-modal' "$PRODUCT"
