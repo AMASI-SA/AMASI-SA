@@ -39,6 +39,8 @@ jobs:
           pytest-asyncio
           openpyxl
           cryptography
+          bcrypt
+          PyJWT
           reportlab
           python-multipart
           pymupdf
