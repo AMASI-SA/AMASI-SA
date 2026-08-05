@@ -11,6 +11,8 @@ on:
       - "backend/tests/test_dashboard_ads_hourly_spend_v1.py"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/lib/dashboardPlatformSpendClient.js"
+      - "frontend/src/lib/dashboardPlatformSpendClient.test.js"
       - "frontend/src/services/dashboardAdsSpend.js"
       - "frontend/src/services/dashboardAdsSpend.test.js"
       - ".github/workflows/prod-dashboard-platform-spend-hourly-v1.yml"
@@ -84,6 +86,7 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/DashboardAdsSpendCard.test.jsx
+          src/lib/dashboardPlatformSpendClient.test.js
           src/services/dashboardAdsSpend.test.js
           src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
@@ -94,6 +97,7 @@ jobs:
         working-directory: .
         run: |
           CARD=frontend/src/components/DashboardAdsSpendCard.jsx
+          CLIENT=frontend/src/lib/dashboardPlatformSpendClient.js
           SERVICE=frontend/src/services/dashboardAdsSpend.js
           grep -q 'dashboard-ads-spend-hourly-chart' "$CARD"
           grep -q 'dashboard-ads-spend-daily-chart' "$CARD"
@@ -102,8 +106,9 @@ jobs:
           grep -q '"meta"' "$SERVICE"
           grep -q '"tiktok"' "$SERVICE"
           grep -q '"google"' "$SERVICE"
-          grep -q '/integrations-v2/dashboard/ads-platform-spend' "$SERVICE"
-          grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$SERVICE"
+          grep -q '/integrations-v2/dashboard/ads-platform-spend' "$CLIENT"
+          grep -q '/integrations-v2/dashboard/ads-platform-spend/refresh' "$CLIENT"
+          grep -q 'loadDashboardPlatformSpend' "$SERVICE"
           ! grep -q 'المصروف المحاسبي' "$CARD"
-          ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE"
-          ! grep -Eq '(api|axios)\.(put|patch|delete)\(' "$CARD" "$SERVICE"
+          ! grep -q 'booked_ad_expense_sar' "$CARD" "$SERVICE" "$CLIENT"
+          ! grep -Eq '(api|axios)\.(put|patch|delete)\(' "$CARD" "$SERVICE" "$CLIENT"
