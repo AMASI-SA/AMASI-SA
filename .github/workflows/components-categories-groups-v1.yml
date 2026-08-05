@@ -1,0 +1,83 @@
+name: Components Categories and Groups V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/component_workspace_cost_compat_routes.py"
+      - "backend/tests/test_component_categories_groups_v1.py"
+      - "frontend/src/pages/MezanComponents.jsx"
+      - "frontend/src/pages/MezanComponentsOrganization.jsx"
+      - "frontend/src/pages/MezanComponentsOrganization.test.jsx"
+      - "frontend/src/services/mezanComponentOrganization.js"
+      - ".github/workflows/components-categories-groups-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          pytest pytest-asyncio fastapi "pydantic>=2" httpx pymongo motor
+          cryptography openpyxl bcrypt PyJWT reportlab pillow
+          python-multipart qrcode arabic-reshaper python-bidi
+      - name: Compile organization layer
+        run: >-
+          python -m py_compile
+          component_workspace_cost_compat_routes.py
+          tests/test_component_categories_groups_v1.py
+      - name: Run focused backend tests
+        run: python -m pytest -q --tb=short tests/test_component_categories_groups_v1.py
+      - name: Enforce metadata-only boundary
+        working-directory: .
+        run: |
+          MODULE=backend/component_workspace_cost_compat_routes.py
+          grep -q 'component_categories_groups_v1' "$MODULE"
+          grep -q 'historical_orders_unchanged' "$MODULE"
+          grep -q 'generated_group_name' "$MODULE"
+          ! grep -Eq 'call_salla|general_ledger.*(insert|update)|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"
+
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install dependencies
+        run: yarn install --non-interactive
+      - name: Test organization helpers
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/pages/MezanComponentsOrganization.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce UI contract
+        working-directory: .
+        run: |
+          PAGE=frontend/src/pages/MezanComponentsOrganization.jsx
+          grep -q 'التصنيفات والقروبات' "$PAGE"
+          grep -q 'اسم القروب التلقائي' "$PAGE"
+          grep -q 'تعديل التصنيفات' "$PAGE"
+          grep -q 'الطلبات أو الفواتير السابقة' "$PAGE"
