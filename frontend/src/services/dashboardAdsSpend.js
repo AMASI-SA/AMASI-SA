@@ -1,4 +1,4 @@
-import api from "../lib/api";
+import { loadDashboardPlatformSpend } from "../lib/dashboardPlatformSpendClient";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HOUR_RE = /^(?:[01]\d|2[0-3]):00$/;
@@ -143,11 +143,12 @@ export async function getDashboardAdsSpend({
     let refreshError = "";
     if (refresh) {
         try {
-            const response = await api.post(
-                "/integrations-v2/dashboard/ads-platform-spend/refresh",
-                { date_from: safeFrom, date_to: safeTo },
-            );
-            responseData = response.data;
+            responseData = await loadDashboardPlatformSpend({
+                dateFrom: safeFrom,
+                dateTo: safeTo,
+                refresh: true,
+                maxAgeMs: 0,
+            });
         } catch (requestError) {
             refreshError = errorMessage(
                 requestError,
@@ -157,11 +158,12 @@ export async function getDashboardAdsSpend({
     }
 
     if (!responseData) {
-        const response = await api.get(
-            "/integrations-v2/dashboard/ads-platform-spend",
-            { params: { date_from: safeFrom, date_to: safeTo } },
-        );
-        responseData = response.data;
+        responseData = await loadDashboardPlatformSpend({
+            dateFrom: safeFrom,
+            dateTo: safeTo,
+            refresh: false,
+            maxAgeMs: 0,
+        });
     }
 
     return {
