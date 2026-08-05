@@ -8,9 +8,12 @@ export const CAMPAIGN_RESULTS_SOURCES = Object.freeze(["salla", "platform"]);
 const STORAGE_PREFIX = "mezan-marketing-results-source-v1:";
 const SNAPCHAT_ACCOUNT_STORAGE = "mezan-snapchat-manager-account-v1";
 const SNAPCHAT_ACCOUNTS_STORAGE = "mezan-snapchat-manager-accounts-v1";
+const SNAPCHAT_RETURN_RANGE_STORAGE = "mezan-snapchat-manager-return-range-v1";
+const SNAPCHAT_RETURN_RANGE_MAX_AGE_MS = 30 * 60 * 1000;
 const snapshots = new Map();
 let forceAccountToday = true;
 let manualRangeSelected = false;
+let restoredReturnRange = null;
 let campaignRequestSequence = 0;
 let latestCampaignResponseSequence = 0;
 
@@ -42,6 +45,87 @@ function safeAccount(value = {}) {
     timezone,
     local_today: localToday,
   };
+}
+
+function validDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function normalizeReturnRange(value = {}) {
+  if (!value || typeof value !== "object") return null;
+  const rawFrom = String(value.date_from || value.dateFrom || "").trim();
+  const rawTo = String(value.date_to || value.dateTo || "").trim();
+  if (!validDate(rawFrom) || !validDate(rawTo)) return null;
+  const [dateFrom, dateTo] = rawFrom <= rawTo
+    ? [rawFrom, rawTo]
+    : [rawTo, rawFrom];
+  const savedAt = Number(value.saved_at || value.savedAt || Date.now());
+  return {
+    date_from: dateFrom,
+    date_to: dateTo,
+    account_id: String(value.account_id || value.accountId || "").trim() || null,
+    saved_at: Number.isFinite(savedAt) ? savedAt : Date.now(),
+  };
+}
+
+function isSnapchatAdsManagerLocation(locationLike = typeof window !== "undefined" ? window.location : null) {
+  try {
+    const pathname = String(locationLike?.pathname || "").replace(/\/+$/, "") || "/";
+    if (pathname !== "/ads-manager") return false;
+    const provider = new URLSearchParams(locationLike?.search || "").get("provider");
+    return String(provider || "").toLowerCase() === "snapchat";
+  } catch {
+    return false;
+  }
+}
+
+function clearStoredReturnRange() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(SNAPCHAT_RETURN_RANGE_STORAGE);
+  } catch {
+    // The in-memory state remains sufficient for the current SPA session.
+  }
+}
+
+function readStoredReturnRange() {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(
+      window.sessionStorage.getItem(SNAPCHAT_RETURN_RANGE_STORAGE) || "null",
+    );
+    const normalized = normalizeReturnRange(parsed);
+    if (!normalized) {
+      clearStoredReturnRange();
+      return null;
+    }
+    if (Date.now() - normalized.saved_at > SNAPCHAT_RETURN_RANGE_MAX_AGE_MS) {
+      clearStoredReturnRange();
+      return null;
+    }
+    return normalized;
+  } catch {
+    clearStoredReturnRange();
+    return null;
+  }
+}
+
+function returnRangeForCurrentPage() {
+  if (!isSnapchatAdsManagerLocation()) return null;
+  const candidate = restoredReturnRange || readStoredReturnRange();
+  if (!candidate) return null;
+  const selectedAccount = snapchatSelectedAccountId();
+  if (
+    candidate.account_id
+    && selectedAccount
+    && candidate.account_id !== selectedAccount
+  ) {
+    restoredReturnRange = null;
+    clearStoredReturnRange();
+    return null;
+  }
+  restoredReturnRange = candidate;
+  return candidate;
 }
 
 export function applyEffectiveCampaignDelivery(payload) {
@@ -169,9 +253,48 @@ export function snapchatSelectedAccount() {
   return snapchatAvailableAccounts().find((account) => account.account_id === selectedId) || null;
 }
 
+export function clearSnapchatRestoredReturnRange() {
+  restoredReturnRange = null;
+  clearStoredReturnRange();
+}
+
+export function rememberSnapchatAdsManagerReturnRange({
+  dateFrom = "",
+  dateTo = "",
+  accountId = "",
+} = {}) {
+  const normalized = normalizeReturnRange({
+    dateFrom,
+    dateTo,
+    accountId,
+    savedAt: Date.now(),
+  });
+  if (!normalized) return null;
+  restoredReturnRange = normalized;
+  manualRangeSelected = true;
+  forceAccountToday = false;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(
+        SNAPCHAT_RETURN_RANGE_STORAGE,
+        JSON.stringify(normalized),
+      );
+    } catch {
+      // The same-tab SPA return still uses the in-memory state.
+    }
+  }
+  return { ...normalized };
+}
+
+export function snapchatRestoredReturnRange() {
+  const range = returnRangeForCurrentPage();
+  return range ? { ...range } : null;
+}
+
 export function setSnapchatSelectedAccount(accountId) {
   const normalized = String(accountId || "").trim();
   writeSelectedAccount(normalized);
+  clearSnapchatRestoredReturnRange();
   forceAccountToday = true;
   manualRangeSelected = false;
   clearCampaignReportSnapshot("snapchat");
@@ -184,11 +307,18 @@ export function setSnapchatSelectedAccount(accountId) {
 }
 
 export function prepareSnapchatAccountPage() {
+  const returnRange = returnRangeForCurrentPage();
+  if (returnRange) {
+    manualRangeSelected = true;
+    forceAccountToday = false;
+    return;
+  }
   forceAccountToday = true;
   manualRangeSelected = false;
 }
 
 export function markSnapchatManualRange() {
+  clearSnapchatRestoredReturnRange();
   manualRangeSelected = true;
   forceAccountToday = false;
 }
@@ -214,7 +344,14 @@ api.interceptors.request.use((config) => {
   const selectedAccountId = snapchatSelectedAccountId();
   if (selectedAccountId) params.account_id = selectedAccountId;
 
-  if (forceAccountToday && !manualRangeSelected) {
+  const returnRange = returnRangeForCurrentPage();
+  if (returnRange) {
+    params.from_date = returnRange.date_from;
+    params.to_date = returnRange.date_to;
+    if (returnRange.account_id) params.account_id = returnRange.account_id;
+    manualRangeSelected = true;
+    forceAccountToday = false;
+  } else if (forceAccountToday && !manualRangeSelected) {
     delete params.from_date;
     delete params.to_date;
     forceAccountToday = false;
@@ -275,6 +412,7 @@ api.interceptors.response.use((response) => {
   ) {
     clearStoredSnapchatAccounts();
     snapshots.delete("snapchat");
+    clearSnapchatRestoredReturnRange();
     forceAccountToday = true;
     manualRangeSelected = false;
     const retryConfig = {
