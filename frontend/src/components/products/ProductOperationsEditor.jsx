@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-    CheckCircle,
     Cube,
     FolderSimple,
     LinkSimple,
     MagnifyingGlass,
     Package,
-    Plus,
     SpinnerGap,
     Trash,
     WarningCircle,
     Wrench,
-    X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -28,7 +25,6 @@ import {
     filterProductGroups,
     groupNamesForResource,
     resourceMatchesCategory,
-    toggleSelectedGroup,
 } from "../../lib/productGroupPicker";
 
 function errorCode(error, fallback) {
@@ -87,9 +83,6 @@ export default function ProductOperationsEditor({ productId }) {
     const [serviceQuery, setServiceQuery] = useState("");
     const [componentQuery, setComponentQuery] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("");
-    const [groupPickerOpen, setGroupPickerOpen] = useState(false);
-    const [groupKind, setGroupKind] = useState("service");
-    const [selectedGroupIds, setSelectedGroupIds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
 
@@ -122,14 +115,10 @@ export default function ProductOperationsEditor({ productId }) {
         () => (data.resources || []).filter((row) => !row.linked_to_product),
         [data.resources],
     );
-    const linkedGroups = useMemo(
-        () => groups.filter((group) => group.linked_to_product),
-        [groups],
-    );
-    const pickerGroups = useMemo(
-        () => filterProductGroups(groups, { categoryId: categoryFilter, kind: groupKind }),
-        [groups, categoryFilter, groupKind],
-    );
+    const categoryGroups = useMemo(() => [
+        ...filterProductGroups(groups, { categoryId: categoryFilter, kind: "service" }),
+        ...filterProductGroups(groups, { categoryId: categoryFilter, kind: "component" }),
+    ], [groups, categoryFilter]);
 
     const filterRows = (kind, query) => {
         const needle = query.trim().toLowerCase();
@@ -201,28 +190,15 @@ export default function ProductOperationsEditor({ productId }) {
         }
     }
 
-    function openGroupPicker() {
-        if (!categoryFilter) {
-            toast.error("اختر تصنيف التجهيز أولًا.");
-            return;
-        }
-        setSelectedGroupIds([]);
-        setGroupKind("service");
-        setGroupPickerOpen(true);
-    }
-
-    async function addSelectedGroups() {
-        if (!selectedGroupIds.length) return;
+    async function addGroup(group) {
         setBusy(true);
         try {
-            const result = await linkProductGroups(productId, selectedGroupIds);
+            const result = await linkProductGroups(productId, [group.id]);
             setData(result);
-            setSelectedGroupIds([]);
-            setGroupPickerOpen(false);
-            toast.success("تمت إضافة المجموعات وربط عناصرها بالمنتج دون تكرار");
+            toast.success(`تمت إضافة مجموعة ${group.name}`);
             window.dispatchEvent(new CustomEvent("mezan:product-resource-links-changed", { detail: { productId } }));
         } catch (error) {
-            toast.error(errorCode(error, "تعذر ربط المجموعات"));
+            toast.error(errorCode(error, "تعذر ربط المجموعة"));
         } finally {
             setBusy(false);
         }
@@ -249,15 +225,12 @@ export default function ProductOperationsEditor({ productId }) {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h2 className="font-black">خدمات ومكوّنات المنتج</h2>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">اختر تصنيف التجهيز لعرض خدماته ومكوّناته ومجموعاته فقط.</p>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">اختر تصنيف التجهيز؛ تظهر مجموعاته أولًا ثم الخدمات والمكوّنات المفردة.</p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                    <select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setSelectedGroupIds([]); }} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black" data-testid="product-resource-category-filter">
-                        <option value="">اختر التصنيف</option>
-                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                    </select>
-                    <button type="button" onClick={openGroupPicker} disabled={!categoryFilter} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-40" data-testid="open-product-group-picker"><Plus className="ml-1 inline" />إضافة مجموعة</button>
-                </div>
+                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black" data-testid="product-resource-category-filter">
+                    <option value="">اختر التصنيف</option>
+                    {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
             </div>
 
             <div className="rounded-xl border border-violet-200 bg-violet-100/70 p-3 text-xs font-bold leading-6 text-violet-950">
@@ -299,51 +272,43 @@ export default function ProductOperationsEditor({ productId }) {
                 )}
             </>}
 
-            <section className="rounded-2xl border border-violet-200 bg-white p-3" data-testid="linked-product-groups">
-                <div className="flex items-center justify-between gap-3"><h3 className="font-black"><FolderSimple className="ml-1 inline text-violet-700" />المجموعات المضافة ({linkedGroups.length})</h3>{!categoryFilter && <span className="text-[11px] font-bold text-slate-400">اختر التصنيف لإضافة مجموعة</span>}</div>
-                {!linkedGroups.length ? <p className="mt-2 text-xs text-slate-400">لا توجد مجموعات مرتبطة بالمنتج.</p> : <div className="mt-3 grid gap-2 lg:grid-cols-2">{linkedGroups.map((group) => (
-                    <article key={group.id} className="rounded-xl border border-violet-100 bg-violet-50/50 p-3">
-                        <div className="flex items-start justify-between gap-3"><div><div className="font-black text-violet-950">{group.name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكوّنات"} · {group.resources?.length || 0} عناصر</div></div><button type="button" disabled={busy} onClick={() => removeGroup(group)} className="rounded-lg border border-rose-200 p-2 text-rose-700"><Trash /></button></div>
-                        <div className="mt-2 flex flex-wrap gap-1">{(group.resources || []).map((resource) => <span key={resource.id} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-700">{resource.name}</span>)}</div>
-                    </article>
-                ))}</div>}
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-3">
-                <h3 className="font-black">المرتبط بالمنتج مباشرة ({linked.length})</h3>
-                {!linked.length ? <p className="mt-2 text-xs text-slate-400">لا توجد خدمات أو مكوّنات مرتبطة بالمنتج مباشرة.</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{linked.map((resource) => {
-                    const names = groupNamesForResource(groups, resource.group_ids);
-                    return <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div className="min-w-0"><div className="truncate font-bold">{resource.name}</div><div className="text-[11px] text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · الكمية {resource.product_quantity || 1}</div>{names.length > 0 && <div className="mt-1 text-[10px] font-bold text-violet-700">من: {names.join("، ")}</div>}</div>{resource.manual_link ? <button type="button" disabled={busy} onClick={() => unlink(resource)} className="rounded-lg border border-rose-200 p-2 text-rose-700" title="إلغاء الربط اليدوي"><Trash /></button> : <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">من مجموعة</span>}</div>;
-                })}</div>}
-            </section>
-
             {!categoryFilter ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">اختر تصنيف التجهيز لعرض خدماته ومكوّناته.</div>
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">اختر تصنيف التجهيز لعرض مجموعاته وخدماته ومكوّناته.</div>
             ) : (
-                <div className="grid gap-3 xl:grid-cols-2">
-                    <ResourcePicker title="الخدمات" Icon={Wrench} rows={services} query={serviceQuery} setQuery={setServiceQuery} onLink={link} busy={busy} />
-                    <ResourcePicker title="المكوّنات" Icon={Cube} rows={components} query={componentQuery} setQuery={setComponentQuery} onLink={link} busy={busy} />
-                </div>
-            )}
+                <>
+                    <section className="rounded-2xl border border-violet-200 bg-white p-3" data-testid="product-groups-inline">
+                        <h3 className="font-black"><FolderSimple className="ml-1 inline text-violet-700" />المجموعات ({categoryGroups.length})</h3>
+                        {!categoryGroups.length ? <p className="mt-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-400">لا توجد مجموعات ضمن التصنيف المحدد.</p> : <div className="mt-3 grid gap-2 lg:grid-cols-2">{categoryGroups.map((group) => (
+                            <article key={group.id} className={`rounded-xl border p-3 ${group.linked_to_product ? "border-emerald-200 bg-emerald-50/50" : "border-violet-100 bg-violet-50/40"}`}>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="font-black text-violet-950">{group.name}</div>
+                                        <div className="mt-1 text-[11px] font-bold text-slate-500">{group.group_kind === "service" ? "مجموعة خدمات" : "مجموعة مكوّنات"} · {group.resources?.length || 0} عناصر</div>
+                                    </div>
+                                    {group.linked_to_product ? (
+                                        <button type="button" disabled={busy} onClick={() => removeGroup(group)} className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700"><Trash className="ml-1 inline" />إزالة</button>
+                                    ) : (
+                                        <button type="button" disabled={busy} onClick={() => addGroup(group)} className="shrink-0 rounded-lg bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><LinkSimple className="ml-1 inline" />ربط المجموعة</button>
+                                    )}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1">{(group.resources || []).map((resource) => <span key={resource.id} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-700">{resource.name}</span>)}</div>
+                            </article>
+                        ))}</div>}
+                    </section>
 
-            {groupPickerOpen && (
-                <div className="fixed inset-0 z-[170] flex items-end justify-center bg-slate-950/60 sm:items-center sm:p-4" dir="rtl" data-testid="product-group-picker-modal">
-                    <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl">
-                        <div className="flex items-start justify-between gap-3"><div><h3 className="text-xl font-black">إضافة مجموعة</h3><p className="mt-1 text-xs font-bold text-slate-500">تظهر فقط مجموعات التصنيف المحدد، وتُربط عناصر المجموعات دون تكرار.</p></div><button type="button" onClick={() => setGroupPickerOpen(false)} className="rounded-xl border p-2"><X /></button></div>
-                        <div className="mt-4 grid grid-cols-2 gap-2">
-                            <button type="button" onClick={() => { setGroupKind("service"); setSelectedGroupIds([]); }} className={`rounded-xl border p-3 text-sm font-black ${groupKind === "service" ? "border-violet-500 bg-violet-50 text-violet-950" : "border-slate-200"}`}><Wrench className="ml-1 inline" />مجموعات الخدمات</button>
-                            <button type="button" onClick={() => { setGroupKind("component"); setSelectedGroupIds([]); }} className={`rounded-xl border p-3 text-sm font-black ${groupKind === "component" ? "border-violet-500 bg-violet-50 text-violet-950" : "border-slate-200"}`}><Cube className="ml-1 inline" />مجموعات المكوّنات</button>
-                        </div>
-                        <div className="mt-4 space-y-2">
-                            {!pickerGroups.length ? <div className="rounded-xl border border-dashed p-6 text-center text-sm font-bold text-slate-500">لا توجد مجموعات من هذا النوع داخل التصنيف المحدد.</div> : pickerGroups.map((group) => {
-                                const linkedAlready = group.linked_to_product;
-                                const checked = selectedGroupIds.includes(String(group.id));
-                                return <label key={group.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${linkedAlready ? "cursor-not-allowed bg-slate-100 opacity-70" : checked ? "border-violet-500 bg-violet-50" : "border-slate-200"}`}><input type="checkbox" disabled={linkedAlready} checked={linkedAlready || checked} onChange={() => setSelectedGroupIds(toggleSelectedGroup(selectedGroupIds, group.id))} className="mt-1 h-4 w-4 accent-violet-700" /><span className="min-w-0 flex-1"><span className="block font-black">{group.name}</span><span className="mt-1 block text-[11px] font-bold text-slate-500">{(group.resources || []).map((resource) => resource.name).join(" · ")}</span></span>{linkedAlready && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-800">مضافة</span>}</label>;
-                            })}
-                        </div>
-                        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setGroupPickerOpen(false)} className="rounded-xl border px-4 py-3 font-black">إلغاء</button><button type="button" onClick={addSelectedGroups} disabled={busy || !selectedGroupIds.length} className="rounded-xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />}إضافة المحدد</button></div>
+                    <section className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <h3 className="font-black">المرتبط بالمنتج مباشرة ({linked.length})</h3>
+                        {!linked.length ? <p className="mt-2 text-xs text-slate-400">لا توجد خدمات أو مكوّنات مرتبطة بالمنتج مباشرة.</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{linked.map((resource) => {
+                            const names = groupNamesForResource(groups, resource.group_ids);
+                            return <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div className="min-w-0"><div className="truncate font-bold">{resource.name}</div><div className="text-[11px] text-slate-500">{resource.track_inventory ? "مكوّن" : "خدمة"} · الكمية {resource.product_quantity || 1}</div>{names.length > 0 && <div className="mt-1 text-[10px] font-bold text-violet-700">من: {names.join("، ")}</div>}</div>{resource.manual_link ? <button type="button" disabled={busy} onClick={() => unlink(resource)} className="rounded-lg border border-rose-200 p-2 text-rose-700" title="إلغاء الربط اليدوي"><Trash /></button> : <span className="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">من مجموعة</span>}</div>;
+                        })}</div>}
+                    </section>
+
+                    <div className="grid gap-3 xl:grid-cols-2">
+                        <ResourcePicker title="الخدمات المفردة" Icon={Wrench} rows={services} query={serviceQuery} setQuery={setServiceQuery} onLink={link} busy={busy} />
+                        <ResourcePicker title="المكوّنات المفردة" Icon={Cube} rows={components} query={componentQuery} setQuery={setComponentQuery} onLink={link} busy={busy} />
                     </div>
-                </div>
+                </>
             )}
         </section>
     );
