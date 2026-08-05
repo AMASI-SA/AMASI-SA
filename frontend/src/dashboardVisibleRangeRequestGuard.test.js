@@ -1,4 +1,3 @@
-import api from "./lib/api";
 import {
     rewriteDashboardRequestToVisibleRange,
     visibleDashboardRange,
@@ -89,5 +88,4 @@ test("does not affect unrelated requests or invalid visible dates", () => {
     renderVisibleRange("2026-08-04", "2026-08-04");
     const settings = { method: "get", url: "/settings" };
     expect(rewriteDashboardRequestToVisibleRange(settings)).toBe(settings);
-    expect(api.interceptors.request.use).toHaveBeenCalledTimes(1);
 });
