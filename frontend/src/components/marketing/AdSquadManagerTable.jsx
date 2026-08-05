@@ -8,7 +8,7 @@ import {
     Trash,
 } from "@phosphor-icons/react";
 
-const STATUS_LABELS = {
+const STATUS_LABELS = Object.freeze({
     ACTIVE: "نشطة",
     active: "نشطة",
     ENABLED: "نشطة",
@@ -20,10 +20,31 @@ const STATUS_LABELS = {
     DELETED: "محذوفة",
     deleted: "محذوفة",
     unknown: "غير محسومة",
-};
+});
+
 const SORT_STORAGE_KEY = "mezan-snapchat-adsquad-sort-v1";
 const SORT_EVENT = "mezan:snapchat-adsquad-sort-updated";
 const VALID_SORTS = new Set(["newest", "spend", "active"]);
+const CHECKBOX_WIDTH = 48;
+const NAME_WIDTH = 300;
+
+export const AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER = Object.freeze([
+    "name",
+    "status",
+    "campaign",
+    "delivery",
+    "orders",
+    "cpa",
+    "roas",
+    "spend",
+    "sales",
+    "impressions",
+    "clicks",
+    "ctr",
+    "budget",
+    "optimization",
+    "account",
+]);
 
 function finite(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -119,28 +140,26 @@ function csvEscape(value) {
 
 function csv(rows) {
     const headers = [
-        "اسم المجموعة الإعلانية", "معرف المجموعة", "اسم الحملة", "معرف الحملة",
-        "الحالة", "حالة التسليم", "الصرف", "المشتريات", "المبيعات", "ROAS",
-        "CPA", "الظهور", "النقرات", "CTR", "eCPC", "eCPM", "الميزانية اليومية",
-        "عملة الميزانية", "هدف التحسين", "إستراتيجية المزايدة", "الحساب", "تاريخ البدء",
+        "اسم المجموعة الإعلانية", "معرف المجموعة", "الحالة", "اسم الحملة", "معرف الحملة",
+        "حالة التسليم", "المشتريات", "CPA", "ROAS", "الصرف", "المبيعات",
+        "الظهور", "النقرات", "CTR", "الميزانية اليومية", "عملة الميزانية",
+        "هدف التحسين", "إستراتيجية المزايدة", "الحساب", "تاريخ البدء",
     ];
     const body = rows.map((row) => [
         row.ad_squad_name,
         row.ad_squad_id,
+        statusLabel(row.status),
         row.campaign_name,
         row.campaign_id,
-        statusLabel(row.status),
         deliveryLabel(row),
-        row.spend_sar,
         row.orders,
-        row.sales_sar,
-        row.roas,
         row.cpa_sar,
+        row.roas,
+        row.spend_sar,
+        row.sales_sar,
         row.impressions,
         row.swipes,
         row.ctr_pct,
-        row.cpc_sar,
-        row.cpm_sar,
         row.budget?.daily_native,
         row.budget?.currency,
         row.optimization_goal,
@@ -206,6 +225,12 @@ function DeliveryCell({ row }) {
     );
 }
 
+function sortableValue(row, key) {
+    if (key === "name") return String(row.ad_squad_name || "");
+    if (key === "status") return activeStatus(row.status) ? 1 : 0;
+    return finite(row[key]);
+}
+
 export default function AdSquadManagerTable({
     rows = [],
     totals = {},
@@ -235,8 +260,8 @@ export default function AdSquadManagerTable({
         if (!columnSort?.key) return preferred;
         const direction = columnSort.direction === "asc" ? 1 : -1;
         return [...preferred].sort((left, right) => {
-            const a = columnSort.key === "name" ? left.ad_squad_name : finite(left[columnSort.key]);
-            const b = columnSort.key === "name" ? right.ad_squad_name : finite(right[columnSort.key]);
+            const a = sortableValue(left, columnSort.key);
+            const b = sortableValue(right, columnSort.key);
             if (a === null && b === null) return 0;
             if (a === null) return 1;
             if (b === null) return -1;
@@ -244,6 +269,7 @@ export default function AdSquadManagerTable({
             return String(a).localeCompare(String(b), "ar", { numeric: true }) * direction;
         });
     }, [rows, preferredSort, columnSort]);
+
     const visible = showSelectedOnly
         ? sorted.filter((row) => selected.has(rowKey(row)))
         : sorted;
@@ -277,8 +303,16 @@ export default function AdSquadManagerTable({
         }));
     }
 
+    const stickyStatusRight = CHECKBOX_WIDTH + NAME_WIDTH;
+
     return (
-        <section className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm" data-testid="ad-squad-manager-table" dir="rtl" data-sort-mode={preferredSort}>
+        <section
+            className="overflow-hidden rounded-b-2xl border border-t-0 border-slate-200 bg-white shadow-sm"
+            data-testid="ad-squad-manager-table"
+            data-native-column-layout="true"
+            dir="rtl"
+            data-sort-mode={preferredSort}
+        >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
                 <div className="flex items-center gap-1">
                     <button
@@ -312,48 +346,49 @@ export default function AdSquadManagerTable({
                 <table className="w-max min-w-full border-separate border-spacing-0 text-right text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
-                            <th className="sticky right-0 z-20 w-12 border-b border-l border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                            <th className="sticky right-0 z-40 w-12 border-b border-l border-slate-200 bg-slate-50 px-3 py-3 text-center">
                                 <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="تحديد كل المجموعات الظاهرة" className="h-4 w-4 accent-emerald-600" />
                             </th>
-                            <th className="sticky right-12 z-20 min-w-[300px] border-b border-l border-slate-200 bg-slate-50 px-4 py-3"><button type="button" onClick={() => sortBy("name")} className="font-black">اسم المجموعة الإعلانية</button></th>
-                            <th className="min-w-[240px] border-b border-slate-200 px-4 py-3 font-black">الحملة</th>
-                            <th className="min-w-[120px] border-b border-slate-200 px-4 py-3 font-black">الحالة</th>
-                            <th className="min-w-[220px] border-b border-slate-200 px-4 py-3 font-black">حالة التسليم</th>
-                            <th className="min-w-[125px] border-b border-slate-200 px-4 py-3"><button type="button" onClick={() => sortBy("orders")} className="font-black">النتائج</button></th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3"><button type="button" onClick={() => sortBy("cpa_sar")} className="font-black">تكلفة النتيجة</button></th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
-                            <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black">مرات الظهور</th>
-                            <th className="min-w-[115px] border-b border-slate-200 px-4 py-3 font-black">النقرات</th>
-                            <th className="min-w-[105px] border-b border-slate-200 px-4 py-3 font-black">CTR</th>
-                            <th className="min-w-[130px] border-b border-slate-200 px-4 py-3 font-black">ROAS</th>
-                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3 font-black">المبيعات</th>
-                            <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black">الميزانية اليومية</th>
-                            <th className="min-w-[170px] border-b border-slate-200 px-4 py-3 font-black">هدف التحسين</th>
-                            <th className="min-w-[220px] border-b border-slate-200 px-4 py-3 font-black">الحساب الإعلاني</th>
+                            <th className="sticky right-12 z-30 min-w-[300px] border-b border-l border-slate-200 bg-slate-50 px-4 py-3" data-column-id="name"><button type="button" onClick={() => sortBy("name")} className="font-black">اسم المجموعة الإعلانية</button></th>
+                            <th className="sticky z-30 min-w-[120px] border-b border-l border-slate-200 bg-slate-50 px-4 py-3" style={{ right: stickyStatusRight }} data-column-id="status"><button type="button" onClick={() => sortBy("status")} className="font-black">الحالة</button></th>
+                            <th className="min-w-[240px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="campaign">الحملة</th>
+                            <th className="min-w-[220px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="delivery">حالة التسليم</th>
+                            <th className="min-w-[125px] border-b border-slate-200 px-4 py-3" data-column-id="orders"><button type="button" onClick={() => sortBy("orders")} className="font-black">النتائج</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3" data-column-id="cpa"><button type="button" onClick={() => sortBy("cpa_sar")} className="font-black">تكلفة النتيجة</button></th>
+                            <th className="min-w-[130px] border-b border-slate-200 px-4 py-3" data-column-id="roas"><button type="button" onClick={() => sortBy("roas")} className="font-black">ROAS</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3" data-column-id="spend"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="sales">المبيعات</th>
+                            <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="impressions">مرات الظهور</th>
+                            <th className="min-w-[115px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="clicks">النقرات</th>
+                            <th className="min-w-[105px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="ctr">CTR</th>
+                            <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="budget">الميزانية اليومية</th>
+                            <th className="min-w-[170px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="optimization">هدف التحسين</th>
+                            <th className="min-w-[220px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="account">الحساب الإعلاني</th>
                         </tr>
                     </thead>
                     <tbody>
                         {visible.map((row) => {
                             const key = rowKey(row);
                             const checked = selected.has(key);
+                            const background = checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50";
                             return (
                                 <tr key={key} className={`${checked ? "bg-emerald-50/60" : "bg-white"} group hover:bg-slate-50`}>
-                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-0 z-10 border-b border-l border-slate-100 px-3 py-4 text-center`}><input type="checkbox" checked={checked} onChange={() => toggle(row)} aria-label={`تحديد ${row.ad_squad_name}`} className="h-4 w-4 accent-emerald-600" /></td>
-                                    <td className={`${checked ? "bg-emerald-50" : "bg-white group-hover:bg-slate-50"} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`}><div className="max-w-[270px] truncate font-extrabold text-slate-950" title={row.ad_squad_name}>{row.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div>{row.start_time && <div className="mt-1 text-[10px] font-bold text-slate-400">بدء: {new Date(row.start_time).toLocaleDateString("ar-SA")}</div>}</td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><div className="max-w-[210px] truncate font-bold text-slate-700" title={row.campaign_name}>{row.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.campaign_id || "—"}</div></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><StatusCell row={row} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><DeliveryCell row={row} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={number(row.orders)} detail="مشتريات" /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={money(row.cpa_sar)} detail="لكل عملية شراء" /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={money(row.spend_sar)} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={number(row.impressions)} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={number(row.swipes)} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={ratio(row.ctr_pct, "%")} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={ratio(row.roas, "×")} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={money(row.sales_sar)} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><Metric value={finite(row.budget?.daily_native) === null ? "—" : `${number(row.budget.daily_native)} ${row.budget?.currency || ""}`} /></td>
-                                    <td className="border-b border-slate-100 px-4 py-4 font-bold text-slate-700">{row.optimization_goal || "—"}</td>
-                                    <td className="border-b border-slate-100 px-4 py-4"><div className="max-w-[200px] truncate font-bold text-slate-700">{row.account_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.account_id}</div></td>
+                                    <td className={`${background} sticky right-0 z-20 border-b border-l border-slate-100 px-3 py-4 text-center`}><input type="checkbox" checked={checked} onChange={() => toggle(row)} aria-label={`تحديد ${row.ad_squad_name}`} className="h-4 w-4 accent-emerald-600" /></td>
+                                    <td className={`${background} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`} data-column-id="name"><div className="max-w-[270px] truncate font-extrabold text-slate-950" title={row.ad_squad_name}>{row.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div>{row.start_time && <div className="mt-1 text-[10px] font-bold text-slate-400">بدء: {new Date(row.start_time).toLocaleDateString("ar-SA")}</div>}</td>
+                                    <td className={`${background} sticky z-10 border-b border-l border-slate-100 px-4 py-4`} style={{ right: stickyStatusRight }} data-column-id="status"><StatusCell row={row} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="campaign"><div className="max-w-[210px] truncate font-bold text-slate-700" title={row.campaign_name}>{row.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.campaign_id || "—"}</div></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="delivery"><DeliveryCell row={row} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="orders"><Metric value={number(row.orders)} detail="مشتريات" /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="cpa"><Metric value={money(row.cpa_sar)} detail="لكل عملية شراء" /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="roas"><Metric value={ratio(row.roas, "×")} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="spend"><Metric value={money(row.spend_sar)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="sales"><Metric value={money(row.sales_sar)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="impressions"><Metric value={number(row.impressions)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="clicks"><Metric value={number(row.swipes)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="ctr"><Metric value={ratio(row.ctr_pct, "%")} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="budget"><Metric value={finite(row.budget?.daily_native) === null ? "—" : `${number(row.budget.daily_native)} ${row.budget?.currency || ""}`} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4 font-bold text-slate-700" data-column-id="optimization">{row.optimization_goal || "—"}</td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="account"><div className="max-w-[200px] truncate font-bold text-slate-700">{row.account_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.account_id}</div></td>
                                 </tr>
                             );
                         })}
@@ -362,7 +397,26 @@ export default function AdSquadManagerTable({
                         )}
                     </tbody>
                     {!!visible.length && (
-                        <tfoot className="bg-slate-50/95 font-black text-slate-800"><tr><td className="sticky right-0 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-3 py-3" /><td className="sticky right-12 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-4 py-3">إجمالي الفترة</td><td className="border-t-2 border-slate-300 px-4 py-3" /><td className="border-t-2 border-slate-300 px-4 py-3" /><td className="border-t-2 border-slate-300 px-4 py-3" /><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.orders)}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.cpa_sar)}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.spend_sar)}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.impressions)}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.swipes)}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{ratio(totals.ctr_pct, "%")}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{ratio(totals.roas, "×")}</td><td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.sales_sar)}</td><td className="border-t-2 border-slate-300 px-4 py-3" /><td className="border-t-2 border-slate-300 px-4 py-3" /><td className="border-t-2 border-slate-300 px-4 py-3" /></tr></tfoot>
+                        <tfoot className="bg-slate-50/95 font-black text-slate-800">
+                            <tr>
+                                <td className="sticky right-0 z-20 border-l border-t-2 border-slate-300 bg-slate-50 px-3 py-3" />
+                                <td className="sticky right-12 z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-4 py-3" data-column-id="name">إجمالي الفترة</td>
+                                <td className="sticky z-10 border-l border-t-2 border-slate-300 bg-slate-50 px-4 py-3" style={{ right: stickyStatusRight }} data-column-id="status" />
+                                <td className="border-t-2 border-slate-300 px-4 py-3" />
+                                <td className="border-t-2 border-slate-300 px-4 py-3" />
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.orders)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.cpa_sar)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{ratio(totals.roas, "×")}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.spend_sar)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.sales_sar)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.impressions)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.swipes)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{ratio(totals.ctr_pct, "%")}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3" />
+                                <td className="border-t-2 border-slate-300 px-4 py-3" />
+                                <td className="border-t-2 border-slate-300 px-4 py-3" />
+                            </tr>
+                        </tfoot>
                     )}
                 </table>
             </div>
