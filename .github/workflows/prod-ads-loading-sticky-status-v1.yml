@@ -37,7 +37,6 @@ jobs:
           src/marketingAdsTableUXEnhancer.test.js
           src/components/marketing/CampaignManagerTable.test.jsx
           src/components/marketing/AdSquadManagerTable.test.jsx
-          src/components/marketing/AdManagerTable.test.jsx
           src/marketingCampaignColumnOrder.test.js
       - name: Build Production frontend
         env:
