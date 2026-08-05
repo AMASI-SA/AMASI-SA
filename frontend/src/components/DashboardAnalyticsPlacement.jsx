@@ -12,6 +12,7 @@ const GA_HOST_TEST_ID = "dashboard-unified-ga4-host";
 const PROFIT_HOST_TEST_ID = "dashboard-unified-profit-host";
 const ADS_HOST_TEST_ID = "dashboard-unified-ads-host";
 const TRAFFIC_HOST_TEST_ID = "dashboard-ga4-traffic-host";
+const LIVE_PROFIT_ATTRIBUTE = "data-dashboard-unified-profit-live";
 const LEGACY_SECTION_SELECTORS = [
     '[data-testid="dashboard-salary-accrual-section"]',
 ];
@@ -57,6 +58,26 @@ function readDashboardDateRange(root = document) {
 
 function sameRange(left, right) {
     return left.fromDate === right.fromDate && left.toDate === right.toDate;
+}
+
+export function profitSummaryCandidates(root = document) {
+    return [...root.querySelectorAll(PROFIT_SUMMARY_SELECTOR)]
+        .filter((node) => node instanceof HTMLElement);
+}
+
+/**
+ * React owns the executive summary. Moving its DOM node into the report grid
+ * works until React refreshes the selected date; React then creates a new live
+ * node at the original position while the moved node becomes a stale duplicate.
+ * Prefer the candidate outside the placement host, because that is the newest
+ * React-owned node. The placement observer swaps it into the centre column.
+ */
+export function newestLiveProfitCandidate(root = document, profitHost = null) {
+    const candidates = profitSummaryCandidates(root);
+    const outsideHost = candidates.filter((node) => node.parentElement !== profitHost);
+    return outsideHost[outsideHost.length - 1]
+        || candidates[candidates.length - 1]
+        || null;
 }
 
 function compactGaStyles() {
@@ -132,8 +153,14 @@ export default function DashboardAnalyticsPlacement({ active = false }) {
             setDateRange((current) => sameRange(current, next) ? current : next);
         };
 
+        const rememberOriginalPosition = (candidate) => {
+            originalParent = candidate?.parentElement || null;
+            originalNextSibling = candidate?.nextSibling || null;
+        };
+
         const restoreProfit = () => {
             if (!currentProfit || !originalParent?.isConnected) return;
+            currentProfit.removeAttribute(LIVE_PROFIT_ATTRIBUTE);
             if (originalNextSibling?.parentElement === originalParent) {
                 originalParent.insertBefore(currentProfit, originalNextSibling);
             } else {
@@ -166,55 +193,84 @@ export default function DashboardAnalyticsPlacement({ active = false }) {
             return column;
         };
 
+        const placeProfitCandidate = (candidate) => {
+            if (!candidate || !currentProfitHost) return false;
+            if (candidate === currentProfit && candidate.parentElement === currentProfitHost) {
+                return false;
+            }
+
+            // A date/filter refresh may have produced a new React-owned card in
+            // the original Dashboard flow. Drop the stale moved node and place
+            // the newest live card in the same centre host. This keeps one
+            // interactive summary and prevents the frozen duplicate below.
+            rememberOriginalPosition(candidate);
+            if (currentProfit && currentProfit !== candidate) {
+                currentProfit.removeAttribute(LIVE_PROFIT_ATTRIBUTE);
+                if (currentProfit.parentElement === currentProfitHost) {
+                    currentProfitHost.removeChild(currentProfit);
+                }
+            }
+            currentProfit = candidate;
+            currentProfit.setAttribute(LIVE_PROFIT_ATTRIBUTE, "true");
+            currentProfit.classList.add("h-full");
+            currentProfitHost.replaceChildren(currentProfit);
+            return true;
+        };
+
+        const createPlacement = (candidate) => {
+            rememberOriginalPosition(candidate);
+            if (!originalParent) return false;
+
+            currentGrid = document.createElement("div");
+            currentGrid.className = "mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-stretch";
+            currentGrid.setAttribute("data-testid", GRID_TEST_ID);
+            currentGrid.setAttribute("dir", "rtl");
+
+            currentGaHost = createColumn(GA_HOST_TEST_ID);
+            currentProfitHost = createColumn(PROFIT_HOST_TEST_ID);
+            currentAdsHost = createColumn(ADS_HOST_TEST_ID);
+            currentTrafficHost = document.createElement("div");
+            currentTrafficHost.className = "mt-6";
+            currentTrafficHost.setAttribute("data-testid", TRAFFIC_HOST_TEST_ID);
+
+            // RTL auto-placement: first child = right, second = centre,
+            // third = left.
+            currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost);
+            originalParent.insertBefore(currentGrid, candidate);
+            placeProfitCandidate(candidate);
+            currentGrid.insertAdjacentElement("afterend", currentTrafficHost);
+
+            setHosts({
+                ga: currentGaHost,
+                ads: currentAdsHost,
+                traffic: currentTrafficHost,
+            });
+            return true;
+        };
+
         const ensurePlacement = () => {
             if (disposed) return;
             pruneLegacyDashboardSections(document);
             syncRange();
 
-            const candidate = document.querySelector(PROFIT_SUMMARY_SELECTOR);
+            if (currentGrid && !currentGrid.isConnected) {
+                removeHosts();
+            }
+
+            const candidate = newestLiveProfitCandidate(document, currentProfitHost);
             if (!candidate) {
                 frame = window.requestAnimationFrame(ensurePlacement);
                 return;
             }
 
-            const candidateAlreadyPlaced = candidate.parentElement === currentProfitHost;
-            if (!currentGrid || !currentGrid.isConnected || !candidateAlreadyPlaced) {
-                if (currentGrid?.isConnected) removeHosts();
-
-                originalParent = candidate.parentElement;
-                originalNextSibling = candidate.nextSibling;
-                if (!originalParent) {
+            if (!currentGrid) {
+                if (!createPlacement(candidate)) {
                     frame = window.requestAnimationFrame(ensurePlacement);
-                    return;
                 }
-
-                currentProfit = candidate;
-                currentGrid = document.createElement("div");
-                currentGrid.className = "mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3 xl:items-stretch";
-                currentGrid.setAttribute("data-testid", GRID_TEST_ID);
-                currentGrid.setAttribute("dir", "rtl");
-
-                currentGaHost = createColumn(GA_HOST_TEST_ID);
-                currentProfitHost = createColumn(PROFIT_HOST_TEST_ID);
-                currentAdsHost = createColumn(ADS_HOST_TEST_ID);
-                currentTrafficHost = document.createElement("div");
-                currentTrafficHost.className = "mt-6";
-                currentTrafficHost.setAttribute("data-testid", TRAFFIC_HOST_TEST_ID);
-
-                // RTL auto-placement: first child = right, second = centre,
-                // third = left.
-                currentGrid.append(currentGaHost, currentProfitHost, currentAdsHost);
-                originalParent.insertBefore(currentGrid, candidate);
-                currentProfitHost.appendChild(candidate);
-                candidate.classList.add("h-full");
-                currentGrid.insertAdjacentElement("afterend", currentTrafficHost);
-
-                setHosts({
-                    ga: currentGaHost,
-                    ads: currentAdsHost,
-                    traffic: currentTrafficHost,
-                });
+                return;
             }
+
+            placeProfitCandidate(candidate);
         };
 
         ensurePlacement();
@@ -268,6 +324,7 @@ export {
     HOST_TEST_ID,
     LEGACY_SECTION_HEADINGS,
     LEGACY_SECTION_SELECTORS,
+    LIVE_PROFIT_ATTRIBUTE,
     PROFIT_HOST_TEST_ID,
     PROFIT_SUMMARY_SELECTOR,
     TRAFFIC_HOST_TEST_ID,
