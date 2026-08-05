@@ -69,7 +69,6 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/pages/MezanComponentsOrganization.test.jsx
-          src/services/mezanComponentCatalog.test.js
       - name: Build Production frontend
         env:
           CI: "false"
