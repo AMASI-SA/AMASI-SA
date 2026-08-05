@@ -1,6 +1,10 @@
 import {
+    ADS_DATE_RANGE_APPLIED_EVENT,
+    APPLIED_RANGE_GUARD_WINDOW_MS,
+    recentAppliedDashboardRange,
+    rememberAppliedDashboardRange,
+    resetAppliedDashboardRangeForTests,
     rewriteDashboardRequestToVisibleRange,
-    visibleDashboardRange,
 } from "./dashboardVisibleRangeRequestGuard";
 
 jest.mock("./lib/api", () => ({
@@ -12,48 +16,63 @@ jest.mock("./lib/api", () => ({
     },
 }));
 
-function renderVisibleRange(from, to = from) {
-    document.body.innerHTML = `
-        <div
-            data-testid="advanced-filters"
-            data-from-date="${from}"
-            data-to-date="${to}"
-        ></div>
-    `;
-}
-
 beforeEach(() => {
     document.body.innerHTML = "";
     jest.clearAllMocks();
+    resetAppliedDashboardRangeForTests();
 });
 
-test("reads the date range currently visible in AdvancedFilters", () => {
-    renderVisibleRange("2026-08-04", "2026-08-04");
-    expect(visibleDashboardRange()).toEqual({
+test("keeps the authoritative request dates when no range was just applied", () => {
+    document.body.innerHTML = `
+        <div data-testid="advanced-filters"
+             data-from-date="2026-08-05"
+             data-to-date="2026-08-05"></div>
+    `;
+    const config = {
+        method: "get",
+        url: "/dashboard-v2?from_date=2026-08-04&to_date=2026-08-04",
+    };
+
+    // DOM text must never replace the React request dates.
+    expect(rewriteDashboardRequestToVisibleRange(config, document, 10_000))
+        .toBe(config);
+});
+
+test("captures the date picker apply event", () => {
+    window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
+        detail: { dateFrom: "2026-08-04", dateTo: "2026-08-04" },
+    }));
+
+    expect(recentAppliedDashboardRange()).toEqual({
         from: "2026-08-04",
         to: "2026-08-04",
     });
 });
 
-test("rewrites a stale Dashboard V2 request to the visible selected date", () => {
-    renderVisibleRange("2026-08-04", "2026-08-04");
+test("repairs a stale silent Dashboard request immediately after apply", () => {
+    rememberAppliedDashboardRange(
+        { dateFrom: "2026-08-04", dateTo: "2026-08-04" },
+        1_000,
+    );
 
     const next = rewriteDashboardRequestToVisibleRange({
         method: "get",
         url: "/dashboard-v2?from_date=2026-08-05&to_date=2026-08-05&payment_methods=mada",
-    });
+    }, document, 1_100);
 
     const params = new URLSearchParams(next.url.split("?")[1]);
-    expect(next.url.split("?")[0]).toBe("/dashboard-v2");
     expect(params.get("from_date")).toBe("2026-08-04");
     expect(params.get("to_date")).toBe("2026-08-04");
     expect(params.get("payment_methods")).toBe("mada");
     expect(next.params).toBeUndefined();
-    expect(next._mezanDashboardVisibleRangeGuard).toBe(true);
+    expect(next._mezanDashboardAppliedRangeGuard).toBe(true);
 });
 
-test("rewrites stale params-object dates and preserves other filters", () => {
-    renderVisibleRange("2026-08-01", "2026-08-04");
+test("preserves params-object filters while repairing stale dates", () => {
+    rememberAppliedDashboardRange(
+        { dateFrom: "2026-08-01", dateTo: "2026-08-04" },
+        2_000,
+    );
 
     const next = rewriteDashboardRequestToVisibleRange({
         method: "get",
@@ -63,7 +82,7 @@ test("rewrites stale params-object dates and preserves other filters", () => {
             to_date: "2026-08-05",
             shipping_companies: "SMSA",
         },
-    });
+    }, document, 2_100);
 
     const params = new URLSearchParams(next.url.split("?")[1]);
     expect(params.get("from_date")).toBe("2026-08-01");
@@ -71,21 +90,44 @@ test("rewrites stale params-object dates and preserves other filters", () => {
     expect(params.get("shipping_companies")).toBe("SMSA");
 });
 
-test("leaves a matching Dashboard request unchanged", () => {
-    renderVisibleRange("2026-08-04", "2026-08-04");
+test("leaves the correct newly applied request unchanged", () => {
+    rememberAppliedDashboardRange(
+        { dateFrom: "2026-08-04", dateTo: "2026-08-04" },
+        3_000,
+    );
     const config = {
         method: "get",
         url: "/dashboard-v2?from_date=2026-08-04&to_date=2026-08-04",
     };
-    expect(rewriteDashboardRequestToVisibleRange(config)).toBe(config);
+
+    expect(rewriteDashboardRequestToVisibleRange(config, document, 3_100))
+        .toBe(config);
 });
 
-test("does not affect unrelated requests or invalid visible dates", () => {
-    renderVisibleRange("invalid", "2026-08-04");
-    const dashboard = { method: "get", url: "/dashboard-v2?from_date=2026-08-05" };
-    expect(rewriteDashboardRequestToVisibleRange(dashboard)).toBe(dashboard);
+test("does not permanently override later Dashboard filters", () => {
+    rememberAppliedDashboardRange(
+        { dateFrom: "2026-08-04", dateTo: "2026-08-04" },
+        4_000,
+    );
+    const later = {
+        method: "get",
+        url: "/dashboard-v2?from_date=2026-08-05&to_date=2026-08-05",
+    };
 
-    renderVisibleRange("2026-08-04", "2026-08-04");
+    expect(rewriteDashboardRequestToVisibleRange(
+        later,
+        document,
+        4_000 + APPLIED_RANGE_GUARD_WINDOW_MS + 1,
+    )).toBe(later);
+});
+
+test("ignores invalid ranges and unrelated endpoints", () => {
+    expect(rememberAppliedDashboardRange({
+        dateFrom: "invalid",
+        dateTo: "2026-08-04",
+    }, 5_000)).toBeNull();
+
     const settings = { method: "get", url: "/settings" };
-    expect(rewriteDashboardRequestToVisibleRange(settings)).toBe(settings);
+    expect(rewriteDashboardRequestToVisibleRange(settings, document, 5_100))
+        .toBe(settings);
 });
