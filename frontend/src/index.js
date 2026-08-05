@@ -15,6 +15,7 @@ import "@/marketingSnapchatDeliveryStateEnhancer";
 import "@/marketingAdsLiveWorkspaceEnhancer";
 import "@/marketingAdsTableUXEnhancer";
 import "@/campaignProfitabilityProductCostLink";
+import "@/dashboardVisibleRangeRequestGuard";
 import "@/dashboardExecutivePlatformSpendInterceptor";
 import "@/reviewedPreparationSelection.css";
 import "@/reviewMezanImageEnhancer";
