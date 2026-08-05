@@ -42,6 +42,7 @@ export async function addMezanComponentPreview(component) {
             unit: component.unit || (component.kind === "stock_component" ? "piece" : "job"),
             track_inventory: component.kind === "stock_component",
             requires_preparation: component.kind === "service" && component.requires_preparation === true,
+            category_ids: component.category_ids || [],
             unit_cost: component.unit_cost,
             description: component.description || "",
         });
@@ -63,6 +64,7 @@ export async function updateMezanComponent(componentId, component) {
             kind: component.kind,
             unit: component.unit || (component.kind === "stock_component" ? "piece" : "job"),
             requires_preparation: component.kind === "service" && component.requires_preparation === true,
+            category_ids: component.category_ids || [],
             unit_cost: component.unit_cost,
             description: component.description || "",
         });
