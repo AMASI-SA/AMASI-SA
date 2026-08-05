@@ -1,0 +1,56 @@
+name: Production Campaign Product Link Persistence V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/campaignProfitabilityProductCostLink.js"
+      - "frontend/src/campaignProfitabilityProductCostLink.test.js"
+      - "frontend/src/campaignProfitabilityProductLinkPersistence.js"
+      - "frontend/src/campaignProfitabilityProductLinkPersistence.css"
+      - "frontend/src/campaignProfitabilityProductLinkPersistence.test.js"
+      - ".github/workflows/prod-campaign-product-link-persistence-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test campaign product navigation
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/campaignProfitabilityProductCostLink.test.js
+          src/campaignProfitabilityProductLinkPersistence.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce persistent product-link contract
+        working-directory: .
+        run: |
+          FIX=frontend/src/campaignProfitabilityProductLinkPersistence.js
+          CSS=frontend/src/campaignProfitabilityProductLinkPersistence.css
+          INDEX=frontend/src/index.js
+          grep -q 'data-mezan-profit-product-persistent-link' "$FIX"
+          grep -q 'فتح المنتج وإضافة التكلفة' "$FIX"
+          grep -q 'rememberSnapchatRangeBeforeProductNavigation' "$FIX"
+          grep -q 'attr(data-mezan-profit-product-persistent-label)' "$CSS"
+          grep -q 'campaignProfitabilityProductLinkPersistence' "$INDEX"
+          ! grep -Eq 'general_ledger|qoyod|campaign.*(update|pause|activate)' "$FIX"
