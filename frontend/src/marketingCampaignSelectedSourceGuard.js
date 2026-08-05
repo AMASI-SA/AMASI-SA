@@ -1,5 +1,8 @@
 import api from "./lib/api";
-import { campaignResultsSource } from "./marketingCampaignResultSource";
+import {
+  campaignResultsSource,
+  getCampaignReportSnapshot,
+} from "./marketingCampaignResultSource";
 
 const CAMPAIGN_REPORT_PATH = "/integrations-v2/snapchat_ads/campaign-report";
 const RETRY_FIELD = "_mezanSelectedSourceRetry";
@@ -156,9 +159,32 @@ export function applySelectedSallaCampaignMetrics(payload) {
     orders: "salla_results.created_orders",
     sales: "salla_results.sales_sar",
     spend: "snapchat",
+    final_response_stage: true,
+    snapshot_hydrated: true,
     read_only: true,
   };
   return payload;
+}
+
+export function finalizeSelectedCampaignSource(
+  response,
+  selectedSource = campaignResultsSource("snapchat"),
+  snapshot = getCampaignReportSnapshot("snapchat"),
+) {
+  if (!isSnapchatCampaignReportResponse(response) || selectedSource !== "salla") {
+    return response;
+  }
+
+  const payload = responsePayload(response);
+  applySelectedSallaCampaignMetrics(payload);
+  if (snapshot && snapshot !== payload && typeof snapshot === "object") {
+    applySelectedSallaCampaignMetrics(snapshot);
+  }
+  response.config = {
+    ...(response.config || {}),
+    _mezanSallaSourceFinalized: true,
+  };
+  return response;
 }
 
 api.interceptors.response.use(async (response) => {
@@ -177,10 +203,7 @@ api.interceptors.response.use(async (response) => {
     });
   }
 
-  if (selectedSource === "salla") {
-    applySelectedSallaCampaignMetrics(payload);
-  }
-  return response;
+  return finalizeSelectedCampaignSource(response, selectedSource);
 });
 
 export const SELECTED_SOURCE_GUARD_POLICY = Object.freeze({
@@ -188,6 +211,8 @@ export const SELECTED_SOURCE_GUARD_POLICY = Object.freeze({
   salla_sales_field: "salla_results.sales_sar",
   spend_source: "snapchat",
   retries_stale_platform_response_once: true,
+  runs_after_stale_response_guard: true,
+  hydrates_raw_snapshot_after_final_response: true,
   provider_writes_allowed: false,
   accounting_writes_allowed: false,
 });
