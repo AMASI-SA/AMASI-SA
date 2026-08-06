@@ -78,6 +78,18 @@ test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
     });
 });
 
+test("opening fulfillment without a stage renders the compact mobile work overview", () => {
+    mockSearchParams = new URLSearchParams("");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="fulfillment-mobile-overview"');
+    expect(markup).toContain("ملخص العمل اليوم");
+    expect(markup).toContain("المهام السريعة");
+    expect(markup).toContain("مراجعة الطلبات");
+    expect(markup).toContain("ملفات التجهيز");
+    expect(markup).toContain("استلام المورد");
+});
+
 test("pending review is embedded under the organized preparation tabs", () => {
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
