@@ -64,14 +64,24 @@ async def filter_pending_by_current_status(
     kept: list[dict[str, Any]] = []
     removed = 0
 
-    for item in orders:
-        order_number = str(item.get("order_number") or "").strip()
-        if not order_number:
-            continue
-        current = await db.unified_orders.find_one(
-            {"user_id": owner_id, "order_number": order_number},
+    # Fetch current states in one query. The previous per-order find_one loop
+    # made each manual-status tab wait on hundreds of sequential Mongo calls.
+    order_numbers = [
+        str(item.get("order_number") or "").strip()
+        for item in orders
+        if str(item.get("order_number") or "").strip()
+    ]
+    unique_order_numbers = list(dict.fromkeys(order_numbers))
+    current_by_order_number: dict[str, dict[str, Any]] = {}
+    if unique_order_numbers:
+        cursor = db.unified_orders.find(
+            {
+                "user_id": owner_id,
+                "order_number": {"$in": unique_order_numbers},
+            },
             {
                 "_id": 0,
+                "order_number": 1,
                 "order_status": 1,
                 "order_status_slug": 1,
                 "order_status_native": 1,
@@ -80,6 +90,16 @@ async def filter_pending_by_current_status(
                 "updated_at": 1,
             },
         )
+        async for current in cursor:
+            order_number = str(current.get("order_number") or "").strip()
+            if order_number:
+                current_by_order_number.setdefault(order_number, current)
+
+    for item in orders:
+        order_number = str(item.get("order_number") or "").strip()
+        if not order_number:
+            continue
+        current = current_by_order_number.get(order_number)
         # Legacy orders without a unified row keep the inbox decision. For any
         # order known to Orders V2, the unified current state is authoritative.
         if current and not current_status_matches(current, status):
@@ -157,3 +177,4 @@ def install_manual_list_current_status_patch() -> None:
         pass
 
     pending_module._current_status_patch_installed = True
+

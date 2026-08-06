@@ -4,14 +4,35 @@ import asyncio
 from qoyod_manual_current_status import filter_pending_by_current_status
 
 
-class _UnifiedOrders:
+class _Cursor:
     def __init__(self, rows):
         self.rows = rows
 
-    async def find_one(self, query, projection=None):
-        key = (query["user_id"], query["order_number"])
-        row = self.rows.get(key)
-        return dict(row) if row else None
+    def __aiter__(self):
+        self._iterator = iter(self.rows)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iterator)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
+class _UnifiedOrders:
+    def __init__(self, rows):
+        self.rows = rows
+        self.find_calls = 0
+
+    def find(self, query, projection=None):
+        self.find_calls += 1
+        owner_id = query["user_id"]
+        order_numbers = set(query["order_number"]["$in"])
+        matches = []
+        for (row_owner_id, order_number), row in self.rows.items():
+            if row_owner_id == owner_id and order_number in order_numbers:
+                matches.append({"order_number": order_number, **dict(row)})
+        return _Cursor(matches)
 
 
 class _DB:
@@ -66,3 +87,32 @@ def test_legacy_order_without_unified_row_keeps_existing_decision():
         status="completed",
     ))
     assert len(result["orders"]) == 1
+
+
+def test_current_status_lookup_is_batched_for_all_orders():
+    db = _DB({
+        ("owner-1", "275957683"): {
+            "order_status": "جاري التوصيل",
+            "order_status_slug": "in_delivery",
+        },
+        ("owner-1", "275899999"): {
+            "order_status": "جاري التوصيل",
+            "order_status_slug": "in_delivery",
+        },
+    })
+    result = asyncio.run(filter_pending_by_current_status(
+        db,
+        {
+            "orders": [
+                {"order_number": "275957683"},
+                {"order_number": "275899999"},
+            ],
+            "counts": {"returned": 2},
+        },
+        user_id="main",
+        orders_user_id="owner-1",
+        status="in_delivery",
+    ))
+    assert len(result["orders"]) == 2
+    assert db.unified_orders.find_calls == 1
+

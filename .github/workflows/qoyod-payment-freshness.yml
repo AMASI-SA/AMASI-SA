@@ -8,10 +8,12 @@ on:
       - "backend/qoyod_auto_payment_freshness.py"
       - "backend/qoyod_auto_per_order_isolation.py"
       - "backend/qoyod_manual_current_status.py"
+      - "backend/integrations/qoyod/reconciliation_v2.py"
       - "backend/tests/test_qoyod_auto_send_latest_payment.py"
       - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
       - "backend/tests/test_qoyod_auto_send_per_order_isolation.py"
       - "backend/tests/test_qoyod_manual_current_status.py"
+      - "backend/tests/test_qoyod_reconciliation_v2.py"
       - ".github/workflows/qoyod-payment-freshness.yml"
   workflow_dispatch:
 
@@ -52,6 +54,7 @@ jobs:
             tests/test_qoyod_auto_send_latest_payment.py \
             tests/test_qoyod_auto_send_per_order_isolation.py \
             tests/test_qoyod_manual_current_status.py \
+            tests/test_qoyod_reconciliation_v2.py \
             -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
           status=$?
           cat /tmp/qoyod-payment-freshness.log
@@ -63,3 +66,4 @@ jobs:
           name: qoyod-payment-freshness-log
           path: /tmp/qoyod-payment-freshness.log
           if-no-files-found: ignore
+
