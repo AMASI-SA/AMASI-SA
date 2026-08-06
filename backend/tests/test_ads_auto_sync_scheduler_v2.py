@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import inspect
 
 from fastapi import APIRouter
 
@@ -87,3 +88,31 @@ def test_safe_summary_preserves_account_error_samples():
         "message": "provider rejected the range",
         "retryable": True,
     }]
+
+
+def test_snapchat_call_budget_is_isolated_per_selected_account():
+    source = inspect.getsource(scheduler._refresh_snapchat)
+
+    assert "token_context = SnapchatSyncContext" in source
+    assert "account_context = SnapchatSyncContext" in source
+    assert "provider_calls_total += int(account_context.provider_calls)" in source
+    assert '"provider_call_budget_scope": "per_selected_account"' in source
+    assert '"provider_calls": provider_calls_total' in source
+
+
+def test_safe_summary_preserves_per_account_provider_calls():
+    summary = scheduler._safe_summary({
+        "provider_calls": 263,
+        "provider_call_budget_scope": "per_selected_account",
+        "account_provider_calls": [
+            {"ad_account_id": "account-usd", "provider_calls": 132},
+            {"ad_account_id": "account-sar", "provider_calls": 131},
+        ],
+    })
+
+    assert summary["provider_calls"] == 263
+    assert summary["provider_call_budget_scope"] == "per_selected_account"
+    assert summary["account_provider_calls"] == [
+        {"ad_account_id": "account-usd", "provider_calls": 132},
+        {"ad_account_id": "account-sar", "provider_calls": 131},
+    ]
