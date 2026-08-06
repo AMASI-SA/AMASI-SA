@@ -86,6 +86,9 @@ def make_order_engine_router(*args, **kwargs):
     from mobile_reviewed_preparation_routes import (
         make_mobile_reviewed_preparation_router,
     )
+    from mobile_preparation_execution_routes import (
+        make_mobile_preparation_execution_router,
+    )
     from preparation_file_registry import (
         make_preparation_file_registry_router,
     )
@@ -169,6 +172,7 @@ def make_order_engine_router(*args, **kwargs):
         make_reviewed_products_catalog_router(db, current_user),
         make_reviewed_product_sorting_router(db, current_user),
         make_mobile_reviewed_preparation_router(db, current_user),
+        make_mobile_preparation_execution_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
         make_preview_fulfillment_seed_router(db, current_user),
