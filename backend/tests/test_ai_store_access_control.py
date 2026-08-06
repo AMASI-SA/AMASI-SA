@@ -115,6 +115,22 @@ def test_stock_preparation_permissions_follow_operational_roles():
     assert "inventory.preparation.receive" in warehouse_permissions
 
 
+def test_supplier_invoice_edit_permissions_can_be_granted_individually():
+    assignment = validate_assignment({
+        "role_key": "warehouse_operator",
+        "extra_permissions": [
+            "supplier_receiving.product_price.edit",
+            "supplier_receiving.service_price.edit",
+            "supplier_receiving.service.add",
+        ],
+    })
+    permissions = effective_permissions(assignment)
+
+    assert "supplier_receiving.product_price.edit" in permissions
+    assert "supplier_receiving.service_price.edit" in permissions
+    assert "supplier_receiving.service.add" in permissions
+
+
 def test_stock_preparation_responsibility_is_assignable():
     assignment = validate_assignment({
         "role_key": "warehouse_operator",

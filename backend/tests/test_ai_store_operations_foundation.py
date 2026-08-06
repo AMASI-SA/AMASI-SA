@@ -5,6 +5,16 @@ def test_owner_role_has_all_permissions():
     assert set(ROLE_CATALOG["owner"]) == PERMISSIONS
 
 
+def test_supplier_invoice_price_and_service_changes_are_explicit_permissions():
+    governed = {
+        "supplier_receiving.product_price.edit",
+        "supplier_receiving.service_price.edit",
+        "supplier_receiving.service.add",
+    }
+    assert governed <= PERMISSIONS
+    assert governed.isdisjoint(ROLE_CATALOG["warehouse_operator"])
+
+
 def test_ai_role_cannot_publish_or_delete_media_by_default():
     permissions = set(ROLE_CATALOG["ai_product_optimizer"])
     assert "products.ai.recommend" in permissions

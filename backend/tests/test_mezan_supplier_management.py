@@ -12,7 +12,7 @@ from mezan_supplier_management_routes import (
 )
 
 
-def test_mezan_supplier_directory_is_independent_from_legacy_and_accounting():
+def test_mezan_supplier_directory_stays_legacy_free_and_supports_v2_accounting():
     source = inspect.getsource(make_mezan_supplier_management_router)
 
     assert MEZAN_SUPPLIERS_V2 == "mezan_suppliers_v2"
@@ -21,7 +21,7 @@ def test_mezan_supplier_directory_is_independent_from_legacy_and_accounting():
     assert "counterparties" not in source
     assert "financial_movements" not in source
     assert '"legacy_supplier_data_used": False' in source
-    assert '"accounting_linked": False' in source
+    assert '"accounting_linked": True' in source
 
 
 def test_supplier_requires_at_least_one_existing_service_identifier():
