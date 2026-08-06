@@ -1,4 +1,4 @@
-name: Run Snapchat All Ads Campaign Total V3
+name: Run Snapchat Ads Manager Attribution V3
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: run-snap-all-ads-campaign-total-v3
+  group: run-snap-ads-manager-attribution-v3
   cancel-in-progress: true
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Apply root source correction
+      - name: Apply Ads Manager attribution correction
         run: python .github/scripts/apply_snap_all_ads_campaign_total_v3.py
 
       - name: Install backend dependencies
@@ -42,8 +42,13 @@ jobs:
         working-directory: backend
         run: |
           python -m py_compile \
+            integrations_control_center/snapchat_freshness_impl_v6.py \
+            integrations_control_center/snapchat_account_hourly_refresh.py \
+            integrations_control_center/snapchat_account_timezone_manager.py \
+            integrations_control_center/snapchat_account_hourly_chart.py \
             integrations_control_center/snapchat_platform_source_integrity.py \
-            integrations_control_center/snapchat_campaign_created_order_semantics.py \
+            integrations_control_center/snapchat_adsquad_performance.py \
+            integrations_control_center/snapchat_ad_performance.py \
             integrations_control_center/__init__.py
           python -m pytest -q --tb=short \
             tests/test_snapchat_platform_source_integrity_v1.py \
@@ -74,14 +79,15 @@ jobs:
           CI: 'false'
         run: yarn build
 
-      - name: Enforce root source contracts
+      - name: Enforce Ads Manager attribution contracts
         run: |
-          FILE=backend/integrations_control_center/snapchat_platform_source_integrity.py
-          grep -q 'REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})' "$FILE"
-          grep -q 'merge_direct_spend_with_campaign_metrics' "$FILE"
-          grep -q 'complete_campaign_breakdown_sum' "$FILE"
-          grep -q 'legacy_hour_conversions_hidden_while_pending' "$FILE"
-          grep -q 'مشتريات Snapchat — جميع الحملات' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+          grep -q 'ADS_MANAGER_ACTION_REPORT_TIME: Final\[str\] = "impression"' backend/integrations_control_center/snapchat_freshness_impl_v6.py
+          grep -q 'action_report_time or ACTION_REPORT_TIME' backend/integrations_control_center/snapchat_account_hourly_refresh.py
+          grep -q 'account_local_action_report_time' backend/integrations_control_center/snapchat_account_timezone_manager.py
+          grep -q 'ADS_MANAGER_ACTION_REPORT_TIME' backend/integrations_control_center/snapchat_platform_source_integrity.py
+          grep -q 'ADS_MANAGER_ACTION_REPORT_TIME' backend/integrations_control_center/snapchat_adsquad_performance.py
+          grep -q 'ADS_MANAGER_ACTION_REPORT_TIME' backend/integrations_control_center/snapchat_ad_performance.py
+          grep -q 'legacy_hour_conversions_hidden_while_pending' backend/integrations_control_center/snapchat_platform_source_integrity.py
           grep -q 'snapchat-platform-total-pending' frontend/src/pages/MarketingPlatformWorkspace.jsx
 
       - name: Commit focused correction
@@ -90,10 +96,20 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add \
             .github/workflows/prod-snap-platform-source-isolation-v1.yml \
+            backend/integrations_control_center/snapchat_freshness_impl_v6.py \
+            backend/integrations_control_center/snapchat_account_hourly_refresh.py \
+            backend/integrations_control_center/snapchat_account_timezone_manager.py \
+            backend/integrations_control_center/snapchat_account_hourly_chart.py \
             backend/integrations_control_center/snapchat_platform_source_integrity.py \
+            backend/integrations_control_center/snapchat_adsquad_performance.py \
+            backend/integrations_control_center/snapchat_ad_performance.py \
             backend/tests/test_snapchat_platform_source_integrity_v1.py \
             frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx \
             frontend/src/pages/MarketingPlatformWorkspace.jsx \
             frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
-          git commit -m "fix(prod-snap): derive All Ads conversions from campaign totals"
+          if git diff --cached --quiet; then
+            echo ADS_MANAGER_ATTRIBUTION_ALREADY_APPLIED
+            exit 0
+          fi
+          git commit -m "fix(prod-snap): align Ads Manager attribution by impression time"
           git push origin HEAD:fix/prod-snap-all-ads-campaign-total-v3
