@@ -245,6 +245,37 @@ def _preflight_qoyod_invoice(
         payload, salla_total=salla_total)
 
 
+_STALE_PAYMENT_METHODS = frozenset({
+    "", "waiting", "pending", "unknown", "بانتظار الدفع",
+})
+
+
+def _resolve_current_payment_method(canon: dict, facts: dict) -> Optional[str]:
+    """Prefer current canonical payment data over stale transitional values.
+
+    Some historical unified-order rows retained the value waiting in the
+    Order Engine even after a Salla refresh persisted the real method (for
+    example tabby_installment) in the latest inbox canonical payload.
+    Waiting is a payment state, not an accounting method, and must never be
+    mapped to a Qoyod account.
+    """
+    engine_method = str(
+        facts.get("payment_method") or facts.get("payment_method_native") or ""
+    ).strip()
+    canonical_method = str(
+        canon.get("payment_method") or canon.get("payment_method_native") or ""
+    ).strip()
+
+    engine_is_stale = engine_method.lower() in _STALE_PAYMENT_METHODS
+    canonical_is_real = (
+        bool(canonical_method)
+        and canonical_method.lower() not in _STALE_PAYMENT_METHODS
+    )
+    if engine_is_stale and canonical_is_real:
+        return canonical_method
+    return engine_method or canonical_method or None
+
+
 def _overlay_order_engine_facts(canon: dict, facts: dict) -> dict:
     """Overlay trusted Orders V2 facts without mutating the inbox snapshot.
 
@@ -1458,11 +1489,7 @@ async def manual_send_one(
         db, user_id=orders_user_id or user_id,
         order_number=str(order_number),
     )
-    payment_method = (
-        payment_facts.get("payment_method")
-        or canon.get("payment_method")
-        or canon.get("payment_method_native")
-    )
+    payment_method = _resolve_current_payment_method(canon, payment_facts)
     receiving_bank_name = payment_facts.get("receiving_bank_name")
     canon = _overlay_order_engine_facts(canon, payment_facts)
     _assert_sar_currency(canon)
