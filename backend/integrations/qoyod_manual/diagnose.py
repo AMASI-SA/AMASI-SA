@@ -15,7 +15,7 @@ from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
     _build_invoice_payload, _q2, _riyadh_today_iso,
     _overlay_order_engine_facts, _within_amount_tolerance,
-    ManualSendRefused,
+    _assert_sar_currency, ManualSendRefused,
 )
 
 
@@ -45,6 +45,15 @@ async def diagnose_totals(db, *, user_id: str,
         order_number=str(order_number),
     )
     canon = _overlay_order_engine_facts(canon, payment_facts)
+    try:
+        _assert_sar_currency(canon)
+    except ManualSendRefused as exc:
+        return {
+            "ok": False,
+            "code": exc.code,
+            "message": exc.message,
+            "detail": exc.extra,
+        }
     if not canon.get("items"):
         return {"ok": False, "code": "no_items",
                 "message": "لا توجد بنود لهذا الطلب في الحمولة الأساسية"}
