@@ -19,6 +19,8 @@ Guards (immutable, only these):
     G4: Payment method must resolve to a Qoyod account_id via the
         EXISTING `qoyod_settings.payment_method_mapping` — no new
         mapping table is created.
+    G5: Invoice currency must be SAR until the tenant's Qoyod
+        multi-currency and exchange-rate treatment is explicitly verified.
 """
 from __future__ import annotations
 
@@ -376,6 +378,29 @@ def _f(v: Any, default: float = 0.0) -> float:
         return float(v) if v is not None else default
     except (TypeError, ValueError):
         return default
+
+
+def _assert_sar_currency(canon: dict) -> str:
+    """Refuse unverified foreign-currency invoices before any Qoyod write."""
+    raw = (canon or {}).get("currency") or (canon or {}).get("currency_code")
+    if isinstance(raw, dict):
+        raw = raw.get("code") or raw.get("currency") or raw.get("value")
+    currency = str(raw or "SAR").strip().upper()
+    if currency != "SAR":
+        raise ManualSendRefused(
+            "unsupported_invoice_currency",
+            (
+                f"عملة الطلب {currency} لم يُتحقق من إعدادها وسعر صرفها في "
+                "قيود؛ عُزل الطلب قبل إنشاء العميل أو المنتج أو الفاتورة."
+            ),
+            {
+                "currency": currency,
+                "supported_currencies": ["SAR"],
+                "qoyod_write_performed": False,
+                "requires_currency_configuration_review": True,
+            },
+        )
+    return currency
 
 
 def _to_int(v: Any) -> Optional[int]:
@@ -1440,6 +1465,7 @@ async def manual_send_one(
     )
     receiving_bank_name = payment_facts.get("receiving_bank_name")
     canon = _overlay_order_engine_facts(canon, payment_facts)
+    _assert_sar_currency(canon)
     salla_total = _q2(canon.get("total_amount"))
     # The inbox snapshot may carry the generic/old payment alias.  Orders V2
     # is authoritative for the current payment method.
