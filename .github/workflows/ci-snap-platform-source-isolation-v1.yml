@@ -1,0 +1,125 @@
+name: Validate Snapchat Platform Source Isolation V1
+
+on:
+  pull_request:
+    branches:
+      - ci/prod-snap-platform-source-isolation-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-snap-platform-source-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  source-integrity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify candidate scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only "origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }}" | sort > /tmp/changed.txt
+          cat > /tmp/expected.txt <<'EOF'
+          .github/workflows/prod-snap-platform-source-isolation-v1.yml
+          backend/integrations_control_center/__init__.py
+          backend/integrations_control_center/snapchat_campaign_created_order_semantics.py
+          backend/integrations_control_center/snapchat_platform_source_integrity.py
+          backend/tests/test_snapchat_platform_source_integrity_v1.py
+          frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          frontend/src/components/marketing/CampaignManagerTable.jsx
+          frontend/src/components/marketing/CampaignManagerTable.test.jsx
+          frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+          frontend/src/marketingCampaignProfitabilityHydration.js
+          frontend/src/marketingCampaignProfitabilityHydration.test.js
+          frontend/src/pages/MarketingPlatformWorkspace.jsx
+          frontend/src/services/marketingPerformance.js
+          EOF
+          diff -u /tmp/expected.txt /tmp/changed.txt
+          echo SNAP_PLATFORM_SOURCE_SCOPE_OK
+
+      - name: Install backend dependencies without bcrypt
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 motor
+          httpx pytest pytest-asyncio openpyxl cryptography reportlab
+          python-multipart PyJWT
+
+      - name: Compile backend modules
+        run: >-
+          python -m py_compile
+          backend/integrations_control_center/snapchat_platform_source_integrity.py
+          backend/integrations_control_center/snapchat_campaign_created_order_semantics.py
+          backend/integrations_control_center/__init__.py
+
+      - name: Run backend source, audit, CAPI and scheduler contracts
+        working-directory: backend
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_snapchat_platform_source_integrity_v1.py
+          tests/test_snapchat_order_source_audit_v1.py
+          tests/test_snapchat_capi_purchases_v3.py
+          tests/test_snapchat_capi_cancellation_v3.py
+          tests/test_ads_auto_sync_scheduler_v2.py
+
+      - name: Enforce backend ownership contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=backend/integrations_control_center/snapchat_platform_source_integrity.py
+          grep -q 'PLATFORM_TOTAL_GRANULARITY = "TOTAL"' "$FILE"
+          grep -q 'PLATFORM_TOTAL_BREAKDOWN = "campaign"' "$FILE"
+          grep -q 'fetch_account_total_direct_metrics' "$FILE"
+          grep -q 'REQUIRED_ACCOUNT_TOTAL_FIELDS' "$FILE"
+          grep -q 'all_ads_direct_account_total' "$FILE"
+          grep -q 'salla_metrics_applied_to_platform.*False' "$FILE"
+          grep -q 'total_snapshot_is_authoritative' "$FILE"
+          grep -q 'if result_source != "salla":' backend/integrations_control_center/snapchat_campaign_created_order_semantics.py
+          ! grep -n '^from auth import ensure_user_settings' backend/integrations_control_center/snapchat_campaign_created_order_semantics.py
+          echo SNAP_PLATFORM_SOURCE_BACKEND_CONTRACT_OK
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run frontend source-isolation tests
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignProfitabilityHydration.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/SnapchatOrderSourceAudit.test.jsx
+
+      - name: Build Production frontend
+        working-directory: frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce frontend source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'snapchat_platform_source_no_salla_hydration' frontend/src/marketingCampaignProfitabilityHydration.js
+          grep -q 'resultSource === "salla"' frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx
+          grep -q 'قيمة مشتريات Snapchat' frontend/src/components/marketing/CampaignManagerTable.jsx
+          grep -q 'مشتريات Snapchat — كل الحساب' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+          echo SNAP_PLATFORM_SOURCE_FRONTEND_CONTRACT_OK
