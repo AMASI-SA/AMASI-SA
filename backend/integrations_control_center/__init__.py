@@ -69,18 +69,6 @@ from .snapchat_adsquad_status_delivery_separation import (
 from .snapchat_campaign_catalog_refresh import (
     install_snapchat_campaign_catalog_refresh,
 )
-from .snapchat_campaign_created_order_semantics import (
-    install_fixed_created_order_semantics,
-)
-from .snapchat_campaign_current_catalog_cost import (
-    install_current_catalog_salla_cost_resolution,
-)
-from .snapchat_campaign_profitability import (
-    install_snapchat_campaign_profitability,
-)
-from .snapchat_campaign_profitability_exact_reuse import (
-    install_exact_salla_profitability_reuse,
-)
 from .snapchat_campaign_result_source_routes import (
     attach_snapchat_campaign_result_source_routes,
 )
@@ -123,6 +111,22 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     control plane. Old pages keep their frozen migration contracts while Mezan
     2 does not read legacy advertising credentials or data-feed collections.
     """
+    # The Salla profitability stack imports Dashboard cost/auth modules. Keep it
+    # behind full router composition so CAPI, scheduler and focused provider
+    # modules remain importable in lightweight environments.
+    from .snapchat_campaign_created_order_semantics import (
+        install_fixed_created_order_semantics,
+    )
+    from .snapchat_campaign_current_catalog_cost import (
+        install_current_catalog_salla_cost_resolution,
+    )
+    from .snapchat_campaign_profitability import (
+        install_snapchat_campaign_profitability,
+    )
+    from .snapchat_campaign_profitability_exact_reuse import (
+        install_exact_salla_profitability_reuse,
+    )
+
     install_meta_native_catalog()
     install_snapchat_native_catalog()
     install_snapchat_ads_manager_attribution()

@@ -17,10 +17,7 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from dashboard_v2_routes import _matches_any
-
 from . import snapchat_account_timezone_manager as manager
-from . import snapchat_campaign_profitability as profitability
 
 SOURCE_MODE = "snapchat_salla_created_orders_fixed_v1"
 PROFIT_CACHE_TTL_SECONDS = 5 * 60
@@ -56,6 +53,21 @@ def _float(value: Any) -> float:
     except (TypeError, ValueError, OverflowError):
         return 0.0
     return parsed if parsed == parsed and abs(parsed) != float("inf") else 0.0
+
+
+def _matches_any(value: str, allowed: list[str]) -> bool:
+    """Match report statuses without importing the full Dashboard router."""
+    if not allowed:
+        return True
+    normalized = _text(value).casefold()
+    return any(
+        candidate and (
+            candidate == normalized
+            or candidate in normalized
+            or normalized in candidate
+        )
+        for candidate in (_text(item).casefold() for item in allowed)
+    )
 
 
 def _status_text(order: dict[str, Any]) -> str:
@@ -259,6 +271,8 @@ async def calculate_financial_profitability(
     financial_matched: dict[tuple[str, str], list[dict[str, Any]]],
     campaign_spend: dict[tuple[str, str], float],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
+    from . import snapchat_campaign_profitability as profitability
+
     cache_key = (user_id, account_id, date_from, date_to)
     now = datetime.now(timezone.utc)
     cached = _PROFIT_CACHE.get(cache_key)

@@ -162,14 +162,39 @@ def test_fixed_created_order_semantics_is_gated_to_salla_source():
     assert '"provider_metrics_preserved_for_platform_source": True' in source
 
 
-def test_created_order_auth_import_is_lazy():
+def test_created_order_dependencies_are_lazy_and_local():
     source = Path(
         "integrations_control_center/snapchat_campaign_created_order_semantics.py"
     ).read_text(encoding="utf-8")
     assert "\nfrom auth import ensure_user_settings\n" not in source
-    function_start = source.index("async def build_created_and_financial_outcomes")
-    function_body = source[function_start:function_start + 1200]
-    assert "from auth import ensure_user_settings" in function_body
+    assert "\nfrom dashboard_v2_routes import _matches_any\n" not in source
+    assert "\nfrom . import snapchat_campaign_profitability as profitability\n" not in source
+    assert "def _matches_any(" in source
+
+    outcomes_start = source.index("async def build_created_and_financial_outcomes")
+    outcomes_body = source[outcomes_start:outcomes_start + 1400]
+    assert "from auth import ensure_user_settings" in outcomes_body
+
+    profitability_start = source.index("async def calculate_financial_profitability")
+    profitability_body = source[profitability_start:profitability_start + 900]
+    assert "from . import snapchat_campaign_profitability as profitability" in profitability_body
+
+
+def test_package_lazy_loads_salla_profitability_stack_only_during_router_composition():
+    source = Path("integrations_control_center/__init__.py").read_text(
+        encoding="utf-8"
+    )
+    prefix, router_body = source.split(
+        "def make_integrations_control_center_router", 1
+    )
+    for module in (
+        "snapchat_campaign_created_order_semantics",
+        "snapchat_campaign_current_catalog_cost",
+        "snapchat_campaign_profitability",
+        "snapchat_campaign_profitability_exact_reuse",
+    ):
+        assert module not in prefix
+        assert module in router_body
 
 
 def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
