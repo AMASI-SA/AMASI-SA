@@ -1,0 +1,61 @@
+name: Preparation PDF Media Text Gap V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/preparation_pdf_wrapped_text.py"
+      - "backend/preparation_pdf_compact_operational_layout.py"
+      - "backend/tests/test_preparation_pdf_media_text_gap.py"
+      - ".github/workflows/preparation-pdf-media-text-gap-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  preparation-pdf-contract:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout pull request without Marketplace actions
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "+$env:GITHUB_REF`:refs/remotes/pull/merge"
+          git checkout --detach refs/remotes/pull/merge
+      - name: Verify runner Python
+        shell: pwsh
+        run: python --version
+      - name: Install focused PDF dependencies
+        shell: pwsh
+        working-directory: backend
+        run: >-
+          python -m pip install -q
+          pytest PyMuPDF qrcode pillow reportlab httpx
+          arabic-reshaper python-bidi
+      - name: Compile changed renderer and test
+        shell: pwsh
+        working-directory: backend
+        run: >-
+          python -m py_compile
+          preparation_pdf_wrapped_text.py
+          preparation_pdf_compact_operational_layout.py
+          tests/test_preparation_pdf_media_text_gap.py
+      - name: Run media and text geometry tests
+        shell: pwsh
+        working-directory: backend
+        run: >-
+          python -m pytest -q --tb=short
+          tests/test_preparation_pdf_media_text_gap.py
+      - name: Enforce final renderer contract
+        shell: pwsh
+        run: |
+          $compact = Get-Content backend/preparation_pdf_compact_operational_layout.py -Raw
+          $wrapped = Get-Content backend/preparation_pdf_wrapped_text.py -Raw
+          if ($compact -notmatch 'MEDIA_TO_DETAILS_GAP = 4\.0 \* mm') { throw 'Missing 4 mm compact gap' }
+          if ($compact -notmatch 'detail_top = compact_detail_top\(media_y\)') { throw 'Final renderer does not use gap helper' }
+          if ($compact -match 'detail_top = media_y - 3\.2') { throw 'Old compact offset still present' }
+          if ($wrapped -notmatch 'MEDIA_TO_TEXT_GAP = 4\.0 \* mm') { throw 'Missing fallback gap' }
