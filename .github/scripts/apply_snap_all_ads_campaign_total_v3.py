@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# Applied only on the isolated PR branch; all provider operations remain read-only.
+
 
 def replace_once(path: str, old: str, new: str) -> None:
     file = Path(path)
