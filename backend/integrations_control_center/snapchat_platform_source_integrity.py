@@ -56,6 +56,7 @@ PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
 REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})
+DIRECT_ACCOUNT_TOTAL_FIELDS = ("spend",)
 
 RefreshCallable = Callable[..., Awaitable[dict[str, Any]]]
 ReportCallable = Callable[..., Awaitable[dict[str, Any]]]
@@ -252,12 +253,8 @@ async def fetch_account_total_direct_metrics(
             "start_time": request_start.isoformat(timespec="seconds"),
             "end_time": request_end.isoformat(timespec="seconds"),
             "granularity": PLATFORM_TOTAL_GRANULARITY,
-            "fields": ",".join(STAT_FIELDS),
+            "fields": ",".join(DIRECT_ACCOUNT_TOTAL_FIELDS),
             "omit_empty": "false",
-            "conversion_source_types": CONVERSION_SOURCE_TYPES,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
         },
     )
     metrics, errors, successful_subrequests = extract_account_total_metrics(payload)
@@ -771,6 +768,7 @@ async def refresh_account_total_snapshots(
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
         "direct_account_total_requested": True,
+        "direct_account_request_fields": list(DIRECT_ACCOUNT_TOTAL_FIELDS),
         "account_spend_source": "direct_ad_account_total",
         "account_commercial_totals_source": "complete_campaign_breakdown_sum",
         "request_windows": request_windows,
@@ -1357,6 +1355,7 @@ def install_snapchat_platform_source_integrity() -> None:
 
 
 __all__ = [
+    "DIRECT_ACCOUNT_TOTAL_FIELDS",
     "PLATFORM_TOTAL_BREAKDOWN",
     "PLATFORM_TOTAL_GRANULARITY",
     "PLATFORM_TOTAL_SOURCE_MODE",

@@ -1,7 +1,10 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
 
+import pytest
+
 from integrations_control_center.snapchat_platform_source_integrity import (
+    DIRECT_ACCOUNT_TOTAL_FIELDS,
     PLATFORM_TOTAL_SOURCE_MODE,
     account_local_dates_for_refresh,
     account_local_total_window,
@@ -9,6 +12,7 @@ from integrations_control_center.snapchat_platform_source_integrity import (
     audit_platform_purchase_totals,
     extract_account_total_campaign_rows,
     extract_account_total_metrics,
+    fetch_account_total_direct_metrics,
     merge_direct_spend_with_campaign_metrics,
     total_snapshot_is_authoritative,
 )
@@ -104,6 +108,44 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
     assert metrics["conversion_purchases"] == 16
     assert metrics["spend"] == 382_800_000
     assert metrics["conversion_purchases_value"] == 745_750_000
+
+
+@pytest.mark.asyncio
+async def test_direct_account_request_uses_spend_only_without_conversion_parameters():
+    class CaptureContext:
+        def __init__(self):
+            self.params = None
+
+        async def get_json(self, client, url, *, headers, params=None):
+            self.params = dict(params or {})
+            return {
+                "total_stats": [{
+                    "sub_request_status": "SUCCESS",
+                    "total_stat": {"stats": {"spend": 714_050_000}},
+                }],
+            }
+
+    context = CaptureContext()
+    metrics, errors = await fetch_account_total_direct_metrics(
+        context,
+        object(),
+        "token-not-used",
+        account_id="account-1",
+        request_start=datetime(2026, 8, 6, 0, 0, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert errors == []
+    assert metrics["spend"] == 714_050_000
+    assert context.params["fields"] == "spend"
+    assert tuple(context.params["fields"].split(",")) == DIRECT_ACCOUNT_TOTAL_FIELDS
+    for forbidden in (
+        "conversion_source_types",
+        "swipe_up_attribution_window",
+        "view_attribution_window",
+        "action_report_time",
+    ):
+        assert forbidden not in context.params
 
 
 def test_direct_account_total_accepts_documented_spend_only_payload():

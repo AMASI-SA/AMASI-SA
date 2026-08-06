@@ -303,6 +303,14 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
             for key in ("error_id", "ad_account_id", "code", "message", "retryable", "kind", "error")
             if item.get(key) is not None
         })
+    account_provider_calls = []
+    for item in list(result.get("account_provider_calls") or [])[:20]:
+        if not isinstance(item, dict):
+            continue
+        account_provider_calls.append({
+            "ad_account_id": item.get("ad_account_id"),
+            "provider_calls": int(item.get("provider_calls") or 0),
+        })
     return {
         "date_from": result.get("date_from"),
         "date_to": result.get("date_to"),
@@ -315,6 +323,8 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
         "rows_saved": int(result.get("rows_saved") or 0),
         "errors_count": int(result.get("errors_count") or 0),
         "provider_calls": int(result.get("provider_calls") or 0),
+        "provider_call_budget_scope": result.get("provider_call_budget_scope"),
+        "account_provider_calls": account_provider_calls,
         "error_samples": error_samples,
         "source_only": True,
         "provider_write_reached": False,
@@ -591,16 +601,19 @@ async def _refresh_snapchat(
     try:
         accounts = await _load_selected_accounts(db, user_id)
         await ensure_snapchat_native_sync_indexes(db)
-        context = SnapchatSyncContext(db, user_id, now=_utcnow)
-        access_token = await context.access_token()
+        token_context = SnapchatSyncContext(db, user_id, now=_utcnow)
+        access_token = await token_context.access_token()
         items: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
+        provider_calls_total = 0
+        account_provider_calls: list[dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=35.0) as client:
             for account in accounts:
+                account_context = SnapchatSyncContext(db, user_id, now=_utcnow)
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
                     item = await refresh_snapchat_account_hours(
-                        context,
+                        account_context,
                         client,
                         access_token,
                         account,
@@ -624,14 +637,14 @@ async def _refresh_snapchat(
                             source_mode=ACCOUNT_REFRESH_SOURCE_MODE,
                             code=code,
                             message=f"account={account_id}: {message}",
-                            retryable=True,
+                            retryable=bool(item_error.get("retryable")),
                         )
                         errors.append({
                             "error_id": error_id,
                             "ad_account_id": account_id,
                             "code": code,
                             "message": message[:300],
-                            "retryable": True,
+                            "retryable": bool(item_error.get("retryable")),
                         })
                     await _collection(db, "mezan_integration_accounts_v2").update_one(
                         {
@@ -673,6 +686,12 @@ async def _refresh_snapchat(
                         "message": exc.message[:300],
                         "retryable": exc.retryable,
                     })
+                finally:
+                    provider_calls_total += int(account_context.provider_calls)
+                    account_provider_calls.append({
+                        "ad_account_id": account_id,
+                        "provider_calls": int(account_context.provider_calls),
+                    })
         rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
         complete = sum(int(item.get("errors_count") or 0) == 0 for item in items)
         status = "complete" if not errors and complete == len(accounts) else "partial"
@@ -685,7 +704,9 @@ async def _refresh_snapchat(
             "accounts_complete": complete,
             "rows_saved": rows_saved,
             "errors_count": len(errors),
-            "provider_calls": context.provider_calls,
+            "provider_calls": provider_calls_total,
+            "provider_call_budget_scope": "per_selected_account",
+            "account_provider_calls": account_provider_calls,
             "error_samples": errors[:10],
         }
         await _collection(db, "mezan_integrations_v2").update_one(
