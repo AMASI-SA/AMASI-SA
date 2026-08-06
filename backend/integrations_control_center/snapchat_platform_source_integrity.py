@@ -5,10 +5,10 @@ The Ads Manager workspace exposes two selectable commercial result sources:
 * ``platform``: purchases and purchase value reported by Snapchat.
 * ``salla``: exact Salla orders matched to a Snapchat campaign.
 
-This module keeps those sources separate. A direct TOTAL ad-account row owns
-the unfiltered All Ads total, while a second TOTAL request broken down by
-campaign owns campaign rows and filtered totals. Existing HOUR ingestion remains
-responsible for the hourly chart and the Riyadh accounting projection.
+This module keeps those sources separate. Snapchat direct Ad Account TOTAL
+owns authoritative All Ads spend, while TOTAL + breakdown=campaign owns
+purchases, purchase value, campaign rows, and filtered totals. Existing HOUR
+ingestion remains responsible for the hourly chart and Riyadh accounting.
 """
 from __future__ import annotations
 
@@ -50,16 +50,12 @@ from .snapchat_native_performance_sync import (
 
 SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v1"
 PLATFORM_TOTAL_SOURCE_MODE = (
-    f"{ADS_MANAGER_SOURCE_MODE}:account_total_v3"
+    f"{ADS_MANAGER_SOURCE_MODE}:account_spend_campaign_commercial_v4"
 )
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
-REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({
-    "spend",
-    "conversion_purchases",
-    "conversion_purchases_value",
-})
+REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})
 
 RefreshCallable = Callable[..., Awaitable[dict[str, Any]]]
 ReportCallable = Callable[..., Awaitable[dict[str, Any]]]
@@ -191,7 +187,7 @@ def _normalized_requested_metrics(
 def extract_account_total_metrics(
     payload: dict[str, Any],
 ) -> tuple[dict[str, int | float] | None, list[dict[str, Any]], int]:
-    """Extract the exact ad-account TOTAL row without a campaign breakdown."""
+    """Extract direct Ad Account TOTAL spend without a breakdown."""
     wrapped_stats = payload.get("total_stats") or []
     if not isinstance(wrapped_stats, list):
         raise SnapchatNativeSyncError(
@@ -242,7 +238,7 @@ async def fetch_account_total_direct_metrics(
     request_start: datetime,
     request_end: datetime,
 ) -> tuple[dict[str, int | float], list[dict[str, Any]]]:
-    """Read the exact All Ads total shown at ad-account level."""
+    """Read direct All Ads spend; conversions come from campaign TOTAL."""
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -443,6 +439,29 @@ def aggregate_total_campaign_metrics(
     }
 
 
+def merge_direct_spend_with_campaign_metrics(
+    direct_metrics: dict[str, Any],
+    campaign_rows: list[dict[str, Any]],
+) -> dict[str, int | float | None]:
+    """Use the authoritative provider level for each All Ads metric.
+
+    The direct Ad Account TOTAL row is accepted for spend. Purchases, purchase
+    value, impressions, swipes, and video metrics are summed from the complete
+    campaign breakdown. No Salla result is introduced into the platform view.
+    """
+    merged = aggregate_total_campaign_metrics(campaign_rows)
+    spend = _as_number(direct_metrics.get("spend"))
+    if spend is None:
+        raise SnapchatNativeSyncError(
+            "snapchat_account_direct_spend_missing",
+            "Snapchat direct Ad Account TOTAL omitted spend.",
+            status_code=502,
+            retryable=True,
+        )
+    merged["spend"] = int(spend) if float(spend).is_integer() else float(spend)
+    return merged
+
+
 def total_snapshot_is_authoritative(
     *,
     breakdown_seen: bool,
@@ -589,6 +608,10 @@ async def persist_account_total_day(
             provider_end=row.get("end_time") or provider_end,
             provider_breakdown=PLATFORM_TOTAL_BREAKDOWN,
         )
+    all_ads_metrics = merge_direct_spend_with_campaign_metrics(
+        account_metrics,
+        campaign_rows,
+    )
     await _upsert_total_row(
         context,
         account=account,
@@ -596,7 +619,7 @@ async def persist_account_total_day(
         external_id=_text(account.get("ad_account_id")),
         date_string=date_string,
         timezone_name=timezone_name,
-        metrics=account_metrics,
+        metrics=all_ads_metrics,
         provider_start=provider_start,
         provider_end=provider_end,
         provider_breakdown=None,
@@ -748,6 +771,8 @@ async def refresh_account_total_snapshots(
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
         "direct_account_total_requested": True,
+        "account_spend_source": "direct_ad_account_total",
+        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
         "request_windows": request_windows,
         "account_timezone": timezone_name,
         "business_timezone": BUSINESS_TIMEZONE,
@@ -1133,6 +1158,8 @@ async def apply_platform_snapshot_to_report(
         "platform_direct_account_total_ready": bool(account_rows),
         "platform_source_isolated": True,
         "platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "account_spend_source": "direct_ad_account_total",
+        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
         "platform_totals_scope": totals_scope,
         "platform_account_orders": account_total.get("orders"),
         "platform_campaign_orders": campaign_sum.get("orders"),
@@ -1176,7 +1203,7 @@ def audit_platform_purchase_totals(
         return (
             int(account.get("orders") or 0),
             int(campaigns.get("orders") or 0),
-            "direct_account_total_snapshot",
+            "campaign_breakdown_all_ads_snapshot",
         )
     campaigns = manager._aggregate_rows(
         campaign_rows,
@@ -1346,6 +1373,7 @@ __all__ = [
     "fetch_account_total_direct_metrics",
     "install_snapchat_platform_source_integrity",
     "load_platform_total_rows",
+    "merge_direct_spend_with_campaign_metrics",
     "persist_account_total_day",
     "platform_rows_by_campaign",
     "refresh_account_total_snapshots",

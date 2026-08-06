@@ -46,6 +46,11 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 identity_matches: 1,
                 identity_coverage_pct: 100,
                 row_limit_reached: false,
+                platform_total_snapshot_ready: true,
+                platform_direct_account_total_ready: true,
+                platform_action_report_time: "impression",
+                account_spend_source: "direct_ad_account_total",
+                account_commercial_totals_source: "complete_campaign_breakdown_sum",
             },
             ai_readiness: {
                 report_ready: true,
@@ -88,6 +93,13 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         spend_sar: 150,
         sales_sar: 500,
         orders: 5,
+    });
+    expect(result.source).toMatchObject({
+        platform_total_snapshot_ready: true,
+        platform_direct_account_total_ready: true,
+        platform_action_report_time: "impression",
+        account_spend_source: "direct_ad_account_total",
+        account_commercial_totals_source: "complete_campaign_breakdown_sum",
     });
     expect(result.ai_readiness.ai_analysis_ready).toBe(true);
     expect(result.ai_readiness.campaign_creation_enabled).toBe(false);

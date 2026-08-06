@@ -9,6 +9,7 @@ from integrations_control_center.snapchat_platform_source_integrity import (
     audit_platform_purchase_totals,
     extract_account_total_campaign_rows,
     extract_account_total_metrics,
+    merge_direct_spend_with_campaign_metrics,
     total_snapshot_is_authoritative,
 )
 
@@ -105,38 +106,76 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
     assert metrics["conversion_purchases_value"] == 745_750_000
 
 
-def test_direct_account_total_stays_separate_from_campaign_breakdown():
+def test_direct_account_total_accepts_documented_spend_only_payload():
     payload = {
         "total_stats": [{
             "sub_request_status": "SUCCESS",
-            "total_stat": {
-                "stats": {
-                    "spend": 489_090_000,
-                    "conversion_purchases": 21,
-                    "conversion_purchases_value": 811_370_000,
-                },
-            },
+            "total_stat": {"stats": {"spend": 714_050_000}},
         }],
     }
     metrics, errors, successful = extract_account_total_metrics(payload)
     assert errors == []
     assert successful == 1
-    assert metrics["spend"] == 489_090_000
-    assert metrics["conversion_purchases"] == 21
-    assert metrics["conversion_purchases_value"] == 811_370_000
-    assert metrics["impressions"] == 0
+    assert metrics["spend"] == 714_050_000
+    assert metrics["conversion_purchases"] == 0
+    assert metrics["conversion_purchases_value"] == 0
 
 
-def test_direct_total_rejects_missing_commercial_fields():
+def test_direct_total_rejects_missing_spend():
     metrics, errors, successful = extract_account_total_metrics({
         "total_stats": [{
             "sub_request_status": "SUCCESS",
-            "total_stat": {"stats": {"spend": 489_090_000}},
+            "total_stat": {
+                "stats": {
+                    "conversion_purchases": 29,
+                    "conversion_purchases_value": 1_186_860_000,
+                },
+            },
         }],
     })
     assert successful == 1
     assert metrics is None
     assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
+
+
+def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
+    direct = {"spend": 714_050_000}
+    campaign_rows = [
+        {
+            "campaign_id": "campaign-1",
+            "metrics": {
+                "spend": 357_860_000,
+                "conversion_purchases": 15,
+                "conversion_purchases_value": 500_000_000,
+                "impressions": 173_368,
+                "swipes": 2_261,
+            },
+        },
+        {
+            "campaign_id": "campaign-2",
+            "metrics": {
+                "spend": 180_180_000,
+                "conversion_purchases": 4,
+                "conversion_purchases_value": 250_000_000,
+                "impressions": 134_850,
+                "swipes": 2_148,
+            },
+        },
+        {
+            "campaign_id": "campaign-rest",
+            "metrics": {
+                "spend": 176_010_000,
+                "conversion_purchases": 10,
+                "conversion_purchases_value": 436_860_000,
+            },
+        },
+    ]
+    merged = merge_direct_spend_with_campaign_metrics(direct, campaign_rows)
+    assert merged["spend"] == 714_050_000
+    assert merged["conversion_purchases"] == 29
+    assert merged["conversion_purchases_value"] == 1_186_860_000
+    assert merged["impressions"] == 308_218
+    assert merged["swipes"] == 4_409
 
 
 def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
@@ -151,7 +190,7 @@ def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
     )
     assert account == 21
     assert campaigns == 16
-    assert source == "direct_account_total_snapshot"
+    assert source == "campaign_breakdown_all_ads_snapshot"
 
 
 def test_fixed_created_order_semantics_is_gated_to_salla_source():
