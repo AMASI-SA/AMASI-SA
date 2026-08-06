@@ -1,0 +1,99 @@
+name: Run Snapchat All Ads Campaign Total V3
+
+on:
+  push:
+    branches:
+      - fix/prod-snap-all-ads-campaign-total-v3
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-snap-all-ads-campaign-total-v3
+  cancel-in-progress: true
+
+jobs:
+  apply-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prod-snap-all-ads-campaign-total-v3
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply root source correction
+        run: python .github/scripts/apply_snap_all_ads_campaign_total_v3.py
+
+      - name: Install backend dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 motor
+          httpx pytest pytest-asyncio openpyxl cryptography reportlab
+          python-multipart PyJWT
+
+      - name: Compile and run backend contracts
+        working-directory: backend
+        run: |
+          python -m py_compile \
+            integrations_control_center/snapchat_platform_source_integrity.py \
+            integrations_control_center/snapchat_campaign_created_order_semantics.py \
+            integrations_control_center/__init__.py
+          python -m pytest -q --tb=short \
+            tests/test_snapchat_platform_source_integrity_v1.py \
+            tests/test_snapchat_order_source_audit_v1.py \
+            tests/test_ads_auto_sync_scheduler_v2.py
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+
+      - name: Run frontend contracts
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignProfitabilityHydration.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/SnapchatOrderSourceAudit.test.jsx
+          src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+
+      - name: Build Production frontend
+        working-directory: frontend
+        env:
+          CI: 'false'
+        run: yarn build
+
+      - name: Enforce root source contracts
+        run: |
+          FILE=backend/integrations_control_center/snapchat_platform_source_integrity.py
+          grep -q 'REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})' "$FILE"
+          grep -q 'merge_direct_spend_with_campaign_metrics' "$FILE"
+          grep -q 'complete_campaign_breakdown_sum' "$FILE"
+          grep -q 'legacy_hour_conversions_hidden_while_pending' "$FILE"
+          grep -q 'مشتريات Snapchat — جميع الحملات' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+          grep -q 'snapchat-platform-total-pending' frontend/src/pages/MarketingPlatformWorkspace.jsx
+
+      - name: Commit focused correction
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            .github/workflows/prod-snap-platform-source-isolation-v1.yml \
+            backend/integrations_control_center/snapchat_platform_source_integrity.py \
+            backend/tests/test_snapchat_platform_source_integrity_v1.py \
+            frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx \
+            frontend/src/pages/MarketingPlatformWorkspace.jsx \
+            frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+          git commit -m "fix(prod-snap): derive All Ads conversions from campaign totals"
+          git push origin HEAD:fix/prod-snap-all-ads-campaign-total-v3
