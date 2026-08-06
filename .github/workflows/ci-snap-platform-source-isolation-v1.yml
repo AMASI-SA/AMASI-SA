@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   source-integrity:
-    runs-on: ubuntu-22.04
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
