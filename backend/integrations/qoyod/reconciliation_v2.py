@@ -146,6 +146,12 @@ async def _load_local_qoyod_invoices(
          "notes": 1, "description": 1},
     ).sort([("issue_date", -1), ("qoyod_invoice_id", -1)])
     async for inv in cursor:
+        # DRY/PREVIEW markers are placeholders from non-writing runs, not
+        # invoices that exist in Qoyod. They must never affect parity counts
+        # or suppress a real Plan-B send.
+        qoyod_invoice_id = inv.get("qoyod_invoice_id")
+        if not qoyod_invoice_id or not _is_real(qoyod_invoice_id):
+            continue
         key, source = _extract_match_key(inv)
         # Stash the resolved key + source on the row for the
         # reconciliation UI to show as a debug badge on qoyod_only
@@ -396,3 +402,4 @@ async def run_reconciliation_v2(
         "rows":                  rows,
         "outcome_labels":        list(_ALL_STATUSES),
     }
+
