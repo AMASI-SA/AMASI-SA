@@ -143,12 +143,23 @@ function deliveryLabel(campaign) {
     return isActiveStatus(campaign.status) ? "يتم التسليم" : "غير نشط";
 }
 
-function defaultColumnsForPlatform(platform) {
-    return platform === "snapchat"
+function defaultColumnsForPlatform(platform, resultSource = "salla") {
+    return platform === "snapchat" && resultSource === "salla"
         ? [...CAMPAIGN_MANAGER_DEFAULT_COLUMNS]
         : CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
             (id) => !PROFITABILITY_COLUMNS.includes(id),
         );
+}
+
+function columnLabel(column, platform, resultSource) {
+    if (
+        platform === "snapchat"
+        && resultSource === "platform"
+        && column.id === "sales"
+    ) {
+        return "قيمة مشتريات Snapchat";
+    }
+    return column.label;
 }
 
 function normalizeVisibleColumns(stored, availableDefinitions, defaults) {
@@ -558,6 +569,7 @@ function columnCellClass(columnId, background, z = "z-10") {
 export default function CampaignManagerTable({
     platform,
     platformLabel,
+    resultSource = "salla",
     campaigns = [],
     totals = {},
     pagination = {},
@@ -565,11 +577,14 @@ export default function CampaignManagerTable({
     onPageChange,
     readOnly = true,
 }) {
-    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}`;
+    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}:${resultSource}`;
     const availableDefinitions = COLUMN_DEFINITIONS.filter(
-        (column) => platform === "snapchat" || !PROFITABILITY_COLUMNS.includes(column.id),
+        (column) => (
+            platform === "snapchat"
+            && resultSource === "salla"
+        ) || !PROFITABILITY_COLUMNS.includes(column.id),
     );
-    const defaultColumns = defaultColumnsForPlatform(platform);
+    const defaultColumns = defaultColumnsForPlatform(platform, resultSource);
     const [selected, setSelected] = useState(() => new Set());
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
     const [sort, setSort] = useState({ key: "spend", direction: "desc" });
@@ -589,6 +604,20 @@ export default function CampaignManagerTable({
         setShowSelectedOnly(false);
         setProfitCampaign(null);
     }, [campaigns]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+            setVisibleColumns(normalizeVisibleColumns(
+                stored,
+                availableDefinitions,
+                defaultColumns,
+            ));
+        } catch {
+            setVisibleColumns(defaultColumns);
+        }
+    }, [storageKey, platform, resultSource]);
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -698,7 +727,7 @@ export default function CampaignManagerTable({
                             <div className="grid max-h-80 gap-1 overflow-auto">
                                 {availableDefinitions.map((column) => (
                                     <label key={column.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                                        <span>{column.label}</span>
+                                        <span>{columnLabel(column, platform, resultSource)}</span>
                                         <input
                                             type="checkbox"
                                             checked={visibleColumns.includes(column.id)}
@@ -757,7 +786,7 @@ export default function CampaignManagerTable({
                                                 className="flex w-full items-end justify-between gap-2 text-right font-black hover:text-slate-950"
                                             >
                                                 <span>
-                                                    <span className="block">{column.label}</span>
+                                                    <span className="block">{columnLabel(column, platform, resultSource)}</span>
                                                     {column.sublabel && <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">{column.sublabel}</span>}
                                                 </span>
                                                 {sort.key === column.id && (

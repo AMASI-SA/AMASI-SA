@@ -17,7 +17,6 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from auth import ensure_user_settings
 from dashboard_v2_routes import _matches_any
 
 from . import snapchat_account_timezone_manager as manager
@@ -119,6 +118,8 @@ async def build_created_and_financial_outcomes(
     dict[tuple[str, str], list[dict[str, Any]]],
 ]:
     """Build fixed acquisition counts and current financial outcomes together."""
+    from auth import ensure_user_settings
+
     settings = await ensure_user_settings(db, user_id)
     included_statuses = settings.get("report_included_statuses") or []
     orders = await _all_orders_in_padded_window(
@@ -357,6 +358,16 @@ def install_fixed_created_order_semantics() -> None:
         token = _FINANCIAL_MATCHED.set({})
         try:
             result = dict(await current_report(*args, **kwargs) or {})
+            result_source = _text(
+                result.get("result_source") or kwargs.get("result_source")
+            ).lower()
+            if result_source != "salla":
+                result.setdefault("policy", {}).update({
+                    "salla_order_semantics_applied": False,
+                    "provider_metrics_preserved_for_platform_source": True,
+                })
+                return result
+
             financial_matched = _FINANCIAL_MATCHED.get()
             campaigns = result.get("campaigns") or []
 
@@ -464,6 +475,8 @@ def install_fixed_created_order_semantics() -> None:
                 "provider_write_reached": False,
                 "accounting_write_reached": False,
                 "qoyod_write_reached": False,
+                "salla_order_semantics_applied": True,
+                "provider_metrics_preserved_for_platform_source": False,
             })
             return result
         finally:

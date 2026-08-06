@@ -452,6 +452,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 <AdsEntityLevelWorkspace
                     platform={platform}
                     platformLabel={config.label}
+                    resultSource={data?.result_source || "salla"}
                     entityLevel={entityLevel}
                     onEntityLevelChange={(level) => {
                         setEntityLevel(level);

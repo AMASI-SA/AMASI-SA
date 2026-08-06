@@ -1,0 +1,217 @@
+from pathlib import Path
+from datetime import date, datetime, timezone
+
+from integrations_control_center.snapchat_platform_source_integrity import (
+    PLATFORM_TOTAL_SOURCE_MODE,
+    account_local_dates_for_refresh,
+    account_local_total_window,
+    aggregate_total_campaign_metrics,
+    audit_platform_purchase_totals,
+    extract_account_total_campaign_rows,
+    extract_account_total_metrics,
+    total_snapshot_is_authoritative,
+)
+
+
+def _row(entity_type, external_id, *, orders, spend, sales, date_string="2026-08-06"):
+    return {
+        "entity_type": entity_type,
+        "external_id": external_id,
+        "campaign_id": external_id if entity_type == "campaign" else None,
+        "date": date_string,
+        "purchases": orders,
+        "spend_native": spend,
+        "spend_sar": spend * 3.75,
+        "purchase_value_native": sales,
+        "purchase_value_sar": sales * 3.75,
+        "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
+        "updated_at": "2026-08-06T14:00:00+00:00",
+    }
+
+
+def test_account_local_total_window_uses_account_midnight_and_current_second():
+    start, end = account_local_total_window(
+        date(2026, 8, 6),
+        timezone_name="America/Los_Angeles",
+        now=datetime(2026, 8, 6, 15, 30, 45, tzinfo=timezone.utc),
+    )
+    assert start.isoformat() == "2026-08-06T00:00:00-07:00"
+    assert end.isoformat() == "2026-08-06T08:30:45-07:00"
+
+
+def test_refresh_dates_cover_account_days_touched_by_riyadh_window():
+    dates = account_local_dates_for_refresh(
+        date(2026, 8, 5),
+        date(2026, 8, 6),
+        timezone_name="America/Los_Angeles",
+        now=datetime(2026, 8, 6, 15, 30, tzinfo=timezone.utc),
+    )
+    assert dates == [date(2026, 8, 4), date(2026, 8, 5), date(2026, 8, 6)]
+
+
+def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
+    start = datetime(2026, 8, 6, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc)
+    payload = {
+        "total_stats": [{
+            "sub_request_status": "SUCCESS",
+            "total_stat": {
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+                "breakdown_stats": {
+                    "campaign": [
+                        {
+                            "id": "campaign-1",
+                            "stats": {
+                                "impressions": 100,
+                                "swipes": 10,
+                                "spend": 203_350_000,
+                                "video_views": 50,
+                                "view_completion": 25,
+                                "conversion_purchases": 12,
+                                "conversion_purchases_value": 500_000_000,
+                            },
+                        },
+                        {
+                            "id": "campaign-2",
+                            "stats": {
+                                "impressions": 200,
+                                "swipes": 20,
+                                "spend": 179_450_000,
+                                "video_views": 100,
+                                "view_completion": 50,
+                                "conversion_purchases": 4,
+                                "conversion_purchases_value": 245_750_000,
+                            },
+                        },
+                    ],
+                },
+            },
+        }],
+    }
+    rows, errors, success, breakdown_seen = extract_account_total_campaign_rows(
+        payload,
+        request_start=start,
+        request_end=end,
+    )
+    assert errors == []
+    assert success == 1
+    assert breakdown_seen is True
+    assert [row["campaign_id"] for row in rows] == ["campaign-1", "campaign-2"]
+
+    metrics = aggregate_total_campaign_metrics(rows)
+    assert metrics["conversion_purchases"] == 16
+    assert metrics["spend"] == 382_800_000
+    assert metrics["conversion_purchases_value"] == 745_750_000
+
+
+def test_direct_account_total_stays_separate_from_campaign_breakdown():
+    payload = {
+        "total_stats": [{
+            "sub_request_status": "SUCCESS",
+            "total_stat": {
+                "stats": {
+                    "spend": 489_090_000,
+                    "conversion_purchases": 21,
+                    "conversion_purchases_value": 811_370_000,
+                },
+            },
+        }],
+    }
+    metrics, errors, successful = extract_account_total_metrics(payload)
+    assert errors == []
+    assert successful == 1
+    assert metrics["spend"] == 489_090_000
+    assert metrics["conversion_purchases"] == 21
+    assert metrics["conversion_purchases_value"] == 811_370_000
+    assert metrics["impressions"] == 0
+
+
+def test_direct_total_rejects_missing_commercial_fields():
+    metrics, errors, successful = extract_account_total_metrics({
+        "total_stats": [{
+            "sub_request_status": "SUCCESS",
+            "total_stat": {"stats": {"spend": 489_090_000}},
+        }],
+    })
+    assert successful == 1
+    assert metrics is None
+    assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
+
+
+def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
+    rows = [
+        _row("ad_account", "account-1", orders=21, spend=489.09, sales=811.37),
+        _row("campaign", "campaign-1", orders=12, spend=203.35, sales=500),
+        _row("campaign", "campaign-2", orders=4, spend=179.45, sales=245.75),
+    ]
+    account, campaigns, source = audit_platform_purchase_totals(
+        rows,
+        requested_days=1,
+    )
+    assert account == 21
+    assert campaigns == 16
+    assert source == "direct_account_total_snapshot"
+
+
+def test_fixed_created_order_semantics_is_gated_to_salla_source():
+    source = Path(
+        "integrations_control_center/snapchat_campaign_created_order_semantics.py"
+    ).read_text(encoding="utf-8")
+    assert 'if result_source != "salla":' in source
+    assert '"provider_metrics_preserved_for_platform_source": True' in source
+
+
+def test_created_order_auth_import_is_lazy():
+    source = Path(
+        "integrations_control_center/snapchat_campaign_created_order_semantics.py"
+    ).read_text(encoding="utf-8")
+    assert "\nfrom auth import ensure_user_settings\n" not in source
+    function_start = source.index("async def build_created_and_financial_outcomes")
+    function_body = source[function_start:function_start + 1200]
+    assert "from auth import ensure_user_settings" in function_body
+
+
+def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
+    rows = [
+        {
+            "campaign_id": "campaign-1",
+            "metrics": {
+                "spend": 100_000_000,
+                "conversion_purchases": 2,
+                "conversion_purchases_value": 300_000_000,
+            },
+        },
+        {
+            "campaign_id": "campaign-2",
+            "metrics": {"spend": 50_000_000},
+        },
+    ]
+    metrics = aggregate_total_campaign_metrics(rows)
+    assert metrics["spend"] == 150_000_000
+    assert metrics["conversion_purchases"] == 2
+    assert metrics["conversion_purchases_value"] == 300_000_000
+    assert metrics["impressions"] == 0
+
+
+def test_partial_total_response_never_replaces_complete_snapshot():
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        account_metrics_available=True,
+        errors=[],
+    ) is True
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=False,
+        account_metrics_available=True,
+        errors=[],
+    ) is False
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        account_metrics_available=False,
+        errors=[],
+    ) is False
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        account_metrics_available=True,
+        errors=[{"code": "partial"}],
+    ) is False

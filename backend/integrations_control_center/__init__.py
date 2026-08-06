@@ -46,6 +46,9 @@ from .snapchat_account_timezone_manager import (
 from .snapchat_account_timezone_retention import (
     install_snapchat_account_timezone_retention,
 )
+from .snapchat_platform_source_integrity import (
+    install_snapchat_platform_source_integrity,
+)
 from .snapchat_ad_performance import (
     attach_snapchat_ad_routes,
     install_snapchat_ad_performance_refresh,
@@ -143,6 +146,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     # projections remain read-only.
     install_snapchat_account_timezone_retention()
     install_snapchat_account_timezone_scheduler()
+    install_snapchat_platform_source_integrity()
     install_snapchat_account_hourly_chart()
     install_snapchat_campaign_catalog_refresh()
     install_snapchat_adsquad_performance_refresh()
