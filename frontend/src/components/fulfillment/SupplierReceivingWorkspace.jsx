@@ -303,6 +303,7 @@ export function SupplierPieceCameraScanner({
     const videoRef = useRef(null);
     const [cameraError, setCameraError] = useState("");
     const [cameraReady, setCameraReady] = useState(false);
+    const [cameraEngine, setCameraEngine] = useState("");
 
     useEffect(() => {
         let stopped = false;
@@ -310,20 +311,47 @@ export function SupplierPieceCameraScanner({
         let lastDetectedValue = "";
         let stream;
         let animationFrame;
+        let zxingControls;
+
+        const acceptDetectedValue = async (rawValue) => {
+            const value = String(rawValue || "").trim();
+            if (!value) {
+                lastDetectedValue = "";
+                return;
+            }
+            if (value === lastDetectedValue || detecting || stopped) return;
+
+            detecting = true;
+            lastDetectedValue = value;
+            try {
+                await onDetected(value);
+            } finally {
+                detecting = false;
+            }
+        };
+
+        const createNativeDetector = async () => {
+            if (!globalThis.BarcodeDetector) return null;
+            try {
+                const getSupportedFormats = globalThis.BarcodeDetector.getSupportedFormats;
+                if (typeof getSupportedFormats !== "function") {
+                    return new globalThis.BarcodeDetector();
+                }
+                const supported = await getSupportedFormats.call(globalThis.BarcodeDetector);
+                const formats = ["qr_code", "code_128"].filter((value) => supported.includes(value));
+                return formats.length ? new globalThis.BarcodeDetector({ formats }) : null;
+            } catch {
+                return null;
+            }
+        };
 
         async function startCamera() {
-            if (!navigator.mediaDevices?.getUserMedia || !globalThis.BarcodeDetector) {
-                setCameraError("هذا المتصفح لا يدعم قراءة QR بالكاميرا. افتح ميزان من Chrome أو Edge على الجوال، أو استخدم قارئ الباركود الخارجي.");
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setCameraError("هذا الجهاز لا يتيح الكاميرا للمتصفح. تأكد من فتح ميزان عبر HTTPS ومنح المتصفح صلاحية الكاميرا.");
                 return;
             }
 
             try {
-                const getSupportedFormats = globalThis.BarcodeDetector.getSupportedFormats;
-                const supported = typeof getSupportedFormats === "function"
-                    ? await getSupportedFormats.call(globalThis.BarcodeDetector)
-                    : [];
-                const formats = ["qr_code", "code_128"].filter((value) => supported.includes(value));
-                const detector = new globalThis.BarcodeDetector(formats.length ? { formats } : undefined);
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: { ideal: "environment" },
@@ -343,27 +371,44 @@ export function SupplierPieceCameraScanner({
                 if (stopped) return;
                 setCameraReady(true);
 
-                const detectFrame = async () => {
-                    if (stopped || !videoRef.current) return;
-                    try {
-                        const rows = await detector.detect(videoRef.current);
-                        const value = String(rows?.[0]?.rawValue || "").trim();
-                        if (value && value !== lastDetectedValue && !detecting) {
-                            detecting = true;
-                            lastDetectedValue = value;
-                            await onDetected(value);
-                            detecting = false;
-                        } else if (!value) {
+                const detector = await createNativeDetector();
+                if (detector) {
+                    setCameraEngine("native");
+                    const detectFrame = async () => {
+                        if (stopped || !videoRef.current) return;
+                        try {
+                            const rows = await detector.detect(videoRef.current);
+                            await acceptDetectedValue(rows?.[0]?.rawValue);
+                        } catch {
+                            // A frame without a readable code is expected while the camera is moving.
                             lastDetectedValue = "";
                         }
-                    } catch {
-                        // A frame without a readable QR is expected while the camera is moving.
-                        detecting = false;
-                    }
-                    animationFrame = requestAnimationFrame(detectFrame);
-                };
+                        animationFrame = requestAnimationFrame(detectFrame);
+                    };
 
-                animationFrame = requestAnimationFrame(detectFrame);
+                    animationFrame = requestAnimationFrame(detectFrame);
+                    return;
+                }
+
+                setCameraEngine("zxing");
+                const { BarcodeFormat, BrowserMultiFormatReader } = await import("@zxing/browser");
+                if (stopped || !videoRef.current) return;
+                const reader = new BrowserMultiFormatReader(undefined, {
+                    delayBetweenScanAttempts: 180,
+                    delayBetweenScanSuccess: 500,
+                });
+                reader.possibleFormats = [BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128];
+                zxingControls = await reader.decodeFromVideoElement(
+                    videoRef.current,
+                    (result) => {
+                        if (result) {
+                            void acceptDetectedValue(result.getText());
+                        } else {
+                            lastDetectedValue = "";
+                        }
+                    },
+                );
+                if (stopped) zxingControls?.stop?.();
             } catch (cameraStartError) {
                 const messages = {
                     NotAllowedError: "اسمح لميزان باستخدام الكاميرا من إعدادات المتصفح ثم حاول مرة أخرى.",
@@ -371,7 +416,7 @@ export function SupplierPieceCameraScanner({
                     NotReadableError: "الكاميرا مستخدمة في تطبيق آخر. أغلقه ثم حاول مرة أخرى.",
                     SecurityError: "تشغيل الكاميرا يحتاج فتح ميزان عبر اتصال آمن HTTPS.",
                 };
-                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا. استخدم قارئ الباركود الخارجي أو الإدخال اليدوي.");
+                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا أو قارئ QR. حدّث الصفحة وحاول مرة أخرى، أو استخدم الإدخال اليدوي مؤقتًا.");
             }
         }
 
@@ -379,6 +424,7 @@ export function SupplierPieceCameraScanner({
         return () => {
             stopped = true;
             if (animationFrame) cancelAnimationFrame(animationFrame);
+            zxingControls?.stop?.();
             for (const track of stream?.getTracks?.() || []) track.stop();
         };
     }, [onDetected]);
@@ -402,7 +448,7 @@ export function SupplierPieceCameraScanner({
                                 <span>{cameraError}</span>
                             </div>
                         ) : (
-                            <div className="relative h-full min-h-0 overflow-hidden rounded-2xl bg-black">
+                            <div className="relative h-full min-h-0 overflow-hidden rounded-2xl bg-black" data-camera-engine={cameraEngine || undefined}>
                                 <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
                                 {!cameraReady && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-sm font-black text-white">

@@ -2,6 +2,16 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 
+const mockZxingStop = jest.fn();
+const mockZxingDecodeFromVideoElement = jest.fn();
+
+jest.mock("@zxing/browser", () => ({
+    BarcodeFormat: { QR_CODE: "QR_CODE", CODE_128: "CODE_128" },
+    BrowserMultiFormatReader: jest.fn().mockImplementation(() => ({
+        decodeFromVideoElement: mockZxingDecodeFromVideoElement,
+    })),
+}));
+
 jest.mock("react-router-dom", () => ({
     Link: ({ to, children }) => <a href={to}>{children}</a>,
 }));
@@ -27,6 +37,7 @@ import {
     closeSupplierReceivingSession,
     loadSupplierReceivingCatalog,
 } from "../../services/supplierReceiving";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
 
 test("supplier receiving stage exposes governed barcode session controls", () => {
@@ -64,6 +75,65 @@ test("supplier camera stays open beside the live invoice draft", () => {
     expect(markup).toContain("اعتماد فاتورة المورد وإنهاء الجلسة");
     expect(markup).toContain("إغلاق الكاميرا");
     expect(markup).toContain("إلغاء الجلسة والخروج");
+});
+
+test("supplier camera falls back to ZXing when BarcodeDetector is unavailable", async () => {
+    const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const originalBarcodeDetector = globalThis.BarcodeDetector;
+    const originalPlay = HTMLMediaElement.prototype.play;
+    const videoTrack = { stop: jest.fn() };
+    const stream = { getTracks: jest.fn(() => [videoTrack]) };
+    const getUserMedia = jest.fn().mockResolvedValue(stream);
+    const onDetected = jest.fn().mockResolvedValue(undefined);
+    BrowserMultiFormatReader.mockImplementation(() => ({
+        decodeFromVideoElement: mockZxingDecodeFromVideoElement,
+    }));
+    mockZxingDecodeFromVideoElement.mockImplementation(async (_video, callback) => {
+        callback({ getText: () => "PIECE-QR-1" });
+        return { stop: mockZxingStop };
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: { getUserMedia },
+    });
+    delete globalThis.BarcodeDetector;
+    HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined);
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(<SupplierPieceCameraScanner onDetected={onDetected} onClose={() => {}} />);
+            await new Promise((resolve) => window.setTimeout(resolve, 20));
+        });
+
+        expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: expect.any(Object), audio: false }));
+        expect(BrowserMultiFormatReader).toHaveBeenCalled();
+        expect(mockZxingDecodeFromVideoElement).toHaveBeenCalled();
+        expect(onDetected).toHaveBeenCalledWith("PIECE-QR-1");
+        expect(container.querySelector('[data-camera-engine="zxing"]')).not.toBeNull();
+        expect(container.textContent).not.toContain("هذا المتصفح لا يدعم قراءة QR بالكاميرا");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        if (originalMediaDevices) {
+            Object.defineProperty(navigator, "mediaDevices", originalMediaDevices);
+        } else {
+            delete navigator.mediaDevices;
+        }
+        if (originalBarcodeDetector) {
+            globalThis.BarcodeDetector = originalBarcodeDetector;
+        } else {
+            delete globalThis.BarcodeDetector;
+        }
+        HTMLMediaElement.prototype.play = originalPlay;
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+
+    expect(mockZxingStop).toHaveBeenCalled();
+    expect(videoTrack.stop).toHaveBeenCalled();
 });
 
 test("invoice lines group identical scanned products and calculate totals", () => {
