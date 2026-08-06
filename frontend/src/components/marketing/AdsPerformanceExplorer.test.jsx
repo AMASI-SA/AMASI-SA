@@ -35,6 +35,23 @@ describe("AdsPerformanceExplorer", () => {
         expect(rows[1].roas_raw).toBe(0.5);
     });
 
+    test("keeps unavailable commercial metrics as null instead of fake zero", () => {
+        const rows = buildAdsChartRows([
+            {
+                date: "2026-08-06",
+                spend_sar: 2973.19,
+                sales_sar: null,
+                orders: null,
+                roas: null,
+            },
+        ]);
+
+        expect(rows[0].spend_raw).toBe(2973.19);
+        expect(rows[0].sales_raw).toBeNull();
+        expect(rows[0].orders_raw).toBeNull();
+        expect(rows[0].roas_raw).toBeNull();
+    });
+
     test("builds a 24-hour Snapchat input with Arabic hour labels", () => {
         expect(formatAdsHourLabel("00:00")).toBe("12 ص");
         expect(formatAdsHourLabel("13:00")).toBe("1 م");

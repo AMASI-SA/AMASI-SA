@@ -212,6 +212,13 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             identity_coverage_pct: number(value.source?.identity_coverage_pct, { min: 0 }),
             row_limit_reached: value.source?.row_limit_reached === true,
             entity_limit_reached: value.source?.entity_limit_reached === true,
+            platform_total_snapshot_ready: value.source?.platform_total_snapshot_ready === true,
+            platform_direct_account_total_ready: value.source?.platform_direct_account_total_ready === true,
+            platform_action_report_time: nullableText(value.source?.platform_action_report_time),
+            account_spend_source: nullableText(value.source?.account_spend_source),
+            account_commercial_totals_source: nullableText(
+                value.source?.account_commercial_totals_source,
+            ),
         },
         ai_readiness: {
             report_ready: value.ai_readiness?.report_ready === true,
