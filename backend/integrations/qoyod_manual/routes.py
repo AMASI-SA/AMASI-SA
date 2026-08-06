@@ -18,6 +18,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from qoyod_order_accounting_sync import repair_qoyod_order_accounting
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 
@@ -566,6 +568,11 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         Also copies the invoice number when present. Idempotent —
         subsequent calls are no-ops.
 
+        In addition, every real local Qoyod invoice whose strict reference
+        matches a Salla order repairs the Orders V2 accounting projection
+        and any missing inbox marker. This is local-only and never writes
+        to Qoyod.
+
         Returns a summary: how many rows were scanned/updated and the
         list of affected order numbers (up to 200 for UI display).
         """
@@ -620,9 +627,22 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             if on and len(affected) < 200:
                 affected.append(on)
 
+        accounting_repair = await repair_qoyod_order_accounting(
+            db,
+            orders_user_id=str(user["id"]),
+            markers_user_id=_TENANT,
+            actor=str(actor),
+        )
+
         logger.warning(
-            "plan-b repair-recon-markers scanned=%s updated=%s actor=%s",
-            scanned, updated, actor)
+            "plan-b repair-recon-markers scanned=%s updated=%s "
+            "accounting_updated=%s actor=%s",
+            scanned,
+            updated,
+            (accounting_repair.get("counts") or {}).get(
+                "unified_orders_updated", 0),
+            actor,
+        )
         return {
             "ok":      True,
             "actor":   actor,
@@ -633,7 +653,9 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 "skipped_already_unified":  skipped_already_unified,
             },
             "affected_orders_sample": affected,
+            "accounting_repair": accounting_repair,
             "at":     _now().isoformat(),
         }
 
     return router
+
