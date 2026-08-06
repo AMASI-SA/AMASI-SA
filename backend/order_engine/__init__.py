@@ -77,10 +77,14 @@ def make_order_engine_router(*args, **kwargs):
     )
     from reviewed_products_catalog import make_reviewed_products_catalog_router
     from reviewed_product_sorting import (
+        install_reviewed_product_sorting,
         make_reviewed_product_sorting_router,
     )
     from reviewed_preparation_batches import (
         make_reviewed_preparation_batches_router,
+    )
+    from mobile_reviewed_preparation_routes import (
+        make_mobile_reviewed_preparation_router,
     )
     from preparation_file_registry import (
         make_preparation_file_registry_router,
@@ -111,6 +115,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
 
     install_order_review_forward_stage_guard()
+    install_reviewed_product_sorting()
     _product_v2_routes.run_product_v2_sync = run_product_v2_sync_fixed
     install_product_source_authority()
     install_product_field_cost_support()
@@ -163,6 +168,7 @@ def make_order_engine_router(*args, **kwargs):
         make_order_review_customer_waiting_router(db, current_user),
         make_reviewed_products_catalog_router(db, current_user),
         make_reviewed_product_sorting_router(db, current_user),
+        make_mobile_reviewed_preparation_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
         make_preparation_file_registry_router(db, current_user),
         make_preview_fulfillment_seed_router(db, current_user),
