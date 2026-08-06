@@ -29,6 +29,15 @@ MAX_BODY_FONT_SIZE = 6.6
 BODY_FONT_STEP = 0.3
 REFERENCE_TEXT = HexColor("#151515")
 REFERENCE_RED = HexColor("#D12B2B")
+# A visible physical gap below both the product image and QR. The previous
+# 4-point offset was only ~1.4 mm and made the first text baseline look glued
+# to the media. Keep this in millimetres so printed output is predictable.
+MEDIA_TO_TEXT_GAP = 4.0 * mm
+
+
+def media_text_start(media_bottom: float) -> float:
+    """Return the first text baseline below the image/QR media row."""
+    return media_bottom - MEDIA_TO_TEXT_GAP
 
 
 def _text(value: Any) -> str:
@@ -349,7 +358,8 @@ def generate_wrapped_reference_preparation_pdf(
                 mask="auto",
             )
 
-        product_cursor = media_y - 4
+        # Always begin text on a separate visual row below both media blocks.
+        product_cursor = media_text_start(media_y)
         product_size, product_lines = _wrap_product_name(
             line.product_name,
             font_name=font_bold,
@@ -429,10 +439,12 @@ def install_preparation_pdf_wrapped_text() -> None:
 
 
 __all__ = [
+    "MEDIA_TO_TEXT_GAP",
     "WrappedField",
     "WrappedSpecificationPlan",
     "build_wrapped_specification_plan",
     "generate_wrapped_reference_preparation_pdf",
     "install_preparation_pdf_wrapped_text",
+    "media_text_start",
     "wrap_reference_text",
 ]
