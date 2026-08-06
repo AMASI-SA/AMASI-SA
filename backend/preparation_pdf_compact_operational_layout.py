@@ -36,12 +36,21 @@ ROW_GAP = 4.5 * mm
 INNER = 2.8 * mm
 MEDIA_SIZE = 24 * mm
 MEDIA_GAP = 1.5 * mm
+# Keep the details on a clearly separate printed row below both the product
+# image and QR. The previous 3.2-point offset was only ~1.1 mm and looked
+# visually attached to the media blocks.
+MEDIA_TO_DETAILS_GAP = 4.0 * mm
 DETAIL_GAP = 1.8 * mm
 _INSTALLED = False
 
 
 def _text(value: Any) -> str:
     return " ".join(str(value or "").split())
+
+
+def compact_detail_top(media_bottom: float) -> float:
+    """Return the first detail baseline below the image/QR media row."""
+    return media_bottom - MEDIA_TO_DETAILS_GAP
 
 
 def compact_card_dimensions(
@@ -260,9 +269,9 @@ def generate_compact_operational_preparation_pdf(
                 mask="auto",
             )
 
-        # Product title is intentionally omitted. Details begin directly below
-        # the media pair so long operational values have more usable space.
-        detail_top = media_y - 3.2
+        # Product title is intentionally omitted. Details now start on a
+        # separate visual row with a fixed 4 mm gap below both media blocks.
+        detail_top = compact_detail_top(media_y)
         detail_bottom = y + INNER
         half_width = (usable_width - DETAIL_GAP) / 2
         left_half_right = left + half_width
@@ -402,9 +411,11 @@ def install_preparation_pdf_compact_operational_layout() -> None:
 __all__ = [
     "COLUMN_GAP",
     "MEDIA_GAP",
+    "MEDIA_TO_DETAILS_GAP",
     "ROW_GAP",
     "compact_card_dimensions",
     "compact_card_pdf_origin",
+    "compact_detail_top",
     "compact_media_positions",
     "compact_reference_card_rows",
     "generate_compact_operational_preparation_pdf",
