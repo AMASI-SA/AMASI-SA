@@ -17,7 +17,6 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from auth import ensure_user_settings
 from dashboard_v2_routes import _matches_any
 
 from . import snapchat_account_timezone_manager as manager
@@ -119,6 +118,8 @@ async def build_created_and_financial_outcomes(
     dict[tuple[str, str], list[dict[str, Any]]],
 ]:
     """Build fixed acquisition counts and current financial outcomes together."""
+    from auth import ensure_user_settings
+
     settings = await ensure_user_settings(db, user_id)
     included_statuses = settings.get("report_included_statuses") or []
     orders = await _all_orders_in_padded_window(
