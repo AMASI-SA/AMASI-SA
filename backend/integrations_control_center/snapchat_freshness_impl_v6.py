@@ -18,9 +18,13 @@ SNAPCHAT_SOURCE_MODE: Final[str] = (
 )
 FRESHNESS_COLLECTION: Final[str] = "mezan_snapchat_reporting_freshness_v2"
 
-# Compatibility names used by existing imports and focused contracts.
-ADS_MANAGER_ACTION_REPORT_TIME = SNAPCHAT_ACTION_REPORT_TIME
-ADS_MANAGER_SOURCE_MODE = SNAPCHAT_SOURCE_MODE
+# The Riyadh Dashboard keeps conversion-time semantics. The Ads Manager
+# workspace uses impression-time attribution so its date-filtered Purchases and
+# Purchase Value match Snapchat Ads Manager.
+ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"
+ADS_MANAGER_SOURCE_MODE: Final[str] = (
+    "snapchat_ads_manager_account_timezone_impression_v7"
+)
 
 
 def _parse_provider_time(value: Any) -> datetime | None:
@@ -337,7 +341,12 @@ def _install_dashboard_freshness() -> None:
 
 
 def install_snapchat_ads_manager_attribution() -> None:
-    """Install conversion-time reporting and nested freshness capture."""
+    """Install conversion-time business reporting plus Ads Manager contracts.
+
+    Ads Manager readers import ``ADS_MANAGER_ACTION_REPORT_TIME`` explicitly;
+    these runtime assignments remain conversion-time for the Riyadh Dashboard
+    and accounting projections.
+    """
     from . import snapchat_account_hourly_refresh as account_refresh
     from . import snapchat_dashboard_summary_routes as dashboard_summary
     from . import snapchat_native_performance_sync as performance_sync

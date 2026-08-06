@@ -30,8 +30,9 @@ const MATCH_LABELS = Object.freeze({
 });
 
 function numeric(value) {
+    if (value === null || value === undefined || value === "") return "—";
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed.toLocaleString("en-US") : "0";
+    return Number.isFinite(parsed) ? parsed.toLocaleString("en-US") : "—";
 }
 
 function money(value) {

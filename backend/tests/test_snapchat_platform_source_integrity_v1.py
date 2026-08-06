@@ -240,3 +240,36 @@ def test_partial_total_response_never_replaces_complete_snapshot():
         account_metrics_available=True,
         errors=[{"code": "partial"}],
     ) is False
+
+
+
+def test_ads_manager_entity_levels_use_impression_time():
+    freshness = Path(
+        "integrations_control_center/snapchat_freshness_impl_v6.py"
+    ).read_text(encoding="utf-8")
+    assert 'ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"' in freshness
+    assert 'SNAPCHAT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
+
+    platform = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+    manager = Path(
+        "integrations_control_center/snapchat_account_timezone_manager.py"
+    ).read_text(encoding="utf-8")
+    hourly_chart = Path(
+        "integrations_control_center/snapchat_account_hourly_chart.py"
+    ).read_text(encoding="utf-8")
+    adsquad = Path(
+        "integrations_control_center/snapchat_adsquad_performance.py"
+    ).read_text(encoding="utf-8")
+    ads = Path(
+        "integrations_control_center/snapchat_ad_performance.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in platform
+    assert 'action_report_time=ADS_MANAGER_ACTION_REPORT_TIME' in manager
+    assert 'kwargs.get("action_report_time")' in hourly_chart
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in adsquad
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in ads
+    assert 'if not account_rows or not campaign_rows:' in platform
+    assert 'legacy_hour_conversions_hidden_while_pending' in platform

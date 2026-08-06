@@ -30,6 +30,12 @@ import { getSnapchatAdSquadPerformance } from "../services/snapchatAdSquadPerfor
 export const MARKETING_PLATFORM_PROVIDERS = MARKETING_PLATFORMS;
 export { isMarketingPerformanceProvider as isMarketingPlatformProvider };
 
+export function isSnapchatPlatformSnapshotPending(platform, data) {
+    return platform === "snapchat"
+        && data?.result_source === "platform"
+        && data?.source?.platform_total_snapshot_ready === false;
+}
+
 const TABS = [
     { id: "overview", label: "نظرة عامة", Icon: ChartLineUp },
     { id: "campaigns", label: "الحملات", Icon: Megaphone },
@@ -295,6 +301,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
     const totals = data?.totals || {};
     const connection = data?.connection || {};
+    const platformSnapshotPending = isSnapchatPlatformSnapshotPending(
+        platform,
+        data,
+    );
     const pagination = data?.campaign_pagination || {
         page: 1,
         pages: 0,
@@ -414,6 +424,16 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-800">
                     <WarningCircle size={20} weight="fill" className="ml-2 inline" />
                     {error}
+                </div>
+            )}
+
+            {platformSnapshotPending && (
+                <div
+                    className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950"
+                    data-testid="snapchat-platform-total-pending"
+                >
+                    <WarningCircle size={20} weight="fill" className="ml-2 inline" />
+                    نتائج Snapchat المطابقة لمدير الإعلانات قيد المزامنة. أخفى ميزان أرقام التحويل القديمة بدل عرض تقرير جزئي.
                 </div>
             )}
 

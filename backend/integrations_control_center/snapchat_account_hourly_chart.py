@@ -15,6 +15,10 @@ from typing import Any, Awaitable, Callable
 
 from . import snapchat_account_hourly_refresh as hourly
 from . import snapchat_account_timezone_manager as account_report
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -27,7 +31,6 @@ from .snapchat_native_data_common import (
     _timezone,
 )
 from .snapchat_native_performance_sync import (
-    ACTION_REPORT_TIME,
     CONVERSION_SOURCE_TYPES,
     STAT_FIELDS,
     SWIPE_ATTRIBUTION_WINDOW,
@@ -42,7 +45,7 @@ SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION = (
     "mezan_snapchat_performance_account_hour_v1"
 )
 ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = (
-    "snapchat_account_campaign_breakdown_account_hour_v1"
+    f"{ADS_MANAGER_SOURCE_MODE}:account_hour_v2"
 )
 MAX_HOURLY_REPORT_ROWS = 2_000
 
@@ -192,7 +195,7 @@ async def _upsert_hour(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ACTION_REPORT_TIME,
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
@@ -264,7 +267,12 @@ def install_snapchat_account_hourly_capture() -> None:
         ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             rows, errors = await current_fetch(context, *args, **kwargs)
             capture = _CAPTURE_CONTEXT.get()
-            if capture and rows:
+            if (
+                capture
+                and rows
+                and kwargs.get("action_report_time")
+                == ADS_MANAGER_ACTION_REPORT_TIME
+            ):
                 try:
                     saved = await persist_account_local_hours(
                         context,
@@ -425,6 +433,7 @@ async def build_hourly_chart_series(
             "ad_account_id": account_id,
             "date": date_string,
             "date_timezone": timezone_name,
+            "source_mode": ACCOUNT_LOCAL_HOURLY_SOURCE_MODE,
         },
         {"_id": 0},
     )
@@ -487,6 +496,7 @@ async def build_hourly_chart_series(
         "hourly_rows": len(rows),
         "hourly_available": bool(rows),
         "hourly_result_source": result_source,
+        "hourly_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
         "salla_hourly_attribution": salla_coverage,
         "accounting_eligible": False,
     }
