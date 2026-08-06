@@ -8,6 +8,7 @@ from integrations_control_center.snapchat_platform_source_integrity import (
     aggregate_total_campaign_metrics,
     audit_platform_purchase_totals,
     extract_account_total_campaign_rows,
+    extract_account_total_metrics,
     total_snapshot_is_authoritative,
 )
 
@@ -104,7 +105,41 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
     assert metrics["conversion_purchases_value"] == 745_750_000
 
 
-def test_audit_prefers_account_total_and_keeps_campaign_sum_separate():
+def test_direct_account_total_stays_separate_from_campaign_breakdown():
+    payload = {
+        "total_stats": [{
+            "sub_request_status": "SUCCESS",
+            "total_stat": {
+                "stats": {
+                    "spend": 489_090_000,
+                    "conversion_purchases": 21,
+                    "conversion_purchases_value": 811_370_000,
+                },
+            },
+        }],
+    }
+    metrics, errors, successful = extract_account_total_metrics(payload)
+    assert errors == []
+    assert successful == 1
+    assert metrics["spend"] == 489_090_000
+    assert metrics["conversion_purchases"] == 21
+    assert metrics["conversion_purchases_value"] == 811_370_000
+    assert metrics["impressions"] == 0
+
+
+def test_direct_total_rejects_missing_commercial_fields():
+    metrics, errors, successful = extract_account_total_metrics({
+        "total_stats": [{
+            "sub_request_status": "SUCCESS",
+            "total_stat": {"stats": {"spend": 489_090_000}},
+        }],
+    })
+    assert successful == 1
+    assert metrics is None
+    assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
+
+
+def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
     rows = [
         _row("ad_account", "account-1", orders=21, spend=489.09, sales=811.37),
         _row("campaign", "campaign-1", orders=12, spend=203.35, sales=500),
@@ -116,8 +151,7 @@ def test_audit_prefers_account_total_and_keeps_campaign_sum_separate():
     )
     assert account == 21
     assert campaigns == 16
-    assert source == "account_total_snapshot"
-
+    assert source == "direct_account_total_snapshot"
 
 
 def test_fixed_created_order_semantics_is_gated_to_salla_source():
@@ -127,6 +161,15 @@ def test_fixed_created_order_semantics_is_gated_to_salla_source():
     assert 'if result_source != "salla":' in source
     assert '"provider_metrics_preserved_for_platform_source": True' in source
 
+
+def test_created_order_auth_import_is_lazy():
+    source = Path(
+        "integrations_control_center/snapchat_campaign_created_order_semantics.py"
+    ).read_text(encoding="utf-8")
+    assert "\nfrom auth import ensure_user_settings\n" not in source
+    function_start = source.index("async def build_created_and_financial_outcomes")
+    function_body = source[function_start:function_start + 1200]
+    assert "from auth import ensure_user_settings" in function_body
 
 
 def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
@@ -141,9 +184,7 @@ def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
         },
         {
             "campaign_id": "campaign-2",
-            "metrics": {
-                "spend": 50_000_000,
-            },
+            "metrics": {"spend": 50_000_000},
         },
     ]
     metrics = aggregate_total_campaign_metrics(rows)
@@ -156,13 +197,21 @@ def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
 def test_partial_total_response_never_replaces_complete_snapshot():
     assert total_snapshot_is_authoritative(
         breakdown_seen=True,
+        account_metrics_available=True,
         errors=[],
     ) is True
     assert total_snapshot_is_authoritative(
         breakdown_seen=False,
+        account_metrics_available=True,
         errors=[],
     ) is False
     assert total_snapshot_is_authoritative(
         breakdown_seen=True,
+        account_metrics_available=False,
+        errors=[],
+    ) is False
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        account_metrics_available=True,
         errors=[{"code": "partial"}],
     ) is False
