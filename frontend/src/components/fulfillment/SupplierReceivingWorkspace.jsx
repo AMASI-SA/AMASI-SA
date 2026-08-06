@@ -5,8 +5,10 @@ import {
     Barcode,
     Buildings,
     Camera,
+    CaretDown,
     CheckCircle,
     ClockCounterClockwise,
+    Keyboard,
     Package,
     PlusCircle,
     SpinnerGap,
@@ -115,6 +117,7 @@ export function buildSupplierInvoiceLines(scans = [], drafts = {}) {
             product_id: scan?.product_id || null,
             product_name: scan?.product_name || "منتج",
             sku: scan?.sku || null,
+            selected_image_url: scan?.selected_image_url || scan?.image_url || null,
             piece_ids: [pieceId],
             reference_product_unit_price_halalas: productReferenceHalalas,
             product_unit_price_halalas: productReferenceHalalas,
@@ -282,6 +285,86 @@ function SupplierInvoiceLineEditor({
     );
 }
 
+function SupplierInvoiceCompactTable({
+    invoiceLines,
+    permissions,
+    serviceCatalog,
+    onProductPriceChange,
+    onServicePriceChange,
+    onServiceToggle,
+    onServiceAdd,
+    showEditors = true,
+}) {
+    const pieceCount = invoiceLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    return (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="supplier-receiving-mobile-invoice">
+            <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                <h4 className="font-black text-slate-950">فاتورة المورد</h4>
+                <span className="text-xs font-black text-slate-500">{pieceCount} قطع · {invoiceLines.length} منتجات</span>
+            </header>
+            {!invoiceLines.length ? (
+                <div className="p-7 text-center text-sm font-bold text-slate-500">امسح أول قطعة لتظهر هنا مباشرة.</div>
+            ) : (
+                <>
+                    <div className="grid grid-cols-[minmax(0,1fr)_42px_68px_70px] items-center gap-1 bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-500">
+                        <span>المنتج</span>
+                        <span className="text-center">الكمية</span>
+                        <span className="text-center">سعر الوحدة</span>
+                        <span className="text-left">الإجمالي</span>
+                    </div>
+                    <div data-testid="supplier-receiving-mobile-invoice-rows">
+                        {invoiceLines.map((line) => {
+                            const unitTotal = line.quantity
+                                ? Math.round(Number(line.total_halalas || 0) / Number(line.quantity))
+                                : 0;
+                            return (
+                                <div key={line.key} className="grid grid-cols-[minmax(0,1fr)_42px_68px_70px] items-center gap-1 border-b border-slate-100 px-3 py-3 last:border-b-0" data-testid="supplier-receiving-mobile-invoice-row">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        {line.selected_image_url ? (
+                                            <img src={line.selected_image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-slate-200 object-cover" />
+                                        ) : (
+                                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><Package size={20} weight="duotone" /></span>
+                                        )}
+                                        <span className="min-w-0">
+                                            <span className="block line-clamp-2 text-xs font-black leading-5 text-slate-950">{line.product_name}</span>
+                                            {line.sku && <span className="mt-0.5 block truncate text-[9px] font-bold text-slate-400">{line.sku}</span>}
+                                        </span>
+                                    </div>
+                                    <span className="text-center text-sm font-black tabular-nums text-slate-800">{line.quantity}</span>
+                                    <span className="text-center text-xs font-black tabular-nums text-slate-800">{formatSupplierMoney(unitTotal)}</span>
+                                    <span className="text-left text-xs font-black tabular-nums text-emerald-800">{formatSupplierMoney(line.total_halalas)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
+            )}
+            {showEditors && invoiceLines.length > 0 && (
+                <details className="group border-t border-slate-200" data-testid="supplier-receiving-mobile-invoice-review">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-slate-800">
+                        <span>مراجعة الأسعار والخدمات</span>
+                        <CaretDown size={18} className="transition-transform group-open:rotate-180" weight="bold" />
+                    </summary>
+                    <div className="space-y-3 border-t border-slate-100 bg-slate-50 p-3">
+                        {invoiceLines.map((line) => (
+                            <SupplierInvoiceLineEditor
+                                key={line.key}
+                                line={line}
+                                permissions={permissions}
+                                serviceCatalog={serviceCatalog}
+                                onProductPriceChange={onProductPriceChange}
+                                onServicePriceChange={onServicePriceChange}
+                                onServiceToggle={onServiceToggle}
+                                onServiceAdd={onServiceAdd}
+                            />
+                        ))}
+                    </div>
+                </details>
+            )}
+        </section>
+    );
+}
+
 export function SupplierPieceCameraScanner({
     onDetected,
     onClose,
@@ -299,11 +382,17 @@ export function SupplierPieceCameraScanner({
     onServicePriceChange = () => {},
     onServiceToggle = () => {},
     onServiceAdd = () => {},
+    supplierName = "",
+    employeeName = "",
+    manualBarcode = "",
+    onManualBarcodeChange = () => {},
+    onManualSubmit = () => {},
 }) {
     const videoRef = useRef(null);
     const [cameraError, setCameraError] = useState("");
     const [cameraReady, setCameraReady] = useState(false);
     const [cameraEngine, setCameraEngine] = useState("");
+    const [manualOpen, setManualOpen] = useState(false);
 
     useEffect(() => {
         let stopped = false;
@@ -429,26 +518,37 @@ export function SupplierPieceCameraScanner({
         };
     }, [onDetected]);
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-2 sm:p-3" dir="rtl" role="dialog" aria-modal="true" aria-label="تصوير QR القطعة" data-testid="supplier-receiving-camera-dialog">
-            <div className="flex h-[96vh] max-h-[96vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-                <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
-                    <div>
-                        <h3 className="flex items-center gap-2 text-lg font-black text-slate-950"><Camera size={24} className="text-emerald-700" weight="duotone" /> تصوير QR القطعة</h3>
-                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">الكاميرا تبقى مفتوحة. وجّهها إلى كل QR، ثم احفظ فاتورة المورد بعد اكتمال التصوير.</p>
-                    </div>
-                    <button type="button" onClick={onClose} disabled={saving || cancelling} className="shrink-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-800 disabled:opacity-50">إغلاق الكاميرا</button>
-                </div>
+    const total = invoiceLines.reduce((sum, line) => sum + Number(line.total_halalas || 0), 0);
+    const cannotSave = saving
+        || scanning
+        || !invoiceLines.length
+        || invoiceLines.some((line) => !line.services.some(
+            (service) => service.selected && Number(service.unit_price_halalas) > 0,
+        ));
 
-                <div className="grid min-h-0 flex-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" data-testid="supplier-receiving-camera-split-layout">
-                    <section className="min-h-0 border-b border-slate-200 bg-slate-950 p-3 lg:border-b-0 lg:border-l">
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white p-0 lg:bg-slate-950/90 lg:p-3" dir="rtl" role="dialog" aria-modal="true" aria-label="تصوير QR القطعة" data-testid="supplier-receiving-camera-dialog">
+            <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-7xl flex-col overflow-hidden bg-white shadow-2xl lg:h-[96vh] lg:max-h-[96vh] lg:rounded-3xl">
+                <header className="flex items-center justify-between gap-3 bg-emerald-800 px-3 py-3 text-white lg:border-b lg:border-slate-200 lg:bg-white lg:p-4 lg:text-slate-950">
+                    <div className="min-w-0">
+                        <h3 className="flex items-center gap-2 text-lg font-black"><Camera size={24} className="text-emerald-200 lg:text-emerald-700" weight="duotone" /> <span className="lg:hidden">استلام المورد</span><span className="hidden lg:inline">تصوير QR القطعة</span></h3>
+                        <p className="mt-0.5 truncate text-[11px] font-bold text-emerald-100 lg:mt-1 lg:text-xs lg:leading-5 lg:text-slate-500">
+                            <span className="lg:hidden">{supplierName || "جلسة المورد"}{employeeName ? ` · ${employeeName}` : ""}</span>
+                            <span className="hidden lg:inline">الكاميرا تبقى مفتوحة. وجّهها إلى كل QR، ثم احفظ فاتورة المورد بعد اكتمال التصوير.</span>
+                        </p>
+                    </div>
+                    <button type="button" onClick={onClose} disabled={saving || cancelling} className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-black text-white disabled:opacity-50 lg:border-slate-300 lg:bg-white lg:text-slate-800"><XCircle className="ml-1 inline lg:hidden" /> <span className="hidden lg:inline">إغلاق الكاميرا</span><span className="lg:hidden">إغلاق</span></button>
+                </header>
+
+                <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-2" data-testid="supplier-receiving-camera-split-layout">
+                    <section className="shrink-0 border-b border-slate-200 bg-white p-3 lg:min-h-0 lg:border-b-0 lg:border-l lg:bg-slate-950">
                         {cameraError ? (
-                            <div className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-950">
+                            <div className="flex min-h-[190px] items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-950 lg:min-h-0">
                                 <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
                                 <span>{cameraError}</span>
                             </div>
                         ) : (
-                            <div className="relative h-full min-h-0 overflow-hidden rounded-2xl bg-black" data-camera-engine={cameraEngine || undefined}>
+                            <div className="relative h-[29dvh] min-h-[190px] max-h-[300px] overflow-hidden rounded-2xl bg-black lg:h-full lg:max-h-none" data-camera-engine={cameraEngine || undefined}>
                                 <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
                                 {!cameraReady && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-sm font-black text-white">
@@ -456,9 +556,12 @@ export function SupplierPieceCameraScanner({
                                     </div>
                                 )}
                                 {cameraReady && (
-                                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-10">
-                                        <div className="aspect-square w-full max-w-72 rounded-3xl border-4 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.35)]" />
-                                    </div>
+                                    <>
+                                        <div className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-black text-emerald-800 shadow"><span className="ml-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />الكاميرا جاهزة</div>
+                                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-12">
+                                            <div className="aspect-square w-full max-w-72 rounded-3xl border-[3px] border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.30)]" />
+                                        </div>
+                                    </>
                                 )}
                                 {scanning && (
                                     <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-emerald-800 shadow-lg">
@@ -467,49 +570,74 @@ export function SupplierPieceCameraScanner({
                                 )}
                             </div>
                         )}
-                        <p className="mt-2 text-center text-xs font-bold text-slate-200">أبعد QR السابق عن الإطار ثم وجّه الكاميرا إلى القطعة التالية.</p>
+
+                        <div className="mt-2 grid grid-cols-2 gap-2 lg:hidden">
+                            <button type="button" onClick={() => setManualOpen((value) => !value)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-800"><Keyboard size={20} /> إدخال يدوي</button>
+                            <button type="button" onClick={onClose} disabled={saving || cancelling} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-800 disabled:opacity-50"><XCircle size={20} /> إغلاق الكاميرا</button>
+                        </div>
+                        {manualOpen && (
+                            <form onSubmit={(event) => { event.preventDefault(); onManualSubmit(); }} className="mt-2 flex gap-2 lg:hidden">
+                                <input value={manualBarcode} onChange={(event) => onManualBarcodeChange(event.target.value)} autoComplete="off" placeholder="أدخل رمز القطعة" className="min-h-11 min-w-0 flex-1 rounded-xl border border-emerald-300 px-3 font-mono text-sm font-black outline-none focus:border-emerald-600" />
+                                <button type="submit" disabled={!manualBarcode.trim() || scanning} className="rounded-xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50">إضافة</button>
+                            </form>
+                        )}
+                        <p className="mt-2 hidden text-center text-xs font-bold text-slate-200 lg:block">أبعد QR السابق عن الإطار ثم وجّه الكاميرا إلى القطعة التالية.</p>
                     </section>
 
-                    <section className="flex min-h-0 flex-col bg-slate-50" data-testid="supplier-receiving-invoice-draft">
-                        <div className="border-b border-slate-200 bg-white p-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div><h4 className="font-black text-slate-950">فاتورة المورد</h4><p className="mt-1 text-xs font-bold text-slate-500">{invoiceLines.reduce((sum, line) => sum + line.quantity, 0)} قطعة · {invoiceLines.length} منتج</p></div>
-                                {lastScan && <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" weight="fill" />تمت إضافة {lastScan.product_name || "المنتج"}</span>}
+                    <section className="flex min-h-0 flex-1 flex-col bg-slate-50" data-testid="supplier-receiving-invoice-draft">
+                        {(lastScan || error) && (
+                            <div className="space-y-2 px-3 pt-3 lg:border-b lg:border-slate-200 lg:bg-white lg:p-4">
+                                {lastScan && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" weight="fill" /> تمت إضافة {lastScan.product_name || "المنتج"} إلى الفاتورة</div>}
+                                {error && <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
                             </div>
-                            {error && <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
-                        </div>
+                        )}
 
                         <div className="min-h-0 flex-1 overflow-auto p-3">
-                            {!invoiceLines.length ? (
-                                <div className="flex min-h-52 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">ابدأ بتصوير باركود المنتجات؛ ستظهر هنا دون إغلاق الكاميرا.</div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {invoiceLines.map((line) => (
-                                        <SupplierInvoiceLineEditor
-                                            key={line.key}
-                                            line={line}
-                                            permissions={permissions}
-                                            serviceCatalog={serviceCatalog}
-                                            onProductPriceChange={onProductPriceChange}
-                                            onServicePriceChange={onServicePriceChange}
-                                            onServiceToggle={onServiceToggle}
-                                            onServiceAdd={onServiceAdd}
-                                        />
-                                    ))}
-                                </div>
-                            )}
+                            <div className="lg:hidden">
+                                <SupplierInvoiceCompactTable
+                                    invoiceLines={invoiceLines}
+                                    permissions={permissions}
+                                    serviceCatalog={serviceCatalog}
+                                    onProductPriceChange={onProductPriceChange}
+                                    onServicePriceChange={onServicePriceChange}
+                                    onServiceToggle={onServiceToggle}
+                                    onServiceAdd={onServiceAdd}
+                                />
+                                <details className="group mt-3 rounded-xl border border-slate-200 bg-white">
+                                    <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-800"><span>التعليمات والمسؤوليات</span><CaretDown size={18} className="transition-transform group-open:rotate-180" /></summary>
+                                    <div className="space-y-2 border-t border-slate-100 p-3 text-xs font-bold leading-5 text-slate-600">
+                                        <p>موظف التجهيز محفوظ مع كل قطعة، وموظف الاستلام هو صاحب الجلسة.</p>
+                                        <p>اعتماد الفاتورة ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
+                                    </div>
+                                </details>
+                            </div>
+                            <div className="hidden space-y-3 lg:block">
+                                {!invoiceLines.length ? (
+                                    <div className="flex min-h-52 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">ابدأ بتصوير باركود المنتجات؛ ستظهر هنا دون إغلاق الكاميرا.</div>
+                                ) : invoiceLines.map((line) => (
+                                    <SupplierInvoiceLineEditor
+                                        key={line.key}
+                                        line={line}
+                                        permissions={permissions}
+                                        serviceCatalog={serviceCatalog}
+                                        onProductPriceChange={onProductPriceChange}
+                                        onServicePriceChange={onServicePriceChange}
+                                        onServiceToggle={onServiceToggle}
+                                        onServiceAdd={onServiceAdd}
+                                    />
+                                ))}
+                            </div>
                         </div>
 
-                        <footer className="border-t border-slate-200 bg-white p-4">
-                            <div className="mb-3 flex items-center justify-between"><span className="font-black text-slate-700">إجمالي الفاتورة</span><span className="text-2xl font-black tabular-nums text-emerald-800">{formatSupplierMoney(invoiceLines.reduce((sum, line) => sum + line.total_halalas, 0))} ر.س</span></div>
-                            <button type="button" onClick={onSave} disabled={saving || scanning || !invoiceLines.length || invoiceLines.some((line) => !line.services.some((service) => service.selected && Number(service.unit_price_halalas) > 0))} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
+                        <footer className="shrink-0 border-t border-slate-200 bg-white p-3 lg:p-4">
+                            <div className="mb-2 flex items-center justify-between"><span className="font-black text-slate-700">الإجمالي</span><span className="text-xl font-black tabular-nums text-emerald-800 lg:text-2xl">{formatSupplierMoney(total)} ر.س</span></div>
+                            <button type="button" onClick={onSave} disabled={cannotSave} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
                                 {saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} اعتماد فاتورة المورد وإنهاء الجلسة
                             </button>
-                            <p className="mt-2 text-center text-[11px] font-bold text-emerald-800">الاعتماد ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
-                            <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-white px-5 text-sm font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-camera">
+                            <p className="mt-1.5 text-center text-[10px] font-bold text-emerald-800">الاعتماد ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
+                            <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-1.5 min-h-9 w-full rounded-xl text-xs font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-camera">
                                 {cancelling ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
                             </button>
-                            <p className="mt-2 text-center text-[11px] font-bold text-slate-500">الإلغاء يهمل المسودة ولا ينشئ فاتورة أو مديونية.</p>
                         </footer>
                     </section>
                 </div>
@@ -527,6 +655,7 @@ export default function SupplierReceivingWorkspace() {
     const [closeNote, setCloseNote] = useState("");
     const [barcode, setBarcode] = useState("");
     const [cameraOpen, setCameraOpen] = useState(false);
+    const [manualEntryOpen, setManualEntryOpen] = useState(false);
     const [error, setError] = useState("");
     const [lastScan, setLastScan] = useState(null);
     const [invoiceDrafts, setInvoiceDrafts] = useState({});
@@ -566,6 +695,17 @@ export default function SupplierReceivingWorkspace() {
     const closedSessions = useMemo(
         () => (data?.sessions || []).filter((row) => row?.status === "closed"),
         [data?.sessions],
+    );
+    const invoiceTotal = invoiceLines.reduce(
+        (sum, line) => sum + Number(line.total_halalas || 0),
+        0,
+    );
+    const invoiceCannotSave = Boolean(
+        busy
+        || !invoiceLines.length
+        || invoiceLines.some((line) => !line.services.some(
+            (service) => service.selected && Number(service.unit_price_halalas) > 0,
+        )),
     );
 
     useEffect(() => {
@@ -767,7 +907,7 @@ export default function SupplierReceivingWorkspace() {
 
     return (
         <section className="space-y-5" dir="rtl" data-testid="supplier-receiving-workspace">
-            <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+            <div className="hidden overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm lg:block">
                 <header className="bg-gradient-to-l from-slate-950 to-violet-900 p-5 text-white sm:p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -796,13 +936,13 @@ export default function SupplierReceivingWorkspace() {
                 </div>
             </div>
 
-            <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950">
+            <div className="hidden items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950 lg:flex">
                 <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
                 <div>عند الاعتماد تتحول مسودة الاستلام إلى فاتورة مورد محاسبية واحدة داخل ميزان 2، وتُنشأ مديونية المورد بالقيمة النهائية. لا يُرسل شيء إلى قيود أو سلة.</div>
             </div>
 
             {error && (
-                <div className="flex items-start gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-black text-rose-950" data-testid="supplier-receiving-error">
+                <div className={`${active ? "hidden lg:flex" : "flex"} items-start gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-black text-rose-950`} data-testid="supplier-receiving-error">
                     <WarningCircle size={21} className="mt-0.5 shrink-0" />{error}
                 </div>
             )}
@@ -827,7 +967,80 @@ export default function SupplierReceivingWorkspace() {
                     {!loading && !(data?.suppliers || []).length && <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">لا يوجد مورد نشط مرتبط بخدمات في ميزان 2. <Link to="/suppliers-v2" className="underline">افتح صفحة الموردين لإضافة المورد وخدماته.</Link></div>}
                 </form>
             ) : (
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
+                <>
+                    <section className="space-y-4 lg:hidden" data-testid="supplier-receiving-mobile-active-session">
+                        <header className="rounded-2xl bg-emerald-800 p-4 text-white shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="text-[10px] font-black text-emerald-100">استلام المورد</div>
+                                    <h3 className="mt-1 truncate text-xl font-black">{supplierDisplayName(active)}</h3>
+                                    <p className="mt-1 text-xs font-bold text-emerald-100">{active.opened_by_name || "—"} · {Number(active.scan_count || 0)} قطعة</p>
+                                </div>
+                                <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${sessionCancelling ? "bg-rose-600" : "bg-white/15"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : "جلسة مفتوحة"}</span>
+                            </div>
+                        </header>
+
+                        {error && (
+                            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black leading-5 text-rose-900" data-testid="supplier-receiving-mobile-error">
+                                <WarningCircle size={19} className="mt-0.5 shrink-0" weight="fill" /> {error}
+                            </div>
+                        )}
+
+                        <section className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm" data-testid="supplier-receiving-mobile-scan-launcher">
+                            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><Barcode size={36} weight="duotone" /></span>
+                            <h3 className="mt-3 text-xl font-black text-slate-950">مسح قطعة جديدة</h3>
+                            <p className="mt-1 text-sm font-bold text-slate-500">امسح رمز القطعة لإضافتها إلى فاتورة المورد</p>
+                            <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-camera-button-mobile">
+                                <Camera size={23} weight="duotone" /> فتح الكاميرا ومسح القطعة
+                            </button>
+                            <button type="button" onClick={() => setManualEntryOpen((value) => !value)} disabled={busy === "scan" || sessionCancelling} className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-white px-5 text-sm font-black text-emerald-800 disabled:opacity-50">
+                                <Keyboard size={21} /> إدخال الرمز يدويًا
+                            </button>
+                            {manualEntryOpen && (
+                                <form onSubmit={scanPiece} className="mt-3 flex gap-2" data-testid="supplier-receiving-mobile-manual-form">
+                                    <input value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" placeholder="رمز القطعة" className="min-h-11 min-w-0 flex-1 rounded-xl border border-emerald-300 px-3 font-mono text-sm font-black outline-none focus:border-emerald-600" />
+                                    <button type="submit" disabled={!barcode.trim() || busy === "scan"} className="rounded-xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50">إضافة</button>
+                                </form>
+                            )}
+                        </section>
+
+                        {lastScan && (
+                            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-black text-emerald-800" data-testid="supplier-receiving-mobile-last-success">
+                                <CheckCircle size={22} weight="fill" /> تمت إضافة {lastScan.product_name || "القطعة"} إلى الفاتورة
+                            </div>
+                        )}
+
+                        <SupplierInvoiceCompactTable
+                            invoiceLines={invoiceLines}
+                            permissions={data?.permissions || {}}
+                            serviceCatalog={activeServiceCatalog}
+                            onProductPriceChange={changeProductPrice}
+                            onServicePriceChange={changeServicePrice}
+                            onServiceToggle={toggleService}
+                            onServiceAdd={addService}
+                        />
+
+                        <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-slate-800"><span>التعليمات والمسؤوليات</span><CaretDown size={18} className="transition-transform group-open:rotate-180" /></summary>
+                            <div className="space-y-3 border-t border-slate-100 p-4 text-xs font-bold leading-5 text-slate-600">
+                                <p>موظف التجهيز محفوظ أصلًا مع كل قطعة، وموظف الاستلام هو صاحب هذه الجلسة.</p>
+                                <p>الاعتماد ينشئ فاتورة ومديونية داخل ميزان 2 فقط، ولا يرسل شيئًا إلى قيود أو سلة.</p>
+                                <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={2} placeholder="ملاحظة الإغلاق — اختياري" className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-emerald-500" />
+                            </div>
+                        </details>
+
+                        <footer className="sticky bottom-0 z-20 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+                            <div className="mb-2 flex items-center justify-between gap-3"><span className="font-black text-slate-950">الإجمالي</span><span className="text-xl font-black tabular-nums text-emerald-800">{formatSupplierMoney(invoiceTotal)} ر.س</span></div>
+                            <button type="button" onClick={closeSession} disabled={invoiceCannotSave} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice-mobile">
+                                {busy === "close" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} مراجعة واعتماد الفاتورة
+                            </button>
+                            <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-1 min-h-9 w-full text-xs font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-mobile">
+                                {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" />} إلغاء الجلسة والخروج
+                            </button>
+                        </footer>
+                    </section>
+
+                    <div className="hidden gap-5 lg:grid xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
                     <div className="space-y-4">
                         <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm" data-testid="supplier-receiving-active-session">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -886,7 +1099,8 @@ export default function SupplierReceivingWorkspace() {
                             <p className="mt-2 text-center text-[11px] font-bold text-rose-700">الإلغاء لا ينشئ فاتورة، ويعيد أي قطع صُوّرت إلى حالتها السابقة.</p>
                         </section>
                     </aside>
-                </div>
+                    </div>
+                </>
             )}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="supplier-receiving-history">
@@ -917,6 +1131,11 @@ export default function SupplierReceivingWorkspace() {
                     onServicePriceChange={changeServicePrice}
                     onServiceToggle={toggleService}
                     onServiceAdd={addService}
+                    supplierName={supplierDisplayName(active)}
+                    employeeName={active.opened_by_name || ""}
+                    manualBarcode={barcode}
+                    onManualBarcodeChange={setBarcode}
+                    onManualSubmit={() => receivePiece(barcode, { refocus: false })}
                 />
             )}
         </section>

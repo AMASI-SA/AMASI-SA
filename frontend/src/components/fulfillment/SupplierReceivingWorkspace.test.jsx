@@ -194,7 +194,7 @@ test("invoice lines do not merge pieces with different pending supplier services
     expect(lines.map((line) => line.services[0].service_id).sort()).toEqual(["engrave", "paint"]);
 });
 
-test("camera invoice shows name, quantity, editable unit price and total without product images", () => {
+test("camera invoice shows one compact row with image quantity unit price and total", () => {
     const markup = renderToStaticMarkup(
         <SupplierPieceCameraScanner
             onDetected={() => {}}
@@ -203,6 +203,7 @@ test("camera invoice shows name, quantity, editable unit price and total without
                 key: "product-1",
                 product_name: "تعليقة اليوم الوطني",
                 sku: "ND-96",
+                selected_image_url: "https://cdn.example.test/national-day.png",
                 quantity: 3,
                 product_unit_price_halalas: 500,
                 product_reference_price_complete: true,
@@ -222,9 +223,12 @@ test("camera invoice shows name, quantity, editable unit price and total without
 
     expect(markup).toContain("سعر المنتج الأساسي للقطعة");
     expect(markup).toContain("الخدمات التي نفذها المورد");
-    expect(markup).toContain("إجمالي الفاتورة");
+    expect(markup).toContain("سعر الوحدة");
+    expect(markup).toContain("الإجمالي");
     expect(markup).toContain("تعليقة اليوم الوطني");
-    expect(markup).not.toContain("<img");
+    expect(markup).toContain('data-testid="supplier-receiving-mobile-invoice-row"');
+    expect(markup).toContain("https://cdn.example.test/national-day.png");
+    expect(markup).toContain("<img");
 });
 
 test("an open supplier session shows the camera launch button", async () => {
@@ -256,6 +260,9 @@ test("an open supplier session shows the camera launch button", async () => {
         const cameraButton = container.querySelector('[data-testid="supplier-receiving-camera-button"]');
         expect(cameraButton).not.toBeNull();
         expect(cameraButton.textContent).toContain("فتح الكاميرا");
+        expect(container.querySelector('[data-testid="supplier-receiving-camera-button-mobile"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="supplier-receiving-mobile-active-session"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="supplier-receiving-mobile-invoice"]')).not.toBeNull();
     } finally {
         act(() => root.unmount());
         container.remove();

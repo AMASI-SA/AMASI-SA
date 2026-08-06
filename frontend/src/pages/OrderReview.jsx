@@ -655,7 +655,8 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
 export const REVIEW_PAGE_SIZE = 10;
 
-export default function OrderReview() {
+export default function OrderReview({ initialSearch = "" }) {
+    const normalizedInitialSearch = String(initialSearch || "").replace(/^#/, "").trim();
     const [orders, setOrders] = useState([]);
     const [currentCursor, setCurrentCursor] = useState(null);
     const [previousCursors, setPreviousCursors] = useState([]);
@@ -663,9 +664,17 @@ export default function OrderReview() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [search, setSearch] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
+    const [search, setSearch] = useState(normalizedInitialSearch);
+    const [searchQuery, setSearchQuery] = useState(normalizedInitialSearch);
     const latestRequestId = useRef(0);
+
+    useEffect(() => {
+        if (!normalizedInitialSearch) return;
+        setSearch(normalizedInitialSearch);
+        setSearchQuery(normalizedInitialSearch);
+        setCurrentCursor(null);
+        setPreviousCursors([]);
+    }, [normalizedInitialSearch]);
 
     const pageNumber = previousCursors.length + 1;
     const hasPreviousPage = previousCursors.length > 0;
