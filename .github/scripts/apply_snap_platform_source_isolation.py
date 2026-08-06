@@ -1,0 +1,406 @@
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    file = Path(path)
+    text = file.read_text(encoding="utf-8")
+    if new in text:
+        return
+    if old not in text:
+        raise SystemExit(f"pattern not found in {path}: {old[:160]!r}")
+    file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+init = "backend/integrations_control_center/__init__.py"
+replace_once(
+    init,
+    """from .snapchat_account_timezone_retention import (
+    install_snapchat_account_timezone_retention,
+)
+""",
+    """from .snapchat_account_timezone_retention import (
+    install_snapchat_account_timezone_retention,
+)
+from .snapchat_platform_source_integrity import (
+    install_snapchat_platform_source_integrity,
+)
+""",
+)
+replace_once(
+    init,
+    """    install_snapchat_account_timezone_scheduler()
+    install_snapchat_account_hourly_chart()
+""",
+    """    install_snapchat_account_timezone_scheduler()
+    install_snapchat_platform_source_integrity()
+    install_snapchat_account_hourly_chart()
+""",
+)
+
+fixed = "backend/integrations_control_center/snapchat_campaign_created_order_semantics.py"
+replace_once(
+    fixed,
+    """            result = dict(await current_report(*args, **kwargs) or {})
+            financial_matched = _FINANCIAL_MATCHED.get()
+            campaigns = result.get("campaigns") or []
+""",
+    """            result = dict(await current_report(*args, **kwargs) or {})
+            result_source = _text(
+                result.get("result_source") or kwargs.get("result_source")
+            ).lower()
+            if result_source != "salla":
+                result.setdefault("policy", {}).update({
+                    "salla_order_semantics_applied": False,
+                    "provider_metrics_preserved_for_platform_source": True,
+                })
+                return result
+
+            financial_matched = _FINANCIAL_MATCHED.get()
+            campaigns = result.get("campaigns") or []
+""",
+)
+replace_once(
+    fixed,
+    """                "qoyod_write_reached": False,
+            })
+            return result
+""",
+    """                "qoyod_write_reached": False,
+                "salla_order_semantics_applied": True,
+                "provider_metrics_preserved_for_platform_source": False,
+            })
+            return result
+""",
+)
+
+hydration = "frontend/src/marketingCampaignProfitabilityHydration.js"
+replace_once(
+    hydration,
+    """  const rawCampaigns = Array.isArray(snapshot?.campaigns)
+    ? snapshot.campaigns
+    : [];
+""",
+    """  const resultSource = text(
+    snapshot?.result_source || snapshot?.selected_result_source,
+  ).toLowerCase();
+  if (resultSource && resultSource !== "salla") {
+    const sourceCampaigns = Array.isArray(campaigns) ? campaigns : [];
+    return {
+      campaigns: sourceCampaigns,
+      totals: totals || {},
+      hydrated_campaigns: 0,
+      order_semantics_hydrated_campaigns: 0,
+      source: "snapchat_platform_source_no_salla_hydration",
+      result_source: resultSource,
+    };
+  }
+
+  const rawCampaigns = Array.isArray(snapshot?.campaigns)
+    ? snapshot.campaigns
+    : [];
+""",
+)
+replace_once(
+    hydration,
+    """  provider_writes_allowed: false,
+});
+""",
+    """  provider_writes_allowed: false,
+  platform_source_hydration_blocked: true,
+});
+""",
+)
+
+performance = "frontend/src/services/marketingPerformance.js"
+replace_once(
+    performance,
+    """        platform: "snapchat",
+        label: MARKETING_PLATFORM_CONFIG.snapchat.label,
+        range: {
+""",
+    """        platform: "snapchat",
+        label: MARKETING_PLATFORM_CONFIG.snapchat.label,
+        result_source: text(value.result_source, "salla"),
+        range: {
+""",
+)
+
+page = "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+replace_once(
+    page,
+    """                    platform={platform}
+                    platformLabel={config.label}
+                    entityLevel={entityLevel}
+""",
+    """                    platform={platform}
+                    platformLabel={config.label}
+                    resultSource={data?.result_source || "salla"}
+                    entityLevel={entityLevel}
+""",
+)
+
+workspace = "frontend/src/components/marketing/AdsEntityLevelWorkspace.jsx"
+replace_once(
+    workspace,
+    """    platform,
+    platformLabel,
+    entityLevel,
+""",
+    """    platform,
+    platformLabel,
+    resultSource = "salla",
+    entityLevel,
+""",
+)
+replace_once(
+    workspace,
+    """                    platform={platform}
+                    platformLabel={platformLabel}
+                    campaigns={campaignReport.campaigns}
+""",
+    """                    platform={platform}
+                    platformLabel={platformLabel}
+                    resultSource={resultSource}
+                    campaigns={campaignReport.campaigns}
+""",
+)
+
+table = "frontend/src/components/marketing/CampaignManagerTable.jsx"
+replace_once(
+    table,
+    """function defaultColumnsForPlatform(platform) {
+    return platform === "snapchat"
+        ? [...CAMPAIGN_MANAGER_DEFAULT_COLUMNS]
+        : CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
+            (id) => !PROFITABILITY_COLUMNS.includes(id),
+        );
+}
+""",
+    """function defaultColumnsForPlatform(platform, resultSource = "salla") {
+    return platform === "snapchat" && resultSource === "salla"
+        ? [...CAMPAIGN_MANAGER_DEFAULT_COLUMNS]
+        : CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
+            (id) => !PROFITABILITY_COLUMNS.includes(id),
+        );
+}
+
+function columnLabel(column, platform, resultSource) {
+    if (
+        platform === "snapchat"
+        && resultSource === "platform"
+        && column.id === "sales"
+    ) {
+        return "قيمة مشتريات Snapchat";
+    }
+    return column.label;
+}
+""",
+)
+replace_once(
+    table,
+    """    platform,
+    platformLabel,
+    campaigns = [],
+""",
+    """    platform,
+    platformLabel,
+    resultSource = "salla",
+    campaigns = [],
+""",
+)
+replace_once(
+    table,
+    """    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}`;
+    const availableDefinitions = COLUMN_DEFINITIONS.filter(
+        (column) => platform === "snapchat" || !PROFITABILITY_COLUMNS.includes(column.id),
+    );
+    const defaultColumns = defaultColumnsForPlatform(platform);
+""",
+    """    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}:${resultSource}`;
+    const availableDefinitions = COLUMN_DEFINITIONS.filter(
+        (column) => (
+            platform === "snapchat"
+            && resultSource === "salla"
+        ) || !PROFITABILITY_COLUMNS.includes(column.id),
+    );
+    const defaultColumns = defaultColumnsForPlatform(platform, resultSource);
+""",
+)
+replace_once(
+    table,
+    """    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
+    }, [storageKey, visibleColumns]);
+""",
+    """    useEffect(() => {
+        if (typeof window === "undefined") return;
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+            setVisibleColumns(normalizeVisibleColumns(
+                stored,
+                availableDefinitions,
+                defaultColumns,
+            ));
+        } catch {
+            setVisibleColumns(defaultColumns);
+        }
+    }, [storageKey, platform, resultSource]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
+    }, [storageKey, visibleColumns]);
+""",
+)
+text = Path(table).read_text(encoding="utf-8")
+text = text.replace(
+    "<span>{column.label}</span>",
+    "<span>{columnLabel(column, platform, resultSource)}</span>",
+)
+text = text.replace(
+    '<span className="block">{column.label}</span>',
+    '<span className="block">{columnLabel(column, platform, resultSource)}</span>',
+)
+Path(table).write_text(text, encoding="utf-8")
+
+audit_ui = "frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx"
+replace_once(
+    audit_ui,
+    """                        <SummaryCard
+                            title="مشتريات Snapchat المنسوبة"
+                            value={summary.platform_attributed_purchases}
+                            note="مجموع صفوف حملات Snapchat، وليس سجل الطلبات المحاسبي"
+                            tone="violet"
+                        />
+""",
+    """                        <SummaryCard
+                            title="مشتريات Snapchat — كل الحساب"
+                            value={summary.platform_attributed_purchases}
+                            note={`لا يتأثر بفلتر الحملات؛ مجموع صفوف الحملات ${summary.platform_campaign_purchases ?? "—"}`}
+                            tone="violet"
+                        />
+""",
+)
+
+hydration_test = "frontend/src/marketingCampaignProfitabilityHydration.test.js"
+text = Path(hydration_test).read_text(encoding="utf-8")
+if "never overwrites platform metrics" not in text:
+    marker = """  test("declares an exact read-only hydration policy", () => {
+"""
+    new_test = """  test("never overwrites platform metrics with Salla orders or profitability", () => {
+    const campaigns = [{
+      account_id: "a1",
+      campaign_id: "c1",
+      orders: 21,
+      sales_sar: 3042.64,
+    }];
+    const totals = { orders: 21, sales_sar: 3042.64, roas: 1.66 };
+    const hydrated = hydrateCampaignProfitability(
+      campaigns,
+      totals,
+      {
+        result_source: "platform",
+        campaigns: [{
+          account_id: "a1",
+          campaign_id: "c1",
+          created_orders: 18,
+          profitability: { orders: 18, sales_sar: 2513.59 },
+        }],
+        totals: {
+          created_orders: 18,
+          profitability: { sales_sar: 2513.59 },
+        },
+      },
+    );
+
+    expect(hydrated.campaigns).toBe(campaigns);
+    expect(hydrated.totals).toBe(totals);
+    expect(hydrated.campaigns[0].orders).toBe(21);
+    expect(hydrated.campaigns[0].sales_sar).toBe(3042.64);
+    expect(hydrated.campaigns[0].profitability).toBeUndefined();
+    expect(hydrated.source).toBe(
+      "snapchat_platform_source_no_salla_hydration",
+    );
+  });
+
+""" + marker
+    if marker not in text:
+        raise SystemExit("hydration test marker missing")
+    text = text.replace(marker, new_test, 1)
+text = text.replace(
+    """      provider_writes_allowed: false,
+    });
+""",
+    """      provider_writes_allowed: false,
+      platform_source_hydration_blocked: true,
+    });
+""",
+    1,
+)
+Path(hydration_test).write_text(text, encoding="utf-8")
+
+table_test = "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+text = Path(table_test).read_text(encoding="utf-8")
+if "platform source hides Salla profitability" not in text:
+    marker = """test("opens product profitability details with official product cost links", async () => {
+"""
+    new_test = """test("platform source hides Salla profitability and labels provider purchase value", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+        root.render(
+            <CampaignManagerTable
+                platform="snapchat"
+                platformLabel="سناب شات"
+                resultSource="platform"
+                campaigns={[{
+                    ...campaigns[1],
+                    orders: 21,
+                    sales_sar: 3042.64,
+                    profitability: undefined,
+                }]}
+                totals={{ orders: 21, sales_sar: 3042.64 }}
+                pagination={{ page: 1, pages: 1, total: 1 }}
+            />,
+        );
+    });
+
+    const table = container.querySelector('[data-testid="campaign-manager-table"]');
+    const ids = [...table.querySelectorAll("thead [data-column-id]")]
+        .map((cell) => cell.dataset.columnId);
+    expect(ids).not.toContain("product_cost");
+    expect(ids).not.toContain("profit");
+    expect(ids).not.toContain("profit_margin");
+    expect(table.textContent).toContain("قيمة مشتريات Snapchat");
+    expect(table.textContent).not.toContain("تفاصيل المنتجات");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+""" + marker
+    if marker not in text:
+        raise SystemExit("table test marker missing")
+    text = text.replace(marker, new_test, 1)
+Path(table_test).write_text(text, encoding="utf-8")
+
+backend_test = Path("backend/tests/test_snapchat_platform_source_integrity_v1.py")
+text = backend_test.read_text(encoding="utf-8")
+if not text.startswith("from pathlib import Path"):
+    text = "from pathlib import Path\n" + text
+if "test_fixed_created_order_semantics_is_gated_to_salla_source" not in text:
+    text += """
+
+
+def test_fixed_created_order_semantics_is_gated_to_salla_source():
+    source = Path(
+        "integrations_control_center/snapchat_campaign_created_order_semantics.py"
+    ).read_text(encoding="utf-8")
+    assert 'if result_source != "salla":' in source
+    assert '"provider_metrics_preserved_for_platform_source": True' in source
+"""
+backend_test.write_text(text, encoding="utf-8")
