@@ -100,6 +100,42 @@ describe("Campaign profitability hydration", () => {
     expect(hydrated.hydrated_campaigns).toBe(0);
   });
 
+  test("never overwrites platform metrics with Salla orders or profitability", () => {
+    const campaigns = [{
+      account_id: "a1",
+      campaign_id: "c1",
+      orders: 21,
+      sales_sar: 3042.64,
+    }];
+    const totals = { orders: 21, sales_sar: 3042.64, roas: 1.66 };
+    const hydrated = hydrateCampaignProfitability(
+      campaigns,
+      totals,
+      {
+        result_source: "platform",
+        campaigns: [{
+          account_id: "a1",
+          campaign_id: "c1",
+          created_orders: 18,
+          profitability: { orders: 18, sales_sar: 2513.59 },
+        }],
+        totals: {
+          created_orders: 18,
+          profitability: { sales_sar: 2513.59 },
+        },
+      },
+    );
+
+    expect(hydrated.campaigns).toBe(campaigns);
+    expect(hydrated.totals).toBe(totals);
+    expect(hydrated.campaigns[0].orders).toBe(21);
+    expect(hydrated.campaigns[0].sales_sar).toBe(3042.64);
+    expect(hydrated.campaigns[0].profitability).toBeUndefined();
+    expect(hydrated.source).toBe(
+      "snapchat_platform_source_no_salla_hydration",
+    );
+  });
+
   test("declares an exact read-only hydration policy", () => {
     expect(CAMPAIGN_PROFITABILITY_HYDRATION_POLICY).toEqual({
       exact_account_campaign_key: true,
@@ -108,6 +144,7 @@ describe("Campaign profitability hydration", () => {
       keeps_financial_orders_separate: true,
       reads_raw_snapshot_only: true,
       provider_writes_allowed: false,
+      platform_source_hydration_blocked: true,
     });
   });
 });

@@ -1,3 +1,4 @@
+from pathlib import Path
 from datetime import date, datetime, timezone
 
 from integrations_control_center.snapchat_platform_source_integrity import (
@@ -115,3 +116,12 @@ def test_audit_prefers_account_total_and_keeps_campaign_sum_separate():
     assert account == 21
     assert campaigns == 16
     assert source == "account_total_snapshot"
+
+
+
+def test_fixed_created_order_semantics_is_gated_to_salla_source():
+    source = Path(
+        "integrations_control_center/snapchat_campaign_created_order_semantics.py"
+    ).read_text(encoding="utf-8")
+    assert 'if result_source != "salla":' in source
+    assert '"provider_metrics_preserved_for_platform_source": True' in source

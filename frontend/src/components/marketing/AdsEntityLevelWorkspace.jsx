@@ -67,6 +67,7 @@ function nativeAppliedDate(kind) {
 export default function AdsEntityLevelWorkspace({
     platform,
     platformLabel,
+    resultSource = "salla",
     entityLevel,
     onEntityLevelChange,
     campaigns,
@@ -115,6 +116,7 @@ export default function AdsEntityLevelWorkspace({
                 <CampaignManagerTable
                     platform={platform}
                     platformLabel={platformLabel}
+                    resultSource={resultSource}
                     campaigns={campaignReport.campaigns}
                     totals={campaignReport.totals}
                     pagination={campaignPagination}

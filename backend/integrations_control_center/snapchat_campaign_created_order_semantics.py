@@ -357,6 +357,16 @@ def install_fixed_created_order_semantics() -> None:
         token = _FINANCIAL_MATCHED.set({})
         try:
             result = dict(await current_report(*args, **kwargs) or {})
+            result_source = _text(
+                result.get("result_source") or kwargs.get("result_source")
+            ).lower()
+            if result_source != "salla":
+                result.setdefault("policy", {}).update({
+                    "salla_order_semantics_applied": False,
+                    "provider_metrics_preserved_for_platform_source": True,
+                })
+                return result
+
             financial_matched = _FINANCIAL_MATCHED.get()
             campaigns = result.get("campaigns") or []
 
@@ -464,6 +474,8 @@ def install_fixed_created_order_semantics() -> None:
                 "provider_write_reached": False,
                 "accounting_write_reached": False,
                 "qoyod_write_reached": False,
+                "salla_order_semantics_applied": True,
+                "provider_metrics_preserved_for_platform_source": False,
             })
             return result
         finally:

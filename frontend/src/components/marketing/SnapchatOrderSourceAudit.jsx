@@ -186,9 +186,9 @@ export default function SnapchatOrderSourceAudit({
                             tone="blue"
                         />
                         <SummaryCard
-                            title="مشتريات Snapchat المنسوبة"
+                            title="مشتريات Snapchat — كل الحساب"
                             value={summary.platform_attributed_purchases}
-                            note="مجموع صفوف حملات Snapchat، وليس سجل الطلبات المحاسبي"
+                            note={`لا يتأثر بفلتر الحملات؛ مجموع صفوف الحملات ${summary.platform_campaign_purchases ?? "—"}`}
                             tone="violet"
                         />
                     </div>

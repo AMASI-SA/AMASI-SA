@@ -165,6 +165,7 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
     return {
         platform: "snapchat",
         label: MARKETING_PLATFORM_CONFIG.snapchat.label,
+        result_source: text(value.result_source, "salla"),
         range: {
             date_from: ISO_DATE_RE.test(value.date_from || "")
                 ? value.date_from

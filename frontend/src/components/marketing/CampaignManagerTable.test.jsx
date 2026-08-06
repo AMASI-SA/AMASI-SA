@@ -181,6 +181,43 @@ test("renders native sticky name and status and separate spend and Salla sales c
     container.remove();
 });
 
+test("platform source hides Salla profitability and labels provider purchase value", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+        root.render(
+            <CampaignManagerTable
+                platform="snapchat"
+                platformLabel="سناب شات"
+                resultSource="platform"
+                campaigns={[{
+                    ...campaigns[1],
+                    orders: 21,
+                    sales_sar: 3042.64,
+                    profitability: undefined,
+                }]}
+                totals={{ orders: 21, sales_sar: 3042.64 }}
+                pagination={{ page: 1, pages: 1, total: 1 }}
+            />,
+        );
+    });
+
+    const table = container.querySelector('[data-testid="campaign-manager-table"]');
+    const ids = [...table.querySelectorAll("thead [data-column-id]")]
+        .map((cell) => cell.dataset.columnId);
+    expect(ids).not.toContain("product_cost");
+    expect(ids).not.toContain("profit");
+    expect(ids).not.toContain("profit_margin");
+    expect(table.textContent).toContain("قيمة مشتريات Snapchat");
+    expect(table.textContent).not.toContain("تفاصيل المنتجات");
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
 test("opens product profitability details with official product cost links", async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");

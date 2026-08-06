@@ -36,6 +36,21 @@ export function hydrateCampaignProfitability(
   totals = {},
   snapshot = getCampaignReportSnapshot("snapchat"),
 ) {
+  const resultSource = text(
+    snapshot?.result_source || snapshot?.selected_result_source,
+  ).toLowerCase();
+  if (resultSource && resultSource !== "salla") {
+    const sourceCampaigns = Array.isArray(campaigns) ? campaigns : [];
+    return {
+      campaigns: sourceCampaigns,
+      totals: totals || {},
+      hydrated_campaigns: 0,
+      order_semantics_hydrated_campaigns: 0,
+      source: "snapchat_platform_source_no_salla_hydration",
+      result_source: resultSource,
+    };
+  }
+
   const rawCampaigns = Array.isArray(snapshot?.campaigns)
     ? snapshot.campaigns
     : [];
@@ -91,4 +106,5 @@ export const CAMPAIGN_PROFITABILITY_HYDRATION_POLICY = Object.freeze({
   keeps_financial_orders_separate: true,
   reads_raw_snapshot_only: true,
   provider_writes_allowed: false,
+  platform_source_hydration_blocked: true,
 });
