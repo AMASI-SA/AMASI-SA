@@ -10,7 +10,8 @@
  *   4. Five outcome labels: matched / needs Plan-B send / qoyod
  *      only / needs Repair Marker / amount mismatch.
  *
- * NO send button. NO edit. NO write-back to قيود. Read + sync + compare.
+ * NO send button and NO write-back to Qoyod. The local repair action only
+ * restores Mezan markers/accounting from already-synced real invoices.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
@@ -67,6 +68,9 @@ export default function QoyodReconciliation() {
   const [error, setError] = useState(null);
   const [syncFirst, setSyncFirst] = useState(true);
   const [page, setPage] = useState(1);
+  const [repairingMarkers, setRepairingMarkers] = useState(false);
+  const [repairResult, setRepairResult] = useState(null);
+  const [repairError, setRepairError] = useState(null);
 
   const runReport = useCallback(
     async ({ withSync = true } = {}) => {
@@ -96,6 +100,23 @@ export default function QoyodReconciliation() {
     },
     [],
   );
+
+  const repairMarkers = useCallback(async () => {
+    setRepairingMarkers(true);
+    setRepairError(null);
+    setRepairResult(null);
+    try {
+      const res = await api.post(
+        "/integrations/qoyod/manual/repair-recon-markers",
+      );
+      setRepairResult(res.data);
+      await runReport({ withSync: false });
+    } catch (e) {
+      setRepairError(extractDetail(e));
+    } finally {
+      setRepairingMarkers(false);
+    }
+  }, [runReport]);
 
   // On mount — auto-load the LATEST locally-saved comparison (no
   // sync). User directive 2026-07-09: the page must never appear
@@ -146,10 +167,21 @@ export default function QoyodReconciliation() {
             {data?.sync_start_date || "2026-07-01"} حتى اليوم.
           </p>
           <p className="text-[11px] text-slate-400 mt-1">
-            🔒 قراءة فقط — لا زر إرسال، لا تعديل، ولا كتابة على قيود.
+            🔒 لا إرسال ولا تعديل في قيود. إصلاح العلامات يكتب محلياً
+            داخل ميزان فقط من فواتير قيود الموجودة.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={repairMarkers}
+            disabled={repairingMarkers || loading}
+            data-testid="recon-repair-markers-btn"
+            className="rounded-lg bg-indigo-700 px-4 py-2 text-sm text-white hover:bg-indigo-600 disabled:opacity-50"
+          >
+            {repairingMarkers
+              ? "جاري إصلاح علامات ميزان…"
+              : "إصلاح علامات ميزان محلياً"}
+          </button>
           <label
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
             data-testid="recon-sync-first-toggle"
@@ -175,6 +207,30 @@ export default function QoyodReconciliation() {
           </button>
         </div>
       </div>
+
+      {repairError && (
+        <div
+          className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700"
+          data-testid="recon-repair-error"
+        >
+          {String(repairError)}
+        </div>
+      )}
+
+      {repairResult && (
+        <div
+          className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800"
+          data-testid="recon-repair-result"
+        >
+          تم إصلاح علامات ميزان محلياً: سجلات الاستلام{" "}
+          <b>{repairResult?.counts?.updated ?? 0}</b>، وبطاقات الطلبات{" "}
+          <b>
+            {repairResult?.accounting_repair?.counts
+              ?.unified_orders_updated ?? 0}
+          </b>
+          . لم تُنشأ أو تُعدّل أي فاتورة في قيود.
+        </div>
+      )}
 
       {error && (
         <div
