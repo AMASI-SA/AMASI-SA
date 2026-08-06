@@ -83,6 +83,9 @@ def make_order_engine_router(*args, **kwargs):
     from reviewed_preparation_batches import (
         make_reviewed_preparation_batches_router,
     )
+    from mobile_reviewed_preparation_recovery_routes import (
+        make_mobile_reviewed_preparation_recovery_router,
+    )
     from mobile_reviewed_preparation_routes import (
         make_mobile_reviewed_preparation_router,
     )
@@ -171,6 +174,10 @@ def make_order_engine_router(*args, **kwargs):
         make_order_review_customer_waiting_router(db, current_user),
         make_reviewed_products_catalog_router(db, current_user),
         make_reviewed_product_sorting_router(db, current_user),
+        # Register the recoverable create endpoint first. The route-key guard
+        # keeps the original GET employees and print-link routes while skipping
+        # the duplicate POST /files implementation.
+        make_mobile_reviewed_preparation_recovery_router(db, current_user),
         make_mobile_reviewed_preparation_router(db, current_user),
         make_mobile_preparation_execution_router(db, current_user),
         make_reviewed_preparation_batches_router(db, current_user),
