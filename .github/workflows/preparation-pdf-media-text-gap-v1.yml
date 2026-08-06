@@ -15,41 +15,47 @@ permissions:
 
 jobs:
   preparation-pdf-contract:
-    runs-on: ubuntu-22.04
+    runs-on: windows-2022
     steps:
       - name: Checkout pull request without Marketplace actions
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git init .
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "+${GITHUB_REF}:refs/remotes/pull/merge"
+          git remote add origin "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "+$env:GITHUB_REF`:refs/remotes/pull/merge"
           git checkout --detach refs/remotes/pull/merge
       - name: Verify runner Python
-        run: python3 --version
+        shell: pwsh
+        run: python --version
       - name: Install focused PDF dependencies
+        shell: pwsh
         working-directory: backend
         run: >-
-          python3 -m pip install -q
+          python -m pip install -q
           pytest PyMuPDF qrcode pillow reportlab httpx
           arabic-reshaper python-bidi
       - name: Compile changed renderer and test
+        shell: pwsh
         working-directory: backend
         run: >-
-          python3 -m py_compile
+          python -m py_compile
           preparation_pdf_wrapped_text.py
           preparation_pdf_compact_operational_layout.py
           tests/test_preparation_pdf_media_text_gap.py
       - name: Run media and text geometry tests
+        shell: pwsh
         working-directory: backend
         run: >-
-          python3 -m pytest -q --tb=short
+          python -m pytest -q --tb=short
           tests/test_preparation_pdf_media_text_gap.py
       - name: Enforce final renderer contract
+        shell: pwsh
         run: |
-          COMPACT=backend/preparation_pdf_compact_operational_layout.py
-          WRAPPED=backend/preparation_pdf_wrapped_text.py
-          grep -q 'MEDIA_TO_DETAILS_GAP = 4.0 \* mm' "$COMPACT"
-          grep -q 'detail_top = compact_detail_top(media_y)' "$COMPACT"
-          ! grep -q 'detail_top = media_y - 3.2' "$COMPACT"
-          grep -q 'MEDIA_TO_TEXT_GAP = 4.0 \* mm' "$WRAPPED"
+          $compact = Get-Content backend/preparation_pdf_compact_operational_layout.py -Raw
+          $wrapped = Get-Content backend/preparation_pdf_wrapped_text.py -Raw
+          if ($compact -notmatch 'MEDIA_TO_DETAILS_GAP = 4\.0 \* mm') { throw 'Missing 4 mm compact gap' }
+          if ($compact -notmatch 'detail_top = compact_detail_top\(media_y\)') { throw 'Final renderer does not use gap helper' }
+          if ($compact -match 'detail_top = media_y - 3\.2') { throw 'Old compact offset still present' }
+          if ($wrapped -notmatch 'MEDIA_TO_TEXT_GAP = 4\.0 \* mm') { throw 'Missing fallback gap' }
