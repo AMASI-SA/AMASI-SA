@@ -72,6 +72,8 @@ jobs:
           src/components/marketing/CampaignManagerTable.test.jsx
           src/components/marketing/SnapchatOrderSourceAudit.test.jsx
           src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+          src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+          src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
 
       - name: Build Production frontend
         working-directory: frontend

@@ -277,6 +277,7 @@ async def _fetch_account_hours(
     request_end: datetime | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    action_report_time: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Fetch HOUR rows, accepting the legacy date-range call contract too."""
     if request_start is None or request_end is None:
@@ -302,7 +303,7 @@ async def _fetch_account_hours(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ACTION_REPORT_TIME,
+        "action_report_time": action_report_time or ACTION_REPORT_TIME,
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
