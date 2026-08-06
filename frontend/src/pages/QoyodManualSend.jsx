@@ -490,6 +490,7 @@ export default function QoyodManualSend() {
   const [diagnoseLoading, setDiagnoseLoading] = useState(false);
   const [canarySending, setCanarySending] = useState(false);
   const [canaryResult, setCanaryResult] = useState(null);
+  const [pendingSendOrder, setPendingSendOrder] = useState(null);
 
   const loadHealth = useCallback(async () => {
     try {
@@ -534,17 +535,12 @@ export default function QoyodManualSend() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, statusTab]);
 
-  const handleSend = async (orderNumber) => {
-    const confirmed = window.confirm(
-      `سيتم إرسال الطلب رقم ${orderNumber} إلى قيود.\n\n` +
-        `الخطوات الأربعة:\n` +
-        `  1. البحث عن العميل / إنشاؤه\n` +
-        `  2. البحث عن المنتجات بالـ SKU / إنشاؤها\n` +
-        `  3. إنشاء الفاتورة\n` +
-        `  4. تسجيل السداد\n\n` +
-        `هل تريد المتابعة؟`
-    );
-    if (!confirmed) return;
+  const handleSend = (orderNumber) => {
+    setPendingSendOrder(orderNumber);
+  };
+
+  const executeSend = async (orderNumber) => {
+    setPendingSendOrder(null);
     setSendingFor(orderNumber);
     setResult(null);
     try {
@@ -829,6 +825,40 @@ export default function QoyodManualSend() {
         result={canaryResult}
         onDismiss={() => setCanaryResult(null)}
       />
+
+      {pendingSendOrder && (
+        <div
+          dir="rtl"
+          data-testid="manual-send-confirmation"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950"
+        >
+          <div className="font-semibold">
+            تأكيد إرسال الطلب #{pendingSendOrder} إلى قيود
+          </div>
+          <div className="mt-1 text-sm">
+            سيتم إنشاء العميل والمنتجات عند الحاجة، ثم الفاتورة والسداد. طلبات
+            الدفع عند الاستلام تُنشئ فاتورة غير مدفوعة فقط.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingSendOrder(null)}
+              data-testid="manual-send-confirm-cancel"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              onClick={() => executeSend(pendingSendOrder)}
+              data-testid="manual-send-confirm-submit"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              تأكيد الإرسال إلى قيود
+            </button>
+          </div>
+        </div>
+      )}
 
       <ResultBanner result={result} onDismiss={() => setResult(null)} />
 
