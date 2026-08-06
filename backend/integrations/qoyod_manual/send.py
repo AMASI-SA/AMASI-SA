@@ -43,6 +43,9 @@ from integrations.qoyod_manual.pending import (
     _matches_status, _salla_order_created_date, SUPPORTED_STATUSES,
 )
 from integrations.qoyod_manual.order_source import get_order_payment_facts
+from qoyod_order_accounting_sync import (
+    sync_unified_order_accounting_from_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1581,7 +1584,7 @@ async def manual_send_one(
         and not is_cod
     ):
         try:
-            return await _retry_payment_only(
+            retry_result = await _retry_payment_only(
                 db, client=client, row=row, canon=canon,
                 user_id=user_id, order_number=str(order_number),
                 lock_id=lock_id, qoyod_account_id=qoyod_account_id,
@@ -1589,6 +1592,14 @@ async def manual_send_one(
                 existing_invoice_number=row.get(
                     "manual_qoyod_invoice_number"),
             )
+            await sync_unified_order_accounting_from_result(
+                db,
+                orders_user_id=str(orders_user_id or user_id),
+                order_number=str(order_number),
+                result=retry_result,
+                source="manual_plan_b_retry",
+            )
+            return retry_result
         except ManualSendRefused as exc:
             await _finalize_lock(
                 db, order_number=str(order_number), user_id=user_id,
@@ -1633,7 +1644,7 @@ async def manual_send_one(
 
     # ── STEP 1 — customer find/create ──────────────────────────────
     try:
-        return await _run_all_steps(
+        send_result = await _run_all_steps(
             db, client=client, row=row, canon=canon, settings=settings,
             user_id=user_id, order_number=str(order_number),
             lock_id=lock_id, salla_total=salla_total,
@@ -1641,6 +1652,14 @@ async def manual_send_one(
             is_cod=is_cod,
             payment_method=payment_method,
         )
+        await sync_unified_order_accounting_from_result(
+            db,
+            orders_user_id=str(orders_user_id or user_id),
+            order_number=str(order_number),
+            result=send_result,
+            source="manual_plan_b",
+        )
+        return send_result
     except ManualSendRefused as exc:
         await _finalize_lock(
             db, order_number=str(order_number), user_id=user_id,
@@ -2121,3 +2140,4 @@ async def _run_all_steps(
         "qoyod_account_id": qoyod_account_id,
         "steps":         steps_trace,
     }
+
