@@ -11,136 +11,369 @@ def replace_once(path: str, old: str, new: str) -> None:
     file.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
-module = "backend/integrations_control_center/snapchat_platform_source_integrity.py"
+def replace_text(path: str, old: str, new: str, *, count: int | None = None) -> None:
+    file = Path(path)
+    text = file.read_text(encoding="utf-8")
+    if old not in text:
+        if new in text:
+            return
+        raise SystemExit(f"text not found in {path}: {old[:180]!r}")
+    file.write_text(
+        text.replace(old, new) if count is None else text.replace(old, new, count),
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# One explicit contract: business/accounting stays conversion-time, while the
+# Ads Manager workspace uses impression-time exactly like the merchant UI.
+# ---------------------------------------------------------------------------
+freshness = "backend/integrations_control_center/snapchat_freshness_impl_v6.py"
 replace_once(
-    module,
-    '''This module keeps those sources separate. A direct TOTAL ad-account row owns
-the unfiltered All Ads total, while a second TOTAL request broken down by
-campaign owns campaign rows and filtered totals. Existing HOUR ingestion remains
-responsible for the hourly chart and the Riyadh accounting projection.
+    freshness,
+    '''# Compatibility names used by existing imports and focused contracts.
+ADS_MANAGER_ACTION_REPORT_TIME = SNAPCHAT_ACTION_REPORT_TIME
+ADS_MANAGER_SOURCE_MODE = SNAPCHAT_SOURCE_MODE
 ''',
-    '''This module keeps those sources separate. Snapchat exposes only spend on the
-direct ad-account entity. Therefore a direct TOTAL row owns All Ads spend, while
-a second TOTAL request broken down by campaign owns purchases, purchase value,
-and campaign rows. Existing HOUR ingestion remains responsible for the hourly
-chart and the Riyadh accounting projection.
+    '''# The Riyadh Dashboard keeps conversion-time semantics. The Ads Manager
+# workspace uses impression-time attribution so its date-filtered Purchases and
+# Purchase Value match Snapchat Ads Manager.
+ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"
+ADS_MANAGER_SOURCE_MODE: Final[str] = (
+    "snapchat_ads_manager_account_timezone_impression_v7"
+)
 ''',
 )
 replace_once(
-    module,
+    freshness,
+    '''def install_snapchat_ads_manager_attribution() -> None:
+    """Install conversion-time reporting and nested freshness capture."""
+''',
+    '''def install_snapchat_ads_manager_attribution() -> None:
+    """Install conversion-time business reporting plus Ads Manager contracts.
+
+    Ads Manager readers import ``ADS_MANAGER_ACTION_REPORT_TIME`` explicitly;
+    these runtime assignments remain conversion-time for the Riyadh Dashboard
+    and accounting projections.
+    """
+''',
+)
+
+# Allow account-local reporting to request a second attribution basis without
+# changing the existing Riyadh business-day request.
+hourly = "backend/integrations_control_center/snapchat_account_hourly_refresh.py"
+replace_once(
+    hourly,
+    '''    start_date: date | None = None,
+    end_date: date | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+''',
+    '''    start_date: date | None = None,
+    end_date: date | None = None,
+    action_report_time: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+''',
+)
+replace_once(
+    hourly,
+    '''        "action_report_time": ACTION_REPORT_TIME,
+''',
+    '''        "action_report_time": action_report_time or ACTION_REPORT_TIME,
+''',
+)
+
+# Account-local campaign/day rows and the hourly chart must use the same
+# impression-time attribution. The Riyadh rows continue using conversion-time.
+manager = "backend/integrations_control_center/snapchat_account_timezone_manager.py"
+replace_once(
+    manager,
+    '''from .snapchat_active_campaign_filtering import is_active_provider_status
+''',
+    '''from .snapchat_active_campaign_filtering import is_active_provider_status
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
+''',
+)
+replace_text(manager, '''    ACTION_REPORT_TIME,
+''', '''''', count=1)
+replace_once(
+    manager,
+    '''ACCOUNT_LOCAL_SOURCE_MODE = (
+    "snapchat_account_hourly_campaign_breakdown_account_day_v1"
+)
+''',
+    '''ACCOUNT_LOCAL_SOURCE_MODE = (
+    f"{ADS_MANAGER_SOURCE_MODE}:account_day_v2"
+)
+''',
+)
+replace_once(
+    manager,
+    '''            "action_report_time": ACTION_REPORT_TIME,
+''',
+    '''            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+''',
+)
+replace_once(
+    manager,
+    '''    used_completed_hour_fallback = False
+    try:
+        rows, errors = await hourly._fetch_account_hours(
+            context,
+            client,
+            access_token,
+            account_id=account_id,
+            request_start=request["provider_start"],
+            request_end=request["provider_end"],
+        )
+    except SnapchatNativeSyncError as exc:
+        fallback = _combined_request_window(
+            start_date,
+            end_date,
+            timezone_name=timezone_name,
+            now=now,
+            include_current_hour=False,
+        )
+        can_retry = (
+            exc.code == "snapchat_provider_http_400"
+            and fallback is not None
+            and fallback["provider_end"] < request["provider_end"]
+        )
+        if not can_retry:
+            raise
+        request = fallback
+        used_completed_hour_fallback = True
+        rows, errors = await hourly._fetch_account_hours(
+            context,
+            client,
+            access_token,
+            account_id=account_id,
+            request_start=request["provider_start"],
+            request_end=request["provider_end"],
+        )
+
+    business_campaigns, business_accounts = _campaign_day_buckets(
+        rows,
+        timezone_name=BUSINESS_TIMEZONE,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    local_campaigns, local_accounts = _campaign_day_buckets(
+        rows,
+        timezone_name=timezone_name,
+        start_date=request["account_local_from"],
+        end_date=request["account_local_to"],
+    )
+''',
+    '''    used_completed_hour_fallback = False
+
+    async def fetch_both(window: dict[str, datetime]):
+        business_rows, business_errors = await hourly._fetch_account_hours(
+            context,
+            client,
+            access_token,
+            account_id=account_id,
+            request_start=window["provider_start"],
+            request_end=window["provider_end"],
+            action_report_time=hourly.ACTION_REPORT_TIME,
+        )
+        account_local_rows, account_local_errors = await hourly._fetch_account_hours(
+            context,
+            client,
+            access_token,
+            account_id=account_id,
+            request_start=window["provider_start"],
+            request_end=window["provider_end"],
+            action_report_time=ADS_MANAGER_ACTION_REPORT_TIME,
+        )
+        return (
+            business_rows,
+            account_local_rows,
+            [*business_errors, *account_local_errors],
+        )
+
+    try:
+        business_rows, account_local_rows, errors = await fetch_both(request)
+    except SnapchatNativeSyncError as exc:
+        fallback = _combined_request_window(
+            start_date,
+            end_date,
+            timezone_name=timezone_name,
+            now=now,
+            include_current_hour=False,
+        )
+        can_retry = (
+            exc.code == "snapchat_provider_http_400"
+            and fallback is not None
+            and fallback["provider_end"] < request["provider_end"]
+        )
+        if not can_retry:
+            raise
+        request = fallback
+        used_completed_hour_fallback = True
+        business_rows, account_local_rows, errors = await fetch_both(request)
+
+    business_campaigns, business_accounts = _campaign_day_buckets(
+        business_rows,
+        timezone_name=BUSINESS_TIMEZONE,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    local_campaigns, local_accounts = _campaign_day_buckets(
+        account_local_rows,
+        timezone_name=timezone_name,
+        start_date=request["account_local_from"],
+        end_date=request["account_local_to"],
+    )
+''',
+)
+replace_once(
+    manager,
+    '''        "current_hour_included": not used_completed_hour_fallback,
+        "source_only": True,
+''',
+    '''        "current_hour_included": not used_completed_hour_fallback,
+        "business_action_report_time": hourly.ACTION_REPORT_TIME,
+        "account_local_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "source_only": True,
+''',
+)
+replace_once(
+    manager,
+    '''            "date_timezone": timezone_name,
+        },
+''',
+    '''            "date_timezone": timezone_name,
+            "source_mode": ACCOUNT_LOCAL_SOURCE_MODE,
+        },
+''',
+)
+replace_once(
+    manager,
+    '''            "commercial_results_source": (
+                "unified_orders:salla_exact_account_campaign_match"
+                if result_source == RESULT_SOURCE_SALLA
+                else "snapchat_conversion_reporting"
+            ),
+''',
+    '''            "commercial_results_source": (
+                "unified_orders:salla_exact_account_campaign_match"
+                if result_source == RESULT_SOURCE_SALLA
+                else "snapchat_ads_manager_impression_reporting"
+            ),
+            "account_local_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+''',
+)
+
+# Persist only the impression-time fetch into the Ads Manager hourly chart.
+hourly_chart = "backend/integrations_control_center/snapchat_account_hourly_chart.py"
+replace_once(
+    hourly_chart,
+    '''from . import snapchat_account_timezone_manager as account_report
+''',
+    '''from . import snapchat_account_timezone_manager as account_report
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
+''',
+)
+replace_text(hourly_chart, '''    ACTION_REPORT_TIME,
+''', '''''', count=1)
+replace_once(
+    hourly_chart,
+    '''ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = (
+    "snapchat_account_campaign_breakdown_account_hour_v1"
+)
+''',
+    '''ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = (
+    f"{ADS_MANAGER_SOURCE_MODE}:account_hour_v2"
+)
+''',
+)
+replace_once(
+    hourly_chart,
+    '''            "action_report_time": ACTION_REPORT_TIME,
+''',
+    '''            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+''',
+)
+replace_once(
+    hourly_chart,
+    '''            capture = _CAPTURE_CONTEXT.get()
+            if capture and rows:
+''',
+    '''            capture = _CAPTURE_CONTEXT.get()
+            if (
+                capture
+                and rows
+                and kwargs.get("action_report_time")
+                == ADS_MANAGER_ACTION_REPORT_TIME
+            ):
+''',
+)
+replace_once(
+    hourly_chart,
+    '''            "date_timezone": timezone_name,
+        },
+''',
+    '''            "date_timezone": timezone_name,
+            "source_mode": ACCOUNT_LOCAL_HOURLY_SOURCE_MODE,
+        },
+''',
+)
+replace_once(
+    hourly_chart,
+    '''        "hourly_result_source": result_source,
+        "salla_hourly_attribution": salla_coverage,
+''',
+    '''        "hourly_result_source": result_source,
+        "hourly_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "salla_hourly_attribution": salla_coverage,
+''',
+)
+
+# TOTAL account and campaign snapshots use impression-time, matching Ads Manager.
+platform = "backend/integrations_control_center/snapchat_platform_source_integrity.py"
+replace_once(
+    platform,
+    '''from .snapchat_campaign_result_source_routes import RESULT_SOURCE_PLATFORM
+''',
+    '''from .snapchat_campaign_result_source_routes import RESULT_SOURCE_PLATFORM
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
+''',
+)
+replace_text(platform, '''    ACTION_REPORT_TIME,
+''', '''''', count=1)
+replace_once(
+    platform,
     '''PLATFORM_TOTAL_SOURCE_MODE = (
     "snapchat_account_direct_total_plus_campaign_breakdown_account_local_v2"
 )
 ''',
     '''PLATFORM_TOTAL_SOURCE_MODE = (
-    "snapchat_account_spend_plus_campaign_commercial_totals_account_local_v3"
+    f"{ADS_MANAGER_SOURCE_MODE}:account_total_v3"
 )
 ''',
 )
-replace_once(
-    module,
-    '''REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({
-    "spend",
-    "conversion_purchases",
-    "conversion_purchases_value",
-})
-''',
-    '''REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})
-''',
+replace_text(
+    platform,
+    '''"action_report_time": ACTION_REPORT_TIME''',
+    '''"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME''',
 )
 replace_once(
-    module,
-    '''    """Extract the exact ad-account TOTAL row without a campaign breakdown."""
-''',
-    '''    """Extract direct ad-account TOTAL spend without a campaign breakdown."""
-''',
-)
-replace_once(
-    module,
-    '''    """Read the exact All Ads total shown at ad-account level."""
-''',
-    '''    """Read direct All Ads spend; commercial metrics come from campaigns."""
-''',
-)
-replace_once(
-    module,
-    '''def total_snapshot_is_authoritative(
-''',
-    '''def merge_direct_spend_with_campaign_metrics(
-    direct_account_metrics: dict[str, Any],
-    campaign_rows: list[dict[str, Any]],
-) -> dict[str, int | float | None]:
-    """Build All Ads totals from the only authoritative fields at each level.
-
-    Snapchat documents that direct Ad Account stats expose spend only. Purchases,
-    purchase value, impressions, swipes and the remaining metrics are summed from
-    the complete ``breakdown=campaign`` response. This mirrors the Ads Manager
-    All Ads total without inventing a direct account conversion metric.
-    """
-    merged = aggregate_total_campaign_metrics(campaign_rows)
-    direct_spend = _as_number(direct_account_metrics.get("spend"))
-    if direct_spend is None:
-        raise SnapchatNativeSyncError(
-            "snapchat_account_direct_spend_missing",
-            "Snapchat direct Ad Account TOTAL did not include spend.",
-            status_code=502,
-            retryable=True,
-        )
-    merged["spend"] = (
-        int(direct_spend)
-        if float(direct_spend).is_integer()
-        else float(direct_spend)
-    )
-    return merged
-
-
-def total_snapshot_is_authoritative(
-''',
-)
-replace_once(
-    module,
-    '''    await _upsert_total_row(
-        context,
-        account=account,
-        entity_type="ad_account",
-        external_id=_text(account.get("ad_account_id")),
-        date_string=date_string,
-        timezone_name=timezone_name,
-        metrics=account_metrics,
-''',
-    '''    all_ads_metrics = merge_direct_spend_with_campaign_metrics(
-        account_metrics,
-        campaign_rows,
-    )
-    await _upsert_total_row(
-        context,
-        account=account,
-        entity_type="ad_account",
-        external_id=_text(account.get("ad_account_id")),
-        date_string=date_string,
-        timezone_name=timezone_name,
-        metrics=all_ads_metrics,
-''',
-)
-replace_once(
-    module,
-    '''        "direct_account_total_requested": True,
-        "request_windows": request_windows,
-''',
-    '''        "direct_account_total_requested": True,
-        "account_spend_source": "direct_ad_account_total",
-        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
-        "request_windows": request_windows,
-''',
-)
-replace_once(
-    module,
+    platform,
     '''def _aggregate_visible_campaigns(
 ''',
     '''def _mask_pending_platform_commercial_metrics(
     result: dict[str, Any],
 ) -> dict[str, Any]:
-    """Never expose legacy HOUR conversions as the new TOTAL snapshot."""
+    """Do not expose legacy conversion-time results while TOTAL is pending."""
     commercial_nulls = {
         "orders": None,
         "sales_sar": None,
@@ -149,12 +382,10 @@ replace_once(
         "cpa_sar": None,
         "cpa_native": None,
         "result_source": RESULT_SOURCE_PLATFORM,
-        "commercial_metrics_source": "snapchat_total_snapshot_pending",
+        "commercial_metrics_source": "snapchat_impression_total_pending",
         "profitability": None,
     }
-    totals = dict(result.get("totals") or {})
-    totals.update(commercial_nulls)
-    result["totals"] = totals
+    result["totals"] = {**dict(result.get("totals") or {}), **commercial_nulls}
     result["daily"] = [
         {**dict(row), **commercial_nulls}
         for row in (result.get("daily") or [])
@@ -165,10 +396,11 @@ replace_once(
         for row in (result.get("campaigns") or [])
         if isinstance(row, dict)
     ]
-    accounts = []
-    for row in result.get("accounts") or []:
-        accounts.append({**dict(row), **commercial_nulls})
-    result["accounts"] = accounts
+    result["accounts"] = [
+        {**dict(row), **commercial_nulls}
+        for row in (result.get("accounts") or [])
+        if isinstance(row, dict)
+    ]
     return result
 
 
@@ -176,7 +408,14 @@ def _aggregate_visible_campaigns(
 ''',
 )
 replace_once(
-    module,
+    platform,
+    '''    if not account_rows and not campaign_rows:
+''',
+    '''    if not account_rows or not campaign_rows:
+''',
+)
+replace_once(
+    platform,
     '''        result.setdefault("policy", {}).update({
             "platform_source_isolated": True,
             "salla_metrics_applied_to_platform": False,
@@ -192,189 +431,112 @@ replace_once(
 ''',
 )
 replace_once(
-    module,
-    '''        "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
-        "platform_direct_account_total_ready": bool(account_rows),
-        "platform_source_isolated": True,
+    platform,
+    '''        "platform_source_isolated": True,
+        "platform_totals_scope": totals_scope,
 ''',
-    '''        "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
-        "platform_direct_account_total_ready": bool(account_rows),
-        "platform_source_isolated": True,
-        "account_spend_source": "direct_ad_account_total",
-        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
-''',
-)
-replace_once(
-    module,
-    '''            "direct_account_total_snapshot",
-''',
-    '''            "campaign_breakdown_all_ads_snapshot",
-''',
-)
-replace_once(
-    module,
-    '''    "load_platform_total_rows",
-    "persist_account_total_day",
-''',
-    '''    "load_platform_total_rows",
-    "merge_direct_spend_with_campaign_metrics",
-    "persist_account_total_day",
+    '''        "platform_source_isolated": True,
+        "platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "platform_totals_scope": totals_scope,
 ''',
 )
 
+# Ad Squad and Ad performance use the same attribution basis as campaigns.
+for path, old_mode, new_mode, entity_type in (
+    (
+        "backend/integrations_control_center/snapchat_adsquad_performance.py",
+        'ADSQUAD_SOURCE_MODE = "snapchat_campaign_stats_adsquad_account_day_v1"',
+        'ADSQUAD_SOURCE_MODE = f"{ADS_MANAGER_SOURCE_MODE}:ad_squad_day_v2"',
+        "ad_squad",
+    ),
+    (
+        "backend/integrations_control_center/snapchat_ad_performance.py",
+        'AD_SOURCE_MODE = "snapchat_campaign_stats_ad_account_day_v1"',
+        'AD_SOURCE_MODE = f"{ADS_MANAGER_SOURCE_MODE}:ad_day_v2"',
+        "ad",
+    ),
+):
+    replace_once(
+        path,
+        '''from .snapchat_active_campaign_filtering import (
+''',
+        '''from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
+from .snapchat_active_campaign_filtering import (
+''',
+    )
+    replace_text(path, '''    ACTION_REPORT_TIME,
+''', '''''', count=1)
+    replace_once(path, old_mode + "\n", new_mode + "\n")
+    replace_text(
+        path,
+        '''"action_report_time": ACTION_REPORT_TIME''',
+        '''"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME''',
+    )
+    replace_once(
+        path,
+        f'''            "entity_type": "{entity_type}",
+            "date": date_query,
+            "date_timezone": timezone_name,
+''',
+        f'''            "entity_type": "{entity_type}",
+            "date": date_query,
+            "date_timezone": timezone_name,
+            "source_mode": {"ADSQUAD_SOURCE_MODE" if entity_type == "ad_squad" else "AD_SOURCE_MODE"},
+''',
+    )
+    replace_once(
+        path,
+        '''            "commercial_results_source": "snapchat_conversion_reporting",
+''',
+        '''            "commercial_results_source": "snapchat_ads_manager_impression_reporting",
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+''',
+    )
+
+# Focused backend contract proves every Ads Manager entity level is aligned.
 backend_test = "backend/tests/test_snapchat_platform_source_integrity_v1.py"
 text = Path(backend_test).read_text(encoding="utf-8")
-text = text.replace(
-    '''    extract_account_total_metrics,
-    total_snapshot_is_authoritative,
-''',
-    '''    extract_account_total_metrics,
-    merge_direct_spend_with_campaign_metrics,
-    total_snapshot_is_authoritative,
-''',
-    1,
-)
-text = text.replace(
-    '''def test_direct_account_total_stays_separate_from_campaign_breakdown():
-    payload = {
-        "total_stats": [{
-            "sub_request_status": "SUCCESS",
-            "total_stat": {
-                "stats": {
-                    "spend": 489_090_000,
-                    "conversion_purchases": 21,
-                    "conversion_purchases_value": 811_370_000,
-                },
-            },
-        }],
-    }
-    metrics, errors, successful = extract_account_total_metrics(payload)
-    assert errors == []
-    assert successful == 1
-    assert metrics["spend"] == 489_090_000
-    assert metrics["conversion_purchases"] == 21
-    assert metrics["conversion_purchases_value"] == 811_370_000
-    assert metrics["impressions"] == 0
+if "test_ads_manager_entity_levels_use_impression_time" not in text:
+    text += '''
 
 
-def test_direct_total_rejects_missing_commercial_fields():
-    metrics, errors, successful = extract_account_total_metrics({
-        "total_stats": [{
-            "sub_request_status": "SUCCESS",
-            "total_stat": {"stats": {"spend": 489_090_000}},
-        }],
-    })
-    assert successful == 1
-    assert metrics is None
-    assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
-''',
-    '''def test_direct_account_total_accepts_documented_spend_only_payload():
-    payload = {
-        "total_stats": [{
-            "sub_request_status": "SUCCESS",
-            "total_stat": {
-                "stats": {"spend": 658_770_000},
-            },
-        }],
-    }
-    metrics, errors, successful = extract_account_total_metrics(payload)
-    assert errors == []
-    assert successful == 1
-    assert metrics["spend"] == 658_770_000
-    assert metrics["conversion_purchases"] == 0
-    assert metrics["conversion_purchases_value"] == 0
+def test_ads_manager_entity_levels_use_impression_time():
+    freshness = Path(
+        "integrations_control_center/snapchat_freshness_impl_v6.py"
+    ).read_text(encoding="utf-8")
+    assert 'ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"' in freshness
+    assert 'SNAPCHAT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
 
+    platform = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+    manager = Path(
+        "integrations_control_center/snapchat_account_timezone_manager.py"
+    ).read_text(encoding="utf-8")
+    hourly_chart = Path(
+        "integrations_control_center/snapchat_account_hourly_chart.py"
+    ).read_text(encoding="utf-8")
+    adsquad = Path(
+        "integrations_control_center/snapchat_adsquad_performance.py"
+    ).read_text(encoding="utf-8")
+    ads = Path(
+        "integrations_control_center/snapchat_ad_performance.py"
+    ).read_text(encoding="utf-8")
 
-def test_direct_total_rejects_missing_spend():
-    metrics, errors, successful = extract_account_total_metrics({
-        "total_stats": [{
-            "sub_request_status": "SUCCESS",
-            "total_stat": {
-                "stats": {
-                    "conversion_purchases": 25,
-                    "conversion_purchases_value": 1_006_990_000,
-                },
-            },
-        }],
-    })
-    assert successful == 1
-    assert metrics is None
-    assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
-
-
-def test_all_ads_merges_direct_spend_with_complete_campaign_commercial_totals():
-    direct = {"spend": 658_770_000}
-    rows = [
-        {
-            "campaign_id": "campaign-1",
-            "metrics": {
-                "spend": 332_980_000,
-                "conversion_purchases": 13,
-                "conversion_purchases_value": 500_000_000,
-                "impressions": 159_575,
-                "swipes": 2_087,
-            },
-        },
-        {
-            "campaign_id": "campaign-2",
-            "metrics": {
-                "spend": 180_010_000,
-                "conversion_purchases": 4,
-                "conversion_purchases_value": 250_000_000,
-                "impressions": 134_780,
-                "swipes": 2_147,
-            },
-        },
-        {
-            "campaign_id": "campaign-3",
-            "metrics": {
-                "spend": 47_980_000,
-                "conversion_purchases": 3,
-                "conversion_purchases_value": 256_990_000,
-                "impressions": 13_434,
-                "swipes": 226,
-            },
-        },
-        {
-            "campaign_id": "campaign-rest",
-            "metrics": {
-                "spend": 97_800_000,
-                "conversion_purchases": 5,
-                "conversion_purchases_value": 0,
-            },
-        },
-    ]
-    merged = merge_direct_spend_with_campaign_metrics(direct, rows)
-    assert merged["spend"] == 658_770_000
-    assert merged["conversion_purchases"] == 25
-    assert merged["conversion_purchases_value"] == 1_006_990_000
-    assert merged["impressions"] == 307_789
-    assert merged["swipes"] == 4_460
-''',
-    1,
-)
-text = text.replace(
-    '''    assert source == "direct_account_total_snapshot"
-''',
-    '''    assert source == "campaign_breakdown_all_ads_snapshot"
-''',
-    1,
-)
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in platform
+    assert 'action_report_time=ADS_MANAGER_ACTION_REPORT_TIME' in manager
+    assert 'kwargs.get("action_report_time")' in hourly_chart
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in adsquad
+    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in ads
+    assert 'if not account_rows or not campaign_rows:' in platform
+    assert 'legacy_hour_conversions_hidden_while_pending' in platform
+'''
 Path(backend_test).write_text(text, encoding="utf-8")
 
-ui = "frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx"
-replace_once(
-    ui,
-    '''                            title="مشتريات Snapchat — كل الحساب"
-                            value={summary.platform_attributed_purchases}
-                            note={`لا يتأثر بفلتر الحملات؛ مجموع صفوف الحملات ${summary.platform_campaign_purchases ?? "—"}`}
-''',
-    '''                            title="مشتريات Snapchat — جميع الحملات"
-                            value={summary.platform_attributed_purchases}
-                            note={`مجموع breakdown الحملات الكامل؛ الصفوف الظاهرة ${summary.platform_campaign_purchases ?? "—"}`}
-''',
-)
-
+# Pending TOTAL snapshots display an explicit state instead of old conversion rows.
 page = "frontend/src/pages/MarketingPlatformWorkspace.jsx"
 replace_once(
     page,
@@ -413,7 +575,7 @@ replace_once(
                     data-testid="snapchat-platform-total-pending"
                 >
                     <WarningCircle size={20} weight="fill" className="ml-2 inline" />
-                    نتائج Snapchat الكاملة قيد المزامنة. أخفى ميزان أرقام التحويل القديمة بدل عرض تقرير جزئي؛ أعد التحديث بعد دورة المزامنة التالية.
+                    نتائج Snapchat المطابقة لمدير الإعلانات قيد المزامنة. أخفى ميزان أرقام التحويل القديمة بدل عرض تقرير جزئي.
                 </div>
             )}
 
@@ -421,68 +583,62 @@ replace_once(
                 totals={totals}
 ''',
 )
-
-page_test = "frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js"
-Path(page_test).write_text(
-    '''import { isSnapchatPlatformSnapshotPending } from "./MarketingPlatformWorkspace";\n\n'
-    'test("flags only an incomplete Snapchat platform TOTAL snapshot", () => {\n'
-    '  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n'
-    '    result_source: "platform",\n'
-    '    source: { platform_total_snapshot_ready: false },\n'
-    '  })).toBe(true);\n'
-    '  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n'
-    '    result_source: "salla",\n'
-    '    source: { platform_total_snapshot_ready: false },\n'
-    '  })).toBe(false);\n'
-    '  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n'
-    '    result_source: "platform",\n'
-    '    source: { platform_total_snapshot_ready: true },\n'
-    '  })).toBe(false);\n'
-    '});\n'''.replace("'\n    '", ""),
+Path(
+    "frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js"
+).write_text(
+    '''import { isSnapchatPlatformSnapshotPending } from "./MarketingPlatformWorkspace";\n\ntest("flags only an incomplete Snapchat platform TOTAL snapshot", () => {\n  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n    result_source: "platform",\n    source: { platform_total_snapshot_ready: false },\n  })).toBe(true);\n  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n    result_source: "salla",\n    source: { platform_total_snapshot_ready: false },\n  })).toBe(false);\n  expect(isSnapchatPlatformSnapshotPending("snapchat", {\n    result_source: "platform",\n    source: { platform_total_snapshot_ready: true },\n  })).toBe(false);\n});\n''',
     encoding="utf-8",
 )
 
-workflow = ".github/workflows/prod-snap-platform-source-isolation-v1.yml"
+# Null provider attribution must never be rendered as a real zero.
+audit = "frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx"
 replace_once(
-    workflow,
-    '''      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
+    audit,
+    '''function numeric(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed.toLocaleString("en-US") : "0";
+}
 ''',
-    '''      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"
-      - "frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js"
+    '''function numeric(value) {
+    if (value === null || value === undefined || value === "") return "—";
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed.toLocaleString("en-US") : "—";
+}
 ''',
 )
-# The same path appears in the push section.
+
+# Extend the permanent CI contract.
+workflow = ".github/workflows/prod-snap-platform-source-isolation-v1.yml"
 text = Path(workflow).read_text(encoding="utf-8")
-needle = '''      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"\n'''
-if text.count(needle) == 1:
-    text = text.replace(
-        needle,
-        needle + '      - "frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js"\n',
-        1,
-    )
-Path(workflow).write_text(text, encoding="utf-8")
-replace_once(
-    workflow,
+for section_anchor in (
+    '      - "frontend/src/pages/MarketingPlatformWorkspace.jsx"\n',
+):
+    addition = section_anchor + '      - "frontend/src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js"\n'
+    while section_anchor in text and addition not in text:
+        text = text.replace(section_anchor, addition, 1)
+text = text.replace(
     '''          src/components/marketing/SnapchatOrderSourceAudit.test.jsx
 ''',
     '''          src/components/marketing/SnapchatOrderSourceAudit.test.jsx
           src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
 ''',
+    1,
 )
-replace_once(
-    workflow,
-    '''          grep -q 'all_ads_direct_account_total' backend/integrations_control_center/snapchat_platform_source_integrity.py
+text = text.replace(
+    '''          grep -q 'total_snapshot_is_authoritative' backend/integrations_control_center/snapchat_platform_source_integrity.py
 ''',
-    '''          grep -q 'all_ads_direct_account_total' backend/integrations_control_center/snapchat_platform_source_integrity.py
-          grep -q 'complete_campaign_breakdown_sum' backend/integrations_control_center/snapchat_platform_source_integrity.py
-          grep -q 'REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})' backend/integrations_control_center/snapchat_platform_source_integrity.py
+    '''          grep -q 'total_snapshot_is_authoritative' backend/integrations_control_center/snapchat_platform_source_integrity.py
+          grep -q 'ADS_MANAGER_ACTION_REPORT_TIME' backend/integrations_control_center/snapchat_platform_source_integrity.py
+          grep -q 'legacy_hour_conversions_hidden_while_pending' backend/integrations_control_center/snapchat_platform_source_integrity.py
 ''',
+    1,
 )
-replace_once(
-    workflow,
+text = text.replace(
     '''          grep -q 'مشتريات Snapchat — كل الحساب' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
 ''',
-    '''          grep -q 'مشتريات Snapchat — جميع الحملات' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+    '''          grep -q 'مشتريات Snapchat — كل الحساب' frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
           grep -q 'snapchat-platform-total-pending' frontend/src/pages/MarketingPlatformWorkspace.jsx
 ''',
+    1,
 )
+Path(workflow).write_text(text, encoding="utf-8")
