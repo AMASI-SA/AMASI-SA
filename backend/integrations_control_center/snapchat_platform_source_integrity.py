@@ -5,10 +5,10 @@ The Ads Manager workspace exposes two selectable commercial result sources:
 * ``platform``: purchases and purchase value reported by Snapchat.
 * ``salla``: exact Salla orders matched to a Snapchat campaign.
 
-This module keeps those sources separate.  A TOTAL ad-account report broken down
-by campaign is persisted in the selected account's native timezone and is used
-for the platform view.  Existing HOUR ingestion remains responsible for the
-hourly chart and the Riyadh accounting projection.
+This module keeps those sources separate. A direct TOTAL ad-account row owns
+the unfiltered All Ads total, while a second TOTAL request broken down by
+campaign owns campaign rows and filtered totals. Existing HOUR ingestion remains
+responsible for the hourly chart and the Riyadh accounting projection.
 """
 from __future__ import annotations
 
@@ -21,9 +21,7 @@ import httpx
 from . import snapchat_account_hourly_refresh as hourly
 from . import snapchat_account_timezone_manager as manager
 from .snapchat_active_campaign_filtering import is_active_provider_status
-from .snapchat_campaign_result_source_routes import (
-    RESULT_SOURCE_PLATFORM,
-)
+from .snapchat_campaign_result_source_routes import RESULT_SOURCE_PLATFORM
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -44,19 +42,21 @@ from .snapchat_native_performance_sync import (
     STAT_FIELDS,
     SWIPE_ATTRIBUTION_WINDOW,
     VIEW_ATTRIBUTION_WINDOW,
-    _add_to_bucket,
     _computed,
-    _finalize_bucket,
-    _new_bucket,
 )
 
 SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v1"
 PLATFORM_TOTAL_SOURCE_MODE = (
-    "snapchat_account_total_campaign_breakdown_account_local_v1"
+    "snapchat_account_direct_total_plus_campaign_breakdown_account_local_v2"
 )
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
+REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({
+    "spend",
+    "conversion_purchases",
+    "conversion_purchases_value",
+})
 
 RefreshCallable = Callable[..., Awaitable[dict[str, Any]]]
 ReportCallable = Callable[..., Awaitable[dict[str, Any]]]
@@ -171,6 +171,113 @@ def _subrequest_error(wrapped: dict[str, Any], status: str) -> dict[str, Any]:
         "error": status[:80],
         "retryable": True,
     }
+
+
+def _normalized_requested_metrics(
+    metrics: dict[str, Any] | None,
+) -> dict[str, int | float]:
+    source = metrics if isinstance(metrics, dict) else {}
+    output: dict[str, int | float] = {}
+    for key in STAT_FIELDS:
+        value = _as_number(source.get(key))
+        number = float(value) if value is not None else 0.0
+        output[key] = int(number) if number.is_integer() else number
+    return output
+
+
+def extract_account_total_metrics(
+    payload: dict[str, Any],
+) -> tuple[dict[str, int | float] | None, list[dict[str, Any]], int]:
+    """Extract the exact ad-account TOTAL row without a campaign breakdown."""
+    wrapped_stats = payload.get("total_stats") or []
+    if not isinstance(wrapped_stats, list):
+        raise SnapchatNativeSyncError(
+            "snapchat_account_total_payload_invalid",
+            "Snapchat returned invalid direct account TOTAL data.",
+            status_code=502,
+            retryable=True,
+        )
+    errors: list[dict[str, Any]] = []
+    successful_subrequests = 0
+    metrics: dict[str, int | float] | None = None
+    for wrapped in wrapped_stats:
+        if not isinstance(wrapped, dict):
+            continue
+        status = _text(wrapped.get("sub_request_status") or "SUCCESS").upper()
+        if "FAIL" in status or "ERROR" in status:
+            errors.append(_subrequest_error(wrapped, status))
+            continue
+        successful_subrequests += 1
+        stat = wrapped.get("total_stat", wrapped)
+        if not isinstance(stat, dict):
+            continue
+        raw = stat.get("stats")
+        if not isinstance(raw, dict):
+            continue
+        missing = sorted(REQUIRED_ACCOUNT_TOTAL_FIELDS - set(raw))
+        if missing:
+            errors.append({
+                "kind": "account_total_direct",
+                "code": "snapchat_account_direct_total_fields_missing",
+                "message": (
+                    "Snapchat direct TOTAL omitted required fields: "
+                    + ",".join(missing)
+                )[:300],
+                "retryable": True,
+            })
+            continue
+        metrics = _normalized_requested_metrics(raw)
+    return metrics, errors, successful_subrequests
+
+
+async def fetch_account_total_direct_metrics(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    *,
+    account_id: str,
+    request_start: datetime,
+    request_end: datetime,
+) -> tuple[dict[str, int | float], list[dict[str, Any]]]:
+    """Read the exact All Ads total shown at ad-account level."""
+    url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+    payload = await context.get_json(
+        client,
+        url,
+        headers=headers,
+        params={
+            "start_time": request_start.isoformat(timespec="seconds"),
+            "end_time": request_end.isoformat(timespec="seconds"),
+            "granularity": PLATFORM_TOTAL_GRANULARITY,
+            "fields": ",".join(STAT_FIELDS),
+            "omit_empty": "false",
+            "conversion_source_types": CONVERSION_SOURCE_TYPES,
+            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "action_report_time": ACTION_REPORT_TIME,
+        },
+    )
+    metrics, errors, successful_subrequests = extract_account_total_metrics(payload)
+    if metrics is None:
+        first = errors[0] if errors else {}
+        raise SnapchatNativeSyncError(
+            _text(first.get("code") or "snapchat_account_direct_total_missing"),
+            _text(
+                first.get("message")
+                or "Snapchat did not return the direct ad-account TOTAL row."
+            ),
+            status_code=502,
+            retryable=True,
+            result={
+                "successful_subrequests": successful_subrequests,
+                "errors": errors[:10],
+            },
+        )
+    return metrics, errors
 
 
 def extract_account_total_campaign_rows(
@@ -313,18 +420,10 @@ async def fetch_account_total_campaign_rows(
 def aggregate_total_campaign_metrics(
     rows: list[dict[str, Any]],
 ) -> dict[str, int | float | None]:
-    """Sum requested TOTAL metrics, treating omitted zero fields as zero.
-
-    Snapchat may omit a requested conversion field on a campaign that has no
-    value.  Requiring every campaign row to carry every key would turn a valid
-    account total into ``None``.  A successful authoritative breakdown makes
-    an omitted requested field equivalent to zero for that campaign.
-    """
-    source = [
-        row
-        for row in rows
-        if _text(row.get("campaign_id"))
-        or row.get("direct_account_fallback") is True
+    """Sum requested campaign TOTAL metrics; omitted zero fields become zero."""
+    campaign_rows = [row for row in rows if _text(row.get("campaign_id"))]
+    source = campaign_rows or [
+        row for row in rows if row.get("direct_account_fallback") is True
     ]
     if not source:
         return {key: 0 for key in STAT_FIELDS}
@@ -344,10 +443,11 @@ def aggregate_total_campaign_metrics(
 def total_snapshot_is_authoritative(
     *,
     breakdown_seen: bool,
+    account_metrics_available: bool,
     errors: list[dict[str, Any]],
 ) -> bool:
-    """Only complete campaign breakdowns may replace the prior snapshot."""
-    return bool(breakdown_seen and not errors)
+    """Require the direct account total and complete campaign breakdown."""
+    return bool(breakdown_seen and account_metrics_available and not errors)
 
 
 async def _ensure_total_indexes(db: Any) -> None:
@@ -386,6 +486,7 @@ async def _upsert_total_row(
     metrics: dict[str, Any],
     provider_start: Any,
     provider_end: Any,
+    provider_breakdown: str | None,
 ) -> None:
     currency = _text(account.get("currency")).upper()
     spend_micro = _as_number(metrics.get("spend"))
@@ -436,7 +537,7 @@ async def _upsert_total_row(
         "provider_window_start": provider_start,
         "provider_window_end": provider_end,
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
-        "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
+        "provider_breakdown": provider_breakdown,
         "stored_granularity": "ACCOUNT_LOCAL_TOTAL_DAY",
         "report_scope": "snapchat_ads_manager_account_timezone",
         "updated_at": now_iso,
@@ -464,15 +565,14 @@ async def persist_account_total_day(
     timezone_name: str,
     date_string: str,
     rows: list[dict[str, Any]],
+    account_metrics: dict[str, Any],
     provider_start: datetime,
     provider_end: datetime,
     authoritative_breakdown: bool,
     errors: list[dict[str, Any]],
 ) -> dict[str, Any]:
     await _ensure_total_indexes(context.db)
-    campaign_rows = [
-        row for row in rows if _text(row.get("campaign_id"))
-    ]
+    campaign_rows = [row for row in rows if _text(row.get("campaign_id"))]
     for row in campaign_rows:
         await _upsert_total_row(
             context,
@@ -484,8 +584,8 @@ async def persist_account_total_day(
             metrics=dict(row.get("metrics") or {}),
             provider_start=row.get("start_time") or provider_start,
             provider_end=row.get("end_time") or provider_end,
+            provider_breakdown=PLATFORM_TOTAL_BREAKDOWN,
         )
-    account_metrics = aggregate_total_campaign_metrics(rows)
     await _upsert_total_row(
         context,
         account=account,
@@ -496,6 +596,7 @@ async def persist_account_total_day(
         metrics=account_metrics,
         provider_start=provider_start,
         provider_end=provider_end,
+        provider_breakdown=None,
     )
 
     if authoritative_breakdown and not errors:
@@ -570,7 +671,15 @@ async def refresh_account_total_snapshots(
             "end_time": request_end.isoformat(timespec="seconds"),
         })
         try:
-            rows, day_errors, breakdown_seen = (
+            account_metrics, account_errors = await fetch_account_total_direct_metrics(
+                context,
+                client,
+                access_token,
+                account_id=account_id,
+                request_start=request_start,
+                request_end=request_end,
+            )
+            rows, campaign_errors, breakdown_seen = (
                 await fetch_account_total_campaign_rows(
                     context,
                     client,
@@ -580,17 +689,19 @@ async def refresh_account_total_snapshots(
                     request_end=request_end,
                 )
             )
+            day_errors = [*account_errors, *campaign_errors]
             for error in day_errors:
                 errors.append({"date": report_date.isoformat(), **error})
             if not total_snapshot_is_authoritative(
                 breakdown_seen=breakdown_seen,
+                account_metrics_available=bool(account_metrics),
                 errors=day_errors,
             ):
                 errors.append({
                     "date": report_date.isoformat(),
                     "code": "snapchat_platform_total_snapshot_partial",
                     "message": (
-                        "Snapchat TOTAL campaign breakdown was incomplete; "
+                        "Snapchat TOTAL snapshot was incomplete; "
                         "the previous complete snapshot was preserved."
                     ),
                     "retryable": True,
@@ -602,6 +713,7 @@ async def refresh_account_total_snapshots(
                 timezone_name=timezone_name,
                 date_string=report_date.isoformat(),
                 rows=rows,
+                account_metrics=account_metrics,
                 provider_start=request_start,
                 provider_end=request_end,
                 authoritative_breakdown=True,
@@ -632,6 +744,7 @@ async def refresh_account_total_snapshots(
         "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
+        "direct_account_total_requested": True,
         "request_windows": request_windows,
         "account_timezone": timezone_name,
         "business_timezone": BUSINESS_TIMEZONE,
@@ -739,9 +852,7 @@ def _scope_campaigns(
 ) -> list[dict[str, Any]]:
     scoped = list(campaigns)
     if active_campaigns_only:
-        scoped = [
-            row for row in scoped if row.get("campaign_active") is True
-        ]
+        scoped = [row for row in scoped if row.get("campaign_active") is True]
     needle = _text(campaign_query).casefold()[:120]
     if needle:
         scoped = [
@@ -781,10 +892,7 @@ def _aggregate_visible_campaigns(
             "cpa_sar": None,
             "cpa_native": None,
         }
-    return manager._aggregate_rows(
-        campaigns,
-        requested_days=requested_days,
-    )
+    return manager._aggregate_rows(campaigns, requested_days=requested_days)
 
 
 async def apply_platform_snapshot_to_report(
@@ -815,12 +923,8 @@ async def apply_platform_snapshot_to_report(
         date_to=date_to,
         timezone_name=timezone_name,
     )
-    account_rows = [
-        row for row in rows if row.get("entity_type") == "ad_account"
-    ]
-    campaign_rows = [
-        row for row in rows if row.get("entity_type") == "campaign"
-    ]
+    account_rows = [row for row in rows if row.get("entity_type") == "ad_account"]
+    campaign_rows = [row for row in rows if row.get("entity_type") == "campaign"]
     if not account_rows and not campaign_rows:
         result.setdefault("insights", []).append({
             "code": "snapchat_platform_total_snapshot_pending",
@@ -833,7 +937,12 @@ async def apply_platform_snapshot_to_report(
         })
         result.setdefault("source", {}).update({
             "platform_total_snapshot_ready": False,
+            "platform_direct_account_total_ready": False,
             "platform_source_isolated": True,
+        })
+        result.setdefault("ai_readiness", {}).update({
+            "report_ready": False,
+            "ai_analysis_ready": False,
         })
         result.setdefault("policy", {}).update({
             "platform_source_isolated": True,
@@ -895,8 +1004,7 @@ async def apply_platform_snapshot_to_report(
             "status": status,
             "configured_status": status,
             "delivery_status": (
-                entity.get("delivery_status")
-                or base.get("delivery_status")
+                entity.get("delivery_status") or base.get("delivery_status")
             ),
             "objective": entity.get("objective") or base.get("objective"),
             "start_time": entity.get("start_time") or base.get("start_time"),
@@ -909,10 +1017,7 @@ async def apply_platform_snapshot_to_report(
                     else (base.get("budget") or {}).get("daily_native")
                 ),
                 "lifetime_native": (
-                    round(
-                        float(entity["lifetime_spend_cap_micro"]) / 1_000_000,
-                        6,
-                    )
+                    round(float(entity["lifetime_spend_cap_micro"]) / 1_000_000, 6)
                     if _number(entity.get("lifetime_spend_cap_micro")) is not None
                     else (base.get("budget") or {}).get("lifetime_native")
                 ),
@@ -932,16 +1037,10 @@ async def apply_platform_snapshot_to_report(
     visible = scoped[offset:offset + limit]
 
     if not active_campaigns_only and not _text(campaign_query) and account_rows:
-        totals = manager._aggregate_rows(
-            account_rows,
-            requested_days=requested_days,
-        )
-        totals_scope = "all_ads_account_total"
+        totals = manager._aggregate_rows(account_rows, requested_days=requested_days)
+        totals_scope = "all_ads_direct_account_total"
     else:
-        totals = _aggregate_visible_campaigns(
-            scoped,
-            requested_days=requested_days,
-        )
+        totals = _aggregate_visible_campaigns(scoped, requested_days=requested_days)
         totals_scope = "filtered_campaign_sum"
     totals.pop("profitability", None)
     totals["result_source"] = RESULT_SOURCE_PLATFORM
@@ -984,14 +1083,16 @@ async def apply_platform_snapshot_to_report(
         rebuilt,
         requested_days=requested_days,
     )
-    account_total = manager._aggregate_rows(
-        account_rows,
-        requested_days=requested_days,
-    ) if account_rows else {}
+    account_total = (
+        manager._aggregate_rows(account_rows, requested_days=requested_days)
+        if account_rows
+        else {}
+    )
     result.setdefault("source", {}).update({
         "platform_total_collection": SNAPCHAT_ACCOUNT_TOTAL_COLLECTION,
         "platform_total_source_mode": PLATFORM_TOTAL_SOURCE_MODE,
-        "platform_total_snapshot_ready": True,
+        "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
+        "platform_direct_account_total_ready": bool(account_rows),
         "platform_source_isolated": True,
         "platform_totals_scope": totals_scope,
         "platform_account_orders": account_total.get("orders"),
@@ -999,6 +1100,15 @@ async def apply_platform_snapshot_to_report(
         "platform_account_sales_sar": account_total.get("sales_sar"),
         "platform_campaign_sales_sar": campaign_sum.get("sales_sar"),
         "salla_metrics_applied_to_platform": False,
+    })
+    result.setdefault("ai_readiness", {}).update({
+        "report_ready": bool(account_rows and campaign_rows),
+        "orders_ready": totals.get("orders") is not None,
+        "sales_ready": totals.get("sales_sar") is not None,
+        "ratios_ready": any(
+            totals.get(key) is not None for key in ("roas", "cpa_sar")
+        ),
+        "ai_analysis_ready": bool(account_rows and campaign_rows),
     })
     result.setdefault("policy", {}).update({
         "platform_source_isolated": True,
@@ -1013,12 +1123,8 @@ def audit_platform_purchase_totals(
     *,
     requested_days: int,
 ) -> tuple[int, int, str]:
-    account_rows = [
-        row for row in rows if row.get("entity_type") == "ad_account"
-    ]
-    campaign_rows = [
-        row for row in rows if row.get("entity_type") == "campaign"
-    ]
+    account_rows = [row for row in rows if row.get("entity_type") == "ad_account"]
+    campaign_rows = [row for row in rows if row.get("entity_type") == "campaign"]
     if account_rows:
         account = manager._aggregate_rows(
             account_rows,
@@ -1031,7 +1137,7 @@ def audit_platform_purchase_totals(
         return (
             int(account.get("orders") or 0),
             int(campaigns.get("orders") or 0),
-            "account_total_snapshot",
+            "direct_account_total_snapshot",
         )
     campaigns = manager._aggregate_rows(
         campaign_rows,
@@ -1061,21 +1167,21 @@ def install_snapchat_platform_source_integrity() -> None:
                 *args,
                 **kwargs,
             ) or {})
-            start_date = kwargs.get("start_date")
-            end_date = kwargs.get("end_date")
-            if not isinstance(start_date, date) and args:
-                start_date = args[0]
-            if not isinstance(end_date, date) and len(args) > 1:
-                end_date = args[1]
-            if not isinstance(start_date, date) or not isinstance(end_date, date):
+            refresh_start = kwargs.get("start_date")
+            refresh_end = kwargs.get("end_date")
+            if not isinstance(refresh_start, date) and args:
+                refresh_start = args[0]
+            if not isinstance(refresh_end, date) and len(args) > 1:
+                refresh_end = args[1]
+            if not isinstance(refresh_start, date) or not isinstance(refresh_end, date):
                 return output
             total = await refresh_account_total_snapshots(
                 context,
                 client,
                 access_token,
                 account,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=refresh_start,
+                end_date=refresh_end,
                 now=kwargs.get("now"),
             )
             output["platform_total_snapshot"] = total
@@ -1122,9 +1228,7 @@ def install_snapchat_platform_source_integrity() -> None:
 
         report_with_platform_integrity._mezan_platform_source_integrity = True  # type: ignore[attr-defined]
         report_with_platform_integrity._mezan_platform_source_base = current_report  # type: ignore[attr-defined]
-        manager.build_account_timezone_campaign_report = (
-            report_with_platform_integrity
-        )
+        manager.build_account_timezone_campaign_report = report_with_platform_integrity
 
     from . import snapchat_native_tracking_routes as tracking_routes
     from . import snapchat_order_source_audit as audit
@@ -1137,35 +1241,28 @@ def install_snapchat_platform_source_integrity() -> None:
             *args: Any,
             **kwargs: Any,
         ) -> dict[str, Any]:
-            result = dict(await current_audit(
-                db,
-                user_id,
-                *args,
-                **kwargs,
-            ) or {})
+            result = dict(await current_audit(db, user_id, *args, **kwargs) or {})
             account = result.get("account") or {}
             account_id = _text(
-                account.get("account_id")
-                or account.get("ad_account_id")
+                account.get("account_id") or account.get("ad_account_id")
             )
-            date_from = _text(result.get("date_from"))
-            date_to = _text(result.get("date_to"))
+            audit_from = _text(result.get("date_from"))
+            audit_to = _text(result.get("date_to"))
             timezone_name = _text(
                 account.get("timezone")
                 or result.get("summary", {}).get("date_timezone")
             )
-            if all((account_id, date_from, date_to, timezone_name)):
+            if all((account_id, audit_from, audit_to, timezone_name)):
                 rows = await load_platform_total_rows(
                     db,
                     user_id,
                     account_id=account_id,
-                    date_from=date_from,
-                    date_to=date_to,
+                    date_from=audit_from,
+                    date_to=audit_to,
                     timezone_name=timezone_name,
                 )
                 requested_days = (
-                    date.fromisoformat(date_to)
-                    - date.fromisoformat(date_from)
+                    date.fromisoformat(audit_to) - date.fromisoformat(audit_from)
                 ).days + 1
                 account_count, campaign_count, source = (
                     audit_platform_purchase_totals(
@@ -1190,15 +1287,14 @@ def install_snapchat_platform_source_integrity() -> None:
 
         audit_with_platform_total._mezan_platform_total_audit = True  # type: ignore[attr-defined]
         audit.build_snapchat_order_source_audit = audit_with_platform_total
-        tracking_routes.build_snapchat_order_source_audit = (
-            audit_with_platform_total
-        )
+        tracking_routes.build_snapchat_order_source_audit = audit_with_platform_total
 
 
 __all__ = [
     "PLATFORM_TOTAL_BREAKDOWN",
     "PLATFORM_TOTAL_GRANULARITY",
     "PLATFORM_TOTAL_SOURCE_MODE",
+    "REQUIRED_ACCOUNT_TOTAL_FIELDS",
     "SNAPCHAT_ACCOUNT_TOTAL_COLLECTION",
     "account_local_dates_for_refresh",
     "account_local_total_window",
@@ -1206,7 +1302,9 @@ __all__ = [
     "apply_platform_snapshot_to_report",
     "audit_platform_purchase_totals",
     "extract_account_total_campaign_rows",
+    "extract_account_total_metrics",
     "fetch_account_total_campaign_rows",
+    "fetch_account_total_direct_metrics",
     "install_snapchat_platform_source_integrity",
     "load_platform_total_rows",
     "persist_account_total_day",
