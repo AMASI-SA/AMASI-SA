@@ -88,7 +88,7 @@ export default function AdsEntityLevelWorkspace({
 }) {
     const adSquadsEnabled = platform === "snapchat";
     const adsEnabled = platform === "snapchat";
-    const campaignReport = platform === "snapchat"
+    const campaignReport = platform === "snapchat" && resultSource === "salla"
         ? hydrateCampaignProfitability(campaigns, campaignTotals)
         : { campaigns, totals: campaignTotals };
     const auditAccountId = campaignReport.campaigns?.[0]?.account_id || campaigns?.[0]?.account_id || null;
