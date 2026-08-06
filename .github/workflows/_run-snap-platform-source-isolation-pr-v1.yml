@@ -89,5 +89,9 @@ jobs:
             frontend/src/components/marketing/CampaignManagerTable.jsx \
             frontend/src/components/marketing/CampaignManagerTable.test.jsx \
             frontend/src/components/marketing/SnapchatOrderSourceAudit.jsx
+          if git diff --cached --quiet; then
+            echo "SOURCE_ISOLATION_ALREADY_APPLIED"
+            exit 0
+          fi
           git commit -m "fix(prod-snap): harden platform TOTAL source integrity"
           git push origin HEAD:${{ github.head_ref }}
