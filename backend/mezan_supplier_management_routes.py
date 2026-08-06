@@ -3,7 +3,8 @@
 This module deliberately does not read, migrate, merge, or write the legacy
 ``suppliers``/``counterparties`` accounting records.  Mezan 2 suppliers are an
 operational catalog whose services come from the existing Product V2 resource
-catalog.  Accounting invoices and liabilities remain a later, explicit step.
+catalog. Approved receiving sessions use the same Mezan 2 supplier identity
+for accounting invoices and payables; legacy supplier records stay excluded.
 """
 from __future__ import annotations
 
@@ -66,7 +67,7 @@ def _public_supplier(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "legacy_dependency": False,
-        "accounting_linked": False,
+        "accounting_linked": True,
     }
 
 
@@ -149,6 +150,7 @@ async def _service_links(
             "name": 1,
             "code": 1,
             "unit": 1,
+            "unit_cost": 1,
             "kind": 1,
             "track_inventory": 1,
             "requires_preparation": 1,
@@ -170,6 +172,7 @@ async def _service_links(
             "service_name": _text(by_id[service_id].get("name")) or service_id,
             "service_code": _text(by_id[service_id].get("code")) or None,
             "unit": _text(by_id[service_id].get("unit")) or "job",
+            "unit_cost": by_id[service_id].get("unit_cost"),
             "requires_preparation": bool(
                 by_id[service_id].get("requires_preparation")
             ),
@@ -232,6 +235,7 @@ def make_mezan_supplier_management_router(
                 "name": 1,
                 "code": 1,
                 "unit": 1,
+                "unit_cost": 1,
                 "kind": 1,
                 "track_inventory": 1,
                 "requires_preparation": 1,
@@ -243,6 +247,7 @@ def make_mezan_supplier_management_router(
                 "name": _text(row.get("name")),
                 "code": _text(row.get("code")) or None,
                 "unit": _text(row.get("unit")) or "job",
+                "unit_cost": row.get("unit_cost"),
                 "requires_preparation": bool(row.get("requires_preparation")),
             }
             for row in raw_services
@@ -266,7 +271,7 @@ def make_mezan_supplier_management_router(
             "rules": {
                 "service_required": True,
                 "legacy_supplier_data_used": False,
-                "accounting_linked": False,
+                "accounting_linked": True,
                 "delete_supported": False,
             },
             "permissions": {
@@ -306,7 +311,7 @@ def make_mezan_supplier_management_router(
             "created_at": now,
             "updated_at": now,
             "legacy_dependency": False,
-            "accounting_linked": False,
+            "accounting_linked": True,
         }
         try:
             await db[MEZAN_SUPPLIERS_V2].insert_one(dict(row))
@@ -363,7 +368,7 @@ def make_mezan_supplier_management_router(
             "updated_by": context["actor_id"],
             "updated_at": _now(),
             "legacy_dependency": False,
-            "accounting_linked": False,
+            "accounting_linked": True,
         }
         try:
             await db[MEZAN_SUPPLIERS_V2].update_one(selector, {"$set": patch})

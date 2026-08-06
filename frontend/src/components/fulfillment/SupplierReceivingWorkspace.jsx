@@ -8,6 +8,7 @@ import {
     CheckCircle,
     ClockCounterClockwise,
     Package,
+    PlusCircle,
     SpinnerGap,
     UserCircle,
     WarningCircle,
@@ -65,14 +66,21 @@ export function supplierScanReferencePriceHalalas(scan) {
 }
 
 export function supplierInvoiceLineKey(scan) {
-    const services = (scan?.services || [])
+    const services = (scan?.invoice_services?.length ? scan.invoice_services : scan?.services || [])
         .map((service) => `${service?.service_id || ""}:${service?.required_quantity || 1}`)
         .sort()
         .join("|");
     return [scan?.product_id || "", scan?.sku || "", scan?.product_name || "منتج", services].join("::");
 }
 
-export function buildSupplierInvoiceLines(scans = [], unitPrices = {}) {
+function serviceReferenceHalalas(service) {
+    const direct = Number(service?.reference_unit_price_halalas);
+    if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
+    const amount = Number(service?.reference_unit_cost ?? service?.unit_cost);
+    return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : 0;
+}
+
+export function buildSupplierInvoiceLines(scans = [], drafts = {}) {
     const lines = new Map();
     [...scans].reverse().forEach((scan) => {
         const pieceId = String(scan?.piece_id || "").trim();
@@ -83,33 +91,80 @@ export function buildSupplierInvoiceLines(scans = [], unitPrices = {}) {
             if (!existing.piece_ids.includes(pieceId)) existing.piece_ids.push(pieceId);
             return;
         }
-        const suggestedPrice = supplierScanReferencePriceHalalas(scan);
-        const override = Number(unitPrices[key]);
-        const services = scan?.services || [];
-        const referencePriceComplete = typeof scan?.reference_price_complete === "boolean"
-            ? scan.reference_price_complete
-            : services.length > 0 && services.every((service) => (
-                service?.reference_unit_cost !== null
-                && service?.reference_unit_cost !== undefined
-                && service?.reference_unit_cost !== ""
-            ));
+        const productReference = Number(scan?.reference_product_unit_price_halalas);
+        const productReferenceHalalas = Number.isFinite(productReference) && productReference >= 0
+            ? Math.round(productReference)
+            : 0;
+        const services = (scan?.invoice_services?.length ? scan.invoice_services : scan?.services || [])
+            .map((service) => ({
+                service_id: String(service?.service_id || "").trim(),
+                service_name: service?.service_name || service?.service_code || "خدمة",
+                service_code: service?.service_code || null,
+                unit: service?.unit || "job",
+                quantity_per_piece: Number(service?.required_quantity || service?.quantity_per_piece || 1),
+                reference_unit_price_halalas: serviceReferenceHalalas(service),
+                unit_price_halalas: serviceReferenceHalalas(service),
+                selected: true,
+                add_to_product: false,
+                reference_price_complete: service?.reference_price_complete !== false
+                    && serviceReferenceHalalas(service) > 0,
+            }))
+            .filter((service) => service.service_id);
         lines.set(key, {
             key,
             product_id: scan?.product_id || null,
             product_name: scan?.product_name || "منتج",
             sku: scan?.sku || null,
             piece_ids: [pieceId],
-            unit_price_halalas: Number.isFinite(override) && override >= 0
-                ? Math.round(override)
-                : suggestedPrice,
-            reference_price_complete: referencePriceComplete,
+            reference_product_unit_price_halalas: productReferenceHalalas,
+            product_unit_price_halalas: productReferenceHalalas,
+            product_reference_price_complete:
+                typeof scan?.reference_product_price_complete === "boolean"
+                    ? scan.reference_product_price_complete
+                    : productReferenceHalalas > 0,
+            services,
         });
     });
     return Array.from(lines.values()).map((line) => ({
         ...line,
-        quantity: line.piece_ids.length,
-        total_halalas: line.piece_ids.length * line.unit_price_halalas,
-    }));
+        ...(drafts[line.key] || {}),
+        services: (() => {
+            const draftServices = drafts[line.key]?.services || {};
+            const merged = line.services.map((service) => ({
+                ...service,
+                ...(draftServices[service.service_id] || {}),
+            }));
+            Object.values(draftServices).forEach((service) => {
+                if (!merged.some((row) => row.service_id === service.service_id)) {
+                    merged.push({ ...service });
+                }
+            });
+            return merged;
+        })(),
+    })).map((line) => {
+        const quantity = line.piece_ids.length;
+        const services = line.services.map((service) => {
+            const perPiece = Number(service.quantity_per_piece || 1);
+            const totalQuantity = (Number.isFinite(perPiece) && perPiece > 0 ? perPiece : 1) * quantity;
+            return {
+                ...service,
+                total_quantity: totalQuantity,
+                total_halalas: service.selected
+                    ? Math.round(totalQuantity * Number(service.unit_price_halalas || 0))
+                    : 0,
+            };
+        });
+        const productTotal = quantity * Number(line.product_unit_price_halalas || 0);
+        const servicesTotal = services.reduce((sum, service) => sum + service.total_halalas, 0);
+        return {
+            ...line,
+            services,
+            quantity,
+            product_total_halalas: productTotal,
+            services_total_halalas: servicesTotal,
+            total_halalas: productTotal + servicesTotal,
+        };
+    });
 }
 
 function EmptyImage() {
@@ -141,6 +196,92 @@ function ScanRow({ scan }) {
     );
 }
 
+function SupplierInvoiceLineEditor({
+    line,
+    permissions,
+    serviceCatalog,
+    onProductPriceChange,
+    onServicePriceChange,
+    onServiceToggle,
+    onServiceAdd,
+}) {
+    const [serviceToAdd, setServiceToAdd] = useState("");
+    const currentServiceIds = new Set(line.services.map((service) => service.service_id));
+    const availableServices = serviceCatalog.filter(
+        (service) => !currentServiceIds.has(String(service?.id || "")),
+    );
+    return (
+        <article className="rounded-2xl border border-slate-200 bg-white p-3" data-testid="supplier-receiving-invoice-line">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="min-w-0">
+                    <div className="truncate font-black text-slate-950">{line.product_name}</div>
+                    <div className="mt-1 text-[11px] font-bold text-slate-500">{line.quantity} قطعة{line.sku ? ` · ${line.sku}` : ""}</div>
+                </div>
+                <div className="min-w-40">
+                    <div className="mb-1 text-[10px] font-black text-slate-500">سعر المنتج الأساسي للقطعة</div>
+                    <label className="relative block">
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={(Number(line.product_unit_price_halalas || 0) / 100).toFixed(2)}
+                            onChange={(event) => onProductPriceChange(line.key, event.target.value)}
+                            disabled={!permissions.can_edit_product_price}
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-2 pl-8 text-center text-sm font-black tabular-nums outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-500"
+                            aria-label={`سعر المنتج ${line.product_name}`}
+                        />
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">ر.س</span>
+                    </label>
+                    {!line.product_reference_price_complete && <div className="mt-1 text-[10px] font-black text-amber-700">السعر الأصلي للمنتج غير مسجل</div>}
+                </div>
+            </div>
+            <div className="mt-3 space-y-2">
+                <div className="text-[11px] font-black text-violet-800">الخدمات التي نفذها المورد</div>
+                {line.services.map((service) => (
+                    <div key={service.service_id} className={`grid grid-cols-[auto_minmax(0,1fr)_108px_82px] items-center gap-2 rounded-xl border p-2 ${service.selected ? "border-violet-200 bg-violet-50/50" : "border-slate-200 bg-slate-50 opacity-70"}`}>
+                        <input
+                            type="checkbox"
+                            checked={Boolean(service.selected)}
+                            onChange={(event) => onServiceToggle(line.key, service.service_id, event.target.checked)}
+                            aria-label={`اختيار خدمة ${service.service_name}`}
+                            className="h-5 w-5 accent-violet-700"
+                        />
+                        <div className="min-w-0">
+                            <div className="truncate text-xs font-black text-slate-900">{service.service_name}</div>
+                            <div className="mt-0.5 text-[10px] font-bold text-slate-500">{service.quantity_per_piece || 1} لكل قطعة{service.add_to_product ? " · ستُضاف للمنتج" : ""}</div>
+                        </div>
+                        <label className="relative">
+                            <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={(Number(service.unit_price_halalas || 0) / 100).toFixed(2)}
+                                onChange={(event) => onServicePriceChange(line.key, service.service_id, event.target.value)}
+                                disabled={!permissions.can_edit_service_price || !service.selected}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 pl-7 text-center text-xs font-black tabular-nums outline-none focus:border-violet-500 disabled:bg-slate-100 disabled:text-slate-500"
+                                aria-label={`سعر خدمة ${service.service_name}`}
+                            />
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">ر.س</span>
+                        </label>
+                        <div className="text-left text-xs font-black tabular-nums text-violet-800">{formatSupplierMoney(service.total_halalas)}</div>
+                    </div>
+                ))}
+                {!line.services.length && <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-xs font-black text-amber-900">لا توجد خدمة مرتبطة يستطيع هذا المورد تنفيذها.</div>}
+            </div>
+            {permissions.can_add_service && availableServices.length > 0 && (
+                <div className="mt-3 flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2">
+                    <select value={serviceToAdd} onChange={(event) => setServiceToAdd(event.target.value)} className="min-h-10 min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-2 text-xs font-black" aria-label={`إضافة خدمة إلى ${line.product_name}`}>
+                        <option value="">اختر خدمة موجودة لإضافتها للمنتج</option>
+                        {availableServices.map((service) => <option key={service.id} value={service.id}>{service.name} · {Number(service.unit_cost || 0).toFixed(2)} ر.س</option>)}
+                    </select>
+                    <button type="button" disabled={!serviceToAdd} onClick={() => { onServiceAdd(line.key, serviceToAdd); setServiceToAdd(""); }} className="rounded-lg bg-emerald-700 px-3 text-xs font-black text-white disabled:opacity-40"><PlusCircle className="ml-1 inline" /> إضافة</button>
+                </div>
+            )}
+            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm font-black"><span>إجمالي المنتج والخدمات</span><span className="tabular-nums text-emerald-800">{formatSupplierMoney(line.total_halalas)} ر.س</span></div>
+        </article>
+    );
+}
+
 export function SupplierPieceCameraScanner({
     onDetected,
     onClose,
@@ -152,7 +293,12 @@ export function SupplierPieceCameraScanner({
     error = "",
     lastScan = null,
     invoiceLines = [],
-    onUnitPriceChange = () => {},
+    permissions = {},
+    serviceCatalog = [],
+    onProductPriceChange = () => {},
+    onServicePriceChange = () => {},
+    onServiceToggle = () => {},
+    onServiceAdd = () => {},
 }) {
     const videoRef = useRef(null);
     const [cameraError, setCameraError] = useState("");
@@ -291,17 +437,18 @@ export function SupplierPieceCameraScanner({
                             {!invoiceLines.length ? (
                                 <div className="flex min-h-52 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">ابدأ بتصوير باركود المنتجات؛ ستظهر هنا دون إغلاق الكاميرا.</div>
                             ) : (
-                                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                                    <div className="grid grid-cols-[minmax(0,1fr)_64px_112px_96px] gap-2 bg-slate-100 px-3 py-2 text-[11px] font-black text-slate-600">
-                                        <span>اسم المنتج</span><span className="text-center">عدد القطع</span><span className="text-center">سعر الوحدة</span><span className="text-left">الإجمالي</span>
-                                    </div>
+                                <div className="space-y-3">
                                     {invoiceLines.map((line) => (
-                                        <div key={line.key} className="grid grid-cols-[minmax(0,1fr)_64px_112px_96px] items-center gap-2 border-t border-slate-100 px-3 py-3 text-sm" data-testid="supplier-receiving-invoice-line">
-                                            <div className="min-w-0"><div className="truncate font-black text-slate-950">{line.product_name}</div>{line.sku && <div className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{line.sku}</div>}{!line.reference_price_complete && <div className="mt-1 text-[10px] font-black text-amber-700">راجع سعر الوحدة</div>}</div>
-                                            <div className="text-center text-lg font-black tabular-nums text-slate-900">{line.quantity}</div>
-                                            <label className="relative"><input type="number" min="0" step="0.01" value={(line.unit_price_halalas / 100).toFixed(2)} onChange={(event) => onUnitPriceChange(line.key, event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-2 pl-8 text-center text-sm font-black tabular-nums outline-none focus:border-emerald-500" aria-label={`سعر وحدة ${line.product_name}`} /><span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">ر.س</span></label>
-                                            <div className="text-left font-black tabular-nums text-emerald-800">{formatSupplierMoney(line.total_halalas)}</div>
-                                        </div>
+                                        <SupplierInvoiceLineEditor
+                                            key={line.key}
+                                            line={line}
+                                            permissions={permissions}
+                                            serviceCatalog={serviceCatalog}
+                                            onProductPriceChange={onProductPriceChange}
+                                            onServicePriceChange={onServicePriceChange}
+                                            onServiceToggle={onServiceToggle}
+                                            onServiceAdd={onServiceAdd}
+                                        />
                                     ))}
                                 </div>
                             )}
@@ -309,13 +456,14 @@ export function SupplierPieceCameraScanner({
 
                         <footer className="border-t border-slate-200 bg-white p-4">
                             <div className="mb-3 flex items-center justify-between"><span className="font-black text-slate-700">إجمالي الفاتورة</span><span className="text-2xl font-black tabular-nums text-emerald-800">{formatSupplierMoney(invoiceLines.reduce((sum, line) => sum + line.total_halalas, 0))} ر.س</span></div>
-                            <button type="button" onClick={onSave} disabled={saving || scanning || !invoiceLines.length} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
-                                {saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} حفظ الفاتورة وإنهاء الجلسة
+                            <button type="button" onClick={onSave} disabled={saving || scanning || !invoiceLines.length || invoiceLines.some((line) => !line.services.some((service) => service.selected && Number(service.unit_price_halalas) > 0))} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
+                                {saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} اعتماد فاتورة المورد وإنهاء الجلسة
                             </button>
+                            <p className="mt-2 text-center text-[11px] font-bold text-emerald-800">الاعتماد ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
                             <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-white px-5 text-sm font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-camera">
                                 {cancelling ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
                             </button>
-                            <p className="mt-2 text-center text-[11px] font-bold text-slate-500">يحفظ سجلًا تشغيليًا في ميزان فقط، دون مديونية أو إرسال إلى قيود.</p>
+                            <p className="mt-2 text-center text-[11px] font-bold text-slate-500">الإلغاء يهمل المسودة ولا ينشئ فاتورة أو مديونية.</p>
                         </footer>
                     </section>
                 </div>
@@ -335,7 +483,7 @@ export default function SupplierReceivingWorkspace() {
     const [cameraOpen, setCameraOpen] = useState(false);
     const [error, setError] = useState("");
     const [lastScan, setLastScan] = useState(null);
-    const [unitPrices, setUnitPrices] = useState({});
+    const [invoiceDrafts, setInvoiceDrafts] = useState({});
     const barcodeRef = useRef(null);
     const scanBusyRef = useRef(false);
 
@@ -360,9 +508,15 @@ export default function SupplierReceivingWorkspace() {
         [data?.active_session_scans],
     );
     const invoiceLines = useMemo(
-        () => buildSupplierInvoiceLines(scans, unitPrices),
-        [scans, unitPrices],
+        () => buildSupplierInvoiceLines(scans, invoiceDrafts),
+        [scans, invoiceDrafts],
     );
+    const activeServiceCatalog = useMemo(() => {
+        const allowed = new Set(
+            (active?.supplier?.service_links || []).map((service) => String(service?.service_id || "")),
+        );
+        return (data?.service_catalog || []).filter((service) => allowed.has(String(service?.id || "")));
+    }, [active?.supplier?.service_links, data?.service_catalog]);
     const closedSessions = useMemo(
         () => (data?.sessions || []).filter((row) => row?.status === "closed"),
         [data?.sessions],
@@ -391,7 +545,7 @@ export default function SupplierReceivingWorkspace() {
             }));
             setOpenNote("");
             setLastScan(null);
-            setUnitPrices({});
+            setInvoiceDrafts({});
         } catch (openError) {
             setError(openError.message);
         } finally {
@@ -444,14 +598,64 @@ export default function SupplierReceivingWorkspace() {
         [receivePiece],
     );
 
-    function changeUnitPrice(lineKey, value) {
+    function changeProductPrice(lineKey, value) {
         const amount = Number(value);
-        setUnitPrices((current) => ({
+        setInvoiceDrafts((current) => ({
             ...current,
-            [lineKey]: Number.isFinite(amount) && amount >= 0
+            [lineKey]: {
+                ...(current[lineKey] || {}),
+                product_unit_price_halalas: Number.isFinite(amount) && amount >= 0
+                    ? Math.round(amount * 100)
+                    : 0,
+            },
+        }));
+    }
+
+    function patchDraftService(lineKey, serviceId, patch) {
+        setInvoiceDrafts((current) => ({
+            ...current,
+            [lineKey]: {
+                ...(current[lineKey] || {}),
+                services: {
+                    ...(current[lineKey]?.services || {}),
+                    [serviceId]: {
+                        ...(current[lineKey]?.services?.[serviceId] || {}),
+                        service_id: serviceId,
+                        ...patch,
+                    },
+                },
+            },
+        }));
+    }
+
+    function changeServicePrice(lineKey, serviceId, value) {
+        const amount = Number(value);
+        patchDraftService(lineKey, serviceId, {
+            unit_price_halalas: Number.isFinite(amount) && amount >= 0
                 ? Math.round(amount * 100)
                 : 0,
-        }));
+        });
+    }
+
+    function toggleService(lineKey, serviceId, selected) {
+        patchDraftService(lineKey, serviceId, { selected: Boolean(selected) });
+    }
+
+    function addService(lineKey, serviceId) {
+        const service = activeServiceCatalog.find((row) => String(row?.id || "") === String(serviceId));
+        if (!service) return;
+        const unitPrice = Number(service.unit_cost);
+        patchDraftService(lineKey, String(service.id), {
+            service_name: service.name || service.code || "خدمة",
+            service_code: service.code || null,
+            unit: service.unit || "job",
+            quantity_per_piece: 1,
+            reference_unit_price_halalas: Number.isFinite(unitPrice) && unitPrice >= 0 ? Math.round(unitPrice * 100) : 0,
+            unit_price_halalas: Number.isFinite(unitPrice) && unitPrice >= 0 ? Math.round(unitPrice * 100) : 0,
+            reference_price_complete: Number.isFinite(unitPrice) && unitPrice > 0,
+            selected: true,
+            add_to_product: true,
+        });
     }
 
     async function closeSession() {
@@ -463,13 +667,18 @@ export default function SupplierReceivingWorkspace() {
                 note: closeNote.trim(),
                 invoice_lines: invoiceLines.map((line) => ({
                     piece_ids: line.piece_ids,
-                    unit_price_halalas: line.unit_price_halalas,
+                    product_unit_price_halalas: line.product_unit_price_halalas,
+                    services: line.services.filter((service) => service.selected).map((service) => ({
+                        service_id: service.service_id,
+                        unit_price_halalas: service.unit_price_halalas,
+                        add_to_product: Boolean(service.add_to_product),
+                    })),
                 })),
             });
             setCameraOpen(false);
             setCloseNote("");
             setLastScan(null);
-            setUnitPrices({});
+            setInvoiceDrafts({});
             await load({ quiet: true });
         } catch (closeError) {
             setError(closeError.message);
@@ -494,7 +703,7 @@ export default function SupplierReceivingWorkspace() {
             setCameraOpen(false);
             setCloseNote("");
             setLastScan(null);
-            setUnitPrices({});
+            setInvoiceDrafts({});
             setBarcode("");
             setData((current) => ({
                 ...current,
@@ -543,7 +752,7 @@ export default function SupplierReceivingWorkspace() {
 
             <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-950">
                 <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
-                <div>هذه الجلسة تنشئ فاتورة تشغيلية داخل ميزان 2 بعد الضغط على حفظ. لا تنشئ مديونية أو قيدًا محاسبيًا ولا ترسل شيئًا إلى قيود أو سلة.</div>
+                <div>عند الاعتماد تتحول مسودة الاستلام إلى فاتورة مورد محاسبية واحدة داخل ميزان 2، وتُنشأ مديونية المورد بالقيمة النهائية. لا يُرسل شيء إلى قيود أو سلة.</div>
             </div>
 
             {error && (
@@ -601,7 +810,7 @@ export default function SupplierReceivingWorkspace() {
 
                         {lastScan && (
                             <div className="rounded-2xl border-2 border-emerald-400 bg-white p-4 shadow-sm" data-testid="supplier-receiving-last-success">
-                                <div className="mb-3 flex items-center gap-2 font-black text-emerald-800"><CheckCircle size={24} weight="fill" /> تم استلام القطعة ومنع تكرارها</div>
+                                <div className="mb-3 flex items-center gap-2 font-black text-emerald-800"><CheckCircle size={24} weight="fill" /> تمت إضافة القطعة للمسودة ومنع تكرارها</div>
                                 <ScanRow scan={lastScan} />
                             </div>
                         )}
@@ -624,7 +833,7 @@ export default function SupplierReceivingWorkspace() {
                             <h3 className="font-black text-slate-950">إنهاء الجلسة</h3>
                             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">احفظ الفاتورة لاعتماد الاستلام، أو ألغِ الجلسة للخروج دون حفظ.</p>
                             <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={3} placeholder="ملاحظة الإغلاق — اختياري" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-400" />
-                            <button type="button" onClick={closeSession} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">{busy === "close" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} حفظ الفاتورة وإنهاء الجلسة</button>
+                            <button type="button" onClick={() => setCameraOpen(true)} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50"><CheckCircle className="ml-1 inline" /> مراجعة الخدمات والأسعار قبل الاعتماد</button>
                             <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-800 disabled:opacity-50" data-testid="supplier-receiving-cancel-session">
                                 {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
                             </button>
@@ -635,11 +844,11 @@ export default function SupplierReceivingWorkspace() {
             )}
 
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="supplier-receiving-history">
-                <div className="flex items-center gap-2"><ClockCounterClockwise size={23} className="text-violet-700" /><div><h3 className="font-black text-slate-950">سجل جلسات الاستلام المغلقة</h3><p className="mt-1 text-xs font-bold text-slate-500">مرجع تشغيلي محفوظ؛ لا تُحذف الجلسات أو القطع.</p></div></div>
+                <div className="flex items-center gap-2"><ClockCounterClockwise size={23} className="text-violet-700" /><div><h3 className="font-black text-slate-950">سجل فواتير المورد المعتمدة</h3><p className="mt-1 text-xs font-bold text-slate-500">الجلسات الجديدة ترتبط بفاتورة محاسبية ومديونية داخل ميزان 2؛ وتبقى المسودات التشغيلية السابقة مميزة بوضوح.</p></div></div>
                 {!closedSessions.length ? <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">لا توجد جلسات مغلقة بعد.</div> : <div className="mt-4 grid gap-3 lg:grid-cols-2">{closedSessions.map((session) => (
                     <article key={session.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{supplierDisplayName(session)}</div><div className="mt-1 font-mono text-xs font-bold text-violet-700">{session.reference}</div></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{session.scan_count} قطعة</span></div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>حفظها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.operational_invoice && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">فاتورة {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span>}</div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>اعتمدها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.supplier_invoice && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">{session.supplier_invoice.invoice_number ? `${session.supplier_invoice.invoice_number} · ` : ""}{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · مديونية</span>}{!session.supplier_invoice && session.operational_invoice && <span className="rounded-full bg-amber-50 px-2.5 py-1 font-black text-amber-800">مسودة تشغيلية سابقة · {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span>}</div>
                     </article>
                 ))}</div>}
             </section>
@@ -656,7 +865,12 @@ export default function SupplierReceivingWorkspace() {
                     error={error}
                     lastScan={lastScan}
                     invoiceLines={invoiceLines}
-                    onUnitPriceChange={changeUnitPrice}
+                    permissions={data?.permissions || {}}
+                    serviceCatalog={activeServiceCatalog}
+                    onProductPriceChange={changeProductPrice}
+                    onServicePriceChange={changeServicePrice}
+                    onServiceToggle={toggleService}
+                    onServiceAdd={addService}
                 />
             )}
         </section>

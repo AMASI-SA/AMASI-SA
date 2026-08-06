@@ -35,9 +35,9 @@ test("supplier receiving stage exposes governed barcode session controls", () =>
     expect(markup).toContain('data-testid="supplier-receiving-workspace"');
     expect(markup).toContain("استلام منتجات المورد بالباركود");
     expect(markup).toContain('data-testid="supplier-receiving-open-form"');
-    expect(markup).toContain("فاتورة تشغيلية داخل ميزان 2");
-    expect(markup).toContain("لا تنشئ مديونية أو قيدًا محاسبيًا");
-    expect(markup).toContain("لا ترسل شيئًا إلى قيود أو سلة");
+    expect(markup).toContain("فاتورة مورد محاسبية واحدة داخل ميزان 2");
+    expect(markup).toContain("مديونية المورد");
+    expect(markup).toContain("لا يُرسل شيء إلى قيود أو سلة");
     expect(markup).toContain("من المورد");
 });
 
@@ -61,7 +61,7 @@ test("supplier camera stays open beside the live invoice draft", () => {
     expect(markup).toContain("تصوير QR القطعة");
     expect(markup).toContain("الكاميرا تبقى مفتوحة");
     expect(markup).toContain("فاتورة المورد");
-    expect(markup).toContain("حفظ الفاتورة وإنهاء الجلسة");
+    expect(markup).toContain("اعتماد فاتورة المورد وإنهاء الجلسة");
     expect(markup).toContain("إغلاق الكاميرا");
     expect(markup).toContain("إلغاء الجلسة والخروج");
 });
@@ -71,9 +71,10 @@ test("invoice lines group identical scanned products and calculate totals", () =
         product_id: "product-1",
         product_name: "سلسال بالاسم",
         sku: "N-1",
-        services: [{ service_id: "engrave", required_quantity: 1 }],
-        reference_unit_price_halalas: 1050,
-        reference_price_complete: true,
+        services: [{ service_id: "engrave", required_quantity: 1, reference_unit_cost: 3.5 }],
+        invoice_services: [{ service_id: "engrave", service_name: "حفر", required_quantity: 1, reference_unit_price_halalas: 350 }],
+        reference_product_unit_price_halalas: 700,
+        reference_product_price_complete: true,
     };
     const scans = [
         { ...base, piece_id: "piece-2" },
@@ -83,13 +84,44 @@ test("invoice lines group identical scanned products and calculate totals", () =
 
     expect(initial).toHaveLength(1);
     expect(initial[0].quantity).toBe(2);
-    expect(initial[0].unit_price_halalas).toBe(1050);
+    expect(initial[0].product_unit_price_halalas).toBe(700);
+    expect(initial[0].services[0].unit_price_halalas).toBe(350);
     expect(initial[0].total_halalas).toBe(2100);
 
     const key = supplierInvoiceLineKey(base);
-    const overridden = buildSupplierInvoiceLines(scans, { [key]: 1200 });
-    expect(overridden[0].unit_price_halalas).toBe(1200);
-    expect(overridden[0].total_halalas).toBe(2400);
+    const overridden = buildSupplierInvoiceLines(scans, {
+        [key]: { product_unit_price_halalas: 800 },
+    });
+    expect(overridden[0].product_unit_price_halalas).toBe(800);
+    expect(overridden[0].total_halalas).toBe(2300);
+});
+
+test("invoice lines do not merge pieces with different pending supplier services", () => {
+    const base = {
+        product_id: "product-1",
+        product_name: "سلسال بالاسم",
+        sku: "N-1",
+        services: [
+            { service_id: "engrave", required_quantity: 1 },
+            { service_id: "paint", required_quantity: 1 },
+        ],
+        reference_product_unit_price_halalas: 500,
+    };
+    const lines = buildSupplierInvoiceLines([
+        {
+            ...base,
+            piece_id: "piece-1",
+            invoice_services: [{ service_id: "engrave", required_quantity: 1, reference_unit_price_halalas: 300 }],
+        },
+        {
+            ...base,
+            piece_id: "piece-2",
+            invoice_services: [{ service_id: "paint", required_quantity: 1, reference_unit_price_halalas: 200 }],
+        },
+    ]);
+
+    expect(lines).toHaveLength(2);
+    expect(lines.map((line) => line.services[0].service_id).sort()).toEqual(["engrave", "paint"]);
 });
 
 test("camera invoice shows name, quantity, editable unit price and total without product images", () => {
@@ -102,16 +134,25 @@ test("camera invoice shows name, quantity, editable unit price and total without
                 product_name: "تعليقة اليوم الوطني",
                 sku: "ND-96",
                 quantity: 3,
-                unit_price_halalas: 750,
+                product_unit_price_halalas: 500,
+                product_reference_price_complete: true,
+                services: [{
+                    service_id: "cut",
+                    service_name: "قص",
+                    quantity_per_piece: 1,
+                    unit_price_halalas: 250,
+                    total_halalas: 750,
+                    selected: true,
+                }],
                 total_halalas: 2250,
             }]}
+            permissions={{ can_edit_product_price: true, can_edit_service_price: true }}
         />,
     );
 
-    expect(markup).toContain("اسم المنتج");
-    expect(markup).toContain("عدد القطع");
-    expect(markup).toContain("سعر الوحدة");
-    expect(markup).toContain("الإجمالي");
+    expect(markup).toContain("سعر المنتج الأساسي للقطعة");
+    expect(markup).toContain("الخدمات التي نفذها المورد");
+    expect(markup).toContain("إجمالي الفاتورة");
     expect(markup).toContain("تعليقة اليوم الوطني");
     expect(markup).not.toContain("<img");
 });
@@ -159,8 +200,9 @@ test("saving sends every grouped piece and edited unit price in one request", as
         product_name: "سلسال بالاسم",
         sku: "N-1",
         services: [{ service_id: "engrave", required_quantity: 1 }],
-        reference_unit_price_halalas: 900,
-        reference_price_complete: true,
+        invoice_services: [{ service_id: "engrave", service_name: "حفر", required_quantity: 1, reference_unit_price_halalas: 400 }],
+        reference_product_unit_price_halalas: 500,
+        reference_product_price_complete: true,
     };
     loadSupplierReceivingCatalog.mockResolvedValue({
         suppliers: [],
@@ -173,8 +215,14 @@ test("saving sends every grouped piece and edited unit price in one request", as
             scan_count: 1,
             opened_by_name: "خالد",
             opened_at: "2026-08-05T10:00:00Z",
-            supplier: { company_name: "مورد أماسي" },
+            supplier: { company_name: "مورد أماسي", service_links: [{ service_id: "engrave" }] },
         },
+        permissions: {
+            can_edit_product_price: false,
+            can_edit_service_price: false,
+            can_add_service: false,
+        },
+        service_catalog: [{ id: "engrave", name: "حفر", unit_cost: 4 }],
     });
     closeSupplierReceivingSession.mockResolvedValue({ ok: true });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -187,10 +235,16 @@ test("saving sends every grouped piece and edited unit price in one request", as
             root.render(<SupplierReceivingWorkspace />);
             await new Promise((resolve) => window.setTimeout(resolve, 0));
         });
-        const saveButton = Array.from(container.querySelectorAll("button")).find(
-            (button) => button.textContent.includes("حفظ الفاتورة وإنهاء الجلسة"),
+        const reviewButton = Array.from(container.querySelectorAll("button")).find(
+            (button) => button.textContent.includes("مراجعة الخدمات والأسعار قبل الاعتماد"),
         );
-        expect(saveButton).not.toBeUndefined();
+        expect(reviewButton).not.toBeUndefined();
+        await act(async () => {
+            reviewButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+        const saveButton = container.querySelector('[data-testid="supplier-receiving-save-invoice"]');
+        expect(saveButton).not.toBeNull();
         await act(async () => {
             saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
             await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -200,7 +254,12 @@ test("saving sends every grouped piece and edited unit price in one request", as
             note: "",
             invoice_lines: [{
                 piece_ids: ["piece-1"],
-                unit_price_halalas: 900,
+                product_unit_price_halalas: 500,
+                services: [{
+                    service_id: "engrave",
+                    unit_price_halalas: 400,
+                    add_to_product: false,
+                }],
             }],
         });
     } finally {
