@@ -23,14 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Extract and apply native source-isolation patch
-        run: |
-          awk '
-            /python - <<'\''PY'\''/ { capture=1; next }
-            capture && /^          PY$/ { capture=0; exit }
-            capture { sub(/^          /, ""); print }
-          ' .github/workflows/_apply-snap-platform-source-isolation-v1.yml > /tmp/apply_snap_platform_source.py
-          python /tmp/apply_snap_platform_source.py
+      - name: Apply native source-isolation patch
+        run: python .github/scripts/apply_snap_platform_source_isolation.py
       - name: Install focused backend dependencies
         run: >-
           python -m pip install -q
