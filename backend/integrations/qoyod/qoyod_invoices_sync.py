@@ -147,6 +147,34 @@ async def sync_qoyod_invoices(
 
     fetched = len(items)
 
+    # The historical unique (user_id, salla_order_id) index allowed at
+    # most one imported row with a missing identity. Repair that legacy
+    # row once before the loop. New rows receive their identity through
+    # $setOnInsert below, so the hot path stays at one database write per
+    # invoice and completes within the proxy timeout.
+    legacy_missing_identity = await db.qoyod_invoices.find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"salla_order_id": {"$exists": False}},
+                {"salla_order_id": None},
+                {"salla_order_id": ""},
+            ],
+        },
+        {"_id": 1, "qoyod_invoice_id": 1},
+    )
+    if legacy_missing_identity and legacy_missing_identity.get(
+        "qoyod_invoice_id"
+    ):
+        await db.qoyod_invoices.update_one(
+            {"_id": legacy_missing_identity["_id"]},
+            {"$set": {
+                "salla_order_id": _sync_salla_order_id(
+                    str(legacy_missing_identity["qoyod_invoice_id"])
+                )
+            }},
+        )
+
     for it in items:
         try:
             if not isinstance(it, dict):
@@ -225,22 +253,6 @@ async def sync_qoyod_invoices(
                     {"user_id": user_id, "qoyod_invoice_id": qid},
                     {"$set": {"last_sync_at": now_iso}},
                 )
-
-            # Repair the one legacy synced row that may already exist
-            # with a missing/null salla_order_id. The filter prevents
-            # overwriting any real Plan-B order id.
-            await db.qoyod_invoices.update_one(
-                {
-                    "user_id": user_id,
-                    "qoyod_invoice_id": qid,
-                    "$or": [
-                        {"salla_order_id": {"$exists": False}},
-                        {"salla_order_id": None},
-                        {"salla_order_id": ""},
-                    ],
-                },
-                {"$set": {"salla_order_id": sync_salla_order_id}},
-            )
         except Exception:  # noqa: BLE001
             # Never let one bad row abort the whole sync. Count and
             # continue — the operator sees `row_errors` in the summary.
