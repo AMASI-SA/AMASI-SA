@@ -8,6 +8,7 @@ from integrations_control_center.snapchat_platform_source_integrity import (
     aggregate_total_campaign_metrics,
     audit_platform_purchase_totals,
     extract_account_total_campaign_rows,
+    total_snapshot_is_authoritative,
 )
 
 
@@ -125,3 +126,43 @@ def test_fixed_created_order_semantics_is_gated_to_salla_source():
     ).read_text(encoding="utf-8")
     assert 'if result_source != "salla":' in source
     assert '"provider_metrics_preserved_for_platform_source": True' in source
+
+
+
+def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
+    rows = [
+        {
+            "campaign_id": "campaign-1",
+            "metrics": {
+                "spend": 100_000_000,
+                "conversion_purchases": 2,
+                "conversion_purchases_value": 300_000_000,
+            },
+        },
+        {
+            "campaign_id": "campaign-2",
+            "metrics": {
+                "spend": 50_000_000,
+            },
+        },
+    ]
+    metrics = aggregate_total_campaign_metrics(rows)
+    assert metrics["spend"] == 150_000_000
+    assert metrics["conversion_purchases"] == 2
+    assert metrics["conversion_purchases_value"] == 300_000_000
+    assert metrics["impressions"] == 0
+
+
+def test_partial_total_response_never_replaces_complete_snapshot():
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        errors=[],
+    ) is True
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=False,
+        errors=[],
+    ) is False
+    assert total_snapshot_is_authoritative(
+        breakdown_seen=True,
+        errors=[{"code": "partial"}],
+    ) is False
