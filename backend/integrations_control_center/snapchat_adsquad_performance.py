@@ -17,6 +17,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from . import snapchat_account_hourly_refresh as hourly
 from .snapchat_account_selection import _load_selected_accounts
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
 from .snapchat_active_campaign_filtering import (
     aggregate_entity_rows,
     is_active_provider_status,
@@ -52,7 +56,6 @@ from .snapchat_native_data_common import (
     _utcnow,
 )
 from .snapchat_native_performance_sync import (
-    ACTION_REPORT_TIME,
     CONVERSION_SOURCE_TYPES,
     STAT_FIELDS,
     SWIPE_ATTRIBUTION_WINDOW,
@@ -63,7 +66,7 @@ from .snapchat_native_performance_sync import (
     _new_bucket,
 )
 
-ADSQUAD_SOURCE_MODE = "snapchat_campaign_stats_adsquad_account_day_v1"
+ADSQUAD_SOURCE_MODE = f"{ADS_MANAGER_SOURCE_MODE}:ad_squad_day_v2"
 ADSQUAD_REFRESH_STATE_COLLECTION = "mezan_snapchat_adsquad_refresh_state_v1"
 ADSQUAD_BREAKDOWN = "adsquad"
 ADSQUAD_REFRESH_INTERVAL_SECONDS = 15 * 60
@@ -209,7 +212,7 @@ async def _fetch_campaign_adsquad_hours(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ACTION_REPORT_TIME,
+        "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -336,7 +339,7 @@ async def _upsert_projection(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ACTION_REPORT_TIME,
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
@@ -678,6 +681,7 @@ async def build_account_timezone_adsquad_report(
             "entity_type": "ad_squad",
             "date": date_query,
             "date_timezone": timezone_name,
+            "source_mode": ADSQUAD_SOURCE_MODE,
         },
         {"_id": 0},
     )
@@ -862,7 +866,8 @@ async def build_account_timezone_adsquad_report(
             ),
             "row_limit_reached": row_limit_reached,
             "entity_limit_reached": entity_limit_reached,
-            "commercial_results_source": "snapchat_conversion_reporting",
+            "commercial_results_source": "snapchat_ads_manager_impression_reporting",
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
             "salla_results_supported": False,
         },
         "policy": {"mode": "observe_only", "mutations_allowed": False},

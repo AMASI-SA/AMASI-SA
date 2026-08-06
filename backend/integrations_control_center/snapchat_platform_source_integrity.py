@@ -22,6 +22,10 @@ from . import snapchat_account_hourly_refresh as hourly
 from . import snapchat_account_timezone_manager as manager
 from .snapchat_active_campaign_filtering import is_active_provider_status
 from .snapchat_campaign_result_source_routes import RESULT_SOURCE_PLATFORM
+from .snapchat_freshness_impl_v6 import (
+    ADS_MANAGER_ACTION_REPORT_TIME,
+    ADS_MANAGER_SOURCE_MODE,
+)
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
     BUSINESS_TIMEZONE,
@@ -37,7 +41,6 @@ from .snapchat_native_data_common import (
     _timezone,
 )
 from .snapchat_native_performance_sync import (
-    ACTION_REPORT_TIME,
     CONVERSION_SOURCE_TYPES,
     STAT_FIELDS,
     SWIPE_ATTRIBUTION_WINDOW,
@@ -47,7 +50,7 @@ from .snapchat_native_performance_sync import (
 
 SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v1"
 PLATFORM_TOTAL_SOURCE_MODE = (
-    "snapchat_account_direct_total_plus_campaign_breakdown_account_local_v2"
+    f"{ADS_MANAGER_SOURCE_MODE}:account_total_v3"
 )
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
@@ -258,7 +261,7 @@ async def fetch_account_total_direct_metrics(
             "conversion_source_types": CONVERSION_SOURCE_TYPES,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-            "action_report_time": ACTION_REPORT_TIME,
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
         },
     )
     metrics, errors, successful_subrequests = extract_account_total_metrics(payload)
@@ -376,7 +379,7 @@ async def fetch_account_total_campaign_rows(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ACTION_REPORT_TIME,
+        "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -528,7 +531,7 @@ async def _upsert_total_row(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ACTION_REPORT_TIME,
+            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
@@ -874,6 +877,40 @@ def _scope_campaigns(
     return scoped
 
 
+def _mask_pending_platform_commercial_metrics(
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Do not expose legacy conversion-time results while TOTAL is pending."""
+    commercial_nulls = {
+        "orders": None,
+        "sales_sar": None,
+        "sales_native": None,
+        "roas": None,
+        "cpa_sar": None,
+        "cpa_native": None,
+        "result_source": RESULT_SOURCE_PLATFORM,
+        "commercial_metrics_source": "snapchat_impression_total_pending",
+        "profitability": None,
+    }
+    result["totals"] = {**dict(result.get("totals") or {}), **commercial_nulls}
+    result["daily"] = [
+        {**dict(row), **commercial_nulls}
+        for row in (result.get("daily") or [])
+        if isinstance(row, dict)
+    ]
+    result["campaigns"] = [
+        {**dict(row), **commercial_nulls}
+        for row in (result.get("campaigns") or [])
+        if isinstance(row, dict)
+    ]
+    result["accounts"] = [
+        {**dict(row), **commercial_nulls}
+        for row in (result.get("accounts") or [])
+        if isinstance(row, dict)
+    ]
+    return result
+
+
 def _aggregate_visible_campaigns(
     campaigns: list[dict[str, Any]],
     *,
@@ -925,7 +962,7 @@ async def apply_platform_snapshot_to_report(
     )
     account_rows = [row for row in rows if row.get("entity_type") == "ad_account"]
     campaign_rows = [row for row in rows if row.get("entity_type") == "campaign"]
-    if not account_rows and not campaign_rows:
+    if not account_rows or not campaign_rows:
         result.setdefault("insights", []).append({
             "code": "snapchat_platform_total_snapshot_pending",
             "severity": "warning",
@@ -947,8 +984,9 @@ async def apply_platform_snapshot_to_report(
         result.setdefault("policy", {}).update({
             "platform_source_isolated": True,
             "salla_metrics_applied_to_platform": False,
+            "legacy_hour_conversions_hidden_while_pending": True,
         })
-        return result
+        return _mask_pending_platform_commercial_metrics(result)
 
     requested_days = (
         date.fromisoformat(date_to) - date.fromisoformat(date_from)
@@ -1094,6 +1132,7 @@ async def apply_platform_snapshot_to_report(
         "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
         "platform_direct_account_total_ready": bool(account_rows),
         "platform_source_isolated": True,
+        "platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
         "platform_totals_scope": totals_scope,
         "platform_account_orders": account_total.get("orders"),
         "platform_campaign_orders": campaign_sum.get("orders"),
