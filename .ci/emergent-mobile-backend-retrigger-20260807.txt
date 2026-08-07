@@ -1,0 +1,3 @@
+No application logic changes.
+Purpose: retrigger the existing Emergent GitHub production sync after mobile-reviewed-preparation-v1 routes were merged.
+Created: 2026-08-07
