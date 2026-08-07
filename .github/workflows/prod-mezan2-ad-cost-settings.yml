@@ -46,6 +46,7 @@ jobs:
           pymongo==4.5.0
           httpx
           cryptography
+          bcrypt
           pytest
           pytest-asyncio
           openpyxl
