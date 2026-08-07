@@ -29,22 +29,7 @@ import SettlementDashboard from "./pages/SettlementDashboard";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
-import QoyodSettings from "./pages/QoyodSettings";
-import QoyodInvoices from "./pages/QoyodInvoices";
-import QoyodGoLive from "./pages/QoyodGoLive";
-import QoyodMigration from "./pages/QoyodMigration";
-import QoyodFreshStart from "./pages/QoyodFreshStart";
-import QoyodFirstSyncMonitor from "./pages/QoyodFirstSyncMonitor";
-import QoyodWebhookMonitor from "./pages/QoyodWebhookMonitor";
-import QoyodUnallocatedReceipts from "./pages/QoyodUnallocatedReceipts";
-import QoyodRoundingReport from "./pages/QoyodRoundingReport";
-import QoyodRoundingDryRun from "./pages/QoyodRoundingDryRun";
-import QoyodCodReceiptsReport from "./pages/QoyodCodReceiptsReport";
-import QoyodPendingOrders from "./pages/QoyodPendingOrders";
-import QoyodManualSend from "./pages/QoyodManualSend";
-import QoyodUnsentOrders from "./pages/QoyodUnsentOrders";
-import QoyodReconciliation from "./pages/QoyodReconciliation";
-import EligibleOrders from "./pages/EligibleOrders";
+import QoyodControlCenter from "./pages/QoyodControlCenter";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
@@ -185,25 +170,13 @@ function AppRoutes() {
             <Route path="/receivables" element={<ProtectedRoute><Layout><Receivables /></Layout></ProtectedRoute>} />
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Layout><QoyodSettings /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/go-live" element={<ProtectedRoute><Layout><QoyodGoLive /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/migration" element={<ProtectedRoute><Layout><QoyodMigration /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/fresh-start" element={<ProtectedRoute><Layout><QoyodFreshStart /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/first-sync-monitor" element={<ProtectedRoute><Layout><QoyodFirstSyncMonitor /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/rounding-report" element={<ProtectedRoute><Layout><QoyodRoundingReport /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/cod-receipts-report" element={<ProtectedRoute><Layout><QoyodCodReceiptsReport /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Layout><QoyodUnsentOrders /></Layout></ProtectedRoute>} />
-            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Layout><QoyodManualSend /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Layout><QoyodReconciliation /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/pending-orders" element={<ProtectedRoute><Layout><QoyodPendingOrders /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/eligible-orders" element={<ProtectedRoute><Layout><EligibleOrders /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><QoyodWebhookMonitor /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/unallocated-receipts" element={<ProtectedRoute><Layout><QoyodUnallocatedReceipts /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/error-log" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأخطاء — قيود" subtitle="جميع حالات الفشل (FAILED_*, DEAD_LETTER) قابلة للفلترة وإعادة المحاولة." icon="⚠️" phase="Day 4-5" testid="qoyod-error-log-placeholder" related={[{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations-v2/qoyod" element={<ProtectedRoute><OwnerOnlyRoute><Layout><QoyodControlCenter /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
+            {/* Qoyod is automatic-only now. Old bookmarks converge on the V2 control center. */}
+            <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=settings" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=reconciliation" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=exceptions" replace /></ProtectedRoute>} />
+            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=exceptions" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/*" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod" replace /></ProtectedRoute>} />
             <Route path="/integrations/salla/orders" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="مراقبة الطلبات — سلة" subtitle="عرض الطلبات الواردة من سلة وحالتها الحالية في خط الأنابيب." icon="🛒" phase="مرحلة لاحقة" testid="salla-orders-placeholder" related={[{to:"/orders",label:"الطلبات"},{to:"/salla-sources",label:"مقارنة مصادر البيانات"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/salla/events" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأحداث — سلة" subtitle="جميع أحداث Webhooks من سلة (طلب جديد، شحن، إلغاء، استرجاع…)." icon="📋" phase="مرحلة لاحقة" testid="salla-events-placeholder" related={[{to:"/make-webhook",label:"ربط Make.com"}]} /></Layout></ProtectedRoute>} />
             <Route path="/ad-accounts" element={<ProtectedRoute><Layout><AdAccounts /></Layout></ProtectedRoute>} />
