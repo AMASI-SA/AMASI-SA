@@ -1,0 +1,30 @@
+name: Mobile Production API Smoke
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - .github/workflows/mobile-prod-api-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check reviewed-preparation production route exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://mezansalla.com/api/mobile-reviewed-preparation-v1/employees'
+          code="$(curl --connect-timeout 10 --max-time 20 --silent --show-error --output /dev/null --write-out '%{http_code}' "$url")"
+          echo "HTTP_STATUS=$code"
+          case "$code" in
+            200|401|403) echo 'MOBILE_PREPARATION_ROUTE_PRESENT' ;;
+            404) echo 'MOBILE_PREPARATION_ROUTE_MISSING'; exit 44 ;;
+            *) echo "UNEXPECTED_STATUS=$code"; exit 45 ;;
+          esac
