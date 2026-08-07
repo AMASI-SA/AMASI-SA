@@ -1218,7 +1218,7 @@ async def apply_platform_snapshot_to_report(
         "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
         "platform_direct_account_total_ready": bool(account_rows),
         "platform_source_isolated": True,
-        "platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "platform_action_report_time": action_report_time,
         "account_spend_source": "direct_ad_account_total",
         "account_commercial_totals_source": "complete_campaign_breakdown_sum",
         "platform_totals_scope": totals_scope,

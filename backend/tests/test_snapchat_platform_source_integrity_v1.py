@@ -394,6 +394,42 @@ def test_ads_manager_uses_28d_click_7d_view_without_changing_riyadh_contract():
     )
 
 
+def test_ready_platform_metadata_uses_selected_action_report_time():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        '"platform_action_report_time": action_report_time'
+        in source
+    )
+    assert (
+        '"platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME'
+        not in source
+    )
+
+
+def test_entity_upserts_preserve_legacy_riyadh_identity():
+    paths = (
+        "integrations_control_center/snapchat_adsquad_performance.py",
+        "integrations_control_center/snapchat_ad_performance.py",
+    )
+
+    for path in paths:
+        source = Path(path).read_text(encoding="utf-8")
+
+        assert (
+            "if collection_name "
+            "== SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION:"
+            in source
+        )
+        assert (
+            'identity["action_report_time"] = action_report_time'
+            in source
+        )
+        assert "update_one(\n        identity," in source
+
+
 def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
     rows = [
         {

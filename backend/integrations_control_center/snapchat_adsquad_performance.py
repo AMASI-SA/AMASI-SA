@@ -370,16 +370,19 @@ async def _upsert_projection(
         "provider_window_end": bucket.get("provider_end"),
         "updated_at": now_iso,
     }
+    identity = {
+        "user_id": context.user_id,
+        "ad_account_id": account["ad_account_id"],
+        "entity_type": "ad_squad",
+        "external_id": adsquad_id,
+        "date": date_string,
+        "attribution_model": ATTRIBUTION_MODEL,
+    }
+    if collection_name == SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION:
+        identity["action_report_time"] = action_report_time
+
     await _collection(context.db, collection_name).update_one(
-        {
-            "user_id": context.user_id,
-            "ad_account_id": account["ad_account_id"],
-            "entity_type": "ad_squad",
-            "external_id": adsquad_id,
-            "date": date_string,
-            "attribution_model": ATTRIBUTION_MODEL,
-            "action_report_time": action_report_time,
-        },
+        identity,
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
     )
