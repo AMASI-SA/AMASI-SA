@@ -132,17 +132,14 @@ def account_local_total_window(
     if report_date < current.date():
         end = nominal_end
     else:
-        # Production evidence showed that Snapchat rejects account TOTAL
-        # requests ending at an open, second-level timestamp. Use only the
-        # latest fully completed account-local hour. The HOUR ingestion remains
-        # responsible for the live chart while TOTAL owns stable commercial
-        # campaign metrics.
-        completed_hour_end = current.replace(
-            minute=0,
+        # Snapchat rejects open second-level timestamps. Query through the
+        # latest fully completed account-local minute so today's TOTAL report
+        # stays aligned with Ads Manager instead of lagging by a full hour.
+        completed_minute_end = current.replace(
             second=0,
             microsecond=0,
         )
-        end = min(nominal_end, completed_hour_end)
+        end = min(nominal_end, completed_minute_end)
     return (start, end) if end > start else None
 
 
