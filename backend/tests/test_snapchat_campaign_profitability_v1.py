@@ -148,3 +148,10 @@ def test_profit_scope_is_conservative_and_read_only():
         module.CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD
     )
     assert module.CAMPAIGN_PROFITABILITY_CACHE_TTL_SECONDS == 300
+
+def test_total_campaign_spend_includes_campaigns_without_matched_orders():
+    assert module._total_campaign_spend({
+        ("account-1", "matched-campaign"): 100.0,
+        ("account-1", "unmatched-campaign"): 55.25,
+    }) == 155.25
+
