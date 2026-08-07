@@ -6,6 +6,7 @@ from integrations.qoyod_manual.send import (
     ManualSendRefused,
     _build_invoice_payload,
     _distribute_residual_over_items,
+    _predict_qoyod_document_total,
     _q2,
 )
 
@@ -67,9 +68,13 @@ def test_order_270457540_reaches_exact_parity_without_adjustment_line():
     distribution = breakdown["rounding_distribution"]
     assert distribution["applied"] is True
     assert distribution["method"] == "item_line_lrm"
-    assert _q2(sum(row["shift"] for row in distribution["shifted_lines"])) == 0.04
+    assert _q2(sum(
+        row["shift"] for row in distribution["shifted_lines"]
+    )) == 0.06
 
     lines = payload["invoice"]["line_items"]
+    assert _predict_qoyod_document_total(
+        lines)["predicted_total"] == 1250.87
     assert len(lines) == len(canon["items"])
     assert all(line["product_id"] != 999 for line in lines)
     assert all(line["description"] != "تسوية فرق التقريب مع سلة"
