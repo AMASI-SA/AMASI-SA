@@ -1,0 +1,43 @@
+name: Production Origin Probe
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/prod-origin-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Mezan production origin without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe() {
+            label="$1"
+            url="$2"
+            echo "=== $label ==="
+            for attempt in 1 2 3 4 5; do
+              headers="$(mktemp)"
+              body="$(mktemp)"
+              code="$(curl --connect-timeout 10 --max-time 20 --silent --show-error --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$url" || true)"
+              ctype="$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")"
+              server="$(awk 'BEGIN{IGNORECASE=1} /^server:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")"
+              ray="$(awk 'BEGIN{IGNORECASE=1} /^cf-ray:/{sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")"
+              snippet="$(tr '\n\r' ' ' < "$body" | sed -E 's/[[:space:]]+/ /g' | cut -c1-240)"
+              echo "attempt=$attempt status=$code content_type=${ctype:-none} server=${server:-none} cf_ray=${ray:-none}"
+              echo "body=${snippet:-<empty>}"
+              rm -f "$headers" "$body"
+              sleep 2
+            done
+          }
+          probe ROOT 'https://mezansalla.com/'
+          probe API_EMPLOYEES 'https://mezansalla.com/api/preparation-file-registry-v1/employees'
+          probe API_CATALOG 'https://mezansalla.com/api/reviewed-products-v1/catalog?limit=1'
