@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ArrowClockwise,
     ArrowRight,
+    Buildings,
+    Camera,
     CheckCircle,
     ClipboardText,
+    Factory,
+    FileText,
     MagnifyingGlass,
     Minus,
     Package,
-    PaperPlaneTilt,
     Plus,
     Printer,
     SpinnerGap,
@@ -250,25 +253,226 @@ function ReceivedView({ data, loading, error, onRefresh, onBack }) {
 export function MyProductsOverview({ data, onOpen }) {
     const [search, setSearch] = useState("");
     const normalizedSearch = search.trim();
-    const matches = normalizedSearch ? (data?.files || []).flatMap((file) => (file.products || []).filter((product) => (product.order_numbers || []).some((order) => String(order).includes(normalizedSearch))).map((product) => ({ ...product, file_number: file.file_number }))) : [];
-    const latestFiles = (data?.files || []).slice(0, 5);
+    const files = Array.isArray(data?.files) ? data.files : [];
+    const supplierAccounts = Array.isArray(data?.supplier_accounts)
+        ? data.supplier_accounts
+        : [];
+    const matches = normalizedSearch
+        ? files.flatMap((file) => (file.products || [])
+            .filter((product) => (product.order_numbers || [])
+                .some((order) => String(order).includes(normalizedSearch)))
+            .map((product) => ({ ...product, file_number: file.file_number })))
+        : [];
+    const latestFiles = files.slice(0, 3);
+    const activeSupplierAccounts = supplierAccounts
+        .filter((account) => (
+            Number(account?.sent_quantity || 0)
+            + Number(account?.ready_quantity || 0)
+            + Number(account?.received_quantity || 0)
+        ) > 0)
+        .slice(0, 3);
+    const supplierInvoiceCount = supplierAccounts.reduce(
+        (total, account) => total + (Array.isArray(account?.dispatches) ? account.dispatches.length : 0),
+        0,
+    );
+
+    const summaryCards = [
+        {
+            key: "waiting",
+            label: "بانتظار المراجعة",
+            value: data?.summary?.waiting_review_products,
+            detail: "منتجًا لم يُرسل للمورد",
+            Icon: ClipboardText,
+            tone: "amber",
+            onClick: () => onOpen("waiting-review"),
+        },
+        {
+            key: "progress",
+            label: "قيد التنفيذ",
+            value: data?.summary?.in_progress_products,
+            detail: "قطعة لدى الموردين",
+            Icon: ArrowClockwise,
+            tone: "blue",
+            onClick: () => onOpen("in-progress"),
+        },
+        {
+            key: "received",
+            label: "تم الاستلام",
+            value: data?.summary?.received_orders_awaiting_branch_handoff,
+            detail: "طلبًا لم يُسلّم للفرع",
+            Icon: CheckCircle,
+            tone: "emerald",
+            onClick: () => onOpen("received"),
+        },
+        {
+            key: "total",
+            label: "إجمالي القطع المسندة",
+            value: data?.summary?.total_assigned_pieces,
+            detail: "قطعة في جميع الحالات",
+            Icon: ClipboardText,
+            tone: "green",
+        },
+    ];
+
+    const summaryTone = {
+        amber: {
+            value: "text-amber-600",
+            icon: "bg-amber-50 text-amber-600",
+            hover: "hover:border-amber-200 hover:bg-amber-50/30",
+        },
+        blue: {
+            value: "text-blue-600",
+            icon: "bg-blue-50 text-blue-600",
+            hover: "hover:border-blue-200 hover:bg-blue-50/30",
+        },
+        emerald: {
+            value: "text-emerald-700",
+            icon: "bg-emerald-50 text-emerald-700",
+            hover: "hover:border-emerald-200 hover:bg-emerald-50/30",
+        },
+        green: {
+            value: "text-emerald-800",
+            icon: "bg-emerald-50 text-emerald-800",
+            hover: "",
+        },
+    };
+
+    const fileProgress = (file) => {
+        const total = Math.max(0, Number(file?.piece_count || 0));
+        const received = Math.max(0, Number(file?.received_quantity || 0));
+        return total ? Math.min(100, Math.round((received / total) * 100)) : 0;
+    };
+
+    const fileStatus = (file) => {
+        const total = Number(file?.piece_count || 0);
+        const received = Number(file?.received_quantity || 0);
+        const inProgress = Number(file?.sent_quantity || 0) + Number(file?.ready_quantity || 0);
+        if (total > 0 && received >= total) {
+            return { label: "تم الاستلام", className: "text-emerald-700" };
+        }
+        if (inProgress > 0 || received > 0) {
+            return { label: "قيد التنفيذ", className: "text-blue-600" };
+        }
+        return { label: "بانتظار المراجعة", className: "text-amber-600" };
+    };
+
+    const SupplierIcon = ({ index }) => {
+        const icons = [Buildings, Storefront, Factory];
+        const Icon = icons[index % icons.length];
+        return <Icon size={31} weight="duotone" />;
+    };
+
+    const SectionTitle = ({ children }) => (
+        <div className="flex items-center gap-2">
+            <span className="h-6 w-1 rounded-full bg-amber-500" aria-hidden="true" />
+            <h3 className="text-base font-black text-slate-950 sm:text-lg">{children}</h3>
+        </div>
+    );
+
     return (
-        <div className="space-y-5" data-testid="preparation-my-products-overview">
-            <div><h3 className="text-xl font-black text-slate-950">إدارة منتجاتي</h3><p className="mt-1 text-sm font-bold text-slate-500">ملخص عام لكل المنتجات المسندة إلى حسابك في مرحلة قيد التنفيذ.</p></div>
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <SummaryCard value={data?.summary?.waiting_review_products} label="بانتظار المراجعة" detail="منتجات لم تُرسل لمورد" tone="violet" onClick={() => onOpen("waiting-review")} />
-                <SummaryCard value={data?.summary?.in_progress_products} label="قيد التنفيذ" detail="منتجات موجودة عند الموردين" tone="amber" onClick={() => onOpen("in-progress")} />
-                <SummaryCard value={data?.summary?.received_orders_awaiting_branch_handoff} label="تم الاستلام" detail="طلبات لم تُسلّم للفرع" tone="emerald" onClick={() => onOpen("received")} />
-                <SummaryCard value={data?.summary?.total_assigned_pieces} label="إجمالي القطع المسندة" detail="قبل المورد وعنده وبعد الاستلام" />
-            </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <button type="button" onClick={() => onOpen("in-progress")} className="rounded-2xl border border-slate-200 bg-white p-4 text-right"><ClipboardText size={25} className="text-violet-700" /><div className="mt-3 text-sm font-black">مراجعة الملفات</div><div className="mt-1 text-[10px] font-bold text-slate-500">الموردون والقطع لديهم</div></button>
-                <a href="/fulfillment-v2?stage=preparation" className="rounded-2xl border border-slate-200 bg-white p-4 text-right"><Package size={25} className="text-emerald-700" /><div className="mt-3 text-sm font-black">استلام من المورد</div><div className="mt-1 text-[10px] font-bold text-slate-500">فتح الكاميرا والفاتورة</div></a>
-                <a href="/fulfillment-v2?stage=preparation" className="rounded-2xl border border-slate-200 bg-white p-4 text-right"><Storefront size={25} className="text-amber-700" /><div className="mt-3 text-sm font-black">فواتير الموردين</div><div className="mt-1 text-[10px] font-bold text-slate-500">الفواتير المحفوظة</div></a>
-                <button type="button" onClick={() => document.getElementById("latest-preparation-files")?.scrollIntoView?.({ behavior: "smooth" })} className="rounded-2xl border border-slate-200 bg-white p-4 text-right"><PaperPlaneTilt size={25} className="text-slate-700" /><div className="mt-3 text-sm font-black">آخر ملفات التجهيز</div><div className="mt-1 text-[10px] font-bold text-slate-500">المرفوعة إلى حسابك</div></button>
-            </div>
-            <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><label className="text-sm font-black text-slate-900">البحث برقم الطلب<div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3"><MagnifyingGlass size={20} className="text-violet-700" /><input value={search} onChange={(event) => setSearch(event.target.value)} inputMode="numeric" placeholder="اكتب أو امسح رقم الطلب" className="min-h-11 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none" /></div></label>{normalizedSearch && <div className="mt-3 space-y-2">{matches.length ? matches.map((product) => <div key={`${product.file_number}:${product.group_key}`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><ProductImage product={product} compact /><div className="min-w-0"><div className="text-sm font-black text-slate-950">{product.product_name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">ملف {product.file_number} · متاح {product.available_quantity} · عند المورد {product.sent_quantity + product.ready_quantity} · مستلم {product.received_quantity}</div></div></div>) : <div className="text-xs font-bold text-slate-500">لا توجد منتجات مسندة إليك لهذا الطلب.</div>}</div>}</section>
-            <section id="latest-preparation-files" className="space-y-3"><h4 className="text-base font-black text-slate-950">آخر ملفات التجهيز</h4>{latestFiles.length ? latestFiles.map((file) => <article key={file.file_number} className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{file.file_title || file.file_number}</div><div className="mt-1 text-xs font-bold text-violet-700">{file.file_number}</div></div><div className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black">{file.piece_count} قطعة</div></div><div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px] font-black"><div className="rounded-lg bg-violet-50 p-2 text-violet-800">{file.available_quantity} بانتظار</div><div className="rounded-lg bg-amber-50 p-2 text-amber-800">{file.sent_quantity + file.ready_quantity} قيد التنفيذ</div><div className="rounded-lg bg-emerald-50 p-2 text-emerald-800">{file.received_quantity} مستلمة</div></div></article>) : <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">لا توجد ملفات مسندة إليك.</div>}</section>
+        <div className="mx-auto w-full max-w-[1180px] space-y-6 bg-white pb-4" data-testid="preparation-my-products-overview">
+            <header className="text-center">
+                <h1 className="text-3xl font-black tracking-tight text-emerald-800 sm:text-4xl">إدارة منتجاتي</h1>
+                <p className="mt-1 text-xs font-bold text-slate-500 sm:text-base">إدارة المنتجات المسندة لك ومتابعة الموردين</p>
+            </header>
+
+            <section className="space-y-3" aria-labelledby="my-products-summary-title">
+                <div id="my-products-summary-title"><SectionTitle>ملخص العمل العام</SectionTitle></div>
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
+                    {summaryCards.map((card) => {
+                        const Tag = card.onClick ? "button" : "div";
+                        const tone = summaryTone[card.tone];
+                        return (
+                            <Tag
+                                key={card.key}
+                                type={card.onClick ? "button" : undefined}
+                                onClick={card.onClick}
+                                className={`min-h-[112px] rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition sm:min-h-[128px] sm:p-4 ${card.onClick ? tone.hover : ""}`}
+                                data-testid={`my-products-summary-${card.key}`}
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-[11px] font-black leading-5 text-slate-900 sm:text-sm">{card.label}</div>
+                                        <div className={`mt-0.5 text-3xl font-black tabular-nums sm:text-4xl ${tone.value}`}>{Number(card.value || 0)}</div>
+                                    </div>
+                                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:h-12 sm:w-12 ${tone.icon}`}><card.Icon size={24} weight="duotone" /></span>
+                                </div>
+                                <div className="mt-1 text-[10px] font-bold leading-5 text-slate-500 sm:text-xs">{card.detail}</div>
+                            </Tag>
+                        );
+                    })}
+                </div>
+            </section>
+
+            <section className="grid grid-cols-2 gap-2.5 sm:gap-4" aria-label="إجراءات إدارة منتجاتي">
+                <button type="button" onClick={() => onOpen("waiting-review")} className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-amber-200 hover:bg-amber-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-open-waiting-review">
+                    <div><div className="text-sm font-black text-slate-950 sm:text-xl">بانتظار المراجعة</div><div className="mt-1 text-[10px] font-bold text-slate-500 sm:text-sm">{Number(data?.summary?.waiting_review_products || 0)} قطعة غير مرسلة</div></div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600 sm:h-14 sm:w-14"><ClipboardText size={28} weight="duotone" /></span>
+                </button>
+                <a href="/fulfillment-v2?stage=preparation" className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-receive-from-supplier">
+                    <div><div className="text-sm font-black text-slate-950 sm:text-xl">استلام من المورد</div><div className="mt-1 text-[10px] font-bold text-slate-500 sm:text-sm">مسح باركود وفتح الفاتورة</div></div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 sm:h-14 sm:w-14"><Camera size={28} weight="fill" /></span>
+                </a>
+                <div className="min-h-[112px] rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm sm:min-h-[120px] sm:p-5" data-testid="my-products-order-search">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-black text-slate-950 sm:text-xl">البحث برقم الطلب</div>
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 sm:h-12 sm:w-12"><MagnifyingGlass size={26} /></span>
+                    </div>
+                    <label className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-2 focus-within:border-emerald-500 sm:min-h-11">
+                        <input value={search} onChange={(event) => setSearch(event.target.value)} inputMode="numeric" placeholder="أدخل رقم الطلب" className="min-w-0 flex-1 bg-transparent text-xs font-bold outline-none sm:text-sm" aria-label="البحث برقم الطلب" />
+                        <Camera size={18} className="shrink-0 text-slate-700" aria-hidden="true" />
+                    </label>
+                </div>
+                <a href="/fulfillment-v2?stage=preparation" className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-supplier-invoices">
+                    <div><div className="text-sm font-black text-slate-950 sm:text-xl">فواتير الموردين</div><div className="mt-1 text-[10px] font-black text-emerald-700 sm:text-sm">{supplierInvoiceCount} فاتورة</div></div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 sm:h-14 sm:w-14"><FileText size={28} weight="fill" /></span>
+                </a>
+            </section>
+
+            {normalizedSearch && (
+                <section className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3" aria-live="polite">
+                    <div className="mb-2 text-xs font-black text-emerald-900">نتائج البحث</div>
+                    {matches.length ? <div className="grid gap-2 sm:grid-cols-2">{matches.map((product) => <div key={`${product.file_number}:${product.group_key}`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><ProductImage product={product} compact /><div className="min-w-0"><div className="text-sm font-black text-slate-950">{product.product_name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">ملف {product.file_number} · متاح {product.available_quantity} · عند المورد {Number(product.sent_quantity || 0) + Number(product.ready_quantity || 0)} · مستلم {product.received_quantity}</div></div></div>)}</div> : <div className="text-xs font-bold text-slate-500">لا توجد منتجات مسندة إليك لهذا الطلب.</div>}
+                </section>
+            )}
+
+            <section id="latest-preparation-files" className="space-y-3">
+                <SectionTitle>آخر ملفات التجهيز</SectionTitle>
+                {latestFiles.length ? (
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        {latestFiles.map((file) => {
+                            const progress = fileProgress(file);
+                            const status = fileStatus(file);
+                            return (
+                                <article key={file.file_number} className="min-w-0 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:p-4" data-testid="my-products-latest-file">
+                                    <div className="truncate text-[10px] font-black text-slate-950 sm:text-sm">{file.file_title || file.file_number}</div>
+                                    <div className="mt-1 text-[9px] font-bold text-slate-600 sm:text-xs">{Number(file.piece_count || 0)} قطعة</div>
+                                    <div className="mt-1 text-[9px] font-bold text-slate-500 sm:text-xs">{Number(file.received_quantity || 0)} مستلمة</div>
+                                    <div className="mt-2 flex items-center gap-2" dir="ltr"><span className="text-[9px] font-black text-slate-700 sm:text-xs">{progress}%</span><span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-200"><span className="block h-full rounded-full bg-emerald-700" style={{ width: `${progress}%` }} /></span></div>
+                                    <div className={`mt-2 text-[9px] font-black sm:text-xs ${status.className}`}>{status.label}</div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                ) : <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm font-bold text-slate-500">لا توجد ملفات مسندة إليك.</div>}
+            </section>
+
+            <section className="space-y-3">
+                <SectionTitle>حالة الموردين</SectionTitle>
+                {activeSupplierAccounts.length ? (
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        {activeSupplierAccounts.map((account, index) => {
+                            const activePieces = Number(account.sent_quantity || 0) + Number(account.ready_quantity || 0);
+                            return (
+                                <article key={account.supplier_id} className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5 sm:p-4" data-testid="my-products-supplier-status">
+                                    <div className="min-w-0"><div className="truncate text-[9px] font-black text-slate-950 sm:text-sm">{account.supplier_name}</div><div className="mt-1 text-lg font-black tabular-nums text-emerald-800 sm:text-2xl">{activePieces}</div></div>
+                                    <span className="shrink-0 text-emerald-700"><SupplierIcon index={index} /></span>
+                                </article>
+                            );
+                        })}
+                    </div>
+                ) : <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-xs font-bold text-slate-500">لا توجد منتجات نشطة لدى الموردين حاليًا.</div>}
+            </section>
         </div>
     );
 }

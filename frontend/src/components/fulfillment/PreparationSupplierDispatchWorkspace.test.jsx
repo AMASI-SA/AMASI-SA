@@ -50,7 +50,23 @@ test("my products overview uses the approved four account-wide counters", () => 
             received_orders_awaiting_branch_handoff: 33,
             total_assigned_pieces: 128,
         },
-        files: [],
+        files: [{
+            file_number: "PF-024",
+            file_title: "ملف أحمد 024",
+            piece_count: 24,
+            received_quantity: 9,
+            sent_quantity: 4,
+            ready_quantity: 0,
+            products: [],
+        }],
+        supplier_accounts: [{
+            supplier_id: "supplier-1",
+            supplier_name: "مؤسسة النور",
+            sent_quantity: 32,
+            ready_quantity: 0,
+            received_quantity: 0,
+            dispatches: [{ id: "invoice-1" }],
+        }],
     }} onOpen={() => {}} />);
 
     expect(markup).toContain("بانتظار المراجعة");
@@ -58,8 +74,17 @@ test("my products overview uses the approved four account-wide counters", () => 
     expect(markup).toContain("تم الاستلام");
     expect(markup).toContain("إجمالي القطع المسندة");
     ["21", "74", "33", "128"].forEach((value) => expect(markup).toContain(`>${value}<`));
-    expect(markup).toContain("ملخص عام");
+    expect(markup).toContain("ملخص العمل العام");
     expect(markup).not.toContain("ملخص العمل اليوم");
+    expect(markup).toContain("إدارة المنتجات المسندة لك ومتابعة الموردين");
+    expect(markup).toContain("استلام من المورد");
+    expect(markup).toContain("البحث برقم الطلب");
+    expect(markup).toContain("فواتير الموردين");
+    expect(markup).toContain("آخر ملفات التجهيز");
+    expect(markup).toContain("حالة الموردين");
+    expect(markup).toContain("ملف أحمد 024");
+    expect(markup).toContain("مؤسسة النور");
+    expect(markup).toContain("grid-cols-3");
 });
 
 

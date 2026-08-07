@@ -383,6 +383,14 @@ export default function PreparationWorkDashboard() {
         ]);
     }, [loadManager, loadWork, managerAllowed]);
 
+    if (activeView === "my-products") {
+        return (
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5" dir="rtl" data-testid="preparation-work-dashboard">
+                <PreparationSupplierDispatchWorkspace view="my-products" onDataChanged={reloadOperationalViews} />
+            </section>
+        );
+    }
+
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" dir="rtl" data-testid="preparation-work-dashboard">
             <header className="border-b border-slate-100 bg-slate-50 p-4 sm:p-5">
@@ -404,7 +412,7 @@ export default function PreparationWorkDashboard() {
             <div className="p-4 sm:p-5">
                 {activeView === "employees" && managerAllowed ? (
                     <EmployeeManagementView data={managerData} loading={managerLoading} error={managerError} date={date} onDateChange={setDate} onRefresh={loadManager} />
-                ) : activeView === "my-products" || (activeView === "unassigned" && managerAllowed) ? (
+                ) : activeView === "unassigned" && managerAllowed ? (
                     <PreparationSupplierDispatchWorkspace view={activeView} onDataChanged={reloadOperationalViews} />
                 ) : (
                     <MyWorkView work={work} loading={workLoading} error={workError} onRefresh={loadWork} onStart={startFile} startingFile={startingFile} />
