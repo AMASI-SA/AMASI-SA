@@ -47,6 +47,7 @@ jobs:
           httpx
           cryptography
           bcrypt
+          PyJWT
           pytest
           pytest-asyncio
           openpyxl
