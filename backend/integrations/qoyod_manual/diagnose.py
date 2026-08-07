@@ -14,8 +14,8 @@ from integrations.qoyod_manual.pending import _salla_order_created_date
 from integrations.qoyod_manual.order_source import get_order_payment_facts
 from integrations.qoyod_manual.send import (
     _build_invoice_payload, _q2, _riyadh_today_iso,
-    _overlay_order_engine_facts, _within_amount_tolerance,
-    _assert_sar_currency, ManualSendRefused,
+    _overlay_order_engine_facts, _prepare_sar_invoice_canon_from_inbox,
+    _within_amount_tolerance, _assert_sar_currency, ManualSendRefused,
 )
 
 
@@ -46,6 +46,13 @@ async def diagnose_totals(db, *, user_id: str,
     )
     canon = _overlay_order_engine_facts(canon, payment_facts)
     try:
+        canon = await _prepare_sar_invoice_canon_from_inbox(
+            db,
+            canon=canon,
+            representative_row=row,
+            user_id=user_id,
+            order_number=str(order_number),
+        )
         _assert_sar_currency(canon)
     except ManualSendRefused as exc:
         return {
