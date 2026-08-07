@@ -168,7 +168,9 @@ def _line_variants(send_module, item: dict, line_resolutions: dict,
 
 def _distribute(send_module, items: list[dict], line_resolutions: dict,
                 tax_factor: float, tax_percent: float,
-                residual_to_absorb: float):
+                residual_to_absorb: float, *,
+                target_document_total: float | None = None,
+                trailing_lines: list[dict] | None = None):
     """Return rebuilt item lines after absorbing ``residual_to_absorb``."""
     residual = _d(residual_to_absorb).quantize(
         _TWO_PLACES, rounding=ROUND_HALF_UP)
@@ -214,7 +216,30 @@ def _distribute(send_module, items: list[dict], line_resolutions: dict,
             return None
 
     selected = states.get(target_cents)
-    if selected is None:
+    if target_document_total is not None:
+        target_document = _d(target_document_total).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+        trailing = list(trailing_lines or [])
+        document_matches: list[tuple[tuple, tuple]] = []
+        for delta_cents, state in states.items():
+            candidate_lines = [
+                variant[0] for variant in state[1]
+            ] + trailing
+            predicted = _d(
+                send_module._predict_qoyod_document_total(
+                    candidate_lines)["predicted_total"]
+            ).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+            if predicted == target_document:
+                rank = (
+                    abs(delta_cents - target_cents),
+                    state[0],
+                    abs(delta_cents),
+                )
+                document_matches.append((rank, state))
+        if not document_matches:
+            return None
+        selected = min(document_matches, key=lambda row: row[0])[1]
+    elif selected is None:
         return None
 
     payloads: list[dict] = []
@@ -296,6 +321,9 @@ def install(send_module) -> None:
             reason = "residual_exceeds_0_10"
 
         raw_items = canon.get("items") or []
+        invoice = payload.get("invoice") or {}
+        old_lines = invoice.get("line_items") or []
+        trailing_lines = old_lines[len(raw_items):]
         distributed = None if reason else _distribute(
             send_module,
             raw_items,
@@ -305,23 +333,22 @@ def install(send_module) -> None:
             send_module._q2(
                 safe_settings.get("qoyod_tax_percent") or 15),
             residual,
+            target_document_total=salla_total,
+            trailing_lines=trailing_lines,
         )
 
         if distributed is not None:
             item_lines, item_rows, item_total_after = distributed
-            original_item_total = send_module._q2(sum(
-                send_module._f(row.get("line_gross_after_tax"))
-                for row in (breakdown.get("items") or [])
-            ))
-            non_item_total = send_module._q2(
-                expected_total - original_item_total)
+            candidate_lines = item_lines + trailing_lines
+            document_prediction = (
+                send_module._predict_qoyod_document_total(
+                    candidate_lines)
+            )
             candidate_total = send_module._q2(
-                item_total_after + non_item_total)
+                document_prediction["predicted_total"])
 
             if candidate_total == salla_total:
-                invoice = payload.get("invoice") or {}
-                old_lines = invoice.get("line_items") or []
-                invoice["line_items"] = item_lines + old_lines[len(raw_items):]
+                invoice["line_items"] = candidate_lines
                 shifted = [
                     {
                         "sku": row.get("sku"),
