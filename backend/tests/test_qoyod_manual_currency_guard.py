@@ -5,6 +5,7 @@ from integrations.qoyod_manual.send import (
     _assert_sar_currency,
     _build_invoice_payload,
     _prepare_sar_invoice_canon,
+    _prepare_sar_invoice_canon_from_inbox,
 )
 
 
@@ -52,6 +53,78 @@ def _foreign_row(*, currency, rate, tax_percent, total, subtotal, shipping=0):
         },
     }
 
+
+class _FakeCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def sort(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, count):
+        self.rows = self.rows[:count]
+        return self
+
+    def __aiter__(self):
+        async def iterate():
+            for row in self.rows:
+                yield row
+        return iterate()
+
+
+class _FakeInbox:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def find(self, *_args, **_kwargs):
+        return _FakeCursor(list(self.rows))
+
+
+class _FakeDb:
+    def __init__(self, rows):
+        self.integration_inbox = _FakeInbox(rows)
+
+
+@pytest.mark.asyncio
+async def test_foreign_order_recovers_fx_and_tax_from_older_trace():
+    canon = {
+        "order_number": "275590587",
+        "currency": "AED",
+        "total_amount": 264.76,
+        "items": [{
+            "sku": "AMS13031",
+            "name": "عباية",
+            "quantity": 1,
+            "unit_price": 213.77,
+            "tax_amount": 0,
+            "discount_amount": 0,
+            "total": 213.77,
+        }],
+    }
+    newest = _foreign_row(
+        currency="AED", rate="1.01978901", tax_percent="0.00",
+        total=264.76, subtotal=213.77, shipping=50.99,
+    )
+    newest["id"] = "newest-status-webhook"
+    del newest["raw_payload"]["data"]["exchange_rate"]
+    historical = _foreign_row(
+        currency="AED", rate="1.01978901", tax_percent="0.00",
+        total=264.76, subtotal=213.77, shipping=50.99,
+    )
+    historical["id"] = "order-created-webhook"
+
+    prepared = await _prepare_sar_invoice_canon_from_inbox(
+        _FakeDb([newest, historical]),
+        canon=canon,
+        representative_row=newest,
+        user_id="merchant-1",
+        order_number="275590587",
+    )
+
+    assert prepared["currency"] == "SAR"
+    assert prepared["total_amount"] == 270.00
+    assert prepared["_qoyod_tax_percent"] == 0.0
+    assert prepared["_qoyod_fx"]["source"] == "salla_order.exchange_rate"
 
 def test_aed_zero_tax_order_uses_salla_rate_and_stays_zero_tax():
     canon = {
