@@ -821,6 +821,77 @@ def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
     return result
 
 
+_FOREIGN_ACCOUNTING_FACT_ERRORS = frozenset({
+    "foreign_currency_accounting_facts_missing",
+    "foreign_currency_exchange_rate_unverified",
+    "foreign_currency_tax_unverified",
+})
+
+
+async def _prepare_sar_invoice_canon_from_inbox(
+    db, *, canon: dict, representative_row: dict,
+    user_id: str, order_number: str,
+) -> dict:
+    """Use the newest row, then older traces, for immutable Salla FX/tax.
+
+    Status-only webhooks can become the representative newest row while the
+    earlier order-created trace still holds Salla's exchange rate and explicit
+    tax percent.  Foreign orders stay blocked unless one stored trace proves
+    every required accounting fact; no configured or live-market rate is used.
+    """
+    try:
+        return _prepare_sar_invoice_canon(
+            canon=canon, row=representative_row)
+    except ManualSendRefused as first_error:
+        currency = _currency_code(
+            (canon or {}).get("currency")
+            or (canon or {}).get("currency_code")
+        )
+        if (
+            currency not in _SUPPORTED_GCC_FOREIGN_CURRENCIES
+            or first_error.code not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+        ):
+            raise
+
+        try:
+            cursor = db.integration_inbox.find(
+                {
+                    "user_id": user_id,
+                    "salla_order_number": str(order_number),
+                },
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "received_at": 1,
+                    "raw_payload": 1,
+                    "adapted_payload": 1,
+                },
+            ).sort([("received_at", -1)]).limit(100)
+            async for candidate in cursor:
+                if (
+                    representative_row.get("id")
+                    and candidate.get("id") == representative_row.get("id")
+                ):
+                    continue
+                try:
+                    return _prepare_sar_invoice_canon(
+                        canon=canon, row=candidate)
+                except ManualSendRefused as candidate_error:
+                    if (
+                        candidate_error.code
+                        not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+                    ):
+                        raise
+        except ManualSendRefused:
+            raise
+        except Exception:
+            logger.exception(
+                "failed to scan historical Salla traces for order=%s",
+                order_number,
+            )
+
+        raise first_error
+
 def _to_int(v: Any) -> Optional[int]:
     """Coerce a Qoyod id to a positive int. Returns None if the value
     is missing, non-numeric, or matches the forbidden DRY/PREVIEW
@@ -1922,7 +1993,13 @@ async def manual_send_one(
     payment_method = _resolve_current_payment_method(canon, payment_facts)
     receiving_bank_name = payment_facts.get("receiving_bank_name")
     canon = _overlay_order_engine_facts(canon, payment_facts)
-    canon = _prepare_sar_invoice_canon(canon=canon, row=row)
+    canon = await _prepare_sar_invoice_canon_from_inbox(
+        db,
+        canon=canon,
+        representative_row=row,
+        user_id=user_id,
+        order_number=str(order_number),
+    )
     _assert_sar_currency(canon)
     salla_total = _q2(canon.get("total_amount"))
     # The inbox snapshot may carry the generic/old payment alias.  Orders V2
