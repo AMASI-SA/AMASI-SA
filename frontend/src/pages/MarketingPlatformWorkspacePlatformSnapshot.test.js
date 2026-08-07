@@ -39,3 +39,17 @@ test("flags only an incomplete Snapchat platform TOTAL snapshot", () => {
     source: { platform_total_snapshot_ready: true },
   })).toBe(false);
 });
+
+
+test("Snapchat source switch invalidates stale rows and reloads with the selected source", () => {
+  const source = require("fs").readFileSync(
+    require("path").join(__dirname, "MarketingPlatformWorkspace.jsx"),
+    "utf8",
+  );
+  expect(source).toContain("CAMPAIGN_RESULTS_SOURCE_EVENT");
+  expect(source).toContain("handleResultSourceUpdated");
+  expect(source).toContain("loadSequenceRef.current += 1");
+  expect(source).toContain("setData(null)");
+  expect(source).toContain("setResultSourceRevision((value) => value + 1)");
+  expect(source).toContain("resultSource,");
+});
