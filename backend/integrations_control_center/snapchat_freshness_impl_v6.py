@@ -26,6 +26,9 @@ ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES: Final[tuple[str, str]] = (
     "conversion",
     "impression",
 )
+ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW: Final[str] = "28_DAY"
+ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW: Final[str] = "7_DAY"
+
 ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 ADS_MANAGER_SOURCE_MODE: Final[str] = (
     "snapchat_ads_manager_account_timezone_conversion_v8"

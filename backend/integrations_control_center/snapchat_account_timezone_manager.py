@@ -23,6 +23,8 @@ from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+    ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
     ads_manager_source_mode,
     normalize_ads_manager_action_report_time,
 )
@@ -332,8 +334,8 @@ async def _upsert_account_local_performance(
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
             "action_report_time": action_report_time,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         },
         "action_report_time": action_report_time,
         "source_mode": account_local_source_mode(action_report_time),
@@ -405,8 +407,10 @@ async def refresh_snapchat_account_hours_with_account_days(
             "errors_count": 0,
             "errors": [],
             "provider_calls": context.provider_calls,
-            "source_mode": account_local_source_mode(action_report_time),
-            "action_report_time": action_report_time,
+            "source_mode": account_local_source_mode(
+                ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+            ),
+            "action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
             "account_timezone": timezone_name,
             "business_timezone": BUSINESS_TIMEZONE,
             "source_only": True,
@@ -416,7 +420,9 @@ async def refresh_snapchat_account_hours_with_account_days(
 
     used_completed_hour_fallback = False
 
-    async def fetch_both(window: dict[str, datetime]):
+    async def fetch_all_modes(window: dict[str, datetime]):
+        # Existing Riyadh accounting projection: keep its established
+        # conversion-time 28d-click / 1d-view contract unchanged.
         business_rows, business_errors = await hourly._fetch_account_hours(
             context,
             client,
@@ -426,6 +432,20 @@ async def refresh_snapchat_account_hours_with_account_days(
             request_end=window["provider_end"],
             action_report_time=hourly.ACTION_REPORT_TIME,
         )
+
+        # Ads Manager operational view: Snapchat-style 28d-click / 7d-view.
+        conversion_rows, conversion_errors = await hourly._fetch_account_hours(
+            context,
+            client,
+            access_token,
+            account_id=account_id,
+            request_start=window["provider_start"],
+            request_end=window["provider_end"],
+            action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+            swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+        )
+
         impression_rows, impression_errors = await hourly._fetch_account_hours(
             context,
             client,
@@ -434,15 +454,28 @@ async def refresh_snapchat_account_hours_with_account_days(
             request_start=window["provider_start"],
             request_end=window["provider_end"],
             action_report_time="impression",
+            swipe_attribution_window=ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         )
+
         return (
             business_rows,
+            conversion_rows,
             impression_rows,
-            [*business_errors, *impression_errors],
+            [
+                *business_errors,
+                *conversion_errors,
+                *impression_errors,
+            ],
         )
 
     try:
-        business_rows, impression_rows, errors = await fetch_both(request)
+        (
+            business_rows,
+            conversion_rows,
+            impression_rows,
+            errors,
+        ) = await fetch_all_modes(request)
     except SnapchatNativeSyncError as exc:
         fallback = _combined_request_window(
             start_date,
@@ -469,7 +502,7 @@ async def refresh_snapchat_account_hours_with_account_days(
         end_date=end_date,
     )
     local_conversion_campaigns, local_conversion_accounts = _campaign_day_buckets(
-        business_rows,
+        conversion_rows,
         timezone_name=timezone_name,
         start_date=request["account_local_from"],
         end_date=request["account_local_to"],
@@ -860,7 +893,8 @@ async def build_account_timezone_campaign_report(
             "entity_type": {"$in": ["ad_account", "campaign"]},
             "date": date_query,
             "date_timezone": timezone_name,
-            "source_mode": ACCOUNT_LOCAL_SOURCE_MODE,
+            "source_mode": account_local_source_mode(action_report_time),
+            "action_report_time": action_report_time,
         },
         {"_id": 0},
     )

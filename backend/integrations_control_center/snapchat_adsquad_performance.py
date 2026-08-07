@@ -21,6 +21,8 @@ from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+    ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
     ads_manager_source_mode,
     normalize_ads_manager_action_report_time,
 )
@@ -219,8 +221,8 @@ async def _fetch_campaign_adsquad_hours(
         "limit": 200,
         "omit_empty": "true",
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
-        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
@@ -350,8 +352,8 @@ async def _upsert_projection(
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
             "action_report_time": action_report_time,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         },
         "action_report_time": action_report_time,
         "source_mode": adsquad_source_mode(action_report_time),
@@ -818,7 +820,7 @@ async def build_account_timezone_adsquad_report(
             "exchange_rate_to_sar": round(rate, 6),
             "result_source": "platform",
             "commercial_results_scope": (
-                "snapchat_ad_squad_conversion_reporting"
+                f"snapchat_ad_squad_{action_report_time}_reporting"
             ),
             **metrics,
         })
@@ -890,7 +892,7 @@ async def build_account_timezone_adsquad_report(
                 SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
             ),
             "entity_collection": SNAPCHAT_ENTITY_COLLECTION,
-            "source_mode": ADSQUAD_SOURCE_MODE,
+            "source_mode": adsquad_source_mode(action_report_time),
             "performance_rows": len(performance_rows),
             "entity_rows": len(entity_rows),
             "ad_squad_entities": len(squads),

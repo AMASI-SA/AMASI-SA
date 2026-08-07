@@ -433,7 +433,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                         <div>
                             <div className="text-sm font-black text-slate-900">توقيت نتائج Snapchat</div>
                             <div className="mt-1 text-xs font-semibold text-slate-500">
-                                وقت التحويل هو الافتراضي لقرارات التشغيل والذكاء الاصطناعي. وقت الظهور متاح للمقارنة التاريخية مع إعداد Snapchat نفسه.
+                                وقت التحويل هو الافتراضي لقرارات التشغيل والذكاء الاصطناعي. وقت الظهور متاح للمقارنة التاريخية. نافذة الإسناد: 28 يومًا للنقر · 7 أيام للمشاهدة.
                             </div>
                         </div>
                         <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">

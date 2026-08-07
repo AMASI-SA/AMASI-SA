@@ -26,6 +26,8 @@ from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+    ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
     ads_manager_source_mode,
     normalize_ads_manager_action_report_time,
 )
@@ -394,8 +396,8 @@ async def fetch_account_total_campaign_rows(
         "limit": 200,
         "omit_empty": "false",
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
-        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+        "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
@@ -503,9 +505,10 @@ async def _ensure_total_indexes(db: Any) -> None:
             ("external_id", 1),
             ("date", 1),
             ("attribution_model", 1),
+            ("action_report_time", 1),
         ],
         unique=True,
-        name="mezan_snapchat_account_total_v1_identity_unique",
+        name="mezan_snapchat_account_total_v2_identity_unique",
     )
     await collection.create_index(
         [
@@ -513,8 +516,9 @@ async def _ensure_total_indexes(db: Any) -> None:
             ("ad_account_id", 1),
             ("date", -1),
             ("entity_type", 1),
+            ("action_report_time", 1),
         ],
-        name="mezan_snapchat_account_total_v1_date",
+        name="mezan_snapchat_account_total_v2_date",
     )
 
 
@@ -573,8 +577,8 @@ async def _upsert_total_row(
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
             "action_report_time": action_report_time,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         },
         "action_report_time": action_report_time,
         "source_mode": platform_total_source_mode(action_report_time),
@@ -945,8 +949,13 @@ def _scope_campaigns(
 
 def _mask_pending_platform_commercial_metrics(
     result: dict[str, Any],
+    *,
+    action_report_time: str,
 ) -> dict[str, Any]:
-    """Do not expose legacy conversion-time results while TOTAL is pending."""
+    """Hide commercial metrics until the selected TOTAL partition is ready."""
+    action_report_time = normalize_ads_manager_action_report_time(
+        action_report_time
+    )
     commercial_nulls = {
         "orders": None,
         "sales_sar": None,
@@ -1058,7 +1067,10 @@ async def apply_platform_snapshot_to_report(
             "salla_metrics_applied_to_platform": False,
             "legacy_hour_conversions_hidden_while_pending": True,
         })
-        return _mask_pending_platform_commercial_metrics(result)
+        return _mask_pending_platform_commercial_metrics(
+            result,
+            action_report_time=action_report_time,
+        )
 
     requested_days = (
         date.fromisoformat(date_to) - date.fromisoformat(date_from)
@@ -1200,7 +1212,9 @@ async def apply_platform_snapshot_to_report(
     )
     result.setdefault("source", {}).update({
         "platform_total_collection": SNAPCHAT_ACCOUNT_TOTAL_COLLECTION,
-        "platform_total_source_mode": PLATFORM_TOTAL_SOURCE_MODE,
+        "platform_total_source_mode": platform_total_source_mode(
+            action_report_time
+        ),
         "platform_total_snapshot_ready": bool(account_rows and campaign_rows),
         "platform_direct_account_total_ready": bool(account_rows),
         "platform_source_isolated": True,
@@ -1221,7 +1235,13 @@ async def apply_platform_snapshot_to_report(
         "ratios_ready": any(
             totals.get(key) is not None for key in ("roas", "cpa_sar")
         ),
-        "ai_analysis_ready": bool(account_rows and campaign_rows),
+        "ai_analysis_ready": (
+            bool(account_rows and campaign_rows)
+            and action_report_time
+            == ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+        ),
+        "ai_action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+        "selected_action_report_time": action_report_time,
     })
     result.setdefault("policy", {}).update({
         "platform_source_isolated": True,

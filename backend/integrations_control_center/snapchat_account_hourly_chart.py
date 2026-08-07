@@ -16,8 +16,12 @@ from typing import Any, Awaitable, Callable
 from . import snapchat_account_hourly_refresh as hourly
 from . import snapchat_account_timezone_manager as account_report
 from .snapchat_freshness_impl_v6 import (
-    ADS_MANAGER_ACTION_REPORT_TIME,
-    ADS_MANAGER_SOURCE_MODE,
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+    ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+    ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+    ads_manager_source_mode,
+    normalize_ads_manager_action_report_time,
 )
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
@@ -42,10 +46,19 @@ from .snapchat_native_performance_sync import (
 )
 
 SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION = (
-    "mezan_snapchat_performance_account_hour_v1"
+    "mezan_snapchat_performance_account_hour_v2"
 )
-ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = (
-    f"{ADS_MANAGER_SOURCE_MODE}:account_hour_v2"
+
+
+def account_local_hourly_source_mode(action_report_time: Any) -> str:
+    return (
+        f"{ads_manager_source_mode(action_report_time)}:"
+        "account_hour_v3"
+    )
+
+
+ACCOUNT_LOCAL_HOURLY_SOURCE_MODE = account_local_hourly_source_mode(
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
 MAX_HOURLY_REPORT_ROWS = 2_000
 
@@ -87,9 +100,10 @@ async def _ensure_indexes(db: Any) -> None:
             ("ad_account_id", 1),
             ("hour_start_utc", 1),
             ("attribution_model", 1),
+            ("action_report_time", 1),
         ],
         unique=True,
-        name="mezan_snapchat_account_hour_v1_identity_unique",
+        name="mezan_snapchat_account_hour_v2_identity_unique",
     )
     await collection.create_index(
         [
@@ -97,8 +111,9 @@ async def _ensure_indexes(db: Any) -> None:
             ("ad_account_id", 1),
             ("date", -1),
             ("hour_index", 1),
+            ("action_report_time", 1),
         ],
-        name="mezan_snapchat_account_hour_v1_date_hour",
+        name="mezan_snapchat_account_hour_v2_date_hour",
     )
 
 
@@ -152,6 +167,7 @@ async def _upsert_hour(
     account: dict[str, Any],
     timezone_name: str,
     bucket: dict[str, Any],
+    action_report_time: str,
 ) -> None:
     metrics = _finalize_bucket(bucket)
     currency = _text(account.get("currency")).upper()
@@ -195,11 +211,14 @@ async def _upsert_hour(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "action_report_time": action_report_time,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         },
-        "source_mode": ACCOUNT_LOCAL_HOURLY_SOURCE_MODE,
+        "action_report_time": action_report_time,
+        "source_mode": account_local_hourly_source_mode(
+            action_report_time
+        ),
         "provider_granularity": "HOUR",
         "provider_breakdown": "campaign",
         "stored_granularity": "ACCOUNT_LOCAL_HOUR",
@@ -218,6 +237,7 @@ async def _upsert_hour(
             "ad_account_id": account["ad_account_id"],
             "hour_start_utc": bucket["hour_start_utc"],
             "attribution_model": ATTRIBUTION_MODEL,
+            "action_report_time": action_report_time,
         },
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
@@ -231,8 +251,12 @@ async def persist_account_local_hours(
     rows: list[dict[str, Any]],
     start_date: date,
     end_date: date,
+    action_report_time: str,
 ) -> int:
     timezone_name = account_report._valid_timezone_name(account.get("timezone"))
+    action_report_time = normalize_ads_manager_action_report_time(
+        action_report_time
+    )
     await _ensure_indexes(context.db)
     buckets = aggregate_account_rows_by_local_hour(
         rows,
@@ -246,6 +270,7 @@ async def persist_account_local_hours(
             account=account,
             timezone_name=timezone_name,
             bucket=bucket,
+            action_report_time=action_report_time,
         )
     return len(buckets)
 
@@ -267,11 +292,18 @@ def install_snapchat_account_hourly_capture() -> None:
         ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             rows, errors = await current_fetch(context, *args, **kwargs)
             capture = _CAPTURE_CONTEXT.get()
+            captured_action_report_time = str(
+                kwargs.get("action_report_time") or ""
+            ).strip().lower()
             if (
                 capture
                 and rows
-                and kwargs.get("action_report_time")
-                == ADS_MANAGER_ACTION_REPORT_TIME
+                and captured_action_report_time
+                in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+                and kwargs.get("swipe_attribution_window")
+                == ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW
+                and kwargs.get("view_attribution_window")
+                == ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW
             ):
                 try:
                     saved = await persist_account_local_hours(
@@ -280,8 +312,12 @@ def install_snapchat_account_hourly_capture() -> None:
                         rows=rows,
                         start_date=capture["start_date"],
                         end_date=capture["end_date"],
+                        action_report_time=captured_action_report_time,
                     )
-                    capture["rows_saved"] = saved
+                    capture["rows_saved"] = (
+                        int(capture.get("rows_saved") or 0)
+                        + saved
+                    )
                 except Exception as exc:  # keep the established daily refresh alive
                     capture["capture_error"] = type(exc).__name__
             return rows, errors
@@ -424,8 +460,12 @@ async def build_hourly_chart_series(
     date_string: str,
     timezone_name: str,
     result_source: str,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     now: datetime | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    action_report_time = normalize_ads_manager_action_report_time(
+        action_report_time
+    )
     cursor = _collection(db, SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION).find(
         {
             "user_id": user_id,
@@ -433,7 +473,10 @@ async def build_hourly_chart_series(
             "ad_account_id": account_id,
             "date": date_string,
             "date_timezone": timezone_name,
-            "source_mode": ACCOUNT_LOCAL_HOURLY_SOURCE_MODE,
+            "source_mode": account_local_hourly_source_mode(
+                action_report_time
+            ),
+            "action_report_time": action_report_time,
         },
         {"_id": 0},
     )
@@ -490,13 +533,15 @@ async def build_hourly_chart_series(
         })
     return series, {
         "hourly_collection": SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION,
-        "hourly_source_mode": ACCOUNT_LOCAL_HOURLY_SOURCE_MODE,
+        "hourly_source_mode": account_local_hourly_source_mode(
+            action_report_time
+        ),
         "stored_granularity": "ACCOUNT_LOCAL_HOUR",
         "provider_granularity": "HOUR",
         "hourly_rows": len(rows),
         "hourly_available": bool(rows),
         "hourly_result_source": result_source,
-        "hourly_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "hourly_action_report_time": action_report_time,
         "salla_hourly_attribution": salla_coverage,
         "accounting_eligible": False,
     }
@@ -526,6 +571,10 @@ def install_snapchat_account_hourly_report() -> None:
                 timezone_name=_text(output.get("account_timezone")),
                 result_source=_text(output.get("result_source"))
                 or account_report.RESULT_SOURCE_SALLA,
+                action_report_time=_text(
+                    output.get("action_report_time")
+                )
+                or ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
             )
             output["hourly"] = series
             source = output.setdefault("source", {})
