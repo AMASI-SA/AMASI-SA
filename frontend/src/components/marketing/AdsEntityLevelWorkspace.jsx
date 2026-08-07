@@ -68,6 +68,7 @@ export default function AdsEntityLevelWorkspace({
     platform,
     platformLabel,
     resultSource = "salla",
+    actionReportTime = "conversion",
     entityLevel,
     onEntityLevelChange,
     campaigns,
@@ -140,7 +141,12 @@ export default function AdsEntityLevelWorkspace({
                     />
                 </>
             )}
-            {entityLevel === "ads" && <AdManagerTable activeCampaignsOnly={activeCampaignsOnly} />}
+            {entityLevel === "ads" && (
+                <AdManagerTable
+                    activeCampaignsOnly={activeCampaignsOnly}
+                    actionReportTime={actionReportTime}
+                />
+            )}
         </section>
     );
 }

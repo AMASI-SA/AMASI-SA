@@ -24,7 +24,10 @@ from .snapchat_active_campaign_filtering import is_active_provider_status
 from .snapchat_campaign_result_source_routes import RESULT_SOURCE_PLATFORM
 from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
-    ADS_MANAGER_SOURCE_MODE,
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+    ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ads_manager_source_mode,
+    normalize_ads_manager_action_report_time,
 )
 from .snapchat_native_data_common import (
     ATTRIBUTION_MODEL,
@@ -48,9 +51,18 @@ from .snapchat_native_performance_sync import (
     _computed,
 )
 
-SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v1"
-PLATFORM_TOTAL_SOURCE_MODE = (
-    f"{ADS_MANAGER_SOURCE_MODE}:account_spend_campaign_completed_hour_v6"
+SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2"
+
+
+def platform_total_source_mode(action_report_time: Any) -> str:
+    return (
+        f"{ads_manager_source_mode(action_report_time)}:"
+        "account_spend_campaign_completed_hour_v7"
+    )
+
+
+PLATFORM_TOTAL_SOURCE_MODE = platform_total_source_mode(
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
 TOTAL_CURRENT_DAY_WINDOW_POLICY = "completed_account_local_hour"
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
@@ -366,6 +378,7 @@ async def fetch_account_total_campaign_rows(
     account_id: str,
     request_start: datetime,
     request_end: datetime,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     headers = {
@@ -383,7 +396,7 @@ async def fetch_account_total_campaign_rows(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -517,6 +530,7 @@ async def _upsert_total_row(
     provider_start: Any,
     provider_end: Any,
     provider_breakdown: str | None,
+    action_report_time: str,
 ) -> None:
     currency = _text(account.get("currency")).upper()
     spend_micro = _as_number(metrics.get("spend"))
@@ -558,11 +572,12 @@ async def _upsert_total_row(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+            "action_report_time": action_report_time,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
-        "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
+        "action_report_time": action_report_time,
+        "source_mode": platform_total_source_mode(action_report_time),
         "accounting_eligible": False,
         "provider_window_start": provider_start,
         "provider_window_end": provider_end,
@@ -582,6 +597,7 @@ async def _upsert_total_row(
             "external_id": external_id,
             "date": date_string,
             "attribution_model": ATTRIBUTION_MODEL,
+            "action_report_time": action_report_time,
         },
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
@@ -600,6 +616,7 @@ async def persist_account_total_day(
     provider_end: datetime,
     authoritative_breakdown: bool,
     errors: list[dict[str, Any]],
+    action_report_time: str,
 ) -> dict[str, Any]:
     await _ensure_total_indexes(context.db)
     campaign_rows = [row for row in rows if _text(row.get("campaign_id"))]
@@ -615,6 +632,7 @@ async def persist_account_total_day(
             provider_start=row.get("start_time") or provider_start,
             provider_end=row.get("end_time") or provider_end,
             provider_breakdown=PLATFORM_TOTAL_BREAKDOWN,
+            action_report_time=action_report_time,
         )
     all_ads_metrics = merge_direct_spend_with_campaign_metrics(
         account_metrics,
@@ -631,6 +649,7 @@ async def persist_account_total_day(
         provider_start=provider_start,
         provider_end=provider_end,
         provider_breakdown=None,
+        action_report_time=action_report_time,
     )
 
     if authoritative_breakdown and not errors:
@@ -647,6 +666,7 @@ async def persist_account_total_day(
             "date": date_string,
             "date_timezone": timezone_name,
             "attribution_model": ATTRIBUTION_MODEL,
+            "action_report_time": action_report_time,
         }
         if campaign_ids:
             stale_query["external_id"] = {"$nin": campaign_ids}
@@ -713,48 +733,56 @@ async def refresh_account_total_snapshots(
                 request_start=request_start,
                 request_end=request_end,
             )
-            rows, campaign_errors, breakdown_seen = (
-                await fetch_account_total_campaign_rows(
-                    context,
-                    client,
-                    access_token,
-                    account_id=account_id,
-                    request_start=request_start,
-                    request_end=request_end,
+            for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
+                rows, campaign_errors, breakdown_seen = (
+                    await fetch_account_total_campaign_rows(
+                        context,
+                        client,
+                        access_token,
+                        account_id=account_id,
+                        request_start=request_start,
+                        request_end=request_end,
+                        action_report_time=action_report_time,
+                    )
                 )
-            )
-            day_errors = [*account_errors, *campaign_errors]
-            for error in day_errors:
-                errors.append({"date": report_date.isoformat(), **error})
-            if not total_snapshot_is_authoritative(
-                breakdown_seen=breakdown_seen,
-                account_metrics_available=bool(account_metrics),
-                errors=day_errors,
-            ):
-                errors.append({
-                    "date": report_date.isoformat(),
-                    "code": "snapchat_platform_total_snapshot_partial",
-                    "message": (
-                        "Snapchat TOTAL snapshot was incomplete; "
-                        "the previous complete snapshot was preserved."
-                    ),
-                    "retryable": True,
-                })
-                continue
-            persisted = await persist_account_total_day(
-                context,
-                account=account,
-                timezone_name=timezone_name,
-                date_string=report_date.isoformat(),
-                rows=rows,
-                account_metrics=account_metrics,
-                provider_start=request_start,
-                provider_end=request_end,
-                authoritative_breakdown=True,
-                errors=[],
-            )
-            saved += int(persisted["account_rows_saved"])
-            campaign_saved += int(persisted["campaign_rows_saved"])
+                day_errors = [*account_errors, *campaign_errors]
+                for error in day_errors:
+                    errors.append({
+                        "date": report_date.isoformat(),
+                        "action_report_time": action_report_time,
+                        **error,
+                    })
+                if not total_snapshot_is_authoritative(
+                    breakdown_seen=breakdown_seen,
+                    account_metrics_available=bool(account_metrics),
+                    errors=day_errors,
+                ):
+                    errors.append({
+                        "date": report_date.isoformat(),
+                        "action_report_time": action_report_time,
+                        "code": "snapchat_platform_total_snapshot_partial",
+                        "message": (
+                            "Snapchat TOTAL snapshot was incomplete; "
+                            "the previous complete snapshot was preserved."
+                        ),
+                        "retryable": True,
+                    })
+                    continue
+                persisted = await persist_account_total_day(
+                    context,
+                    account=account,
+                    timezone_name=timezone_name,
+                    date_string=report_date.isoformat(),
+                    rows=rows,
+                    account_metrics=account_metrics,
+                    provider_start=request_start,
+                    provider_end=request_end,
+                    authoritative_breakdown=True,
+                    errors=[],
+                    action_report_time=action_report_time,
+                )
+                saved += int(persisted["account_rows_saved"])
+                campaign_saved += int(persisted["campaign_rows_saved"])
         except SnapchatNativeSyncError as exc:
             if exc.code == "snapchat_needs_reauth":
                 raise
@@ -776,6 +804,7 @@ async def refresh_account_total_snapshots(
         "errors": errors,
         "provider_calls": context.provider_calls,
         "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
+        "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
         "direct_account_total_requested": True,
@@ -808,6 +837,7 @@ async def load_platform_total_rows(
     date_from: str,
     date_to: str,
     timezone_name: str,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> list[dict[str, Any]]:
     cursor = _collection(db, SNAPCHAT_ACCOUNT_TOTAL_COLLECTION).find(
         {
@@ -816,7 +846,8 @@ async def load_platform_total_rows(
             "ad_account_id": account_id,
             "date": {"$gte": date_from, "$lte": date_to},
             "date_timezone": timezone_name,
-            "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
+            "source_mode": platform_total_source_mode(action_report_time),
+            "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
             "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         },
         {"_id": 0},
@@ -924,7 +955,7 @@ def _mask_pending_platform_commercial_metrics(
         "cpa_sar": None,
         "cpa_native": None,
         "result_source": RESULT_SOURCE_PLATFORM,
-        "commercial_metrics_source": "snapchat_impression_total_pending",
+        "commercial_metrics_source": f"snapchat_{action_report_time}_total_pending",
         "profitability": None,
     }
     result["totals"] = {**dict(result.get("totals") or {}), **commercial_nulls}
@@ -985,6 +1016,9 @@ async def apply_platform_snapshot_to_report(
     date_from = _text(result.get("date_from"))
     date_to = _text(result.get("date_to"))
     timezone_name = _text(result.get("account_timezone"))
+    action_report_time = normalize_ads_manager_action_report_time(
+        result.get("action_report_time")
+    )
     if not all((account_id, date_from, date_to, timezone_name)):
         return result
     rows = await load_platform_total_rows(
@@ -994,6 +1028,7 @@ async def apply_platform_snapshot_to_report(
         date_from=date_from,
         date_to=date_to,
         timezone_name=timezone_name,
+        action_report_time=action_report_time,
     )
     account_rows = [row for row in rows if row.get("entity_type") == "ad_account"]
     campaign_rows = [row for row in rows if row.get("entity_type") == "campaign"]
@@ -1011,6 +1046,8 @@ async def apply_platform_snapshot_to_report(
             "platform_total_snapshot_ready": False,
             "platform_direct_account_total_ready": False,
             "platform_source_isolated": True,
+            "platform_action_report_time": action_report_time,
+            "platform_total_source_mode": platform_total_source_mode(action_report_time),
         })
         result.setdefault("ai_readiness", {}).update({
             "report_ready": False,
@@ -1336,6 +1373,7 @@ def install_snapchat_platform_source_integrity() -> None:
                     date_from=audit_from,
                     date_to=audit_to,
                     timezone_name=timezone_name,
+                    action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
                 )
                 requested_days = (
                     date.fromisoformat(audit_to) - date.fromisoformat(audit_from)

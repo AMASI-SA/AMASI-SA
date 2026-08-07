@@ -202,6 +202,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [activeTab, setActiveTab] = useState("overview");
     const [entityLevel, setEntityLevel] = useState("campaigns");
     const [activeCampaignsOnly, setActiveCampaignsOnly] = useState(true);
+    const [actionReportTime, setActionReportTime] = useState("conversion");
     const [adSquadSort, setAdSquadSort] = useState("orders");
     const [adSquadPage, setAdSquadPage] = useState(1);
     const [adSquadReport, setAdSquadReport] = useState(null);
@@ -223,6 +224,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 page,
                 limit: 25,
                 activeCampaignsOnly,
+                actionReportTime,
             });
             if (requestId !== loadSequenceRef.current) return;
             setData(result);
@@ -241,7 +243,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 setRefreshing(false);
             }
         }
-    }, [activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);
+    }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);
 
     const selectedAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
@@ -284,6 +286,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setActiveTab("overview");
         setEntityLevel("campaigns");
         setActiveCampaignsOnly(true);
+        setActionReportTime("conversion");
         setAdSquadSort("orders");
         setAdSquadReport(null);
         setAdSquadError("");
@@ -420,6 +423,47 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 </button>
             </form>
 
+            {platform === "snapchat" && (
+                <section
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                    data-testid="snapchat-action-report-time-control"
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div className="text-sm font-black text-slate-900">توقيت نتائج Snapchat</div>
+                            <div className="mt-1 text-xs font-semibold text-slate-500">
+                                وقت التحويل هو الافتراضي لقرارات التشغيل والذكاء الاصطناعي. وقت الظهور متاح للمقارنة التاريخية مع إعداد Snapchat نفسه.
+                            </div>
+                        </div>
+                        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                            {[
+                                ["conversion", "وقت التحويل · موصى به"],
+                                ["impression", "وقت الظهور · مقارنة"],
+                            ].map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => {
+                                        setPage(1);
+                                        setAdSquadPage(1);
+                                        setActionReportTime(value);
+                                    }}
+                                    aria-pressed={actionReportTime === value}
+                                    data-testid={`snapchat-action-report-time-${value}`}
+                                    className={`rounded-lg px-4 py-2 text-xs font-black transition ${
+                                        actionReportTime === value
+                                            ? "bg-slate-950 text-white shadow-sm"
+                                            : "text-slate-600 hover:bg-white"
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            )}
+
             {error && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 font-bold text-rose-800">
                     <WarningCircle size={20} weight="fill" className="ml-2 inline" />
@@ -473,6 +517,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     platform={platform}
                     platformLabel={config.label}
                     resultSource={data?.result_source || "salla"}
+                    actionReportTime={actionReportTime}
                     entityLevel={entityLevel}
                     onEntityLevelChange={(level) => {
                         setEntityLevel(level);
@@ -514,7 +559,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             </span>
                             <div>
                                 <h2 className="text-xl font-black text-slate-900">جاهزية ذكاء ميزان</h2>
-                                <p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط.</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط. قرارات الذكاء الاصطناعي تعتمد وقت التحويل فقط.</p>
                             </div>
                         </div>
                         <div className="mt-5 grid gap-3 sm:grid-cols-2">

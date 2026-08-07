@@ -166,6 +166,10 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
         platform: "snapchat",
         label: MARKETING_PLATFORM_CONFIG.snapchat.label,
         result_source: text(value.result_source, "salla"),
+        action_report_time: text(value.action_report_time, "conversion"),
+        supported_action_report_times: Array.isArray(value.supported_action_report_times)
+            ? value.supported_action_report_times.filter((item) => ["conversion", "impression"].includes(item))
+            : ["conversion", "impression"],
         range: {
             date_from: ISO_DATE_RE.test(value.date_from || "")
                 ? value.date_from
@@ -215,6 +219,7 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             platform_total_snapshot_ready: value.source?.platform_total_snapshot_ready === true,
             platform_direct_account_total_ready: value.source?.platform_direct_account_total_ready === true,
             platform_action_report_time: nullableText(value.source?.platform_action_report_time),
+            account_local_action_report_time: nullableText(value.source?.account_local_action_report_time),
             account_spend_source: nullableText(value.source?.account_spend_source),
             account_commercial_totals_source: nullableText(
                 value.source?.account_commercial_totals_source,
@@ -379,6 +384,7 @@ export async function getMarketingPerformance({
     page = 1,
     limit = 25,
     activeCampaignsOnly = true,
+    actionReportTime = "conversion",
 } = {}) {
     if (!isMarketingPerformanceProvider(platform)) {
         throw new Error("invalid_marketing_platform");
@@ -393,6 +399,9 @@ export async function getMarketingPerformance({
                     page,
                     limit,
                     active_campaigns_only: activeCampaignsOnly,
+                    action_report_time: ["conversion", "impression"].includes(actionReportTime)
+                        ? actionReportTime
+                        : "conversion",
                 },
             }),
             getIntegrationsOverview(),
