@@ -129,6 +129,149 @@ def _strict_decimal(value: Any, *, field: str) -> Decimal:
     return result
 
 
+def _predict_qoyod_document_total(lines: list[dict]) -> dict:
+    """Reproduce Qoyod's document-level subtotal and tax rounding."""
+    if not isinstance(lines, list) or not lines:
+        raise ManualSendRefused(
+            "qoyod_preflight_payload_invalid",
+            "لا تحتوي فاتورة قيود على بنود قابلة للتحقق قبل الإرسال.",
+        )
+
+    subtotal_raw = Decimal("0")
+    tax_raw = Decimal("0")
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "يوجد بند غير صالح في فاتورة قيود قبل الإرسال.",
+                {"line_index": index},
+            )
+        quantity = _strict_decimal(
+            line.get("quantity"), field=f"line_items[{index}].quantity")
+        if quantity <= 0:
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "كمية بند الفاتورة يجب أن تكون أكبر من صفر.",
+                {"line_index": index, "quantity": line.get("quantity")},
+            )
+        unit_price = _strict_decimal(
+            line.get("unit_price"),
+            field=f"line_items[{index}].unit_price",
+        )
+        discount = _strict_decimal(
+            line.get("discount") or 0,
+            field=f"line_items[{index}].discount",
+        )
+        tax_percent = _strict_decimal(
+            line.get("tax_percent") or 0,
+            field=f"line_items[{index}].tax_percent",
+        )
+        line_net = (
+            quantity
+            * unit_price.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+            - discount.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+        )
+        if line_net < 0:
+            raise ManualSendRefused(
+                "qoyod_preflight_payload_invalid",
+                "خصم بند الفاتورة أكبر من قيمته.",
+                {"line_index": index},
+            )
+        subtotal_raw += line_net
+        tax_raw += line_net * tax_percent / Decimal("100")
+
+    subtotal = subtotal_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    tax = tax_raw.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    predicted_total = (subtotal + tax).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP)
+    return {
+        "subtotal": float(subtotal),
+        "tax": float(tax),
+        "predicted_total": float(predicted_total),
+    }
+
+
+def _align_qoyod_document_total(
+    lines: list[dict], *, salla_total: float, item_line_count: int,
+    adjustment_product_id: Optional[int],
+) -> dict:
+    """Close a small document-rounding drift without negative payload values.
+
+    Qoyod rounds tax at document level.  When that differs from Salla's
+    line-level total, increase product discounts by one halalah at a time
+    until the Qoyod prediction is no longer above Salla.  If that crosses
+    below the target, add only a positive, tax-free rounding line.
+    """
+    expected = Decimal(str(_q2(salla_total)))
+    before = _predict_qoyod_document_total(lines)
+    predicted = Decimal(str(before["predicted_total"]))
+    difference = (predicted - expected).quantize(
+        _TWO_PLACES, rounding=ROUND_HALF_UP)
+    changed_lines: list[int] = []
+
+    if abs(difference) > Decimal("1.00"):
+        return {
+            "applied": False,
+            "reason": "document_rounding_difference_too_large",
+            "before": before,
+            "after": before,
+            "difference": float(difference),
+            "changed_item_lines": changed_lines,
+        }
+
+    # One halalah per original product line is the maximum automatic
+    # taxable-base redistribution. Larger differences remain blocked.
+    while difference > 0 and len(changed_lines) < item_line_count:
+        index = item_line_count - 1 - len(changed_lines)
+        line = lines[index]
+        quantity = _strict_decimal(
+            line.get("quantity"), field=f"line_items[{index}].quantity")
+        unit_price = _strict_decimal(
+            line.get("unit_price"), field=f"line_items[{index}].unit_price")
+        discount = _strict_decimal(
+            line.get("discount") or 0,
+            field=f"line_items[{index}].discount")
+        candidate = (discount + _TWO_PLACES).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+        if candidate > quantity * unit_price:
+            break
+        line["discount"] = float(candidate)
+        changed_lines.append(index)
+        current = _predict_qoyod_document_total(lines)
+        predicted = Decimal(str(current["predicted_total"]))
+        difference = (predicted - expected).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+
+    adjustment_amount = Decimal("0")
+    if difference < 0 and adjustment_product_id is not None:
+        adjustment_amount = (-difference).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+        if adjustment_amount <= Decimal("1.00"):
+            lines.append({
+                "product_id": adjustment_product_id,
+                "description": "تسوية فرق التقريب مع سلة",
+                "quantity": 1,
+                "unit_price": float(adjustment_amount),
+                "discount": 0.0,
+                "discount_type": "amount",
+                "tax_percent": 0.0,
+            })
+
+    after = _predict_qoyod_document_total(lines)
+    final_difference = (
+        Decimal(str(after["predicted_total"])) - expected
+    ).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    return {
+        "applied": bool(changed_lines or adjustment_amount),
+        "before": before,
+        "after": after,
+        "difference": float(final_difference),
+        "changed_item_lines": changed_lines,
+        "adjustment_amount": float(adjustment_amount),
+        "adjustment_product_id": adjustment_product_id,
+    }
+
+
 def _preflight_qoyod_invoice_payload(
     payload: dict, *, salla_total: float,
 ) -> dict:
@@ -1009,8 +1152,8 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
         and _f(cod_breakdown.get("salla_declared_amount")) > 0
     )
     residual = _q2(salla_total - expected_total_before_adj)
-    if (abs(diff_before_adj) > 0.01
-            and abs(residual) <= 1.00
+    if (residual > 0.01
+            and residual <= 1.00
             and not shipping_config_gap
             and not cod_config_gap):
         adj_pid = _unwrap_id(
@@ -1045,6 +1188,32 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
                 "qoyod_total_before": expected_total_before_adj,
                 "note":               ("سطر تسوية تلقائي بلا ضريبة — "
                                         "لغلق فرق التقريب بين قيود وسلة"),
+            }
+
+    document_alignment: Optional[dict] = None
+    if not shipping_config_gap and not cod_config_gap:
+        document_alignment = _align_qoyod_document_total(
+            lines,
+            salla_total=salla_total,
+            item_line_count=len(raw_items),
+            adjustment_product_id=_unwrap_id(
+                settings.get("rounding_adjustment_product_id")),
+        )
+        exact_after = document_alignment["after"]
+        expected_total_dec = Decimal(str(exact_after["predicted_total"]))
+        if document_alignment.get("adjustment_amount"):
+            rounding_adjustment = {
+                "applied": True,
+                "product_id": document_alignment.get(
+                    "adjustment_product_id"),
+                "amount": document_alignment["adjustment_amount"],
+                "salla_total": salla_total,
+                "qoyod_total_before": document_alignment["before"][
+                    "predicted_total"],
+                "note": (
+                    "توزيع فرق تقريب ضريبة المستند على أسطر المنتجات "
+                    "ثم إضافة تسوية موجبة بلا ضريبة"
+                ),
             }
 
     expected_total = float(
@@ -1138,6 +1307,7 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
         "residual_before_adjustment":    _q2(salla_total
                                               - expected_total_before_adj),
         "rounding_adjustment":    rounding_adjustment,
+        "document_rounding_alignment": document_alignment,
         "expected_qoyod_total":   expected_total,
         "difference":             diff,
         "difference_source_hint": hint,
