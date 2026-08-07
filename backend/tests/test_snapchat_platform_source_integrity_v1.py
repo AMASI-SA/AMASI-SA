@@ -112,7 +112,7 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
 
 
 @pytest.mark.asyncio
-async def test_direct_account_request_uses_spend_only_without_conversion_parameters():
+async def test_direct_account_request_uses_all_ads_metrics_and_attribution():
     class CaptureContext:
         def __init__(self):
             self.params = None
@@ -122,7 +122,13 @@ async def test_direct_account_request_uses_spend_only_without_conversion_paramet
             return {
                 "total_stats": [{
                     "sub_request_status": "SUCCESS",
-                    "total_stat": {"stats": {"spend": 714_050_000}},
+                    "total_stat": {
+                        "stats": {
+                            "spend": 714_050_000,
+                            "conversion_purchases": 24,
+                            "conversion_purchases_value": 1_186_350_000,
+                        },
+                    },
                 }],
             }
 
@@ -134,19 +140,17 @@ async def test_direct_account_request_uses_spend_only_without_conversion_paramet
         account_id="account-1",
         request_start=datetime(2026, 8, 6, 0, 0, tzinfo=timezone.utc),
         request_end=datetime(2026, 8, 6, 12, 0, tzinfo=timezone.utc),
+        action_report_time="conversion",
     )
 
     assert errors == []
     assert metrics["spend"] == 714_050_000
-    assert context.params["fields"] == "spend"
+    assert metrics["conversion_purchases"] == 24
     assert tuple(context.params["fields"].split(",")) == DIRECT_ACCOUNT_TOTAL_FIELDS
-    for forbidden in (
-        "conversion_source_types",
-        "swipe_up_attribution_window",
-        "view_attribution_window",
-        "action_report_time",
-    ):
-        assert forbidden not in context.params
+    assert context.params["conversion_source_types"] == "total"
+    assert context.params["swipe_up_attribution_window"] == "28_DAY"
+    assert context.params["view_attribution_window"] == "7_DAY"
+    assert context.params["action_report_time"] == "conversion"
 
 
 def test_direct_account_total_accepts_documented_spend_only_payload():
@@ -219,6 +223,36 @@ def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
     assert merged["conversion_purchases_value"] == 1_186_860_000
     assert merged["impressions"] == 308_218
     assert merged["swipes"] == 4_409
+
+
+def test_all_ads_prefers_direct_headline_metrics_over_campaign_sum():
+    direct = {
+        "spend": 474_720_000,
+        "conversion_purchases": 24,
+        "conversion_purchases_value": 1_186_350_000,
+        "impressions": 500_000,
+        "swipes": 3_200,
+        "video_views": 250_000,
+        "view_completion": 120_000,
+    }
+    campaign_rows = [{
+        "campaign_id": "campaign-stale",
+        "metrics": {
+            "spend": 474_720_000,
+            "conversion_purchases": 8,
+            "conversion_purchases_value": 400_000_000,
+            "impressions": 300_000,
+            "swipes": 2_000,
+        },
+    }]
+
+    merged = merge_direct_spend_with_campaign_metrics(direct, campaign_rows)
+
+    assert merged["spend"] == 474_720_000
+    assert merged["conversion_purchases"] == 24
+    assert merged["conversion_purchases_value"] == 1_186_350_000
+    assert merged["impressions"] == 500_000
+    assert merged["swipes"] == 3_200
 
 
 def test_audit_prefers_direct_account_total_and_keeps_campaign_sum_separate():
