@@ -19,7 +19,12 @@ from . import snapchat_account_hourly_refresh as hourly
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
-    ADS_MANAGER_SOURCE_MODE,
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+    ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+    ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+    ads_manager_source_mode,
+    normalize_ads_manager_action_report_time,
 )
 from .snapchat_active_campaign_filtering import (
     aggregate_entity_rows,
@@ -66,7 +71,12 @@ from .snapchat_native_performance_sync import (
     _new_bucket,
 )
 
-ADSQUAD_SOURCE_MODE = f"{ADS_MANAGER_SOURCE_MODE}:ad_squad_day_v2"
+def adsquad_source_mode(action_report_time: Any) -> str:
+    return f"{ads_manager_source_mode(action_report_time)}:ad_squad_day_v3"
+
+
+ADSQUAD_SOURCE_MODE = adsquad_source_mode(ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME)
+ADSQUAD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_squad_v1"
 ADSQUAD_REFRESH_STATE_COLLECTION = "mezan_snapchat_adsquad_refresh_state_v1"
 ADSQUAD_BREAKDOWN = "adsquad"
 ADSQUAD_REFRESH_INTERVAL_SECONDS = 15 * 60
@@ -195,6 +205,7 @@ async def _fetch_campaign_adsquad_hours(
     campaign_id: str,
     request_start: datetime,
     request_end: datetime,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
     headers = {
@@ -210,9 +221,9 @@ async def _fetch_campaign_adsquad_hours(
         "limit": 200,
         "omit_empty": "true",
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
-        "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-        "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+        "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -297,6 +308,7 @@ async def _upsert_projection(
     adsquad_id: str,
     date_string: str,
     bucket: dict[str, Any],
+    action_report_time: str,
 ) -> None:
     metrics = _finalize_bucket(bucket)
     currency = _text(account.get("currency")).upper()
@@ -339,11 +351,12 @@ async def _upsert_projection(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
-            "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
-            "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
+            "action_report_time": action_report_time,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
         },
-        "source_mode": ADSQUAD_SOURCE_MODE,
+        "action_report_time": action_report_time,
+        "source_mode": adsquad_source_mode(action_report_time),
         "provider_breakdown": ADSQUAD_BREAKDOWN,
         "provider_granularity": "HOUR",
         "stored_granularity": stored_granularity,
@@ -357,15 +370,19 @@ async def _upsert_projection(
         "provider_window_end": bucket.get("provider_end"),
         "updated_at": now_iso,
     }
+    identity = {
+        "user_id": context.user_id,
+        "ad_account_id": account["ad_account_id"],
+        "entity_type": "ad_squad",
+        "external_id": adsquad_id,
+        "date": date_string,
+        "attribution_model": ATTRIBUTION_MODEL,
+    }
+    if collection_name == SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION:
+        identity["action_report_time"] = action_report_time
+
     await _collection(context.db, collection_name).update_one(
-        {
-            "user_id": context.user_id,
-            "ad_account_id": account["ad_account_id"],
-            "entity_type": "ad_squad",
-            "external_id": adsquad_id,
-            "date": date_string,
-            "attribution_model": ATTRIBUTION_MODEL,
-        },
+        identity,
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
     )
@@ -387,8 +404,10 @@ async def _recent_refresh(
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=timezone.utc)
     return (
-        now - observed.astimezone(timezone.utc)
-    ).total_seconds() < ADSQUAD_REFRESH_INTERVAL_SECONDS
+        _text((row or {}).get("source_mode")) == ADSQUAD_REFRESH_SOURCE_MODE
+        and (now - observed.astimezone(timezone.utc)).total_seconds()
+        < ADSQUAD_REFRESH_INTERVAL_SECONDS
+    )
 
 
 async def refresh_snapchat_adsquad_performance(
@@ -446,46 +465,57 @@ async def refresh_snapchat_adsquad_performance(
         context.user_id,
         account_id,
     )
-    rows: list[dict[str, Any]] = []
+    rows_by_mode: dict[str, list[dict[str, Any]]] = {
+        mode: [] for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    }
     errors: list[dict[str, Any]] = []
     calls_before = context.provider_calls
     for campaign in campaigns:
         campaign_id = _text(campaign.get("external_id"))
         if not campaign_id:
             continue
-        try:
-            campaign_rows, campaign_errors = await _fetch_campaign_adsquad_hours(
-                context,
-                client,
-                access_token,
-                campaign_id=campaign_id,
-                request_start=request["provider_start"],
-                request_end=request["provider_end"],
-            )
-            rows.extend(campaign_rows)
-            errors.extend(campaign_errors)
-        except SnapchatNativeSyncError as exc:
-            if exc.code == "snapchat_needs_reauth":
-                raise
-            errors.append({
-                "kind": "adsquad_stats",
-                "campaign_id": campaign_id,
-                "code": exc.code,
-                "message": exc.message[:300],
-                "retryable": bool(exc.retryable),
-            })
+        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
+            try:
+                campaign_rows, campaign_errors = await _fetch_campaign_adsquad_hours(
+                    context,
+                    client,
+                    access_token,
+                    campaign_id=campaign_id,
+                    request_start=request["provider_start"],
+                    request_end=request["provider_end"],
+                    action_report_time=action_report_time,
+                )
+                rows_by_mode[action_report_time].extend(campaign_rows)
+                errors.extend({
+                    **error,
+                    "action_report_time": action_report_time,
+                } for error in campaign_errors)
+            except SnapchatNativeSyncError as exc:
+                if exc.code == "snapchat_needs_reauth":
+                    raise
+                errors.append({
+                    "kind": "adsquad_stats",
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "code": exc.code,
+                    "message": exc.message[:300],
+                    "retryable": bool(exc.retryable),
+                })
     business = _day_buckets(
-        rows,
+        rows_by_mode[ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME],
         timezone_name=BUSINESS_TIMEZONE,
         start_date=start_date,
         end_date=end_date,
     )
-    local = _day_buckets(
-        rows,
-        timezone_name=timezone_name,
-        start_date=request["account_local_from"],
-        end_date=request["account_local_to"],
-    )
+    local_by_mode = {
+        mode: _day_buckets(
+            rows_by_mode[mode],
+            timezone_name=timezone_name,
+            start_date=request["account_local_from"],
+            end_date=request["account_local_to"],
+        )
+        for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    }
     saved = 0
     for (campaign_id, adsquad_id, date_string), bucket in sorted(
         business.items()
@@ -500,21 +530,26 @@ async def refresh_snapchat_adsquad_performance(
             adsquad_id=adsquad_id,
             date_string=date_string,
             bucket=bucket,
+            action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
         )
         saved += 1
-    for (campaign_id, adsquad_id, date_string), bucket in sorted(local.items()):
-        await _upsert_projection(
-            context,
-            collection_name=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
-            account=account,
-            timezone_name=timezone_name,
-            stored_granularity="ACCOUNT_LOCAL_DAY",
-            campaign_id=campaign_id,
-            adsquad_id=adsquad_id,
-            date_string=date_string,
-            bucket=bucket,
-        )
-        saved += 1
+    account_local_saved = 0
+    for action_report_time, local in local_by_mode.items():
+        for (campaign_id, adsquad_id, date_string), bucket in sorted(local.items()):
+            await _upsert_projection(
+                context,
+                collection_name=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
+                account=account,
+                timezone_name=timezone_name,
+                stored_granularity="ACCOUNT_LOCAL_DAY",
+                campaign_id=campaign_id,
+                adsquad_id=adsquad_id,
+                date_string=date_string,
+                bucket=bucket,
+                action_report_time=action_report_time,
+            )
+            saved += 1
+            account_local_saved += 1
     now_iso = context.now_iso()
     await _collection(
         context.db,
@@ -530,7 +565,7 @@ async def refresh_snapchat_adsquad_performance(
                 "campaigns_requested": len(campaigns),
                 "campaign_limit_reached": campaign_limit_reached,
                 "errors_count": len(errors),
-                "source_mode": ADSQUAD_SOURCE_MODE,
+                "source_mode": ADSQUAD_REFRESH_SOURCE_MODE,
                 "updated_at": now_iso,
             },
             "$setOnInsert": {"created_at": now_iso},
@@ -538,11 +573,12 @@ async def refresh_snapchat_adsquad_performance(
         upsert=True,
     )
     return {
-        "source_mode": ADSQUAD_SOURCE_MODE,
+        "source_mode": ADSQUAD_REFRESH_SOURCE_MODE,
+        "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "skipped": False,
         "rows_saved": saved,
         "riyadh_rows_saved": len(business),
-        "account_local_rows_saved": len(local),
+        "account_local_rows_saved": account_local_saved,
         "campaigns_requested": len(campaigns),
         "campaign_limit_reached": campaign_limit_reached,
         "errors_count": len(errors),
@@ -633,9 +669,11 @@ async def build_account_timezone_adsquad_report(
     limit: int,
     active_campaigns_only: bool = False,
     sort_by: str = "orders",
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     current = _aware_now(now())
+    action_report_time = normalize_ads_manager_action_report_time(action_report_time)
     accounts = await _load_selected_accounts(db, user_id)
     if not accounts:
         raise SnapchatNativeSyncError(
@@ -681,7 +719,8 @@ async def build_account_timezone_adsquad_report(
             "entity_type": "ad_squad",
             "date": date_query,
             "date_timezone": timezone_name,
-            "source_mode": ADSQUAD_SOURCE_MODE,
+            "source_mode": adsquad_source_mode(action_report_time),
+            "action_report_time": action_report_time,
         },
         {"_id": 0},
     )
@@ -784,7 +823,7 @@ async def build_account_timezone_adsquad_report(
             "exchange_rate_to_sar": round(rate, 6),
             "result_source": "platform",
             "commercial_results_scope": (
-                "snapchat_ad_squad_conversion_reporting"
+                f"snapchat_ad_squad_{action_report_time}_reporting"
             ),
             **metrics,
         })
@@ -837,6 +876,8 @@ async def build_account_timezone_adsquad_report(
         "selected_account_id": account["account_id"],
         "selected_account": account,
         "result_source": "platform",
+        "action_report_time": action_report_time,
+        "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "supported_result_sources": ["platform"],
         "active_campaigns_only": bool(active_campaigns_only),
         "sort_by": sort_mode,
@@ -854,7 +895,7 @@ async def build_account_timezone_adsquad_report(
                 SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION
             ),
             "entity_collection": SNAPCHAT_ENTITY_COLLECTION,
-            "source_mode": ADSQUAD_SOURCE_MODE,
+            "source_mode": adsquad_source_mode(action_report_time),
             "performance_rows": len(performance_rows),
             "entity_rows": len(entity_rows),
             "ad_squad_entities": len(squads),
@@ -866,8 +907,8 @@ async def build_account_timezone_adsquad_report(
             ),
             "row_limit_reached": row_limit_reached,
             "entity_limit_reached": entity_limit_reached,
-            "commercial_results_source": "snapchat_ads_manager_impression_reporting",
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+            "commercial_results_source": f"snapchat_ads_manager_{action_report_time}_reporting",
+            "action_report_time": action_report_time,
             "salla_results_supported": False,
         },
         "policy": {"mode": "observe_only", "mutations_allowed": False},
@@ -899,6 +940,7 @@ def attach_snapchat_adsquad_routes(
         limit: int = Query(default=25, ge=10, le=100),
         active_campaigns_only: bool = Query(default=True),
         sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),
+        action_report_time: str = Query(default=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME, pattern="^(conversion|impression)$"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
@@ -914,6 +956,7 @@ def attach_snapchat_adsquad_routes(
                 limit=limit,
                 active_campaigns_only=active_campaigns_only,
                 sort_by=sort_by,
+                action_report_time=action_report_time,
             )
         except SnapchatNativeSyncError as exc:
             raise HTTPException(

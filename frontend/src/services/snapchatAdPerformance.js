@@ -84,6 +84,7 @@ export function normalizeSnapchatAdReport(payload = {}) {
         account_timezone: text(value.account_timezone) || null,
         selected_account_id: text(value.selected_account_id) || null,
         result_source: "platform",
+        action_report_time: text(value.action_report_time, "conversion"),
         totals: metrics(value.totals),
         ads: Array.isArray(value.ads)
             ? value.ads.map(normalizeSnapchatAd).filter(Boolean)
@@ -110,6 +111,7 @@ export async function getSnapchatAdPerformance({
     limit = 100,
     activeCampaignsOnly = true,
     sortBy = "orders",
+    actionReportTime = "conversion",
 } = {}) {
     const response = await api.get("/integrations-v2/snapchat_ads/ad-report", {
         params: {
@@ -121,6 +123,9 @@ export async function getSnapchatAdPerformance({
             limit,
             active_campaigns_only: activeCampaignsOnly,
             sort_by: sortBy,
+            action_report_time: ["conversion", "impression"].includes(actionReportTime)
+                ? actionReportTime
+                : "conversion",
         },
     });
     return normalizeSnapchatAdReport(response.data);

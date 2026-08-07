@@ -14,6 +14,7 @@ from integrations_control_center.snapchat_platform_source_integrity import (
     extract_account_total_metrics,
     fetch_account_total_direct_metrics,
     merge_direct_spend_with_campaign_metrics,
+    _mask_pending_platform_commercial_metrics,
     total_snapshot_is_authoritative,
 )
 
@@ -278,6 +279,157 @@ def test_package_lazy_loads_salla_profitability_stack_only_during_router_composi
         assert module in router_body
 
 
+def test_platform_total_collection_partitions_conversion_and_impression():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+    assert 'mezan_snapchat_performance_account_total_v2' in source
+    assert 'action_report_time' in source
+    assert 'for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES' in source
+    assert 'platform_total_source_mode(action_report_time)' in source
+
+
+def test_account_local_collection_partitions_conversion_and_impression():
+    source = Path(
+        "integrations_control_center/snapchat_account_timezone_manager.py"
+    ).read_text(encoding="utf-8")
+    assert 'mezan_snapchat_performance_account_day_v3' in source
+    assert '("action_report_time", 1)' in source
+    assert '("conversion", local_conversion_campaigns, local_conversion_accounts)' in source
+    assert '("impression", local_impression_campaigns, local_impression_accounts)' in source
+    assert 'action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME' in source
+
+
+def test_entity_level_reports_partition_attribution_modes():
+    adsquad = Path(
+        "integrations_control_center/snapchat_adsquad_performance.py"
+    ).read_text(encoding="utf-8")
+    ad = Path(
+        "integrations_control_center/snapchat_ad_performance.py"
+    ).read_text(encoding="utf-8")
+    for source in (adsquad, ad):
+        assert "ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES" in source
+        assert 'pattern="^(conversion|impression)$"' in source
+        assert 'action_report_time=action_report_time' in source
+        assert '"action_report_time": action_report_time' in source
+    assert "adsquad_source_mode(action_report_time)" in adsquad
+    assert "ad_source_mode(action_report_time)" in ad
+
+
+def test_pending_platform_mask_is_explicitly_partitioned_by_action_time():
+    result = {
+        "totals": {"orders": 99, "sales_sar": 999.0},
+        "daily": [],
+        "campaigns": [],
+        "accounts": [],
+    }
+    masked = _mask_pending_platform_commercial_metrics(
+        result,
+        action_report_time="impression",
+    )
+    assert masked["totals"]["orders"] is None
+    assert masked["totals"]["sales_sar"] is None
+    assert (
+        masked["totals"]["commercial_metrics_source"]
+        == "snapchat_impression_total_pending"
+    )
+
+
+def test_ads_manager_uses_28d_click_7d_view_without_changing_riyadh_contract():
+    freshness = Path(
+        "integrations_control_center/snapchat_freshness_impl_v6.py"
+    ).read_text(encoding="utf-8")
+    hourly_refresh = Path(
+        "integrations_control_center/snapchat_account_hourly_refresh.py"
+    ).read_text(encoding="utf-8")
+    manager = Path(
+        "integrations_control_center/snapchat_account_timezone_manager.py"
+    ).read_text(encoding="utf-8")
+    hourly_chart = Path(
+        "integrations_control_center/snapchat_account_hourly_chart.py"
+    ).read_text(encoding="utf-8")
+    platform = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        'ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW: Final[str] = "28_DAY"'
+        in freshness
+    )
+    assert (
+        'ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW: Final[str] = "7_DAY"'
+        in freshness
+    )
+
+    # Dashboard/accounting keeps its existing contract.
+    assert 'VIEW_ATTRIBUTION_WINDOW = "1_DAY"' in hourly_refresh
+
+    # Ads Manager requests use the isolated 7-day view window.
+    assert (
+        "view_attribution_window=ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW"
+        in manager
+    )
+    assert (
+        '"view_attribution_window": '
+        "ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW"
+        in platform
+    )
+
+    # Hourly chart is partitioned by the same selected mode.
+    assert "mezan_snapchat_performance_account_hour_v2" in hourly_chart
+    assert '("action_report_time", 1)' in hourly_chart
+    assert "def account_local_hourly_source_mode(" in hourly_chart
+    assert '"source_mode": account_local_hourly_source_mode(' in hourly_chart
+    assert '"action_report_time": action_report_time' in hourly_chart
+
+    # TOTAL snapshots also partition conversion vs impression.
+    assert "mezan_snapchat_account_total_v2_identity_unique" in platform
+    assert '("action_report_time", 1)' in platform
+
+    # Impression comparison must never become AI-operational truth.
+    assert (
+        "and action_report_time\n"
+        "            == ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME"
+        in platform
+    )
+
+
+def test_ready_platform_metadata_uses_selected_action_report_time():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        '"platform_action_report_time": action_report_time'
+        in source
+    )
+    assert (
+        '"platform_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME'
+        not in source
+    )
+
+
+def test_entity_upserts_preserve_legacy_riyadh_identity():
+    paths = (
+        "integrations_control_center/snapchat_adsquad_performance.py",
+        "integrations_control_center/snapchat_ad_performance.py",
+    )
+
+    for path in paths:
+        source = Path(path).read_text(encoding="utf-8")
+
+        assert (
+            "if collection_name "
+            "== SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION:"
+            in source
+        )
+        assert (
+            'identity["action_report_time"] = action_report_time'
+            in source
+        )
+        assert "update_one(\n        identity," in source
+
+
 def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
     rows = [
         {
@@ -324,11 +476,13 @@ def test_partial_total_response_never_replaces_complete_snapshot():
 
 
 
-def test_ads_manager_entity_levels_use_impression_time():
+def test_ads_manager_defaults_to_conversion_and_supports_impression_comparison():
     freshness = Path(
         "integrations_control_center/snapchat_freshness_impl_v6.py"
     ).read_text(encoding="utf-8")
-    assert 'ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"' in freshness
+    assert 'ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
+    assert 'ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES' in freshness
+    assert '"impression"' in freshness
     assert 'SNAPCHAT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
 
     platform = Path(
@@ -347,10 +501,10 @@ def test_ads_manager_entity_levels_use_impression_time():
         "integrations_control_center/snapchat_ad_performance.py"
     ).read_text(encoding="utf-8")
 
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in platform
-    assert 'action_report_time=ADS_MANAGER_ACTION_REPORT_TIME' in manager
+    assert 'normalize_ads_manager_action_report_time' in platform
+    assert 'action_report_time=action_report_time' in manager
     assert 'kwargs.get("action_report_time")' in hourly_chart
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in adsquad
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in ads
+    assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in adsquad
+    assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in ads
     assert 'if not account_rows or not campaign_rows:' in platform
     assert 'legacy_hour_conversions_hidden_while_pending' in platform
