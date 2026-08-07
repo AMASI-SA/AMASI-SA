@@ -22,19 +22,23 @@ jobs:
           set -euo pipefail
           probe() {
             label="$1"
-            url="$2"
-            code="$(curl --connect-timeout 10 --max-time 20 --silent --show-error --output /dev/null --write-out '%{http_code}' "$url")"
+            method="$2"
+            url="$3"
+            code="$(curl --connect-timeout 10 --max-time 20 --silent --show-error --request "$method" --header 'Content-Type: application/json' --data '{}' --output /dev/null --write-out '%{http_code}' "$url")"
             echo "$label=$code"
             if [ "$code" = "404" ]; then
               echo "MISSING:$label"
               return 44
             fi
             case "$code" in
-              200|401|403|405|422) return 0 ;;
+              200|400|401|403|405|409|422) return 0 ;;
               *) echo "UNEXPECTED:$label:$code"; return 45 ;;
             esac
           }
-          probe REGISTRY_EMPLOYEES 'https://mezansalla.com/api/preparation-file-registry-v1/employees'
-          probe REVIEWED_BATCHES 'https://mezansalla.com/api/reviewed-preparation-batches-v1/batches'
-          probe REGISTRY_FILES 'https://mezansalla.com/api/preparation-file-registry-v1/files'
-          probe MOBILE_EMPLOYEES 'https://mezansalla.com/api/mobile-reviewed-preparation-v1/employees' || true
+          probe REGISTRY_EMPLOYEES GET 'https://mezansalla.com/api/preparation-file-registry-v1/employees'
+          probe SAFE_DRAFT POST 'https://mezansalla.com/api/preparation-file-safety-v1/drafts'
+          probe REVIEWED_BATCHES POST 'https://mezansalla.com/api/reviewed-preparation-batches-v1/batches'
+          probe REGISTRY_FINALIZE POST 'https://mezansalla.com/api/preparation-file-registry-v1/finalize/probe-request'
+          probe WORK_SCHEDULE PUT 'https://mezansalla.com/api/preparation-work-v1/files/probe-file/schedule'
+          probe MY_WORK GET 'https://mezansalla.com/api/preparation-work-v1/my-work'
+          probe MOBILE_EMPLOYEES GET 'https://mezansalla.com/api/mobile-reviewed-preparation-v1/employees' || true
