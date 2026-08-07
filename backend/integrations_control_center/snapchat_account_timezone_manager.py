@@ -493,7 +493,12 @@ async def refresh_snapchat_account_hours_with_account_days(
             raise
         request = fallback
         used_completed_hour_fallback = True
-        business_rows, impression_rows, errors = await fetch_both(request)
+        (
+            business_rows,
+            conversion_rows,
+            impression_rows,
+            errors,
+        ) = await fetch_all_modes(request)
 
     business_campaigns, business_accounts = _campaign_day_buckets(
         business_rows,

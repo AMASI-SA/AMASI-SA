@@ -3,12 +3,16 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import inspect
 
+import pytest
 from fastapi import APIRouter
 
 from integrations_control_center import snapchat_account_hourly_refresh as hourly
 from integrations_control_center import snapchat_account_timezone_manager as manager
 from integrations_control_center.snapchat_account_timezone_retention import (
     install_snapchat_account_timezone_retention,
+)
+from integrations_control_center.snapchat_native_data_common import (
+    SnapchatNativeSyncError,
 )
 
 
@@ -144,3 +148,87 @@ def test_account_timezone_report_is_explicitly_read_only() -> None:
     assert "accounting_write_reached" in source
     assert "qoyod_write_reached" in source
     assert "dashboard_accounting_timezone_unchanged" in source
+
+@pytest.mark.asyncio
+async def test_current_hour_400_retries_all_modes_with_completed_hour(
+    monkeypatch,
+) -> None:
+    live_end = datetime(2026, 8, 7, 20, 0, tzinfo=timezone.utc)
+    completed_end = datetime(2026, 8, 7, 19, 0, tzinfo=timezone.utc)
+    window_calls = []
+
+    def fake_window(
+        start_date,
+        end_date,
+        *,
+        timezone_name,
+        now,
+        include_current_hour,
+    ):
+        window_calls.append(include_current_hour)
+        request_end = live_end if include_current_hour else completed_end
+        return {
+            "business_start": datetime(
+                2026, 8, 7, 0, 0, tzinfo=timezone.utc
+            ),
+            "business_end": request_end,
+            "provider_start": datetime(
+                2026, 8, 7, 0, 0, tzinfo=timezone.utc
+            ),
+            "provider_end": request_end,
+            "account_local_from": date(2026, 8, 7),
+            "account_local_to": date(2026, 8, 7),
+        }
+
+    fetch_calls = []
+
+    async def fake_fetch(*args, **kwargs):
+        fetch_calls.append(dict(kwargs))
+        if len(fetch_calls) == 1:
+            raise SnapchatNativeSyncError(
+                "snapchat_provider_http_400",
+                "Open HOUR window rejected.",
+                status_code=400,
+                retryable=False,
+            )
+        return [], []
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(manager, "_combined_request_window", fake_window)
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    monkeypatch.setattr(manager, "_ensure_account_local_indexes", noop)
+    monkeypatch.setattr(manager, "_upsert_account_local_performance", noop)
+    monkeypatch.setattr(manager, "_upsert_performance", noop)
+
+    class Context:
+        db = object()
+        provider_calls = 0
+
+    result = await manager.refresh_snapchat_account_hours_with_account_days(
+        Context(),
+        object(),
+        "access-token",
+        {
+            "ad_account_id": "account-1",
+            "timezone": "America/Los_Angeles",
+            "currency": "USD",
+        },
+        start_date=date(2026, 8, 7),
+        end_date=date(2026, 8, 7),
+        now=datetime(2026, 8, 7, 19, 30, tzinfo=timezone.utc),
+    )
+
+    assert window_calls == [True, False]
+    assert len(fetch_calls) == 4
+    assert [
+        call["action_report_time"] for call in fetch_calls[1:]
+    ] == ["conversion", "conversion", "impression"]
+    assert all(
+        call["request_end"] == completed_end
+        for call in fetch_calls[1:]
+    )
+    assert result["current_hour_included"] is False
+    assert result["errors_count"] == 0
+
