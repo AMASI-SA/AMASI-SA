@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/integrations/qoyod_manual/**'
       - 'backend/tests/test_qoyod_rounding_lrm.py'
+      - 'backend/tests/test_qoyod_manual_document_rounding_alignment.py'
       - 'backend/tests/test_qoyod_manual_send_plan_b.py'
       - 'backend/tests/test_plan_b_payment_path_fix.py'
       - 'backend/tests/test_pending_cross_tab_dedupe.py'
@@ -29,7 +30,9 @@ jobs:
         run: |
           python -m py_compile \
             backend/integrations/qoyod_manual/__init__.py \
-            backend/integrations/qoyod_manual/rounding_lrm.py
+            backend/integrations/qoyod_manual/rounding_lrm.py \
+            backend/integrations/qoyod_manual/rounding_lrm_exact.py \
+            backend/integrations/qoyod_manual/send.py
       - name: Run rounding and Plan-B regression tests
         env:
           PYTHONPATH: backend
@@ -39,6 +42,7 @@ jobs:
           set +e
           pytest -q --tb=short \
             backend/tests/test_qoyod_rounding_lrm.py \
+            backend/tests/test_qoyod_manual_document_rounding_alignment.py \
             backend/tests/test_qoyod_manual_send_plan_b.py \
             backend/tests/test_plan_b_payment_path_fix.py \
             backend/tests/test_pending_cross_tab_dedupe.py \
