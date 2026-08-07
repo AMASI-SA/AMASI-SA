@@ -106,6 +106,8 @@ async def test_build_hourly_series_returns_full_24_hour_axis():
                 "ad_account_id": "account-1",
                 "date": "2026-08-04",
                 "date_timezone": "Asia/Riyadh",
+                "action_report_time": "conversion",
+                "source_mode": module.account_local_hourly_source_mode("conversion"),
                 "hour_index": 0,
                 "metrics": {
                     "spend": 10_000_000,
@@ -125,6 +127,8 @@ async def test_build_hourly_series_returns_full_24_hour_axis():
                 "ad_account_id": "account-1",
                 "date": "2026-08-04",
                 "date_timezone": "Asia/Riyadh",
+                "action_report_time": "conversion",
+                "source_mode": module.account_local_hourly_source_mode("conversion"),
                 "hour_index": 1,
                 "metrics": {
                     "spend": 5_000_000,
@@ -183,6 +187,8 @@ async def test_salla_hourly_series_uses_exact_campaign_attribution(monkeypatch):
                 "ad_account_id": "account-1",
                 "date": "2026-08-04",
                 "date_timezone": "Asia/Riyadh",
+                "action_report_time": "conversion",
+                "source_mode": module.account_local_hourly_source_mode("conversion"),
                 "hour_index": 9,
                 "metrics": {"spend": 20_000_000},
                 "spend_sar": 20.0,
