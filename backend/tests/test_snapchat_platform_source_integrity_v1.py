@@ -278,6 +278,43 @@ def test_package_lazy_loads_salla_profitability_stack_only_during_router_composi
         assert module in router_body
 
 
+def test_platform_total_collection_partitions_conversion_and_impression():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+    assert 'mezan_snapchat_performance_account_total_v2' in source
+    assert 'action_report_time' in source
+    assert 'for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES' in source
+    assert 'platform_total_source_mode(action_report_time)' in source
+
+
+def test_account_local_collection_partitions_conversion_and_impression():
+    source = Path(
+        "integrations_control_center/snapchat_account_timezone_manager.py"
+    ).read_text(encoding="utf-8")
+    assert 'mezan_snapchat_performance_account_day_v3' in source
+    assert '("action_report_time", 1)' in source
+    assert '("conversion", local_conversion_campaigns, local_conversion_accounts)' in source
+    assert '("impression", local_impression_campaigns, local_impression_accounts)' in source
+    assert 'action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME' in source
+
+
+def test_entity_level_reports_partition_attribution_modes():
+    adsquad = Path(
+        "integrations_control_center/snapchat_adsquad_performance.py"
+    ).read_text(encoding="utf-8")
+    ad = Path(
+        "integrations_control_center/snapchat_ad_performance.py"
+    ).read_text(encoding="utf-8")
+    for source in (adsquad, ad):
+        assert "ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES" in source
+        assert 'pattern="^(conversion|impression)$"' in source
+        assert 'action_report_time=action_report_time' in source
+        assert '"action_report_time": action_report_time' in source
+    assert "adsquad_source_mode(action_report_time)" in adsquad
+    assert "ad_source_mode(action_report_time)" in ad
+
+
 def test_total_aggregation_treats_omitted_zero_metrics_as_zero():
     rows = [
         {
@@ -324,11 +361,13 @@ def test_partial_total_response_never_replaces_complete_snapshot():
 
 
 
-def test_ads_manager_entity_levels_use_impression_time():
+def test_ads_manager_defaults_to_conversion_and_supports_impression_comparison():
     freshness = Path(
         "integrations_control_center/snapchat_freshness_impl_v6.py"
     ).read_text(encoding="utf-8")
-    assert 'ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"' in freshness
+    assert 'ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
+    assert 'ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES' in freshness
+    assert '"impression"' in freshness
     assert 'SNAPCHAT_ACTION_REPORT_TIME: Final[str] = "conversion"' in freshness
 
     platform = Path(
@@ -347,10 +386,10 @@ def test_ads_manager_entity_levels_use_impression_time():
         "integrations_control_center/snapchat_ad_performance.py"
     ).read_text(encoding="utf-8")
 
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in platform
-    assert 'action_report_time=ADS_MANAGER_ACTION_REPORT_TIME' in manager
+    assert 'normalize_ads_manager_action_report_time' in platform
+    assert 'action_report_time=action_report_time' in manager
     assert 'kwargs.get("action_report_time")' in hourly_chart
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in adsquad
-    assert '"action_report_time": ADS_MANAGER_ACTION_REPORT_TIME' in ads
+    assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in adsquad
+    assert '"action_report_time": normalize_ads_manager_action_report_time(action_report_time)' in ads
     assert 'if not account_rows or not campaign_rows:' in platform
     assert 'legacy_hour_conversions_hidden_while_pending' in platform

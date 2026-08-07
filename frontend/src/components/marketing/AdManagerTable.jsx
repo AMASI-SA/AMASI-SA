@@ -210,7 +210,10 @@ export const AD_MANAGER_SORT_OPTIONS = Object.freeze([
     { id: "newest", label: "الأحدث أولًا" },
 ]);
 
-export default function AdManagerTable({ activeCampaignsOnly = true }) {
+export default function AdManagerTable({
+    activeCampaignsOnly = true,
+    actionReportTime = "conversion",
+}) {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -239,6 +242,7 @@ export default function AdManagerTable({ activeCampaignsOnly = true }) {
                 limit: 100,
                 activeCampaignsOnly,
                 sortBy: serverSort,
+                actionReportTime,
             });
             setReport(result);
         } catch (loadError) {
@@ -251,7 +255,7 @@ export default function AdManagerTable({ activeCampaignsOnly = true }) {
         } finally {
             setLoading(false);
         }
-    }, [activeCampaignsOnly, appliedQuery, page, serverSort]);
+    }, [actionReportTime, activeCampaignsOnly, appliedQuery, page, serverSort]);
 
     useEffect(() => {
         load();

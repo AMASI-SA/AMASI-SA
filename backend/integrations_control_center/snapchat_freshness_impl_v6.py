@@ -19,12 +19,31 @@ SNAPCHAT_SOURCE_MODE: Final[str] = (
 FRESHNESS_COLLECTION: Final[str] = "mezan_snapchat_reporting_freshness_v2"
 
 # The Riyadh Dashboard keeps conversion-time semantics. The Ads Manager
-# workspace uses impression-time attribution so its date-filtered Purchases and
-# Purchase Value match Snapchat Ads Manager.
-ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = "impression"
-ADS_MANAGER_SOURCE_MODE: Final[str] = (
-    "snapchat_ads_manager_account_timezone_impression_v7"
+# workspace defaults to Snapchat's recommended conversion-time view, while
+# retaining impression-time as an explicit comparison mode.
+ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME: Final[str] = "conversion"
+ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES: Final[tuple[str, str]] = (
+    "conversion",
+    "impression",
 )
+ADS_MANAGER_ACTION_REPORT_TIME: Final[str] = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+ADS_MANAGER_SOURCE_MODE: Final[str] = (
+    "snapchat_ads_manager_account_timezone_conversion_v8"
+)
+
+
+def normalize_ads_manager_action_report_time(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return (
+        normalized
+        if normalized in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        else ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+    )
+
+
+def ads_manager_source_mode(action_report_time: Any) -> str:
+    normalized = normalize_ads_manager_action_report_time(action_report_time)
+    return f"snapchat_ads_manager_account_timezone_{normalized}_v8"
 
 
 def _parse_provider_time(value: Any) -> datetime | None:

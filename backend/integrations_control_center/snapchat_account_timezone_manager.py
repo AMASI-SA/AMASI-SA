@@ -21,7 +21,10 @@ from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_active_campaign_filtering import is_active_provider_status
 from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
-    ADS_MANAGER_SOURCE_MODE,
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+    ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES,
+    ads_manager_source_mode,
+    normalize_ads_manager_action_report_time,
 )
 from .snapchat_campaign_result_source_routes import (
     RESULT_SOURCE_PLATFORM,
@@ -63,10 +66,16 @@ from .snapchat_native_performance_sync import (
 )
 
 SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION = (
-    "mezan_snapchat_performance_account_day_v2"
+    "mezan_snapchat_performance_account_day_v3"
 )
-ACCOUNT_LOCAL_SOURCE_MODE = (
-    f"{ADS_MANAGER_SOURCE_MODE}:account_day_v2"
+
+
+def account_local_source_mode(action_report_time: Any) -> str:
+    return f"{ads_manager_source_mode(action_report_time)}:account_day_v3"
+
+
+ACCOUNT_LOCAL_SOURCE_MODE = account_local_source_mode(
+    ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
 MAX_REPORT_ROWS = 100_000
 MAX_ENTITY_ROWS = 50_000
@@ -260,13 +269,14 @@ async def _ensure_account_local_indexes(db: Any) -> None:
             ("external_id", 1),
             ("date", 1),
             ("attribution_model", 1),
+            ("action_report_time", 1),
         ],
         unique=True,
-        name="mezan_snapchat_account_day_v2_identity_unique",
+        name="mezan_snapchat_account_day_v3_identity_unique",
     )
     await collection.create_index(
         [("user_id", 1), ("ad_account_id", 1), ("date", -1), ("entity_type", 1)],
-        name="mezan_snapchat_account_day_v2_date",
+        name="mezan_snapchat_account_day_v3_date",
     )
 
 
@@ -281,6 +291,7 @@ async def _upsert_account_local_performance(
     metrics: dict[str, Any],
     provider_start: Any,
     provider_end: Any,
+    action_report_time: str,
 ) -> None:
     currency = _text(account.get("currency")).upper()
     spend_micro = _as_number(metrics.get("spend"))
@@ -320,11 +331,12 @@ async def _upsert_account_local_performance(
         "conversion_reporting": {
             "metric": "conversion_purchases",
             "source_types": [CONVERSION_SOURCE_TYPES],
-            "action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+            "action_report_time": action_report_time,
             "swipe_up_attribution_window": SWIPE_ATTRIBUTION_WINDOW,
             "view_attribution_window": VIEW_ATTRIBUTION_WINDOW,
         },
-        "source_mode": ACCOUNT_LOCAL_SOURCE_MODE,
+        "action_report_time": action_report_time,
+        "source_mode": account_local_source_mode(action_report_time),
         "accounting_eligible": False,
         "provider_window_start": provider_start,
         "provider_window_end": provider_end,
@@ -346,6 +358,7 @@ async def _upsert_account_local_performance(
             "external_id": external_id,
             "date": date_string,
             "attribution_model": ATTRIBUTION_MODEL,
+            "action_report_time": action_report_time,
         },
         {"$set": document, "$setOnInsert": {"created_at": now_iso}},
         upsert=True,
@@ -392,7 +405,8 @@ async def refresh_snapchat_account_hours_with_account_days(
             "errors_count": 0,
             "errors": [],
             "provider_calls": context.provider_calls,
-            "source_mode": ACCOUNT_LOCAL_SOURCE_MODE,
+            "source_mode": account_local_source_mode(action_report_time),
+            "action_report_time": action_report_time,
             "account_timezone": timezone_name,
             "business_timezone": BUSINESS_TIMEZONE,
             "source_only": True,
@@ -412,23 +426,23 @@ async def refresh_snapchat_account_hours_with_account_days(
             request_end=window["provider_end"],
             action_report_time=hourly.ACTION_REPORT_TIME,
         )
-        account_local_rows, account_local_errors = await hourly._fetch_account_hours(
+        impression_rows, impression_errors = await hourly._fetch_account_hours(
             context,
             client,
             access_token,
             account_id=account_id,
             request_start=window["provider_start"],
             request_end=window["provider_end"],
-            action_report_time=ADS_MANAGER_ACTION_REPORT_TIME,
+            action_report_time="impression",
         )
         return (
             business_rows,
-            account_local_rows,
-            [*business_errors, *account_local_errors],
+            impression_rows,
+            [*business_errors, *impression_errors],
         )
 
     try:
-        business_rows, account_local_rows, errors = await fetch_both(request)
+        business_rows, impression_rows, errors = await fetch_both(request)
     except SnapchatNativeSyncError as exc:
         fallback = _combined_request_window(
             start_date,
@@ -446,7 +460,7 @@ async def refresh_snapchat_account_hours_with_account_days(
             raise
         request = fallback
         used_completed_hour_fallback = True
-        business_rows, account_local_rows, errors = await fetch_both(request)
+        business_rows, impression_rows, errors = await fetch_both(request)
 
     business_campaigns, business_accounts = _campaign_day_buckets(
         business_rows,
@@ -454,8 +468,14 @@ async def refresh_snapchat_account_hours_with_account_days(
         start_date=start_date,
         end_date=end_date,
     )
-    local_campaigns, local_accounts = _campaign_day_buckets(
-        account_local_rows,
+    local_conversion_campaigns, local_conversion_accounts = _campaign_day_buckets(
+        business_rows,
+        timezone_name=timezone_name,
+        start_date=request["account_local_from"],
+        end_date=request["account_local_to"],
+    )
+    local_impression_campaigns, local_impression_accounts = _campaign_day_buckets(
+        impression_rows,
         timezone_name=timezone_name,
         start_date=request["account_local_from"],
         end_date=request["account_local_to"],
@@ -506,34 +526,41 @@ async def refresh_snapchat_account_hours_with_account_days(
         cursor += timedelta(days=1)
 
     local_rows_saved = 0
-    for (campaign_id, date_string), bucket in sorted(local_campaigns.items()):
-        await _upsert_account_local_performance(
-            context,
-            account=account,
-            entity_type="campaign",
-            external_id=campaign_id,
-            date_string=date_string,
-            timezone_name=timezone_name,
-            metrics=_finalize_bucket(bucket),
-            provider_start=bucket.get("provider_start"),
-            provider_end=bucket.get("provider_end"),
-        )
-        saved += 1
-        local_rows_saved += 1
-    for date_string, bucket in sorted(local_accounts.items()):
-        await _upsert_account_local_performance(
-            context,
-            account=account,
-            entity_type="ad_account",
-            external_id=account_id,
-            date_string=date_string,
-            timezone_name=timezone_name,
-            metrics=_finalize_bucket(bucket),
-            provider_start=bucket.get("provider_start"),
-            provider_end=bucket.get("provider_end"),
-        )
-        saved += 1
-        local_rows_saved += 1
+    local_sets = (
+        ("conversion", local_conversion_campaigns, local_conversion_accounts),
+        ("impression", local_impression_campaigns, local_impression_accounts),
+    )
+    for action_report_time, local_campaigns, local_accounts in local_sets:
+        for (campaign_id, date_string), bucket in sorted(local_campaigns.items()):
+            await _upsert_account_local_performance(
+                context,
+                account=account,
+                entity_type="campaign",
+                external_id=campaign_id,
+                date_string=date_string,
+                timezone_name=timezone_name,
+                metrics=_finalize_bucket(bucket),
+                provider_start=bucket.get("provider_start"),
+                provider_end=bucket.get("provider_end"),
+                action_report_time=action_report_time,
+            )
+            saved += 1
+            local_rows_saved += 1
+        for date_string, bucket in sorted(local_accounts.items()):
+            await _upsert_account_local_performance(
+                context,
+                account=account,
+                entity_type="ad_account",
+                external_id=account_id,
+                date_string=date_string,
+                timezone_name=timezone_name,
+                metrics=_finalize_bucket(bucket),
+                provider_start=bucket.get("provider_start"),
+                provider_end=bucket.get("provider_end"),
+                action_report_time=action_report_time,
+            )
+            saved += 1
+            local_rows_saved += 1
 
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
@@ -555,7 +582,8 @@ async def refresh_snapchat_account_hours_with_account_days(
         "account_local_date_to": request["account_local_to"].isoformat(),
         "current_hour_included": not used_completed_hour_fallback,
         "business_action_report_time": hourly.ACTION_REPORT_TIME,
-        "account_local_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+        "account_local_action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+        "account_local_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -780,10 +808,12 @@ async def build_account_timezone_campaign_report(
     page: int,
     limit: int,
     result_source: str,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
     active_campaigns_only: bool = False,
     now: Callable[[], datetime] = _utcnow,
 ) -> dict[str, Any]:
     current = _aware_now(now())
+    action_report_time = normalize_ads_manager_action_report_time(action_report_time)
     selected_accounts = await _load_selected_accounts(db, user_id)
     if not selected_accounts:
         raise SnapchatNativeSyncError(
@@ -1067,6 +1097,8 @@ async def build_account_timezone_campaign_report(
         "selected_account": selected_meta,
         "available_accounts": public_accounts,
         "result_source": result_source,
+        "action_report_time": action_report_time,
+        "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "supported_result_sources": list(SUPPORTED_RESULT_SOURCES),
         "active_campaigns_only": bool(active_campaigns_only),
         "totals": totals,
@@ -1101,9 +1133,9 @@ async def build_account_timezone_campaign_report(
             "commercial_results_source": (
                 "unified_orders:salla_exact_account_campaign_match"
                 if result_source == RESULT_SOURCE_SALLA
-                else "snapchat_ads_manager_impression_reporting"
+                else f"snapchat_ads_manager_{action_report_time}_reporting"
             ),
-            "account_local_action_report_time": ADS_MANAGER_ACTION_REPORT_TIME,
+            "account_local_action_report_time": action_report_time,
             "salla_attribution": coverage,
         },
         "ai_readiness": {
@@ -1114,7 +1146,13 @@ async def build_account_timezone_campaign_report(
             "orders_ready": totals.get("orders") is not None,
             "sales_ready": totals.get("sales_sar") is not None,
             "ratios_ready": any(totals.get(key) is not None for key in ("roas", "cpa_sar", "cpc_sar", "cpm_sar", "ctr_pct")),
-            "ai_analysis_ready": report_ready and campaign_details_ready,
+            "ai_analysis_ready": (
+                report_ready
+                and campaign_details_ready
+                and action_report_time == ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
+            ),
+            "ai_action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+            "selected_action_report_time": action_report_time,
             "required_lifecycle": [
                 "proposal", "preview", "approval", "execution",
                 "verification", "audit", "rollback",
@@ -1125,6 +1163,8 @@ async def build_account_timezone_campaign_report(
             "mode": "observe_only",
             "mutations_allowed": False,
             "dashboard_accounting_timezone_unchanged": BUSINESS_TIMEZONE,
+            "default_action_report_time": ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+            "impression_time_comparison_only": True,
         },
         "source_only": True,
         "provider_read_reached": False,
@@ -1153,6 +1193,7 @@ def attach_snapchat_account_timezone_campaign_routes(
         page: int = Query(default=1, ge=1),
         limit: int = Query(default=25, ge=10, le=100),
         result_source: str = Query(default=RESULT_SOURCE_SALLA, pattern="^(salla|platform)$"),
+        action_report_time: str = Query(default=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME, pattern="^(conversion|impression)$"),
         active_campaigns_only: bool = Query(default=True),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
@@ -1168,6 +1209,7 @@ def attach_snapchat_account_timezone_campaign_routes(
                 page=page,
                 limit=limit,
                 result_source=result_source,
+                action_report_time=action_report_time,
                 active_campaigns_only=active_campaigns_only,
             )
         except SnapchatNativeSyncError as exc:
