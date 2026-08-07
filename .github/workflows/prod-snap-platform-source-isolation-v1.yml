@@ -54,8 +54,9 @@ jobs:
         run: |
           FILE=backend/integrations_control_center/snapchat_platform_source_integrity.py
           grep -q 'REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})' "$FILE"
+          grep -q 'DIRECT_ACCOUNT_TOTAL_FIELDS = STAT_FIELDS' "$FILE"
           grep -q 'merge_direct_spend_with_campaign_metrics' "$FILE"
-          grep -q 'complete_campaign_breakdown_sum' "$FILE"
+          grep -q 'account_commercial_totals_source": "direct_ad_account_total"' "$FILE"
           grep -q 'ADS_MANAGER_ACTION_REPORT_TIME' "$FILE"
           grep -q 'legacy_hour_conversions_hidden_while_pending' "$FILE"
 
