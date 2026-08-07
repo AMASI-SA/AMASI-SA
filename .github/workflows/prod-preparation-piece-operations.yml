@@ -31,6 +31,8 @@ on:
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx"
+      - "frontend/src/components/fulfillment/supplierDispatchPrint.js"
+      - "frontend/src/components/fulfillment/supplierDispatchPrint.test.js"
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - ".github/workflows/prod-preparation-piece-operations.yml"
@@ -128,6 +130,7 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/fulfillment/PreparationWorkDashboard.test.jsx
           src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+          src/components/fulfillment/supplierDispatchPrint.test.js
           src/reviewPreparationFileScheduleSync.test.js
           src/preparationFileFailureSafetyClient.test.js
           src/reviewSpecEditVisibilitySafety.test.js

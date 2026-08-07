@@ -73,14 +73,14 @@ test("file cannot start until every expected piece is materialized", () => {
 });
 
 
-test("dashboard exposes my work and employee management windows", () => {
+test("dashboard starts with my products inside the in-progress stage", () => {
     const markup = renderToStaticMarkup(<PreparationWorkDashboard />);
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
-    expect(markup).toContain("ملفاتي الجديدة");
-    expect(markup).toContain("حسابات الموردين");
+    expect(markup).toContain("إدارة منتجاتي");
     expect(markup).toContain("غير مسند");
-    expect(markup).toContain("متابعة القطع");
+    expect(markup).toContain("تفاصيل القطع");
     expect(markup).toContain("إدارة منتجات الموظفين");
-    expect(markup).toContain("جارٍ تحميل الملفات الجديدة");
+    expect(markup).toContain("جارٍ تحميل إدارة منتجاتي");
+    expect(markup).toContain("تبدأ هذه المرحلة من «إدارة منتجاتي»");
 });

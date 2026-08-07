@@ -91,7 +91,15 @@ class CreateSupplierDispatchRequest(_SelectionsRequest):
 
 
 class RejectPreparationPiecesRequest(_SelectionsRequest):
-    reason: str | None = Field(default=None, max_length=1000)
+    reason: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        reason = _text(value)
+        if len(reason) < 3:
+            raise ValueError("preparation_rejection_reason_required")
+        return reason
 
 
 class ReassignPreparationPiecesRequest(BaseModel):
@@ -249,6 +257,29 @@ def supplier_dispatch_blocker(
     }
 
 
+def supplier_dispatch_lines(
+    pieces: list[dict[str, Any]],
+    supplier: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Print only the unfinished services offered by this supplier."""
+    supplier_service_ids = {
+        _text(row.get("service_id"))
+        for row in supplier.get("service_links") or []
+        if _text(row.get("service_id"))
+    }
+    lines = _group_piece_products(pieces)
+    for line in lines:
+        line["services"] = [
+            service
+            for service in line.get("services") or []
+            if (
+                _text(service.get("service_id")) in supplier_service_ids
+                and _text(service.get("status")) != "completed"
+            )
+        ]
+    return lines
+
+
 def supplier_receiving_dispatch_blocker(
     piece: dict[str, Any],
     supplier_id: Any,
@@ -305,7 +336,11 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "sent_quantity": 0,
             "ready_quantity": 0,
             "received_quantity": 0,
+            "order_numbers": [],
         })
+        order_number = _text(piece.get("order_number"))
+        if order_number and order_number not in row["order_numbers"]:
+            row["order_numbers"].append(order_number)
         row["quantity"] += 1
         dispatch_status = _text(piece.get("supplier_dispatch_status"))
         status = _text(piece.get("status"))
@@ -317,6 +352,8 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row["ready_quantity"] += 1
         if dispatch_status == DISPATCH_STATUS_RECEIVED or status == PIECE_STATUS_RECEIVED:
             row["received_quantity"] += 1
+    for row in grouped.values():
+        row["order_numbers"].sort()
     return sorted(
         grouped.values(),
         key=lambda row: (_normalized(row.get("product_name")), row["group_key"]),
@@ -344,6 +381,57 @@ def _file_view(
         "received_quantity": sum(row["received_quantity"] for row in products),
         "is_new": any(row["available_quantity"] > 0 for row in products),
         "products": products,
+    }
+
+
+def employee_workspace_summary(
+    files: list[dict[str, Any]],
+    pieces: list[dict[str, Any]],
+) -> dict[str, int]:
+    waiting_review_products = sum(
+        1
+        for file_row in files
+        for product in file_row.get("products") or []
+        if int(product.get("available_quantity") or 0) > 0
+    )
+    in_progress_products = sum(
+        1
+        for file_row in files
+        for product in file_row.get("products") or []
+        if (
+            int(product.get("sent_quantity") or 0)
+            + int(product.get("ready_quantity") or 0)
+        ) > 0
+    )
+    received_awaiting_handoff = [
+        row
+        for row in pieces
+        if (
+            (
+                _text(row.get("supplier_dispatch_status")) == DISPATCH_STATUS_RECEIVED
+                or _text(row.get("status")) == PIECE_STATUS_RECEIVED
+            )
+            and not _text(row.get("branch_handoff_at"))
+        )
+    ]
+    received_order_numbers = {
+        _text(row.get("order_number"))
+        for row in received_awaiting_handoff
+        if _text(row.get("order_number"))
+    }
+    return {
+        "new_files": sum(1 for row in files if row["is_new"]),
+        "available_to_send": sum(row["available_quantity"] for row in files),
+        "sent": sum(row["sent_quantity"] for row in files),
+        "ready": sum(row["ready_quantity"] for row in files),
+        "received": sum(row["received_quantity"] for row in files),
+        "waiting_review_products": waiting_review_products,
+        "in_progress_products": in_progress_products,
+        "received_orders_awaiting_branch_handoff": len(received_order_numbers),
+        "received_pieces_awaiting_branch_handoff": len(received_awaiting_handoff),
+        "total_assigned_pieces": sum(
+            1 for row in pieces if not _text(row.get("branch_handoff_at"))
+        ),
     }
 
 
@@ -439,6 +527,7 @@ async def _employee_workspace(
         ),
         reverse=True,
     )
+    summary = employee_workspace_summary(files, pieces)
     files = files[:limit]
 
     supplier_rows: dict[str, dict[str, Any]] = {}
@@ -502,13 +591,7 @@ async def _employee_workspace(
 
     return {
         "employee_id": employee_id,
-        "summary": {
-            "new_files": sum(1 for row in files if row["is_new"]),
-            "available_to_send": sum(row["available_quantity"] for row in files),
-            "sent": sum(row["sent_quantity"] for row in files),
-            "ready": sum(row["ready_quantity"] for row in files),
-            "received": sum(row["received_quantity"] for row in files),
-        },
+        "summary": summary,
         "files": files,
         "supplier_accounts": sorted(
             supplier_rows.values(),
@@ -738,7 +821,7 @@ def make_preparation_supplier_dispatch_router(
         dispatch_id = f"sdv1_{uuid.uuid4().hex}"
         now = _now()
         piece_ids = [_text(row.get("piece_id")) for row in selected]
-        lines = _group_piece_products(selected)
+        lines = supplier_dispatch_lines(selected, supplier)
         shell = {
             "id": dispatch_id,
             "user_id": user_id,
@@ -910,7 +993,7 @@ def make_preparation_supplier_dispatch_router(
         piece_ids = [_text(row.get("piece_id")) for row in selected]
         now = _now()
         rejection_id = f"reject_{uuid.uuid4().hex}"
-        reason = _text(payload.reason) or "ليس من اختصاص الموظف"
+        reason = _text(payload.reason)
         result = await db[PIECES].update_many(
             {
                 "user_id": user_id,
@@ -1204,9 +1287,11 @@ __all__ = [
     "RejectPreparationPiecesRequest",
     "ReassignPreparationPiecesRequest",
     "ensure_supplier_dispatch_indexes",
+    "employee_workspace_summary",
     "make_preparation_supplier_dispatch_router",
     "piece_is_available_for_supplier_dispatch",
     "plan_piece_selections",
     "supplier_dispatch_blocker",
+    "supplier_dispatch_lines",
     "supplier_receiving_dispatch_blocker",
 ]
