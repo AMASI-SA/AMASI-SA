@@ -12,6 +12,7 @@ from integrations_control_center.snapchat_account_hourly_refresh import (
 from integrations_control_center.snapchat_ads_manager_attribution import (
     ADS_MANAGER_ACTION_REPORT_TIME,
     ADS_MANAGER_SOURCE_MODE,
+    SNAPCHAT_SOURCE_MODE,
     _account_id_from_stats_url,
     extract_provider_freshness,
     install_snapchat_ads_manager_attribution,
@@ -71,12 +72,13 @@ def test_installer_keeps_request_storage_and_response_metadata_consistent():
     assert snapchat_account_hourly_refresh.ACTION_REPORT_TIME == "conversion"
     assert snapchat_native_performance_sync.ACTION_REPORT_TIME == "conversion"
     assert snapchat_dashboard_summary_routes.ACTION_REPORT_TIME == "conversion"
-    assert snapchat_account_hourly_refresh.ACCOUNT_REFRESH_SOURCE_MODE != (
-        ADS_MANAGER_SOURCE_MODE
+    assert snapchat_account_hourly_refresh.ACCOUNT_REFRESH_SOURCE_MODE == (
+        SNAPCHAT_SOURCE_MODE
     )
-    assert snapchat_account_hourly_refresh.ACCOUNT_REFRESH_SOURCE_MODE.endswith(
-        "riyadh_refresh_v3"
+    assert SNAPCHAT_SOURCE_MODE.endswith(
+        "conversion_freshness_nested_v6"
     )
+    assert SNAPCHAT_SOURCE_MODE != ADS_MANAGER_SOURCE_MODE
     assert ADS_MANAGER_SOURCE_MODE.endswith(
         "account_timezone_conversion_v8"
     )
