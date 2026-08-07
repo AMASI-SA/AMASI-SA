@@ -577,6 +577,321 @@ def _assert_sar_currency(canon: dict) -> str:
     return currency
 
 
+_SUPPORTED_GCC_FOREIGN_CURRENCIES = frozenset({
+    "AED", "QAR", "KWD", "OMR", "BHD",
+})
+_SUPPORTED_SALLA_TAX_PERCENTAGES = frozenset({
+    Decimal("0.00"), Decimal("15.00"),
+})
+
+
+def _currency_code(value: Any, default: str = "SAR") -> str:
+    if isinstance(value, dict):
+        value = (
+            value.get("code")
+            or value.get("currency")
+            or value.get("value")
+        )
+    return str(value or default).strip().upper()
+
+
+def _money_decimal(value: Any) -> Optional[Decimal]:
+    """Read a Salla money node without silently turning bad data into zero."""
+    node = value
+    for _ in range(3):
+        if not isinstance(node, dict):
+            break
+        if "amount" not in node:
+            return None
+        node = node.get("amount")
+    if node in (None, "") or isinstance(node, bool):
+        return None
+    try:
+        result = Decimal(str(node))
+    except Exception:
+        return None
+    return result if result.is_finite() else None
+
+
+def _iter_order_payload_nodes(value: Any):
+    """Yield likely order dictionaries from stored webhook/API envelopes."""
+    queue: list[tuple[Any, int]] = [(value, 0)]
+    seen: set[int] = set()
+    while queue:
+        node, depth = queue.pop(0)
+        if not isinstance(node, dict) or depth > 5 or id(node) in seen:
+            continue
+        seen.add(id(node))
+        yield node
+        for key in ("data", "order", "payload", "body", "event_data"):
+            child = node.get(key)
+            if isinstance(child, dict):
+                queue.append((child, depth + 1))
+
+
+def _find_salla_accounting_node(row: dict, order_number: str) -> Optional[dict]:
+    """Find the richest stored Salla order node for FX/tax proof."""
+    best: Optional[dict] = None
+    best_score = -1
+    for source in (
+        (row or {}).get("raw_payload"),
+        (row or {}).get("adapted_payload"),
+    ):
+        for node in _iter_order_payload_nodes(source):
+            reference = (
+                node.get("reference_id")
+                or node.get("order_number")
+                or node.get("reference")
+            )
+            if (
+                reference not in (None, "")
+                and str(reference) != str(order_number)
+            ):
+                continue
+            amounts = node.get("amounts")
+            score = (
+                (4 if isinstance(amounts, dict) else 0)
+                + (4 if isinstance(node.get("exchange_rate"), dict) else 0)
+                + (3 if str(reference or "") == str(order_number) else 0)
+                + (1 if node.get("items") else 0)
+            )
+            if score > best_score:
+                best = node
+                best_score = score
+    return best
+
+
+def _explicit_salla_tax_percent(order_node: Optional[dict]) -> Optional[Decimal]:
+    amounts = (order_node or {}).get("amounts")
+    tax = amounts.get("tax") if isinstance(amounts, dict) else None
+    percent = tax.get("percent") if isinstance(tax, dict) else None
+    if percent in (None, ""):
+        return None
+    try:
+        result = Decimal(str(percent)).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP)
+    except Exception:
+        return None
+    return result if result.is_finite() and result >= 0 else None
+
+
+def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
+    """Create a SAR invoice view backed by Salla's order FX and tax."""
+    result = dict(canon or {})
+    original_currency = _currency_code(
+        result.get("currency") or result.get("currency_code"))
+    order_number = str(
+        result.get("order_number") or result.get("order_id") or "")
+    order_node = _find_salla_accounting_node(row or {}, order_number)
+    tax_percent = _explicit_salla_tax_percent(order_node)
+
+    if original_currency == "SAR":
+        if tax_percent is not None:
+            result["_qoyod_tax_percent"] = float(tax_percent)
+        return result
+
+    if original_currency not in _SUPPORTED_GCC_FOREIGN_CURRENCIES:
+        raise ManualSendRefused(
+            "unsupported_invoice_currency",
+            f"عملة الطلب {original_currency} غير مدعومة للتحويل الآمن إلى الريال.",
+            {
+                "currency": original_currency,
+                "supported_foreign_currencies": sorted(
+                    _SUPPORTED_GCC_FOREIGN_CURRENCIES),
+                "qoyod_write_performed": False,
+            },
+        )
+    if not order_node:
+        raise ManualSendRefused(
+            "foreign_currency_accounting_facts_missing",
+            "لا توجد حمولة سلة أصلية تثبت سعر الصرف والضريبة؛ عُزل الطلب.",
+            {
+                "currency": original_currency,
+                "qoyod_write_performed": False,
+            },
+        )
+
+    exchange = order_node.get("exchange_rate")
+    rate = (
+        _money_decimal(exchange.get("rate"))
+        if isinstance(exchange, dict) else None
+    )
+    base_currency = _currency_code(
+        exchange.get("base_currency") if isinstance(exchange, dict) else None,
+        default="",
+    )
+    exchange_currency = _currency_code(
+        exchange.get("exchange_currency")
+        if isinstance(exchange, dict) else None,
+        default="",
+    )
+    if (
+        rate is None
+        or rate <= 0
+        or base_currency != "SAR"
+        or exchange_currency != original_currency
+    ):
+        raise ManualSendRefused(
+            "foreign_currency_exchange_rate_unverified",
+            "سعر صرف سلة غير مكتمل أو لا يحوّل عملة الطلب إلى SAR؛ عُزل الطلب.",
+            {
+                "currency": original_currency,
+                "base_currency": base_currency,
+                "exchange_currency": exchange_currency,
+                "rate": str(rate) if rate is not None else None,
+                "qoyod_write_performed": False,
+            },
+        )
+    if tax_percent not in _SUPPORTED_SALLA_TAX_PERCENTAGES:
+        raise ManualSendRefused(
+            "foreign_currency_tax_unverified",
+            "نسبة ضريبة الطلب الأجنبية غير مثبتة صراحةً في سلة كـ 0% أو 15%.",
+            {
+                "currency": original_currency,
+                "tax_percent": (
+                    str(tax_percent) if tax_percent is not None else None),
+                "qoyod_write_performed": False,
+            },
+        )
+
+    amounts = order_node.get("amounts") or {}
+    original_total = _money_decimal(result.get("total_amount"))
+    if original_total is None or original_total <= 0:
+        original_total = _money_decimal(amounts.get("total"))
+    if original_total is None or original_total <= 0:
+        raise ManualSendRefused(
+            "foreign_currency_total_unverified",
+            "إجمالي الطلب الأجنبي غير صالح؛ عُزل الطلب قبل الإرسال.",
+            {
+                "currency": original_currency,
+                "qoyod_write_performed": False,
+            },
+        )
+
+    def converted(value: Any) -> Optional[float]:
+        amount = _money_decimal(value)
+        if amount is None:
+            return None
+        return float((amount * rate).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP))
+
+    source_amounts = {
+        "total_amount": result.get("total_amount") or amounts.get("total"),
+        "subtotal": result.get("subtotal") or amounts.get("sub_total")
+                    or amounts.get("subtotal"),
+        "tax_amount": result.get("tax_amount")
+                      if result.get("tax_amount") not in (None, "")
+                      else amounts.get("tax"),
+        "shipping_amount": (
+            amounts.get("shipping_cost")
+            or amounts.get("shipping")
+            or result.get("shipping_amount")
+        ),
+        "discount_amount": result.get("discount_amount")
+                           or amounts.get("discount"),
+        "cod_fee_amount": result.get("cod_fee_amount")
+                          or amounts.get("cash_on_delivery"),
+    }
+    for key, value in source_amounts.items():
+        amount = converted(value)
+        if amount is not None:
+            result[key] = amount
+
+    converted_items: list[dict] = []
+    for item in result.get("items") or []:
+        copied = dict(item or {})
+        for key in ("unit_price", "tax_amount", "discount_amount", "total"):
+            amount = converted(copied.get(key))
+            if amount is not None:
+                copied[key] = amount
+        converted_items.append(copied)
+    result["items"] = converted_items
+    result["currency"] = "SAR"
+    result["currency_code"] = "SAR"
+    result["_qoyod_tax_percent"] = float(tax_percent)
+    result["_qoyod_fx"] = {
+        "source": "salla_order.exchange_rate",
+        "original_currency": original_currency,
+        "original_total": float(original_total),
+        "rate": str(rate),
+        "base_currency": "SAR",
+        "converted_total": converted(original_total),
+        "tax_percent": float(tax_percent),
+    }
+    return result
+
+
+_FOREIGN_ACCOUNTING_FACT_ERRORS = frozenset({
+    "foreign_currency_accounting_facts_missing",
+    "foreign_currency_exchange_rate_unverified",
+    "foreign_currency_tax_unverified",
+})
+
+
+async def _prepare_sar_invoice_canon_from_inbox(
+    db, *, canon: dict, representative_row: dict,
+    user_id: str, order_number: str,
+) -> dict:
+    """Use the newest row, then older traces, for immutable Salla FX/tax.
+
+    Status-only webhooks can become the representative newest row while the
+    earlier order-created trace still holds Salla's exchange rate and explicit
+    tax percent.  Foreign orders stay blocked unless one stored trace proves
+    every required accounting fact; no configured or live-market rate is used.
+    """
+    try:
+        return _prepare_sar_invoice_canon(
+            canon=canon, row=representative_row)
+    except ManualSendRefused as first_error:
+        currency = _currency_code(
+            (canon or {}).get("currency")
+            or (canon or {}).get("currency_code")
+        )
+        if (
+            currency not in _SUPPORTED_GCC_FOREIGN_CURRENCIES
+            or first_error.code not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+        ):
+            raise
+
+        try:
+            cursor = db.integration_inbox.find(
+                {
+                    "user_id": user_id,
+                    "salla_order_number": str(order_number),
+                },
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "received_at": 1,
+                    "raw_payload": 1,
+                    "adapted_payload": 1,
+                },
+            ).sort([("received_at", -1)]).limit(100)
+            async for candidate in cursor:
+                if (
+                    representative_row.get("id")
+                    and candidate.get("id") == representative_row.get("id")
+                ):
+                    continue
+                try:
+                    return _prepare_sar_invoice_canon(
+                        canon=canon, row=candidate)
+                except ManualSendRefused as candidate_error:
+                    if (
+                        candidate_error.code
+                        not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+                    ):
+                        raise
+        except ManualSendRefused:
+            raise
+        except Exception:
+            logger.exception(
+                "failed to scan historical Salla traces for order=%s",
+                order_number,
+            )
+
+        raise first_error
+
 def _to_int(v: Any) -> Optional[int]:
     """Coerce a Qoyod id to a positive int. Returns None if the value
     is missing, non-numeric, or matches the forbidden DRY/PREVIEW
@@ -996,8 +1311,13 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     line and produce a plain `totals_mismatch` — those are real
     configuration errors, not rounding.
     """
+    explicit_tax_percent = canon.get("_qoyod_tax_percent")
     try:
-        tax_percent = float(settings.get("qoyod_tax_percent") or 15)
+        tax_percent = float(
+            explicit_tax_percent
+            if explicit_tax_percent is not None
+            else (settings.get("qoyod_tax_percent") or 15)
+        )
     except (TypeError, ValueError):
         tax_percent = 15.0
     tax_percent = _q2(tax_percent)
@@ -1299,6 +1619,7 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     breakdown = {
         "tax_percent":            tax_percent,
         "tax_factor":             tax_factor,
+        "currency_conversion":    canon.get("_qoyod_fx"),
         "salla_declared_total":   salla_total,
         "items":                  breakdown_items,
         "shipping":               shipping_breakdown,
@@ -1322,11 +1643,21 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
                             or canon.get("order_id"),
             "status":       "Approved",
             "payment_method": "10",
-            "currency_code": canon.get("currency") or "SAR",
+            "currency_code": "SAR",
             "line_items":   lines,
-            "notes":        f"Mezan Plan-B Manual · order "
-                            f"{canon.get('order_number') or ''} · "
-                            f"send_date={send_date_iso}",
+            "notes":        (
+                f"Mezan Plan-B Manual · order "
+                f"{canon.get('order_number') or ''} · "
+                f"send_date={send_date_iso}"
+                + (
+                    f" · original={canon['_qoyod_fx']['original_total']} "
+                    f"{canon['_qoyod_fx']['original_currency']}"
+                    f" · salla_rate={canon['_qoyod_fx']['rate']}"
+                    f" · converted={canon['_qoyod_fx']['converted_total']} SAR"
+                    f" · tax={canon['_qoyod_fx']['tax_percent']}%"
+                    if canon.get("_qoyod_fx") else ""
+                )
+            ),
             "external_reference": canon.get("order_id"),
         }
     }
@@ -1662,6 +1993,13 @@ async def manual_send_one(
     payment_method = _resolve_current_payment_method(canon, payment_facts)
     receiving_bank_name = payment_facts.get("receiving_bank_name")
     canon = _overlay_order_engine_facts(canon, payment_facts)
+    canon = await _prepare_sar_invoice_canon_from_inbox(
+        db,
+        canon=canon,
+        representative_row=row,
+        user_id=user_id,
+        order_number=str(order_number),
+    )
     _assert_sar_currency(canon)
     salla_total = _q2(canon.get("total_amount"))
     # The inbox snapshot may carry the generic/old payment alias.  Orders V2
