@@ -385,6 +385,7 @@ export async function getMarketingPerformance({
     limit = 25,
     activeCampaignsOnly = true,
     actionReportTime = "conversion",
+    resultSource = "salla",
 } = {}) {
     if (!isMarketingPerformanceProvider(platform)) {
         throw new Error("invalid_marketing_platform");
@@ -399,6 +400,9 @@ export async function getMarketingPerformance({
                     page,
                     limit,
                     active_campaigns_only: activeCampaignsOnly,
+                    result_source: ["salla", "platform"].includes(resultSource)
+                        ? resultSource
+                        : "salla",
                     action_report_time: ["conversion", "impression"].includes(actionReportTime)
                         ? actionReportTime
                         : "conversion",
