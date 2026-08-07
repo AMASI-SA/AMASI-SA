@@ -5,8 +5,12 @@ from datetime import datetime, timezone
 
 import pytest
 
+import auth
 from integrations_control_center import (
     snapchat_campaign_created_order_semantics as module,
+)
+from integrations_control_center import (
+    snapchat_campaign_profitability as profitability,
 )
 
 
@@ -55,7 +59,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
             "hide_inferred_date_orders": False,
         }
 
-    monkeypatch.setattr(module, "ensure_user_settings", settings)
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
     db = FakeDB([
         {
             "user_id": "owner-1",
@@ -130,7 +134,7 @@ async def test_account_timezone_controls_the_created_order_day(monkeypatch):
             "hide_inferred_date_orders": False,
         }
 
-    monkeypatch.setattr(module, "ensure_user_settings", settings)
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
     db = FakeDB([
         {
             "user_id": "owner-1",
@@ -181,8 +185,8 @@ async def test_profitability_uses_financial_orders_only(monkeypatch):
             "lines": [],
         }
 
-    monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
-    monkeypatch.setattr(module.profitability, "_order_cost_and_products", order_cost)
+    monkeypatch.setattr(profitability, "_load_cost_context", cost_context)
+    monkeypatch.setattr(profitability, "_order_cost_and_products", order_cost)
 
     by_campaign, totals = await module.calculate_financial_profitability(
         object(),
@@ -195,7 +199,10 @@ async def test_profitability_uses_financial_orders_only(monkeypatch):
                 {"total_amount": 150.0, "product_cost": 60.0},
             ],
         },
-        campaign_spend={("account-1", "campaign-1"): 30.0},
+        campaign_spend={
+            ("account-1", "campaign-1"): 30.0,
+            ("account-1", "campaign-without-orders"): 40.0,
+        },
     )
 
     row = by_campaign[("account-1", "campaign-1")]
@@ -204,6 +211,10 @@ async def test_profitability_uses_financial_orders_only(monkeypatch):
     assert row["product_cost_sar"] == 60.0
     assert row["contribution_profit_sar"] == 60.0
     assert totals["orders"] == 1
+    assert totals["ad_spend_sar"] == 70.0
+    assert totals["contribution_profit_sar"] == 20.0
+    assert totals["profit_margin_pct"] == pytest.approx(13.33)
+    assert totals["total_ad_spend_scope"] == "all_campaigns_in_report"
 
 
 def test_cancelled_status_detection_handles_arabic_and_english():

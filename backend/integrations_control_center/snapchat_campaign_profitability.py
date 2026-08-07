@@ -475,6 +475,16 @@ def _finalize_campaign(
     }
 
 
+def _total_campaign_spend(
+    campaign_spend: dict[tuple[str, str], float],
+) -> float:
+    """Return report-wide spend, including campaigns without matched orders."""
+    return round(
+        sum(_float(value) for value in campaign_spend.values()),
+        2,
+    )
+
+
 async def build_campaign_profitability(
     db: Any,
     user_id: str,
@@ -570,7 +580,7 @@ async def build_campaign_profitability(
     )
     total_sales = round(sum(_float(row.get("sales_sar")) for row in by_campaign.values()), 2)
     total_known_cost = round(sum(_float(row.get("known_product_cost_sar")) for row in by_campaign.values()), 2)
-    total_spend = round(sum(_float(row.get("ad_spend_sar")) for row in by_campaign.values()), 2)
+    total_spend = _total_campaign_spend(spend_by_campaign)
     total_profit = (
         round(total_sales - total_known_cost - total_spend, 2)
         if all_complete
@@ -604,6 +614,7 @@ async def build_campaign_profitability(
             "ambiguous_orders": ambiguous_orders,
             "unattributed_snapchat_orders": unattributed_snapchat_orders,
             "campaigns_with_orders": len(by_campaign),
+            "total_ad_spend_scope": "all_campaigns_in_report",
             "campaign_rows_exact_match_only": True,
             "product_cost_source": "mezan_v2_cost_engine_with_salla_fallback_flagging",
             "allocation_method": CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD,

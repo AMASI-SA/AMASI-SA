@@ -303,9 +303,7 @@ async def calculate_financial_profitability(
     total_known_cost = round(
         sum(_float(row.get("known_product_cost_sar")) for row in by_campaign.values()), 2
     )
-    total_spend = round(
-        sum(_float(row.get("ad_spend_sar")) for row in by_campaign.values()), 2
-    )
+    total_spend = profitability._total_campaign_spend(campaign_spend)
     total_profit = (
         round(total_sales - total_known_cost - total_spend, 2)
         if all_complete else None
@@ -322,6 +320,7 @@ async def calculate_financial_profitability(
             if total_profit is not None and total_sales > 0 else None
         ),
         "campaigns_with_orders": len(by_campaign),
+        "total_ad_spend_scope": "all_campaigns_in_report",
         "campaigns_with_missing_cost": sum(
             int(row.get("cost_status") == "missing")
             for row in by_campaign.values()
