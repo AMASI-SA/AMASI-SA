@@ -832,19 +832,36 @@ def _file_public(row: dict[str, Any], counts: dict[str, int]) -> dict[str, Any]:
 
 
 async def _my_work_view(db: Any, *, user_id: str, employee_id: str, limit: int) -> dict[str, Any]:
-    files = await db[REGISTRY].find(
-        {"user_id": user_id, "status": "ready", "responsible_employee_id": employee_id},
+    # Piece responsibility is authoritative after a manager reassigns a
+    # rejected product.  The original PDF registry remains immutable and may
+    # still name the first employee, so discover work from pieces first.
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "responsible_employee_id": employee_id,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+        },
         {"_id": 0},
-    ).sort("registered_at", -1).limit(limit).to_list(limit)
-    batch_ids = [_text(row.get("batch_id")) for row in files if _text(row.get("batch_id"))]
-    pieces = (
-        await db[PIECES].find(
-            {"user_id": user_id, "batch_id": {"$in": batch_ids}},
+    ).sort("updated_at", -1).limit(20000).to_list(20000)
+    batch_ids = sorted({
+        _text(row.get("batch_id"))
+        for row in pieces
+        if _text(row.get("batch_id"))
+    })
+    files = (
+        await db[REGISTRY].find(
+            {"user_id": user_id, "status": "ready", "batch_id": {"$in": batch_ids}},
             {"_id": 0},
-        ).sort("assigned_at", -1).to_list(20000)
+        ).sort("registered_at", -1).limit(limit).to_list(limit)
         if batch_ids
         else []
     )
+    visible_batch_ids = {
+        _text(row.get("batch_id")) for row in files if _text(row.get("batch_id"))
+    }
+    pieces = [
+        row for row in pieces if _text(row.get("batch_id")) in visible_batch_ids
+    ]
     counts_by_batch: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for piece in pieces:
         batch_id = _text(piece.get("batch_id"))

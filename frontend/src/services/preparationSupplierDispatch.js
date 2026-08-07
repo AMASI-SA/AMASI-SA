@@ -1,0 +1,89 @@
+import api from "../lib/api";
+
+const ERROR_LABELS = {
+    preparation_manage_permission_required: "تحتاج صلاحية إدارة التجهيز لفتح ملفاتك.",
+    preparation_file_not_found: "ملف التجهيز غير موجود أو لم يكتمل تسجيله.",
+    piece_quantity_exceeds_available: "الكمية المختارة لم تعد متاحة؛ حدّث الملف.",
+    supplier_dispatch_supplier_not_found: "المورد غير موجود أو موقوف.",
+    supplier_dispatch_service_mismatch: "المورد المحدد لا يقدم خدمة متبقية لهذا المنتج.",
+    supplier_dispatch_piece_conflict: "تغيّرت إحدى القطع أثناء الرفع؛ حدّث الملف.",
+    preparation_rejection_piece_conflict: "تغيّرت إحدى القطع أثناء الرفض؛ حدّث الملف.",
+    preparation_reassignment_piece_conflict: "أُسندت إحدى القطع من مدير آخر؛ حدّث القائمة.",
+    responsible_employee_unavailable: "اختر موظفًا نشطًا يملك صلاحية إدارة التجهيز.",
+    supplier_dispatch_not_found: "دفعة المورد غير موجودة أو تغيرت حالتها.",
+    supplier_dispatch_owner_required: "تأكيد الجاهزية متاح للموظف الذي رفع الدفعة أو المدير.",
+};
+
+function dispatchError(error, fallback) {
+    const detail = error?.response?.data?.detail;
+    const wrapped = new Error(
+        detail?.message
+        || ERROR_LABELS[detail?.code]
+        || detail?.code
+        || error?.message
+        || fallback,
+    );
+    wrapped.code = detail?.code;
+    wrapped.forbidden = error?.response?.status === 403;
+    return wrapped;
+}
+
+export function newPreparationDispatchRequestId(prefix = "supplier-dispatch") {
+    if (globalThis.crypto?.randomUUID) {
+        return `${prefix}:${globalThis.crypto.randomUUID()}`;
+    }
+    return `${prefix}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+export async function getPreparationSupplierWorkspace({ limit = 100 } = {}) {
+    try {
+        return (await api.get("/supplier-dispatch-v1/workspace", {
+            params: { limit },
+        })).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر تحميل ملفات الموظف وحسابات الموردين.");
+    }
+}
+
+export async function sendPreparationPiecesToSupplier(payload) {
+    try {
+        return (await api.post("/supplier-dispatch-v1/dispatches", payload)).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر رفع المنتجات إلى المورد.");
+    }
+}
+
+export async function rejectPreparationPieces(payload) {
+    try {
+        return (await api.post("/supplier-dispatch-v1/rejections", payload)).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر نقل المنتجات إلى غير المسندة.");
+    }
+}
+
+export async function getUnassignedPreparationPieces() {
+    try {
+        return (await api.get("/supplier-dispatch-v1/manager/unassigned")).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر تحميل المنتجات غير المسندة.");
+    }
+}
+
+export async function reassignPreparationPieces(payload) {
+    try {
+        return (await api.post("/supplier-dispatch-v1/manager/reassign", payload)).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر إعادة إسناد المنتجات.");
+    }
+}
+
+export async function markSupplierDispatchReady(dispatchId, note = "") {
+    try {
+        return (await api.post(
+            `/supplier-dispatch-v1/dispatches/${encodeURIComponent(dispatchId)}/ready`,
+            { note: String(note || "").trim() || null },
+        )).data;
+    } catch (error) {
+        throw dispatchError(error, "تعذّر تأكيد جاهزية دفعة المورد.");
+    }
+}

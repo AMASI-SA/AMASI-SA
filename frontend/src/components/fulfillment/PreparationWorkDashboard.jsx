@@ -5,8 +5,11 @@ import {
     CheckCircle,
     Clock,
     Gear,
+    PaperPlaneTilt,
     Play,
     SpinnerGap,
+    Storefront,
+    UserMinus,
     UsersThree,
     WarningCircle,
 } from "@phosphor-icons/react";
@@ -16,6 +19,7 @@ import {
     getPreparationManagerSummary,
     startPreparationFile,
 } from "../../services/preparationWorkService";
+import PreparationSupplierDispatchWorkspace from "./PreparationSupplierDispatchWorkspace";
 
 const STATUS_LABELS = {
     assigned: "مسند ولم يبدأ",
@@ -307,7 +311,7 @@ function EmployeeManagementView({ data, loading, error, date, onDateChange, onRe
 }
 
 export default function PreparationWorkDashboard() {
-    const [activeView, setActiveView] = useState("my-work");
+    const [activeView, setActiveView] = useState("new-files");
     const [work, setWork] = useState(null);
     const [workLoading, setWorkLoading] = useState(true);
     const [workError, setWorkError] = useState("");
@@ -339,7 +343,6 @@ export default function PreparationWorkDashboard() {
         } catch (error) {
             if (error.forbidden) {
                 setManagerAllowed(false);
-                setActiveView("my-work");
             } else {
                 setManagerError(error.message || "تعذّر تحميل التقرير.");
             }
@@ -368,9 +371,19 @@ export default function PreparationWorkDashboard() {
     };
 
     const tabs = useMemo(() => [
-        { id: "my-work", label: "منتجاتي", Icon: Gear, visible: true },
+        { id: "new-files", label: "ملفاتي الجديدة", Icon: PaperPlaneTilt, visible: true },
+        { id: "supplier-accounts", label: "حسابات الموردين", Icon: Storefront, visible: true },
+        { id: "my-work", label: "متابعة القطع", Icon: Gear, visible: true },
+        { id: "unassigned", label: "غير مسند", Icon: UserMinus, visible: managerAllowed },
         { id: "employees", label: "إدارة منتجات الموظفين", Icon: UsersThree, visible: managerAllowed },
     ].filter((item) => item.visible), [managerAllowed]);
+
+    const reloadOperationalViews = useCallback(async () => {
+        await Promise.all([
+            loadWork(),
+            managerAllowed ? loadManager() : Promise.resolve(),
+        ]);
+    }, [loadManager, loadWork, managerAllowed]);
 
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" dir="rtl" data-testid="preparation-work-dashboard">
@@ -393,6 +406,8 @@ export default function PreparationWorkDashboard() {
             <div className="p-4 sm:p-5">
                 {activeView === "employees" && managerAllowed ? (
                     <EmployeeManagementView data={managerData} loading={managerLoading} error={managerError} date={date} onDateChange={setDate} onRefresh={loadManager} />
+                ) : activeView === "new-files" || activeView === "supplier-accounts" || (activeView === "unassigned" && managerAllowed) ? (
+                    <PreparationSupplierDispatchWorkspace view={activeView} onDataChanged={reloadOperationalViews} />
                 ) : (
                     <MyWorkView work={work} loading={workLoading} error={workError} onRefresh={loadWork} onStart={startFile} startingFile={startingFile} />
                 )}

@@ -77,7 +77,10 @@ test("dashboard exposes my work and employee management windows", () => {
     const markup = renderToStaticMarkup(<PreparationWorkDashboard />);
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
-    expect(markup).toContain("منتجاتي");
+    expect(markup).toContain("ملفاتي الجديدة");
+    expect(markup).toContain("حسابات الموردين");
+    expect(markup).toContain("غير مسند");
+    expect(markup).toContain("متابعة القطع");
     expect(markup).toContain("إدارة منتجات الموظفين");
-    expect(markup).toContain("جارٍ تحميل منتجاتك");
+    expect(markup).toContain("جارٍ تحميل الملفات الجديدة");
 });
