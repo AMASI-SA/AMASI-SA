@@ -580,9 +580,7 @@ def _assert_sar_currency(canon: dict) -> str:
 _SUPPORTED_GCC_FOREIGN_CURRENCIES = frozenset({
     "AED", "QAR", "KWD", "OMR", "BHD",
 })
-_SUPPORTED_SALLA_TAX_PERCENTAGES = frozenset({
-    Decimal("0.00"), Decimal("15.00"),
-})
+_FIXED_INCLUSIVE_TAX_PERCENT = Decimal("15.00")
 
 
 def _currency_code(value: Any, default: str = "SAR") -> str:
@@ -683,11 +681,22 @@ def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
     order_number = str(
         result.get("order_number") or result.get("order_id") or "")
     order_node = _find_salla_accounting_node(row or {}, order_number)
-    tax_percent = _explicit_salla_tax_percent(order_node)
+    source_tax_percent = _explicit_salla_tax_percent(order_node)
 
     if original_currency == "SAR":
-        if tax_percent is not None:
-            result["_qoyod_tax_percent"] = float(tax_percent)
+        # Merchant accounting policy (2026-08-08): every Saudi order total
+        # is treated as VAT-inclusive at 15%, regardless of the percentage
+        # reported by Salla.  The gross customer total remains unchanged.
+        result["_qoyod_tax_percent"] = float(
+            _FIXED_INCLUSIVE_TAX_PERCENT
+        )
+        result["_qoyod_tax_policy"] = {
+            "policy": "all_orders_total_inclusive_15",
+            "source_tax_percent": (
+                float(source_tax_percent)
+                if source_tax_percent is not None else None
+            ),
+        }
         return result
 
     if original_currency not in _SUPPORTED_GCC_FOREIGN_CURRENCIES:
@@ -742,17 +751,11 @@ def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
                 "qoyod_write_performed": False,
             },
         )
-    if tax_percent not in _SUPPORTED_SALLA_TAX_PERCENTAGES:
-        raise ManualSendRefused(
-            "foreign_currency_tax_unverified",
-            "نسبة ضريبة الطلب الأجنبية غير مثبتة صراحةً في سلة كـ 0% أو 15%.",
-            {
-                "currency": original_currency,
-                "tax_percent": (
-                    str(tax_percent) if tax_percent is not None else None),
-                "qoyod_write_performed": False,
-            },
-        )
+    # Merchant accounting policy (2026-08-08): GCC foreign-currency order
+    # totals are VAT-inclusive at the Saudi standard rate even when Salla's
+    # destination snapshot reports 0%.  The customer total is NEVER increased;
+    # Qoyod extracts 15% from inside the converted SAR gross amount.
+    tax_percent = _FIXED_INCLUSIVE_TAX_PERCENT
 
     amounts = order_node.get("amounts") or {}
     original_total = _money_decimal(result.get("total_amount"))
@@ -817,6 +820,11 @@ def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
         "base_currency": "SAR",
         "converted_total": converted(original_total),
         "tax_percent": float(tax_percent),
+        "source_tax_percent": (
+            float(source_tax_percent)
+            if source_tax_percent is not None else None
+        ),
+        "tax_policy": "all_orders_total_inclusive_15",
     }
     return result
 
@@ -824,13 +832,13 @@ def _prepare_sar_invoice_canon(*, canon: dict, row: dict) -> dict:
 _FOREIGN_ACCOUNTING_FACT_ERRORS = frozenset({
     "foreign_currency_accounting_facts_missing",
     "foreign_currency_exchange_rate_unverified",
-    "foreign_currency_tax_unverified",
 })
 
 
 async def _prepare_sar_invoice_canon_from_inbox(
     db, *, canon: dict, representative_row: dict,
     user_id: str, order_number: str,
+    orders_user_id: Optional[str] = None,
 ) -> dict:
     """Use the newest row, then older traces, for immutable Salla FX/tax.
 
@@ -876,6 +884,53 @@ async def _prepare_sar_invoice_canon_from_inbox(
                 try:
                     return _prepare_sar_invoice_canon(
                         canon=canon, row=candidate)
+                except ManualSendRefused as candidate_error:
+                    if (
+                        candidate_error.code
+                        not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+                    ):
+                        raise
+
+            # Orders V2 retains the authoritative GET /orders/{id} payload
+            # under unified_orders.raw_by_source.salla_direct.  Some historic
+            # integration_inbox rows were intentionally compacted and no
+            # longer contain exchange_rate, so use that durable Salla snapshot
+            # before refusing the send.  No live/market/manual rate is used.
+            tenant_ids: list[str] = []
+            for value in (orders_user_id, user_id, "main"):
+                normalized = str(value or "").strip()
+                if normalized and normalized not in tenant_ids:
+                    tenant_ids.append(normalized)
+            for tenant_id in tenant_ids:
+                unified = await db.unified_orders.find_one(
+                    {
+                        "user_id": tenant_id,
+                        "order_number": str(order_number),
+                        "raw_by_source.salla_direct": {"$exists": True},
+                    },
+                    {
+                        "_id": 0,
+                        "raw_by_source.salla_direct": 1,
+                    },
+                )
+                raw_by_source = (
+                    (unified or {}).get("raw_by_source") or {}
+                )
+                salla_direct = raw_by_source.get("salla_direct")
+                if not isinstance(salla_direct, dict):
+                    continue
+                try:
+                    prepared = _prepare_sar_invoice_canon(
+                        canon=canon,
+                        row={"raw_payload": salla_direct},
+                    )
+                    prepared_fx = prepared.get("_qoyod_fx")
+                    if isinstance(prepared_fx, dict):
+                        prepared_fx["source"] = (
+                            "unified_orders.raw_by_source.salla_direct."
+                            "exchange_rate"
+                        )
+                    return prepared
                 except ManualSendRefused as candidate_error:
                     if (
                         candidate_error.code
@@ -1619,6 +1674,10 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
     breakdown = {
         "tax_percent":            tax_percent,
         "tax_factor":             tax_factor,
+        "tax_policy":             (
+            canon.get("_qoyod_tax_policy")
+            or ((canon.get("_qoyod_fx") or {}).get("tax_policy"))
+        ),
         "currency_conversion":    canon.get("_qoyod_fx"),
         "salla_declared_total":   salla_total,
         "items":                  breakdown_items,
@@ -1656,6 +1715,13 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
                     f" · converted={canon['_qoyod_fx']['converted_total']} SAR"
                     f" · tax={canon['_qoyod_fx']['tax_percent']}%"
                     if canon.get("_qoyod_fx") else ""
+                )
+                + (
+                    " · tax_policy=total_inclusive_15%"
+                    if (
+                        canon.get("_qoyod_tax_policy")
+                        or canon.get("_qoyod_fx")
+                    ) else ""
                 )
             ),
             "external_reference": canon.get("order_id"),
@@ -1999,6 +2065,7 @@ async def manual_send_one(
         representative_row=row,
         user_id=user_id,
         order_number=str(order_number),
+        orders_user_id=orders_user_id,
     )
     _assert_sar_currency(canon)
     salla_total = _q2(canon.get("total_amount"))
@@ -2701,4 +2768,3 @@ async def _run_all_steps(
         "qoyod_account_id": qoyod_account_id,
         "steps":         steps_trace,
     }
-

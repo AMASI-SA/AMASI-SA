@@ -52,6 +52,7 @@ async def diagnose_totals(db, *, user_id: str,
             representative_row=row,
             user_id=user_id,
             order_number=str(order_number),
+            orders_user_id=orders_user_id,
         )
         _assert_sar_currency(canon)
     except ManualSendRefused as exc:

@@ -15,6 +15,36 @@ def test_assert_sar_currency_accepts_sar_and_missing_default(value):
     assert _assert_sar_currency(canon) == "SAR"
 
 
+@pytest.mark.parametrize("source_tax", [None, "0", "8", "10", "15"])
+def test_sar_order_always_extracts_fifteen_percent_from_total(source_tax):
+    row = {
+        "raw_payload": {
+            "data": {
+                "reference_id": "12345",
+                "amounts": {
+                    "tax": {"percent": source_tax},
+                    "total": {"amount": 115, "currency": "SAR"},
+                },
+            },
+        },
+    }
+    prepared = _prepare_sar_invoice_canon(
+        canon={
+            "order_number": "12345",
+            "currency": "SAR",
+            "total_amount": 115,
+            "items": [],
+        },
+        row=row,
+    )
+
+    assert prepared["total_amount"] == 115
+    assert prepared["_qoyod_tax_percent"] == 15.0
+    assert prepared["_qoyod_tax_policy"]["policy"] == (
+        "all_orders_total_inclusive_15"
+    )
+
+
 @pytest.mark.parametrize("value", ["AED", "QAR", {"code": "AED"}])
 def test_assert_sar_currency_blocks_unverified_currency(value):
     with pytest.raises(ManualSendRefused) as exc_info:
@@ -81,8 +111,17 @@ class _FakeInbox:
 
 
 class _FakeDb:
-    def __init__(self, rows):
+    def __init__(self, rows, unified=None):
         self.integration_inbox = _FakeInbox(rows)
+        self.unified_orders = _FakeUnifiedOrders(unified)
+
+
+class _FakeUnifiedOrders:
+    def __init__(self, row=None):
+        self.row = row
+
+    async def find_one(self, *_args, **_kwargs):
+        return self.row
 
 
 @pytest.mark.asyncio
@@ -123,10 +162,55 @@ async def test_foreign_order_recovers_fx_and_tax_from_older_trace():
 
     assert prepared["currency"] == "SAR"
     assert prepared["total_amount"] == 270.00
-    assert prepared["_qoyod_tax_percent"] == 0.0
+    assert prepared["_qoyod_tax_percent"] == 15.0
     assert prepared["_qoyod_fx"]["source"] == "salla_order.exchange_rate"
 
-def test_aed_zero_tax_order_uses_salla_rate_and_stays_zero_tax():
+
+@pytest.mark.asyncio
+async def test_foreign_order_recovers_fx_from_unified_order_details():
+    canon = {
+        "order_number": "275590587",
+        "currency": "AED",
+        "total_amount": 264.76,
+        "items": [{
+            "sku": "AMS13031",
+            "name": "عباية",
+            "quantity": 1,
+            "unit_price": 213.77,
+            "tax_amount": 0,
+            "discount_amount": 0,
+            "total": 213.77,
+        }],
+    }
+    stripped = _foreign_row(
+        currency="AED", rate="1.01978901", tax_percent="0.00",
+        total=264.76, subtotal=213.77, shipping=50.99,
+    )
+    del stripped["raw_payload"]["data"]["exchange_rate"]
+    authoritative = _foreign_row(
+        currency="AED", rate="1.01978901", tax_percent="0.00",
+        total=264.76, subtotal=213.77, shipping=50.99,
+    )["raw_payload"]["data"]
+    db = _FakeDb(
+        [stripped],
+        unified={"raw_by_source": {"salla_direct": authoritative}},
+    )
+
+    prepared = await _prepare_sar_invoice_canon_from_inbox(
+        db,
+        canon=canon,
+        representative_row=stripped,
+        user_id="qoyod-tenant",
+        orders_user_id="orders-tenant",
+        order_number="275590587",
+    )
+
+    assert prepared["total_amount"] == 270.00
+    assert prepared["_qoyod_tax_percent"] == 15.0
+    assert prepared["_qoyod_fx"]["source"].startswith("unified_orders.")
+
+def test_aed_zero_tax_order_becomes_inclusive_fifteen_percent_without_total_change(
+):
     canon = {
         "order_number": "275590587",
         "order_id": "802684702",
@@ -161,9 +245,13 @@ def test_aed_zero_tax_order_uses_salla_rate_and_stays_zero_tax():
     assert prepared["subtotal"] == 218.00
     assert prepared["shipping_amount"] == 52.00
     assert prepared["items"][0]["unit_price"] == 218.00
-    assert prepared["_qoyod_tax_percent"] == 0.0
+    assert prepared["_qoyod_tax_percent"] == 15.0
     assert prepared["_qoyod_fx"]["original_total"] == 264.76
     assert prepared["_qoyod_fx"]["rate"] == "1.01978901"
+    assert prepared["_qoyod_fx"]["source_tax_percent"] == 0.0
+    assert prepared["_qoyod_fx"]["tax_policy"] == (
+        "all_orders_total_inclusive_15"
+    )
 
     payload, expected_total, breakdown = _build_invoice_payload(
         canon=prepared,
@@ -179,10 +267,10 @@ def test_aed_zero_tax_order_uses_salla_rate_and_stays_zero_tax():
     assert expected_total == 270.00
     assert payload["invoice"]["currency_code"] == "SAR"
     assert all(
-        line["tax_percent"] == 0.0
+        line["tax_percent"] == 15.0
         for line in payload["invoice"]["line_items"]
     )
-    assert breakdown["tax_percent"] == 0.0
+    assert breakdown["tax_percent"] == 15.0
     assert "original=264.76 AED" in payload["invoice"]["notes"]
     assert "converted=270.0 SAR" in payload["invoice"]["notes"]
 
@@ -248,8 +336,10 @@ def test_foreign_order_without_salla_rate_is_blocked_before_qoyod_write():
     assert exc_info.value.extra["qoyod_write_performed"] is False
 
 
-@pytest.mark.parametrize("tax_percent", [None, "5.00"])
-def test_foreign_order_requires_explicit_zero_or_fifteen_tax(tax_percent):
+@pytest.mark.parametrize(
+    "tax_percent", [None, "0.00", "5.00", "8.00", "15.00"]
+)
+def test_foreign_order_always_extracts_fifteen_percent_from_gross(tax_percent):
     canon = {
         "order_number": "275590587",
         "currency": "AED",
@@ -264,8 +354,6 @@ def test_foreign_order_requires_explicit_zero_or_fifteen_tax(tax_percent):
         subtotal=100,
     )
 
-    with pytest.raises(ManualSendRefused) as exc_info:
-        _prepare_sar_invoice_canon(canon=canon, row=row)
-
-    assert exc_info.value.code == "foreign_currency_tax_unverified"
-    assert exc_info.value.extra["qoyod_write_performed"] is False
+    prepared = _prepare_sar_invoice_canon(canon=canon, row=row)
+    assert prepared["total_amount"] == 100.00
+    assert prepared["_qoyod_tax_percent"] == 15.0
