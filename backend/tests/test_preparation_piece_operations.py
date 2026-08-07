@@ -1,3 +1,4 @@
+import inspect
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -265,3 +266,13 @@ def test_router_registers_my_work_manager_start_and_schedule_routes():
     assert ("/preparation-work-v1/manager/summary", "GET") in routes
     assert ("/preparation-work-v1/files/{file_number}/start", "POST") in routes
     assert ("/preparation-work-v1/files/{file_number}/schedule", "PUT") in routes
+
+
+def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
+    source = inspect.getsource(__import__("preparation_piece_operations")._my_work_view)
+
+    assert '"responsible_employee_id": employee_id' in source
+    assert '"batch_id": {"$in": batch_ids}' in source
+    assert source.index('"responsible_employee_id": employee_id') < source.index(
+        '"batch_id": {"$in": batch_ids}'
+    )

@@ -6,11 +6,13 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_supplier_dispatch.py"
       - "backend/preparation_piece_line_services.py"
       - "backend/preparation_piece_execution_guard.py"
       - "backend/preparation_file_failure_safety.py"
       - "backend/order_engine/__init__.py"
       - "backend/tests/test_preparation_piece_operations.py"
+      - "backend/tests/test_preparation_supplier_dispatch.py"
       - "backend/tests/test_preparation_piece_line_services.py"
       - "backend/tests/test_preparation_piece_stage_semantics.py"
       - "backend/tests/test_preparation_piece_execution_guard.py"
@@ -24,8 +26,11 @@ on:
       - "frontend/src/reviewSpecEditVisibilitySafety.js"
       - "frontend/src/reviewSpecEditVisibilitySafety.test.js"
       - "frontend/src/services/preparationWorkService.js"
+      - "frontend/src/services/preparationSupplierDispatch.js"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
+      - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx"
+      - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx"
       - "frontend/src/pages/FulfillmentV2.jsx"
       - "frontend/src/pages/FulfillmentV2.test.jsx"
       - ".github/workflows/prod-preparation-piece-operations.yml"
@@ -67,6 +72,7 @@ jobs:
         run: >-
           python -m py_compile
           backend/preparation_piece_operations.py
+          backend/preparation_supplier_dispatch.py
           backend/preparation_piece_line_services.py
           backend/preparation_piece_execution_guard.py
           backend/preparation_file_failure_safety.py
@@ -77,6 +83,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_preparation_piece_operations.py
+          tests/test_preparation_supplier_dispatch.py
           tests/test_preparation_piece_line_services.py
           tests/test_preparation_piece_stage_semantics.py
           tests/test_preparation_piece_execution_guard.py
@@ -89,7 +96,7 @@ jobs:
       - name: Enforce Mezan-only boundary
         run: |
           set -euo pipefail
-          for FILE in backend/preparation_piece_operations.py backend/preparation_piece_line_services.py backend/preparation_piece_execution_guard.py backend/preparation_file_failure_safety.py; do
+          for FILE in backend/preparation_piece_operations.py backend/preparation_supplier_dispatch.py backend/preparation_piece_line_services.py backend/preparation_piece_execution_guard.py backend/preparation_file_failure_safety.py; do
             ! grep -Eq 'call_salla|call_qoyod|requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' "$FILE"
           done
           grep -q 'failed_preparation_request_released' backend/preparation_file_failure_safety.py
@@ -120,6 +127,7 @@ jobs:
         run: >-
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/components/fulfillment/PreparationWorkDashboard.test.jsx
+          src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
           src/reviewPreparationFileScheduleSync.test.js
           src/preparationFileFailureSafetyClient.test.js
           src/reviewSpecEditVisibilitySafety.test.js

@@ -21,6 +21,8 @@ const ERROR_LABELS = {
     supplier_piece_services_missing: "القطعة لا تحتوي على خدمة تجهيز. اربط المنتج بخدمة من مكونات المنتجات أولًا.",
     supplier_piece_service_mismatch: "المورد المحدد لا يقدم أي خدمة متبقية مرتبطة بهذه القطعة.",
     supplier_piece_already_in_receiving_session: "هذه القطعة مضافة بالفعل إلى جلسة استلام مفتوحة.",
+    supplier_piece_not_dispatched: "أرسل القطعة إلى المورد قبل استلامها.",
+    supplier_piece_dispatched_to_different_supplier: "هذه القطعة مرسلة إلى مورد مختلف عن جلسة الاستلام الحالية.",
     supplier_receiving_invoice_duplicate_piece: "تحتوي مسودة الفاتورة على قطعة مكررة.",
     supplier_receiving_invoice_duplicate_service: "تحتوي مسودة الفاتورة على خدمة مكررة.",
     supplier_receiving_invoice_piece_mismatch: "تغيّرت قطع الجلسة. حدّث الفاتورة ثم احفظ من جديد.",

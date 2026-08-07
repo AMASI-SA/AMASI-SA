@@ -433,6 +433,7 @@ def test_service_completion_keeps_unfinished_group_services_open():
         completed_at=datetime.now(timezone.utc),
     )
     assert update["$set"]["status"] == PIECE_STATUS_IN_PROGRESS
+    assert update["$set"]["supplier_dispatch_status"] == "partial_received"
     assert update["$set"]["remaining_service_count"] == 1
     assert update["$set"]["services"][0]["status"] == "completed"
     assert update["$set"]["services"][1]["status"] == "pending"

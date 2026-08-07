@@ -33,6 +33,11 @@ from preparation_piece_operations import (
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
 )
+from preparation_supplier_dispatch import (
+    DISPATCH_STATUS_PARTIAL,
+    DISPATCH_STATUS_RECEIVED,
+    supplier_receiving_dispatch_blocker,
+)
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
@@ -978,12 +983,14 @@ def supplier_service_completion_update(
         set_values.update({
             "status": PIECE_STATUS_RECEIVED,
             "execution_status": "received_from_supplier",
+            "supplier_dispatch_status": DISPATCH_STATUS_RECEIVED,
             "received_at": completed_at,
         })
     else:
         set_values.update({
             "status": PIECE_STATUS_IN_PROGRESS,
             "execution_status": "awaiting_remaining_services",
+            "supplier_dispatch_status": DISPATCH_STATUS_PARTIAL,
         })
         update["$unset"] = {
             "received_at": "",
@@ -1651,6 +1658,13 @@ def make_supplier_receiving_router(
             blocker = piece_scan_blocker(piece)
             if blocker:
                 raise HTTPException(status_code=409, detail=blocker)
+            dispatch_blocker = supplier_receiving_dispatch_blocker(
+                piece,
+                (session.get("supplier_snapshot") or {}).get("id")
+                or session.get("supplier_id"),
+            )
+            if dispatch_blocker:
+                raise HTTPException(status_code=409, detail=dispatch_blocker)
             reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
             if reserved_session_id:
                 raise HTTPException(
