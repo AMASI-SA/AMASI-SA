@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install targeted dependencies
-        run: python -m pip install -q pytest openpyxl
+        run: python -m pip install -q pytest openpyxl cryptography
       - name: Verify latest-payment invariants
         run: |
           python - <<'PY'
@@ -72,5 +72,4 @@ jobs:
           name: qoyod-payment-freshness-log
           path: /tmp/qoyod-payment-freshness.log
           if-no-files-found: ignore
-
 
