@@ -50,8 +50,9 @@ from .snapchat_native_performance_sync import (
 
 SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v1"
 PLATFORM_TOTAL_SOURCE_MODE = (
-    f"{ADS_MANAGER_SOURCE_MODE}:account_spend_campaign_commercial_v4"
+    f"{ADS_MANAGER_SOURCE_MODE}:account_spend_campaign_completed_hour_v6"
 )
+TOTAL_CURRENT_DAY_WINDOW_POLICY = "completed_account_local_hour"
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
@@ -114,10 +115,20 @@ def account_local_total_window(
         next_date.day,
         tzinfo=zone,
     )
-    end = nominal_end if report_date < current.date() else min(
-        nominal_end,
-        current.replace(microsecond=0),
-    )
+    if report_date < current.date():
+        end = nominal_end
+    else:
+        # Production evidence showed that Snapchat rejects account TOTAL
+        # requests ending at an open, second-level timestamp. Use only the
+        # latest fully completed account-local hour. The HOUR ingestion remains
+        # responsible for the live chart while TOTAL owns stable commercial
+        # campaign metrics.
+        completed_hour_end = current.replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        end = min(nominal_end, completed_hour_end)
     return (start, end) if end > start else None
 
 
@@ -771,6 +782,7 @@ async def refresh_account_total_snapshots(
         "direct_account_request_fields": list(DIRECT_ACCOUNT_TOTAL_FIELDS),
         "account_spend_source": "direct_ad_account_total",
         "account_commercial_totals_source": "complete_campaign_breakdown_sum",
+        "current_day_total_window_policy": TOTAL_CURRENT_DAY_WINDOW_POLICY,
         "request_windows": request_windows,
         "account_timezone": timezone_name,
         "business_timezone": BUSINESS_TIMEZONE,
