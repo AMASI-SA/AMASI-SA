@@ -6,8 +6,8 @@ The Ads Manager workspace exposes two selectable commercial result sources:
 * ``salla``: exact Salla orders matched to a Snapchat campaign.
 
 This module keeps those sources separate. Snapchat direct Ad Account TOTAL
-owns authoritative All Ads spend, while TOTAL + breakdown=campaign owns
-purchases, purchase value, campaign rows, and filtered totals. Existing HOUR
+owns the authoritative All Ads headline metrics, while TOTAL +
+breakdown=campaign owns campaign rows and filtered totals. Existing HOUR
 ingestion remains responsible for the hourly chart and Riyadh accounting.
 """
 from __future__ import annotations
@@ -59,7 +59,7 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "account_spend_campaign_completed_hour_v7"
+        "direct_account_headlines_campaign_completed_hour_v8"
     )
 
 
@@ -71,7 +71,7 @@ PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
 REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})
-DIRECT_ACCOUNT_TOTAL_FIELDS = ("spend",)
+DIRECT_ACCOUNT_TOTAL_FIELDS = STAT_FIELDS
 
 RefreshCallable = Callable[..., Awaitable[dict[str, Any]]]
 ReportCallable = Callable[..., Awaitable[dict[str, Any]]]
@@ -260,8 +260,9 @@ async def fetch_account_total_direct_metrics(
     account_id: str,
     request_start: datetime,
     request_end: datetime,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> tuple[dict[str, int | float], list[dict[str, Any]]]:
-    """Read direct All Ads spend; conversions come from campaign TOTAL."""
+    """Read the direct All Ads headline metrics shown by Ads Manager."""
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -277,6 +278,12 @@ async def fetch_account_total_direct_metrics(
             "granularity": PLATFORM_TOTAL_GRANULARITY,
             "fields": ",".join(DIRECT_ACCOUNT_TOTAL_FIELDS),
             "omit_empty": "false",
+            "conversion_source_types": CONVERSION_SOURCE_TYPES,
+            "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+            "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+            "action_report_time": normalize_ads_manager_action_report_time(
+                action_report_time
+            ),
         },
     )
     metrics, errors, successful_subrequests = extract_account_total_metrics(payload)
@@ -470,15 +477,17 @@ def merge_direct_spend_with_campaign_metrics(
     campaign breakdown. No Salla result is introduced into the platform view.
     """
     merged = aggregate_total_campaign_metrics(campaign_rows)
-    spend = _as_number(direct_metrics.get("spend"))
-    if spend is None:
+    if _as_number(direct_metrics.get("spend")) is None:
         raise SnapchatNativeSyncError(
             "snapchat_account_direct_spend_missing",
             "Snapchat direct Ad Account TOTAL omitted spend.",
             status_code=502,
             retryable=True,
         )
-    merged["spend"] = int(spend) if float(spend).is_integer() else float(spend)
+    for key in STAT_FIELDS:
+        value = _as_number(direct_metrics.get(key))
+        if value is not None:
+            merged[key] = int(value) if float(value).is_integer() else float(value)
     return merged
 
 
@@ -726,15 +735,18 @@ async def refresh_account_total_snapshots(
             "end_time": request_end.isoformat(timespec="seconds"),
         })
         try:
-            account_metrics, account_errors = await fetch_account_total_direct_metrics(
-                context,
-                client,
-                access_token,
-                account_id=account_id,
-                request_start=request_start,
-                request_end=request_end,
-            )
             for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
+                account_metrics, account_errors = (
+                    await fetch_account_total_direct_metrics(
+                        context,
+                        client,
+                        access_token,
+                        account_id=account_id,
+                        request_start=request_start,
+                        request_end=request_end,
+                        action_report_time=action_report_time,
+                    )
+                )
                 rows, campaign_errors, breakdown_seen = (
                     await fetch_account_total_campaign_rows(
                         context,
@@ -811,7 +823,7 @@ async def refresh_account_total_snapshots(
         "direct_account_total_requested": True,
         "direct_account_request_fields": list(DIRECT_ACCOUNT_TOTAL_FIELDS),
         "account_spend_source": "direct_ad_account_total",
-        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
+        "account_commercial_totals_source": "direct_ad_account_total",
         "current_day_total_window_policy": TOTAL_CURRENT_DAY_WINDOW_POLICY,
         "request_windows": request_windows,
         "account_timezone": timezone_name,
@@ -1217,7 +1229,7 @@ async def apply_platform_snapshot_to_report(
         "platform_source_isolated": True,
         "platform_action_report_time": action_report_time,
         "account_spend_source": "direct_ad_account_total",
-        "account_commercial_totals_source": "complete_campaign_breakdown_sum",
+        "account_commercial_totals_source": "direct_ad_account_total",
         "platform_totals_scope": totals_scope,
         "platform_account_orders": account_total.get("orders"),
         "platform_campaign_orders": campaign_sum.get("orders"),

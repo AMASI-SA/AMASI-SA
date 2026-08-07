@@ -1,5 +1,5 @@
 // Mezan OS V2 governed preparation workspace.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
     ArrowRight,
@@ -20,7 +20,6 @@ import PreparationFilesRegistry from "../components/fulfillment/PreparationFiles
 import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
-import FulfillmentMobileOverview from "../components/fulfillment/FulfillmentMobileOverview";
 
 export const FULFILLMENT_STAGES = [
     {
@@ -121,14 +120,8 @@ function PlannedStage({ stage }) {
 
 export default function FulfillmentV2() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [isMobile, setIsMobile] = useState(() => (
-        typeof window !== "undefined"
-        && typeof window.matchMedia === "function"
-        && window.matchMedia("(max-width: 1023px)").matches
-    ));
     const searchKey = searchParams.toString();
-    const hasRequestedStage = Boolean(String(searchParams.get("stage") || "").trim());
-    const requestedStage = String(searchParams.get("stage") || "pending_review").trim();
+    const requestedStage = String(searchParams.get("stage") || "in_progress").trim();
     const activeStage = useMemo(
         () => FULFILLMENT_STAGES.find((stage) => stage.key === requestedStage) || FULFILLMENT_STAGES[0],
         [requestedStage],
@@ -148,19 +141,6 @@ export default function FulfillmentV2() {
         setSearchParams(next, { replace: true });
     }, [activeStage.key, searchKey, searchParams, setSearchParams]);
 
-    useEffect(() => {
-        if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
-        const media = window.matchMedia("(max-width: 1023px)");
-        const sync = () => setIsMobile(media.matches);
-        sync();
-        if (typeof media.addEventListener === "function") {
-            media.addEventListener("change", sync);
-            return () => media.removeEventListener("change", sync);
-        }
-        media.addListener?.(sync);
-        return () => media.removeListener?.(sync);
-    }, []);
-
     const selectStage = (stageKey, params = {}) => {
         const next = new URLSearchParams(searchParams);
         next.set("stage", stageKey);
@@ -171,7 +151,7 @@ export default function FulfillmentV2() {
         setSearchParams(next, { replace: true });
     };
 
-    const showMobileOverview = () => {
+    const showMyProductsOverview = () => {
         setSearchParams(new URLSearchParams(), { replace: true });
     };
 
@@ -193,12 +173,10 @@ export default function FulfillmentV2() {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="fulfillment-v2-page">
-            {!hasRequestedStage && <FulfillmentMobileOverview onOpenStage={selectStage} stages={FULFILLMENT_STAGES} />}
-
-            {hasRequestedStage && (
+            {activeStage.key !== "in_progress" && (
                 <header className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm lg:hidden" data-testid="fulfillment-mobile-stage-header">
                     <div className="flex items-center gap-3 bg-emerald-800 px-3 py-3 text-white">
-                        <button type="button" onClick={showMobileOverview} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10" aria-label="العودة إلى لوحة إدارة التجهيز">
+                        <button type="button" onClick={showMyProductsOverview} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10" aria-label="العودة إلى إدارة منتجاتي">
                             <ArrowRight size={21} weight="bold" />
                         </button>
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
@@ -222,7 +200,7 @@ export default function FulfillmentV2() {
                 </header>
             )}
 
-            <header className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
+            {activeStage.key !== "in_progress" && <header className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
                 <div className="bg-gradient-to-l from-violet-700 via-violet-600 to-indigo-700 px-5 py-6 text-white sm:px-7">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -274,13 +252,9 @@ export default function FulfillmentV2() {
                         })}
                     </nav>
                 </div>
-            </header>
+            </header>}
 
-            {(hasRequestedStage || !isMobile) && (
-                <div className={!hasRequestedStage ? "hidden lg:block" : ""}>
-                    {stageContent}
-                </div>
-            )}
+            {stageContent}
         </div>
     );
 }
