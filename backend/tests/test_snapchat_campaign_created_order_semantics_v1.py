@@ -5,8 +5,12 @@ from datetime import datetime, timezone
 
 import pytest
 
+import auth
 from integrations_control_center import (
     snapchat_campaign_created_order_semantics as module,
+)
+from integrations_control_center import (
+    snapchat_campaign_profitability as profitability,
 )
 
 
@@ -55,7 +59,7 @@ async def test_created_orders_remain_counted_when_cancelled(monkeypatch):
             "hide_inferred_date_orders": False,
         }
 
-    monkeypatch.setattr(module, "ensure_user_settings", settings)
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
     db = FakeDB([
         {
             "user_id": "owner-1",
@@ -130,7 +134,7 @@ async def test_account_timezone_controls_the_created_order_day(monkeypatch):
             "hide_inferred_date_orders": False,
         }
 
-    monkeypatch.setattr(module, "ensure_user_settings", settings)
+    monkeypatch.setattr(auth, "ensure_user_settings", settings)
     db = FakeDB([
         {
             "user_id": "owner-1",
@@ -181,8 +185,8 @@ async def test_profitability_uses_financial_orders_only(monkeypatch):
             "lines": [],
         }
 
-    monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
-    monkeypatch.setattr(module.profitability, "_order_cost_and_products", order_cost)
+    monkeypatch.setattr(profitability, "_load_cost_context", cost_context)
+    monkeypatch.setattr(profitability, "_order_cost_and_products", order_cost)
 
     by_campaign, totals = await module.calculate_financial_profitability(
         object(),
