@@ -24,7 +24,7 @@ jobs:
       - name: Install focused dependencies
         run: >-
           pip install pytest fastapi "pydantic>=2" httpx pymongo motor
-          cryptography openpyxl
+          cryptography openpyxl bcrypt
       - name: Compile scheduler and Snapchat adapters
         working-directory: backend
         run: |
