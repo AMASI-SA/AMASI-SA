@@ -327,7 +327,7 @@ def _health_for(snapshot: dict, *, checked_at: str | None = None) -> dict:
 _SAFE_SETTINGS_DEEP_LINKS = {
     "salla": "/settings/salla",
     "meta_ads": "/settings",
-    "qoyod": "/integrations/qoyod/settings",
+    "qoyod": "/integrations-v2/qoyod",
 }
 
 
