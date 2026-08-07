@@ -26,6 +26,10 @@ import {
     MARKETING_PLATFORMS,
 } from "../services/marketingPerformance";
 import { getSnapchatAdSquadPerformance } from "../services/snapchatAdSquadPerformance";
+import {
+    CAMPAIGN_RESULTS_SOURCE_EVENT,
+    campaignResultsSource,
+} from "../marketingCampaignResultSource";
 
 export const MARKETING_PLATFORM_PROVIDERS = MARKETING_PLATFORMS;
 export { isMarketingPerformanceProvider as isMarketingPlatformProvider };
@@ -203,6 +207,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [entityLevel, setEntityLevel] = useState("campaigns");
     const [activeCampaignsOnly, setActiveCampaignsOnly] = useState(true);
     const [actionReportTime, setActionReportTime] = useState("conversion");
+    const [resultSource, setResultSource] = useState(
+        () => campaignResultsSource(platform),
+    );
+    const [resultSourceRevision, setResultSourceRevision] = useState(0);
     const [adSquadSort, setAdSquadSort] = useState("orders");
     const [adSquadPage, setAdSquadPage] = useState(1);
     const [adSquadReport, setAdSquadReport] = useState(null);
@@ -225,6 +233,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 limit: 25,
                 activeCampaignsOnly,
                 actionReportTime,
+                resultSource,
             });
             if (requestId !== loadSequenceRef.current) return;
             setData(result);
@@ -243,7 +252,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 setRefreshing(false);
             }
         }
-    }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform]);
+    }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform, resultSource, resultSourceRevision]);
 
     const selectedAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
@@ -288,9 +297,41 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setEntityLevel("campaigns");
         setActiveCampaignsOnly(true);
         setActionReportTime("conversion");
+        setResultSource(campaignResultsSource(platform));
         setAdSquadSort("orders");
         setAdSquadReport(null);
         setAdSquadError("");
+    }, [platform]);
+
+    useEffect(() => {
+        if (platform !== "snapchat" || typeof window === "undefined") {
+            return undefined;
+        }
+        const handleResultSourceUpdated = (event) => {
+            if (event?.detail?.platform !== "snapchat") return;
+            const nextSource = ["salla", "platform"].includes(event?.detail?.source)
+                ? event.detail.source
+                : campaignResultsSource("snapchat");
+
+            // Invalidate any response that started before the source switch.
+            // Keeping the old payload visible would mix Salla purchases with
+            // Snapchat spend until another unrelated refresh occurs.
+            loadSequenceRef.current += 1;
+            setData(null);
+            setLoading(true);
+            setPage(1);
+            setAdSquadPage(1);
+            setResultSource(nextSource);
+            setResultSourceRevision((value) => value + 1);
+        };
+        window.addEventListener(
+            CAMPAIGN_RESULTS_SOURCE_EVENT,
+            handleResultSourceUpdated,
+        );
+        return () => window.removeEventListener(
+            CAMPAIGN_RESULTS_SOURCE_EVENT,
+            handleResultSourceUpdated,
+        );
     }, [platform]);
 
     useEffect(() => {
