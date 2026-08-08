@@ -59,14 +59,14 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "direct_account_headlines_campaign_completed_hour_v10"
+        "direct_account_headlines_campaign_local_day_v11"
     )
 
 
 PLATFORM_TOTAL_SOURCE_MODE = platform_total_source_mode(
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
-TOTAL_CURRENT_DAY_WINDOW_POLICY = "completed_account_local_hour"
+TOTAL_CURRENT_DAY_WINDOW_POLICY = "account_local_day_boundary"
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
@@ -129,19 +129,11 @@ def account_local_total_window(
         next_date.day,
         tzinfo=zone,
     )
-    if report_date < current.date():
-        end = nominal_end
-    else:
-        # Production rejects current-minute TOTAL boundaries with HTTP 400.
-        # Use the latest fully completed account-local hour for stable
-        # commercial totals; the HOUR ingestion remains responsible for the
-        # live spend chart between TOTAL refreshes.
-        completed_hour_end = current.replace(
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
-        end = min(nominal_end, completed_hour_end)
+    # Snapchat requires both TOTAL boundaries to be account-local day
+    # boundaries. For the current day, the next local midnight is the valid
+    # exclusive boundary and Snapchat returns the cumulative data available
+    # so far; hour- or minute-level end times are rejected with HTTP 400.
+    end = nominal_end
     return (start, end) if end > start else None
 
 
