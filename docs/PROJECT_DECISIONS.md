@@ -466,3 +466,90 @@ The Phase 1 boundary is mandatory:
   are contractually fixed to `false`.
 - Future live capabilities require separate ingestion, privacy, identity,
   approval, quality and rollback gates. They are not implied by this preview.
+
+---
+
+## Decision-029 — Mezan Is AI-Native, Not AI-Dependent
+
+Status: Approved, architecture mandatory
+
+The long-term target is one AI-native Mezan OS, not a separate AI product and
+not a wholesale rewrite of the current system.
+
+Correct deterministic commerce, operational and accounting modules remain the
+authoritative foundation. AI reasons above trusted facts and invokes approved
+tools; it does not replace source-of-truth calculations or make core operation
+dependent on a language model being available.
+
+The binding architecture is defined in:
+
+`docs/adr/ADR-002-ai-native-operating-model.md`
+
+---
+
+## Decision-030 — Existing Work Evolves Additively into the AI Architecture
+
+Status: Approved
+
+Validated work on Salla, advertising platforms, GA4, dashboards, products,
+costs, orders, suppliers, receiving, customer service, accounting and the
+integration control center remains part of Mezan OS.
+
+AI work must reuse those modules as factual inputs, deterministic services or
+execution connectors wherever they are correct. A separate duplicate AI stack
+must not be created merely to expose the same business capability to an agent.
+
+---
+
+## Decision-031 — All AI-Initiated Writes Pass Through the Action Gateway
+
+Status: Approved, architecture mandatory
+
+No AI model or agent may mutate a production database or external provider
+directly.
+
+Every AI-initiated action must pass through a Mezan Action Gateway that enforces
+identity, tenant isolation, permissions, allowlists, risk checks, approval level,
+budget/loss limits where applicable, idempotency, audit logging, deterministic
+execution, outcome measurement and rollback state.
+
+---
+
+## Decision-032 — Specialized Agents Do Not Own Business Truth
+
+Status: Approved
+
+Mezan may use a supervisory agent and specialized Profit, Ads, Customer,
+Product, Orders, Accounting, Growth and Risk agents.
+
+Agents consume canonical and deterministic facts. They may produce analyses,
+recommendations or bounded action requests, but they do not become competing
+sources of truth for orders, costs, accounting, inventory, customers or provider
+facts.
+
+---
+
+## Decision-033 — Business Memory Is Structured and Traceable
+
+Status: Approved
+
+Mezan must retain durable business memory as structured system data, including
+prior decisions, experiments, campaign outcomes, product profitability,
+operational patterns, legitimate customer signals, accepted/rejected
+recommendations and measured results.
+
+Conversational memory alone is not a business system of record. Durable memory
+must preserve provenance, time, version and confidence where applicable.
+
+---
+
+## Decision-034 — Deterministic Operation Is the Safe Degradation Mode
+
+Status: Approved
+
+If an AI provider, model or agent is unavailable, degraded or below confidence
+threshold, Mezan's correctness-critical commerce, operational and accounting
+workflows must continue through deterministic code and explicit human controls.
+
+AI unavailability must reduce intelligence or automation, not corrupt business
+truth or make core operations unavailable.
