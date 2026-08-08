@@ -5,10 +5,11 @@ The Ads Manager workspace exposes two selectable commercial result sources:
 * ``platform``: purchases and purchase value reported by Snapchat.
 * ``salla``: exact Salla orders matched to a Snapchat campaign.
 
-This module keeps those sources separate. Snapchat direct Ad Account TOTAL
-owns the authoritative All Ads headline metrics, while TOTAL +
-breakdown=campaign owns campaign rows and filtered totals. Existing HOUR
-ingestion remains responsible for the hourly chart and Riyadh accounting.
+This module keeps those sources separate. The complete ad-account campaign
+breakdown owns both the All Ads headline rollup and campaign rows. This avoids
+the unsupported direct ad-account stats shape while retaining every campaign,
+including inactive campaigns. Existing HOUR ingestion remains responsible for
+the hourly chart and Riyadh accounting.
 """
 from __future__ import annotations
 
@@ -59,7 +60,7 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "direct_account_headlines_campaign_current_hour_rollup_v12"
+        "campaign_breakdown_all_ads_current_hour_rollup_v14"
     )
 
 
@@ -839,18 +840,6 @@ async def refresh_account_total_snapshots(
         })
         try:
             for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
-                account_metrics, account_errors = (
-                    await fetch_account_total_direct_metrics(
-                        context,
-                        client,
-                        access_token,
-                        account_id=account_id,
-                        request_start=request_start,
-                        request_end=request_end,
-                        granularity=request_granularity,
-                        action_report_time=action_report_time,
-                    )
-                )
                 rows, campaign_errors, breakdown_seen = (
                     await fetch_account_total_campaign_rows(
                         context,
@@ -863,6 +852,8 @@ async def refresh_account_total_snapshots(
                         action_report_time=action_report_time,
                     )
                 )
+                account_metrics = aggregate_total_campaign_metrics(rows)
+                account_errors: list[dict[str, Any]] = []
                 day_errors = [*account_errors, *campaign_errors]
                 for error in day_errors:
                     errors.append({
@@ -926,10 +917,10 @@ async def refresh_account_total_snapshots(
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "current_day_provider_granularity": PLATFORM_CURRENT_DAY_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
-        "direct_account_total_requested": True,
-        "direct_account_request_fields": list(DIRECT_ACCOUNT_TOTAL_FIELDS),
-        "account_spend_source": "direct_ad_account_stats",
-        "account_commercial_totals_source": "direct_ad_account_stats",
+        "direct_account_total_requested": False,
+        "direct_account_request_fields": [],
+        "account_spend_source": "complete_campaign_breakdown_rollup",
+        "account_commercial_totals_source": "complete_campaign_breakdown_rollup",
         "current_day_total_window_policy": TOTAL_CURRENT_DAY_WINDOW_POLICY,
         "request_windows": request_windows,
         "account_timezone": timezone_name,
