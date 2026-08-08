@@ -139,11 +139,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
 
             {loading ? <div className="p-8 text-center text-slate-400"><SpinnerGap className="inline animate-spin" /> جاري تحميل آخر Pilot…</div> : !run ? <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">لم يتم تشغيل Pilot بعد.</div> : <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : <span className="text-emerald-700">مكتمل</span>}</div>
+                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
                     <div className="text-xs text-slate-500">Run: <span className="font-mono">{String(run.run_id || "").slice(0, 10)}</span> · Model: {run.model || "—"} · Taxonomy: {run.taxonomy_version || "—"}</div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-9">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-11">
                     {[
                         ["المحدد", counters.selected],
                         ["المحلل", counters.analyzed],
@@ -152,6 +152,8 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                         ["مراجعة", counters.review_required],
                         ["<70%", counters.low_confidence],
                         ["فشل AI", counters.ai_failed],
+                        ["فحص بصري", counters.visual_checked],
+                        ["فشل بصري", counters.visual_failed],
                         ["ناقص", counters.missing_data],
                         ["اعتمد", counters.applied],
                     ].map(([label, value]) => <div key={label} className="rounded-xl border bg-slate-50 p-2 text-center"><div className="num text-lg font-black text-slate-900">{Number(value || 0).toLocaleString("en-US")}</div><div className="text-[11px] text-slate-500">{label}</div></div>)}
@@ -171,7 +173,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                             <div className="min-w-0"><div className="font-bold text-slate-900">{row.product_name || "بدون اسم"}</div><div className="mt-1 text-[11px] text-slate-400">{row.salla_product_id || row.mezan_product_id}</div></div>
                             <div className="min-w-0"><div className="font-bold text-violet-900">{row.google_category_name || "لم يُحدد"} {row.google_category_id ? <span className="num text-xs text-slate-400">ID {row.google_category_id}</span> : null}</div><div className="mt-1 text-xs text-slate-500">{row.google_category_path || "—"}</div></div>
                             <div><span className="num text-xl font-black">{Number(row.ai_confidence || 0)}</span><span className="text-xs text-slate-400">%</span></div>
-                            <div><span className={`inline-block rounded-lg border px-2 py-1 text-[11px] font-bold ${statusClass(row.decision_status)}`}>{STATUS_LABELS[row.decision_status] || row.decision_status}</span><p className="mt-2 text-xs text-slate-600">{row.ai_reason || "—"}</p>{row.apply_status === "applied" && <div className="mt-1 text-[11px] font-bold text-emerald-700">تم الاعتماد داخل ميزان</div>}</div>
+                            <div><span className={`inline-block rounded-lg border px-2 py-1 text-[11px] font-bold ${statusClass(row.decision_status)}`}>{STATUS_LABELS[row.decision_status] || row.decision_status}</span><p className="mt-2 text-xs text-slate-600">{row.ai_reason || "—"}</p>{row.visual_verification_status === "failed" && <div className="mt-1 text-[11px] font-bold text-rose-700">فشل بصري آمن · {row.visual_verification_error_code || "provider_error"} · {Number(row.visual_verification_attempts || 0).toLocaleString("en-US")} محاولة</div>}{row.apply_status === "applied" && <div className="mt-1 text-[11px] font-bold text-emerald-700">تم الاعتماد داخل ميزان</div>}</div>
                             <button onClick={() => openProduct(row.mezan_product_id)} className="rounded-lg border px-2 py-2 text-xs font-bold text-slate-700"><ArrowSquareOut className="ml-1 inline" />فتح</button>
                         </div>)}
                     </div>

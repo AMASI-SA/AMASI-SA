@@ -4,6 +4,7 @@ from product_google_taxonomy_ai_pilot import (
     _fallback_search_terms,
     _input_revision,
     _product_evidence,
+    _run_counters,
     _select_pilot_products,
 )
 
@@ -112,3 +113,20 @@ def test_pilot_selection_keeps_diversity_and_some_existing_categories():
     assert any(row.get("google_category") for row in selected)
     keys = {row["categories"][0]["name"] for row in selected if row.get("categories")}
     assert len(keys) >= 4
+
+
+def test_visual_failures_are_counted_separately_from_ai_failures():
+    counters = _run_counters([
+        {
+            "decision_status": "review_required",
+            "visual_verification_status": "failed",
+        },
+        {
+            "decision_status": "high_confidence",
+            "visual_verification_status": "consistent",
+        },
+        {"decision_status": "ai_failed"},
+    ], 3)
+    assert counters["visual_checked"] == 2
+    assert counters["visual_failed"] == 1
+    assert counters["ai_failed"] == 1

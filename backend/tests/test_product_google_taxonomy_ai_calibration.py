@@ -138,8 +138,15 @@ def test_ai_result_confidence_is_deterministically_capped(monkeypatch):
 
 
 class _VisionResponse:
-    def __init__(self, payload):
-        self.output_text = json.dumps(payload, ensure_ascii=False)
+    def __init__(self, payload, *, status="completed", incomplete_reason=""):
+        self.output_text = json.dumps(payload, ensure_ascii=False) if payload is not None else ""
+        self.status = status
+        self.incomplete_details = (
+            {"reason": incomplete_reason}
+            if incomplete_reason
+            else None
+        )
+        self.error = None
 
 
 class _VisionResponses:
@@ -348,3 +355,111 @@ def test_existing_google_category_skips_high_confidence_visual_spend(monkeypatch
     )["p1"]
     assert result["confidence"] == 95
     assert client.responses.calls == []
+
+
+def test_visual_gate_retries_incomplete_token_response_with_larger_budget(monkeypatch):
+    async def fake_calibrated(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "191",
+                "confidence": 95,
+                "reason": "اسوارة زينة",
+                "evidence": ["اسوارة"],
+            }
+        }
+
+    class RetryingResponses:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return _VisionResponse(
+                    None,
+                    status="incomplete",
+                    incomplete_reason="max_output_tokens",
+                )
+            return _VisionResponse({
+                "verdict": "consistent",
+                "confidence": 97,
+                "observed_product_type": "اسوارة",
+                "reason": "الصورة متسقة",
+                "evidence": ["اسوارة حلي"],
+            })
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(
+        calibration,
+        "_calibrated_ai_classify_chunk_original",
+        fake_calibrated,
+        raising=False,
+    )
+    monkeypatch.setattr(visual_gate.asyncio, "sleep", no_wait)
+    client = type("Client", (), {"responses": RetryingResponses()})()
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("اسوارة", image_url="https://cdn.example.com/bracelet.jpg"),
+        "candidate_categories": [{"id": "191", "name": "أساور", "path": "حلي > أساور"}],
+    }]
+    result = asyncio.run(
+        visual_gate.calibrated_ai_classify_chunk_with_visual_gate(client, rows)
+    )["p1"]
+    assert result["confidence"] == 95
+    assert result["visual_verification_status"] == "consistent"
+    assert result["visual_verification_attempts"] == 2
+    assert result["visual_verification_error_code"] is None
+    assert [call["max_output_tokens"] for call in client.responses.calls] == [1200, 2400]
+
+
+def test_visual_gate_records_final_safe_failure_and_keeps_review_cap(monkeypatch):
+    async def fake_calibrated(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "201",
+                "confidence": 95,
+                "reason": "ساعة بناتي",
+                "evidence": [],
+            }
+        }
+
+    class FailingResponses:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return _VisionResponse(
+                None,
+                status="incomplete",
+                incomplete_reason="max_output_tokens",
+            )
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(
+        calibration,
+        "_calibrated_ai_classify_chunk_original",
+        fake_calibrated,
+        raising=False,
+    )
+    monkeypatch.setattr(visual_gate.asyncio, "sleep", no_wait)
+    client = type("Client", (), {"responses": FailingResponses()})()
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("ساعة بناتي", image_url="https://cdn.example.com/watch.jpg"),
+        "candidate_categories": [{"id": "201", "name": "ساعات يد", "path": "حلي > ساعات يد"}],
+    }]
+    result = asyncio.run(
+        visual_gate.calibrated_ai_classify_chunk_with_visual_gate(client, rows)
+    )["p1"]
+    assert result["confidence"] == 89
+    assert result["visual_verification_status"] == "failed"
+    assert result["visual_verification_attempts"] == 2
+    assert result["visual_verification_error_code"] == "max_output_tokens"
+    assert len(client.responses.calls) == 2

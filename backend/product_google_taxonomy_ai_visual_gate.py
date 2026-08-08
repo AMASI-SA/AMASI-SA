@@ -6,6 +6,7 @@ public product image before it remains eligible for batch approval.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -14,7 +15,10 @@ import product_google_taxonomy_ai_pilot as pilot
 
 HIGH_CONFIDENCE_MIN = 90
 VISUAL_REVIEW_CAP = 89
-VISUAL_VERIFY_MAX_OUTPUT_TOKENS = 500
+VISUAL_VERIFY_MAX_OUTPUT_TOKENS = 1200
+VISUAL_VERIFY_RETRY_MAX_OUTPUT_TOKENS = 2400
+VISUAL_VERIFY_MAX_ATTEMPTS = 2
+VISUAL_VERIFY_RETRY_DELAY_SECONDS = 1.5
 
 VISUAL_VERIFY_SCHEMA = {
     "type": "object",
@@ -41,6 +45,91 @@ VISUAL_VERIFY_SCHEMA = {
         "evidence",
     ],
 }
+
+
+class _VisualVerificationError(RuntimeError):
+    """Safe, structured failure used for retry and persisted diagnostics."""
+
+    def __init__(self, code: str, *, retryable: bool) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+def _response_incomplete_reason(response: Any) -> str:
+    details = getattr(response, "incomplete_details", None)
+    if isinstance(details, dict):
+        return str(details.get("reason") or "").strip()
+    return str(getattr(details, "reason", "") or "").strip()
+
+
+def _validate_response_completed(response: Any) -> None:
+    status = str(getattr(response, "status", "") or "").strip()
+    if status == "incomplete":
+        reason = _response_incomplete_reason(response)
+        if reason in {"max_output_tokens", "max_tokens"}:
+            raise _VisualVerificationError(
+                "max_output_tokens",
+                retryable=True,
+            )
+        raise _VisualVerificationError(
+            "incomplete_response",
+            retryable=False,
+        )
+    if status in {"failed", "cancelled"}:
+        error = getattr(response, "error", None)
+        provider_code = (
+            str(error.get("code") or "").strip()
+            if isinstance(error, dict)
+            else str(getattr(error, "code", "") or "").strip()
+        )
+        raise _VisualVerificationError(
+            "server_error" if provider_code == "server_error" else "provider_error",
+            retryable=provider_code == "server_error",
+        )
+
+
+def _visual_error_code(exc: Exception) -> str:
+    if isinstance(exc, _VisualVerificationError):
+        return exc.code
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return "rate_limited"
+    if isinstance(status_code, int) and status_code >= 500:
+        return "server_error"
+    name = type(exc).__name__.casefold()
+    if "timeout" in name:
+        return "timeout"
+    if "connection" in name:
+        return "connection_error"
+    if isinstance(exc, json.JSONDecodeError):
+        return "invalid_json"
+    return "provider_error"
+
+
+def _visual_error_retryable(exc: Exception) -> bool:
+    if isinstance(exc, _VisualVerificationError):
+        return exc.retryable
+    return _visual_error_code(exc) in {
+        "rate_limited",
+        "server_error",
+        "timeout",
+        "connection_error",
+        "invalid_json",
+    }
+
+
+def _retry_delay_seconds(exc: Exception) -> float:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers:
+        try:
+            raw = headers.get("retry-after")
+            if raw is not None:
+                return max(0.5, min(8.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    return VISUAL_VERIFY_RETRY_DELAY_SECONDS
 
 
 def _candidate_for_result(
@@ -82,6 +171,7 @@ async def _visual_consistency_check_one(
     *,
     evidence: dict[str, Any],
     candidate: dict[str, Any],
+    max_output_tokens: int = VISUAL_VERIFY_MAX_OUTPUT_TOKENS,
 ) -> dict[str, Any] | None:
     image_url = str(evidence.get("main_image_url") or "").strip()
     if not image_url:
@@ -128,7 +218,7 @@ async def _visual_consistency_check_one(
                 {"type": "input_image", "image_url": image_url},
             ],
         }],
-        max_output_tokens=VISUAL_VERIFY_MAX_OUTPUT_TOKENS,
+        max_output_tokens=max_output_tokens,
         text={
             "format": {
                 "type": "json_schema",
@@ -139,10 +229,17 @@ async def _visual_consistency_check_one(
         },
     )
 
-    payload = json.loads(response.output_text)
+    _validate_response_completed(response)
+    output_text = str(getattr(response, "output_text", "") or "").strip()
+    if not output_text:
+        raise _VisualVerificationError("empty_output", retryable=True)
+    try:
+        payload = json.loads(output_text)
+    except json.JSONDecodeError as exc:
+        raise _VisualVerificationError("invalid_json", retryable=True) from exc
     verdict = str(payload.get("verdict") or "").strip()
     if verdict not in {"consistent", "conflict", "unclear"}:
-        return None
+        raise _VisualVerificationError("invalid_verdict", retryable=False)
     payload["verdict"] = verdict
     try:
         payload["confidence"] = max(
@@ -152,6 +249,44 @@ async def _visual_consistency_check_one(
     except (TypeError, ValueError):
         payload["confidence"] = 0
     return payload
+
+
+async def _visual_consistency_check_with_retry(
+    client: Any,
+    *,
+    evidence: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Retry only recoverable failures and return safe audit metadata."""
+    output_tokens = VISUAL_VERIFY_MAX_OUTPUT_TOKENS
+    last_code = "provider_error"
+    attempts = 0
+    for attempt in range(1, VISUAL_VERIFY_MAX_ATTEMPTS + 1):
+        attempts = attempt
+        try:
+            check = await _visual_consistency_check_one(
+                client,
+                evidence=evidence,
+                candidate=candidate,
+                max_output_tokens=output_tokens,
+            )
+            return check, {
+                "status": str((check or {}).get("verdict") or "unclear"),
+                "attempts": attempt,
+                "error_code": None,
+            }
+        except Exception as exc:
+            last_code = _visual_error_code(exc)
+            if attempt >= VISUAL_VERIFY_MAX_ATTEMPTS or not _visual_error_retryable(exc):
+                break
+            if last_code == "max_output_tokens":
+                output_tokens = VISUAL_VERIFY_RETRY_MAX_OUTPUT_TOKENS
+            await asyncio.sleep(_retry_delay_seconds(exc))
+    return None, {
+        "status": "failed",
+        "attempts": attempts,
+        "error_code": last_code,
+    }
 
 
 def _apply_visual_review_gate(
@@ -239,24 +374,25 @@ async def calibrated_ai_classify_chunk_with_visual_gate(
         candidate = _candidate_for_result(result, candidates)
         if not candidate:
             continue
-        try:
-            check = await _visual_consistency_check_one(
-                client,
-                evidence=evidence,
-                candidate=candidate,
-            )
-        except Exception:
-            # A visual verification outage must never turn a proposal into an
-            # automatic approval. Fail closed to the human-review band.
+        check, audit = await _visual_consistency_check_with_retry(
+            client,
+            evidence=evidence,
+            candidate=candidate,
+        )
+        result["visual_verification_status"] = audit["status"]
+        result["visual_verification_attempts"] = audit["attempts"]
+        result["visual_verification_error_code"] = audit["error_code"]
+        if check is None:
+            # A final visual verification failure must never turn a proposal
+            # into an automatic approval. Fail closed to human review.
             check = {
                 "verdict": "unclear",
                 "confidence": 0,
                 "observed_product_type": "",
-                "reason": "تعذر إكمال التحقق البصري لهذه النتيجة.",
+                "reason": "تعذر إكمال التحقق البصري بعد إعادة المحاولة؛ بقي الاقتراح للمراجعة البشرية.",
                 "evidence": [],
             }
-        if check:
-            _apply_visual_review_gate(result, check)
+        _apply_visual_review_gate(result, check)
 
     return results
 
