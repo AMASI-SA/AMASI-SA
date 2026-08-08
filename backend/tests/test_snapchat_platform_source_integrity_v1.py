@@ -40,14 +40,14 @@ def _row(entity_type, external_id, *, orders, spend, sales, date_string="2026-08
     }
 
 
-def test_account_local_current_day_window_uses_latest_completed_hour():
+def test_account_local_current_day_window_uses_next_midnight_boundary():
     start, end = account_local_total_window(
         date(2026, 8, 6),
         timezone_name="America/Los_Angeles",
         now=datetime(2026, 8, 6, 15, 30, 45, tzinfo=timezone.utc),
     )
     assert start.isoformat() == "2026-08-06T00:00:00-07:00"
-    assert end.isoformat() == "2026-08-06T08:00:00-07:00"
+    assert end.isoformat() == "2026-08-07T00:00:00-07:00"
 
 
 def test_refresh_dates_cover_account_days_touched_by_riyadh_window():
@@ -288,18 +288,24 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
     )
 
 
-def test_platform_total_v14_uses_complete_campaign_rollup():
+def test_platform_total_v15_uses_complete_campaign_day_total():
     source = Path(
         "integrations_control_center/snapchat_platform_source_integrity.py"
     ).read_text(encoding="utf-8")
 
-    assert "campaign_breakdown_all_ads_current_hour_rollup_v14" in source
+    assert "campaign_breakdown_all_ads_account_day_total_v15" in source
     refresh = source.split(
         "async def refresh_account_total_snapshots", 1
     )[1].split("async def _to_list", 1)[0]
     assert "await fetch_account_total_direct_metrics(" not in refresh
     assert "account_metrics = aggregate_total_campaign_metrics(rows)" in refresh
     assert '"direct_account_total_requested": False' in refresh
+    assert "request_granularity = PLATFORM_TOTAL_GRANULARITY" in refresh
+    assert "if report_date == local_current_date" not in refresh
+    assert (
+        '"current_day_provider_granularity": PLATFORM_TOTAL_GRANULARITY'
+        in refresh
+    )
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
