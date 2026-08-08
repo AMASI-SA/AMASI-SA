@@ -59,7 +59,7 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "direct_account_headlines_campaign_completed_hour_v8"
+        "direct_account_headlines_campaign_completed_hour_v9"
     )
 
 
@@ -202,7 +202,9 @@ def _normalized_requested_metrics(
     output: dict[str, int | float] = {}
     for key in STAT_FIELDS:
         value = _as_number(source.get(key))
-        number = float(value) if value is not None else 0.0
+        if value is None:
+            continue
+        number = float(value)
         output[key] = int(number) if number.is_integer() else number
     return output
 

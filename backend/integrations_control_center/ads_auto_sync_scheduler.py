@@ -37,10 +37,8 @@ from .tiktok_native_reporting import (
     tiktok_reporting_enabled,
 )
 from .tiktok_oauth_security import TIKTOK_PROVIDER_ID, tiktok_oauth_configured
-from .snapchat_account_hourly_refresh import (
-    ACCOUNT_REFRESH_SOURCE_MODE,
-    refresh_snapchat_account_hours,
-)
+from . import snapchat_account_hourly_refresh as snapchat_hourly
+from .snapchat_account_hourly_refresh import ACCOUNT_REFRESH_SOURCE_MODE
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_native_data_common import (
     BUSINESS_TIMEZONE,
@@ -612,7 +610,7 @@ async def _refresh_snapchat(
                 account_context = SnapchatSyncContext(db, user_id, now=_utcnow)
                 account_id = str(account.get("ad_account_id") or "").strip()
                 try:
-                    item = await refresh_snapchat_account_hours(
+                    item = await snapchat_hourly.refresh_snapchat_account_hours(
                         account_context,
                         client,
                         access_token,

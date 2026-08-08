@@ -109,6 +109,9 @@ function normalizeAccount(account, provider, fallbackStatus, fallbackSource, fal
         external_account_id: nullableText(safe.external_account_id), store_id: nullableText(safe.store_id),
         ad_account_id: nullableText(safe.ad_account_id), display_name: nullableText(safe.display_name),
         currency: nullableText(safe.currency), timezone: nullableText(safe.timezone),
+        local_today: /^\d{4}-\d{2}-\d{2}$/.test(safe.local_today || "")
+            ? safe.local_today
+            : null,
         connection_status: text(safe.connection_status, fallbackStatus), capabilities: normalizeCapabilities(safe.capabilities),
         permissions: Array.isArray(safe.permissions) ? safe.permissions.filter((item) => typeof item === "string") : [],
         last_sync_at: nullableText(safe.last_sync_at), data_delay_minutes: safeNumber(safe.data_delay_minutes, { min: 0 }),
