@@ -94,7 +94,7 @@ def test_extract_adsquad_total_rows_preserves_parent_campaign():
 
     assert module.ADSQUAD_PROVIDER_GRANULARITY == "TOTAL"
     assert module.adsquad_source_mode("conversion").endswith(
-        "ad_squad_account_day_total_v4"
+        "ad_squad_active_campaign_account_day_total_v5"
     )
     assert successful == 1
     assert breakdown_seen is True
@@ -114,6 +114,43 @@ def test_extract_adsquad_total_rows_preserves_parent_campaign():
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_campaign_entities_selects_active_rows_before_legacy_limit():
+    historical = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "ad_account_id": "account-1",
+            "entity_type": "campaign",
+            "external_id": f"paused-{index:03d}",
+            "display_name": f"Paused {index:03d}",
+            "status": "PAUSED",
+        }
+        for index in range(module.MAX_CAMPAIGNS_PER_ACCOUNT + 20)
+    ]
+    current = {
+        "user_id": "owner-1",
+        "provider": "snapchat_ads",
+        "ad_account_id": "account-1",
+        "entity_type": "campaign",
+        "external_id": "campaign-current",
+        "display_name": "Current active campaign",
+        "status": "ACTIVE",
+    }
+    db = FakeDB({
+        SNAPCHAT_ENTITY_COLLECTION: [*historical, current],
+    })
+
+    campaigns, limited = await module._campaign_entities(
+        db,
+        "owner-1",
+        "account-1",
+    )
+
+    assert [row["external_id"] for row in campaigns] == ["campaign-current"]
+    assert limited is False
 
 
 def test_day_buckets_follow_requested_timezone():
