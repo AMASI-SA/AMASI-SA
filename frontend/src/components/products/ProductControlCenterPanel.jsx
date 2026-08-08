@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+import api from "../../lib/api";
 import VisualHtmlEditor from "./VisualHtmlEditor";
 import {
     approveProductControlDraft, getProductControlCenter, getSallaCategoryCatalog,
@@ -123,6 +124,92 @@ function CategoryPicker({ value, items, loading, onChange }) {
     </div>;
 }
 
+function GoogleCategoryPicker({ value, items, loading, error, version, onChange }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const selected = useMemo(() => {
+        const current = String(value || "").trim();
+        if (!current) return null;
+        return items.find((row) => String(row.id) === current || String(row.path) === current) || null;
+    }, [items, value]);
+    const visible = useMemo(() => {
+        const needle = query.trim().toLocaleLowerCase("ar");
+        const rows = needle
+            ? items.filter((row) => `${row.id} ${row.name} ${row.path}`.toLocaleLowerCase("ar").includes(needle))
+            : items;
+        return rows.slice(0, 100);
+    }, [items, query]);
+
+    function choose(row) {
+        onChange(String(row.id));
+        setQuery("");
+        setOpen(false);
+    }
+
+    return <div
+        className="relative"
+        tabIndex={-1}
+        onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        }}
+        onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(false);
+        }}
+    >
+        <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-600">
+            <span>Google Product Category</span>
+            {version && <span className="font-normal text-slate-400">Google {version}</span>}
+        </div>
+        <button
+            type="button"
+            aria-expanded={open}
+            data-testid="google-product-category-picker"
+            onClick={() => setOpen((current) => !current)}
+            className="mt-1 min-h-12 w-full rounded-xl border bg-white p-3 text-right text-sm"
+        >
+            {loading
+                ? "جاري تحميل تصنيفات Google…"
+                : selected
+                    ? <span><b>{selected.name}</b><small className="mt-1 block text-slate-400">{selected.path} · ID {selected.id}</small></span>
+                    : value
+                        ? <span className="text-amber-700">القيمة الحالية غير موجودة في القائمة الرسمية: {value}</span>
+                        : "اختر تصنيف Google…"}
+        </button>
+        {error && <div className="mt-1 text-xs font-bold text-rose-600">{error}</div>}
+        {open && <div className="absolute z-[60] mt-2 w-full min-w-[360px] overflow-hidden rounded-2xl border bg-white shadow-2xl">
+            <label className="flex items-center gap-2 border-b p-3">
+                <MagnifyingGlass className="text-slate-400" />
+                <input
+                    autoFocus
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="ابحث بالعربي أو برقم Google ID…"
+                    className="min-w-0 flex-1 outline-none"
+                />
+            </label>
+            <div className="max-h-80 overflow-auto p-2">
+                {loading && <div className="p-6 text-center"><SpinnerGap className="inline animate-spin" /></div>}
+                {!loading && visible.map((row) => <button
+                    type="button"
+                    key={row.id}
+                    onClick={() => choose(row)}
+                    className={`block w-full rounded-xl p-3 text-right hover:bg-violet-50 ${String(row.id) === String(value) ? "bg-violet-50" : ""}`}
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <span><b>{row.name}</b><small className="mt-1 block text-slate-400">{row.path}</small></span>
+                        <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500">ID {row.id}</span>
+                    </div>
+                </button>)}
+                {!loading && !visible.length && <div className="p-5 text-center text-sm text-slate-400">لا توجد نتيجة في Taxonomy الرسمية.</div>}
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t bg-slate-50 p-2 text-xs text-slate-500">
+                <span>{items.length.toLocaleString("en-US")} تصنيف من Google</span>
+                {value && <button type="button" onClick={() => { onChange(""); setOpen(false); }} className="rounded-lg border bg-white px-3 py-1 font-bold text-rose-600">مسح التصنيف</button>}
+            </div>
+        </div>}
+    </div>;
+}
+
 function ChangeDiff({ before = {}, after = {} }) {
     const rows = Object.keys(after);
     if (!rows.length) return null;
@@ -138,6 +225,10 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     const [tab, setTab] = useState("history");
     const [categories, setCategories] = useState([]);
     const [categoriesLoading, setCategoriesLoading] = useState(false);
+    const [googleTaxonomy, setGoogleTaxonomy] = useState([]);
+    const [googleTaxonomyLoading, setGoogleTaxonomyLoading] = useState(false);
+    const [googleTaxonomyError, setGoogleTaxonomyError] = useState("");
+    const [googleTaxonomyVersion, setGoogleTaxonomyVersion] = useState("");
 
     async function load() {
         if (!productId) return;
@@ -160,6 +251,24 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     useEffect(() => {
         let live = true; setCategoriesLoading(true);
         getSallaCategoryCatalog().then((result) => { if (live) setCategories(result.items || []); }).catch(() => {}).finally(() => { if (live) setCategoriesLoading(false); });
+        return () => { live = false; };
+    }, []);
+    useEffect(() => {
+        let live = true;
+        setGoogleTaxonomyLoading(true);
+        setGoogleTaxonomyError("");
+        api.get("/products-v2/google-taxonomy")
+            .then((response) => {
+                if (!live) return;
+                const result = response.data || {};
+                setGoogleTaxonomy(result.items || []);
+                setGoogleTaxonomyVersion(result.version || "");
+            })
+            .catch((error) => {
+                if (!live) return;
+                setGoogleTaxonomyError(error?.response?.data?.detail?.message || "تعذر تحميل تصنيفات Google الرسمية.");
+            })
+            .finally(() => { if (live) setGoogleTaxonomyLoading(false); });
         return () => { live = false; };
     }, []);
 
@@ -194,7 +303,8 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
                 {field("price", "السعر الأساسي", <input type="number" value={form.price} onChange={(e) => setForm((r) => ({ ...r, price: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}{field("sale_price", "السعر المخفض", <input type="number" value={form.sale_price} onChange={(e) => setForm((r) => ({ ...r, sale_price: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
                 {field("sale_starts_at", "تاريخ بداية التخفيض", <input type="date" value={form.sale_starts_at} onChange={(e) => setForm((r) => ({ ...r, sale_starts_at: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}{field("sale_ends_at", "تاريخ نهاية التخفيض", <input type="date" value={form.sale_ends_at} onChange={(e) => setForm((r) => ({ ...r, sale_ends_at: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
                 <CategoryPicker value={form.categories} items={categories} loading={categoriesLoading} onChange={(value) => setForm((r) => ({ ...r, categories: value }))} />
-                {field("google_category", "Google Product Category")}{field("local_category", "التصنيف المحلي في ميزان")}{field("slug", "رابط المنتج Slug")}{field("seo_title", "عنوان SEO")}{field("keywords", "كلمات SEO")}
+                <GoogleCategoryPicker value={form.google_category} items={googleTaxonomy} loading={googleTaxonomyLoading} error={googleTaxonomyError} version={googleTaxonomyVersion} onChange={(value) => setForm((r) => ({ ...r, google_category: value }))} />
+                {field("local_category", "التصنيف المحلي في ميزان")}{field("slug", "رابط المنتج Slug")}{field("seo_title", "عنوان SEO")}{field("keywords", "كلمات SEO")}
             </div>
             {field("short_description", "الوصف المختصر", <textarea rows={3} value={form.short_description} onChange={(e) => setForm((r) => ({ ...r, short_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
             {field("seo_description", "وصف SEO", <textarea rows={3} value={form.seo_description} onChange={(e) => setForm((r) => ({ ...r, seo_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
