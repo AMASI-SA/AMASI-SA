@@ -39,6 +39,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Queue,
         items: [
             { to: "/fulfillment-v2", label: "إدارة التجهيز", exactSearch: true },
+            { to: "/fulfillment-v2?workspace=my-products", label: "إدارة منتجاتي" },
             { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
             { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
         ],

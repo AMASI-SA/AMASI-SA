@@ -35,3 +35,33 @@ test("supplier dispatch print escapes product text", () => {
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
 });
+
+
+test("combined supplier print preserves a block for every preparation file", () => {
+    const html = buildSupplierDispatchPrintHtml({
+        id: "dispatch-2",
+        supplier_file_number: "SF-20260808-ABC123",
+        supplier_name: "مورد الذهب",
+        piece_count: 3,
+        source_files: [
+            {
+                file_number: "PF-100",
+                registered_at: "2026-08-08T08:00:00Z",
+                lines: [{ product_name: "سلسال", quantity: 2 }],
+            },
+            {
+                file_number: "PF-101",
+                registered_at: "2026-08-08T09:00:00Z",
+                lines: [{ product_name: "خاتم", quantity: 1 }],
+            },
+        ],
+    });
+
+    expect(html).toContain("ملف تجهيز المورد — مورد الذهب");
+    expect(html).toContain("رقم ملف المورد:");
+    expect(html).toContain("SF-20260808-ABC123");
+    expect(html).toContain("ملف التجهيز: PF-100");
+    expect(html).toContain("ملف التجهيز: PF-101");
+    expect(html).toContain("سلسال");
+    expect(html).toContain("خاتم");
+});

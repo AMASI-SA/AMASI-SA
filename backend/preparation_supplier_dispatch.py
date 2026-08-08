@@ -14,9 +14,10 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
@@ -61,6 +62,17 @@ class PreparationPieceSelection(BaseModel):
     quantity: int = Field(ge=1, le=MAX_SELECTED_PIECES)
 
 
+def _validate_selection_rows(
+    values: list[PreparationPieceSelection],
+) -> list[PreparationPieceSelection]:
+    keys = [_text(row.group_key) for row in values]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate_piece_group")
+    if sum(row.quantity for row in values) > MAX_SELECTED_PIECES:
+        raise ValueError("piece_selection_limit_exceeded")
+    return values
+
+
 class _SelectionsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -77,17 +89,80 @@ class _SelectionsRequest(BaseModel):
         cls,
         values: list[PreparationPieceSelection],
     ) -> list[PreparationPieceSelection]:
-        keys = [_text(row.group_key) for row in values]
-        if len(keys) != len(set(keys)):
-            raise ValueError("duplicate_piece_group")
-        if sum(row.quantity for row in values) > MAX_SELECTED_PIECES:
-            raise ValueError("piece_selection_limit_exceeded")
-        return values
+        return _validate_selection_rows(values)
 
 
-class CreateSupplierDispatchRequest(_SelectionsRequest):
+class SupplierDispatchFileSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_number: str = Field(min_length=1, max_length=120)
+    selections: list[PreparationPieceSelection] = Field(
+        min_length=1,
+        max_length=MAX_SELECTIONS,
+    )
+
+    @field_validator("selections")
+    @classmethod
+    def validate_selections(
+        cls,
+        values: list[PreparationPieceSelection],
+    ) -> list[PreparationPieceSelection]:
+        return _validate_selection_rows(values)
+
+
+class CreateSupplierDispatchRequest(BaseModel):
+    """Create one supplier file from one or more preparation files.
+
+    ``file_number`` + ``selections`` remains accepted for deployed clients.
+    New clients send ``files`` so one supplier file can preserve several source
+    preparation-file blocks without merging their assignment history.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str = Field(min_length=8, max_length=160)
     supplier_id: str = Field(min_length=1, max_length=160)
     note: str | None = Field(default=None, max_length=1000)
+    file_number: str | None = Field(default=None, max_length=120)
+    selections: list[PreparationPieceSelection] | None = Field(
+        default=None,
+        max_length=MAX_SELECTIONS,
+    )
+    files: list[SupplierDispatchFileSelection] = Field(
+        default_factory=list,
+        max_length=MAX_SELECTIONS,
+    )
+
+    @model_validator(mode="after")
+    def validate_file_selections(self) -> "CreateSupplierDispatchRequest":
+        legacy_used = bool(_text(self.file_number) or self.selections)
+        if self.files and legacy_used:
+            raise ValueError("mixed_supplier_dispatch_selection_modes")
+        if not self.files:
+            if not _text(self.file_number) or not self.selections:
+                raise ValueError("supplier_dispatch_files_required")
+            _validate_selection_rows(self.selections)
+        rows = self.file_requests()
+        file_numbers = [_text(row.file_number) for row in rows]
+        if len(file_numbers) != len(set(file_numbers)):
+            raise ValueError("duplicate_supplier_dispatch_file")
+        if sum(len(row.selections) for row in rows) > MAX_SELECTIONS:
+            raise ValueError("piece_selection_limit_exceeded")
+        if sum(
+            selection.quantity
+            for row in rows
+            for selection in row.selections
+        ) > MAX_SELECTED_PIECES:
+            raise ValueError("piece_selection_limit_exceeded")
+        return self
+
+    def file_requests(self) -> list[SupplierDispatchFileSelection]:
+        if self.files:
+            return list(self.files)
+        return [SupplierDispatchFileSelection(
+            file_number=_text(self.file_number),
+            selections=list(self.selections or []),
+        )]
 
 
 class RejectPreparationPiecesRequest(_SelectionsRequest):
@@ -611,14 +686,19 @@ async def _unassigned_workspace(
         {"user_id": user_id, "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED},
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("rejected_at", 1).limit(5000).to_list(5000)
-    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
     for piece in pieces:
-        key = (_text(piece.get("file_number")), _text(piece.get("group_key")))
+        key = (
+            _text(piece.get("file_number")),
+            _text(piece.get("group_key")),
+            _text(piece.get("rejection_id")) or _text(piece.get("piece_id")),
+        )
         row = grouped.setdefault(key, {
             "file_number": key[0],
             "batch_id": _text(piece.get("batch_id")),
             "file_title": _text(piece.get("file_title")),
             "group_key": key[1],
+            "rejection_id": key[2],
             "product_name": _text(piece.get("product_name")) or "منتج",
             "sku": _text(piece.get("sku")) or None,
             "selected_image_url": _text(piece.get("selected_image_url")) or None,
@@ -764,16 +844,41 @@ def make_preparation_supplier_dispatch_router(
         if existing:
             return {"ok": _text(existing.get("status")) != "building", "dispatch": existing}
 
-        registry = await db[REGISTRY].find_one(
-            {"user_id": user_id, "file_number": _text(payload.file_number), "status": "ready"},
-            {"_id": 0},
-        )
-        if not registry:
-            raise HTTPException(status_code=404, detail={"code": "preparation_file_not_found"})
-        candidates = await db[PIECES].find(
+        file_requests = payload.file_requests()
+        source_file_numbers = [_text(row.file_number) for row in file_requests]
+        registries = await db[REGISTRY].find(
             {
                 "user_id": user_id,
-                "file_number": _text(payload.file_number),
+                "file_number": {"$in": source_file_numbers},
+                "status": "ready",
+            },
+            {"_id": 0},
+        ).to_list(len(source_file_numbers))
+        registry_by_file = {
+            _text(row.get("file_number")): row
+            for row in registries
+            if _text(row.get("file_number"))
+        }
+        missing_files = [
+            file_number
+            for file_number in source_file_numbers
+            if file_number not in registry_by_file
+        ]
+        if missing_files:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "preparation_file_not_found",
+                    "file_numbers": missing_files,
+                },
+            )
+
+        selected: list[dict[str, Any]] = []
+        selected_by_file: dict[str, list[dict[str, Any]]] = {}
+        all_candidates = await db[PIECES].find(
+            {
+                "user_id": user_id,
+                "file_number": {"$in": source_file_numbers},
                 "responsible_employee_id": employee_id,
                 "status": {"$in": [PIECE_STATUS_ASSIGNED, PIECE_STATUS_IN_PROGRESS]},
                 "$or": [
@@ -785,20 +890,28 @@ def make_preparation_supplier_dispatch_router(
             },
             {"_id": 0},
         ).to_list(50000)
-        candidates = [row for row in candidates if piece_is_available_for_supplier_dispatch(row)]
-        try:
-            selected = plan_piece_selections(
-                candidates,
-                [row.model_dump() for row in payload.selections],
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": str(exc),
-                    "message": "الكمية المختارة لم تعد متاحة؛ حدّث الملف وأعد المحاولة.",
-                },
-            ) from exc
+        candidates_by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for candidate in all_candidates:
+            if piece_is_available_for_supplier_dispatch(candidate):
+                candidates_by_file[_text(candidate.get("file_number"))].append(candidate)
+        for file_request in file_requests:
+            file_number = _text(file_request.file_number)
+            try:
+                file_selected = plan_piece_selections(
+                    candidates_by_file[file_number],
+                    [row.model_dump() for row in file_request.selections],
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": str(exc),
+                        "file_number": file_number,
+                        "message": "الكمية المختارة لم تعد متاحة؛ حدّث الملف وأعد المحاولة.",
+                    },
+                ) from exc
+            selected_by_file[file_number] = file_selected
+            selected.extend(file_selected)
         supplier = await db[MEZAN_SUPPLIERS_V2].find_one(
             {
                 "user_id": user_id,
@@ -821,14 +934,46 @@ def make_preparation_supplier_dispatch_router(
         dispatch_id = f"sdv1_{uuid.uuid4().hex}"
         now = _now()
         piece_ids = [_text(row.get("piece_id")) for row in selected]
-        lines = supplier_dispatch_lines(selected, supplier)
+        supplier_file_number = (
+            source_file_numbers[0]
+            if len(source_file_numbers) == 1
+            else f"SF-{now.astimezone(ZoneInfo('Asia/Riyadh')).strftime('%Y%m%d')}-{dispatch_id[-6:].upper()}"
+        )
+        source_files = []
+        lines = []
+        for file_number in source_file_numbers:
+            registry = registry_by_file[file_number]
+            file_lines = supplier_dispatch_lines(
+                selected_by_file[file_number],
+                supplier,
+            )
+            source_file = {
+                "file_number": file_number,
+                "batch_id": _text(registry.get("batch_id")),
+                "file_title": _text(registry.get("file_title")) or file_number,
+                "registered_at": registry.get("registered_at"),
+                "piece_count": len(selected_by_file[file_number]),
+                "lines": file_lines,
+            }
+            source_files.append(source_file)
+            lines.extend([
+                {**line, "source_file_number": file_number}
+                for line in file_lines
+            ])
         shell = {
             "id": dispatch_id,
             "user_id": user_id,
             "client_request_id": payload.client_request_id,
             "status": "building",
-            "file_number": _text(payload.file_number),
-            "batch_id": _text(registry.get("batch_id")),
+            "file_number": supplier_file_number,
+            "supplier_file_number": supplier_file_number,
+            "source_file_numbers": source_file_numbers,
+            "source_files": source_files,
+            "batch_id": (
+                _text(registry_by_file[source_file_numbers[0]].get("batch_id"))
+                if len(source_file_numbers) == 1
+                else None
+            ),
             "supplier_id": _text(supplier.get("id")),
             "supplier_name": _text(supplier.get("company_name")),
             "sent_by_id": employee_id,
@@ -907,13 +1052,14 @@ def make_preparation_supplier_dispatch_router(
             )
             raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_conflict"})
 
-        await _mark_orders_started(
-            db,
-            user_id=user_id,
-            registry=registry,
-            pieces=selected,
-            actor=worker,
-        )
+        for file_number in source_file_numbers:
+            await _mark_orders_started(
+                db,
+                user_id=user_id,
+                registry=registry_by_file[file_number],
+                pieces=selected_by_file[file_number],
+                actor=worker,
+            )
         ready_patch = {"status": DISPATCH_STATUS_SENT, "sent_at": now, "updated_at": now}
         await db[DISPATCHES].update_one(
             {"user_id": user_id, "id": dispatch_id, "status": "building"},
@@ -926,7 +1072,9 @@ def make_preparation_supplier_dispatch_router(
             "client_request_id": payload.client_request_id,
             "event_type": "preparation_pieces_sent_to_supplier",
             "dispatch_id": dispatch_id,
-            "file_number": _text(payload.file_number),
+            "file_number": supplier_file_number,
+            "supplier_file_number": supplier_file_number,
+            "source_file_numbers": source_file_numbers,
             "supplier_id": _text(supplier.get("id")),
             "supplier_name": _text(supplier.get("company_name")),
             "piece_ids": piece_ids,
@@ -1286,6 +1434,7 @@ __all__ = [
     "PreparationPieceSelection",
     "RejectPreparationPiecesRequest",
     "ReassignPreparationPiecesRequest",
+    "SupplierDispatchFileSelection",
     "ensure_supplier_dispatch_indexes",
     "employee_workspace_summary",
     "make_preparation_supplier_dispatch_router",

@@ -19,8 +19,8 @@ jest.mock("../components/fulfillment/PreparationFilesRegistry", () => function P
     return <div data-testid="preparation-files-registry-window">سجل ملفات التجهيز المستقل</div>;
 });
 
-jest.mock("../components/fulfillment/PreparationWorkDashboard", () => function PreparationWorkDashboardFixture() {
-    return <div data-testid="preparation-work-dashboard">منتجاتي وإدارة منتجات الموظفين</div>;
+jest.mock("../components/fulfillment/PreparationWorkDashboard", () => function PreparationWorkDashboardFixture({ initialView, standalone }) {
+    return <div data-testid="preparation-work-dashboard">{standalone && initialView === "my-products" ? "إدارة منتجاتي المستقلة" : "تفاصيل قيد التنفيذ وإدارة الموظفين"}</div>;
 });
 
 jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToShipFixture() {
@@ -78,15 +78,26 @@ test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
     });
 });
 
-test("opening fulfillment without a stage renders the standalone my products overview", () => {
+test("opening fulfillment without a stage starts at pending review", () => {
     mockSearchParams = new URLSearchParams("");
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
+    expect(markup).toContain('data-testid="pending-review-queue"');
+    expect(markup).toContain("قائمة انتظار المراجعة");
+    expect(markup).toContain("تبويبات إدارة التجهيز");
+    expect(markup).toContain("Mezan OS V2");
+    expect(markup).not.toContain("إدارة منتجاتي المستقلة");
+});
+
+test("my products workspace is standalone and separate from fulfillment stages", () => {
+    mockSearchParams = new URLSearchParams("workspace=my-products");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
-    expect(markup).toContain("منتجاتي وإدارة منتجات الموظفين");
-    expect(markup).not.toContain('data-testid="fulfillment-mobile-overview"');
+    expect(markup).toContain("إدارة منتجاتي المستقلة");
     expect(markup).not.toContain("تبويبات إدارة التجهيز");
     expect(markup).not.toContain("Mezan OS V2");
+    expect(markup).not.toContain('data-testid="pending-review-queue"');
 });
 
 test("pending review is embedded under the organized preparation tabs", () => {
@@ -123,9 +134,9 @@ test("in progress stage renders the employee work dashboard instead of a placeho
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
-    expect(markup).toContain("منتجاتي وإدارة منتجات الموظفين");
-    expect(markup).not.toContain("تبويبات إدارة التجهيز");
-    expect(markup).not.toContain("Mezan OS V2");
+    expect(markup).toContain("تفاصيل قيد التنفيذ وإدارة الموظفين");
+    expect(markup).toContain("تبويبات إدارة التجهيز");
+    expect(markup).toContain("Mezan OS V2");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 

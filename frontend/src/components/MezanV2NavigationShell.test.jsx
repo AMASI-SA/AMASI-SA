@@ -65,6 +65,7 @@ test("orders and fulfillment are independent top-level sections", () => {
     expect(orders.items.map((item) => item.to)).toEqual(["/orders-v2"]);
     expect(fulfillment.items.map((item) => item.to)).toEqual([
         "/fulfillment-v2",
+        "/fulfillment-v2?workspace=my-products",
         "/fulfillment-v2?stage=reviewed&view=products",
         "/fulfillment-v2?stage=reviewed&view=files",
     ]);

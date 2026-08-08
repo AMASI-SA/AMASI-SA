@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from preparation_supplier_dispatch import (
     ASSIGNMENT_STATUS_UNASSIGNED,
+    CreateSupplierDispatchRequest,
     DISPATCH_STATUS_PARTIAL,
     DISPATCH_STATUS_READY,
     DISPATCH_STATUS_SENT,
@@ -156,6 +157,59 @@ def test_returning_assignment_requires_a_meaningful_employee_reason():
         reason="ليس من اختصاصي",
     )
     assert payload.reason == "ليس من اختصاصي"
+
+
+def test_one_supplier_file_can_preserve_selections_from_multiple_source_files():
+    payload = CreateSupplierDispatchRequest(
+        client_request_id="supplier-dispatch-multi-1",
+        supplier_id="supplier-1",
+        files=[
+            {
+                "file_number": "PF-100",
+                "selections": [{"group_key": "product:1", "quantity": 2}],
+            },
+            {
+                "file_number": "PF-101",
+                "selections": [{"group_key": "product:1", "quantity": 1}],
+            },
+        ],
+    )
+
+    assert [row.file_number for row in payload.file_requests()] == ["PF-100", "PF-101"]
+    assert sum(
+        selection.quantity
+        for row in payload.file_requests()
+        for selection in row.selections
+    ) == 3
+
+
+def test_supplier_file_rejects_duplicate_source_file_blocks():
+    with pytest.raises(ValidationError):
+        CreateSupplierDispatchRequest(
+            client_request_id="supplier-dispatch-multi-2",
+            supplier_id="supplier-1",
+            files=[
+                {
+                    "file_number": "PF-100",
+                    "selections": [{"group_key": "product:1", "quantity": 1}],
+                },
+                {
+                    "file_number": "PF-100",
+                    "selections": [{"group_key": "product:2", "quantity": 1}],
+                },
+            ],
+        )
+
+
+def test_legacy_single_file_supplier_payload_remains_supported():
+    payload = CreateSupplierDispatchRequest(
+        client_request_id="supplier-dispatch-legacy-1",
+        supplier_id="supplier-1",
+        file_number="PF-100",
+        selections=[{"group_key": "product:1", "quantity": 1}],
+    )
+
+    assert payload.file_requests()[0].file_number == "PF-100"
 
 
 def test_employee_summary_uses_products_orders_and_all_assigned_pieces():

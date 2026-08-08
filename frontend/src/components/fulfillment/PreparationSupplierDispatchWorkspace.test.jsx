@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import PreparationSupplierDispatchWorkspace, {
     dispatchSelections,
     MyProductsOverview,
+    selectedFileDispatches,
+    supplierDispatchForPrint,
     WaitingReviewView,
 } from "./PreparationSupplierDispatchWorkspace";
 
@@ -17,6 +19,35 @@ test("dispatch selection clamps quantities to the employee available pieces", ()
     )).toEqual([
         { group_key: "product:1", quantity: 3 },
     ]);
+});
+
+
+test("one supplier file keeps selections grouped by their source preparation file", () => {
+    expect(selectedFileDispatches([
+        {
+            file_number: "PF-100",
+            products: [{ group_key: "product:1", available_quantity: 2 }],
+        },
+        {
+            file_number: "PF-101",
+            products: [{ group_key: "product:1", available_quantity: 3 }],
+        },
+    ], {
+        "PF-100": { "product:1": 2 },
+        "PF-101": { "product:1": 1 },
+    })).toEqual([
+        { file_number: "PF-100", selections: [{ group_key: "product:1", quantity: 2 }] },
+        { file_number: "PF-101", selections: [{ group_key: "product:1", quantity: 1 }] },
+    ]);
+});
+
+
+test("print data keeps the selected supplier name when an API response omits it", () => {
+    expect(supplierDispatchForPrint(
+        { id: "dispatch-1" },
+        [{ id: "supplier-1", company_name: "مورد النقش" }],
+        "supplier-1",
+    ).supplier_name).toBe("مورد النقش");
 });
 
 
@@ -96,6 +127,7 @@ test("waiting review renders two product cards per mobile row and mandatory retu
             files: [{
                 file_number: "PF-100",
                 file_title: "ملف أحمد",
+                registered_at: "2026-08-08T08:00:00Z",
                 available_quantity: 2,
                 sent_quantity: 0,
                 products: [{
@@ -116,5 +148,9 @@ test("waiting review renders two product cards per mobile row and mandatory retu
     expect(markup).toContain("grid-cols-2");
     expect(markup).toContain("سلسال الاسم");
     expect(markup).toContain("إرجاع الإسناد");
+    expect(markup).toContain("خيارات سلسال الاسم");
+    expect(markup).toContain("تاريخ الرفع");
+    expect(markup).toContain('data-testid="multi-file-supplier-dispatch"');
+    expect(markup).toContain("ملف مورد واحد");
     expect(markup).toContain("حفظ وطباعة ملف المورد");
 });
