@@ -180,6 +180,68 @@ async def ensure_snapchat_native_sync_indexes(db: Any) -> None:
     )
 
 
+
+def _safe_provider_text(value: Any, *, limit: int) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    if any(
+        secret in lowered
+        for secret in (
+            "authorization",
+            "bearer ",
+            "access_token",
+            "refresh_token",
+            "client_secret",
+        )
+    ):
+        return ""
+    return text[:limit]
+
+
+def _safe_provider_error_detail(payload: Any) -> dict[str, str]:
+    """Extract only allow-listed, bounded Snapchat error metadata."""
+    if not isinstance(payload, dict):
+        return {}
+    candidates: list[dict[str, Any]] = [payload]
+    nested_error = payload.get("error")
+    if isinstance(nested_error, dict):
+        candidates.append(nested_error)
+    nested_errors = payload.get("errors")
+    if isinstance(nested_errors, list):
+        candidates.extend(
+            item for item in nested_errors[:3] if isinstance(item, dict)
+        )
+    code = ""
+    message = ""
+    for item in candidates:
+        if not code:
+            for key in ("error_code", "code", "request_status", "status"):
+                code = _safe_provider_text(item.get(key), limit=80)
+                if code:
+                    break
+        if not message:
+            for key in (
+                "error_message",
+                "debug_message",
+                "message",
+                "description",
+            ):
+                message = _safe_provider_text(item.get(key), limit=240)
+                if message:
+                    break
+        if code and message:
+            break
+    return {
+        key: value
+        for key, value in (
+            ("provider_error_code", code),
+            ("provider_error_message", message),
+        )
+        if value
+    }
+
 @dataclass
 class SnapchatSyncContext:
     db: Any
@@ -213,10 +275,25 @@ class SnapchatSyncContext:
                 status_code=409, result={"needs_reauth": True},
             )
         if response.status_code >= 400:
+            try:
+                provider_payload = response.json() or {}
+            except (TypeError, ValueError):
+                provider_payload = {}
+            detail = _safe_provider_error_detail(provider_payload)
+            provider_code = detail.get("provider_error_code", "")
+            provider_message = detail.get("provider_error_message", "")
+            safe_suffix = ": ".join(
+                part for part in (provider_code, provider_message) if part
+            )
+            message = "Snapchat rejected a read-only data request."
+            if safe_suffix:
+                message = f"{message} Provider: {safe_suffix}"
             raise SnapchatNativeSyncError(
                 f"snapchat_provider_http_{response.status_code}",
-                "Snapchat rejected a read-only data request.", status_code=502,
+                message,
+                status_code=502,
                 retryable=response.status_code >= 500,
+                result=detail,
             )
         try:
             payload = response.json() or {}
