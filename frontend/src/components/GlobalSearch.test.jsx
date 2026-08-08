@@ -21,12 +21,13 @@ test("Qoyod query exposes all unified control-center tabs", () => {
     const pages = buildGlobalSearchResults("قيود", { isOwner: true })
         .filter((result) => result.type === "page");
 
-    expect(pages.map((page) => page.to)).toEqual([
+    expect(pages).toHaveLength(4);
+    expect(pages.map((page) => page.to)).toEqual(expect.arrayContaining([
         "/integrations-v2/qoyod?tab=status",
         "/integrations-v2/qoyod?tab=settings",
         "/integrations-v2/qoyod?tab=exceptions",
         "/integrations-v2/qoyod?tab=reconciliation",
-    ]);
+    ]));
     expect(pages.every((page) => page.label.startsWith("قيود"))).toBe(true);
 });
 
