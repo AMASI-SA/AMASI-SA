@@ -1,4 +1,9 @@
-from product_category_variant_support import _build_category_catalog, _flatten_categories, enrich_product_patch
+from product_category_variant_support import (
+    _build_category_catalog,
+    _flatten_categories,
+    _parse_google_taxonomy,
+    enrich_product_patch,
+)
 
 
 def test_variant_ids_become_readable_option_labels():
@@ -54,3 +59,50 @@ def test_nested_sub_categories_are_included_and_hidden_is_marked():
     assert child["is_hidden"] is True
     assert child["status_label"] == "مخفي"
     assert child["path"].endswith("— مخفي")
+
+
+def test_google_taxonomy_parser_preserves_id_path_and_leaf_name():
+    version, items = _parse_google_taxonomy(
+        "\n".join([
+            "# Google_Product_Taxonomy_Version: 2021-09-21",
+            "166 - Apparel & Accessories",
+            "188 - Apparel & Accessories > Jewelry",
+            "559 - Apparel & Accessories > Jewelry > Necklaces",
+            "bad row",
+        ])
+    )
+
+    assert version == "2021-09-21"
+    assert items == [
+        {
+            "id": "166",
+            "path": "Apparel & Accessories",
+            "name": "Apparel & Accessories",
+            "depth": 0,
+        },
+        {
+            "id": "188",
+            "path": "Apparel & Accessories > Jewelry",
+            "name": "Jewelry",
+            "depth": 1,
+        },
+        {
+            "id": "559",
+            "path": "Apparel & Accessories > Jewelry > Necklaces",
+            "name": "Necklaces",
+            "depth": 2,
+        },
+    ]
+
+
+def test_google_taxonomy_parser_ignores_duplicate_or_invalid_ids():
+    _, items = _parse_google_taxonomy(
+        "\n".join([
+            "559 - Apparel & Accessories > Jewelry > Necklaces",
+            "559 - Duplicate path",
+            "abc - Invalid id",
+            "560 - Apparel & Accessories > Jewelry > Rings",
+        ])
+    )
+
+    assert [row["id"] for row in items] == ["559", "560"]
