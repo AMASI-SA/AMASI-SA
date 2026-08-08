@@ -164,8 +164,8 @@ def test_direct_account_total_accepts_documented_spend_only_payload():
     assert errors == []
     assert successful == 1
     assert metrics["spend"] == 714_050_000
-    assert metrics["conversion_purchases"] == 0
-    assert metrics["conversion_purchases_value"] == 0
+    assert "conversion_purchases" not in metrics
+    assert "conversion_purchases_value" not in metrics
 
 
 def test_direct_total_rejects_missing_spend():
@@ -183,6 +183,29 @@ def test_direct_total_rejects_missing_spend():
     assert successful == 1
     assert metrics is None
     assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
+
+
+def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
+    source = Path(
+        "integrations_control_center/ads_auto_sync_scheduler.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "from . import snapchat_account_hourly_refresh as snapchat_hourly"
+        in source
+    )
+    assert (
+        "await snapchat_hourly.refresh_snapchat_account_hours("
+        in source
+    )
+
+
+def test_platform_total_v9_partitions_sparse_metric_fix():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+
+    assert "direct_account_headlines_campaign_completed_hour_v9" in source
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
