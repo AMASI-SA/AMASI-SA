@@ -15,7 +15,10 @@ import {
     snapchatSelectedAccountId,
 } from "../../marketingCampaignResultSource";
 import { ADS_DATE_RANGE_APPLIED_EVENT } from "./ArabicDateRangePicker";
-import { getSnapchatAdPerformance } from "../../services/snapchatAdPerformance";
+import {
+    getSnapchatAdPerformance,
+    SNAPCHAT_ENTITY_PAGE_SIZE,
+} from "../../services/snapchatAdPerformance";
 
 const AUTO_REFRESH_MS = 60_000;
 const NAME_WIDTH = 330;
@@ -213,6 +216,8 @@ export const AD_MANAGER_SORT_OPTIONS = Object.freeze([
 export default function AdManagerTable({
     activeCampaignsOnly = true,
     actionReportTime = "conversion",
+    campaignId = null,
+    adSquadId = null,
 }) {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -238,8 +243,10 @@ export default function AdManagerTable({
                 dateFrom: range.dateFrom,
                 dateTo: range.dateTo,
                 query: appliedQuery,
+                campaignId,
+                adSquadId,
                 page,
-                limit: 100,
+                limit: SNAPCHAT_ENTITY_PAGE_SIZE,
                 activeCampaignsOnly,
                 sortBy: serverSort,
                 actionReportTime,
@@ -255,11 +262,23 @@ export default function AdManagerTable({
         } finally {
             setLoading(false);
         }
-    }, [actionReportTime, activeCampaignsOnly, appliedQuery, page, serverSort]);
+    }, [
+        actionReportTime,
+        activeCampaignsOnly,
+        adSquadId,
+        appliedQuery,
+        campaignId,
+        page,
+        serverSort,
+    ]);
 
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [campaignId, adSquadId]);
 
     useEffect(() => {
         const refresh = () => {
