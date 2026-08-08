@@ -14,7 +14,7 @@ import product_google_taxonomy_ai_pilot as pilot
 CAR_WORDS = {"سياره", "سيارات", "للسياره", "للسيارات"}
 PENDANT_WORDS = {"تعليقه", "دلايه", "دلايات", "تعليقات"}
 NECKLACE_WORDS = {"سلسال", "سلاسل", "قلاده", "قلادات"}
-HAIR_WORDS = {"شعر", "للشعر"}
+HAIR_WORDS = {"شعر", "الشعر", "للشعر"}
 BROOCH_WORDS = {"بروش", "بروشات"}
 DAQLA_WORDS = {"دقله", "دقلة", "الدقله", "الدقلة"}
 
