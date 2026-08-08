@@ -2,9 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import PreparationSupplierDispatchWorkspace, {
     dispatchSelections,
+    dispatchSelectionState,
     MyProductsOverview,
     selectedFileDispatches,
     supplierDispatchForPrint,
+    toggledDispatchQuantity,
     WaitingReviewView,
 } from "./PreparationSupplierDispatchWorkspace";
 
@@ -19,6 +21,16 @@ test("dispatch selection clamps quantities to the employee available pieces", ()
     )).toEqual([
         { group_key: "product:1", quantity: 3 },
     ]);
+});
+
+
+test("selecting a product starts with every available piece and toggles back to hidden", () => {
+    const product = { product_name: "سلسال الاسم", available_quantity: 20 };
+
+    expect(toggledDispatchQuantity(product, 0)).toBe(20);
+    expect(dispatchSelectionState(product, 20)).toBe("full");
+    expect(dispatchSelectionState(product, 10)).toBe("partial");
+    expect(toggledDispatchQuantity(product, 10)).toBe(0);
 });
 
 
@@ -133,6 +145,7 @@ test("waiting review renders two product cards per mobile row and mandatory retu
                 products: [{
                     group_key: "product:1",
                     product_name: "سلسال الاسم",
+                    selected_image_url: "https://example.test/product.jpg",
                     available_quantity: 2,
                     services: [{ service_id: "engrave", service_name: "نحت", status: "pending" }],
                 }],
@@ -146,11 +159,19 @@ test("waiting review renders two product cards per mobile row and mandatory retu
     />);
 
     expect(markup).toContain("grid-cols-2");
+    expect(markup).toContain("lg:grid-cols-4");
     expect(markup).toContain("سلسال الاسم");
+    expect(markup).toContain("object-contain");
+    expect(markup).toContain('data-testid="dispatch-product-selector"');
+    expect(markup).toContain('data-selection-state="unselected"');
+    expect(markup).not.toContain('data-testid="dispatch-quantity-control"');
+    expect(markup).not.toContain("اختيار كامل");
+    expect(markup).not.toContain("اختيار جزئي");
     expect(markup).toContain("إرجاع الإسناد");
     expect(markup).toContain("خيارات سلسال الاسم");
     expect(markup).toContain("تاريخ الرفع");
     expect(markup).toContain('data-testid="multi-file-supplier-dispatch"');
     expect(markup).toContain("ملف مورد واحد");
     expect(markup).toContain("حفظ وطباعة ملف المورد");
+    expect(markup).toContain("بانتظار المراجعة");
 });

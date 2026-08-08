@@ -1,16 +1,25 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
 
 from preparation_supplier_dispatch import (
     ASSIGNMENT_STATUS_UNASSIGNED,
+    BATCHES,
     CreateSupplierDispatchRequest,
     DISPATCH_STATUS_PARTIAL,
     DISPATCH_STATUS_READY,
     DISPATCH_STATUS_SENT,
+    PIECES,
+    PIECE_EVENTS,
+    REGISTRY,
     RejectPreparationPiecesRequest,
+    WORKFLOWS,
+    _employee_workspace,
+    _mark_orders_started_if_fully_dispatched,
     employee_workspace_summary,
+    file_is_fully_dispatched,
     make_preparation_supplier_dispatch_router,
     piece_is_available_for_supplier_dispatch,
     plan_piece_selections,
@@ -67,6 +76,107 @@ def test_rejected_or_already_sent_piece_is_not_available_for_another_dispatch():
     assert piece_is_available_for_supplier_dispatch(
         _piece("partial", supplier_dispatch_status=DISPATCH_STATUS_PARTIAL)
     ) is True
+
+
+def test_file_enters_execution_only_after_every_active_piece_is_dispatched():
+    partial = [
+        _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT),
+        _piece("waiting", group_key="product:2"),
+    ]
+    complete = [
+        _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT),
+        _piece(
+            "ready",
+            group_key="product:2",
+            supplier_dispatch_status=DISPATCH_STATUS_READY,
+        ),
+        _piece(
+            "received",
+            group_key="product:3",
+            supplier_dispatch_status="received",
+        ),
+    ]
+
+    assert file_is_fully_dispatched(partial) is False
+    assert file_is_fully_dispatched(complete) is True
+
+
+def test_cancelled_piece_does_not_block_file_dispatch_completion():
+    pieces = [
+        _piece("sent", supplier_dispatch_status=DISPATCH_STATUS_SENT),
+        _piece("cancelled", group_key="product:2", status="cancelled"),
+    ]
+
+    assert file_is_fully_dispatched(pieces) is True
+
+
+@pytest.mark.asyncio
+async def test_file_status_changes_only_after_the_last_piece_is_dispatched():
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        async def to_list(self, _length):
+            return [dict(row) for row in self.rows]
+
+    registry = {
+        "user_id": "merchant-1",
+        "file_number": "PF-100",
+        "batch_id": "batch-1",
+        "status": "ready",
+        "execution_status": "assigned",
+    }
+    pieces = [
+        {
+            **_piece("piece-1", supplier_dispatch_status=DISPATCH_STATUS_SENT),
+            "user_id": "merchant-1",
+            "file_number": "PF-100",
+            "batch_id": "batch-1",
+        },
+        {
+            **_piece("piece-2", group_key="product:2", order_number="3002"),
+            "user_id": "merchant-1",
+            "file_number": "PF-100",
+            "batch_id": "batch-1",
+        },
+    ]
+    collections = {
+        PIECES: MagicMock(find=MagicMock(side_effect=lambda *_args, **_kwargs: Cursor(pieces))),
+        REGISTRY: MagicMock(update_one=AsyncMock(return_value=SimpleNamespace(modified_count=1))),
+        BATCHES: MagicMock(update_one=AsyncMock()),
+        WORKFLOWS: MagicMock(update_many=AsyncMock()),
+        PIECE_EVENTS: MagicMock(insert_one=AsyncMock()),
+    }
+    db = MagicMock()
+    db.__getitem__.side_effect = collections.__getitem__
+
+    changed = await _mark_orders_started_if_fully_dispatched(
+        db,
+        user_id="merchant-1",
+        registry=registry,
+        actor={"id": "employee-1", "name": "أحمد"},
+    )
+
+    assert changed is False
+    collections[REGISTRY].update_one.assert_not_awaited()
+
+    pieces[1]["supplier_dispatch_status"] = DISPATCH_STATUS_SENT
+    changed = await _mark_orders_started_if_fully_dispatched(
+        db,
+        user_id="merchant-1",
+        registry=registry,
+        actor={"id": "employee-1", "name": "أحمد"},
+    )
+
+    assert changed is True
+    registry_update = collections[REGISTRY].update_one.await_args.args[1]["$set"]
+    assert registry_update["execution_status"] == "in_progress"
+    collections[BATCHES].update_one.assert_awaited_once()
+    workflow_update = collections[WORKFLOWS].update_many.await_args.args[1]["$set"]
+    assert workflow_update["stage"] == "in_progress"
+    event = collections[PIECE_EVENTS].insert_one.await_args.args[0]
+    assert event["event_type"] == "preparation_file_fully_dispatched"
+    assert event["piece_count"] == 2
 
 
 def test_supplier_must_offer_an_unfinished_service_on_the_piece():
@@ -241,3 +351,34 @@ def test_employee_summary_uses_products_orders_and_all_assigned_pieces():
     assert summary["received_orders_awaiting_branch_handoff"] == 1
     assert summary["received_pieces_awaiting_branch_handoff"] == 2
     assert summary["total_assigned_pieces"] == 4
+
+
+@pytest.mark.asyncio
+async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee():
+    class EmptyCursor:
+        def sort(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        async def to_list(self, _length):
+            return []
+
+    collection = MagicMock()
+    collection.find.return_value = EmptyCursor()
+    db = MagicMock()
+    db.__getitem__.return_value = collection
+
+    result = await _employee_workspace(
+        db,
+        user_id="merchant-1",
+        employee_id="employee-1",
+        limit=100,
+    )
+
+    pieces_query = collection.find.call_args_list[0].args[0]
+    assert pieces_query["user_id"] == "merchant-1"
+    assert pieces_query["responsible_employee_id"] == "employee-1"
+    assert result["employee_id"] == "employee-1"
+    assert result["files"] == []

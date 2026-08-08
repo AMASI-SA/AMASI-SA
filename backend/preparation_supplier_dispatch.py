@@ -50,6 +50,11 @@ DISPATCH_STATUS_SENT = "sent"
 DISPATCH_STATUS_READY = "ready"
 DISPATCH_STATUS_PARTIAL = "partial_received"
 DISPATCH_STATUS_RECEIVED = "received"
+FILE_DISPATCH_COMPLETE_STATUSES = {
+    DISPATCH_STATUS_SENT,
+    DISPATCH_STATUS_READY,
+    DISPATCH_STATUS_RECEIVED,
+}
 ASSIGNMENT_STATUS_UNASSIGNED = "unassigned_after_rejection"
 MAX_SELECTIONS = 200
 MAX_SELECTED_PIECES = 1500
@@ -292,6 +297,19 @@ def piece_is_available_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
         "",
         DISPATCH_STATUS_PARTIAL,
     }
+
+
+def file_is_fully_dispatched(pieces: list[dict[str, Any]]) -> bool:
+    """Return true only when every active physical piece was raised to a supplier."""
+    active = [
+        piece for piece in pieces
+        if _text(piece.get("status")) != PIECE_STATUS_CANCELLED
+    ]
+    return bool(active) and all(
+        _text(piece.get("supplier_dispatch_status"))
+        in FILE_DISPATCH_COMPLETE_STATUSES
+        for piece in active
+    )
 
 
 def supplier_dispatch_blocker(
@@ -733,7 +751,7 @@ async def _mark_orders_started(
     registry: dict[str, Any],
     pieces: list[dict[str, Any]],
     actor: dict[str, Any],
-) -> None:
+) -> bool:
     now = _now()
     actor_id = _text(actor.get("id"))
     actor_name = _actor_name(actor)
@@ -743,8 +761,13 @@ async def _mark_orders_started(
         _text(row.get("order_number")) for row in pieces
         if _text(row.get("order_number"))
     })
-    await db[REGISTRY].update_one(
-        {"user_id": user_id, "file_number": file_number, "status": "ready"},
+    registry_result = await db[REGISTRY].update_one(
+        {
+            "user_id": user_id,
+            "file_number": file_number,
+            "status": "ready",
+            "execution_status": {"$in": ["assigned", "not_started", "", None]},
+        },
         {"$set": {
             "execution_status": "in_progress",
             "started_at": registry.get("started_at") or now,
@@ -753,6 +776,8 @@ async def _mark_orders_started(
             "updated_at": now,
         }},
     )
+    if not int(registry_result.modified_count or 0):
+        return False
     if batch_id:
         await db[BATCHES].update_one(
             {"user_id": user_id, "id": batch_id},
@@ -779,6 +804,49 @@ async def _mark_orders_started(
                 "updated_at": now,
             }, "$inc": {"revision": 1}},
         )
+    await db[PIECE_EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "batch_id": batch_id or None,
+        "file_number": file_number,
+        "event_type": "preparation_file_fully_dispatched",
+        "piece_count": len(pieces),
+        "order_numbers": order_numbers,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "occurred_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+    return True
+
+
+async def _mark_orders_started_if_fully_dispatched(
+    db: Any,
+    *,
+    user_id: str,
+    registry: dict[str, Any],
+    actor: dict[str, Any],
+) -> bool:
+    file_number = _text(registry.get("file_number"))
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "file_number": file_number,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+        },
+        {"_id": 0},
+    ).to_list(50000)
+    if not file_is_fully_dispatched(pieces):
+        return False
+    return await _mark_orders_started(
+        db,
+        user_id=user_id,
+        registry=registry,
+        pieces=pieces,
+        actor=actor,
+    )
 
 
 def make_preparation_supplier_dispatch_router(
@@ -1052,15 +1120,22 @@ def make_preparation_supplier_dispatch_router(
             )
             raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_conflict"})
 
+        completed_source_file_numbers = []
         for file_number in source_file_numbers:
-            await _mark_orders_started(
+            completed = await _mark_orders_started_if_fully_dispatched(
                 db,
                 user_id=user_id,
                 registry=registry_by_file[file_number],
-                pieces=selected_by_file[file_number],
                 actor=worker,
             )
-        ready_patch = {"status": DISPATCH_STATUS_SENT, "sent_at": now, "updated_at": now}
+            if completed:
+                completed_source_file_numbers.append(file_number)
+        ready_patch = {
+            "status": DISPATCH_STATUS_SENT,
+            "sent_at": now,
+            "updated_at": now,
+            "completed_source_file_numbers": completed_source_file_numbers,
+        }
         await db[DISPATCHES].update_one(
             {"user_id": user_id, "id": dispatch_id, "status": "building"},
             {"$set": ready_patch},

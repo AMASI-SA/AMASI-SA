@@ -103,9 +103,14 @@ function SummaryCard({ value, label, detail, tone = "slate", onClick }) {
 }
 
 function ProductImage({ product, compact = false }) {
-    const size = compact ? "h-12 w-12" : "h-20 w-full";
+    const size = compact ? "h-12 w-12" : "aspect-square w-full";
     return product?.selected_image_url ? (
-        <img src={product.selected_image_url} alt="" className={`${size} rounded-xl border border-slate-200 object-cover`} />
+        <img
+            src={product.selected_image_url}
+            alt={product?.product_name || "صورة المنتج"}
+            className={`${size} rounded-xl border border-slate-200 bg-white ${compact ? "object-cover" : "object-contain"}`}
+            data-testid={compact ? undefined : "dispatch-product-image"}
+        />
     ) : (
         <div className={`flex ${size} items-center justify-center rounded-xl bg-slate-100 text-slate-400`}><Package size={24} /></div>
     );
@@ -127,16 +132,55 @@ function ProductOptionsMenu({ product, onReturn }) {
     );
 }
 
-function QuantityControl({ product, value, onChange }) {
+export function dispatchSelectionState(product, value) {
     const available = Number(product?.available_quantity || 0);
     const current = Math.max(0, Math.min(available, Number(value || 0)));
-    const set = (next) => onChange(Math.max(0, Math.min(available, Number(next || 0))));
+    if (current <= 0 || available <= 0) return "unselected";
+    return current >= available ? "full" : "partial";
+}
+
+export function toggledDispatchQuantity(product, value) {
+    return dispatchSelectionState(product, value) === "unselected"
+        ? Math.max(0, Number(product?.available_quantity || 0))
+        : 0;
+}
+
+function ProductSelectionButton({ product, value, onChange }) {
+    const state = dispatchSelectionState(product, value);
+    const selected = state !== "unselected";
+    const tone = state === "partial"
+        ? "border-amber-500 bg-amber-400 text-white shadow-amber-200"
+        : selected
+            ? "border-emerald-600 bg-emerald-600 text-white shadow-emerald-200"
+            : "border-slate-300 bg-white text-transparent shadow-slate-200";
     return (
-        <div className="grid grid-cols-[34px_minmax(0,1fr)_34px] gap-1" dir="ltr">
-            <button type="button" onClick={() => set(current - 1)} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white" aria-label="إنقاص الكمية"><Minus size={14} /></button>
-            <input type="number" inputMode="numeric" min="0" max={available} value={current} onChange={(event) => set(event.target.value)} className="h-9 min-w-0 rounded-lg border border-slate-200 text-center text-sm font-black outline-none focus:border-violet-500" aria-label={`كمية ${product?.product_name || "المنتج"}`} />
-            <button type="button" onClick={() => set(current + 1)} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white" aria-label="زيادة الكمية"><Plus size={14} /></button>
-            <button type="button" onClick={() => set(available)} className="col-span-3 h-8 rounded-lg bg-slate-900 px-2 text-[10px] font-black text-white">اختيار كامل الكمية</button>
+        <button
+            type="button"
+            onClick={() => onChange(toggledDispatchQuantity(product, value))}
+            aria-label={selected ? `إلغاء تحديد ${product?.product_name || "المنتج"}` : `تحديد ${product?.product_name || "المنتج"}`}
+            aria-pressed={selected}
+            className={`absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center rounded-full border-2 shadow-md transition ${tone}`}
+            data-testid="dispatch-product-selector"
+        >
+            <CheckCircle size={25} weight="fill" />
+        </button>
+    );
+}
+
+function QuantityControl({ product, value, onChange }) {
+    const available = Math.max(0, Number(product?.available_quantity || 0));
+    const current = Math.max(1, Math.min(available, Number(value || 1)));
+    const set = (next) => onChange(Math.max(1, Math.min(available, Number(next || 1))));
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white p-1.5" data-testid="dispatch-quantity-control">
+            <div className="mb-1 text-center text-xs font-black tabular-nums text-slate-700" dir="ltr">
+                {current} / {available}
+            </div>
+            <div className="grid grid-cols-[32px_minmax(0,1fr)_32px] gap-1" dir="ltr">
+                <button type="button" onClick={() => set(current - 1)} disabled={current <= 1} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-35" aria-label="إنقاص الكمية"><Minus size={14} /></button>
+                <input type="number" inputMode="numeric" min="1" max={available} value={current} onChange={(event) => set(event.target.value)} className="h-9 min-w-0 rounded-lg border border-slate-200 text-center text-sm font-black outline-none focus:border-violet-500" aria-label={`كمية ${product?.product_name || "المنتج"}`} />
+                <button type="button" onClick={() => set(current + 1)} disabled={current >= available} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white disabled:opacity-35" aria-label="زيادة الكمية"><Plus size={14} /></button>
+            </div>
         </div>
     );
 }
@@ -168,7 +212,16 @@ function ReturnAssignmentDialog({ target, reason, onReasonChange, busy, onCancel
     );
 }
 
-export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, onBack }) {
+export function WaitingReviewView({
+    data,
+    loading,
+    error,
+    onRefresh,
+    onChanged,
+    onBack,
+    title = "بانتظار المراجعة",
+    description = "المنتجات المسندة إليك ولم تُرسل إلى مورد بعد.",
+}) {
     const files = (data?.files || []).filter((file) => file.available_quantity > 0);
     const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
     const [selected, setSelected] = useState({});
@@ -209,9 +262,17 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
                 supplierId,
             );
             const printed = printSupplierDispatch(dispatch, printWindow);
+            const completedFiles = Array.isArray(dispatch?.completed_source_file_numbers)
+                ? dispatch.completed_source_file_numbers
+                : [];
             setSelected({});
             setSupplierId("");
-            setNotice(printed ? "تم حفظ ملف المورد وفتح نافذة الطباعة." : "تم حفظ ملف المورد، لكن المتصفح منع نافذة الطباعة. يمكنك إعادة طباعته من قيد التنفيذ.");
+            const completionNotice = completedFiles.length
+                ? ` اكتمل رفع ${completedFiles.length} ملف تجهيز وتحولت حالته إلى «قيد التنفيذ».`
+                : " بقيت حالة الملف بانتظار اكتمال رفع جميع منتجاته.";
+            setNotice(
+                `${printed ? "تم حفظ ملف المورد وفتح نافذة الطباعة." : "تم حفظ ملف المورد، لكن المتصفح منع نافذة الطباعة. يمكنك إعادة طباعته من قيد التنفيذ."}${completionNotice}`,
+            );
             await onChanged();
         } catch (sendError) {
             printWindow?.close?.();
@@ -245,7 +306,7 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
 
     return (
         <div className="space-y-5" data-testid="preparation-waiting-review-products">
-            <SectionHeader title="بانتظار المراجعة" description="المنتجات المسندة إليك ولم تُرسل إلى مورد بعد." onBack={onBack} onRefresh={onRefresh} loading={loading} />
+            <SectionHeader title={title} description={description} onBack={onBack} onRefresh={onRefresh} loading={loading} />
             {(error || actionError) && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{actionError || error}</div>}
             {notice && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">{notice}</div>}
             {!files.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد منتجات بانتظار الإرسال للمورد</div></div> : (
@@ -255,19 +316,26 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
                         const fileSelectedQuantity = selections.reduce((sum, row) => sum + row.quantity, 0);
                         return (
                             <article key={file.file_number} className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-                                <header className="bg-violet-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-black text-slate-950">{file.file_number}</h4><div className="mt-1 text-xs font-black text-violet-700">تاريخ الرفع: {formatRiyadhDate(file.registered_at)}</div>{file.file_title && file.file_title !== file.file_number && <div className="mt-1 text-xs font-bold text-slate-500">{file.file_title}</div>}<div className="mt-2 text-xs font-bold text-slate-600">{file.available_quantity} قطعة بانتظار الإرسال · {file.sent_quantity} قيد التنفيذ</div></div><div className="rounded-xl bg-white px-3 py-2 text-xs font-black text-violet-900">المحدد: {fileSelectedQuantity} قطعة</div></div></header>
-                                <div className="grid grid-cols-2 gap-2 p-2 sm:gap-3 sm:p-4 lg:grid-cols-3 xl:grid-cols-4">
+                                <header className="bg-violet-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-black text-slate-950">{file.file_number}</h4><div className="mt-1 text-xs font-black text-violet-700">تاريخ الرفع: {formatRiyadhDate(file.registered_at)}</div>{file.file_title && file.file_title !== file.file_number && <div className="mt-1 text-xs font-bold text-slate-500">{file.file_title}</div>}<div className="mt-2 text-xs font-bold text-slate-600">{file.available_quantity} قطعة بانتظار الرفع · {file.sent_quantity} قطعة مرفوعة للمورد</div></div><div className="rounded-xl bg-white px-3 py-2 text-xs font-black text-violet-900">المحدد: {fileSelectedQuantity} قطعة</div></div></header>
+                                <div className="grid grid-cols-2 gap-2 p-2 sm:gap-3 sm:p-4 lg:grid-cols-4" data-testid="dispatch-product-grid">
                                     {(file.products || []).filter((product) => product.available_quantity > 0).map((product) => {
                                         const value = selected[file.file_number]?.[product.group_key] || 0;
+                                        const selectionState = dispatchSelectionState(product, value);
+                                        const selectionTone = selectionState === "full"
+                                            ? "border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-100"
+                                            : selectionState === "partial"
+                                                ? "border-amber-400 bg-amber-50/60 ring-2 ring-amber-100"
+                                                : "border-slate-200 bg-white";
                                         return (
-                                            <article key={product.group_key} className={`min-w-0 rounded-2xl border p-2.5 ${value > 0 ? "border-violet-400 bg-violet-50/60 ring-2 ring-violet-100" : "border-slate-200 bg-white"}`}>
+                                            <article key={product.group_key} className={`min-w-0 rounded-2xl border p-2.5 transition ${selectionTone}`} data-selection-state={selectionState}>
                                                 <div className="relative">
                                                     <ProductImage product={product} />
+                                                    <ProductSelectionButton product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} />
                                                     <ProductOptionsMenu product={product} onReturn={() => { setReturnTarget({ file, product }); setReturnReason(""); }} />
                                                 </div>
                                                 <div className="mt-2 min-w-0"><div className="line-clamp-2 min-h-10 text-xs font-black leading-5 text-slate-900 sm:text-sm">{product.product_name}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">{product.sku || "بدون SKU"} · {product.available_quantity} قطعة</div></div>
                                                 <div className="mt-2 flex min-h-6 flex-wrap gap-1">{(product.services || []).filter((service) => service.status !== "completed").slice(0, 2).map((service) => <span key={service.service_id} className="rounded-full bg-amber-50 px-1.5 py-1 text-[9px] font-black text-amber-800">{service.service_name || "خدمة"}</span>)}</div>
-                                                <div className="mt-2"><QuantityControl product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} /></div>
+                                                {selectionState !== "unselected" && <div className="mt-2"><QuantityControl product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} /></div>}
                                             </article>
                                         );
                                     })}
@@ -410,13 +478,13 @@ export function MyProductsOverview({ data, onOpen }) {
     };
 
     const fileStatus = (file) => {
-        const total = Number(file?.piece_count || 0);
-        const received = Number(file?.received_quantity || 0);
-        const inProgress = Number(file?.sent_quantity || 0) + Number(file?.ready_quantity || 0);
+        const executionStatus = String(file?.execution_status || "assigned");
+        const total = Math.max(0, Number(file?.piece_count || 0));
+        const received = Math.max(0, Number(file?.received_quantity || 0));
         if (total > 0 && received >= total) {
             return { label: "تم الاستلام", className: "text-emerald-700" };
         }
-        if (inProgress > 0 || received > 0) {
+        if (executionStatus === "in_progress") {
             return { label: "قيد التنفيذ", className: "text-blue-600" };
         }
         return { label: "بانتظار المراجعة", className: "text-amber-600" };
@@ -563,16 +631,30 @@ function UnassignedManagerView({ onChanged }) {
     return <div className="space-y-5" data-testid="preparation-unassigned-manager-queue"><div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.unassigned_products} label="منتجات غير مسندة" tone="amber" /><SummaryCard value={data?.summary?.unassigned_pieces} label="إجمالي القطع" tone="violet" /></div><SectionHeader title="منتجات غير مسندة" description="يعرض الموظف الذي أعاد الإسناد وملاحظته، ويحفظ السجل السابق دون حذف." onRefresh={load} loading={loading} />{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}{!items.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد منتجات غير مسندة</div></div> : <div className="space-y-3">{items.map((item) => { const key = `${item.file_number}:${item.group_key}:${item.rejection_id || "return"}`; return <article key={key} className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:grid-cols-[72px_minmax(0,1fr)_minmax(220px,320px)_auto] lg:items-center"><ProductImage product={item} compact /><div><div className="font-black text-slate-950">{item.product_name}</div><div className="mt-1 text-xs font-bold text-slate-600">الملف {item.file_number} · {item.quantity} قطعة</div><div className="mt-1 text-xs font-black text-slate-800">أعاد الإسناد: {item.rejected_by_employee_name || "موظف"}</div><div className="mt-1 text-[11px] font-bold text-slate-500">{formatRiyadhDate(item.rejected_at)}</div><div className="mt-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black leading-5 text-rose-700">الملاحظة: {item.rejection_reason}</div></div><select value={employeeByGroup[key] || ""} onChange={(event) => setEmployeeByGroup((current) => ({ ...current, [key]: event.target.value }))} className="min-h-11 rounded-xl border border-amber-200 bg-white px-3 text-sm font-black"><option value="">اختر الموظف الجديد</option>{(data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><button type="button" onClick={() => assign(item)} disabled={!employeeByGroup[key] || busy === key} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50">{busy === key ? <SpinnerGap className="animate-spin" /> : <UserSwitch size={19} />}إعادة الإسناد</button></article>; })}</div>}</div>;
 }
 
-function EmployeeProductsWorkspace({ onDataChanged }) {
+function EmployeeProductsWorkspace({ onDataChanged, initialSection = "overview" }) {
     const [data, setData] = useState(null);
-    const [section, setSection] = useState("overview");
+    const [section, setSection] = useState(initialSection);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const load = useCallback(async () => { setLoading(true); setError(""); try { setData(await getPreparationSupplierWorkspace({ limit: 200 })); } catch (loadError) { setError(loadError.message || "تعذّر تحميل إدارة منتجاتي."); } finally { setLoading(false); } }, []);
     useEffect(() => { load(); }, [load]);
     const changed = useCallback(async () => { await Promise.all([load(), onDataChanged()]); }, [load, onDataChanged]);
     if (loading && !data) return <div className="flex min-h-48 items-center justify-center gap-2 font-black text-violet-700"><SpinnerGap className="animate-spin" /> جارٍ تحميل إدارة منتجاتي…</div>;
-    if (section === "waiting-review") return <WaitingReviewView data={data} loading={loading} error={error} onRefresh={load} onChanged={changed} onBack={() => setSection("overview")} />;
+    if (section === "waiting-review") {
+        const directExecutionView = initialSection === "waiting-review";
+        return <WaitingReviewView
+            data={data}
+            loading={loading}
+            error={error}
+            onRefresh={load}
+            onChanged={changed}
+            onBack={directExecutionView ? undefined : () => setSection("overview")}
+            title={directExecutionView ? "رفع المنتجات للمورد" : "بانتظار المراجعة"}
+            description={directExecutionView
+                ? "حدد المنتجات والكميات؛ ويتحول الملف إلى قيد التنفيذ بعد اكتمال رفع جميع منتجاته."
+                : "المنتجات المسندة إليك ولم تُرسل إلى مورد بعد."}
+        />;
+    }
     if (section === "in-progress") return <InProgressView data={data} loading={loading} error={error} onRefresh={load} onBack={() => setSection("overview")} />;
     if (section === "received") return <ReceivedView data={data} loading={loading} error={error} onRefresh={load} onBack={() => setSection("overview")} />;
     return <MyProductsOverview data={data} onOpen={setSection} />;
@@ -581,7 +663,10 @@ function EmployeeProductsWorkspace({ onDataChanged }) {
 export default function PreparationSupplierDispatchWorkspace({ view = "my-products", onDataChanged = async () => {} }) {
     const content = useMemo(() => {
         if (view === "unassigned") return <UnassignedManagerView onChanged={onDataChanged} />;
-        return <EmployeeProductsWorkspace onDataChanged={onDataChanged} />;
+        const initialSection = ["waiting-review", "in-progress", "received"].includes(view)
+            ? view
+            : "overview";
+        return <EmployeeProductsWorkspace onDataChanged={onDataChanged} initialSection={initialSection} />;
     }, [onDataChanged, view]);
     return content;
 }

@@ -5,7 +5,6 @@ import {
     CheckCircle,
     Clock,
     Gear,
-    Play,
     SpinnerGap,
     Storefront,
     UserMinus,
@@ -16,7 +15,6 @@ import {
 import {
     getMyPreparationWork,
     getPreparationManagerSummary,
-    startPreparationFile,
 } from "../../services/preparationWorkService";
 import PreparationSupplierDispatchWorkspace from "./PreparationSupplierDispatchWorkspace";
 
@@ -57,6 +55,10 @@ export function filePiecesAreReady(file = {}) {
     return expected > 0
         && actual === expected
         && file?.piece_registry_status !== "recovery_required";
+}
+
+export function inProgressFiles(files = []) {
+    return files.filter((file) => String(file?.execution_status || "") === "in_progress");
 }
 
 function formatDateTime(value) {
@@ -104,8 +106,8 @@ function PieceServiceSummary({ piece }) {
     );
 }
 
-function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) {
-    const files = Array.isArray(work?.files) ? work.files : [];
+function MyWorkView({ work, loading, error, onRefresh }) {
+    const files = inProgressFiles(Array.isArray(work?.files) ? work.files : []);
     const pieces = Array.isArray(work?.pieces) ? work.pieces : [];
     const summary = work?.summary || {};
     const materializationWarnings = Array.isArray(work?.materialization_warnings)
@@ -132,8 +134,8 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
 
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-black text-slate-950">ملفات التجهيز المسندة إليّ</h2>
-                    <p className="mt-1 text-sm font-semibold text-slate-500">الملف يبقى مسندًا ولا يدخل قيد التنفيذ قبل بدء العمل فعليًا.</p>
+                    <h2 className="text-lg font-black text-slate-950">ملفات قيد التنفيذ</h2>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">تظهر هنا بعد اكتمال رفع جميع منتجات الملف من «إدارة منتجاتي».</p>
                 </div>
                 <button
                     type="button"
@@ -175,7 +177,7 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
             {!files.length && !error ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
                     <CheckCircle size={34} className="mx-auto text-slate-400" />
-                    <div className="mt-3 font-black text-slate-800">لا توجد ملفات مسندة إليك حاليًا</div>
+                    <div className="mt-3 font-black text-slate-800">لا توجد ملفات قيد التنفيذ حاليًا</div>
                 </div>
             ) : (
                 <div className="space-y-4">
@@ -185,8 +187,6 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
                         const required = file.schedule_mode === "required";
                         const dueAt = required ? file.required_due_at : automaticDue;
                         const piecesReady = filePiecesAreReady(file);
-                        const canStart = piecesReady
-                            && ["assigned", "not_started", ""].includes(file.execution_status || "");
                         return (
                             <article key={file.file_number} className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${required ? "border-rose-300" : "border-slate-200"}`}>
                                 <header className={`p-4 sm:p-5 ${required ? "bg-rose-50" : "bg-slate-50"}`}>
@@ -214,21 +214,9 @@ function MyWorkView({ work, loading, error, onRefresh, onStart, startingFile }) 
                                             <div className="mt-1">{formatDateTime(dueAt)}</div>
                                         </div>
                                     </div>
-                                    {canStart && (
-                                        <button
-                                            type="button"
-                                            onClick={() => onStart(file.file_number)}
-                                            disabled={startingFile === file.file_number}
-                                            className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 text-sm font-black text-white disabled:opacity-60"
-                                            data-testid={`start-preparation-file-${file.file_number}`}
-                                        >
-                                            {startingFile === file.file_number ? <SpinnerGap size={19} className="animate-spin" /> : <Play size={19} weight="fill" />}
-                                            بدء التنفيذ
-                                        </button>
-                                    )}
                                     {!piecesReady && (
                                         <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">
-                                            سجلات القطع غير مكتملة ({file.piece_count || 0}/{file.expected_piece_count || 0}) — بدء التنفيذ متوقف حتى الاسترداد.
+                                            سجلات القطع غير مكتملة ({file.piece_count || 0}/{file.expected_piece_count || 0}) — يلزم الاسترداد قبل متابعة الملف.
                                         </div>
                                     )}
                                 </header>
@@ -314,7 +302,6 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
     const [work, setWork] = useState(null);
     const [workLoading, setWorkLoading] = useState(true);
     const [workError, setWorkError] = useState("");
-    const [startingFile, setStartingFile] = useState("");
     const [managerData, setManagerData] = useState(null);
     const [managerLoading, setManagerLoading] = useState(false);
     const [managerError, setManagerError] = useState("");
@@ -355,20 +342,6 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
         loadManager();
     }, [loadManager]);
 
-    const startFile = async (fileNumber) => {
-        if (!fileNumber || startingFile) return;
-        setStartingFile(fileNumber);
-        setWorkError("");
-        try {
-            await startPreparationFile(fileNumber);
-            await Promise.all([loadWork(), managerAllowed ? loadManager() : Promise.resolve()]);
-        } catch (error) {
-            setWorkError(error.message || "تعذّر بدء الملف.");
-        } finally {
-            setStartingFile("");
-        }
-    };
-
     const tabs = useMemo(() => [
         { id: "my-work", label: "تفاصيل القطع", Icon: Storefront, visible: true },
         { id: "unassigned", label: "منتجات غير مسندة", Icon: UserMinus, visible: managerAllowed },
@@ -396,7 +369,7 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h2 className="text-xl font-black text-slate-950">قيد التنفيذ</h2>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">تبدأ هذه المرحلة من «إدارة منتجاتي» عند وصول ملف التجهيز إلى حساب الموظف.</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">تظهر الملفات هنا بعد رفع جميع منتجاتها للمورد من صفحة «إدارة منتجاتي» المستقلة.</p>
                     </div>
                     <nav className="flex flex-wrap gap-2" aria-label="نوافذ قيد التنفيذ">
                         {tabs.map(({ id, label, Icon }) => (
@@ -414,7 +387,7 @@ export default function PreparationWorkDashboard({ initialView = "my-work", stan
                 ) : activeView === "unassigned" && managerAllowed ? (
                     <PreparationSupplierDispatchWorkspace view={activeView} onDataChanged={reloadOperationalViews} />
                 ) : (
-                    <MyWorkView work={work} loading={workLoading} error={workError} onRefresh={loadWork} onStart={startFile} startingFile={startingFile} />
+                    <MyWorkView work={work} loading={workLoading} error={workError} onRefresh={loadWork} />
                 )}
             </div>
         </section>
