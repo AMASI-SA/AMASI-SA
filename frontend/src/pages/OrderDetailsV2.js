@@ -15,6 +15,8 @@ import CompactOrderTimeline from "../components/CompactOrderTimeline";
 import { useOrder } from "../hooks/useOrders";
 import OriginalOrderDetailsV2 from "./OrderDetailsV2.jsx";
 
+const ENABLE_LEGACY_COMPACT_TIMELINE = false;
+
 const SOURCE_LABELS = {
     ig: "إنستقرام", instagram: "إنستقرام", fb: "فيسبوك", facebook: "فيسبوك",
     meta: "ميتا (فيسبوك وإنستقرام)", snapchat: "سناب شات", snap: "سناب شات",
@@ -392,7 +394,7 @@ export default function OrderDetailsV2() {
 
         const mountEnhancements = () => {
             timelineOriginal = document.querySelector('[data-testid="order-v2-timeline"]');
-            if (timelineOriginal && timelineOriginal.dataset.compactTimelineReplaced !== "true") {
+            if (ENABLE_LEGACY_COMPACT_TIMELINE && timelineOriginal && timelineOriginal.dataset.compactTimelineReplaced !== "true") {
                 timelineReplacement = document.createElement("div");
                 timelineReplacement.dataset.compactTimelineHost = "true";
                 timelineReplacement.setAttribute("dir", "rtl");
