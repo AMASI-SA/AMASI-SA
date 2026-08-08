@@ -3,13 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 jest.mock("../../services/preparationWorkService", () => ({
     getMyPreparationWork: jest.fn(),
     getPreparationManagerSummary: jest.fn(),
-    startPreparationFile: jest.fn(),
 }));
 
 import PreparationWorkDashboard, {
     fileEstimatedDueAt,
     filePieces,
     filePiecesAreReady,
+    inProgressFiles,
     riyadhDateInputValue,
 } from "./PreparationWorkDashboard";
 
@@ -59,7 +59,7 @@ test("Riyadh date input uses an ISO-like local business date", () => {
 });
 
 
-test("file cannot start until every expected piece is materialized", () => {
+test("file details stay guarded until every expected piece is materialized", () => {
     expect(filePiecesAreReady({
         expected_piece_count: 1,
         piece_count: 0,
@@ -73,6 +73,16 @@ test("file cannot start until every expected piece is materialized", () => {
 });
 
 
+test("in-progress stage excludes files still waiting in the employee my-products page", () => {
+    const files = [
+        { file_number: "PF-100", execution_status: "assigned" },
+        { file_number: "PF-101", execution_status: "in_progress" },
+    ];
+
+    expect(inProgressFiles(files).map((file) => file.file_number)).toEqual(["PF-101"]);
+});
+
+
 test("in-progress dashboard starts with piece details", () => {
     const markup = renderToStaticMarkup(<PreparationWorkDashboard />);
 
@@ -80,6 +90,7 @@ test("in-progress dashboard starts with piece details", () => {
     expect(markup).toContain("جارٍ تحميل منتجاتك");
     expect(markup).toContain("تفاصيل القطع");
     expect(markup).toContain("منتجات غير مسندة");
+    expect(markup).not.toContain("بدء التنفيذ");
 });
 
 
