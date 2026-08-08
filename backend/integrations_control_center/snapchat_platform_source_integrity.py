@@ -59,7 +59,7 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "direct_account_headlines_campaign_completed_hour_v9"
+        "direct_account_headlines_campaign_completed_hour_v10"
     )
 
 
@@ -132,14 +132,16 @@ def account_local_total_window(
     if report_date < current.date():
         end = nominal_end
     else:
-        # Snapchat rejects open second-level timestamps. Query through the
-        # latest fully completed account-local minute so today's TOTAL report
-        # stays aligned with Ads Manager instead of lagging by a full hour.
-        completed_minute_end = current.replace(
+        # Production rejects current-minute TOTAL boundaries with HTTP 400.
+        # Use the latest fully completed account-local hour for stable
+        # commercial totals; the HOUR ingestion remains responsible for the
+        # live spend chart between TOTAL refreshes.
+        completed_hour_end = current.replace(
+            minute=0,
             second=0,
             microsecond=0,
         )
-        end = min(nominal_end, completed_minute_end)
+        end = min(nominal_end, completed_hour_end)
     return (start, end) if end > start else None
 
 
