@@ -55,6 +55,22 @@ class FakeDB:
         return self[name]
 
 
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [
+        (100, 9),
+        (10, 9),
+        (9, 9),
+        (1, 1),
+        (0, 1),
+        (None, 9),
+        ("invalid", 9),
+    ],
+)
+def test_adsquad_page_limit_caps_legacy_clients_at_nine(requested, expected):
+    assert module.normalize_adsquad_page_limit(requested) == expected
+
+
 def test_extract_adsquad_total_rows_preserves_parent_campaign():
     request_start = datetime(2026, 8, 4, tzinfo=timezone.utc)
     request_end = datetime(2026, 8, 5, tzinfo=timezone.utc)
