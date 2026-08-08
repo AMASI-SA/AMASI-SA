@@ -276,6 +276,8 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     const notice = useMemo(() => discountNotice(form), [form]);
     const draft = state?.draft || null;
     const protectedFields = state?.protected_fields || [];
+    const draftFields = Object.keys(draft?.changes || {});
+    const googleTaxonomyOnlyDraft = draftFields.length === 1 && draftFields[0] === "google_category";
 
     async function saveDraft() {
         if (!Object.keys(changes).length) return toast.info("لا توجد تغييرات لحفظها");
@@ -288,7 +290,25 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         finally { setBusy(false); }
     }
     async function approve() { if (!draft) return; setBusy(true); try { const result = await approveProductControlDraft(productId, draft.id); setState((current) => ({ ...current, draft: result.draft })); toast.success("تم اعتماد المسودة"); } finally { setBusy(false); } }
-    async function publish() { if (!draft) return; setBusy(true); try { await publishProductControlDraft(productId, draft.id); toast.success("تم نشر التعديل إلى سلة وتسجيل المراجعة"); await load(); onPublished?.(); } catch (error) { toast.error(error?.response?.data?.detail?.message || "تعذر النشر إلى سلة"); } finally { setBusy(false); } }
+    async function publish() {
+        if (!draft) return;
+        setBusy(true);
+        try {
+            const result = await publishProductControlDraft(productId, draft.id);
+            const sallaResponse = result?.revision?.salla_response || {};
+            if (sallaResponse?.reason === "google_taxonomy_mezan_managed") {
+                toast.success("تم اعتماد تصنيف Google في ميزان. لم يُرسل إلى Salla لأن الـAPI العام لا يدعم كتابة هذا الحقل.");
+            } else if (sallaResponse?.reason === "google_taxonomy_already_matches") {
+                toast.success("تصنيف Google مطابق أصلًا في Salla وتم توثيق المطابقة.");
+            } else {
+                toast.success("تم نشر التعديل إلى سلة وتسجيل المراجعة");
+            }
+            await load();
+            onPublished?.();
+        } catch (error) {
+            toast.error(error?.response?.data?.detail?.message || "تعذر تنفيذ التعديل");
+        } finally { setBusy(false); }
+    }
 
     const field = (key, label, input) => <label className="block text-xs font-black text-slate-600">{label}{input || <input value={form[key]} onChange={(event) => setForm((row) => ({ ...row, [key]: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm font-normal" />}</label>;
 
@@ -306,12 +326,13 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
                 <GoogleCategoryPicker value={form.google_category} items={googleTaxonomy} loading={googleTaxonomyLoading} error={googleTaxonomyError} version={googleTaxonomyVersion} onChange={(value) => setForm((r) => ({ ...r, google_category: value }))} />
                 {field("local_category", "التصنيف المحلي في ميزان")}{field("slug", "رابط المنتج Slug")}{field("seo_title", "عنوان SEO")}{field("keywords", "كلمات SEO")}
             </div>
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><b>Google Category:</b> يديره ميزان حاليًا ويُجهّز لاستخدامه في Google Product Feed. لا يرسل ميزان PUT غير موثّق إلى Salla لهذا الحقل.</div>
             {field("short_description", "الوصف المختصر", <textarea rows={3} value={form.short_description} onChange={(e) => setForm((r) => ({ ...r, short_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
             {field("seo_description", "وصف SEO", <textarea rows={3} value={form.seo_description} onChange={(e) => setForm((r) => ({ ...r, seo_description: e.target.value }))} className="mt-1 w-full rounded-xl border p-3" />)}
             <label className="block text-xs font-black text-slate-600">وصف المنتج<VisualHtmlEditor resetKey={productId} value={form.description} onChange={(description) => setForm((r) => ({ ...r, description }))} /></label>
             <label className="block text-xs font-black text-slate-600">سبب التعديل<input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
             {Object.keys(changes).length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><b>معاينة التغييرات قبل الحفظ</b><ChangeDiff before={original} after={changes} /></div>}
-            <div className="flex flex-wrap justify-end gap-2"><button disabled={busy || !Object.keys(changes).length} onClick={saveDraft} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white"><FloppyDisk className="inline" /> حفظ مسودة</button>{draft?.status === "draft" && <button onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white"><PaperPlaneTilt className="inline" /> نشر إلى سلة</button>}</div>
+            <div className="flex flex-wrap justify-end gap-2"><button disabled={busy || !Object.keys(changes).length} onClick={saveDraft} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white"><FloppyDisk className="inline" /> حفظ مسودة</button>{draft?.status === "draft" && <button onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white"><PaperPlaneTilt className="inline" /> {googleTaxonomyOnlyDraft ? "اعتماد تصنيف Google في ميزان" : "نشر إلى سلة"}</button>}</div>
             {draft && <div className="rounded-xl border bg-slate-50 p-3 text-xs"><b>حالة المسودة:</b> {draft.status}</div>}
         </div> : <div className="p-4 text-sm">آخر مسودة: {draft?.status || "لا توجد"}</div>}
     </section>;
