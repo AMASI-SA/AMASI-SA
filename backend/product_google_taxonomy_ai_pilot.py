@@ -496,6 +496,25 @@ def _decision_status(
     return "low_confidence"
 
 
+def _run_counters(records: list[dict[str, Any]], selected_count: int) -> dict[str, int]:
+    return {
+        "selected": selected_count,
+        "analyzed": sum(1 for row in records if row.get("decision_status") not in {"missing_data", "ai_failed"}),
+        "no_change": sum(1 for row in records if row.get("decision_status") == "no_change"),
+        "high_confidence": sum(1 for row in records if row.get("decision_status") == "high_confidence"),
+        "review_required": sum(1 for row in records if str(row.get("decision_status")).startswith("review_required")),
+        "low_confidence": sum(1 for row in records if row.get("decision_status") == "low_confidence"),
+        "ai_failed": sum(1 for row in records if row.get("decision_status") == "ai_failed"),
+        "missing_data": sum(1 for row in records if row.get("decision_status") == "missing_data"),
+        "visual_checked": sum(
+            1 for row in records
+            if row.get("visual_verification_status") in {"consistent", "conflict", "unclear", "failed"}
+        ),
+        "visual_failed": sum(1 for row in records if row.get("visual_verification_status") == "failed"),
+        "applied": 0,
+    }
+
+
 async def _ensure_indexes(db: Any) -> None:
     await db[RUNS].create_index([("user_id", 1), ("created_at", -1)], name="ix_google_taxonomy_ai_runs")
     await db[CLASSIFICATIONS].create_index(
@@ -687,24 +706,21 @@ async def _execute_pilot(db: Any, user_id: str, run_id: str, limit: int) -> None
                     "candidate_count": len(meta["candidates"]),
                     "evidence_limited": meta["limited_evidence"],
                     "search_term_source": meta["term_source"],
+                    "visual_verification_status": result.get("visual_verification_status"),
+                    "visual_verification_attempts": int(result.get("visual_verification_attempts") or 0),
+                    "visual_verification_error_code": result.get("visual_verification_error_code"),
                     "model": _model(),
                 })
 
         if records:
             await db[CLASSIFICATIONS].insert_many(records, ordered=False)
 
-        counters = {
-            "selected": len(selected),
-            "analyzed": sum(1 for row in records if row.get("decision_status") not in {"missing_data", "ai_failed"}),
-            "no_change": sum(1 for row in records if row.get("decision_status") == "no_change"),
-            "high_confidence": sum(1 for row in records if row.get("decision_status") == "high_confidence"),
-            "review_required": sum(1 for row in records if str(row.get("decision_status")).startswith("review_required")),
-            "low_confidence": sum(1 for row in records if row.get("decision_status") == "low_confidence"),
-            "ai_failed": sum(1 for row in records if row.get("decision_status") == "ai_failed"),
-            "missing_data": sum(1 for row in records if row.get("decision_status") == "missing_data"),
-            "applied": 0,
-        }
-        status = "completed" if counters["ai_failed"] == 0 else "completed_with_errors"
+        counters = _run_counters(records, len(selected))
+        status = (
+            "completed"
+            if counters["ai_failed"] == 0 and counters["visual_failed"] == 0
+            else "completed_with_errors"
+        )
         await db[RUNS].update_one(
             {"user_id": user_id, "run_id": run_id},
             {"$set": {
@@ -786,7 +802,8 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "counters": {
                 "selected": 0, "analyzed": 0, "no_change": 0, "high_confidence": 0,
                 "review_required": 0, "low_confidence": 0, "ai_failed": 0,
-                "missing_data": 0, "applied": 0,
+                "missing_data": 0, "visual_checked": 0, "visual_failed": 0,
+                "applied": 0,
             },
             "mode": "proposal_only_pilot",
             "writes_to_salla": False,
