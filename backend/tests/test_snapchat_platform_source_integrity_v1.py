@@ -1,8 +1,13 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
 
+import httpx
 import pytest
 
+from integrations_control_center.snapchat_native_data_common import (
+    SnapchatNativeSyncError,
+    SnapchatSyncContext,
+)
 from integrations_control_center.snapchat_platform_source_integrity import (
     DIRECT_ACCOUNT_TOTAL_FIELDS,
     PLATFORM_TOTAL_SOURCE_MODE,
@@ -110,6 +115,37 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
     assert metrics["spend"] == 382_800_000
     assert metrics["conversion_purchases_value"] == 745_750_000
 
+
+
+@pytest.mark.asyncio
+async def test_provider_http_400_keeps_only_safe_snapchat_error_detail():
+    class Client:
+        async def get(self, url, *, headers, params=None):
+            return httpx.Response(
+                400,
+                json={
+                    "request_status": "ERROR",
+                    "error_code": "E_REPORTING_PARAM",
+                    "debug_message": "Invalid reporting parameter: granularity",
+                },
+            )
+
+    context = SnapchatSyncContext(db=None, user_id="user-1")
+    with pytest.raises(SnapchatNativeSyncError) as captured:
+        await context.get_json(
+            Client(),
+            "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+            headers={"Authorization": "Bearer token-not-logged"},
+            params={"granularity": "HOUR"},
+        )
+
+    assert captured.value.code == "snapchat_provider_http_400"
+    assert captured.value.result == {
+        "provider_error_code": "E_REPORTING_PARAM",
+        "provider_error_message": "Invalid reporting parameter: granularity",
+    }
+    assert "token-not-logged" not in captured.value.message
+    assert "E_REPORTING_PARAM" in captured.value.message
 
 @pytest.mark.asyncio
 async def test_direct_account_request_uses_all_ads_metrics_and_attribution():
