@@ -204,16 +204,19 @@ export default function GlobalSearch({ compact = false }) {
 
     const onKeyDown = (event) => {
         if (!resultsOpen) return;
+        if (event.key === "Escape") {
+            event.preventDefault();
+            setFocused(false);
+            inputRef.current?.blur();
+            return;
+        }
+        if (results.length === 0) return;
         if (event.key === "ArrowDown") {
             event.preventDefault();
             setActiveIndex((index) => Math.min(index + 1, results.length - 1));
         } else if (event.key === "ArrowUp") {
             event.preventDefault();
             setActiveIndex((index) => Math.max(index - 1, 0));
-        } else if (event.key === "Escape") {
-            event.preventDefault();
-            setFocused(false);
-            inputRef.current?.blur();
         }
     };
 
