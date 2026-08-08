@@ -1,11 +1,15 @@
 """Arabic/Saudi-market calibration guards for the Google taxonomy AI pilot.
 
-This layer is intentionally deterministic.  It adjusts candidate retrieval and
-caps model confidence when explicit product wording conflicts with the chosen
-Google taxonomy path.  It never writes products and never calls Salla.
+This layer is intentionally deterministic around high-confidence decisions. It
+adjusts candidate retrieval, caps confidence for explicit semantic conflicts,
+and may use the public product image as a second opinion only for unresolved
+low-confidence products. It never writes products and never calls Salla.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from typing import Any
 
 import product_google_taxonomy_ai_pilot as pilot
@@ -17,6 +21,28 @@ NECKLACE_WORDS = {"سلسال", "سلاسل", "قلاده", "قلادات"}
 HAIR_WORDS = {"شعر", "الشعر", "للشعر"}
 BROOCH_WORDS = {"بروش", "بروشات"}
 DAQLA_WORDS = {"دقله", "دقلة", "الدقله", "الدقلة"}
+BRACELET_WORDS = {"اسواره", "اسوره", "اساور", "سوار"}
+WRISTBAND_CUES = {
+    "معصم", "المعصم", "سيليكون", "قماش", "رياضي", "رياضيه", "فعاليات",
+    "دخول", "تعريف", "مستشفى", "مهرجان", "تذاكر",
+}
+PHONE_CASE_WORDS = {"كفر", "جراب", "حافظه", "حافظة"}
+DOLL_WORDS = {"دميه", "دمية", "دمى", "لعبه", "لعبة"}
+
+VISION_CONFIDENCE_TRIGGER = 69
+VISION_MAX_OUTPUT_TOKENS = 700
+
+VISION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "category_id": {"type": "string"},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+        "reason": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+    },
+    "required": ["category_id", "confidence", "reason", "evidence"],
+}
 
 
 def _name_tokens(evidence: dict[str, Any]) -> set[str]:
@@ -46,6 +72,68 @@ def _is_daqla(evidence: dict[str, Any]) -> bool:
     return _has_any(_name_tokens(evidence), DAQLA_WORDS)
 
 
+def _is_jewelry_bracelet(evidence: dict[str, Any]) -> bool:
+    tokens = _name_tokens(evidence)
+    return _has_any(tokens, BRACELET_WORDS) and not _has_any(tokens, WRISTBAND_CUES)
+
+
+def _is_phone_case(evidence: dict[str, Any]) -> bool:
+    tokens = _name_tokens(evidence)
+    return _has_any(tokens, PHONE_CASE_WORDS) and not _has_any(tokens, CAR_WORDS)
+
+
+def _is_doll(evidence: dict[str, Any]) -> bool:
+    return _has_any(_name_tokens(evidence), DOLL_WORDS)
+
+
+def _is_ambiguous_bundle(evidence: dict[str, Any]) -> bool:
+    name = pilot._normalize_ar(evidence.get("name"))
+    return "طقم" in name.split() and ("قطع" in name.split() or bool(re.search(r"\b\d+\b", name)))
+
+
+def _public_image_url(product: dict[str, Any]) -> str:
+    def extract(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("url", "original", "original_url", "image", "src"):
+                candidate = value.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+        return ""
+
+    candidate = extract(product.get("main_image"))
+    if not candidate:
+        for row in (product.get("images") or [])[:3]:
+            candidate = extract(row)
+            if candidate:
+                break
+    if candidate.startswith("https://") or candidate.startswith("http://"):
+        return candidate[:1600]
+    return ""
+
+
+def calibrated_product_evidence(product: dict[str, Any]) -> dict[str, Any]:
+    evidence = pilot._product_evidence_original(product)
+    image_url = _public_image_url(product)
+    if image_url:
+        evidence["main_image_url"] = image_url
+    return evidence
+
+
+def calibrated_input_revision(evidence: dict[str, Any]) -> str:
+    relevant = {
+        key: evidence.get(key)
+        for key in (
+            "name", "description", "short_description", "salla_categories", "options",
+            "product_type", "brand", "sku", "gtin", "mpn", "current_google_category",
+            "main_image_url",
+        )
+    }
+    payload = json.dumps(relevant, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
     """Return strong contextual terms that disambiguate common Arabic products."""
     terms: list[str] = []
@@ -61,6 +149,12 @@ def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
         terms.extend(["اكسسوارات شعر", "مشابك شعر", "دبابيس شعر"])
     if _is_daqla(evidence):
         terms.extend(["ملابس تقليدية", "ملابس أطفال تقليدية", "ملابس مناسبات تقليدية"])
+    if _is_jewelry_bracelet(evidence):
+        terms.extend(["حلي اساور", "اساور مجوهرات", "اساور زينة"])
+    if _is_phone_case(evidence):
+        terms.extend(["حافظات الهواتف المحمولة", "جرابات هواتف", "حافظات اجهزة محمولة"])
+    if _is_doll(evidence):
+        terms.extend(["دمى محشوة", "العاب دمى", "العاب محشوة"])
     return terms
 
 
@@ -72,9 +166,6 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
         if any(term in normalized for term in ("حلي", "قلادات", "دلايات", "مجوهرات")):
             return True
     if _is_full_necklace(evidence):
-        # Google ID 192 is the charms/pendants branch in the Arabic taxonomy;
-        # a product explicitly sold as a full necklace should not be auto-routed
-        # there unless the product itself says pendant/charm.
         if "قلادات ودلايات" in normalized or "دلايات" in normalized:
             return True
     if _is_hair_brooch(evidence):
@@ -82,6 +173,11 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
             return True
     if _is_daqla(evidence):
         if "التعميد" in normalized or "المناوله" in normalized:
+            return True
+    if _is_jewelry_bracelet(evidence):
+        if "اساور المعصم" in normalized or (
+            "اكسسوارات الملابس" in normalized and "اساور" in normalized
+        ):
             return True
     return False
 
@@ -100,7 +196,6 @@ def calibrated_candidate_rows(
         taxonomy,
         current_id,
     )
-    # Existing provider/current category is never silently hidden from review.
     result: list[dict[str, Any]] = []
     for row in rows:
         row_id = str(row.get("id") or "")
@@ -114,7 +209,9 @@ def calibrated_candidate_rows(
 
 
 def confidence_cap(evidence: dict[str, Any], chosen_path: Any) -> tuple[int | None, str | None]:
-    """Return a confidence ceiling when an explicit semantic conflict remains."""
+    """Return a confidence ceiling when explicit wording conflicts or stays ambiguous."""
+    if _is_ambiguous_bundle(evidence):
+        return 79, "المنتج طقم متعدد القطع؛ يحتاج مراجعة بشرية لتحديد المنتج الرئيسي في التصنيف."
     if not chosen_path:
         return None, None
     if _path_incompatible(evidence, chosen_path):
@@ -126,7 +223,100 @@ def confidence_cap(evidence: dict[str, Any], chosen_path: Any) -> tuple[int | No
             return 69, "ذكر الشعر يجعل تصنيف بروشات الملابس غير آمن للاعتماد التلقائي."
         if _is_daqla(evidence):
             return 49, "الدقلة المحلية لا تدعم تصنيف أزياء التعميد/المناولة."
+        if _is_jewelry_bracelet(evidence):
+            return 49, "اسم المنتج يدل على حُلي/سوار زينة وليس Wristband من إكسسوارات الملابس."
     return None, None
+
+
+def _apply_cap(result: dict[str, Any], evidence: dict[str, Any], candidates: list[dict[str, Any]]) -> None:
+    chosen_id = str(result.get("category_id") or "")
+    chosen = next((row for row in candidates if str(row.get("id") or "") == chosen_id), None)
+    cap, note = confidence_cap(evidence, (chosen or {}).get("path"))
+    if cap is None:
+        return
+    try:
+        current = int(result.get("confidence") or 0)
+    except (TypeError, ValueError):
+        current = 0
+    result["confidence"] = min(current, cap)
+    if note:
+        reason = pilot._text(result.get("reason"))
+        result["reason"] = f"{note} {reason}"[: pilot.MAX_REASON_CHARS]
+
+
+def _needs_vision(result: dict[str, Any], evidence: dict[str, Any], candidates: list[dict[str, Any]]) -> bool:
+    if not evidence.get("main_image_url") or not candidates:
+        return False
+    chosen_id = str(result.get("category_id") or "")
+    try:
+        confidence = int(result.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0
+    return not chosen_id or confidence <= VISION_CONFIDENCE_TRIGGER
+
+
+async def _vision_rescue_one(
+    client: Any,
+    *,
+    evidence: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    image_url = str(evidence.get("main_image_url") or "").strip()
+    if not image_url:
+        return None
+    safe_facts = {
+        key: evidence.get(key)
+        for key in (
+            "name", "description", "short_description", "salla_categories",
+            "options", "product_type", "brand",
+        )
+    }
+    candidate_payload = [
+        {"id": str(row.get("id") or ""), "name": row.get("name"), "path": row.get("path")}
+        for row in candidates
+    ]
+    response = await client.responses.create(
+        model=pilot._model(),
+        instructions=(
+            "أنت طبقة تحقق بصري لتصنيف Google Product Category داخل Mezan. استخدم الصورة فقط "
+            "لحسم الغموض في حقائق المنتج النصية. اختر category_id حرفياً من candidate_categories. "
+            "إذا لم تحسم الصورة نوع المنتج أو كان المنتج طقماً متعدد الأنواع، أعد category_id فارغاً "
+            "وثقة أقل من 70. لا تستنتج ماركة أو مادة أو استخداماً غير ظاهر."
+        ),
+        input=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": json.dumps(
+                        {"facts": safe_facts, "candidate_categories": candidate_payload},
+                        ensure_ascii=False,
+                    ),
+                },
+                {"type": "input_image", "image_url": image_url},
+            ],
+        }],
+        max_output_tokens=VISION_MAX_OUTPUT_TOKENS,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "google_taxonomy_vision_rescue",
+                "strict": True,
+                "schema": VISION_SCHEMA,
+            }
+        },
+    )
+    payload = json.loads(response.output_text)
+    chosen_id = str(payload.get("category_id") or "")
+    candidate_ids = {str(row.get("id") or "") for row in candidates}
+    if chosen_id and chosen_id not in candidate_ids:
+        return None
+    payload["category_id"] = chosen_id
+    try:
+        payload["confidence"] = max(0, min(100, int(payload.get("confidence") or 0)))
+    except (TypeError, ValueError):
+        payload["confidence"] = 0
+    return payload
 
 
 async def calibrated_ai_classify_chunk(client: Any, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -135,29 +325,37 @@ async def calibrated_ai_classify_chunk(client: Any, rows: list[dict[str, Any]]) 
     for product_id, result in results.items():
         source = by_product.get(str(product_id)) or {}
         evidence = source.get("facts") if isinstance(source.get("facts"), dict) else {}
-        chosen_id = str(result.get("category_id") or "")
-        chosen = next(
-            (
-                row for row in (source.get("candidate_categories") or [])
-                if str(row.get("id") or "") == chosen_id
-            ),
-            None,
-        )
-        cap, note = confidence_cap(evidence, (chosen or {}).get("path"))
-        if cap is not None:
+        candidates = source.get("candidate_categories") if isinstance(source.get("candidate_categories"), list) else []
+        _apply_cap(result, evidence, candidates)
+
+        if _needs_vision(result, evidence, candidates):
             try:
-                current = int(result.get("confidence") or 0)
-            except (TypeError, ValueError):
-                current = 0
-            result["confidence"] = min(current, cap)
-            if note:
-                reason = pilot._text(result.get("reason"))
-                result["reason"] = f"{note} {reason}"[: pilot.MAX_REASON_CHARS]
+                rescued = await _vision_rescue_one(client, evidence=evidence, candidates=candidates)
+            except Exception:
+                rescued = None
+            if rescued:
+                _apply_cap(rescued, evidence, candidates)
+                current_confidence = int(result.get("confidence") or 0)
+                rescued_confidence = int(rescued.get("confidence") or 0)
+                if rescued_confidence > current_confidence or not str(result.get("category_id") or ""):
+                    reason = pilot._text(rescued.get("reason"))
+                    result.update(rescued)
+                    result["reason"] = f"تحقق بصري: {reason}"[: pilot.MAX_REASON_CHARS]
+                    evidence_rows = [pilot._text(value)[:220] for value in (rescued.get("evidence") or [])]
+                    if "الصورة دعمت التصنيف" not in evidence_rows:
+                        evidence_rows.append("الصورة دعمت التصنيف")
+                    result["evidence"] = evidence_rows[: pilot.MAX_EVIDENCE_ITEMS]
     return results
 
 
 def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Any):
     """Install calibration once, then return the original governed pilot router."""
+    if not hasattr(pilot, "_product_evidence_original"):
+        pilot._product_evidence_original = pilot._product_evidence
+        pilot._product_evidence = calibrated_product_evidence
+    if not hasattr(pilot, "_input_revision_original"):
+        pilot._input_revision_original = pilot._input_revision
+        pilot._input_revision = calibrated_input_revision
     if not hasattr(pilot, "_candidate_rows_original"):
         pilot._candidate_rows_original = pilot._candidate_rows
         pilot._candidate_rows = calibrated_candidate_rows
