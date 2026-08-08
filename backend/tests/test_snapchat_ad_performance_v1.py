@@ -146,7 +146,8 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     async def cost_settings(db, user_id):
         return {"items": []}
 
-    monkeypatch.setattr(module, "_load_selected_accounts", selected_accounts)\n    import ads_manager.account_cost_settings as account_cost_settings
+    monkeypatch.setattr(module, "_load_selected_accounts", selected_accounts)
+    import ads_manager.account_cost_settings as account_cost_settings
 
     monkeypatch.setattr(
         account_cost_settings,
