@@ -288,12 +288,18 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
     )
 
 
-def test_platform_total_v12_uses_current_hour_rollup():
+def test_platform_total_v14_uses_complete_campaign_rollup():
     source = Path(
         "integrations_control_center/snapchat_platform_source_integrity.py"
     ).read_text(encoding="utf-8")
 
-    assert "direct_account_headlines_campaign_current_hour_rollup_v12" in source
+    assert "campaign_breakdown_all_ads_current_hour_rollup_v14" in source
+    refresh = source.split(
+        "async def refresh_account_total_snapshots", 1
+    )[1].split("async def _to_list", 1)[0]
+    assert "await fetch_account_total_direct_metrics(" not in refresh
+    assert "account_metrics = aggregate_total_campaign_metrics(rows)" in refresh
+    assert '"direct_account_total_requested": False' in refresh
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
