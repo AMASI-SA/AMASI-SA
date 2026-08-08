@@ -5,7 +5,6 @@ import {
     CheckCircle,
     Clock,
     Gear,
-    PaperPlaneTilt,
     Play,
     SpinnerGap,
     Storefront,
@@ -311,7 +310,7 @@ function EmployeeManagementView({ data, loading, error, date, onDateChange, onRe
 }
 
 export default function PreparationWorkDashboard() {
-    const [activeView, setActiveView] = useState("new-files");
+    const [activeView, setActiveView] = useState("my-products");
     const [work, setWork] = useState(null);
     const [workLoading, setWorkLoading] = useState(true);
     const [workError, setWorkError] = useState("");
@@ -371,9 +370,8 @@ export default function PreparationWorkDashboard() {
     };
 
     const tabs = useMemo(() => [
-        { id: "new-files", label: "ملفاتي الجديدة", Icon: PaperPlaneTilt, visible: true },
-        { id: "supplier-accounts", label: "حسابات الموردين", Icon: Storefront, visible: true },
-        { id: "my-work", label: "متابعة القطع", Icon: Gear, visible: true },
+        { id: "my-products", label: "إدارة منتجاتي", Icon: Gear, visible: true },
+        { id: "my-work", label: "تفاصيل القطع", Icon: Storefront, visible: true },
         { id: "unassigned", label: "غير مسند", Icon: UserMinus, visible: managerAllowed },
         { id: "employees", label: "إدارة منتجات الموظفين", Icon: UsersThree, visible: managerAllowed },
     ].filter((item) => item.visible), [managerAllowed]);
@@ -385,13 +383,21 @@ export default function PreparationWorkDashboard() {
         ]);
     }, [loadManager, loadWork, managerAllowed]);
 
+    if (activeView === "my-products") {
+        return (
+            <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5" dir="rtl" data-testid="preparation-work-dashboard">
+                <PreparationSupplierDispatchWorkspace view="my-products" onDataChanged={reloadOperationalViews} />
+            </section>
+        );
+    }
+
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" dir="rtl" data-testid="preparation-work-dashboard">
             <header className="border-b border-slate-100 bg-slate-50 p-4 sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <h2 className="text-xl font-black text-slate-950">قيد التنفيذ</h2>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">متابعة الملفات المسندة والقطع والخدمات؛ يبدأ التنفيذ عند ضغط الموظف «بدء التنفيذ».</p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-slate-600">تبدأ هذه المرحلة من «إدارة منتجاتي» عند وصول ملف التجهيز إلى حساب الموظف.</p>
                     </div>
                     <nav className="flex flex-wrap gap-2" aria-label="نوافذ قيد التنفيذ">
                         {tabs.map(({ id, label, Icon }) => (
@@ -406,7 +412,7 @@ export default function PreparationWorkDashboard() {
             <div className="p-4 sm:p-5">
                 {activeView === "employees" && managerAllowed ? (
                     <EmployeeManagementView data={managerData} loading={managerLoading} error={managerError} date={date} onDateChange={setDate} onRefresh={loadManager} />
-                ) : activeView === "new-files" || activeView === "supplier-accounts" || (activeView === "unassigned" && managerAllowed) ? (
+                ) : activeView === "unassigned" && managerAllowed ? (
                     <PreparationSupplierDispatchWorkspace view={activeView} onDataChanged={reloadOperationalViews} />
                 ) : (
                     <MyWorkView work={work} loading={workLoading} error={workError} onRefresh={loadWork} onStart={startFile} startingFile={startingFile} />

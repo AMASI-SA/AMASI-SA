@@ -78,16 +78,15 @@ test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
     });
 });
 
-test("opening fulfillment without a stage renders the compact mobile work overview", () => {
+test("opening fulfillment without a stage renders the standalone my products overview", () => {
     mockSearchParams = new URLSearchParams("");
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
-    expect(markup).toContain('data-testid="fulfillment-mobile-overview"');
-    expect(markup).toContain("ملخص العمل اليوم");
-    expect(markup).toContain("المهام السريعة");
-    expect(markup).toContain("مراجعة الطلبات");
-    expect(markup).toContain("ملفات التجهيز");
-    expect(markup).toContain("استلام المورد");
+    expect(markup).toContain('data-testid="preparation-work-dashboard"');
+    expect(markup).toContain("منتجاتي وإدارة منتجات الموظفين");
+    expect(markup).not.toContain('data-testid="fulfillment-mobile-overview"');
+    expect(markup).not.toContain("تبويبات إدارة التجهيز");
+    expect(markup).not.toContain("Mezan OS V2");
 });
 
 test("pending review is embedded under the organized preparation tabs", () => {
@@ -125,6 +124,8 @@ test("in progress stage renders the employee work dashboard instead of a placeho
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
     expect(markup).toContain("منتجاتي وإدارة منتجات الموظفين");
+    expect(markup).not.toContain("تبويبات إدارة التجهيز");
+    expect(markup).not.toContain("Mezan OS V2");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
