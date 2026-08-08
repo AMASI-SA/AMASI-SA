@@ -8,6 +8,7 @@ accounting eligible and no Snapchat mutation is performed.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Awaitable, Callable
@@ -69,16 +70,17 @@ from .snapchat_native_performance_sync import (
 def adsquad_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "ad_squad_active_campaign_account_day_total_v5"
+        "ad_squad_active_campaign_account_day_bounded_v6"
     )
 
 
 ADSQUAD_SOURCE_MODE = adsquad_source_mode(ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME)
-ADSQUAD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_squad_active_total_v3"
+ADSQUAD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_squad_active_bounded_total_v4"
 ADSQUAD_REFRESH_STATE_COLLECTION = "mezan_snapchat_adsquad_refresh_state_v1"
 ADSQUAD_BREAKDOWN = "adsquad"
 ADSQUAD_PROVIDER_GRANULARITY = "TOTAL"
 ADSQUAD_REFRESH_INTERVAL_SECONDS = 15 * 60
+ADSQUAD_FETCH_CONCURRENCY = 6
 MAX_CAMPAIGNS_PER_ACCOUNT = 250
 MAX_REPORT_ROWS = 100_000
 MAX_ENTITY_ROWS = 50_000
@@ -272,6 +274,70 @@ async def _fetch_campaign_adsquad_totals(
             result={"error": first},
         )
     return rows, errors, breakdown_seen
+
+
+async def _fetch_adsquad_window(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    *,
+    campaigns: list[dict[str, Any]],
+    request_start: datetime,
+    request_end: datetime,
+) -> list[dict[str, Any]]:
+    """Fetch one report window with a small, bounded amount of concurrency."""
+    semaphore = asyncio.Semaphore(ADSQUAD_FETCH_CONCURRENCY)
+
+    async def fetch_one(
+        campaign_id: str,
+        action_report_time: str,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            try:
+                rows, report_errors, breakdown_seen = (
+                    await _fetch_campaign_adsquad_totals(
+                        context,
+                        client,
+                        access_token,
+                        campaign_id=campaign_id,
+                        request_start=request_start,
+                        request_end=request_end,
+                        action_report_time=action_report_time,
+                    )
+                )
+                return {
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "rows": rows,
+                    "errors": report_errors,
+                    "breakdown_seen": breakdown_seen,
+                }
+            except SnapchatNativeSyncError as exc:
+                if exc.code == "snapchat_needs_reauth":
+                    raise
+                return {
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "rows": [],
+                    "errors": [{
+                        "kind": "adsquad_total_stats",
+                        "campaign_id": campaign_id,
+                        "code": exc.code,
+                        "message": exc.message[:300],
+                        "retryable": bool(exc.retryable),
+                    }],
+                    "breakdown_seen": False,
+                }
+
+    tasks = [
+        fetch_one(campaign_id, action_report_time)
+        for campaign in campaigns
+        if (campaign_id := _text(campaign.get("external_id")))
+        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    ]
+    if not tasks:
+        return []
+    return list(await asyncio.gather(*tasks))
 
 
 def _day_buckets(
@@ -517,47 +583,31 @@ async def refresh_snapchat_adsquad_performance(
             mode: True for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
         }
 
-        for campaign in campaigns:
-            campaign_id = _text(campaign.get("external_id"))
-            if not campaign_id:
+        window_results = await _fetch_adsquad_window(
+            context,
+            client,
+            access_token,
+            campaigns=campaigns,
+            request_start=request_start,
+            request_end=request_end,
+        )
+        for result in window_results:
+            action_report_time = _text(result.get("action_report_time"))
+            if action_report_time not in rows_by_mode:
                 continue
-            for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
-                try:
-                    campaign_rows, campaign_errors, breakdown_seen = (
-                        await _fetch_campaign_adsquad_totals(
-                            context,
-                            client,
-                            access_token,
-                            campaign_id=campaign_id,
-                            request_start=request_start,
-                            request_end=request_end,
-                            action_report_time=action_report_time,
-                        )
-                    )
-                    rows_by_mode[action_report_time].extend(campaign_rows)
-                    complete_by_mode[action_report_time] = (
-                        complete_by_mode[action_report_time]
-                        and breakdown_seen
-                        and not campaign_errors
-                    )
-                    errors.extend({
-                        **error,
-                        "date": report_date.isoformat(),
-                        "action_report_time": action_report_time,
-                    } for error in campaign_errors)
-                except SnapchatNativeSyncError as exc:
-                    if exc.code == "snapchat_needs_reauth":
-                        raise
-                    complete_by_mode[action_report_time] = False
-                    errors.append({
-                        "kind": "adsquad_total_stats",
-                        "date": report_date.isoformat(),
-                        "campaign_id": campaign_id,
-                        "action_report_time": action_report_time,
-                        "code": exc.code,
-                        "message": exc.message[:300],
-                        "retryable": bool(exc.retryable),
-                    })
+            campaign_rows = result.get("rows") or []
+            campaign_errors = result.get("errors") or []
+            rows_by_mode[action_report_time].extend(campaign_rows)
+            complete_by_mode[action_report_time] = (
+                complete_by_mode[action_report_time]
+                and bool(result.get("breakdown_seen"))
+                and not campaign_errors
+            )
+            errors.extend({
+                **error,
+                "date": report_date.isoformat(),
+                "action_report_time": action_report_time,
+            } for error in campaign_errors)
 
         for action_report_time, mode_rows in rows_by_mode.items():
             local = _day_buckets(
