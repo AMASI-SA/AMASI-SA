@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowClockwise,
     ArrowRight,
@@ -30,6 +30,8 @@ import {
     sendPreparationPiecesToSupplier,
 } from "../../services/preparationSupplierDispatch";
 import { printSupplierDispatch } from "./supplierDispatchPrint";
+
+const SupplierReceivingWorkspace = lazy(() => import("./SupplierReceivingWorkspace"));
 
 export function dispatchSelections(products = [], selected = {}) {
     return products
@@ -203,6 +205,138 @@ function SectionHeader({ title, description, onBack, onRefresh, loading }) {
                 <div className="min-w-0"><h3 className="text-lg font-black text-slate-950">{title}</h3><p className="mt-1 text-xs font-bold leading-5 text-slate-500">{description}</p></div>
             </div>
             {onRefresh && <button type="button" onClick={onRefresh} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black"><ArrowClockwise className={loading ? "animate-spin" : ""} />تحديث</button>}
+        </div>
+    );
+}
+
+export function orderSearchValueFromBarcode(rawValue) {
+    const value = String(rawValue || "").trim();
+    if (!value) return "";
+    const numberGroups = value.match(/[0-9]{5,}/g) || [];
+    if (!numberGroups.length) return value;
+    return numberGroups.sort((left, right) => right.length - left.length)[0];
+}
+
+export function OrderBarcodeCameraScanner({ onDetected, onClose }) {
+    const videoRef = useRef(null);
+    const [cameraError, setCameraError] = useState("");
+    const [cameraReady, setCameraReady] = useState(false);
+    const [cameraEngine, setCameraEngine] = useState("");
+
+    useEffect(() => {
+        let stopped = false;
+        let stream;
+        let animationFrame;
+        let zxingControls;
+
+        const finish = (rawValue) => {
+            const value = orderSearchValueFromBarcode(rawValue);
+            if (!value || stopped) return;
+            stopped = true;
+            onDetected(value);
+        };
+
+        const createNativeDetector = async () => {
+            if (!globalThis.BarcodeDetector) return null;
+            try {
+                const supported = typeof globalThis.BarcodeDetector.getSupportedFormats === "function"
+                    ? await globalThis.BarcodeDetector.getSupportedFormats()
+                    : [];
+                const formats = ["qr_code", "code_128"].filter((format) => !supported.length || supported.includes(format));
+                return new globalThis.BarcodeDetector(formats.length ? { formats } : undefined);
+            } catch {
+                return null;
+            }
+        };
+
+        async function startCamera() {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setCameraError("هذا الجهاز لا يتيح الكاميرا للمتصفح. افتح ميزان عبر HTTPS واسمح باستخدام الكاميرا.");
+                return;
+            }
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                    audio: false,
+                });
+                if (stopped || !videoRef.current) {
+                    for (const track of stream?.getTracks?.() || []) track.stop();
+                    return;
+                }
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play();
+                if (stopped) return;
+                setCameraReady(true);
+
+                const detector = await createNativeDetector();
+                if (detector) {
+                    setCameraEngine("native");
+                    const detectFrame = async () => {
+                        if (stopped || !videoRef.current) return;
+                        try {
+                            const rows = await detector.detect(videoRef.current);
+                            finish(rows?.[0]?.rawValue);
+                        } catch {
+                            // Moving frames commonly contain no readable barcode.
+                        }
+                        if (!stopped) animationFrame = requestAnimationFrame(detectFrame);
+                    };
+                    animationFrame = requestAnimationFrame(detectFrame);
+                    return;
+                }
+
+                setCameraEngine("zxing");
+                const { BarcodeFormat, BrowserMultiFormatReader } = await import("@zxing/browser");
+                const reader = new BrowserMultiFormatReader(undefined, {
+                    delayBetweenScanAttempts: 180,
+                    delayBetweenScanSuccess: 500,
+                });
+                reader.possibleFormats = [BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128];
+                zxingControls = await reader.decodeFromVideoElement(videoRef.current, (result) => {
+                    if (result) finish(result.getText());
+                });
+                if (stopped) zxingControls?.stop?.();
+            } catch (cameraStartError) {
+                const messages = {
+                    NotAllowedError: "اسمح لميزان باستخدام الكاميرا من إعدادات المتصفح ثم حاول مرة أخرى.",
+                    NotFoundError: "لم يتم العثور على كاميرا في هذا الجهاز.",
+                    NotReadableError: "الكاميرا مستخدمة في تطبيق آخر. أغلقه ثم حاول مرة أخرى.",
+                    SecurityError: "تشغيل الكاميرا يحتاج فتح ميزان عبر اتصال آمن HTTPS.",
+                };
+                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا أو قراءة الباركود.");
+            }
+        }
+
+        startCamera();
+        return () => {
+            stopped = true;
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            zxingControls?.stop?.();
+            for (const track of stream?.getTracks?.() || []) track.stop();
+        };
+    }, [onDetected]);
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/90 p-3" role="dialog" aria-modal="true" aria-label="مسح باركود رقم الطلب" dir="rtl" data-testid="my-products-order-camera-dialog">
+            <div className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+                <header className="flex items-center justify-between gap-3 bg-emerald-800 p-4 text-white">
+                    <div><h3 className="flex items-center gap-2 text-lg font-black"><Camera size={23} /> مسح باركود الطلب</h3><p className="mt-1 text-xs font-bold text-emerald-100">وجّه الكاميرا إلى QR أو Code 128 الخاص بالطلب.</p></div>
+                    <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15" aria-label="إغلاق الكاميرا"><X size={20} /></button>
+                </header>
+                <div className="p-4">
+                    {cameraError ? <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-900">{cameraError}</div> : (
+                        <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-black" data-camera-engine={cameraEngine || undefined}>
+                            <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
+                            {!cameraReady && <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-black text-white"><SpinnerGap className="animate-spin" /> جارٍ تشغيل الكاميرا…</div>}
+                            {cameraReady && <div className="pointer-events-none absolute inset-[18%] rounded-2xl border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(0,0,0,0.28)]" />}
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
@@ -381,14 +515,16 @@ function InProgressView({ data, loading, error, onRefresh, onBack }) {
     );
 }
 
-function ReceivedView({ data, loading, error, onRefresh, onBack }) {
-    const accounts = (data?.supplier_accounts || []).filter((account) => account.received_quantity > 0);
+export function ReceivedView({ data, loading, error, onRefresh, onBack }) {
+    const receivedProducts = (data?.files || []).flatMap((file) => (file?.products || [])
+        .filter((product) => Number(product?.received_quantity || 0) > 0)
+        .map((product) => ({ ...product, file_number: file.file_number })));
     return (
         <div className="space-y-5" data-testid="preparation-products-received">
             <SectionHeader title="تم الاستلام" description="ما استلمه موظف التجهيز من المورد ولم يُسلّمه لموظف الاستلام بالفرع." onBack={onBack} onRefresh={onRefresh} loading={loading} />
             <div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.received_orders_awaiting_branch_handoff} label="الطلبات" detail="بانتظار التسليم للفرع" tone="emerald" /><SummaryCard value={data?.summary?.received_pieces_awaiting_branch_handoff} label="القطع المستلمة" detail="لم تُسلّم للفرع" tone="violet" /></div>
             {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}
-            {!accounts.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد قطع مستلمة بانتظار التسليم للفرع</div></div> : <div className="grid gap-4 xl:grid-cols-2">{accounts.map((account) => <article key={account.supplier_id} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h4 className="font-black text-slate-950">{account.supplier_name}</h4><div className="mt-1 text-xs font-bold text-emerald-800">{account.received_quantity} قطعة مستلمة</div></article>)}</div>}
+            {!receivedProducts.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد قطع مستلمة بانتظار التسليم للفرع</div></div> : <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{receivedProducts.map((product) => <article key={`${product.file_number}:${product.group_key}`} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><ProductImage product={product} /><h4 className="mt-2 line-clamp-2 text-sm font-black text-slate-950">{product.product_name}</h4><div className="mt-1 text-xs font-bold text-emerald-800">{product.received_quantity} قطعة مستلمة</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">ملف {product.file_number}</div></article>)}</div>}
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900"><WarningCircle size={19} className="mt-0.5 shrink-0" />إنقاص هذا العدد سيتم فقط في مرحلة تسليم القطع لموظف الاستلام بالفرع بالباركود، وهي بوابة التنفيذ التالية.</div>
         </div>
     );
@@ -396,6 +532,11 @@ function ReceivedView({ data, loading, error, onRefresh, onBack }) {
 
 export function MyProductsOverview({ data, onOpen }) {
     const [search, setSearch] = useState("");
+    const [cameraOpen, setCameraOpen] = useState(false);
+    const handleBarcodeDetected = useCallback((value) => {
+        setSearch(orderSearchValueFromBarcode(value));
+        setCameraOpen(false);
+    }, []);
     const normalizedSearch = search.trim();
     const files = Array.isArray(data?.files) ? data.files : [];
     const supplierAccounts = Array.isArray(data?.supplier_accounts)
@@ -424,8 +565,8 @@ export function MyProductsOverview({ data, onOpen }) {
         {
             key: "waiting",
             label: "بانتظار المراجعة",
-            value: data?.summary?.waiting_review_products,
-            detail: "منتجًا لم يُرسل للمورد",
+            value: data?.summary?.waiting_review_pieces,
+            detail: "قطعة لم تُرسل للمورد",
             Icon: ClipboardText,
             tone: "amber",
             onClick: () => onOpen("waiting-review"),
@@ -433,7 +574,7 @@ export function MyProductsOverview({ data, onOpen }) {
         {
             key: "progress",
             label: "قيد التنفيذ",
-            value: data?.summary?.in_progress_products,
+            value: data?.summary?.in_progress_pieces,
             detail: "قطعة لدى الموردين",
             Icon: ArrowClockwise,
             tone: "blue",
@@ -442,8 +583,8 @@ export function MyProductsOverview({ data, onOpen }) {
         {
             key: "received",
             label: "تم الاستلام",
-            value: data?.summary?.received_orders_awaiting_branch_handoff,
-            detail: "طلبًا لم يُسلّم للفرع",
+            value: data?.summary?.received_pieces_awaiting_branch_handoff,
+            detail: "قطعة لم تُسلّم للفرع",
             Icon: CheckCircle,
             tone: "emerald",
             onClick: () => onOpen("received"),
@@ -550,13 +691,13 @@ export function MyProductsOverview({ data, onOpen }) {
 
             <section className="grid grid-cols-2 gap-2.5 sm:gap-4" aria-label="إجراءات إدارة منتجاتي">
                 <button type="button" onClick={() => onOpen("waiting-review")} className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-amber-200 hover:bg-amber-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-open-waiting-review">
-                    <div><div className="text-sm font-black text-slate-950 sm:text-xl">بانتظار المراجعة</div><div className="mt-1 text-[10px] font-bold text-slate-500 sm:text-sm">{Number(data?.summary?.waiting_review_products || 0)} قطعة غير مرسلة</div></div>
+                    <div><div className="text-sm font-black text-slate-950 sm:text-xl">بانتظار المراجعة</div><div className="mt-1 text-[10px] font-bold text-slate-500 sm:text-sm">{Number(data?.summary?.waiting_review_pieces || 0)} قطعة غير مرسلة</div></div>
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600 sm:h-14 sm:w-14"><ClipboardText size={28} weight="duotone" /></span>
                 </button>
-                <a href="/fulfillment-v2?stage=preparation" className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-receive-from-supplier">
+                <button type="button" onClick={() => onOpen("supplier-receiving")} className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-receive-from-supplier">
                     <div><div className="text-sm font-black text-slate-950 sm:text-xl">استلام من المورد</div><div className="mt-1 text-[10px] font-bold text-slate-500 sm:text-sm">مسح باركود وفتح الفاتورة</div></div>
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 sm:h-14 sm:w-14"><Camera size={28} weight="fill" /></span>
-                </a>
+                </button>
                 <div className="min-h-[112px] rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm sm:min-h-[120px] sm:p-5" data-testid="my-products-order-search">
                     <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-black text-slate-950 sm:text-xl">البحث برقم الطلب</div>
@@ -564,13 +705,13 @@ export function MyProductsOverview({ data, onOpen }) {
                     </div>
                     <label className="mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-2 focus-within:border-emerald-500 sm:min-h-11">
                         <input value={search} onChange={(event) => setSearch(event.target.value)} inputMode="numeric" placeholder="أدخل رقم الطلب" className="min-w-0 flex-1 bg-transparent text-xs font-bold outline-none sm:text-sm" aria-label="البحث برقم الطلب" />
-                        <Camera size={18} className="shrink-0 text-slate-700" aria-hidden="true" />
+                        <button type="button" onClick={() => setCameraOpen(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-emerald-800 transition hover:bg-emerald-50" aria-label="فتح الكاميرا لمسح باركود الطلب" data-testid="my-products-order-camera-button"><Camera size={19} /></button>
                     </label>
                 </div>
-                <a href="/fulfillment-v2?stage=preparation" className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-supplier-invoices">
+                <button type="button" onClick={() => onOpen("supplier-receiving")} className="flex min-h-[112px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50/30 sm:min-h-[120px] sm:p-5" data-testid="my-products-supplier-invoices">
                     <div><div className="text-sm font-black text-slate-950 sm:text-xl">فواتير الموردين</div><div className="mt-1 text-[10px] font-black text-emerald-700 sm:text-sm">{supplierInvoiceCount} فاتورة</div></div>
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 sm:h-14 sm:w-14"><FileText size={28} weight="fill" /></span>
-                </a>
+                </button>
             </section>
 
             {normalizedSearch && (
@@ -617,6 +758,7 @@ export function MyProductsOverview({ data, onOpen }) {
                     </div>
                 ) : <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-xs font-bold text-slate-500">لا توجد منتجات نشطة لدى الموردين حاليًا.</div>}
             </section>
+            {cameraOpen && <OrderBarcodeCameraScanner onDetected={handleBarcodeDetected} onClose={() => setCameraOpen(false)} />}
         </div>
     );
 }
@@ -667,13 +809,14 @@ function EmployeeProductsWorkspace({ onDataChanged, initialSection = "overview" 
     }
     if (section === "in-progress") return <InProgressView data={data} loading={loading} error={error} onRefresh={load} onBack={() => setSection("overview")} />;
     if (section === "received") return <ReceivedView data={data} loading={loading} error={error} onRefresh={load} onBack={() => setSection("overview")} />;
+    if (section === "supplier-receiving") return <div className="space-y-5"><SectionHeader title="فاتورة المورد" description="استلام المنتجات وسجل فواتير المورد داخل إدارة منتجاتي." onBack={() => setSection("overview")} /><Suspense fallback={<div className="flex min-h-48 items-center justify-center gap-2 font-black text-emerald-700"><SpinnerGap className="animate-spin" /> جارٍ تحميل فاتورة المورد…</div>}><SupplierReceivingWorkspace /></Suspense></div>;
     return <MyProductsOverview data={data} onOpen={setSection} />;
 }
 
 export default function PreparationSupplierDispatchWorkspace({ view = "my-products", onDataChanged = async () => {} }) {
     const content = useMemo(() => {
         if (view === "unassigned") return <UnassignedManagerView onChanged={onDataChanged} />;
-        const initialSection = ["waiting-review", "in-progress", "received"].includes(view)
+        const initialSection = ["waiting-review", "in-progress", "received", "supplier-receiving"].includes(view)
             ? view
             : "overview";
         return <EmployeeProductsWorkspace onDataChanged={onDataChanged} initialSection={initialSection} />;

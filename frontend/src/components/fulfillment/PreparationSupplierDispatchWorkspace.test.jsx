@@ -1,10 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
+jest.mock("./SupplierReceivingWorkspace", () => () => (
+    <div data-testid="supplier-receiving-workspace">فاتورة المورد داخل إدارة منتجاتي</div>
+));
+
 import PreparationSupplierDispatchWorkspace, {
     dispatchSelections,
     dispatchSelectionState,
     MyProductsOverview,
+    OrderBarcodeCameraScanner,
+    orderSearchValueFromBarcode,
     productImageUrl,
+    ReceivedView,
     selectedFileDispatches,
     supplierDispatchForPrint,
     toggledDispatchQuantity,
@@ -83,6 +90,18 @@ test("product image prefers manual choice then resolved Salla image then source 
 });
 
 
+test("order barcode search extracts the order number and exposes a real camera dialog", () => {
+    expect(orderSearchValueFromBarcode("ORDER:276936126")).toBe("276936126");
+    expect(orderSearchValueFromBarcode("276936126")).toBe("276936126");
+
+    const markup = renderToStaticMarkup(
+        <OrderBarcodeCameraScanner onDetected={() => {}} onClose={() => {}} />,
+    );
+    expect(markup).toContain('data-testid="my-products-order-camera-dialog"');
+    expect(markup).toContain("مسح باركود الطلب");
+});
+
+
 test("my products is the default employee in-progress window", () => {
     const markup = renderToStaticMarkup(
         <PreparationSupplierDispatchWorkspace />,
@@ -108,6 +127,9 @@ test("manager unassigned queue remains independent from employee products", () =
 test("my products overview uses the approved four account-wide counters", () => {
     const markup = renderToStaticMarkup(<MyProductsOverview data={{
         summary: {
+            waiting_review_pieces: 22,
+            in_progress_pieces: 73,
+            received_pieces_awaiting_branch_handoff: 33,
             waiting_review_products: 21,
             in_progress_products: 74,
             received_orders_awaiting_branch_handoff: 33,
@@ -136,18 +158,50 @@ test("my products overview uses the approved four account-wide counters", () => 
     expect(markup).toContain("قيد التنفيذ");
     expect(markup).toContain("تم الاستلام");
     expect(markup).toContain("إجمالي القطع المسندة");
-    ["21", "74", "33", "128"].forEach((value) => expect(markup).toContain(`>${value}<`));
+    ["22", "73", "33", "128"].forEach((value) => expect(markup).toContain(`>${value}<`));
     expect(markup).toContain("ملخص العمل العام");
     expect(markup).not.toContain("ملخص العمل اليوم");
     expect(markup).toContain("إدارة المنتجات المسندة لك ومتابعة الموردين");
     expect(markup).toContain("استلام من المورد");
     expect(markup).toContain("البحث برقم الطلب");
+    expect(markup).toContain('data-testid="my-products-order-camera-button"');
     expect(markup).toContain("فواتير الموردين");
+    expect(markup).not.toContain('/fulfillment-v2?stage=preparation');
     expect(markup).toContain("آخر ملفات التجهيز");
     expect(markup).toContain("حالة الموردين");
     expect(markup).toContain("ملف أحمد 024");
     expect(markup).toContain("مؤسسة النور");
     expect(markup).toContain("grid-cols-3");
+});
+
+
+test("received card renders assigned received products even without a supplier account row", () => {
+    const markup = renderToStaticMarkup(<ReceivedView
+        data={{
+            summary: {
+                received_orders_awaiting_branch_handoff: 1,
+                received_pieces_awaiting_branch_handoff: 1,
+            },
+            supplier_accounts: [],
+            files: [{
+                file_number: "PF-RECEIVED-1",
+                products: [{
+                    group_key: "product:received",
+                    product_name: "سلسال جاهز للاستلام",
+                    received_quantity: 1,
+                    resolved_image_url: "https://cdn.salla.sa/received.jpg",
+                }],
+            }],
+        }}
+        loading={false}
+        error=""
+        onRefresh={() => {}}
+        onBack={() => {}}
+    />);
+
+    expect(markup).toContain("سلسال جاهز للاستلام");
+    expect(markup).toContain("قطعة مستلمة");
+    expect(markup).not.toContain("لا توجد قطع مستلمة");
 });
 
 

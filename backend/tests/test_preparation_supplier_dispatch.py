@@ -353,7 +353,7 @@ def test_legacy_single_file_supplier_payload_remains_supported():
     assert payload.file_requests()[0].file_number == "PF-100"
 
 
-def test_employee_summary_uses_products_orders_and_all_assigned_pieces():
+def test_employee_summary_exposes_physical_piece_counts_for_overview_cards():
     files = [
         {
             "is_new": True,
@@ -377,6 +377,8 @@ def test_employee_summary_uses_products_orders_and_all_assigned_pieces():
 
     summary = employee_workspace_summary(files, pieces)
 
+    assert summary["waiting_review_pieces"] == 3
+    assert summary["in_progress_pieces"] == 3
     assert summary["waiting_review_products"] == 1
     assert summary["in_progress_products"] == 1
     assert summary["received_orders_awaiting_branch_handoff"] == 1

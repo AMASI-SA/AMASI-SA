@@ -546,6 +546,15 @@ def employee_workspace_summary(
     files: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
 ) -> dict[str, int]:
+    waiting_review_pieces = sum(
+        int(file_row.get("available_quantity") or 0)
+        for file_row in files
+    )
+    in_progress_pieces = sum(
+        int(file_row.get("sent_quantity") or 0)
+        + int(file_row.get("ready_quantity") or 0)
+        for file_row in files
+    )
     waiting_review_products = sum(
         1
         for file_row in files
@@ -583,6 +592,10 @@ def employee_workspace_summary(
         "sent": sum(row["sent_quantity"] for row in files),
         "ready": sum(row["ready_quantity"] for row in files),
         "received": sum(row["received_quantity"] for row in files),
+        # The overview cards must use one physical-piece grain.  Keep the
+        # product/order counters below for backwards compatibility only.
+        "waiting_review_pieces": waiting_review_pieces,
+        "in_progress_pieces": in_progress_pieces,
         "waiting_review_products": waiting_review_products,
         "in_progress_products": in_progress_products,
         "received_orders_awaiting_branch_handoff": len(received_order_numbers),
