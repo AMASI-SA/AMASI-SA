@@ -1,11 +1,15 @@
 import asyncio
+import json
 
 import product_google_taxonomy_ai_calibration as calibration
 import product_google_taxonomy_ai_pilot as pilot
 
 
-def _evidence(name):
-    return {"name": name, "description": "", "salla_categories": [], "options": []}
+def _evidence(name, *, image_url=""):
+    row = {"name": name, "description": "", "salla_categories": [], "options": []}
+    if image_url:
+        row["main_image_url"] = image_url
+    return row
 
 
 def test_car_hanging_adds_vehicle_context_and_rejects_jewelry_path():
@@ -52,13 +56,57 @@ def test_daqla_cannot_route_to_christening_communion_apparel():
     assert "الدقلة" in note
 
 
-def test_normal_bracelet_keeps_model_confidence_uncapped():
+def test_jewelry_bracelet_rejects_clothing_wristband_branch():
+    evidence = _evidence("اسوارة بلمعة زركون")
+    terms = calibration.contextual_search_terms(evidence)
+    assert any("حلي" in term for term in terms)
     cap, note = calibration.confidence_cap(
-        _evidence("اسواره تصميم حسب الطلب"),
-        "ملابس وإكسسوارات > حلي > أساور المعصم",
+        evidence,
+        "ملابس وإكسسوارات > إكسسوارات الملابس > أساور المعصم",
+    )
+    assert cap == 49
+    assert "Wristband" in note
+
+
+def test_explicit_silicone_wristband_is_not_forced_to_jewelry():
+    evidence = _evidence("سوار معصم سيليكون للفعاليات")
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "ملابس وإكسسوارات > إكسسوارات الملابس > أساور المعصم",
     )
     assert cap is None
     assert note is None
+    assert not any("حلي اساور" == pilot._normalize_ar(term) for term in calibration.contextual_search_terms(evidence))
+
+
+def test_bundle_is_never_auto_approved_from_one_category():
+    cap, note = calibration.confidence_cap(
+        _evidence("طقم رجالي 6 قطع بالاسم"),
+        "ملابس وإكسسوارات > حلي > أساور",
+    )
+    assert cap == 79
+    assert "متعدد القطع" in note
+
+
+def test_phone_case_and_doll_add_ambiguity_resolving_terms():
+    phone_terms = calibration.contextual_search_terms(_evidence("كفر زهور الجوري"))
+    doll_terms = calibration.contextual_search_terms(_evidence("دمية ميرومي اللطيفة"))
+    assert any("هواتف" in term for term in phone_terms)
+    assert any("دمى" in term for term in doll_terms)
+
+
+def test_product_evidence_exposes_only_public_http_image_url(monkeypatch):
+    monkeypatch.setattr(
+        pilot,
+        "_product_evidence_original",
+        lambda product: {"name": product.get("name"), "has_image": True},
+        raising=False,
+    )
+    evidence = calibration.calibrated_product_evidence({
+        "name": "كفر هاتف",
+        "main_image": "https://cdn.example.com/product.jpg",
+    })
+    assert evidence["main_image_url"] == "https://cdn.example.com/product.jpg"
 
 
 def test_ai_result_confidence_is_deterministically_capped(monkeypatch):
@@ -86,3 +134,88 @@ def test_ai_result_confidence_is_deterministically_capped(monkeypatch):
     result = asyncio.run(calibration.calibrated_ai_classify_chunk(object(), rows))["p1"]
     assert result["confidence"] == 69
     assert "سلسال" in result["reason"]
+
+
+class _VisionResponse:
+    def __init__(self, payload):
+        self.output_text = json.dumps(payload, ensure_ascii=False)
+
+
+class _VisionResponses:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return _VisionResponse(self.payload)
+
+
+class _VisionClient:
+    def __init__(self, payload):
+        self.responses = _VisionResponses(payload)
+
+
+def test_low_confidence_product_can_use_image_as_second_opinion(monkeypatch):
+    async def fake_original(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "",
+                "confidence": 40,
+                "reason": "النص غير كاف",
+                "evidence": [],
+            }
+        }
+
+    monkeypatch.setattr(pilot, "_ai_classify_chunk_original", fake_original, raising=False)
+    client = _VisionClient({
+        "category_id": "555",
+        "confidence": 92,
+        "reason": "الصورة تظهر حافظة هاتف بوضوح",
+        "evidence": ["شكل الحافظة وفتحة الكاميرا"],
+    })
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("كفر زهور الجوري", image_url="https://cdn.example.com/case.jpg"),
+        "candidate_categories": [
+            {"id": "555", "name": "حافظات هاتف", "path": "إلكترونيات > ملحقات > حافظات هاتف"},
+            {"id": "999", "name": "إطارات", "path": "مركبات > إطارات"},
+        ],
+    }]
+    result = asyncio.run(calibration.calibrated_ai_classify_chunk(client, rows))["p1"]
+    assert result["category_id"] == "555"
+    assert result["confidence"] == 92
+    assert result["reason"].startswith("تحقق بصري:")
+    assert client.responses.calls
+    content = client.responses.calls[0]["input"][0]["content"]
+    assert any(row.get("type") == "input_image" for row in content)
+
+
+def test_vision_cannot_escape_candidate_list(monkeypatch):
+    async def fake_original(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "",
+                "confidence": 30,
+                "reason": "غير واضح",
+                "evidence": [],
+            }
+        }
+
+    monkeypatch.setattr(pilot, "_ai_classify_chunk_original", fake_original, raising=False)
+    client = _VisionClient({
+        "category_id": "outside",
+        "confidence": 99,
+        "reason": "محاولة خارج المرشحين",
+        "evidence": [],
+    })
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("دمية", image_url="https://cdn.example.com/doll.jpg"),
+        "candidate_categories": [{"id": "123", "name": "دمى", "path": "ألعاب > دمى"}],
+    }]
+    result = asyncio.run(calibration.calibrated_ai_classify_chunk(client, rows))["p1"]
+    assert result["category_id"] == ""
+    assert result["confidence"] == 30
