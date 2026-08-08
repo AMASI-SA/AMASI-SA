@@ -68,6 +68,19 @@ def _is_real(v) -> bool:
     return bool(s) and not s.upper().startswith(("DRY:", "PREVIEW:"))
 
 
+def _include_in_daily_report(entry: dict) -> bool:
+    """Return whether an entry is an actionable daily Qoyod result."""
+    if entry.get("status") != UNSENT:
+        return True
+    current = entry.get("salla_status_slug") or entry.get("salla_status")
+    # Preserve unknown legacy rows for investigation; only exclude a row
+    # when Salla supplied a definite non-eligible current status.
+    if not current:
+        return True
+    from integrations.qoyod.eligible_orders import _is_eligible_status
+    return _is_eligible_status(current)
+
+
 def simplify_row(row: dict, *,
                  in_qoyod_by_reference: bool = False) -> dict:
     """Map one integration_inbox row to the 4-status contract.
@@ -322,11 +335,22 @@ async def list_unsent_orders(
                         and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
 
+    # Daily operations must only call an order "لم يُرسل" when its
+    # CURRENT Salla status is eligible for invoicing. Historical inbox
+    # rows for awaiting-review/payment, cancelled, deleted, etc. remain
+    # available in the source collections but are not actionable Qoyod
+    # exceptions and must not inflate the unsent count.
+    visible_keys = [
+        key for key in order_keys
+        if _include_in_daily_report(grouped[key])
+    ]
+    excluded_not_eligible = len(order_keys) - len(visible_keys)
+
     # rev37.3 — Salla-status facet: distinct statuses ACTUALLY present
-    # (computed BEFORE the salla_status filter so the dropdown always
-    # shows every available option) + optional backend-side filter.
+    # in the actionable report (computed BEFORE the salla_status filter)
+    # + optional backend-side filter.
     salla_status_counts: dict[str, int] = {}
-    for key in order_keys:
+    for key in visible_keys:
         e = grouped[key]
         label = e.get("salla_status") or e.get("salla_status_slug")
         if label:
@@ -340,7 +364,7 @@ async def list_unsent_orders(
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     orders: list[dict] = []
-    for key in order_keys:
+    for key in visible_keys:
         e = grouped[key]
         if not _salla_match(e):
             continue
@@ -353,5 +377,6 @@ async def list_unsent_orders(
             "total": sum(counts.values()),
             "sync_start_date": sync_start.isoformat(),
             "excluded_pre_sync_start": excluded_pre_sync,
+            "excluded_not_eligible": excluded_not_eligible,
             "salla_status_counts": salla_status_counts,
             "orders": orders}
