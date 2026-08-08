@@ -1,6 +1,7 @@
 import {
     normalizeSnapchatAd,
     normalizeSnapchatAdReport,
+    SNAPCHAT_ENTITY_PAGE_SIZE,
 } from "./snapchatAdPerformance";
 
 describe("Snapchat Ad performance service", () => {
@@ -79,4 +80,11 @@ describe("Snapchat Ad performance service", () => {
         expect(report.pagination.total).toBe(1);
         expect(report.policy.mutations_allowed).toBe(false);
     });
+
+    test("defaults entity pagination to nine rows", () => {
+        const report = normalizeSnapchatAdReport({});
+        expect(SNAPCHAT_ENTITY_PAGE_SIZE).toBe(9);
+        expect(report.pagination.limit).toBe(9);
+    });
+
 });
