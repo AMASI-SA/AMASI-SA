@@ -56,6 +56,30 @@ test("normalization preserves unknown values instead of converting them to zero"
     expect(meta.accounts[0].health_score).toBeNull();
 });
 
+test("Snapchat account normalization preserves a valid local day", () => {
+    const overview = normalizeIntegrationOverview({
+        providers: [{
+            provider: "snapchat_ads",
+            connection_status: "connected",
+            connection_provenance: "api_connection",
+            accounts: [{
+                ad_account_id: "account-1",
+                timezone: "America/Los_Angeles",
+                local_today: "2026-08-07",
+            }],
+        }],
+    });
+    const snapchat = overview.providers.find(
+        (row) => row.provider === "snapchat_ads",
+    );
+
+    expect(snapchat.accounts[0]).toMatchObject({
+        ad_account_id: "account-1",
+        timezone: "America/Los_Angeles",
+        local_today: "2026-08-07",
+    });
+});
+
 test("secret-shaped fields and bearer text are removed from frontend state", () => {
     const sentinel = "SENTINEL-DO-NOT-LEAK";
     const safe = redactIntegrationValue({ access_token: sentinel, nested: { clientSecret: sentinel, message: `Bearer ${sentinel}abcdefgh`, query: `https://provider.example/callback?token=${sentinel}`, app: `app_secret=${sentinel}`, spaced: `refresh token: ${sentinel}`, safe_message: "انتهت صلاحية الربط" } });

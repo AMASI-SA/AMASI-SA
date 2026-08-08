@@ -39,6 +39,31 @@ export function isMarketingPerformanceProvider(value) {
     return MARKETING_PLATFORMS.includes(String(value || "").trim());
 }
 
+export function clampSnapchatRangeToAccountToday(
+    { dateFrom, dateTo } = {},
+    accountLocalToday,
+) {
+    if (!ISO_DATE_RE.test(accountLocalToday || "")) {
+        return { dateFrom, dateTo };
+    }
+    return {
+        dateFrom: ISO_DATE_RE.test(dateFrom || "") && dateFrom > accountLocalToday
+            ? accountLocalToday
+            : dateFrom,
+        dateTo: ISO_DATE_RE.test(dateTo || "") && dateTo > accountLocalToday
+            ? accountLocalToday
+            : dateTo,
+    };
+}
+
+export function snapchatAccountLocalToday(integration = {}) {
+    const accountDays = (integration.accounts || [])
+        .map((account) => account?.local_today)
+        .filter((value) => ISO_DATE_RE.test(value || ""))
+        .sort();
+    return accountDays[0] || null;
+}
+
 function text(value, fallback = "") {
     return typeof value === "string" ? value : fallback;
 }
@@ -127,6 +152,9 @@ function normalizeAccount(value = {}) {
         account_name: text(value.account_name, accountId),
         currency: nullableText(value.currency),
         timezone: nullableText(value.timezone),
+        local_today: ISO_DATE_RE.test(value.local_today || "")
+            ? value.local_today
+            : null,
         ...normalizeTotals(value),
     };
 }
@@ -391,11 +419,28 @@ export async function getMarketingPerformance({
         throw new Error("invalid_marketing_platform");
     }
     if (platform === "snapchat") {
-        const [reportResponse, integrations] = await Promise.all([
-            api.get("/integrations-v2/snapchat_ads/campaign-report", {
+        // Snapchat validates report dates in each ad account's timezone. Resolve
+        // the earliest local day first so Riyadh's next calendar day is never
+        // sent to an account that is still on the previous day.
+        const integrations = await getIntegrationsOverview();
+        const integration = integrations.providers.find(
+            (row) => row.provider === "snapchat_ads",
+        ) || {};
+        const accountLocalToday = snapchatAccountLocalToday(integration);
+        const requestRange = clampSnapchatRangeToAccountToday(
+            { dateFrom, dateTo },
+            accountLocalToday,
+        );
+        const reportResponse = await api.get(
+            "/integrations-v2/snapchat_ads/campaign-report",
+            {
                 params: {
-                    from_date: ISO_DATE_RE.test(dateFrom || "") ? dateFrom : undefined,
-                    to_date: ISO_DATE_RE.test(dateTo || "") ? dateTo : undefined,
+                    from_date: ISO_DATE_RE.test(requestRange.dateFrom || "")
+                        ? requestRange.dateFrom
+                        : undefined,
+                    to_date: ISO_DATE_RE.test(requestRange.dateTo || "")
+                        ? requestRange.dateTo
+                        : undefined,
                     campaign_query: String(campaignQuery || "").trim().slice(0, 120) || undefined,
                     page,
                     limit,
@@ -407,16 +452,21 @@ export async function getMarketingPerformance({
                         ? actionReportTime
                         : "conversion",
                 },
-            }),
-            getIntegrationsOverview(),
-        ]);
-        const integration = integrations.providers.find(
-            (row) => row.provider === "snapchat_ads",
-        ) || {};
-        return normalizeSnapchatMarketingWorkspace(
+            },
+        );
+        const normalized = normalizeSnapchatMarketingWorkspace(
             reportResponse.data,
             integration,
         );
+        return {
+            ...normalized,
+            account_local_today: accountLocalToday,
+            range: {
+                ...normalized.range,
+                date_from: normalized.range.date_from || requestRange.dateFrom,
+                date_to: normalized.range.date_to || requestRange.dateTo,
+            },
+        };
     }
     if (platform === "google") return googleWorkspace();
     const config = MARKETING_PLATFORM_CONFIG[platform];

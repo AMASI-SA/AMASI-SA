@@ -236,6 +236,25 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 resultSource,
             });
             if (requestId !== loadSequenceRef.current) return;
+            if (platform === "snapchat") {
+                const resolvedRange = {
+                    dateFrom: result.range?.date_from,
+                    dateTo: result.range?.date_to,
+                };
+                if (
+                    isValidISODate(resolvedRange.dateFrom)
+                    && isValidISODate(resolvedRange.dateTo)
+                ) {
+                    setDateFrom(resolvedRange.dateFrom);
+                    setDateTo(resolvedRange.dateTo);
+                    setAppliedRange((current) => (
+                        current.dateFrom === resolvedRange.dateFrom
+                        && current.dateTo === resolvedRange.dateTo
+                            ? current
+                            : resolvedRange
+                    ));
+                }
+            }
             setData(result);
             setError("");
         } catch (loadError) {

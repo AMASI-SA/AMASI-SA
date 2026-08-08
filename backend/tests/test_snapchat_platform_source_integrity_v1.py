@@ -1,8 +1,13 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
 
+import httpx
 import pytest
 
+from integrations_control_center.snapchat_native_data_common import (
+    SnapchatNativeSyncError,
+    SnapchatSyncContext,
+)
 from integrations_control_center.snapchat_platform_source_integrity import (
     DIRECT_ACCOUNT_TOTAL_FIELDS,
     PLATFORM_TOTAL_SOURCE_MODE,
@@ -35,14 +40,14 @@ def _row(entity_type, external_id, *, orders, spend, sales, date_string="2026-08
     }
 
 
-def test_account_local_total_window_includes_latest_completed_minute():
+def test_account_local_current_day_window_uses_next_midnight_boundary():
     start, end = account_local_total_window(
         date(2026, 8, 6),
         timezone_name="America/Los_Angeles",
         now=datetime(2026, 8, 6, 15, 30, 45, tzinfo=timezone.utc),
     )
     assert start.isoformat() == "2026-08-06T00:00:00-07:00"
-    assert end.isoformat() == "2026-08-06T08:30:00-07:00"
+    assert end.isoformat() == "2026-08-07T00:00:00-07:00"
 
 
 def test_refresh_dates_cover_account_days_touched_by_riyadh_window():
@@ -111,6 +116,37 @@ def test_extract_total_campaign_breakdown_and_aggregate_matches_ads_manager():
     assert metrics["conversion_purchases_value"] == 745_750_000
 
 
+
+@pytest.mark.asyncio
+async def test_provider_http_400_keeps_only_safe_snapchat_error_detail():
+    class Client:
+        async def get(self, url, *, headers, params=None):
+            return httpx.Response(
+                400,
+                json={
+                    "request_status": "ERROR",
+                    "error_code": "E_REPORTING_PARAM",
+                    "debug_message": "Invalid reporting parameter: granularity",
+                },
+            )
+
+    context = SnapchatSyncContext(db=None, user_id="user-1")
+    with pytest.raises(SnapchatNativeSyncError) as captured:
+        await context.get_json(
+            Client(),
+            "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+            headers={"Authorization": "Bearer token-not-logged"},
+            params={"granularity": "HOUR"},
+        )
+
+    assert captured.value.code == "snapchat_provider_http_400"
+    assert captured.value.result == {
+        "provider_error_code": "E_REPORTING_PARAM",
+        "provider_error_message": "Invalid reporting parameter: granularity",
+    }
+    assert "token-not-logged" not in captured.value.message
+    assert "E_REPORTING_PARAM" in captured.value.message
+
 @pytest.mark.asyncio
 async def test_direct_account_request_uses_all_ads_metrics_and_attribution():
     class CaptureContext:
@@ -153,6 +189,58 @@ async def test_direct_account_request_uses_all_ads_metrics_and_attribution():
     assert context.params["action_report_time"] == "conversion"
 
 
+
+@pytest.mark.asyncio
+async def test_current_day_direct_request_rolls_up_completed_hours():
+    class CaptureContext:
+        def __init__(self):
+            self.params = None
+
+        async def get_json(self, client, url, *, headers, params=None):
+            self.params = dict(params or {})
+            return {
+                "timeseries_stats": [{
+                    "sub_request_status": "SUCCESS",
+                    "timeseries_stat": {
+                        "id": "account-1",
+                        "timeseries": [
+                            {
+                                "stats": {
+                                    "spend": 100_000_000,
+                                    "conversion_purchases": 2,
+                                    "conversion_purchases_value": 250_000_000,
+                                },
+                            },
+                            {
+                                "stats": {
+                                    "spend": 125_000_000,
+                                    "conversion_purchases": 3,
+                                    "conversion_purchases_value": 400_000_000,
+                                },
+                            },
+                        ],
+                    },
+                }],
+            }
+
+    context = CaptureContext()
+    metrics, errors = await fetch_account_total_direct_metrics(
+        context,
+        object(),
+        "token-not-used",
+        account_id="account-1",
+        request_start=datetime(2026, 8, 6, 0, 0, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 6, 8, 0, tzinfo=timezone.utc),
+        granularity="HOUR",
+        action_report_time="conversion",
+    )
+
+    assert errors == []
+    assert context.params["granularity"] == "HOUR"
+    assert metrics["spend"] == 225_000_000
+    assert metrics["conversion_purchases"] == 5
+    assert metrics["conversion_purchases_value"] == 650_000_000
+
 def test_direct_account_total_accepts_documented_spend_only_payload():
     payload = {
         "total_stats": [{
@@ -164,8 +252,8 @@ def test_direct_account_total_accepts_documented_spend_only_payload():
     assert errors == []
     assert successful == 1
     assert metrics["spend"] == 714_050_000
-    assert metrics["conversion_purchases"] == 0
-    assert metrics["conversion_purchases_value"] == 0
+    assert "conversion_purchases" not in metrics
+    assert "conversion_purchases_value" not in metrics
 
 
 def test_direct_total_rejects_missing_spend():
@@ -183,6 +271,41 @@ def test_direct_total_rejects_missing_spend():
     assert successful == 1
     assert metrics is None
     assert errors[0]["code"] == "snapchat_account_direct_total_fields_missing"
+
+
+def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
+    source = Path(
+        "integrations_control_center/ads_auto_sync_scheduler.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "from . import snapchat_account_hourly_refresh as snapchat_hourly"
+        in source
+    )
+    assert (
+        "await snapchat_hourly.refresh_snapchat_account_hours("
+        in source
+    )
+
+
+def test_platform_total_v15_uses_complete_campaign_day_total():
+    source = Path(
+        "integrations_control_center/snapchat_platform_source_integrity.py"
+    ).read_text(encoding="utf-8")
+
+    assert "campaign_breakdown_all_ads_account_day_total_v15" in source
+    refresh = source.split(
+        "async def refresh_account_total_snapshots", 1
+    )[1].split("async def _to_list", 1)[0]
+    assert "await fetch_account_total_direct_metrics(" not in refresh
+    assert "account_metrics = aggregate_total_campaign_metrics(rows)" in refresh
+    assert '"direct_account_total_requested": False' in refresh
+    assert "request_granularity = PLATFORM_TOTAL_GRANULARITY" in refresh
+    assert "if report_date == local_current_date" not in refresh
+    assert (
+        '"current_day_provider_granularity": PLATFORM_TOTAL_GRANULARITY'
+        in refresh
+    )
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():

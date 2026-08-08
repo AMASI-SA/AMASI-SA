@@ -61,10 +61,16 @@ export default function QoyodUnsentOrders() {
             طلبات لم تُرسل إلى قيود
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            شاشة التشغيل اليومية — كل طلب بحالة واحدة واضحة وسببها.
+            يعرض فقط الطلبات المؤهلة للفوترة في قيود. حالات انتظار المراجعة
+            أو الدفع والطلبات الملغاة لا تُحتسب ضمن «لم يُرسل».
             {data?.sync_start_date && (
               <span className="mr-2 text-xs text-slate-400" data-testid="unsent-sync-start-note">
                 (نطاق التكامل يبدأ من {data.sync_start_date} — الطلبات الأقدم مستبعدة)
+              </span>
+            )}
+            {(data?.excluded_not_eligible ?? 0) > 0 && (
+              <span className="mr-2 text-xs text-slate-400" data-testid="unsent-noneligible-note">
+                (مستبعد غير مؤهل: {data.excluded_not_eligible})
               </span>
             )}
           </p>

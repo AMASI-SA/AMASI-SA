@@ -5,10 +5,11 @@ The Ads Manager workspace exposes two selectable commercial result sources:
 * ``platform``: purchases and purchase value reported by Snapchat.
 * ``salla``: exact Salla orders matched to a Snapchat campaign.
 
-This module keeps those sources separate. Snapchat direct Ad Account TOTAL
-owns the authoritative All Ads headline metrics, while TOTAL +
-breakdown=campaign owns campaign rows and filtered totals. Existing HOUR
-ingestion remains responsible for the hourly chart and Riyadh accounting.
+This module keeps those sources separate. The complete ad-account campaign
+breakdown owns both the All Ads headline rollup and campaign rows. This avoids
+the unsupported direct ad-account stats shape while retaining every campaign,
+including inactive campaigns. Existing HOUR ingestion remains responsible for
+the hourly chart and Riyadh accounting.
 """
 from __future__ import annotations
 
@@ -59,15 +60,16 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "direct_account_headlines_campaign_completed_hour_v8"
+        "campaign_breakdown_all_ads_account_day_total_v15"
     )
 
 
 PLATFORM_TOTAL_SOURCE_MODE = platform_total_source_mode(
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
-TOTAL_CURRENT_DAY_WINDOW_POLICY = "completed_account_local_hour"
+TOTAL_CURRENT_DAY_WINDOW_POLICY = "account_local_day_boundary"
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
+PLATFORM_CURRENT_DAY_GRANULARITY = "HOUR"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
 MAX_TOTAL_ROWS = 100_000
 REQUIRED_ACCOUNT_TOTAL_FIELDS = frozenset({"spend"})
@@ -129,18 +131,10 @@ def account_local_total_window(
         next_date.day,
         tzinfo=zone,
     )
-    if report_date < current.date():
-        end = nominal_end
-    else:
-        # Snapchat rejects open second-level timestamps. Query through the
-        # latest fully completed account-local minute so today's TOTAL report
-        # stays aligned with Ads Manager instead of lagging by a full hour.
-        completed_minute_end = current.replace(
-            second=0,
-            microsecond=0,
-        )
-        end = min(nominal_end, completed_minute_end)
-    return (start, end) if end > start else None
+    # Snapchat TOTAL requires account-local day boundaries. The campaign
+    # breakdown endpoint accepts the next-midnight boundary for the open day
+    # and returns the current cumulative Ads Manager total.
+    return (start, nominal_end)
 
 
 def account_local_dates_for_refresh(
@@ -202,10 +196,101 @@ def _normalized_requested_metrics(
     output: dict[str, int | float] = {}
     for key in STAT_FIELDS:
         value = _as_number(source.get(key))
-        number = float(value) if value is not None else 0.0
+        if value is None:
+            continue
+        number = float(value)
         output[key] = int(number) if number.is_integer() else number
     return output
 
+
+
+def _sum_hourly_metrics(points: Any) -> dict[str, int | float]:
+    sums = {key: 0.0 for key in STAT_FIELDS}
+    seen: set[str] = set()
+    if not isinstance(points, list):
+        return {}
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        metrics = point.get("stats")
+        if not isinstance(metrics, dict):
+            continue
+        for key in STAT_FIELDS:
+            value = _as_number(metrics.get(key))
+            if value is None:
+                continue
+            sums[key] += float(value)
+            seen.add(key)
+    return {
+        key: int(sums[key]) if sums[key].is_integer() else sums[key]
+        for key in STAT_FIELDS
+        if key in seen
+    }
+
+
+def _hourly_payload_as_total(
+    payload: dict[str, Any],
+    *,
+    breakdown: bool,
+) -> dict[str, Any]:
+    """Aggregate provider HOUR points into the existing account-day contract."""
+    wrapped_stats = payload.get("timeseries_stats") or []
+    if not isinstance(wrapped_stats, list):
+        raise SnapchatNativeSyncError(
+            "snapchat_account_hour_payload_invalid",
+            "Snapchat returned invalid account HOUR performance data.",
+            status_code=502,
+            retryable=True,
+        )
+    total_stats: list[dict[str, Any]] = []
+    for wrapped in wrapped_stats:
+        if not isinstance(wrapped, dict):
+            continue
+        status = _text(wrapped.get("sub_request_status") or "SUCCESS").upper()
+        if "FAIL" in status or "ERROR" in status:
+            total_stats.append(dict(wrapped))
+            continue
+        stat = wrapped.get("timeseries_stat", wrapped)
+        if not isinstance(stat, dict):
+            continue
+        total_stat: dict[str, Any] = {
+            "id": stat.get("id"),
+            "start_time": stat.get("start_time"),
+            "end_time": stat.get("end_time"),
+        }
+        if breakdown:
+            raw_breakdown = stat.get("breakdown_stats")
+            campaigns = (
+                raw_breakdown.get(PLATFORM_TOTAL_BREAKDOWN)
+                if isinstance(raw_breakdown, dict)
+                else None
+            )
+            if isinstance(campaigns, list):
+                campaign_totals: list[dict[str, Any]] = []
+                for campaign in campaigns:
+                    if not isinstance(campaign, dict):
+                        continue
+                    campaign_totals.append({
+                        "id": campaign.get("id"),
+                        "stats": _sum_hourly_metrics(campaign.get("timeseries")),
+                    })
+                total_stat["breakdown_stats"] = {
+                    PLATFORM_TOTAL_BREAKDOWN: campaign_totals,
+                }
+            else:
+                total_stat["stats"] = _sum_hourly_metrics(
+                    stat.get("timeseries")
+                )
+        else:
+            total_stat["stats"] = _sum_hourly_metrics(stat.get("timeseries"))
+        total_stats.append({
+            "sub_request_status": wrapped.get("sub_request_status") or "SUCCESS",
+            "total_stat": total_stat,
+        })
+    return {
+        "total_stats": total_stats,
+        "paging": payload.get("paging") or {},
+    }
 
 def extract_account_total_metrics(
     payload: dict[str, Any],
@@ -260,6 +345,7 @@ async def fetch_account_total_direct_metrics(
     account_id: str,
     request_start: datetime,
     request_end: datetime,
+    granularity: str = PLATFORM_TOTAL_GRANULARITY,
     action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> tuple[dict[str, int | float], list[dict[str, Any]]]:
     """Read the direct All Ads headline metrics shown by Ads Manager."""
@@ -275,7 +361,7 @@ async def fetch_account_total_direct_metrics(
         params={
             "start_time": request_start.isoformat(timespec="seconds"),
             "end_time": request_end.isoformat(timespec="seconds"),
-            "granularity": PLATFORM_TOTAL_GRANULARITY,
+            "granularity": granularity,
             "fields": ",".join(DIRECT_ACCOUNT_TOTAL_FIELDS),
             "omit_empty": "false",
             "conversion_source_types": CONVERSION_SOURCE_TYPES,
@@ -286,6 +372,8 @@ async def fetch_account_total_direct_metrics(
             ),
         },
     )
+    if granularity == PLATFORM_CURRENT_DAY_GRANULARITY:
+        payload = _hourly_payload_as_total(payload, breakdown=False)
     metrics, errors, successful_subrequests = extract_account_total_metrics(payload)
     if metrics is None:
         first = errors[0] if errors else {}
@@ -384,6 +472,7 @@ async def fetch_account_total_campaign_rows(
     account_id: str,
     request_start: datetime,
     request_end: datetime,
+    granularity: str = PLATFORM_TOTAL_GRANULARITY,
     action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account_id}/stats"
@@ -394,7 +483,7 @@ async def fetch_account_total_campaign_rows(
     params: dict[str, Any] | None = {
         "start_time": request_start.isoformat(timespec="seconds"),
         "end_time": request_end.isoformat(timespec="seconds"),
-        "granularity": PLATFORM_TOTAL_GRANULARITY,
+        "granularity": granularity,
         "breakdown": PLATFORM_TOTAL_BREAKDOWN,
         "fields": ",".join(STAT_FIELDS),
         "limit": 200,
@@ -415,6 +504,8 @@ async def fetch_account_total_campaign_rows(
             headers=headers,
             params=params,
         )
+        if granularity == PLATFORM_CURRENT_DAY_GRANULARITY:
+            payload = _hourly_payload_as_total(payload, breakdown=True)
         page_rows, page_errors, page_success, page_breakdown = (
             extract_account_total_campaign_rows(
                 payload,
@@ -729,24 +820,15 @@ async def refresh_account_total_snapshots(
         if window is None:
             continue
         request_start, request_end = window
+        request_granularity = PLATFORM_TOTAL_GRANULARITY
         request_windows.append({
             "date": report_date.isoformat(),
             "start_time": request_start.isoformat(timespec="seconds"),
             "end_time": request_end.isoformat(timespec="seconds"),
+            "granularity": request_granularity,
         })
         try:
             for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
-                account_metrics, account_errors = (
-                    await fetch_account_total_direct_metrics(
-                        context,
-                        client,
-                        access_token,
-                        account_id=account_id,
-                        request_start=request_start,
-                        request_end=request_end,
-                        action_report_time=action_report_time,
-                    )
-                )
                 rows, campaign_errors, breakdown_seen = (
                     await fetch_account_total_campaign_rows(
                         context,
@@ -755,9 +837,12 @@ async def refresh_account_total_snapshots(
                         account_id=account_id,
                         request_start=request_start,
                         request_end=request_end,
+                        granularity=request_granularity,
                         action_report_time=action_report_time,
                     )
                 )
+                account_metrics = aggregate_total_campaign_metrics(rows)
+                account_errors: list[dict[str, Any]] = []
                 day_errors = [*account_errors, *campaign_errors]
                 for error in day_errors:
                     errors.append({
@@ -775,7 +860,7 @@ async def refresh_account_total_snapshots(
                         "action_report_time": action_report_time,
                         "code": "snapchat_platform_total_snapshot_partial",
                         "message": (
-                            "Snapchat TOTAL snapshot was incomplete; "
+                            "Snapchat platform snapshot was incomplete; "
                             "the previous complete snapshot was preserved."
                         ),
                         "retryable": True,
@@ -819,11 +904,12 @@ async def refresh_account_total_snapshots(
         "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
         "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
+        "current_day_provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
-        "direct_account_total_requested": True,
-        "direct_account_request_fields": list(DIRECT_ACCOUNT_TOTAL_FIELDS),
-        "account_spend_source": "direct_ad_account_total",
-        "account_commercial_totals_source": "direct_ad_account_total",
+        "direct_account_total_requested": False,
+        "direct_account_request_fields": [],
+        "account_spend_source": "complete_campaign_breakdown_rollup",
+        "account_commercial_totals_source": "complete_campaign_breakdown_rollup",
         "current_day_total_window_policy": TOTAL_CURRENT_DAY_WINDOW_POLICY,
         "request_windows": request_windows,
         "account_timezone": timezone_name,

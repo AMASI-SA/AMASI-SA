@@ -1,7 +1,9 @@
 import {
     adaptAdsManager,
+    clampSnapchatRangeToAccountToday,
     isMarketingPerformanceProvider,
     normalizeSnapchatMarketingWorkspace,
+    snapchatAccountLocalToday,
 } from "./marketingPerformance";
 
 test("Snapchat report normalization preserves verified performance and blocks writes", () => {
@@ -107,6 +109,33 @@ test("Snapchat report normalization preserves verified performance and blocks wr
     expect(result.policy).toEqual({
         mode: "observe_only",
         mutations_allowed: false,
+    });
+});
+
+test("Snapchat report dates are capped at the earliest account-local day", () => {
+    const integration = {
+        accounts: [
+            { local_today: "2026-08-08" },
+            { local_today: "2026-08-07" },
+            { local_today: "invalid" },
+        ],
+    };
+    const accountLocalToday = snapchatAccountLocalToday(integration);
+
+    expect(accountLocalToday).toBe("2026-08-07");
+    expect(clampSnapchatRangeToAccountToday(
+        { dateFrom: "2026-08-08", dateTo: "2026-08-08" },
+        accountLocalToday,
+    )).toEqual({
+        dateFrom: "2026-08-07",
+        dateTo: "2026-08-07",
+    });
+    expect(clampSnapchatRangeToAccountToday(
+        { dateFrom: "2026-08-01", dateTo: "2026-08-06" },
+        accountLocalToday,
+    )).toEqual({
+        dateFrom: "2026-08-01",
+        dateTo: "2026-08-06",
     });
 });
 
