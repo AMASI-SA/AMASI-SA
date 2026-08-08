@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from datetime import date, datetime, timezone
 
@@ -94,7 +95,7 @@ def test_extract_adsquad_total_rows_preserves_parent_campaign():
 
     assert module.ADSQUAD_PROVIDER_GRANULARITY == "TOTAL"
     assert module.adsquad_source_mode("conversion").endswith(
-        "ad_squad_active_campaign_account_day_total_v5"
+        "ad_squad_active_campaign_account_day_bounded_v6"
     )
     assert successful == 1
     assert breakdown_seen is True
@@ -151,6 +152,52 @@ async def test_campaign_entities_selects_active_rows_before_legacy_limit():
 
     assert [row["external_id"] for row in campaigns] == ["campaign-current"]
     assert limited is False
+
+
+@pytest.mark.asyncio
+async def test_adsquad_window_fetch_is_parallel_and_bounded(monkeypatch):
+    active = 0
+    peak = 0
+
+    async def fake_fetch(
+        context,
+        client,
+        access_token,
+        *,
+        campaign_id,
+        request_start,
+        request_end,
+        action_report_time,
+    ):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return ([{"campaign_id": campaign_id}], [], True)
+
+    monkeypatch.setattr(module, "_fetch_campaign_adsquad_totals", fake_fetch)
+    campaigns = [
+        {"external_id": f"campaign-{index:02d}"}
+        for index in range(module.ADSQUAD_FETCH_CONCURRENCY * 3)
+    ]
+
+    results = await module._fetch_adsquad_window(
+        object(),
+        object(),
+        "token",
+        campaigns=campaigns,
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    )
+
+    assert len(results) == (
+        len(campaigns) * len(module.ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES)
+    )
+    assert 1 < peak <= module.ADSQUAD_FETCH_CONCURRENCY
+    assert module.ADSQUAD_REFRESH_SOURCE_MODE.endswith(
+        "ad_squad_active_bounded_total_v4"
+    )
 
 
 def test_day_buckets_follow_requested_timezone():
