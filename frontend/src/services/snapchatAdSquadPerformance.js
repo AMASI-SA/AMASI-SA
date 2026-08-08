@@ -1,5 +1,7 @@
 import api from "../lib/api";
 
+export const SNAPCHAT_ENTITY_PAGE_SIZE = 9;
+
 function number(value, { integer = false } = {}) {
     if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
@@ -119,7 +121,7 @@ export function normalizeSnapchatAdSquadReport(payload = {}) {
             : [],
         pagination: {
             page: number(value.pagination?.page, { integer: true }) || 1,
-            limit: number(value.pagination?.limit, { integer: true }) || 25,
+            limit: number(value.pagination?.limit, { integer: true }) || SNAPCHAT_ENTITY_PAGE_SIZE,
             total: number(value.pagination?.total, { integer: true }) || 0,
             pages: number(value.pagination?.pages, { integer: true }) || 0,
         },
@@ -135,8 +137,9 @@ export async function getSnapchatAdSquadPerformance({
     dateFrom,
     dateTo,
     query = "",
+    campaignId,
     page = 1,
-    limit = 25,
+    limit = SNAPCHAT_ENTITY_PAGE_SIZE,
     activeCampaignsOnly = true,
     sortBy = "orders",
     actionReportTime = "conversion",
@@ -147,6 +150,7 @@ export async function getSnapchatAdSquadPerformance({
             from_date: dateFrom || undefined,
             to_date: dateTo || undefined,
             query: String(query || "").trim().slice(0, 120) || undefined,
+            campaign_id: String(campaignId || "").trim().slice(0, 120) || undefined,
             page,
             limit,
             active_campaigns_only: activeCampaignsOnly,
