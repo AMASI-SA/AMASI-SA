@@ -60,14 +60,14 @@ SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2
 def platform_total_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "campaign_breakdown_all_ads_current_hour_rollup_v14"
+        "campaign_breakdown_all_ads_account_day_total_v15"
     )
 
 
 PLATFORM_TOTAL_SOURCE_MODE = platform_total_source_mode(
     ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME
 )
-TOTAL_CURRENT_DAY_WINDOW_POLICY = "completed_account_local_hour_rollup"
+TOTAL_CURRENT_DAY_WINDOW_POLICY = "account_local_day_boundary"
 PLATFORM_TOTAL_GRANULARITY = "TOTAL"
 PLATFORM_CURRENT_DAY_GRANULARITY = "HOUR"
 PLATFORM_TOTAL_BREAKDOWN = "campaign"
@@ -131,14 +131,10 @@ def account_local_total_window(
         next_date.day,
         tzinfo=zone,
     )
-    if report_date < current.date():
-        end = nominal_end
-    else:
-        # TOTAL requires day boundaries and rejects a future next-midnight
-        # boundary for the open day. Current-day reads therefore use HOUR
-        # granularity through the latest completed account-local hour.
-        end = current.replace(minute=0, second=0, microsecond=0)
-    return (start, end) if end > start else None
+    # Snapchat TOTAL requires account-local day boundaries. The campaign
+    # breakdown endpoint accepts the next-midnight boundary for the open day
+    # and returns the current cumulative Ads Manager total.
+    return (start, nominal_end)
 
 
 def account_local_dates_for_refresh(
@@ -805,9 +801,6 @@ async def refresh_account_total_snapshots(
             status_code=409,
         )
     timezone_name = manager._valid_timezone_name(account.get("timezone"))
-    local_current_date = _aware_now(now).astimezone(
-        _timezone(timezone_name)
-    ).date()
     dates = account_local_dates_for_refresh(
         start_date,
         end_date,
@@ -827,11 +820,7 @@ async def refresh_account_total_snapshots(
         if window is None:
             continue
         request_start, request_end = window
-        request_granularity = (
-            PLATFORM_CURRENT_DAY_GRANULARITY
-            if report_date == local_current_date
-            else PLATFORM_TOTAL_GRANULARITY
-        )
+        request_granularity = PLATFORM_TOTAL_GRANULARITY
         request_windows.append({
             "date": report_date.isoformat(),
             "start_time": request_start.isoformat(timespec="seconds"),
@@ -915,7 +904,7 @@ async def refresh_account_total_snapshots(
         "source_mode": PLATFORM_TOTAL_SOURCE_MODE,
         "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "provider_granularity": PLATFORM_TOTAL_GRANULARITY,
-        "current_day_provider_granularity": PLATFORM_CURRENT_DAY_GRANULARITY,
+        "current_day_provider_granularity": PLATFORM_TOTAL_GRANULARITY,
         "provider_breakdown": PLATFORM_TOTAL_BREAKDOWN,
         "direct_account_total_requested": False,
         "direct_account_request_fields": [],
