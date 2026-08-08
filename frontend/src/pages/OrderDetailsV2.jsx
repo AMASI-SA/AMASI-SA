@@ -33,6 +33,7 @@ import {
     verifyShippingLabel,
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
+import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -1038,11 +1039,9 @@ export default function OrderDetailsV2() {
 
             <AdvancedOrderInfo order={order} />
             <AccountingSummary order={order} currency={currency} />
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-timeline">
-                <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><ClockCounterClockwise size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">سجل الطلب</h2></div>
-                <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">سيظهر هنا تاريخ أحداث الطلب.</div>
-            </section>
+            <OrderActivityPanel
+                orderNumber={openedOrderNumber || orderNumber}
+            />
         </div>
     );
 }

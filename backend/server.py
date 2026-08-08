@@ -69,6 +69,7 @@ from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
 from order_engine.routes import make_order_engine_router
+from order_activity_routes import make_order_activity_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
@@ -3933,6 +3934,7 @@ api.include_router(
     make_dashboard_v2_router(db, current_user, dashboard, _require_owner)
 )
 api.include_router(make_order_engine_router(db, current_user))
+api.include_router(make_order_activity_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
