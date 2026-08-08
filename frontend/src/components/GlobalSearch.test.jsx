@@ -5,6 +5,9 @@ jest.mock("react-router-dom", () => ({
     useNavigate: () => jest.fn(),
 }));
 
+import fs from "fs";
+import path from "path";
+
 import {
     buildGlobalSearchResults,
     normalizeGlobalSearch,
@@ -52,4 +55,11 @@ test("owner-only Mezan 2 pages stay hidden from non-owner users", () => {
     expect(
         buildGlobalSearchResults("قيود", { isOwner: false }),
     ).toEqual([]);
+});
+
+
+test("Layout imports the unified search component before rendering it", () => {
+    const layoutSource = fs.readFileSync(path.join(__dirname, "Layout.jsx"), "utf8");
+    expect(layoutSource).toContain('import GlobalSearch from "./GlobalSearch";');
+    expect(layoutSource).toContain("<GlobalSearch");
 });

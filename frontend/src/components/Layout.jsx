@@ -17,6 +17,7 @@ import {
     Warehouse,
 } from "@phosphor-icons/react";
 import Sidebar from "./Sidebar";
+import GlobalSearch from "./GlobalSearch";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
