@@ -338,6 +338,20 @@ def build_piece_documents(
                 "product_name": _text(line.get("product_name")) or None,
                 "sku": _text(line.get("sku")) or None,
                 "selected_image_url": _text(line.get("selected_image_url")) or None,
+                "resolved_image_url": _text(line.get("resolved_image_url")) or None,
+                "image_url": (
+                    _text(line.get("image_url"))
+                    or _text(line.get("resolved_image_url"))
+                    or next(
+                        (
+                            _text(candidate)
+                            for candidate in line.get("image_candidates") or []
+                            if _text(candidate)
+                        ),
+                        "",
+                    )
+                    or None
+                ),
                 "specifications_snapshot": list(line.get("file_spec_fields") or []),
                 "product_options_snapshot": dict(line.get("product_options") or {}),
                 "preparation_note": _text(line.get("preparation_note")) or None,
@@ -382,6 +396,9 @@ def _piece_upsert_update(
         "file_title": piece["file_title"],
         "responsible_employee_id": piece["responsible_employee_id"],
         "responsible_employee_name": piece["responsible_employee_name"],
+        "selected_image_url": piece.get("selected_image_url"),
+        "resolved_image_url": piece.get("resolved_image_url"),
+        "image_url": piece.get("image_url"),
         "updated_at": updated_at or _now(),
     }
     insert_values = {
