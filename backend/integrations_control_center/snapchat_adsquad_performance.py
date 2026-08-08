@@ -84,8 +84,18 @@ ADSQUAD_FETCH_CONCURRENCY = 6
 MAX_CAMPAIGNS_PER_ACCOUNT = 250
 MAX_REPORT_ROWS = 100_000
 MAX_ENTITY_ROWS = 50_000
+ADSQUAD_PAGE_SIZE = 9
 
 AccountRefresh = Callable[..., Awaitable[dict[str, Any]]]
+
+
+def normalize_adsquad_page_limit(value: Any) -> int:
+    """Keep legacy clients compatible while enforcing the UI page contract."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return ADSQUAD_PAGE_SIZE
+    return min(ADSQUAD_PAGE_SIZE, max(1, parsed))
 
 
 def _number(value: Any) -> float | None:
@@ -1035,7 +1045,7 @@ def attach_snapchat_adsquad_routes(
         query: str | None = Query(default=None, max_length=120),
         campaign_id: str | None = Query(default=None, max_length=120),
         page: int = Query(default=1, ge=1),
-        limit: int = Query(default=9, ge=1, le=100),
+        limit: int = Query(default=ADSQUAD_PAGE_SIZE, ge=1, le=100),
         active_campaigns_only: bool = Query(default=True),
         sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),
         action_report_time: str = Query(default=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME, pattern="^(conversion|impression)$"),
@@ -1051,7 +1061,7 @@ def attach_snapchat_adsquad_routes(
                 to_date=to_date,
                 query=query,
                 page=page,
-                limit=limit,
+                limit=normalize_adsquad_page_limit(limit),
                 campaign_id=campaign_id,
                 active_campaigns_only=active_campaigns_only,
                 sort_by=sort_by,
@@ -1075,6 +1085,7 @@ def attach_snapchat_adsquad_routes(
 
 __all__ = [
     "ADSQUAD_BREAKDOWN",
+    "ADSQUAD_PAGE_SIZE",
     "ADSQUAD_PROVIDER_GRANULARITY",
     "ADSQUAD_REFRESH_INTERVAL_SECONDS",
     "ADSQUAD_SOURCE_MODE",
@@ -1082,5 +1093,6 @@ __all__ = [
     "build_account_timezone_adsquad_report",
     "extract_adsquad_total_rows",
     "install_snapchat_adsquad_performance_refresh",
+    "normalize_adsquad_page_limit",
     "refresh_snapchat_adsquad_performance",
 ]
