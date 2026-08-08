@@ -109,6 +109,8 @@ def test_batch_units_become_assigned_piece_records_for_file_employee():
                 "product_id": "44",
                 "product_name": "دقلة بالاسم",
                 "sku": "DQL-44",
+                "resolved_image_url": "https://cdn.salla.sa/dql-44.jpg",
+                "image_candidates": ["https://cdn.salla.sa/dql-44.jpg"],
                 "file_spec_fields": [
                     {"name": "اللون", "value": "ذهبي"},
                 ],
@@ -137,6 +139,14 @@ def test_batch_units_become_assigned_piece_records_for_file_employee():
     assert all(row["execution_status"] == "not_started" for row in documents)
     assert all(row["responsible_employee_id"] == "employee-1" for row in documents)
     assert all(row["remaining_service_count"] == 1 for row in documents)
+    assert all(
+        row["resolved_image_url"] == "https://cdn.salla.sa/dql-44.jpg"
+        for row in documents
+    )
+    assert all(
+        row["image_url"] == "https://cdn.salla.sa/dql-44.jpg"
+        for row in documents
+    )
     assert documents[0]["estimated_due_at"] == assigned_at + timedelta(minutes=90)
 
 
@@ -151,6 +161,9 @@ def test_piece_upsert_never_reuses_a_path_across_mongodb_operators():
             "file_title": "تجهيز المنتجات",
             "responsible_employee_id": "employee-1",
             "responsible_employee_name": "محمد",
+            "selected_image_url": None,
+            "resolved_image_url": "https://cdn.salla.sa/product.jpg",
+            "image_url": "https://cdn.salla.sa/product.jpg",
             "status": PIECE_STATUS_ASSIGNED,
             "created_at": updated_at - timedelta(minutes=5),
             "updated_at": updated_at - timedelta(minutes=5),
@@ -164,6 +177,7 @@ def test_piece_upsert_never_reuses_a_path_across_mongodb_operators():
     assert update["$setOnInsert"]["id"] == "piece-1"
     assert update["$set"]["file_number"] == "PF-20260804-0005"
     assert update["$set"]["responsible_employee_id"] == "employee-1"
+    assert update["$set"]["resolved_image_url"] == "https://cdn.salla.sa/product.jpg"
     assert update["$set"]["updated_at"] == updated_at
 
 

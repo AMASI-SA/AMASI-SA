@@ -8,15 +8,19 @@ from preparation_supplier_dispatch import (
     ASSIGNMENT_STATUS_UNASSIGNED,
     BATCHES,
     CreateSupplierDispatchRequest,
+    DISPATCHES,
     DISPATCH_STATUS_PARTIAL,
     DISPATCH_STATUS_READY,
     DISPATCH_STATUS_SENT,
+    MEZAN_SUPPLIERS_V2,
     PIECES,
     PIECE_EVENTS,
     REGISTRY,
     RejectPreparationPiecesRequest,
     WORKFLOWS,
     _employee_workspace,
+    _group_piece_products,
+    _hydrate_piece_images_from_batches,
     _mark_orders_started_if_fully_dispatched,
     employee_workspace_summary,
     file_is_fully_dispatched,
@@ -213,6 +217,33 @@ def test_supplier_file_contains_only_services_offered_by_selected_supplier():
     assert [row["service_name"] for row in lines[0]["services"]] == ["نحت"]
 
 
+def test_existing_piece_uses_resolved_salla_image_when_manual_image_is_missing():
+    pieces = [{
+        **_piece("gift-card", group_key="product:AMS11542"),
+        "batch_id": "batch-1",
+        "product_name": "كرت إهداء حسب الطلب",
+        "selected_image_url": None,
+    }]
+    batches = [{
+        "id": "batch-1",
+        "lines": [{
+            "order_item_id": "item-1",
+            "group_key": "product:AMS11542",
+            "selected_image_url": None,
+            "resolved_image_url": "https://cdn.salla.sa/AMS11542.jpg",
+            "image_candidates": ["https://cdn.salla.sa/AMS11542.jpg"],
+        }],
+    }]
+
+    _hydrate_piece_images_from_batches(pieces, batches)
+    products = _group_piece_products(pieces)
+
+    assert pieces[0]["selected_image_url"] is None
+    assert pieces[0]["resolved_image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+    assert products[0]["resolved_image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+    assert products[0]["image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+
+
 def test_new_dispatch_governance_requires_the_same_supplier_at_receiving():
     legacy_piece = _piece("legacy")
     governed_piece = _piece(
@@ -382,3 +413,63 @@ async def test_employee_workspace_queries_only_pieces_assigned_to_that_employee(
     assert pieces_query["responsible_employee_id"] == "employee-1"
     assert result["employee_id"] == "employee-1"
     assert result["files"] == []
+
+
+@pytest.mark.asyncio
+async def test_employee_workspace_hydrates_legacy_piece_image_from_reviewed_batch():
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def sort(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        async def to_list(self, _length):
+            return [dict(row) for row in self.rows]
+
+    piece = {
+        **_piece("gift-card", group_key="product:AMS11542"),
+        "user_id": "merchant-1",
+        "batch_id": "batch-1",
+        "file_number": "PF-11542",
+        "product_name": "كرت إهداء حسب الطلب",
+        "responsible_employee_id": "employee-1",
+        "selected_image_url": None,
+    }
+    collections = {
+        PIECES: MagicMock(find=MagicMock(return_value=Cursor([piece]))),
+        BATCHES: MagicMock(find=MagicMock(return_value=Cursor([{
+            "id": "batch-1",
+            "lines": [{
+                "order_item_id": "item-1",
+                "group_key": "product:AMS11542",
+                "resolved_image_url": "https://cdn.salla.sa/AMS11542.jpg",
+            }],
+        }]))),
+        REGISTRY: MagicMock(find=MagicMock(return_value=Cursor([{
+            "batch_id": "batch-1",
+            "file_number": "PF-11542",
+            "file_title": "ملف بطاقات الإهداء",
+        }]))),
+        DISPATCHES: MagicMock(find=MagicMock(return_value=Cursor([]))),
+        MEZAN_SUPPLIERS_V2: MagicMock(find=MagicMock(return_value=Cursor([]))),
+    }
+    db = MagicMock()
+    db.__getitem__.side_effect = collections.__getitem__
+
+    result = await _employee_workspace(
+        db,
+        user_id="merchant-1",
+        employee_id="employee-1",
+        limit=100,
+    )
+
+    product = result["files"][0]["products"][0]
+    assert product["selected_image_url"] is None
+    assert product["resolved_image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+    assert product["image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+    batch_query = collections[BATCHES].find.call_args.args[0]
+    assert batch_query == {"user_id": "merchant-1", "id": {"$in": ["batch-1"]}}

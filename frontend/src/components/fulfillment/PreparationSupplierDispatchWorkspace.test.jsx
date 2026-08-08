@@ -4,6 +4,7 @@ import PreparationSupplierDispatchWorkspace, {
     dispatchSelections,
     dispatchSelectionState,
     MyProductsOverview,
+    productImageUrl,
     selectedFileDispatches,
     supplierDispatchForPrint,
     toggledDispatchQuantity,
@@ -60,6 +61,25 @@ test("print data keeps the selected supplier name when an API response omits it"
         [{ id: "supplier-1", company_name: "مورد النقش" }],
         "supplier-1",
     ).supplier_name).toBe("مورد النقش");
+});
+
+
+test("product image prefers manual choice then resolved Salla image then source image", () => {
+    expect(productImageUrl({
+        selected_image_url: "https://example.test/manual.jpg",
+        resolved_image_url: "https://cdn.salla.sa/resolved.jpg",
+        image_url: "https://cdn.salla.sa/source.jpg",
+    })).toBe("https://example.test/manual.jpg");
+    expect(productImageUrl({
+        selected_image_url: null,
+        resolved_image_url: "https://cdn.salla.sa/AMS11542.jpg",
+        image_url: "https://cdn.salla.sa/source.jpg",
+    })).toBe("https://cdn.salla.sa/AMS11542.jpg");
+    expect(productImageUrl({
+        selected_image_url: null,
+        resolved_image_url: null,
+        image_url: "https://cdn.salla.sa/source.jpg",
+    })).toBe("https://cdn.salla.sa/source.jpg");
 });
 
 
@@ -174,4 +194,33 @@ test("waiting review renders two product cards per mobile row and mandatory retu
     expect(markup).toContain("ملف مورد واحد");
     expect(markup).toContain("حفظ وطباعة ملف المورد");
     expect(markup).toContain("بانتظار المراجعة");
+});
+
+
+test("waiting review renders a resolved Salla image without a manual image choice", () => {
+    const markup = renderToStaticMarkup(<WaitingReviewView
+        data={{
+            suppliers: [],
+            files: [{
+                file_number: "PF-11542",
+                available_quantity: 1,
+                products: [{
+                    group_key: "product:AMS11542",
+                    product_name: "كرت إهداء حسب الطلب",
+                    selected_image_url: null,
+                    resolved_image_url: "https://cdn.salla.sa/AMS11542.jpg",
+                    available_quantity: 1,
+                    services: [],
+                }],
+            }],
+        }}
+        loading={false}
+        error=""
+        onRefresh={() => {}}
+        onChanged={async () => {}}
+        onBack={() => {}}
+    />);
+
+    expect(markup).toContain('src="https://cdn.salla.sa/AMS11542.jpg"');
+    expect(markup).toContain('data-testid="dispatch-product-image"');
 });

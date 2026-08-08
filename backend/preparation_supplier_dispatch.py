@@ -414,6 +414,8 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "product_name": _text(piece.get("product_name")) or "منتج",
             "sku": _text(piece.get("sku")) or None,
             "selected_image_url": _text(piece.get("selected_image_url")) or None,
+            "resolved_image_url": _text(piece.get("resolved_image_url")) or None,
+            "image_url": _text(piece.get("image_url")) or None,
             "services": [
                 {
                     "service_id": _text(service.get("service_id")),
@@ -431,6 +433,9 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "received_quantity": 0,
             "order_numbers": [],
         })
+        for field in ("selected_image_url", "resolved_image_url", "image_url"):
+            if not _text(row.get(field)) and _text(piece.get(field)):
+                row[field] = _text(piece.get(field))
         order_number = _text(piece.get("order_number"))
         if order_number and order_number not in row["order_numbers"]:
             row["order_numbers"].append(order_number)
@@ -451,6 +456,66 @@ def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
         grouped.values(),
         key=lambda row: (_normalized(row.get("product_name")), row["group_key"]),
     )
+
+
+def _hydrate_piece_images_from_batches(
+    pieces: list[dict[str, Any]],
+    batches: list[dict[str, Any]],
+) -> None:
+    """Restore image fields omitted by older materialised piece snapshots.
+
+    Reviewed batches keep both the manual choice and the URL that successfully
+    resolved while the supplier PDF was built.  Older physical piece records
+    copied only the manual field, so a product using Salla's default image
+    appeared blank in the employee workspace.  Hydration is response-local and
+    performs no external or accounting writes.
+    """
+    lines_by_item: dict[tuple[str, str], dict[str, Any]] = {}
+    lines_by_group: dict[tuple[str, str], dict[str, Any]] = {}
+    for batch in batches:
+        batch_id = _text(batch.get("id"))
+        if not batch_id:
+            continue
+        for line in batch.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            order_item_id = _text(line.get("order_item_id"))
+            group_key = _text(line.get("group_key"))
+            if order_item_id:
+                lines_by_item[(batch_id, order_item_id)] = line
+            if group_key:
+                lines_by_group[(batch_id, group_key)] = line
+
+    for piece in pieces:
+        batch_id = _text(piece.get("batch_id"))
+        line = (
+            lines_by_item.get((batch_id, _text(piece.get("order_item_id"))))
+            or lines_by_group.get((batch_id, _text(piece.get("group_key"))))
+        )
+        if not line:
+            continue
+        candidates = [
+            _text(value)
+            for value in line.get("image_candidates") or []
+            if _text(value)
+        ]
+        selected = (
+            _text(piece.get("selected_image_url"))
+            or _text(line.get("selected_image_url"))
+        )
+        resolved = (
+            _text(piece.get("resolved_image_url"))
+            or _text(line.get("resolved_image_url"))
+        )
+        source = (
+            _text(piece.get("image_url"))
+            or _text(line.get("image_url"))
+            or resolved
+            or (candidates[0] if candidates else "")
+        )
+        piece["selected_image_url"] = selected or None
+        piece["resolved_image_url"] = resolved or None
+        piece["image_url"] = source or None
 
 
 def _file_view(
@@ -594,6 +659,36 @@ async def _employee_workspace(
     batch_ids = sorted({
         _text(row.get("batch_id")) for row in pieces if _text(row.get("batch_id"))
     })
+    image_batch_ids = sorted({
+        _text(row.get("batch_id"))
+        for row in pieces
+        if (
+            _text(row.get("batch_id"))
+            and not (
+                _text(row.get("selected_image_url"))
+                or _text(row.get("resolved_image_url"))
+                or _text(row.get("image_url"))
+            )
+        )
+    })
+    image_batches = (
+        await db[BATCHES].find(
+            {"user_id": user_id, "id": {"$in": image_batch_ids}},
+            {
+                "_id": 0,
+                "id": 1,
+                "lines.order_item_id": 1,
+                "lines.group_key": 1,
+                "lines.selected_image_url": 1,
+                "lines.resolved_image_url": 1,
+                "lines.image_url": 1,
+                "lines.image_candidates": 1,
+            },
+        ).to_list(max(1, len(image_batch_ids)))
+        if image_batch_ids
+        else []
+    )
+    _hydrate_piece_images_from_batches(pieces, image_batches)
     registries = (
         await db[REGISTRY].find(
             {"user_id": user_id, "batch_id": {"$in": batch_ids}},

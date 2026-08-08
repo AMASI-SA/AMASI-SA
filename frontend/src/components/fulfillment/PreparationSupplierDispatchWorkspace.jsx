@@ -102,11 +102,21 @@ function SummaryCard({ value, label, detail, tone = "slate", onClick }) {
     );
 }
 
+export function productImageUrl(product = {}) {
+    return String(
+        product?.selected_image_url
+        || product?.resolved_image_url
+        || product?.image_url
+        || "",
+    ).trim();
+}
+
 function ProductImage({ product, compact = false }) {
     const size = compact ? "h-12 w-12" : "aspect-square w-full";
-    return product?.selected_image_url ? (
+    const imageUrl = productImageUrl(product);
+    return imageUrl ? (
         <img
-            src={product.selected_image_url}
+            src={imageUrl}
             alt={product?.product_name || "صورة المنتج"}
             className={`${size} rounded-xl border border-slate-200 bg-white ${compact ? "object-cover" : "object-contain"}`}
             data-testid={compact ? undefined : "dispatch-product-image"}
