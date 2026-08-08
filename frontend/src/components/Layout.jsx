@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
     ChartLineUp,
     ChatsCircle,
@@ -33,49 +33,6 @@ import MarketingPlatformWorkspace, {
 import MezanV2NavigationShell, {
     isMezanV2Route,
 } from "./MezanV2NavigationShell";
-
-function GlobalOrderSearch({ compact = false }) {
-    const navigate = useNavigate();
-    const [orderNumber, setOrderNumber] = useState("");
-
-    function submit(event) {
-        event.preventDefault();
-        const normalized = String(orderNumber || "").replace(/^#/, "").trim();
-        if (!normalized) return;
-        navigate(`/orders-v2/${encodeURIComponent(normalized)}`);
-        setOrderNumber("");
-    }
-
-    return (
-        <form
-            onSubmit={submit}
-            className={`flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${compact ? "h-10 w-full" : "h-12 w-full max-w-2xl"}`}
-            role="search"
-            aria-label="البحث العام عن طلب"
-            data-testid="global-order-search"
-        >
-            <div className="relative min-w-0 flex-1">
-                <MagnifyingGlass
-                    size={compact ? 18 : 21}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
-                    value={orderNumber}
-                    onChange={(event) => setOrderNumber(event.target.value)}
-                    inputMode="numeric"
-                    placeholder="ابحث برقم الطلب من أي صفحة…"
-                    className="h-full w-full bg-transparent pr-10 pl-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                />
-            </div>
-            <button
-                type="submit"
-                className={`inline-flex h-full shrink-0 items-center justify-center bg-violet-700 px-4 font-bold text-white transition hover:bg-violet-800 ${compact ? "text-xs" : "text-sm"}`}
-            >
-                بحث
-            </button>
-        </form>
-    );
-}
 
 // Compatibility contract for focused V2 workflows. The visible navigation is
 // now rendered by MezanV2NavigationShell; these definitions remain only so
@@ -237,7 +194,7 @@ export default function Layout({ children }) {
                         </button>
                     </div>
                     <div className="px-4 pb-3">
-                        <GlobalOrderSearch compact />
+                        <GlobalSearch compact />
                     </div>
                 </header>
             )}
@@ -268,7 +225,7 @@ export default function Layout({ children }) {
                         <MezanV2NavigationShell
                             location={location}
                             onOpenAll={() => setLegacyMenuOpen(true)}
-                            searchForm={<GlobalOrderSearch compact />}
+                            searchForm={<GlobalSearch compact />}
                             notificationControl={<NotificationBell />}
                         />
                     </div>
@@ -291,7 +248,7 @@ export default function Layout({ children }) {
                             <List size={22} weight="bold" />
                             الكل
                         </button>
-                        <GlobalOrderSearch />
+                        <GlobalSearch />
                     </div>
                 )}
 
