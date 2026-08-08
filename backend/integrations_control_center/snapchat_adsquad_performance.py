@@ -233,9 +233,7 @@ async def _fetch_campaign_adsquad_totals(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": normalize_ads_manager_action_report_time(
-            action_report_time
-        ),
+        "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
