@@ -96,6 +96,28 @@ def test_phone_case_and_doll_add_ambiguity_resolving_terms():
     assert any("دمى" in term for term in doll_terms)
 
 
+def test_school_pinafore_rejects_infant_and_toddler_dress_branch():
+    evidence = _evidence("المريول المدرسي البناتي")
+    terms = calibration.contextual_search_terms(evidence)
+    assert any("مدرسي" in pilot._normalize_ar(term) for term in terms)
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "ملابس وإكسسوارات > ملابس > فساتين الرضع والأطفال الصغار",
+    )
+    assert cap == 49
+    assert "المريول المدرسي" in note
+
+
+def test_club_logo_does_not_turn_rosary_into_football_fan_accessory():
+    evidence = _evidence("سبحة بشعار نادي النصر")
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "فنون وترفيه > تذكارات رياضية > إكسسوارات لمشجعي كرة القدم",
+    )
+    assert cap == 49
+    assert "السبحة" in note
+
+
 def test_product_evidence_exposes_only_public_http_image_url(monkeypatch):
     monkeypatch.setattr(
         pilot,
