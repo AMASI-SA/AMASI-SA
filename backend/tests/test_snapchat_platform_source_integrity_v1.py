@@ -35,14 +35,14 @@ def _row(entity_type, external_id, *, orders, spend, sales, date_string="2026-08
     }
 
 
-def test_account_local_total_window_uses_account_day_boundaries():
+def test_account_local_current_day_window_uses_latest_completed_hour():
     start, end = account_local_total_window(
         date(2026, 8, 6),
         timezone_name="America/Los_Angeles",
         now=datetime(2026, 8, 6, 15, 30, 45, tzinfo=timezone.utc),
     )
     assert start.isoformat() == "2026-08-06T00:00:00-07:00"
-    assert end.isoformat() == "2026-08-07T00:00:00-07:00"
+    assert end.isoformat() == "2026-08-06T08:00:00-07:00"
 
 
 def test_refresh_dates_cover_account_days_touched_by_riyadh_window():
@@ -153,6 +153,58 @@ async def test_direct_account_request_uses_all_ads_metrics_and_attribution():
     assert context.params["action_report_time"] == "conversion"
 
 
+
+@pytest.mark.asyncio
+async def test_current_day_direct_request_rolls_up_completed_hours():
+    class CaptureContext:
+        def __init__(self):
+            self.params = None
+
+        async def get_json(self, client, url, *, headers, params=None):
+            self.params = dict(params or {})
+            return {
+                "timeseries_stats": [{
+                    "sub_request_status": "SUCCESS",
+                    "timeseries_stat": {
+                        "id": "account-1",
+                        "timeseries": [
+                            {
+                                "stats": {
+                                    "spend": 100_000_000,
+                                    "conversion_purchases": 2,
+                                    "conversion_purchases_value": 250_000_000,
+                                },
+                            },
+                            {
+                                "stats": {
+                                    "spend": 125_000_000,
+                                    "conversion_purchases": 3,
+                                    "conversion_purchases_value": 400_000_000,
+                                },
+                            },
+                        ],
+                    },
+                }],
+            }
+
+    context = CaptureContext()
+    metrics, errors = await fetch_account_total_direct_metrics(
+        context,
+        object(),
+        "token-not-used",
+        account_id="account-1",
+        request_start=datetime(2026, 8, 6, 0, 0, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 6, 8, 0, tzinfo=timezone.utc),
+        granularity="HOUR",
+        action_report_time="conversion",
+    )
+
+    assert errors == []
+    assert context.params["granularity"] == "HOUR"
+    assert metrics["spend"] == 225_000_000
+    assert metrics["conversion_purchases"] == 5
+    assert metrics["conversion_purchases_value"] == 650_000_000
+
 def test_direct_account_total_accepts_documented_spend_only_payload():
     payload = {
         "total_stats": [{
@@ -200,12 +252,12 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
     )
 
 
-def test_platform_total_v11_partitions_account_day_boundary_fix():
+def test_platform_total_v12_uses_current_hour_rollup():
     source = Path(
         "integrations_control_center/snapchat_platform_source_integrity.py"
     ).read_text(encoding="utf-8")
 
-    assert "direct_account_headlines_campaign_local_day_v11" in source
+    assert "direct_account_headlines_campaign_current_hour_rollup_v12" in source
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
