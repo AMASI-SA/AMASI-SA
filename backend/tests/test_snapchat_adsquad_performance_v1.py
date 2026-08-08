@@ -54,49 +54,57 @@ class FakeDB:
         return self[name]
 
 
-def test_extract_adsquad_hour_rows_preserves_parent_campaign():
+def test_extract_adsquad_total_rows_preserves_parent_campaign():
+    request_start = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    request_end = datetime(2026, 8, 5, tzinfo=timezone.utc)
     payload = {
-        "timeseries_stats": [
+        "total_stats": [
             {
-                "timeseries_stat": {
+                "sub_request_status": "SUCCESS",
+                "total_stat": {
+                    "start_time": "2026-08-04T00:00:00+00:00",
+                    "end_time": "2026-08-05T00:00:00+00:00",
                     "breakdown_stats": {
                         "adsquad": [
                             {
                                 "id": "squad-1",
-                                "timeseries": [
-                                    {
-                                        "start_time": "2026-08-04T00:00:00+03:00",
-                                        "end_time": "2026-08-04T01:00:00+03:00",
-                                        "stats": {
-                                            "spend": 5_000_000,
-                                            "impressions": 1000,
-                                            "swipes": 50,
-                                            "conversion_purchases": 2,
-                                            "conversion_purchases_value": 10_000_000,
-                                        },
-                                    }
-                                ],
+                                "stats": {
+                                    "spend": 5_000_000,
+                                    "impressions": 1000,
+                                    "swipes": 50,
+                                    "conversion_purchases": 2,
+                                    "conversion_purchases_value": 10_000_000,
+                                },
                             }
                         ]
-                    }
-                }
+                    },
+                },
             }
         ]
     }
 
-    rows, errors, successful = module.extract_adsquad_hour_rows(
-        payload,
-        campaign_id="campaign-1",
+    rows, errors, successful, breakdown_seen = (
+        module.extract_adsquad_total_rows(
+            payload,
+            campaign_id="campaign-1",
+            request_start=request_start,
+            request_end=request_end,
+        )
     )
 
+    assert module.ADSQUAD_PROVIDER_GRANULARITY == "TOTAL"
+    assert module.adsquad_source_mode("conversion").endswith(
+        "ad_squad_account_day_total_v4"
+    )
     assert successful == 1
+    assert breakdown_seen is True
     assert errors == []
     assert rows == [
         {
             "campaign_id": "campaign-1",
             "ad_squad_id": "squad-1",
-            "start_time": "2026-08-04T00:00:00+03:00",
-            "end_time": "2026-08-04T01:00:00+03:00",
+            "start_time": "2026-08-04T00:00:00+00:00",
+            "end_time": "2026-08-05T00:00:00+00:00",
             "metrics": {
                 "spend": 5_000_000,
                 "impressions": 1000,

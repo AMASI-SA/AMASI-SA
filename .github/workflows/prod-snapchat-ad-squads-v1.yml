@@ -69,9 +69,10 @@ jobs:
           MODULE=backend/integrations_control_center/snapchat_adsquad_performance.py
           INIT=backend/integrations_control_center/__init__.py
           grep -q 'ADSQUAD_BREAKDOWN = "adsquad"' "$MODULE"
-          grep -q 'granularity": "HOUR"' "$MODULE"
+          grep -q 'ADSQUAD_PROVIDER_GRANULARITY = "TOTAL"' "$MODULE"
+          grep -q 'omit_empty": "false"' "$MODULE"
           grep -q 'entity_type": "ad_squad"' "$MODULE"
-          grep -q 'stored_granularity="ACCOUNT_LOCAL_DAY"' "$MODULE"
+          grep -q 'stored_granularity="ACCOUNT_LOCAL_TOTAL_DAY"' "$MODULE"
           grep -q 'salla_results_supported": False' "$MODULE"
           grep -q 'attach_snapchat_adsquad_routes' "$INIT"
           grep -q 'install_snapchat_adsquad_performance_refresh' "$INIT"
