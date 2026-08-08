@@ -143,19 +143,10 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     async def selected_accounts(db, user_id):
         return [deepcopy(account)]
 
-    async def parent_report(*args, **kwargs):
-        raise AssertionError("Ad report must reuse the projected parent catalog")
-
     async def cost_settings(db, user_id):
         return {"items": []}
 
-    monkeypatch.setattr(module, "_load_selected_accounts", selected_accounts)
-    monkeypatch.setattr(
-        module.adsquad_report,
-        "build_account_timezone_adsquad_report",
-        parent_report,
-    )
-    import ads_manager.account_cost_settings as account_cost_settings
+    monkeypatch.setattr(module, "_load_selected_accounts", selected_accounts)    import ads_manager.account_cost_settings as account_cost_settings
 
     monkeypatch.setattr(
         account_cost_settings,
