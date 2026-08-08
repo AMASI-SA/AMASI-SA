@@ -2,6 +2,15 @@ import api from "../lib/api";
 
 export const SNAPCHAT_ENTITY_PAGE_SIZE = 9;
 
+export function snapchatEntityPageLimit(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return SNAPCHAT_ENTITY_PAGE_SIZE;
+    return Math.min(
+        SNAPCHAT_ENTITY_PAGE_SIZE,
+        Math.max(1, Math.trunc(parsed)),
+    );
+}
+
 function number(value, { integer = false } = {}) {
     if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
@@ -152,7 +161,7 @@ export async function getSnapchatAdSquadPerformance({
             query: String(query || "").trim().slice(0, 120) || undefined,
             campaign_id: String(campaignId || "").trim().slice(0, 120) || undefined,
             page,
-            limit,
+            limit: snapchatEntityPageLimit(limit),
             active_campaigns_only: activeCampaignsOnly,
             sort_by: sortBy,
             action_report_time: ["conversion", "impression"].includes(actionReportTime)

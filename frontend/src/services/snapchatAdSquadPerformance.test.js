@@ -1,6 +1,7 @@
 import {
     normalizeAdSquad,
     normalizeSnapchatAdSquadReport,
+    snapchatEntityPageLimit,
     SNAPCHAT_ENTITY_PAGE_SIZE,
 } from "./snapchatAdSquadPerformance";
 
@@ -112,6 +113,14 @@ describe("Snapchat Ad Squad performance service", () => {
         const report = normalizeSnapchatAdSquadReport({});
         expect(SNAPCHAT_ENTITY_PAGE_SIZE).toBe(9);
         expect(report.pagination.limit).toBe(9);
+    });
+
+    test("caps ad squad API requests at nine rows", () => {
+        expect(snapchatEntityPageLimit(100)).toBe(9);
+        expect(snapchatEntityPageLimit("9")).toBe(9);
+        expect(snapchatEntityPageLimit(5)).toBe(5);
+        expect(snapchatEntityPageLimit(0)).toBe(1);
+        expect(snapchatEntityPageLimit("invalid")).toBe(9);
     });
 
 });
