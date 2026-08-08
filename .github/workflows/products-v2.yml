@@ -17,6 +17,7 @@ on:
       - "backend/product_category_publish_support.py"
       - "backend/product_google_taxonomy_support.py"
       - "backend/product_google_taxonomy_ai_pilot.py"
+      - "backend/product_google_taxonomy_ai_calibration.py"
       - "backend/product_option_cost_routes.py"
       - "backend/product_creation_routes.py"
       - "backend/product_fulfillment_routes.py"
@@ -45,6 +46,7 @@ on:
       - "backend/tests/test_product_google_taxonomy_support.py"
       - "backend/tests/test_product_google_taxonomy_publish_boundary.py"
       - "backend/tests/test_product_google_taxonomy_ai_pilot.py"
+      - "backend/tests/test_product_google_taxonomy_ai_calibration.py"
       - "backend/tests/test_product_images_status_support.py"
       - "backend/tests/test_product_media_draft_routes.py"
       - "backend/tests/test_product_media_upload_routes.py"
@@ -120,6 +122,7 @@ jobs:
             tests/test_product_google_taxonomy_support.py \
             tests/test_product_google_taxonomy_publish_boundary.py \
             tests/test_product_google_taxonomy_ai_pilot.py \
+            tests/test_product_google_taxonomy_ai_calibration.py \
             tests/test_product_images_status_support.py \
             tests/test_product_media_draft_routes.py \
             tests/test_product_media_upload_routes.py \
