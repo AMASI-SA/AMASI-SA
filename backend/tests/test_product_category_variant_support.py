@@ -67,7 +67,7 @@ def test_google_taxonomy_parser_preserves_id_path_and_leaf_name():
             "# Google_Product_Taxonomy_Version: 2021-09-21",
             "166 - Apparel & Accessories",
             "188 - Apparel & Accessories > Jewelry",
-            "559 - Apparel & Accessories > Jewelry > Necklaces",
+            "196 - Apparel & Accessories > Jewelry > Necklaces",
             "bad row",
         ])
     )
@@ -87,7 +87,7 @@ def test_google_taxonomy_parser_preserves_id_path_and_leaf_name():
             "depth": 1,
         },
         {
-            "id": "559",
+            "id": "196",
             "path": "Apparel & Accessories > Jewelry > Necklaces",
             "name": "Necklaces",
             "depth": 2,
@@ -98,11 +98,11 @@ def test_google_taxonomy_parser_preserves_id_path_and_leaf_name():
 def test_google_taxonomy_parser_ignores_duplicate_or_invalid_ids():
     _, items = _parse_google_taxonomy(
         "\n".join([
-            "559 - Apparel & Accessories > Jewelry > Necklaces",
-            "559 - Duplicate path",
+            "196 - Apparel & Accessories > Jewelry > Necklaces",
+            "196 - Duplicate path",
             "abc - Invalid id",
-            "560 - Apparel & Accessories > Jewelry > Rings",
+            "200 - Apparel & Accessories > Jewelry > Rings",
         ])
     )
 
-    assert [row["id"] for row in items] == ["559", "560"]
+    assert [row["id"] for row in items] == ["196", "200"]
