@@ -1,20 +1,52 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
-jest.mock("./CampaignManagerTable", () => function CampaignTable() {
-    return <div data-testid="mock-campaign-table">الحملات</div>;
+jest.mock("./CampaignManagerTable", () => function CampaignTable({ onOpenAdSquads }) {
+    return (
+        <button
+            type="button"
+            data-testid="mock-campaign-table"
+            onClick={() => onOpenAdSquads?.({
+                campaign_id: "campaign-1",
+                campaign_name: "حملة 1",
+            })}
+        >
+            الحملات
+        </button>
+    );
 });
 
-jest.mock("./AdSquadManagerTable", () => function AdSquadTable() {
-    return <div data-testid="mock-ad-squad-table">المجموعات الإعلانية</div>;
+jest.mock("./AdSquadManagerTable", () => function AdSquadTable({ onOpenAds }) {
+    return (
+        <button
+            type="button"
+            data-testid="mock-ad-squad-table"
+            onClick={() => onOpenAds?.({
+                ad_squad_id: "squad-1",
+                ad_squad_name: "مجموعة 1",
+                campaign_id: "campaign-1",
+                campaign_name: "حملة 1",
+            })}
+        >
+            المجموعات الإعلانية
+        </button>
+    );
 });
 
 jest.mock("./AdSquadSortControls", () => function AdSquadSortControls() {
     return <div data-testid="mock-ad-squad-sort">ترتيب المجموعات</div>;
 });
 
-jest.mock("./AdManagerTable", () => function AdManagerTable() {
-    return <div data-testid="mock-ad-manager-table">الإعلانات</div>;
+jest.mock("./AdManagerTable", () => function AdManagerTable({ campaignId, adSquadId }) {
+    return (
+        <div
+            data-testid="mock-ad-manager-table"
+            data-campaign-id={campaignId || ""}
+            data-ad-squad-id={adSquadId || ""}
+        >
+            الإعلانات
+        </div>
+    );
 });
 
 import AdsEntityLevelWorkspace from "./AdsEntityLevelWorkspace";
@@ -100,4 +132,53 @@ describe("AdsEntityLevelWorkspace", () => {
 
         expect(container.querySelector('[data-testid="mock-ad-manager-table"]')).not.toBeNull();
     });
+
+    test("passes hierarchy selections and exposes breadcrumb reset", async () => {
+        const onOpenAdSquads = jest.fn();
+        const onClearHierarchy = jest.fn();
+        await act(async () => {
+            root.render(
+                <AdsEntityLevelWorkspace
+                    platform="snapchat"
+                    platformLabel="سناب شات"
+                    entityLevel="ads"
+                    onEntityLevelChange={() => {}}
+                    campaigns={[]}
+                    campaignTotals={{}}
+                    campaignPagination={{}}
+                    adSquadReport={null}
+                    selectedCampaign={{
+                        campaign_id: "campaign-1",
+                        campaign_name: "حملة 1",
+                    }}
+                    selectedAdSquad={{
+                        ad_squad_id: "squad-1",
+                        ad_squad_name: "مجموعة 1",
+                    }}
+                    onOpenAdSquads={onOpenAdSquads}
+                    onClearHierarchy={onClearHierarchy}
+                />,
+            );
+        });
+
+        const ads = container.querySelector('[data-testid="mock-ad-manager-table"]');
+        expect(ads.dataset.campaignId).toBe("campaign-1");
+        expect(ads.dataset.adSquadId).toBe("squad-1");
+        const breadcrumb = container.querySelector('[data-testid="snapchat-entity-breadcrumb"]');
+        expect(breadcrumb).not.toBeNull();
+
+        const allCampaigns = Array.from(breadcrumb.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("كل الحملات"));
+        await act(async () => allCampaigns.click());
+        expect(onClearHierarchy).toHaveBeenCalledTimes(1);
+
+        const campaign = Array.from(breadcrumb.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("حملة 1"));
+        await act(async () => campaign.click());
+        expect(onOpenAdSquads).toHaveBeenCalledWith({
+            campaign_id: "campaign-1",
+            campaign_name: "حملة 1",
+        });
+    });
+
 });
