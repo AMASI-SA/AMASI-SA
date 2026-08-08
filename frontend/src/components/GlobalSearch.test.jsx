@@ -1,3 +1,10 @@
+jest.mock("react-router-dom", () => ({
+    Link: ({ to, children, ...props }) => (
+        <a href={to} {...props}>{children}</a>
+    ),
+    useNavigate: () => jest.fn(),
+}));
+
 import {
     buildGlobalSearchResults,
     normalizeGlobalSearch,
