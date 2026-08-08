@@ -12,7 +12,7 @@ from salla_integration.service import SallaError, call_salla
 
 
 GOOGLE_PRODUCT_TAXONOMY_URL = (
-    "https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt"
+    "https://www.google.com/basepages/producttype/taxonomy-with-ids.ar-SA.txt"
 )
 GOOGLE_TAXONOMY_TTL_SECONDS = 24 * 60 * 60
 _GOOGLE_TAXONOMY_CACHE: dict[str, Any] = {
@@ -293,7 +293,7 @@ def make_product_category_catalog_router(db: Any, current_user: Callable) -> API
             "items": items,
             "total": len(items),
             "version": version,
-            "source": "google_official_taxonomy",
+            "source": "google_official_taxonomy_ar-SA",
         }
 
     @router.get("/category-catalog")
