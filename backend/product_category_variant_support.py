@@ -1,11 +1,26 @@
-"""Readable product categories and variant labels for Mezan Product V2."""
+"""Readable product categories, Google taxonomy, and variant labels for Mezan Product V2."""
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any, Callable
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from salla_integration.service import SallaError, call_salla
+
+
+GOOGLE_PRODUCT_TAXONOMY_URL = (
+    "https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt"
+)
+GOOGLE_TAXONOMY_TTL_SECONDS = 24 * 60 * 60
+_GOOGLE_TAXONOMY_CACHE: dict[str, Any] = {
+    "items": [],
+    "version": None,
+    "loaded_at": 0.0,
+}
+_GOOGLE_TAXONOMY_LOCK = asyncio.Lock()
 
 
 def _text(value: Any) -> str:
@@ -17,6 +32,90 @@ def _text(value: Any) -> str:
                 return _text(value.get(key))
         return ""
     return str(value).strip()
+
+
+def _parse_google_taxonomy(source: str) -> tuple[str | None, list[dict[str, Any]]]:
+    """Parse Google's official ``ID - full path`` taxonomy text format."""
+    version: str | None = None
+    items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for raw_line in str(source or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            prefix = "# Google_Product_Taxonomy_Version:"
+            if line.startswith(prefix):
+                version = line[len(prefix):].strip() or None
+            continue
+        if " - " not in line:
+            continue
+
+        category_id, path = line.split(" - ", 1)
+        category_id = category_id.strip()
+        path = path.strip()
+        if not category_id.isdigit() or not path or category_id in seen_ids:
+            continue
+
+        seen_ids.add(category_id)
+        items.append({
+            "id": category_id,
+            "path": path,
+            "name": path.rsplit(" > ", 1)[-1].strip(),
+            "depth": path.count(" > "),
+        })
+
+    return version, items
+
+
+async def _get_google_taxonomy() -> tuple[str | None, list[dict[str, Any]]]:
+    now = time.monotonic()
+    cached_items = _GOOGLE_TAXONOMY_CACHE.get("items") or []
+    loaded_at = float(_GOOGLE_TAXONOMY_CACHE.get("loaded_at") or 0.0)
+    if cached_items and now - loaded_at < GOOGLE_TAXONOMY_TTL_SECONDS:
+        return _GOOGLE_TAXONOMY_CACHE.get("version"), cached_items
+
+    async with _GOOGLE_TAXONOMY_LOCK:
+        now = time.monotonic()
+        cached_items = _GOOGLE_TAXONOMY_CACHE.get("items") or []
+        loaded_at = float(_GOOGLE_TAXONOMY_CACHE.get("loaded_at") or 0.0)
+        if cached_items and now - loaded_at < GOOGLE_TAXONOMY_TTL_SECONDS:
+            return _GOOGLE_TAXONOMY_CACHE.get("version"), cached_items
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+                response = await client.get(GOOGLE_PRODUCT_TAXONOMY_URL)
+                response.raise_for_status()
+        except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            if cached_items:
+                return _GOOGLE_TAXONOMY_CACHE.get("version"), cached_items
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "google_taxonomy_unavailable",
+                    "message": "تعذر تحميل تصنيفات Google الرسمية مؤقتًا.",
+                },
+            ) from exc
+
+        version, items = _parse_google_taxonomy(response.text)
+        if len(items) < 1000:
+            if cached_items:
+                return _GOOGLE_TAXONOMY_CACHE.get("version"), cached_items
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "google_taxonomy_invalid",
+                    "message": "استجابة تصنيفات Google غير مكتملة.",
+                },
+            )
+
+        _GOOGLE_TAXONOMY_CACHE.update({
+            "items": items,
+            "version": version,
+            "loaded_at": time.monotonic(),
+        })
+        return version, items
 
 
 def _category_row(value: Any, parent_path: str = "", parent_id: str = "") -> dict[str, Any] | None:
@@ -182,6 +281,20 @@ def install_product_category_variant_support() -> None:
 
 def make_product_category_catalog_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/products-v2", tags=["Products V2 Categories"])
+
+    @router.get("/google-taxonomy")
+    async def google_taxonomy(user: dict = Depends(current_user)) -> dict[str, Any]:
+        # Auth dependency is intentionally required even though the taxonomy
+        # itself is public; this keeps all Product OS catalog surfaces private.
+        _ = user
+        version, items = await _get_google_taxonomy()
+        return {
+            "ok": True,
+            "items": items,
+            "total": len(items),
+            "version": version,
+            "source": "google_official_taxonomy",
+        }
 
     @router.get("/category-catalog")
     async def category_catalog(user: dict = Depends(current_user)) -> dict[str, Any]:
