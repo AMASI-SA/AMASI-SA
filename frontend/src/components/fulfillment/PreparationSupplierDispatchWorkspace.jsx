@@ -6,6 +6,7 @@ import {
     Camera,
     CheckCircle,
     ClipboardText,
+    DotsThreeVertical,
     Factory,
     FileText,
     MagnifyingGlass,
@@ -42,6 +43,41 @@ export function dispatchSelections(products = [], selected = {}) {
         .filter((row) => row.group_key && row.quantity > 0);
 }
 
+export function selectedFileDispatches(files = [], selected = {}) {
+    return files
+        .map((file) => ({
+            file_number: String(file?.file_number || ""),
+            selections: dispatchSelections(
+                file?.products || [],
+                selected?.[file?.file_number] || {},
+            ),
+        }))
+        .filter((file) => file.file_number && file.selections.length > 0);
+}
+
+export function supplierDispatchForPrint(dispatch = {}, suppliers = [], supplierId = "") {
+    const selectedSupplier = suppliers.find(
+        (supplier) => String(supplier?.id || "") === String(supplierId || ""),
+    );
+    return {
+        ...dispatch,
+        supplier_name: String(
+            dispatch?.supplier_name || selectedSupplier?.company_name || "",
+        ).trim() || "مورد غير محدد",
+    };
+}
+
+function formatRiyadhDate(value) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+        timeZone: "Asia/Riyadh",
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(parsed);
+}
+
 function SummaryCard({ value, label, detail, tone = "slate", onClick }) {
     const styles = {
         violet: "border-violet-200 bg-violet-50 text-violet-950",
@@ -72,6 +108,22 @@ function ProductImage({ product, compact = false }) {
         <img src={product.selected_image_url} alt="" className={`${size} rounded-xl border border-slate-200 object-cover`} />
     ) : (
         <div className={`flex ${size} items-center justify-center rounded-xl bg-slate-100 text-slate-400`}><Package size={24} /></div>
+    );
+}
+
+function ProductOptionsMenu({ product, onReturn }) {
+    return (
+        <details className="group absolute right-2 top-2 z-20" data-testid="product-options-menu">
+            <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 shadow-md transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden" aria-label={`خيارات ${product?.product_name || "المنتج"}`}>
+                <DotsThreeVertical size={25} weight="bold" />
+            </summary>
+            <div className="absolute right-0 top-11 z-30 min-w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                <button type="button" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onReturn(); }} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-right text-xs font-black text-rose-700 transition hover:bg-rose-50">
+                    <UserSwitch size={17} />
+                    إرجاع الإسناد
+                </button>
+            </div>
+        </details>
     );
 }
 
@@ -107,10 +159,10 @@ function ReturnAssignmentDialog({ target, reason, onReasonChange, busy, onCancel
     return (
         <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/60 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="إرجاع إسناد المنتج للمدير">
             <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-                <div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-black text-slate-950">إرجاع الإسناد للمدير</h3><p className="mt-1 text-xs font-bold leading-5 text-slate-500">سيُعاد كامل المتبقي من {target.product.product_name} وعدده {target.product.available_quantity} قطعة.</p></div><button type="button" onClick={onCancel} disabled={busy} className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100"><X size={18} /></button></div>
-                <label className="mt-4 block text-sm font-black text-slate-800">سبب إلغاء الإسناد <span className="text-rose-600">*</span><textarea value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={4} maxLength={1000} placeholder="اكتب السبب بوضوح ليتمكن المدير من إعادة إسناده للموظف المناسب" className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-500" /></label>
+                <div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-black text-slate-950">تأكيد إرجاع الإسناد</h3><p className="mt-1 text-xs font-bold leading-5 text-slate-500">بعد التأكيد ينتقل كامل المتبقي من {target.product.product_name} وعدده {target.product.available_quantity} قطعة إلى «منتجات غير مسندة» لدى المدير.</p></div><button type="button" onClick={onCancel} disabled={busy} className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100"><X size={18} /></button></div>
+                <label className="mt-4 block text-sm font-black text-slate-800">ملاحظة سبب إرجاع الإسناد <span className="text-rose-600">*</span><textarea value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={4} maxLength={1000} placeholder="اكتب السبب بوضوح ليتمكن المدير من إعادة إسناده للموظف المناسب" className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-500" /></label>
                 {!valid && <div className="mt-1 text-xs font-bold text-rose-600">كتابة السبب إلزامية.</div>}
-                <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={onCancel} disabled={busy} className="min-h-11 rounded-xl border border-slate-200 font-black">إلغاء</button><button type="button" onClick={onConfirm} disabled={!valid || busy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-700 font-black text-white disabled:opacity-50">{busy ? <SpinnerGap className="animate-spin" /> : <UserSwitch size={19} />}إرجاع للمدير</button></div>
+                <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={onCancel} disabled={busy} className="min-h-11 rounded-xl border border-slate-200 font-black">إلغاء</button><button type="button" onClick={onConfirm} disabled={!valid || busy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-700 font-black text-white disabled:opacity-50">{busy ? <SpinnerGap className="animate-spin" /> : <UserSwitch size={19} />}تأكيد الإرجاع</button></div>
             </div>
         </div>
     );
@@ -120,7 +172,7 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
     const files = (data?.files || []).filter((file) => file.available_quantity > 0);
     const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
     const [selected, setSelected] = useState({});
-    const [supplierByFile, setSupplierByFile] = useState({});
+    const [supplierId, setSupplierId] = useState("");
     const [busyFile, setBusyFile] = useState("");
     const [actionError, setActionError] = useState("");
     const [notice, setNotice] = useState("");
@@ -129,27 +181,36 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
 
     const fileSelection = (file) => dispatchSelections(file.products, selected[file.file_number] || {});
     const setQuantity = (fileNumber, groupKey, quantity) => setSelected((current) => ({ ...current, [fileNumber]: { ...(current[fileNumber] || {}), [groupKey]: quantity } }));
-    const resetFile = (fileNumber) => setSelected((current) => ({ ...current, [fileNumber]: {} }));
+    const selectedFiles = selectedFileDispatches(files, selected);
+    const selectedQuantity = selectedFiles.reduce(
+        (total, file) => total + file.selections.reduce(
+            (fileTotal, selection) => fileTotal + selection.quantity,
+            0,
+        ),
+        0,
+    );
 
-    const send = async (file) => {
-        const selections = fileSelection(file);
-        const supplierId = supplierByFile[file.file_number] || "";
-        if (!selections.length || !supplierId || busyFile) return;
+    const send = async () => {
+        if (!selectedFiles.length || !supplierId || busyFile) return;
         const printWindow = globalThis.window?.open?.("", "_blank") || null;
-        setBusyFile(file.file_number);
+        setBusyFile("supplier-file");
         setActionError("");
         setNotice("");
         try {
             const response = await sendPreparationPiecesToSupplier({
                 client_request_id: newPreparationDispatchRequestId(),
-                file_number: file.file_number,
                 supplier_id: supplierId,
-                selections,
+                files: selectedFiles,
                 note: null,
             });
-            const printed = printSupplierDispatch(response.dispatch, printWindow);
-            resetFile(file.file_number);
-            setSupplierByFile((current) => ({ ...current, [file.file_number]: "" }));
+            const dispatch = supplierDispatchForPrint(
+                response.dispatch,
+                suppliers,
+                supplierId,
+            );
+            const printed = printSupplierDispatch(dispatch, printWindow);
+            setSelected({});
+            setSupplierId("");
             setNotice(printed ? "تم حفظ ملف المورد وفتح نافذة الطباعة." : "تم حفظ ملف المورد، لكن المتصفح منع نافذة الطباعة. يمكنك إعادة طباعته من قيد التنفيذ.");
             await onChanged();
         } catch (sendError) {
@@ -191,31 +252,36 @@ export function WaitingReviewView({ data, loading, error, onRefresh, onChanged, 
                 <div className="space-y-4">
                     {files.map((file) => {
                         const selections = fileSelection(file);
-                        const selectedQuantity = selections.reduce((sum, row) => sum + row.quantity, 0);
+                        const fileSelectedQuantity = selections.reduce((sum, row) => sum + row.quantity, 0);
                         return (
                             <article key={file.file_number} className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-                                <header className="bg-violet-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h4 className="font-black text-slate-950">{file.file_title || file.file_number}</h4><span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-violet-700">{file.file_number}</span></div><div className="mt-2 text-xs font-bold text-slate-600">{file.available_quantity} قطعة بانتظار الإرسال · {file.sent_quantity} قيد التنفيذ</div></div><div className="rounded-xl bg-white px-3 py-2 text-xs font-black text-violet-900">المحدد: {selectedQuantity} قطعة</div></div></header>
+                                <header className="bg-violet-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-black text-slate-950">{file.file_number}</h4><div className="mt-1 text-xs font-black text-violet-700">تاريخ الرفع: {formatRiyadhDate(file.registered_at)}</div>{file.file_title && file.file_title !== file.file_number && <div className="mt-1 text-xs font-bold text-slate-500">{file.file_title}</div>}<div className="mt-2 text-xs font-bold text-slate-600">{file.available_quantity} قطعة بانتظار الإرسال · {file.sent_quantity} قيد التنفيذ</div></div><div className="rounded-xl bg-white px-3 py-2 text-xs font-black text-violet-900">المحدد: {fileSelectedQuantity} قطعة</div></div></header>
                                 <div className="grid grid-cols-2 gap-2 p-2 sm:gap-3 sm:p-4 lg:grid-cols-3 xl:grid-cols-4">
                                     {(file.products || []).filter((product) => product.available_quantity > 0).map((product) => {
                                         const value = selected[file.file_number]?.[product.group_key] || 0;
                                         return (
                                             <article key={product.group_key} className={`min-w-0 rounded-2xl border p-2.5 ${value > 0 ? "border-violet-400 bg-violet-50/60 ring-2 ring-violet-100" : "border-slate-200 bg-white"}`}>
-                                                <ProductImage product={product} />
+                                                <div className="relative">
+                                                    <ProductImage product={product} />
+                                                    <ProductOptionsMenu product={product} onReturn={() => { setReturnTarget({ file, product }); setReturnReason(""); }} />
+                                                </div>
                                                 <div className="mt-2 min-w-0"><div className="line-clamp-2 min-h-10 text-xs font-black leading-5 text-slate-900 sm:text-sm">{product.product_name}</div><div className="mt-1 truncate text-[10px] font-bold text-slate-500">{product.sku || "بدون SKU"} · {product.available_quantity} قطعة</div></div>
                                                 <div className="mt-2 flex min-h-6 flex-wrap gap-1">{(product.services || []).filter((service) => service.status !== "completed").slice(0, 2).map((service) => <span key={service.service_id} className="rounded-full bg-amber-50 px-1.5 py-1 text-[9px] font-black text-amber-800">{service.service_name || "خدمة"}</span>)}</div>
                                                 <div className="mt-2"><QuantityControl product={product} value={value} onChange={(quantity) => setQuantity(file.file_number, product.group_key, quantity)} /></div>
-                                                <button type="button" onClick={() => { setReturnTarget({ file, product }); setReturnReason(""); }} className="mt-2 inline-flex min-h-9 w-full items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2 text-[10px] font-black text-rose-700"><UserSwitch size={15} />إرجاع الإسناد</button>
                                             </article>
                                         );
                                     })}
                                 </div>
-                                <footer className="grid gap-3 border-t border-slate-100 bg-slate-50 p-4 lg:grid-cols-[minmax(220px,1fr)_auto]">
-                                    <select value={supplierByFile[file.file_number] || ""} onChange={(event) => setSupplierByFile((current) => ({ ...current, [file.file_number]: event.target.value }))} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black outline-none focus:border-violet-500"><option value="">اختر المورد للمنتجات المحددة</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.company_name}</option>)}</select>
-                                    <button type="button" onClick={() => send(file)} disabled={!selections.length || !supplierByFile[file.file_number] || busyFile === file.file_number} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 text-sm font-black text-white disabled:opacity-50">{busyFile === file.file_number ? <SpinnerGap className="animate-spin" /> : <Printer size={20} weight="fill" />}حفظ وطباعة ملف المورد</button>
-                                </footer>
                             </article>
                         );
                     })}
+                    <section className="sticky bottom-3 z-30 grid gap-3 rounded-2xl border border-violet-200 bg-white/95 p-4 shadow-xl backdrop-blur lg:grid-cols-[minmax(240px,1fr)_auto]" data-testid="multi-file-supplier-dispatch">
+                        <div>
+                            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black outline-none focus:border-violet-500"><option value="">اختر المورد لكل المنتجات المحددة</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.company_name}</option>)}</select>
+                            <div className="mt-2 text-xs font-bold text-slate-600">{selectedQuantity} قطعة محددة من {selectedFiles.length} ملف تجهيز — ستُحفظ في ملف مورد واحد مع بقاء كل ملف في بلوك مستقل.</div>
+                        </div>
+                        <button type="button" onClick={send} disabled={!selectedFiles.length || !supplierId || Boolean(busyFile)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 text-sm font-black text-white disabled:opacity-50">{busyFile === "supplier-file" ? <SpinnerGap className="animate-spin" /> : <Printer size={20} weight="fill" />}حفظ وطباعة ملف المورد</button>
+                    </section>
                 </div>
             )}
             <ReturnAssignmentDialog target={returnTarget} reason={returnReason} onReasonChange={setReturnReason} busy={Boolean(busyFile)} onCancel={() => { setReturnTarget(null); setReturnReason(""); }} onConfirm={confirmReturn} />
@@ -231,7 +297,7 @@ function InProgressView({ data, loading, error, onRefresh, onBack }) {
             {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}
             {!accounts.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><Storefront size={36} className="mx-auto text-slate-400" /><div className="mt-3 font-black text-slate-800">لا توجد منتجات عند الموردين حاليًا</div></div> : <div className="grid gap-4 xl:grid-cols-2">{accounts.map((account) => {
                 const currentProducts = (account.products || []).filter((product) => (product.sent_quantity + product.ready_quantity) > 0);
-                return <article key={account.supplier_id} className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm"><header className="bg-amber-50 p-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-700 text-white"><Storefront size={24} /></span><div className="min-w-0 flex-1"><h4 className="truncate font-black text-slate-950">{account.supplier_name}</h4><p className="mt-1 text-xs font-bold text-amber-800">{account.sent_quantity + account.ready_quantity} قطعة قيد التنفيذ</p></div></div></header><div className="grid grid-cols-2 gap-2 p-3">{currentProducts.map((product) => <div key={product.group_key} className="rounded-xl border border-slate-200 p-2"><div className="flex items-center gap-2"><ProductImage product={product} compact /><div className="min-w-0"><div className="line-clamp-2 text-xs font-black text-slate-900">{product.product_name}</div><div className="mt-1 text-[10px] font-bold text-slate-500">{product.sent_quantity + product.ready_quantity} قطعة</div></div></div></div>)}</div><footer className="space-y-2 border-t border-slate-100 bg-slate-50 p-3">{(account.dispatches || []).filter((dispatch) => ["sent", "ready"].includes(dispatch.status)).map((dispatch) => <div key={dispatch.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div className="min-w-0 text-xs font-bold text-slate-600"><b className="text-slate-900">{dispatch.file_number}</b> · {dispatch.piece_count} قطعة</div><button type="button" onClick={() => printSupplierDispatch(dispatch)} className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg border border-violet-200 px-2 text-[11px] font-black text-violet-700"><Printer size={16} />إعادة الطباعة</button></div>)}</footer></article>;
+                return <article key={account.supplier_id} className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm"><header className="bg-amber-50 p-4"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-700 text-white"><Storefront size={24} /></span><div className="min-w-0 flex-1"><h4 className="truncate font-black text-slate-950">{account.supplier_name}</h4><p className="mt-1 text-xs font-bold text-amber-800">{account.sent_quantity + account.ready_quantity} قطعة قيد التنفيذ</p></div></div></header><div className="grid grid-cols-2 gap-2 p-3">{currentProducts.map((product) => <div key={product.group_key} className="rounded-xl border border-slate-200 p-2"><div className="flex items-center gap-2"><ProductImage product={product} compact /><div className="min-w-0"><div className="line-clamp-2 text-xs font-black text-slate-900">{product.product_name}</div><div className="mt-1 text-[10px] font-bold text-slate-500">{product.sent_quantity + product.ready_quantity} قطعة</div></div></div></div>)}</div><footer className="space-y-2 border-t border-slate-100 bg-slate-50 p-3">{(account.dispatches || []).filter((dispatch) => ["sent", "ready"].includes(dispatch.status)).map((dispatch) => <div key={dispatch.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3"><div className="min-w-0 text-xs font-bold text-slate-600"><b className="text-slate-900">{dispatch.supplier_file_number || dispatch.file_number}</b> · {dispatch.piece_count} قطعة · {(dispatch.source_file_numbers || []).length || 1} ملف تجهيز</div><button type="button" onClick={() => printSupplierDispatch(supplierDispatchForPrint(dispatch, [{ id: account.supplier_id, company_name: account.supplier_name }], account.supplier_id))} className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg border border-violet-200 px-2 text-[11px] font-black text-violet-700"><Printer size={16} />إعادة الطباعة</button></div>)}</footer></article>;
             })}</div>}
         </div>
     );
@@ -486,7 +552,7 @@ function UnassignedManagerView({ onChanged }) {
     const load = useCallback(async () => { setLoading(true); setError(""); try { setData(await getUnassignedPreparationPieces()); } catch (loadError) { setError(loadError.message || "تعذّر تحميل غير المسندة."); } finally { setLoading(false); } }, []);
     useEffect(() => { load(); }, [load]);
     const assign = async (item) => {
-        const key = `${item.file_number}:${item.group_key}`;
+        const key = `${item.file_number}:${item.group_key}:${item.rejection_id || "return"}`;
         const employeeId = employeeByGroup[key] || "";
         if (!employeeId || busy) return;
         setBusy(key); setError("");
@@ -494,7 +560,7 @@ function UnassignedManagerView({ onChanged }) {
     };
     if (loading && !data) return <div className="flex min-h-48 items-center justify-center gap-2 font-black text-violet-700"><SpinnerGap className="animate-spin" /> جارٍ تحميل المنتجات غير المسندة…</div>;
     const items = data?.items || [];
-    return <div className="space-y-5" data-testid="preparation-unassigned-manager-queue"><div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.unassigned_products} label="منتجات غير مسندة" tone="amber" /><SummaryCard value={data?.summary?.unassigned_pieces} label="إجمالي القطع" tone="violet" /></div><SectionHeader title="منتجات أعادها الموظفون" description="يحفظ سبب الإرجاع وسجل الإسناد السابق دون حذف." onRefresh={load} loading={loading} />{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}{!items.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد منتجات غير مسندة</div></div> : <div className="space-y-3">{items.map((item) => { const key = `${item.file_number}:${item.group_key}`; return <article key={key} className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:grid-cols-[72px_minmax(0,1fr)_minmax(220px,320px)_auto] lg:items-center"><ProductImage product={item} compact /><div><div className="font-black text-slate-950">{item.product_name}</div><div className="mt-1 text-xs font-bold text-slate-600">{item.file_number} · {item.quantity} قطعة · أعادها {item.rejected_by_employee_name || "موظف"}</div><div className="mt-1 text-xs font-black text-rose-700">{item.rejection_reason}</div></div><select value={employeeByGroup[key] || ""} onChange={(event) => setEmployeeByGroup((current) => ({ ...current, [key]: event.target.value }))} className="min-h-11 rounded-xl border border-amber-200 bg-white px-3 text-sm font-black"><option value="">اختر الموظف الجديد</option>{(data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><button type="button" onClick={() => assign(item)} disabled={!employeeByGroup[key] || busy === key} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50">{busy === key ? <SpinnerGap className="animate-spin" /> : <UserSwitch size={19} />}إعادة الإسناد</button></article>; })}</div>}</div>;
+    return <div className="space-y-5" data-testid="preparation-unassigned-manager-queue"><div className="grid grid-cols-2 gap-3"><SummaryCard value={data?.summary?.unassigned_products} label="منتجات غير مسندة" tone="amber" /><SummaryCard value={data?.summary?.unassigned_pieces} label="إجمالي القطع" tone="violet" /></div><SectionHeader title="منتجات غير مسندة" description="يعرض الموظف الذي أعاد الإسناد وملاحظته، ويحفظ السجل السابق دون حذف." onRefresh={load} loading={loading} />{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900">{error}</div>}{!items.length && !error ? <div className="rounded-2xl border border-dashed border-slate-300 p-9 text-center"><CheckCircle size={36} className="mx-auto text-emerald-600" /><div className="mt-3 font-black text-slate-800">لا توجد منتجات غير مسندة</div></div> : <div className="space-y-3">{items.map((item) => { const key = `${item.file_number}:${item.group_key}:${item.rejection_id || "return"}`; return <article key={key} className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:grid-cols-[72px_minmax(0,1fr)_minmax(220px,320px)_auto] lg:items-center"><ProductImage product={item} compact /><div><div className="font-black text-slate-950">{item.product_name}</div><div className="mt-1 text-xs font-bold text-slate-600">الملف {item.file_number} · {item.quantity} قطعة</div><div className="mt-1 text-xs font-black text-slate-800">أعاد الإسناد: {item.rejected_by_employee_name || "موظف"}</div><div className="mt-1 text-[11px] font-bold text-slate-500">{formatRiyadhDate(item.rejected_at)}</div><div className="mt-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black leading-5 text-rose-700">الملاحظة: {item.rejection_reason}</div></div><select value={employeeByGroup[key] || ""} onChange={(event) => setEmployeeByGroup((current) => ({ ...current, [key]: event.target.value }))} className="min-h-11 rounded-xl border border-amber-200 bg-white px-3 text-sm font-black"><option value="">اختر الموظف الجديد</option>{(data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><button type="button" onClick={() => assign(item)} disabled={!employeeByGroup[key] || busy === key} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50">{busy === key ? <SpinnerGap className="animate-spin" /> : <UserSwitch size={19} />}إعادة الإسناد</button></article>; })}</div>}</div>;
 }
 
 function EmployeeProductsWorkspace({ onDataChanged }) {

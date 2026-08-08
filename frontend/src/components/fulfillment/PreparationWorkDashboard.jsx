@@ -309,8 +309,8 @@ function EmployeeManagementView({ data, loading, error, date, onDateChange, onRe
     );
 }
 
-export default function PreparationWorkDashboard() {
-    const [activeView, setActiveView] = useState("my-products");
+export default function PreparationWorkDashboard({ initialView = "my-work", standalone = false }) {
+    const [activeView, setActiveView] = useState(initialView);
     const [work, setWork] = useState(null);
     const [workLoading, setWorkLoading] = useState(true);
     const [workError, setWorkError] = useState("");
@@ -370,9 +370,8 @@ export default function PreparationWorkDashboard() {
     };
 
     const tabs = useMemo(() => [
-        { id: "my-products", label: "إدارة منتجاتي", Icon: Gear, visible: true },
         { id: "my-work", label: "تفاصيل القطع", Icon: Storefront, visible: true },
-        { id: "unassigned", label: "غير مسند", Icon: UserMinus, visible: managerAllowed },
+        { id: "unassigned", label: "منتجات غير مسندة", Icon: UserMinus, visible: managerAllowed },
         { id: "employees", label: "إدارة منتجات الموظفين", Icon: UsersThree, visible: managerAllowed },
     ].filter((item) => item.visible), [managerAllowed]);
 
@@ -383,7 +382,7 @@ export default function PreparationWorkDashboard() {
         ]);
     }, [loadManager, loadWork, managerAllowed]);
 
-    if (activeView === "my-products") {
+    if (standalone || activeView === "my-products") {
         return (
             <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5" dir="rtl" data-testid="preparation-work-dashboard">
                 <PreparationSupplierDispatchWorkspace view="my-products" onDataChanged={reloadOperationalViews} />

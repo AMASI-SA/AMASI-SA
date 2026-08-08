@@ -17,6 +17,7 @@ const fulfillment = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "fulf
 test("fulfillment routes keep reviewed products available internally", () => {
     expect(fulfillment.items).toEqual([
         { to: "/fulfillment-v2", label: "إدارة التجهيز", exactSearch: true },
+        { to: "/fulfillment-v2?workspace=my-products", label: "إدارة منتجاتي" },
         { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
         { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
     ]);
@@ -26,6 +27,7 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
     document.body.innerHTML = `
         <nav data-testid="mezan-v2-secondary-fulfillment">
             <a href="/fulfillment-v2">إدارة التجهيز</a>
+            <a href="/fulfillment-v2?workspace=my-products">إدارة منتجاتي</a>
             <a href="${REVIEWED_PRODUCTS_SECONDARY_TARGET}">تم المراجعة</a>
             <a href="/fulfillment-v2?stage=reviewed&view=files">سجل ملفات التجهيز</a>
         </nav>
@@ -34,6 +36,7 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
     expect(removeReviewedProductsSecondaryTab(document)).toBe(1);
     expect(Array.from(document.querySelectorAll("nav a")).map((link) => link.textContent)).toEqual([
         "إدارة التجهيز",
+        "إدارة منتجاتي",
         "سجل ملفات التجهيز",
     ]);
 });
@@ -45,8 +48,9 @@ test("only the reviewed products navigation item is active in products view", ()
     };
 
     expect(isNavigationItemActive(location, fulfillment.items[0])).toBe(false);
-    expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(true);
-    expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(true);
+    expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(false);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 
@@ -58,7 +62,19 @@ test("only the file registry navigation item is active in files view", () => {
 
     expect(isNavigationItemActive(location, fulfillment.items[0])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(false);
-    expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(true);
+    expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(true);
+    expect(activeNavigationSection(location)?.id).toBe("fulfillment");
+});
+
+test("my products is an independent navigation item beside fulfillment", () => {
+    const location = {
+        pathname: "/fulfillment-v2",
+        search: "?workspace=my-products",
+    };
+
+    expect(isNavigationItemActive(location, fulfillment.items[0])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(true);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 

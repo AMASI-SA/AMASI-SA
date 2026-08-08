@@ -121,7 +121,8 @@ function PlannedStage({ stage }) {
 export default function FulfillmentV2() {
     const [searchParams, setSearchParams] = useSearchParams();
     const searchKey = searchParams.toString();
-    const requestedStage = String(searchParams.get("stage") || "in_progress").trim();
+    const myProductsWorkspace = searchParams.get("workspace") === "my-products";
+    const requestedStage = String(searchParams.get("stage") || "pending_review").trim();
     const activeStage = useMemo(
         () => FULFILLMENT_STAGES.find((stage) => stage.key === requestedStage) || FULFILLMENT_STAGES[0],
         [requestedStage],
@@ -143,6 +144,7 @@ export default function FulfillmentV2() {
 
     const selectStage = (stageKey, params = {}) => {
         const next = new URLSearchParams(searchParams);
+        next.delete("workspace");
         next.set("stage", stageKey);
         if (stageKey === "reviewed") next.set("view", params.view || "products");
         else next.delete("view");
@@ -151,18 +153,20 @@ export default function FulfillmentV2() {
         setSearchParams(next, { replace: true });
     };
 
-    const showMyProductsOverview = () => {
+    const showFulfillmentOverview = () => {
         setSearchParams(new URLSearchParams(), { replace: true });
     };
 
-    const stageContent = activeStage.key === "pending_review" ? (
+    const stageContent = myProductsWorkspace ? (
+        <PreparationWorkDashboard initialView="my-products" standalone />
+    ) : activeStage.key === "pending_review" ? (
         <OrderReview embedded initialSearch={searchParams.get("search") || ""} />
     ) : activeStage.key === "reviewed" ? (
         reviewedView === "files"
             ? <PreparationFilesRegistry />
             : <ReviewedOrders />
     ) : activeStage.key === "in_progress" ? (
-        <PreparationWorkDashboard />
+        <PreparationWorkDashboard initialView="my-work" />
     ) : activeStage.key === "preparation" ? (
         <SupplierReceivingWorkspace />
     ) : activeStage.key === "ready_to_ship" ? (
@@ -173,10 +177,10 @@ export default function FulfillmentV2() {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="fulfillment-v2-page">
-            {activeStage.key !== "in_progress" && (
+            {!myProductsWorkspace && (
                 <header className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm lg:hidden" data-testid="fulfillment-mobile-stage-header">
                     <div className="flex items-center gap-3 bg-emerald-800 px-3 py-3 text-white">
-                        <button type="button" onClick={showMyProductsOverview} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10" aria-label="العودة إلى إدارة منتجاتي">
+                        <button type="button" onClick={showFulfillmentOverview} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10" aria-label="العودة إلى بداية إدارة التجهيز">
                             <ArrowRight size={21} weight="bold" />
                         </button>
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
@@ -200,7 +204,7 @@ export default function FulfillmentV2() {
                 </header>
             )}
 
-            {activeStage.key !== "in_progress" && <header className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
+            {!myProductsWorkspace && <header className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
                 <div className="bg-gradient-to-l from-violet-700 via-violet-600 to-indigo-700 px-5 py-6 text-white sm:px-7">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>

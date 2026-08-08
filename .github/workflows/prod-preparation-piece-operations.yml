@@ -27,6 +27,8 @@ on:
       - "frontend/src/reviewSpecEditVisibilitySafety.test.js"
       - "frontend/src/services/preparationWorkService.js"
       - "frontend/src/services/preparationSupplierDispatch.js"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.fulfillment.test.jsx"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.jsx"
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx"
@@ -131,6 +133,7 @@ jobs:
           src/components/fulfillment/PreparationWorkDashboard.test.jsx
           src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
           src/components/fulfillment/supplierDispatchPrint.test.js
+          src/components/MezanV2NavigationShell.fulfillment.test.jsx
           src/reviewPreparationFileScheduleSync.test.js
           src/preparationFileFailureSafetyClient.test.js
           src/reviewSpecEditVisibilitySafety.test.js

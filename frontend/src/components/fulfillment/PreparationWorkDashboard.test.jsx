@@ -73,11 +73,21 @@ test("file cannot start until every expected piece is materialized", () => {
 });
 
 
-test("dashboard starts with the standalone approved my products page", () => {
+test("in-progress dashboard starts with piece details", () => {
     const markup = renderToStaticMarkup(<PreparationWorkDashboard />);
 
     expect(markup).toContain('data-testid="preparation-work-dashboard"');
+    expect(markup).toContain("جارٍ تحميل منتجاتك");
+    expect(markup).toContain("تفاصيل القطع");
+    expect(markup).toContain("منتجات غير مسندة");
+});
+
+
+test("standalone dashboard renders my products without fulfillment tabs", () => {
+    const markup = renderToStaticMarkup(
+        <PreparationWorkDashboard initialView="my-products" standalone />,
+    );
+
     expect(markup).toContain("جارٍ تحميل إدارة منتجاتي");
-    expect(markup).not.toContain("تبدأ هذه المرحلة من «إدارة منتجاتي»");
     expect(markup).not.toContain("تفاصيل القطع");
 });
