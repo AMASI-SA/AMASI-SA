@@ -68,6 +68,19 @@ def _is_real(v) -> bool:
     return bool(s) and not s.upper().startswith(("DRY:", "PREVIEW:"))
 
 
+def _include_in_daily_report(entry: dict) -> bool:
+    """Return whether an entry is an actionable daily Qoyod result."""
+    if entry.get("status") != UNSENT:
+        return True
+    current = entry.get("salla_status_slug") or entry.get("salla_status")
+    # Preserve unknown legacy rows for investigation; only exclude a row
+    # when Salla supplied a definite non-eligible current status.
+    if not current:
+        return True
+    from integrations.qoyod.eligible_orders import _is_eligible_status
+    return _is_eligible_status(current)
+
+
 def simplify_row(row: dict, *,
                  in_qoyod_by_reference: bool = False) -> dict:
     """Map one integration_inbox row to the 4-status contract.
@@ -327,16 +340,6 @@ async def list_unsent_orders(
     # rows for awaiting-review/payment, cancelled, deleted, etc. remain
     # available in the source collections but are not actionable Qoyod
     # exceptions and must not inflate the unsent count.
-    from integrations.qoyod.eligible_orders import _is_eligible_status
-
-    def _include_in_daily_report(e: dict) -> bool:
-        if e.get("status") != UNSENT:
-            return True
-        current = e.get("salla_status_slug") or e.get("salla_status")
-        # Preserve unknown legacy rows for investigation; only exclude a
-        # row when Salla supplied a definite non-eligible current status.
-        return not current or _is_eligible_status(current)
-
     visible_keys = [
         key for key in order_keys if _include_in_daily_report(grouped[key])
     ]
