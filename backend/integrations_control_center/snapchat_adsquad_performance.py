@@ -69,12 +69,12 @@ from .snapchat_native_performance_sync import (
 def adsquad_source_mode(action_report_time: Any) -> str:
     return (
         f"{ads_manager_source_mode(action_report_time)}:"
-        "ad_squad_account_day_total_v4"
+        "ad_squad_active_campaign_account_day_total_v5"
     )
 
 
 ADSQUAD_SOURCE_MODE = adsquad_source_mode(ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME)
-ADSQUAD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_squad_total_v2"
+ADSQUAD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_squad_active_total_v3"
 ADSQUAD_REFRESH_STATE_COLLECTION = "mezan_snapchat_adsquad_refresh_state_v1"
 ADSQUAD_BREAKDOWN = "adsquad"
 ADSQUAD_PROVIDER_GRANULARITY = "TOTAL"
@@ -123,15 +123,20 @@ async def _campaign_entities(
             "last_observed_at": 1,
         },
     )
-    rows = await _to_list(cursor, MAX_CAMPAIGNS_PER_ACCOUNT + 1)
-    limited = len(rows) > MAX_CAMPAIGNS_PER_ACCOUNT
-    rows = rows[:MAX_CAMPAIGNS_PER_ACCOUNT]
-    rows.sort(key=lambda row: (
-        str(row.get("status") or "").upper() != "ACTIVE",
+    # Load the whole account catalog before applying the provider-active filter.
+    # Taking the first 250 Mongo rows first excluded current campaigns on mature
+    # accounts whose catalog contains thousands of historical campaigns.
+    rows = await _to_list(cursor, MAX_ENTITY_ROWS)
+    active_rows = [
+        row for row in rows
+        if is_active_provider_status(row.get("status"))
+    ]
+    active_rows.sort(key=lambda row: (
         _text(row.get("display_name")).casefold(),
         _text(row.get("external_id")),
     ))
-    return rows, limited
+    limited = len(active_rows) > MAX_CAMPAIGNS_PER_ACCOUNT
+    return active_rows[:MAX_CAMPAIGNS_PER_ACCOUNT], limited
 
 
 def extract_adsquad_total_rows(
