@@ -2,11 +2,16 @@
 
 Status: Approved
 Architecture gate: Binding future roadmap
-Approved objective: Build a long-lived commerce intelligence and execution system that can improve net profit, customer experience and operational quality with limited human intervention.
+Approved objective: Build one long-lived AI-native commerce intelligence and execution system that can improve sustainable net profit, customer experience and operational quality with progressively less human intervention, while preserving deterministic business correctness.
 
 ## 1. North Star
 
-Mezan OS must evolve from an order and accounting platform into an AI-assisted commerce operating system.
+Mezan OS must evolve from an order and accounting platform into an **AI-native commerce operating system**.
+
+AI-native does not mean AI-dependent. Orders, accounting, cost, tax, inventory,
+permissions, idempotency and other correctness-critical rules remain deterministic
+and authoritative. AI consumes trusted facts, reasons above them and requests
+bounded actions through governed execution interfaces.
 
 The long-term system must be able to:
 
@@ -20,6 +25,36 @@ The long-term system must be able to:
 - Learn from outcomes and prior decisions.
 
 The primary optimization target is sustainable net profit, not revenue or ROAS alone.
+
+### 1.1 Binding AI-Native Operating Model
+
+The target architecture is:
+
+`External Sources → Raw Facts → Canonical Domain → Deterministic Business/Financial Rules → Intelligence Features → Specialized AI Agents → Mezan Action Gateway → Approved Connectors/Workflows → Outcome Measurement`
+
+The project remains one product. Existing validated work is not discarded or
+duplicated for AI; it becomes the factual, operational and execution foundation
+that the intelligence layer can use.
+
+The intended agent topology may include:
+
+- Mezan Supervisor.
+- Profit Agent.
+- Ads Agent.
+- Customer Agent.
+- Product Agent.
+- Orders Agent.
+- Accounting Agent.
+- Growth Agent.
+- Risk Agent.
+
+Agents do not own business truth. All AI-initiated writes must pass through the
+Mezan Action Gateway with permission, risk, approval, idempotency, audit,
+execution and rollback controls.
+
+The binding architectural decision is:
+
+`docs/adr/ADR-002-ai-native-operating-model.md`
 
 ## 2. Ten-Year Data Principle
 
@@ -157,6 +192,10 @@ Every recommendation or automated action must record:
 - Actual result.
 - Rollback status when applicable.
 
+Durable business memory must be stored as structured, versioned and traceable
+system data. Conversational memory alone must never be treated as the business
+system of record.
+
 ## 5. Future Engines
 
 ### Marketing Attribution Engine
@@ -206,9 +245,12 @@ Can propose and later execute:
 - New experiments.
 - New campaign creation.
 
-### Commerce Executive Agent
+### Commerce Executive Agent / Mezan Supervisor
 
-Combines marketing, customer, store, product, operational and financial evidence to prioritize actions by expected net-profit impact.
+Combines marketing, customer, store, product, operational and financial evidence
+to prioritize actions by expected sustainable net-profit impact. It coordinates
+specialized agents but does not bypass their domain controls, the canonical data
+layer or the Action Gateway.
 
 ## 6. Autonomy Levels
 
@@ -233,6 +275,7 @@ Mandatory controls include:
 - Rollback procedures.
 - Complete audit logs.
 - Emergency stop.
+- Deterministic safe-degradation when AI is unavailable or below confidence.
 
 ## 7. Project Phases and Gates
 
@@ -309,6 +352,7 @@ Gate: Brand, legal, platform and factual-quality checks.
 - Budget recommendations.
 - Pause, scale and targeting proposals.
 - Owner/team approval workflow.
+- Route every executable change through the Action Gateway.
 
 Gate: Simulation, limits, auditability and rollback.
 
@@ -331,10 +375,19 @@ Gate: Proven reliability over an agreed observation period, with no bypass of fi
 - Version canonical schemas and transformations.
 - Preserve event time, ingestion time and source time separately.
 - Every action-capable agent requires permissions, limits, audit logs and rollback.
+- No AI model or agent may write directly to providers or production data; executable AI actions must use the Action Gateway.
+- Correct deterministic modules are reused as the business foundation rather than duplicated in a parallel AI stack.
+- AI unavailability must degrade to deterministic operation and explicit human control.
 - Customer data access must follow least privilege, retention and privacy controls.
 
 ## 9. Current Scope Control
 
 This roadmap is binding but does not authorize premature implementation.
 
-The current implementation gate remains Order Engine and Order Item Engine completion. Marketing, customer-conversation, content-generation and autonomous campaign work must wait for their defined phases and acceptance gates.
+The AI-native operating model is a project-wide architectural target, not a
+requirement to pause current delivery or rewrite existing validated work.
+Current modules continue to be completed and production-validated in their
+active workstreams, while new work preserves the interfaces and evidence needed
+for future intelligence and action layers.
+
+The current implementation gate remains Order Engine and Order Item Engine completion. Marketing, customer-conversation, content-generation and autonomous campaign work must wait for their defined phases and acceptance gates unless a later approved project decision explicitly changes the active gate.
