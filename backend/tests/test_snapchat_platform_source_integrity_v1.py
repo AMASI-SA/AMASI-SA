@@ -200,12 +200,12 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
     )
 
 
-def test_platform_total_v10_partitions_hour_boundary_fix():
+def test_platform_total_v11_partitions_account_day_boundary_fix():
     source = Path(
         "integrations_control_center/snapchat_platform_source_integrity.py"
     ).read_text(encoding="utf-8")
 
-    assert "direct_account_headlines_campaign_completed_hour_v10" in source
+    assert "direct_account_headlines_campaign_local_day_v11" in source
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
