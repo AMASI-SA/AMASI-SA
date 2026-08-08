@@ -1102,10 +1102,13 @@ def make_preparation_supplier_dispatch_router(
                 status_code=404,
                 detail={"code": "supplier_dispatch_supplier_not_found"},
             )
-        for piece in selected:
-            blocker = supplier_dispatch_blocker(piece, supplier)
-            if blocker:
-                raise HTTPException(status_code=409, detail=blocker)
+        # TEMPORARILY DISABLED until the preparation application is complete:
+        # allow dispatching a product to a supplier outside its linked services.
+        # Re-enable this exact block to restore the supplier-specialty guard.
+        # for piece in selected:
+        #     blocker = supplier_dispatch_blocker(piece, supplier)
+        #     if blocker:
+        #         raise HTTPException(status_code=409, detail=blocker)
 
         dispatch_id = f"sdv1_{uuid.uuid4().hex}"
         now = _now()
