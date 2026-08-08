@@ -131,7 +131,7 @@ def make_order_engine_router(*args, **kwargs):
     from product_media_ai_execution_support import install_product_media_ai_execution_support
     from ai_store_operations_foundation import make_ai_store_operations_router
     from ai_store_access_control import make_ai_store_access_router
-    from product_google_taxonomy_ai_pilot import make_product_google_taxonomy_ai_pilot_router
+    from product_google_taxonomy_ai_calibration import make_product_google_taxonomy_ai_pilot_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
