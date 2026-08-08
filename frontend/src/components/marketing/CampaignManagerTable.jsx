@@ -296,10 +296,10 @@ function ProductCostMetric({ campaign }) {
     return <MetricValue primary={formatMoney(cost)} secondary={secondary} />;
 }
 
-function cellValue(campaign, columnId, onOpenProfit) {
+function cellValue(campaign, columnId, onOpenProfit, onOpenAdSquads) {
     switch (columnId) {
-        case "name":
-            return (
+        case "name": {
+            const content = (
                 <div className="min-w-0">
                     <div className="max-w-[270px] truncate font-extrabold text-slate-950" title={campaign.campaign_name}>
                         {campaign.campaign_name || campaign.campaign_id}
@@ -309,6 +309,18 @@ function cellValue(campaign, columnId, onOpenProfit) {
                     </div>
                 </div>
             );
+            if (!onOpenAdSquads) return content;
+            return (
+                <button
+                    type="button"
+                    onClick={() => onOpenAdSquads(campaign)}
+                    className="block w-full text-right underline-offset-4 hover:text-emerald-700 hover:underline"
+                    aria-label={`عرض المجموعات الإعلانية لحملة ${campaign.campaign_name || campaign.campaign_id}`}
+                >
+                    {content}
+                </button>
+            );
+        }
         case "status": {
             const active = isActiveStatus(campaign.status);
             return (
@@ -576,6 +588,7 @@ export default function CampaignManagerTable({
     page = 1,
     onPageChange,
     readOnly = true,
+    onOpenAdSquads,
 }) {
     const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}:${resultSource}`;
     const availableDefinitions = COLUMN_DEFINITIONS.filter(
@@ -828,7 +841,7 @@ export default function CampaignManagerTable({
                                                 }}
                                                 data-column-id={column.id}
                                             >
-                                                {cellValue(campaign, column.id, setProfitCampaign)}
+                                                {cellValue(campaign, column.id, setProfitCampaign, onOpenAdSquads)}
                                             </td>
                                         );
                                     })}
