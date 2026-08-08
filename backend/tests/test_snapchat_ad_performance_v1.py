@@ -36,19 +36,31 @@ class FakeCursor:
 
 
 class FakeCollection:
-    def __init__(self, rows):
+    def __init__(self, rows, *, name, find_calls):
         self.rows = rows
+        self.name = name
+        self.find_calls = find_calls
 
     def find(self, query, projection=None):
+        self.find_calls.append({
+            "collection": self.name,
+            "query": deepcopy(query),
+            "projection": deepcopy(projection),
+        })
         return FakeCursor(row for row in self.rows if _matches(row, query))
 
 
 class FakeDB:
     def __init__(self, collections):
         self.collections = deepcopy(collections)
+        self.find_calls = []
 
     def __getitem__(self, name):
-        return FakeCollection(self.collections.setdefault(name, []))
+        return FakeCollection(
+            self.collections.setdefault(name, []),
+            name=name,
+            find_calls=self.find_calls,
+        )
 
     def __getattr__(self, name):
         return self[name]
@@ -131,26 +143,10 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     async def selected_accounts(db, user_id):
         return [deepcopy(account)]
 
-    async def parent_report(*args, **kwargs):
-        return {
-            "ad_squads": [
-                {
-                    "ad_squad_id": "squad-1",
-                    "delivery_state": "DELIVERING",
-                    "delivery_status": "يتم التسليم",
-                }
-            ]
-        }
-
     async def cost_settings(db, user_id):
         return {"items": []}
 
     monkeypatch.setattr(module, "_load_selected_accounts", selected_accounts)
-    monkeypatch.setattr(
-        module.adsquad_report,
-        "build_account_timezone_adsquad_report",
-        parent_report,
-    )
     import ads_manager.account_cost_settings as account_cost_settings
 
     monkeypatch.setattr(
@@ -215,9 +211,17 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
         query=None,
         page=1,
         limit=100,
+        active_campaigns_only=True,
         now=lambda: datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
     )
 
+    entity_find = next(
+        call for call in db.find_calls
+        if call["collection"] == SNAPCHAT_ENTITY_COLLECTION
+    )
+    assert entity_find["projection"] == module.AD_REPORT_ENTITY_PROJECTION
+    assert report["source"]["entity_projection_bounded"] is True
+    assert report["source"]["parent_catalog_reused"] is True
     assert report["pagination"]["total"] == 1
     ad = report["ads"][0]
     assert ad["ad_name"] == "فيديو المنتج الأول"
