@@ -76,6 +76,8 @@ on:
       - "frontend/src/preparationFileRegistryUi.test.js"
       - "frontend/src/reviewPreparationFileRegistryEnhancer.js"
       - "frontend/src/components/Layout.jsx"
+      - "frontend/src/components/GlobalSearch.jsx"
+      - "frontend/src/components/GlobalSearch.test.jsx"
       - "frontend/src/components/Sidebar.jsx"
       - "frontend/src/components/MezanV2NavigationShell.jsx"
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
@@ -290,7 +292,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/GlobalSearch.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
