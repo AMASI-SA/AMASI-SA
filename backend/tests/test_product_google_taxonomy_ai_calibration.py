@@ -3,6 +3,7 @@ import json
 
 import product_google_taxonomy_ai_calibration as calibration
 import product_google_taxonomy_ai_pilot as pilot
+import product_google_taxonomy_ai_visual_gate as visual_gate
 
 
 def _evidence(name, *, image_url=""):
@@ -219,3 +220,131 @@ def test_vision_cannot_escape_candidate_list(monkeypatch):
     result = asyncio.run(calibration.calibrated_ai_classify_chunk(client, rows))["p1"]
     assert result["category_id"] == ""
     assert result["confidence"] == 30
+
+
+def test_high_confidence_visual_conflict_forces_human_review(monkeypatch):
+    async def fake_calibrated(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "201",
+                "confidence": 95,
+                "reason": "الاسم يقول ساعة بناتي",
+                "evidence": ["ساعة بناتي"],
+            }
+        }
+
+    monkeypatch.setattr(
+        calibration,
+        "_calibrated_ai_classify_chunk_original",
+        fake_calibrated,
+        raising=False,
+    )
+    client = _VisionClient({
+        "verdict": "conflict",
+        "confidence": 98,
+        "observed_product_type": "قطعة معلقة تشبه قلادة وليست ساعة معصم",
+        "reason": "الصورة لا تظهر سوار معصم أو هيكل ساعة يد.",
+        "evidence": ["القطعة معلقة بخيط حول الرقبة"],
+    })
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("ساعة بناتي", image_url="https://cdn.example.com/watch.jpg"),
+        "candidate_categories": [{
+            "id": "201",
+            "name": "ساعات يد",
+            "path": "ملابس وإكسسوارات > حلي > ساعات يد",
+        }],
+    }]
+    result = asyncio.run(
+        visual_gate.calibrated_ai_classify_chunk_with_visual_gate(client, rows)
+    )["p1"]
+    assert result["category_id"] == "201"
+    assert result["confidence"] == 89
+    assert "مراجعة بصرية مطلوبة" in result["reason"]
+    assert "الصورة خالفت التصنيف النصي" in result["evidence"]
+    assert client.responses.calls
+
+
+def test_high_confidence_visual_consistency_keeps_auto_approval_band(monkeypatch):
+    async def fake_calibrated(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "191",
+                "confidence": 95,
+                "reason": "اسوارة زينة",
+                "evidence": ["اسوارة"],
+            }
+        }
+
+    monkeypatch.setattr(
+        calibration,
+        "_calibrated_ai_classify_chunk_original",
+        fake_calibrated,
+        raising=False,
+    )
+    client = _VisionClient({
+        "verdict": "consistent",
+        "confidence": 98,
+        "observed_product_type": "اسوارة حلي",
+        "reason": "الصورة تظهر اسوارة زينة حول المعصم.",
+        "evidence": ["حلقة معدنية مزخرفة"],
+    })
+    rows = [{
+        "product_id": "p1",
+        "facts": _evidence("اسوارة بلمعة زركون", image_url="https://cdn.example.com/bracelet.jpg"),
+        "candidate_categories": [{
+            "id": "191",
+            "name": "أساور",
+            "path": "ملابس وإكسسوارات > حلي > أساور",
+        }],
+    }]
+    result = asyncio.run(
+        visual_gate.calibrated_ai_classify_chunk_with_visual_gate(client, rows)
+    )["p1"]
+    assert result["confidence"] == 95
+    assert "الصورة متسقة مع التصنيف المقترح" in result["evidence"]
+
+
+def test_existing_google_category_skips_high_confidence_visual_spend(monkeypatch):
+    async def fake_calibrated(client, rows):
+        return {
+            "p1": {
+                "product_id": "p1",
+                "category_id": "5388",
+                "confidence": 95,
+                "reason": "تصنيف قائم",
+                "evidence": [],
+            }
+        }
+
+    monkeypatch.setattr(
+        calibration,
+        "_calibrated_ai_classify_chunk_original",
+        fake_calibrated,
+        raising=False,
+    )
+    client = _VisionClient({
+        "verdict": "conflict",
+        "confidence": 99,
+        "observed_product_type": "",
+        "reason": "",
+        "evidence": [],
+    })
+    evidence = _evidence("عباية", image_url="https://cdn.example.com/abaya.jpg")
+    evidence["current_google_category"] = "5388"
+    rows = [{
+        "product_id": "p1",
+        "facts": evidence,
+        "candidate_categories": [{
+            "id": "5388",
+            "name": "ملابس تقليدية",
+            "path": "ملابس وإكسسوارات > ملابس > ملابس تقليدية",
+        }],
+    }]
+    result = asyncio.run(
+        visual_gate.calibrated_ai_classify_chunk_with_visual_gate(client, rows)
+    )["p1"]
+    assert result["confidence"] == 95
+    assert client.responses.calls == []
