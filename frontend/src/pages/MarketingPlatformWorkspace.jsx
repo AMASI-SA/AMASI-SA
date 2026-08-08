@@ -25,7 +25,10 @@ import {
     MARKETING_PLATFORM_CONFIG,
     MARKETING_PLATFORMS,
 } from "../services/marketingPerformance";
-import { getSnapchatAdSquadPerformance } from "../services/snapchatAdSquadPerformance";
+import {
+    getSnapchatAdSquadPerformance,
+    SNAPCHAT_ENTITY_PAGE_SIZE,
+} from "../services/snapchatAdSquadPerformance";
 import {
     CAMPAIGN_RESULTS_SOURCE_EVENT,
     campaignResultsSource,
@@ -216,6 +219,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [adSquadReport, setAdSquadReport] = useState(null);
     const [adSquadLoading, setAdSquadLoading] = useState(false);
     const [adSquadError, setAdSquadError] = useState("");
+    const [selectedCampaign, setSelectedCampaign] = useState(null);
+    const [selectedAdSquad, setSelectedAdSquad] = useState(null);
     const loadSequenceRef = useRef(0);
 
     const load = useCallback(async ({ silent = false } = {}) => {
@@ -284,8 +289,9 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 dateFrom: appliedRange.dateFrom,
                 dateTo: appliedRange.dateTo,
                 query: appliedQuery,
+                campaignId: selectedCampaign?.campaign_id || undefined,
                 page: adSquadPage,
-                limit: 25,
+                limit: SNAPCHAT_ENTITY_PAGE_SIZE,
                 activeCampaignsOnly,
                 sortBy: adSquadSort,
                 actionReportTime,
@@ -301,7 +307,17 @@ export default function MarketingPlatformWorkspace({ provider }) {
         } finally {
             setAdSquadLoading(false);
         }
-    }, [actionReportTime, activeCampaignsOnly, adSquadPage, adSquadSort, appliedQuery, appliedRange, platform, selectedAccountId]);
+    }, [
+        actionReportTime,
+        activeCampaignsOnly,
+        adSquadPage,
+        adSquadSort,
+        appliedQuery,
+        appliedRange,
+        platform,
+        selectedAccountId,
+        selectedCampaign?.campaign_id,
+    ]);
 
     useEffect(() => {
         const currentToday = todaySA();
@@ -320,6 +336,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setAdSquadSort("orders");
         setAdSquadReport(null);
         setAdSquadError("");
+        setSelectedCampaign(null);
+        setSelectedAdSquad(null);
     }, [platform]);
 
     useEffect(() => {
@@ -399,6 +417,37 @@ export default function MarketingPlatformWorkspace({ provider }) {
     function refreshReports() {
         load({ silent: true });
         if (entityLevel === "ad_squads") loadAdSquads();
+    }
+
+    function openCampaignAdSquads(campaign) {
+        if (!campaign?.campaign_id) return;
+        setSelectedCampaign({
+            campaign_id: campaign.campaign_id,
+            campaign_name: campaign.campaign_name || campaign.campaign_id,
+        });
+        setSelectedAdSquad(null);
+        setAdSquadPage(1);
+        setEntityLevel("ad_squads");
+    }
+
+    function openAdSquadAds(adSquad) {
+        if (!adSquad?.ad_squad_id) return;
+        setSelectedCampaign({
+            campaign_id: adSquad.campaign_id,
+            campaign_name: adSquad.campaign_name || adSquad.campaign_id,
+        });
+        setSelectedAdSquad({
+            ad_squad_id: adSquad.ad_squad_id,
+            ad_squad_name: adSquad.ad_squad_name || adSquad.ad_squad_id,
+        });
+        setEntityLevel("ads");
+    }
+
+    function clearEntityHierarchy() {
+        setSelectedCampaign(null);
+        setSelectedAdSquad(null);
+        setAdSquadPage(1);
+        setEntityLevel("campaigns");
     }
 
     if (loading && !data) return <LoadingState />;
@@ -588,6 +637,12 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     onEntityLevelChange={(level) => {
                         setEntityLevel(level);
                         setAdSquadPage(1);
+                        if (level === "campaigns") {
+                            setSelectedCampaign(null);
+                            setSelectedAdSquad(null);
+                        } else if (level === "ad_squads") {
+                            setSelectedAdSquad(null);
+                        }
                     }}
                     campaigns={data?.campaigns || []}
                     campaignTotals={totals}
@@ -611,6 +666,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     onAdSquadPageChange={setAdSquadPage}
                     adSquadLoading={adSquadLoading}
                     adSquadError={adSquadError}
+                    selectedCampaign={selectedCampaign}
+                    selectedAdSquad={selectedAdSquad}
+                    onOpenAdSquads={openCampaignAdSquads}
+                    onOpenAds={openAdSquadAds}
+                    onClearHierarchy={clearEntityHierarchy}
                 />
             )}
 

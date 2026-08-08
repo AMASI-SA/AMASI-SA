@@ -233,9 +233,7 @@ async def _fetch_campaign_adsquad_totals(
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
         "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
         "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
-        "action_report_time": normalize_ads_manager_action_report_time(
-            action_report_time
-        ),
+        "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
     }
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -761,6 +759,7 @@ async def build_account_timezone_adsquad_report(
     query: str | None,
     page: int,
     limit: int,
+    campaign_id: str | None = None,
     active_campaigns_only: bool = False,
     sort_by: str = "orders",
     action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
@@ -864,6 +863,7 @@ async def build_account_timezone_adsquad_report(
     currency, rate = _effective_currency(selected, setting)
     rows: list[dict[str, Any]] = []
     identity_matches = 0
+    requested_campaign_id = _text(campaign_id)
     all_adsquad_ids = sorted(set(groups) | set(squads))
     for adsquad_id in all_adsquad_ids:
         facts = groups.get(adsquad_id, [])
@@ -874,6 +874,8 @@ async def build_account_timezone_adsquad_report(
         if not campaign_id and facts:
             campaign_id = _text(facts[0].get("campaign_id"))
         campaign = campaigns.get(campaign_id, {})
+        if requested_campaign_id and campaign_id != requested_campaign_id:
+            continue
         metrics = _aggregate_rows(facts, requested_days=requested_days)
         rows.append({
             "account_id": account["account_id"],
@@ -974,6 +976,7 @@ async def build_account_timezone_adsquad_report(
         "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "supported_result_sources": ["platform"],
         "active_campaigns_only": bool(active_campaigns_only),
+        "campaign_id": requested_campaign_id or None,
         "sort_by": sort_mode,
         "totals": totals,
         "daily": daily,
@@ -1030,8 +1033,9 @@ def attach_snapchat_adsquad_routes(
         from_date: str | None = Query(default=None),
         to_date: str | None = Query(default=None),
         query: str | None = Query(default=None, max_length=120),
+        campaign_id: str | None = Query(default=None, max_length=120),
         page: int = Query(default=1, ge=1),
-        limit: int = Query(default=25, ge=10, le=100),
+        limit: int = Query(default=9, ge=1, le=100),
         active_campaigns_only: bool = Query(default=True),
         sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),
         action_report_time: str = Query(default=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME, pattern="^(conversion|impression)$"),
@@ -1048,6 +1052,7 @@ def attach_snapchat_adsquad_routes(
                 query=query,
                 page=page,
                 limit=limit,
+                campaign_id=campaign_id,
                 active_campaigns_only=active_campaigns_only,
                 sort_by=sort_by,
                 action_report_time=action_report_time,

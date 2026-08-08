@@ -302,3 +302,18 @@ async def test_report_keeps_zero_spend_adsquad_from_entity_catalog(monkeypatch):
     assert report["source_only"] is True
     assert report["provider_write_reached"] is False
     assert report["accounting_write_reached"] is False
+    filtered = await module.build_account_timezone_adsquad_report(
+        db,
+        "owner-1",
+        account_id="account-1",
+        from_date="2026-08-04",
+        to_date="2026-08-04",
+        query=None,
+        page=1,
+        limit=9,
+        campaign_id="campaign-other",
+        now=lambda: datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
+    )
+    assert filtered["pagination"]["limit"] == 9
+    assert filtered["pagination"]["total"] == 0
+    assert filtered["campaign_id"] == "campaign-other"

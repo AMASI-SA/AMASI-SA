@@ -86,6 +86,11 @@ export default function AdsEntityLevelWorkspace({
     onAdSquadPageChange,
     adSquadLoading,
     adSquadError,
+    selectedCampaign = null,
+    selectedAdSquad = null,
+    onOpenAdSquads,
+    onOpenAds,
+    onClearHierarchy,
 }) {
     const adSquadsEnabled = platform === "snapchat";
     const adsEnabled = platform === "snapchat";
@@ -103,6 +108,38 @@ export default function AdsEntityLevelWorkspace({
                 [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] { border-top-left-radius: 0; border-top-right-radius: 0; }
             `}</style>
             <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} />
+            {platform === "snapchat" && (selectedCampaign || selectedAdSquad) && (
+                <div
+                    className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"
+                    data-testid="snapchat-entity-breadcrumb"
+                >
+                    <button
+                        type="button"
+                        onClick={onClearHierarchy}
+                        className="rounded-lg bg-white px-3 py-1.5 text-emerald-700 shadow-sm hover:bg-emerald-50"
+                    >
+                        كل الحملات
+                    </button>
+                    <span>/</span>
+                    {selectedCampaign && (
+                        <button
+                            type="button"
+                            onClick={() => onOpenAdSquads?.(selectedCampaign)}
+                            className="rounded-lg px-2 py-1.5 hover:bg-white hover:text-emerald-700"
+                        >
+                            {selectedCampaign.campaign_name || selectedCampaign.campaign_id}
+                        </button>
+                    )}
+                    {selectedAdSquad && (
+                        <>
+                            <span>/</span>
+                            <span className="rounded-lg bg-violet-50 px-2 py-1.5 text-violet-700">
+                                {selectedAdSquad.ad_squad_name || selectedAdSquad.ad_squad_id}
+                            </span>
+                        </>
+                    )}
+                </div>
+            )}
             {platform === "snapchat" && entityLevel === "campaigns" && (
                 <SnapchatOrderSourceAudit
                     accountId={auditAccountId}
@@ -124,6 +161,7 @@ export default function AdsEntityLevelWorkspace({
                     page={campaignPage}
                     onPageChange={onCampaignPageChange}
                     readOnly={readOnly}
+                    onOpenAdSquads={platform === "snapchat" ? onOpenAdSquads : undefined}
                 />
             )}
             {entityLevel === "ad_squads" && (
@@ -138,6 +176,7 @@ export default function AdsEntityLevelWorkspace({
                         loading={adSquadLoading}
                         error={adSquadError}
                         sortMode={adSquadSort}
+                        onOpenAds={onOpenAds}
                     />
                 </>
             )}
@@ -145,6 +184,8 @@ export default function AdsEntityLevelWorkspace({
                 <AdManagerTable
                     activeCampaignsOnly={activeCampaignsOnly}
                     actionReportTime={actionReportTime}
+                    campaignId={selectedCampaign?.campaign_id || null}
+                    adSquadId={selectedAdSquad?.ad_squad_id || null}
                 />
             )}
         </section>

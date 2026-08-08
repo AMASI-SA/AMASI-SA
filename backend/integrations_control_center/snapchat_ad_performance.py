@@ -1,13 +1,15 @@
 """Read-only Snapchat Ad performance for Ads Manager.
 
 Ad-level facts are captured from the Campaign Stats endpoint with
-``breakdown=ad`` and HOUR granularity. The same account-local date semantics
+``breakdown=ad`` and authoritative per-day TOTAL granularity. The same
+account-local date semantics
 used by Campaign and Ad Squad reports are preserved. These rows are diagnostic
 and Ads-Manager-only: they are never accounting eligible and never write to
 Snapchat.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Callable
@@ -73,13 +75,20 @@ from .snapchat_native_performance_sync import (
 )
 
 def ad_source_mode(action_report_time: Any) -> str:
-    return f"{ads_manager_source_mode(action_report_time)}:ad_day_v3"
+    return (
+        f"{ads_manager_source_mode(action_report_time)}:"
+        "ad_active_campaign_account_day_total_v4"
+    )
 
 
 AD_SOURCE_MODE = ad_source_mode(ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME)
-AD_REFRESH_SOURCE_MODE = "snapchat_ads_manager_dual_attribution_ad_v1"
+AD_REFRESH_SOURCE_MODE = (
+    "snapchat_ads_manager_dual_attribution_ad_active_bounded_total_v2"
+)
 AD_REFRESH_STATE_COLLECTION = "mezan_snapchat_ad_refresh_state_v1"
 AD_BREAKDOWN = "ad"
+AD_PROVIDER_GRANULARITY = "TOTAL"
+AD_FETCH_CONCURRENCY = 6
 AD_REFRESH_INTERVAL_SECONDS = 15 * 60
 MAX_REPORT_ROWS = 150_000
 MAX_ENTITY_ROWS = 75_000
@@ -234,6 +243,204 @@ async def _fetch_campaign_ad_hours(
     return rows, errors
 
 
+def extract_ad_total_rows(
+    payload: dict[str, Any],
+    *,
+    campaign_id: str,
+    request_start: datetime,
+    request_end: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int, bool]:
+    """Extract complete Ad rows from a Campaign TOTAL breakdown response."""
+    wrapped_stats = payload.get("total_stats") or []
+    if not isinstance(wrapped_stats, list):
+        raise SnapchatNativeSyncError(
+            "snapchat_ad_total_payload_invalid",
+            "Snapchat returned invalid Ad TOTAL performance data.",
+            status_code=502,
+            retryable=True,
+        )
+    rows: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    successful = 0
+    breakdown_seen = False
+    for wrapped in wrapped_stats:
+        if not isinstance(wrapped, dict):
+            continue
+        status = str(wrapped.get("sub_request_status") or "SUCCESS").upper()
+        if "FAIL" in status or "ERROR" in status:
+            errors.append({
+                "kind": "ad_total_stats",
+                "campaign_id": campaign_id,
+                "error": status[:100],
+            })
+            continue
+        successful += 1
+        stat = wrapped.get("total_stat", wrapped)
+        if not isinstance(stat, dict):
+            continue
+        provider_start = stat.get("start_time") or request_start.isoformat(
+            timespec="seconds"
+        )
+        provider_end = stat.get("end_time") or request_end.isoformat(
+            timespec="seconds"
+        )
+        breakdown = stat.get("breakdown_stats")
+        candidates: list[dict[str, Any]] = []
+        if isinstance(breakdown, dict):
+            for key in ("ad", "ads"):
+                value = breakdown.get(key)
+                if isinstance(value, list):
+                    breakdown_seen = True
+                    candidates.extend(
+                        item for item in value if isinstance(item, dict)
+                    )
+        for entity in candidates:
+            ad_id = _text(entity.get("id"))
+            metrics = entity.get("stats")
+            if not ad_id or not isinstance(metrics, dict):
+                continue
+            rows.append({
+                "campaign_id": campaign_id,
+                "ad_id": ad_id,
+                "start_time": provider_start,
+                "end_time": provider_end,
+                "metrics": metrics,
+            })
+    return rows, errors, successful, breakdown_seen
+
+
+async def _fetch_campaign_ad_totals(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    *,
+    campaign_id: str,
+    request_start: datetime,
+    request_end: datetime,
+    action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    url = f"{SNAPCHAT_API_BASE}/campaigns/{campaign_id}/stats"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+    params: dict[str, Any] | None = {
+        "start_time": request_start.isoformat(timespec="seconds"),
+        "end_time": request_end.isoformat(timespec="seconds"),
+        "granularity": AD_PROVIDER_GRANULARITY,
+        "breakdown": AD_BREAKDOWN,
+        "fields": ",".join(STAT_FIELDS),
+        "limit": 200,
+        # Conversion-time purchases can arrive in hours without delivery.
+        # omit_empty=false is required so those attributed Ad rows are retained.
+        "omit_empty": "false",
+        "conversion_source_types": CONVERSION_SOURCE_TYPES,
+        "swipe_up_attribution_window": ADS_MANAGER_SWIPE_ATTRIBUTION_WINDOW,
+        "view_attribution_window": ADS_MANAGER_VIEW_ATTRIBUTION_WINDOW,
+        "action_report_time": normalize_ads_manager_action_report_time(action_report_time),
+    }
+    rows: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    successful = 0
+    breakdown_seen = False
+    for _ in range(MAX_PAGES):
+        payload = await context.get_json(
+            client,
+            url,
+            headers=headers,
+            params=params,
+        )
+        page_rows, page_errors, page_success, page_breakdown = (
+            extract_ad_total_rows(
+                payload,
+                campaign_id=campaign_id,
+                request_start=request_start,
+                request_end=request_end,
+            )
+        )
+        rows.extend(page_rows)
+        errors.extend(page_errors)
+        successful += page_success
+        breakdown_seen = breakdown_seen or page_breakdown
+        next_url = _safe_next_url((payload.get("paging") or {}).get("next_link"))
+        if not next_url:
+            break
+        url, params = next_url, None
+    if successful == 0 and errors:
+        raise SnapchatNativeSyncError(
+            "snapchat_ad_total_stats_failed",
+            f"Snapchat Ad TOTAL stats failed for campaign {campaign_id}.",
+            status_code=502,
+            retryable=True,
+            result={"error": errors[0]},
+        )
+    return rows, errors, breakdown_seen
+
+
+async def _fetch_ad_window(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    *,
+    campaigns: list[dict[str, Any]],
+    request_start: datetime,
+    request_end: datetime,
+) -> list[dict[str, Any]]:
+    """Fetch one account-local Ad day with bounded provider concurrency."""
+    semaphore = asyncio.Semaphore(AD_FETCH_CONCURRENCY)
+
+    async def fetch_one(
+        campaign_id: str,
+        action_report_time: str,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            try:
+                rows, report_errors, breakdown_seen = (
+                    await _fetch_campaign_ad_totals(
+                        context,
+                        client,
+                        access_token,
+                        campaign_id=campaign_id,
+                        request_start=request_start,
+                        request_end=request_end,
+                        action_report_time=action_report_time,
+                    )
+                )
+                return {
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "rows": rows,
+                    "errors": report_errors,
+                    "breakdown_seen": breakdown_seen,
+                }
+            except SnapchatNativeSyncError as exc:
+                if exc.code == "snapchat_needs_reauth":
+                    raise
+                return {
+                    "campaign_id": campaign_id,
+                    "action_report_time": action_report_time,
+                    "rows": [],
+                    "errors": [{
+                        "kind": "ad_total_stats",
+                        "campaign_id": campaign_id,
+                        "code": exc.code,
+                        "message": exc.message[:300],
+                        "retryable": bool(exc.retryable),
+                    }],
+                    "breakdown_seen": False,
+                }
+
+    tasks = [
+        fetch_one(campaign_id, action_report_time)
+        for campaign in campaigns
+        if (campaign_id := _text(campaign.get("external_id")))
+        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+    ]
+    if not tasks:
+        return []
+    return list(await asyncio.gather(*tasks))
+
+
 def _day_buckets(
     rows: list[dict[str, Any]],
     *,
@@ -334,7 +541,7 @@ async def _upsert_projection(
         "action_report_time": action_report_time,
         "source_mode": ad_source_mode(action_report_time),
         "provider_breakdown": AD_BREAKDOWN,
-        "provider_granularity": "HOUR",
+        "provider_granularity": AD_PROVIDER_GRANULARITY,
         "stored_granularity": stored_granularity,
         "accounting_eligible": False,
         "report_scope": (
@@ -420,14 +627,22 @@ async def refresh_snapchat_ad_performance(
             "provider_calls": 0,
             "source_only": True,
         }
-    request = _combined_request_window(
+
+    # Match the proven Ad Squad path: one authoritative TOTAL snapshot for
+    # each account-local day. HOUR rows undercount late conversion-time
+    # purchases at Ad breakdown level on the open day.
+    from .snapchat_platform_source_integrity import (
+        account_local_dates_for_refresh,
+        account_local_total_window,
+    )
+
+    report_dates = account_local_dates_for_refresh(
         start_date,
         end_date,
         timezone_name=timezone_name,
         now=current,
-        include_current_hour=True,
     )
-    if request is None:
+    if not report_dates:
         return {
             "source_mode": AD_SOURCE_MODE,
             "skipped": True,
@@ -436,132 +651,142 @@ async def refresh_snapchat_ad_performance(
             "provider_calls": 0,
             "source_only": True,
         }
+
     campaigns, campaign_limit_reached = await _campaign_entities(
         context.db,
         context.user_id,
         account_id,
     )
-    rows_by_mode: dict[str, list[dict[str, Any]]] = {
-        mode: [] for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
-    }
     errors: list[dict[str, Any]] = []
     calls_before = context.provider_calls
-    for campaign in campaigns:
-        campaign_id = _text(campaign.get("external_id"))
-        if not campaign_id:
+    account_local_saved = 0
+    request_windows: list[dict[str, str]] = []
+    breakdown_days = 0
+
+    for report_date in report_dates:
+        window = account_local_total_window(
+            report_date,
+            timezone_name=timezone_name,
+            now=current,
+        )
+        if window is None:
             continue
-        for action_report_time in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES:
-            try:
-                campaign_rows, campaign_errors = await _fetch_campaign_ad_hours(
+        request_start, request_end = window
+        request_windows.append({
+            "date": report_date.isoformat(),
+            "start_time": request_start.isoformat(timespec="seconds"),
+            "end_time": request_end.isoformat(timespec="seconds"),
+            "granularity": AD_PROVIDER_GRANULARITY,
+        })
+        rows_by_mode: dict[str, list[dict[str, Any]]] = {
+            mode: [] for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        }
+        complete_by_mode = {
+            mode: True for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        }
+
+        window_results = await _fetch_ad_window(
+            context,
+            client,
+            access_token,
+            campaigns=campaigns,
+            request_start=request_start,
+            request_end=request_end,
+        )
+        for result in window_results:
+            action_report_time = _text(result.get("action_report_time"))
+            if action_report_time not in rows_by_mode:
+                continue
+            campaign_rows = result.get("rows") or []
+            campaign_errors = result.get("errors") or []
+            rows_by_mode[action_report_time].extend(campaign_rows)
+            complete_by_mode[action_report_time] = (
+                complete_by_mode[action_report_time]
+                and bool(result.get("breakdown_seen"))
+                and not campaign_errors
+            )
+            errors.extend({
+                **error,
+                "date": report_date.isoformat(),
+                "action_report_time": action_report_time,
+            } for error in campaign_errors)
+
+        for action_report_time, mode_rows in rows_by_mode.items():
+            local = _day_buckets(
+                mode_rows,
+                timezone_name=timezone_name,
+                start_date=report_date,
+                end_date=report_date,
+            )
+            for (campaign_id, ad_id, date_string), bucket in sorted(
+                local.items()
+            ):
+                await _upsert_projection(
                     context,
-                    client,
-                    access_token,
+                    collection_name=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
+                    account=account,
+                    timezone_name=timezone_name,
+                    stored_granularity="ACCOUNT_LOCAL_TOTAL_DAY",
                     campaign_id=campaign_id,
-                    request_start=request["provider_start"],
-                    request_end=request["provider_end"],
+                    ad_id=ad_id,
+                    date_string=date_string,
+                    bucket=bucket,
                     action_report_time=action_report_time,
                 )
-                rows_by_mode[action_report_time].extend(campaign_rows)
-                errors.extend({
-                    **error,
-                    "action_report_time": action_report_time,
-                } for error in campaign_errors)
-            except SnapchatNativeSyncError as exc:
-                if exc.code == "snapchat_needs_reauth":
-                    raise
-                errors.append({
-                    "kind": "ad_stats",
-                    "campaign_id": campaign_id,
-                    "action_report_time": action_report_time,
-                    "code": exc.code,
-                    "message": exc.message[:300],
-                    "retryable": bool(exc.retryable),
-                })
-    business = _day_buckets(
-        rows_by_mode[ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME],
-        timezone_name=BUSINESS_TIMEZONE,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    local_by_mode = {
-        mode: _day_buckets(
-            rows_by_mode[mode],
-            timezone_name=timezone_name,
-            start_date=request["account_local_from"],
-            end_date=request["account_local_to"],
-        )
-        for mode in ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
-    }
-    saved = 0
-    for (campaign_id, ad_id, date_string), bucket in sorted(business.items()):
-        await _upsert_projection(
-            context,
-            collection_name=SNAPCHAT_PERFORMANCE_COLLECTION,
-            account=account,
-            timezone_name=BUSINESS_TIMEZONE,
-            stored_granularity="RIYADH_DAY",
-            campaign_id=campaign_id,
-            ad_id=ad_id,
-            date_string=date_string,
-            bucket=bucket,
-            action_report_time=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
-        )
-        saved += 1
-    account_local_saved = 0
-    for action_report_time, local in local_by_mode.items():
-        for (campaign_id, ad_id, date_string), bucket in sorted(local.items()):
-            await _upsert_projection(
-                context,
-                collection_name=SNAPCHAT_ACCOUNT_LOCAL_PERFORMANCE_COLLECTION,
-                account=account,
-                timezone_name=timezone_name,
-                stored_granularity="ACCOUNT_LOCAL_DAY",
-                campaign_id=campaign_id,
-                ad_id=ad_id,
-                date_string=date_string,
-                bucket=bucket,
-                action_report_time=action_report_time,
-            )
-            saved += 1
-            account_local_saved += 1
+                account_local_saved += 1
+            if complete_by_mode[action_report_time]:
+                breakdown_days += 1
+
     now_iso = context.now_iso()
-    await _collection(context.db, AD_REFRESH_STATE_COLLECTION).update_one(
+    state_set: dict[str, Any] = {
+        "user_id": context.user_id,
+        "ad_account_id": account_id,
+        "rows_saved": account_local_saved,
+        "campaigns_requested": len(campaigns),
+        "campaign_limit_reached": campaign_limit_reached,
+        "errors_count": len(errors),
+        "source_mode": AD_REFRESH_SOURCE_MODE,
+        "provider_granularity": AD_PROVIDER_GRANULARITY,
+        "updated_at": now_iso,
+        "last_attempt_at": now_iso,
+    }
+    if not errors and not campaign_limit_reached:
+        state_set["last_success_at"] = now_iso
+    await _collection(
+        context.db,
+        AD_REFRESH_STATE_COLLECTION,
+    ).update_one(
         {"user_id": context.user_id, "ad_account_id": account_id},
         {
-            "$set": {
-                "user_id": context.user_id,
-                "ad_account_id": account_id,
-                "last_success_at": now_iso,
-                "rows_saved": saved,
-                "campaigns_requested": len(campaigns),
-                "campaign_limit_reached": campaign_limit_reached,
-                "errors_count": len(errors),
-                "source_mode": AD_REFRESH_SOURCE_MODE,
-                "updated_at": now_iso,
-            },
+            "$set": state_set,
             "$setOnInsert": {"created_at": now_iso},
         },
         upsert=True,
     )
     return {
         "source_mode": AD_REFRESH_SOURCE_MODE,
-        "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
+        "supported_action_report_times": list(
+            ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES
+        ),
         "skipped": False,
-        "rows_saved": saved,
-        "riyadh_rows_saved": len(business),
+        "rows_saved": account_local_saved,
+        "riyadh_rows_saved": 0,
         "account_local_rows_saved": account_local_saved,
         "campaigns_requested": len(campaigns),
         "campaign_limit_reached": campaign_limit_reached,
         "errors_count": len(errors),
         "errors": errors[:50],
         "provider_calls": context.provider_calls - calls_before,
+        "provider_granularity": AD_PROVIDER_GRANULARITY,
+        "provider_breakdown": AD_BREAKDOWN,
+        "request_windows": request_windows,
+        "authoritative_breakdown_days": breakdown_days,
         "source_only": True,
         "provider_write_reached": False,
         "ad_write_reached": False,
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
     }
-
 
 def install_snapchat_ad_performance_refresh() -> None:
     current = hourly.refresh_snapchat_account_hours
@@ -674,12 +899,39 @@ def _creative_summary(entity: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _delivery_codes(value: Any) -> set[str]:
+    if isinstance(value, (list, tuple, set)):
+        return {
+            _text(item).upper()
+            for item in value
+            if _text(item)
+        }
+    raw = _text(value).upper()
+    if not raw:
+        return set()
+    for char in "[]'\"":
+        raw = raw.replace(char, " ")
+    return {
+        item.strip()
+        for item in raw.replace(",", " ").split()
+        if item.strip()
+    }
+
+
 def _delivery_for_ad(
     ad: dict[str, Any],
     parent: dict[str, Any] | None,
 ) -> dict[str, Any]:
     configured = _text(ad.get("status") or "UNKNOWN").upper()
     review = _text(ad.get("review_status") or "").upper()
+    if configured in {"UNKNOWN", ""}:
+        return {
+            "configured_status": "UNKNOWN",
+            "delivery_state": "UNKNOWN",
+            "delivery_status": "حالة الإعلان غير متوفرة من Snapchat",
+            "delivery_reason_code": "AD_IDENTITY_NOT_SYNCED",
+            "deliverable": False,
+        }
     if configured not in {"ACTIVE", "ENABLED"}:
         return {
             "configured_status": configured,
@@ -704,8 +956,39 @@ def _delivery_for_ad(
             "delivery_reason_code": "AD_REVIEW_PENDING",
             "deliverable": False,
         }
+
+    provider_state = _text(ad.get("delivery_state")).upper()
+    provider_codes = _delivery_codes(ad.get("delivery_status"))
+    blocked_codes = provider_codes & {
+        "NOT_DELIVERING",
+        "INVALID",
+        "PAUSED",
+        "INACTIVE",
+        "REJECTED",
+        "DISAPPROVED",
+        "BUDGET_EXHAUSTED",
+        "OUT_OF_BUDGET",
+    }
+    if provider_state and provider_state not in {"DELIVERING", "ACTIVE"}:
+        return {
+            "configured_status": configured,
+            "delivery_state": provider_state,
+            "delivery_status": "لا تسليم — أبلغ Snapchat بمانع على الإعلان",
+            "delivery_reason_code": next(iter(blocked_codes), provider_state),
+            "deliverable": False,
+        }
+    if blocked_codes:
+        reason = sorted(blocked_codes)[0]
+        return {
+            "configured_status": configured,
+            "delivery_state": "NOT_DELIVERING",
+            "delivery_status": "لا تسليم — أبلغ Snapchat بمانع على الإعلان",
+            "delivery_reason_code": reason,
+            "deliverable": False,
+        }
+
     parent_row = parent or {}
-    parent_state = _text(parent_row.get("delivery_state"))
+    parent_state = _text(parent_row.get("delivery_state")).upper()
     parent_label = _text(
         parent_row.get("delivery_status")
         or parent_row.get("delivery_label")
@@ -721,14 +1004,22 @@ def _delivery_for_ad(
             "deliverable": False,
             "delivery_inherited_from_ad_squad": True,
         }
+    learning = "LEARNING_PHASE" in provider_codes
     return {
         "configured_status": configured,
         "delivery_state": "DELIVERING",
-        "delivery_status": "يتم التسليم",
-        "delivery_reason_code": "DELIVERING",
+        "delivery_status": (
+            "يتم التسليم — مرحلة التعلم"
+            if learning
+            else "يتم التسليم"
+        ),
+        "delivery_reason_code": (
+            "LEARNING_PHASE"
+            if learning
+            else "DELIVERING"
+        ),
         "deliverable": True,
     }
-
 
 async def build_account_timezone_ad_report(
     db: Any,
@@ -740,6 +1031,8 @@ async def build_account_timezone_ad_report(
     query: str | None,
     page: int,
     limit: int,
+    campaign_id: str | None = None,
+    ad_squad_id: str | None = None,
     active_campaigns_only: bool = False,
     sort_by: str = "orders",
     action_report_time: str = ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME,
@@ -835,6 +1128,8 @@ async def build_account_timezone_ad_report(
     currency, rate = _effective_currency(selected, setting)
     rows: list[dict[str, Any]] = []
     identity_matches = 0
+    requested_campaign_id = _text(campaign_id)
+    requested_ad_squad_id = _text(ad_squad_id)
     all_ad_ids = sorted(set(groups) | set(ads))
     for ad_id in all_ad_ids:
         facts = groups.get(ad_id, [])
@@ -849,6 +1144,10 @@ async def build_account_timezone_ad_report(
         if not campaign_id:
             campaign_id = _text(squad.get("campaign_id"))
         campaign = campaigns.get(campaign_id, {})
+        if requested_campaign_id and campaign_id != requested_campaign_id:
+            continue
+        if requested_ad_squad_id and ad_squad_id != requested_ad_squad_id:
+            continue
         campaign_active = is_active_provider_status(campaign.get("status"))
         if active_campaigns_only and not campaign_active:
             continue
@@ -925,6 +1224,8 @@ async def build_account_timezone_ad_report(
         "supported_action_report_times": list(ADS_MANAGER_SUPPORTED_ACTION_REPORT_TIMES),
         "supported_result_sources": ["platform"],
         "active_campaigns_only": bool(active_campaigns_only),
+        "campaign_id": requested_campaign_id or None,
+        "ad_squad_id": requested_ad_squad_id or None,
         "sort_by": sort_mode,
         "totals": totals,
         "ads": page_rows,
@@ -981,8 +1282,10 @@ def attach_snapchat_ad_routes(
         from_date: str | None = Query(default=None),
         to_date: str | None = Query(default=None),
         query: str | None = Query(default=None, max_length=120),
+        campaign_id: str | None = Query(default=None, max_length=120),
+        ad_squad_id: str | None = Query(default=None, max_length=120),
         page: int = Query(default=1, ge=1),
-        limit: int = Query(default=25, ge=10, le=100),
+        limit: int = Query(default=9, ge=1, le=100),
         active_campaigns_only: bool = Query(default=True),
         sort_by: str = Query(default="orders", pattern="^(orders|spend|newest|active)$"),
         action_report_time: str = Query(default=ADS_MANAGER_DEFAULT_ACTION_REPORT_TIME, pattern="^(conversion|impression)$"),
@@ -999,6 +1302,8 @@ def attach_snapchat_ad_routes(
                 query=query,
                 page=page,
                 limit=limit,
+                campaign_id=campaign_id,
+                ad_squad_id=ad_squad_id,
                 active_campaigns_only=active_campaigns_only,
                 sort_by=sort_by,
                 action_report_time=action_report_time,
@@ -1026,6 +1331,7 @@ __all__ = [
     "attach_snapchat_ad_routes",
     "build_account_timezone_ad_report",
     "extract_ad_hour_rows",
+    "extract_ad_total_rows",
     "install_snapchat_ad_performance_refresh",
     "refresh_snapchat_ad_performance",
 ]

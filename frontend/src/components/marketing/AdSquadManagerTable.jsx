@@ -243,6 +243,7 @@ export default function AdSquadManagerTable({
     loading = false,
     error = "",
     sortMode = "orders",
+    onOpenAds,
 }) {
     const [selected, setSelected] = useState(() => new Set());
     const [showSelectedOnly, setShowSelectedOnly] = useState(false);
@@ -379,7 +380,18 @@ export default function AdSquadManagerTable({
                             return (
                                 <tr key={key} className={`${checked ? "bg-emerald-50/60" : "bg-white"} group hover:bg-slate-50`}>
                                     <td className={`${background} sticky right-0 z-20 border-b border-l border-slate-100 px-3 py-4 text-center`}><input type="checkbox" checked={checked} onChange={() => toggle(row)} aria-label={`تحديد ${row.ad_squad_name}`} className="h-4 w-4 accent-emerald-600" /></td>
-                                    <td className={`${background} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`} data-column-id="name"><div className="max-w-[270px] truncate font-extrabold text-slate-950" title={row.ad_squad_name}>{row.ad_squad_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div>{row.start_time && <div className="mt-1 text-[10px] font-bold text-slate-400">بدء: {new Date(row.start_time).toLocaleDateString("ar-SA")}</div>}</td>
+                                    <td className={`${background} sticky right-12 z-10 border-b border-l border-slate-100 px-4 py-4`} data-column-id="name">
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenAds?.(row)}
+                                            className="block w-full text-right"
+                                            aria-label={`عرض إعلانات ${row.ad_squad_name}`}
+                                        >
+                                            <div className="max-w-[270px] truncate font-extrabold text-slate-950 underline-offset-4 hover:text-emerald-700 hover:underline" title={row.ad_squad_name}>{row.ad_squad_name}</div>
+                                            <div className="mt-1 font-mono text-[10px] text-slate-400">{row.ad_squad_id}</div>
+                                            {row.start_time && <div className="mt-1 text-[10px] font-bold text-slate-400">بدء: {new Date(row.start_time).toLocaleDateString("ar-SA")}</div>}
+                                        </button>
+                                    </td>
                                     <td className={`${background} sticky z-10 border-b border-l border-slate-100 px-4 py-4`} style={{ right: stickyStatusRight }} data-column-id="status"><StatusCell row={row} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="campaign"><div className="max-w-[210px] truncate font-bold text-slate-700" title={row.campaign_name}>{row.campaign_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.campaign_id || "—"}</div></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="delivery"><DeliveryCell row={row} /></td>
