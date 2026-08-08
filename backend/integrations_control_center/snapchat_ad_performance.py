@@ -16,7 +16,6 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from . import snapchat_account_hourly_refresh as hourly
-from . import snapchat_adsquad_performance as adsquad_report
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_freshness_impl_v6 import (
     ADS_MANAGER_ACTION_REPORT_TIME,
@@ -84,6 +83,33 @@ AD_BREAKDOWN = "ad"
 AD_REFRESH_INTERVAL_SECONDS = 15 * 60
 MAX_REPORT_ROWS = 150_000
 MAX_ENTITY_ROWS = 75_000
+
+# The production catalog contains thousands of Ads and Creatives. Loading every
+# provider snapshot here duplicates the Ad Squad report working set and can
+# exhaust the web worker before FastAPI writes a response. Keep this projection
+# explicit so the read-only report scales with the catalog while retaining every
+# field rendered by the UI.
+AD_REPORT_ENTITY_PROJECTION = {
+    "_id": 0,
+    "entity_type": 1,
+    "external_id": 1,
+    "display_name": 1,
+    "status": 1,
+    "campaign_id": 1,
+    "ad_squad_id": 1,
+    "creative_id": 1,
+    "review_status": 1,
+    "created_at_provider": 1,
+    "updated_at_provider": 1,
+    "delivery_state": 1,
+    "delivery_status": 1,
+    "delivery_reason_code": 1,
+    "provider_snapshot.type": 1,
+    "provider_snapshot.creative_type": 1,
+    "provider_snapshot.top_snap_media_id": 1,
+    "provider_snapshot.media_id": 1,
+    "provider_snapshot.web_view_properties.url": 1,
+}
 
 
 def extract_ad_hour_rows(
@@ -779,31 +805,16 @@ async def build_account_timezone_ad_report(
             "ad_account_id": account["account_id"],
             "entity_type": {"$in": ["campaign", "ad_squad", "ad", "creative"]},
         },
-        {"_id": 0},
+        AD_REPORT_ENTITY_PROJECTION,
     )
     entity_rows = await _to_list(entity_cursor, MAX_ENTITY_ROWS)
     entity_limit_reached = len(entity_rows) >= MAX_ENTITY_ROWS
     campaigns, squads, ads, creatives = _entity_maps(entity_rows)
 
-    parent_report = await adsquad_report.build_account_timezone_adsquad_report(
-        db,
-        user_id,
-        account_id=account["account_id"],
-        from_date=dates[0].isoformat(),
-        to_date=dates[-1].isoformat(),
-        query=None,
-        page=1,
-        limit=100,
-        active_campaigns_only=False,
-        sort_by="spend",
-        action_report_time=action_report_time,
-        now=lambda: current,
-    )
-    parent_rows = {
-        _text(row.get("ad_squad_id")): row
-        for row in parent_report.get("ad_squads") or []
-        if isinstance(row, dict) and _text(row.get("ad_squad_id"))
-    }
+    # The Ad report already loaded the Ad Squad entities. Reusing them avoids a
+    # second full performance/catalog scan and also covers parents beyond the
+    # first 100 rows of the paginated Ad Squad report.
+    parent_rows = squads
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in performance_rows:
@@ -838,6 +849,9 @@ async def build_account_timezone_ad_report(
         if not campaign_id:
             campaign_id = _text(squad.get("campaign_id"))
         campaign = campaigns.get(campaign_id, {})
+        campaign_active = is_active_provider_status(campaign.get("status"))
+        if active_campaigns_only and not campaign_active:
+            continue
         parent = parent_rows.get(ad_squad_id)
         creative_id = _text(entity.get("creative_id"))
         metrics = _aggregate_rows(facts, requested_days=requested_days)
@@ -852,7 +866,7 @@ async def build_account_timezone_ad_report(
             "campaign_id": campaign_id or None,
             "campaign_name": _text(campaign.get("display_name")) or campaign_id or "حملة غير معروفة",
             "campaign_status": campaign.get("status") or "unknown",
-            "campaign_active": is_active_provider_status(campaign.get("status")),
+            "campaign_active": campaign_active,
             "ad_squad_status": squad.get("status") or "unknown",
             "status": delivery["configured_status"],
             "review_status": entity.get("review_status"),
@@ -936,6 +950,8 @@ async def build_account_timezone_ad_report(
             ),
             "row_limit_reached": row_limit_reached,
             "entity_limit_reached": entity_limit_reached,
+            "entity_projection_bounded": True,
+            "parent_catalog_reused": True,
             "commercial_results_source": f"snapchat_ads_manager_{action_report_time}_reporting",
             "action_report_time": action_report_time,
             "salla_results_supported": False,
