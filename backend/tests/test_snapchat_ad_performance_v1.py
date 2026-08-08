@@ -108,6 +108,85 @@ def test_extract_ad_hour_rows_preserves_campaign_identity():
     assert rows[0]["metrics"]["spend"] == 5_000_000
 
 
+def test_extract_ad_total_rows_preserves_all_attributed_purchases():
+    payload = {
+        "total_stats": [
+            {
+                "total_stat": {
+                    "start_time": "2026-08-08T00:00:00+03:00",
+                    "end_time": "2026-08-08T12:00:00+03:00",
+                    "breakdown_stats": {
+                        "ad": [
+                            {
+                                "id": "ad-1",
+                                "stats": {
+                                    "spend": 12_000_000,
+                                    "conversion_purchases": 15,
+                                    "conversion_purchases_value": 50_000_000,
+                                },
+                            }
+                        ]
+                    },
+                }
+            }
+        ]
+    }
+
+    rows, errors, successful, breakdown_seen = module.extract_ad_total_rows(
+        payload,
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 8, 12, tzinfo=timezone.utc),
+    )
+
+    assert successful == 1
+    assert errors == []
+    assert breakdown_seen is True
+    assert rows[0]["ad_id"] == "ad-1"
+    assert rows[0]["metrics"]["conversion_purchases"] == 15
+
+
+@pytest.mark.asyncio
+async def test_total_request_keeps_conversion_only_ad_rows():
+    class Context:
+        provider_calls = 0
+
+        async def get_json(self, client, url, *, headers, params):
+            self.params = deepcopy(params)
+            return {
+                "total_stats": [
+                    {
+                        "total_stat": {
+                            "breakdown_stats": {
+                                "ad": [
+                                    {
+                                        "id": "ad-conversion-only",
+                                        "stats": {"conversion_purchases": 3},
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+
+    context = Context()
+    rows, errors, breakdown_seen = await module._fetch_campaign_ad_totals(
+        context,
+        None,
+        "token",
+        campaign_id="campaign-1",
+        request_start=datetime(2026, 8, 8, tzinfo=timezone.utc),
+        request_end=datetime(2026, 8, 8, 12, tzinfo=timezone.utc),
+    )
+
+    assert errors == []
+    assert breakdown_seen is True
+    assert rows[0]["metrics"]["conversion_purchases"] == 3
+    assert context.params["granularity"] == "TOTAL"
+    assert context.params["omit_empty"] == "false"
+
+
 def test_ad_delivery_separates_switch_review_and_parent_blockers():
     paused = module._delivery_for_ad({"status": "PAUSED"}, None)
     assert paused["delivery_reason_code"] == "AD_CONFIGURED_PAUSED"
@@ -129,6 +208,22 @@ def test_ad_delivery_separates_switch_review_and_parent_blockers():
     assert inherited["configured_status"] == "ACTIVE"
     assert inherited["delivery_inherited_from_ad_squad"] is True
     assert inherited["delivery_reason_code"] == "ACCOUNT_PAYMENT_BLOCKED"
+
+
+    unknown = module._delivery_for_ad({}, None)
+    assert unknown["delivery_state"] == "UNKNOWN"
+    assert unknown["delivery_reason_code"] == "AD_IDENTITY_NOT_SYNCED"
+
+    learning = module._delivery_for_ad(
+        {
+            "status": "ACTIVE",
+            "review_status": "APPROVED",
+            "delivery_status": ["VALID", "LEARNING_PHASE"],
+        },
+        {"delivery_state": "DELIVERING"},
+    )
+    assert learning["delivery_state"] == "DELIVERING"
+    assert learning["delivery_reason_code"] == "LEARNING_PHASE"
 
 
 @pytest.mark.asyncio
@@ -235,3 +330,19 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     assert report["source"]["salla_results_supported"] is False
     assert report["policy"]["mutations_allowed"] is False
     assert report["provider_write_reached"] is False
+    filtered = await module.build_account_timezone_ad_report(
+        db,
+        "owner-1",
+        account_id="account-1",
+        from_date="2026-08-04",
+        to_date="2026-08-04",
+        query=None,
+        page=1,
+        limit=9,
+        campaign_id="campaign-other",
+        active_campaigns_only=True,
+        now=lambda: datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
+    )
+    assert filtered["pagination"]["limit"] == 9
+    assert filtered["pagination"]["total"] == 0
+    assert filtered["campaign_id"] == "campaign-other"
