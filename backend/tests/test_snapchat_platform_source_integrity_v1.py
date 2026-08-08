@@ -35,14 +35,14 @@ def _row(entity_type, external_id, *, orders, spend, sales, date_string="2026-08
     }
 
 
-def test_account_local_total_window_uses_latest_completed_hour():
+def test_account_local_total_window_uses_account_day_boundaries():
     start, end = account_local_total_window(
         date(2026, 8, 6),
         timezone_name="America/Los_Angeles",
         now=datetime(2026, 8, 6, 15, 30, 45, tzinfo=timezone.utc),
     )
     assert start.isoformat() == "2026-08-06T00:00:00-07:00"
-    assert end.isoformat() == "2026-08-06T08:00:00-07:00"
+    assert end.isoformat() == "2026-08-07T00:00:00-07:00"
 
 
 def test_refresh_dates_cover_account_days_touched_by_riyadh_window():
@@ -200,12 +200,12 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
     )
 
 
-def test_platform_total_v10_partitions_hour_boundary_fix():
+def test_platform_total_v11_partitions_account_day_boundary_fix():
     source = Path(
         "integrations_control_center/snapchat_platform_source_integrity.py"
     ).read_text(encoding="utf-8")
 
-    assert "direct_account_headlines_campaign_completed_hour_v10" in source
+    assert "direct_account_headlines_campaign_local_day_v11" in source
 
 
 def test_all_ads_merges_direct_spend_with_campaign_commercial_metrics():
