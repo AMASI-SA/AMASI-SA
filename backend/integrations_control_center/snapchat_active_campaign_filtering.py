@@ -93,6 +93,10 @@ def aggregate_entity_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "impressions",
         "swipes",
         "video_views",
+        "view_content",
+        "add_to_cart",
+        "start_checkout",
+        "add_billing",
     )
     totals: dict[str, float | None] = {}
     for field in numeric_fields:
@@ -109,6 +113,10 @@ def aggregate_entity_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "impressions": int(round(impressions)) if impressions is not None else None,
         "swipes": int(round(swipes)) if swipes is not None else None,
         "video_views": int(round(totals["video_views"])) if totals.get("video_views") is not None else None,
+        "view_content": int(round(totals["view_content"])) if totals.get("view_content") is not None else None,
+        "add_to_cart": int(round(totals["add_to_cart"])) if totals.get("add_to_cart") is not None else None,
+        "start_checkout": int(round(totals["start_checkout"])) if totals.get("start_checkout") is not None else None,
+        "add_billing": int(round(totals["add_billing"])) if totals.get("add_billing") is not None else None,
         "roas": _ratio(sales_sar, spend_sar),
         "cpa_sar": _ratio(spend_sar, orders),
         "cpa_native": _ratio(spend_native, orders),

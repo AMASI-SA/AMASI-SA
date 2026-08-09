@@ -26,6 +26,13 @@ describe("Snapchat Ad performance service", () => {
             orders: "4",
             sales_sar: "500",
             roas: "3.984",
+            view_content: "40",
+            add_to_cart: "12",
+            start_checkout: "6",
+            add_billing: "4",
+            paid_reach: "1000",
+            paid_frequency: "1.5",
+            reach_frequency_scope: "exact_one_day_total",
         })).toMatchObject({
             ad_id: "ad-1",
             ad_name: "فيديو المنتج",
@@ -40,6 +47,13 @@ describe("Snapchat Ad performance service", () => {
             orders: 4,
             sales_sar: 500,
             roas: 3.984,
+            view_content: 40,
+            add_to_cart: 12,
+            start_checkout: 6,
+            add_billing: 4,
+            paid_reach: 1000,
+            paid_frequency: 1.5,
+            reach_frequency_scope: "exact_one_day_total",
             result_source: "platform",
         });
     });

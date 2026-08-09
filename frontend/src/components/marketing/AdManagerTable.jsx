@@ -41,8 +41,14 @@ export const AD_MANAGER_NATIVE_COLUMN_ORDER = Object.freeze([
     "spend",
     "sales",
     "impressions",
+    "paid_reach",
+    "paid_frequency",
     "clicks",
     "ctr",
+    "view_content",
+    "add_to_cart",
+    "start_checkout",
+    "add_billing",
 ]);
 
 const STATUS_LABELS = Object.freeze({
@@ -171,7 +177,8 @@ function exportCsv(rows) {
     const headers = [
         "اسم الإعلان", "معرف الإعلان", "الحالة", "المراجعة", "حالة التسليم",
         "المجموعة الإعلانية", "الحملة", "المشتريات", "CPA", "ROAS", "الصرف",
-        "المبيعات", "الظهور", "النقرات", "CTR", "الإبداع", "نوع الإبداع",
+        "المبيعات", "الظهور", "الوصول المدفوع", "التكرار المدفوع", "النقرات", "CTR",
+        "عرض المحتوى", "إضافة للسلة", "بدء الدفع", "بيانات الدفع", "الإبداع", "نوع الإبداع",
     ];
     const body = rows.map((ad) => [
         ad.ad_name,
@@ -187,8 +194,14 @@ function exportCsv(rows) {
         ad.spend_sar,
         ad.sales_sar,
         ad.impressions,
+        ad.paid_reach,
+        ad.paid_frequency,
         ad.swipes,
         ad.ctr_pct,
+        ad.view_content,
+        ad.add_to_cart,
+        ad.start_checkout,
+        ad.add_billing,
         ad.creative_name || ad.creative_id,
         ad.creative_type,
     ]);
@@ -435,8 +448,14 @@ export default function AdManagerTable({
                             <th className="min-w-[145px] border-b border-slate-200 px-5 py-4" data-column-id="spend"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
                             <th className="min-w-[145px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="sales">المبيعات</th>
                             <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="impressions">مرات الظهور</th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="paid_reach">الوصول المدفوع</th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="paid_frequency">التكرار المدفوع</th>
                             <th className="min-w-[110px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="clicks">النقرات</th>
                             <th className="min-w-[100px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="ctr">CTR</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="view_content">عرض المحتوى</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="add_to_cart">إضافة للسلة</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="start_checkout">بدء الدفع</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-5 py-4 font-black" data-column-id="add_billing">بيانات الدفع</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -464,12 +483,18 @@ export default function AdManagerTable({
                                 <td className="border-b border-slate-100 px-5 py-5" data-column-id="spend"><Metric primary={money(ad.spend_sar)} /></td>
                                 <td className="border-b border-slate-100 px-5 py-5" data-column-id="sales"><Metric primary={money(ad.sales_sar)} /></td>
                                 <td className="border-b border-slate-100 px-5 py-5" data-column-id="impressions"><Metric primary={number(ad.impressions)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="paid_reach"><Metric primary={number(ad.paid_reach)} secondary="Paid Reach" /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="paid_frequency"><Metric primary={ratio(ad.paid_frequency, "×")} secondary="Paid Frequency" /></td>
                                 <td className="border-b border-slate-100 px-5 py-5" data-column-id="clicks"><Metric primary={number(ad.swipes)} /></td>
                                 <td className="border-b border-slate-100 px-5 py-5" data-column-id="ctr"><Metric primary={ratio(ad.ctr_pct, "%")} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="view_content"><Metric primary={number(ad.view_content)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="add_to_cart"><Metric primary={number(ad.add_to_cart)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="start_checkout"><Metric primary={number(ad.start_checkout)} /></td>
+                                <td className="border-b border-slate-100 px-5 py-5" data-column-id="add_billing"><Metric primary={number(ad.add_billing)} /></td>
                             </tr>
                         ))}
                         {!rows.length && (
-                            <tr><td colSpan={14} className="px-6 py-16 text-center"><ChartBar size={40} weight="duotone" className="mx-auto text-slate-300" /><div className="mt-3 font-black text-slate-600">{loading ? "جاري تحميل الإعلانات…" : "لا توجد إعلانات موثقة ضمن الفترة أو البحث."}</div></td></tr>
+                            <tr><td colSpan={20} className="px-6 py-16 text-center"><ChartBar size={40} weight="duotone" className="mx-auto text-slate-300" /><div className="mt-3 font-black text-slate-600">{loading ? "جاري تحميل الإعلانات…" : "لا توجد إعلانات موثقة ضمن الفترة أو البحث."}</div></td></tr>
                         )}
                     </tbody>
                     {!!rows.length && (
@@ -484,8 +509,14 @@ export default function AdManagerTable({
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{money(totals.spend_sar)}</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{money(totals.sales_sar)}</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.impressions)}</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">—</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">—</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.swipes)}</td>
                                 <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{ratio(totals.ctr_pct, "%")}</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.view_content)}</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.add_to_cart)}</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.start_checkout)}</td>
+                                <td className="border-t-2 border-slate-300 px-5 py-4 font-mono">{number(totals.add_billing)}</td>
                             </tr>
                         </tfoot>
                     )}

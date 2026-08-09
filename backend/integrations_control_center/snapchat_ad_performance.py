@@ -122,6 +122,9 @@ AD_REPORT_ENTITY_PROJECTION = {
     "provider_snapshot.creative_type": 1,
     "provider_snapshot.top_snap_media_id": 1,
     "provider_snapshot.media_id": 1,
+    "provider_snapshot.ad_squad_id": 1,
+    "provider_snapshot.adsquad_id": 1,
+    "provider_snapshot.campaign_id": 1,
     "provider_snapshot.web_view_properties.url": 1,
 }
 
@@ -1181,8 +1184,22 @@ async def build_account_timezone_ad_report(
         entity = ads.get(ad_id, {})
         if entity:
             identity_matches += 1
-        ad_squad_id = _text(entity.get("ad_squad_id"))
-        campaign_id = _text(entity.get("campaign_id"))
+        snapshot = entity.get("provider_snapshot")
+        snapshot = snapshot if isinstance(snapshot, dict) else {}
+        ad_squad_id = (
+            _text(entity.get("ad_squad_id"))
+            or _text(snapshot.get("ad_squad_id"))
+            or _text(snapshot.get("adsquad_id"))
+        )
+        if not ad_squad_id and facts:
+            ad_squad_id = _text(
+                facts[0].get("ad_squad_id")
+                or facts[0].get("adsquad_id")
+            )
+        campaign_id = (
+            _text(entity.get("campaign_id"))
+            or _text(snapshot.get("campaign_id"))
+        )
         if not campaign_id and facts:
             campaign_id = _text(facts[0].get("campaign_id"))
         squad = squads.get(ad_squad_id, {})

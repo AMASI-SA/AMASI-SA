@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from integrations_control_center import snapchat_ad_performance
+from integrations_control_center import snapchat_account_timezone_manager
 from integrations_control_center import snapchat_adsquad_performance
 from integrations_control_center import snapchat_native_performance_sync as module
 from integrations_control_center import snapchat_platform_source_integrity
@@ -67,6 +68,49 @@ def test_metric_provenance_states_frequency_is_exact_provider_window():
     assert provenance["frequency_aggregation"] == "exact_provider_window"
     assert provenance["frequency_summed"] is False
     assert provenance["provider_granularity"] == "TOTAL"
+
+
+def test_report_exposes_funnel_and_exact_one_day_audience_metrics():
+    rows = [{
+        "date": "2026-08-09",
+        "metrics": {
+            "conversion_view_content": 40,
+            "conversion_add_cart": 12,
+            "conversion_start_checkout": 6,
+            "conversion_add_billing": 4,
+            "uniques": 100,
+            "frequency": 3.0,
+        },
+    }]
+
+    exact = snapchat_account_timezone_manager._aggregate_rows(
+        rows,
+        requested_days=1,
+    )
+    assert exact["view_content"] == 40
+    assert exact["add_to_cart"] == 12
+    assert exact["start_checkout"] == 6
+    assert exact["add_billing"] == 4
+    assert exact["paid_reach"] == 100
+    assert exact["paid_frequency"] == 3
+    assert exact["reach_frequency_scope"] == "exact_one_day_total"
+
+    overlapping_entities = snapchat_account_timezone_manager._aggregate_rows(
+        [rows[0], rows[0]],
+        requested_days=1,
+    )
+    assert overlapping_entities["paid_reach"] is None
+    assert overlapping_entities["paid_frequency"] is None
+    assert overlapping_entities["reach_frequency_scope"] == "exact_total_window_required"
+
+    multi_day = snapchat_account_timezone_manager._aggregate_rows(
+        rows,
+        requested_days=7,
+    )
+    assert multi_day["view_content"] == 40
+    assert multi_day["paid_reach"] is None
+    assert multi_day["paid_frequency"] is None
+    assert multi_day["reach_frequency_scope"] == "exact_total_window_required"
 
 
 @pytest.mark.asyncio

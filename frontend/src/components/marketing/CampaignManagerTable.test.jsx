@@ -91,10 +91,16 @@ test("campaign manager owns the canonical Mezan 2 column order", () => {
         "profit",
         "profit_margin",
         "impressions",
+        "paid_reach",
+        "paid_frequency",
         "cpm",
         "clicks",
         "cpc",
         "ctr",
+        "view_content",
+        "add_to_cart",
+        "start_checkout",
+        "add_billing",
         "budget",
         "account",
     ]);
@@ -125,6 +131,12 @@ test("period totals include campaign profitability", () => {
         roas: 2.7,
         cpa_sar: 33.333,
         impressions: 1000,
+        paid_reach: 800,
+        paid_frequency: 1.25,
+        view_content: 90,
+        add_to_cart: 25,
+        start_checkout: 12,
+        add_billing: 8,
         swipes: 50,
         ctr_pct: 5,
         cpc_sar: 2,
@@ -138,6 +150,9 @@ test("period totals include campaign profitability", () => {
     expect(campaignTotalsForColumn(totals, "name")).toBe("إجمالي الفترة");
     expect(campaignTotalsForColumn(totals, "orders")).toBe("3");
     expect(campaignTotalsForColumn(totals, "roas")).toBe("2.70×");
+    expect(campaignTotalsForColumn(totals, "paid_reach")).toBe("800");
+    expect(campaignTotalsForColumn(totals, "paid_frequency")).toBe("1.25×");
+    expect(campaignTotalsForColumn(totals, "add_to_cart")).toBe("25");
     expect(campaignTotalsForColumn(totals, "spend")).toContain("100.00");
     expect(campaignTotalsForColumn(totals, "sales")).toContain("270.00");
     expect(campaignTotalsForColumn(totals, "product_cost")).toContain("100.00");

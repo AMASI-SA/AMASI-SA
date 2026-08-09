@@ -304,11 +304,11 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
                 "entity_type": "ad",
                 "external_id": "ad-1",
                 "campaign_id": "campaign-1",
-                "ad_squad_id": "squad-1",
                 "creative_id": "creative-1",
                 "display_name": "فيديو المنتج الأول",
                 "status": "ACTIVE",
                 "review_status": "APPROVED",
+                "provider_snapshot": {"ad_squad_id": "squad-1"},
             },
             {
                 "user_id": "owner-1",
@@ -355,6 +355,22 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     assert report["source"]["salla_results_supported"] is False
     assert report["policy"]["mutations_allowed"] is False
     assert report["provider_write_reached"] is False
+    filtered_squad = await module.build_account_timezone_ad_report(
+        db,
+        "owner-1",
+        account_id="account-1",
+        from_date="2026-08-04",
+        to_date="2026-08-04",
+        query=None,
+        page=1,
+        limit=9,
+        campaign_id="campaign-1",
+        ad_squad_id="squad-1",
+        active_campaigns_only=True,
+        now=lambda: datetime(2026, 8, 4, 12, tzinfo=timezone.utc),
+    )
+    assert filtered_squad["pagination"]["total"] == 1
+    assert filtered_squad["ads"][0]["ad_squad_id"] == "squad-1"
     filtered = await module.build_account_timezone_ad_report(
         db,
         "owner-1",

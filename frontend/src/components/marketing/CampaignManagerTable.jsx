@@ -27,6 +27,14 @@ const PROFITABILITY_COLUMNS = Object.freeze([
     "profit",
     "profit_margin",
 ]);
+const SNAPCHAT_METRIC_COLUMNS = Object.freeze([
+    "paid_reach",
+    "paid_frequency",
+    "view_content",
+    "add_to_cart",
+    "start_checkout",
+    "add_billing",
+]);
 
 const REQUIRED_COLUMNS = Object.freeze(["name", "status", "spend", "sales"]);
 const REQUIRED_COLUMN_SET = new Set(REQUIRED_COLUMNS);
@@ -47,10 +55,16 @@ export const CAMPAIGN_MANAGER_DEFAULT_COLUMNS = Object.freeze([
     "profit",
     "profit_margin",
     "impressions",
+    "paid_reach",
+    "paid_frequency",
     "cpm",
     "clicks",
     "cpc",
     "ctr",
+    "view_content",
+    "add_to_cart",
+    "start_checkout",
+    "add_billing",
     "budget",
     "account",
 ]);
@@ -70,10 +84,16 @@ const COLUMN_DEFINITIONS = Object.freeze([
     { id: "profit", label: "ربح الحملة", sublabel: "بعد المنتج والإعلان", width: 175, sortable: true },
     { id: "profit_margin", label: "هامش الربح", sublabel: "قبل رسوم الدفع والشحن", width: 150, sortable: true },
     { id: "impressions", label: "مرات الظهور المدفوعة", width: 165, sortable: true },
+    { id: "paid_reach", label: "الوصول المدفوع", sublabel: "Paid Reach", width: 145, sortable: true },
+    { id: "paid_frequency", label: "التكرار المدفوع", sublabel: "Paid Frequency", width: 145, sortable: true },
     { id: "cpm", label: "eCPM المدفوع", width: 135, sortable: true },
     { id: "clicks", label: "النقرات", width: 115, sortable: true },
     { id: "cpc", label: "eCPC", width: 115, sortable: true },
     { id: "ctr", label: "CTR", width: 105, sortable: true },
+    { id: "view_content", label: "عرض المحتوى", sublabel: "View Content", width: 140, sortable: true },
+    { id: "add_to_cart", label: "إضافة للسلة", sublabel: "Add to Cart", width: 140, sortable: true },
+    { id: "start_checkout", label: "بدء الدفع", sublabel: "Start Checkout", width: 140, sortable: true },
+    { id: "add_billing", label: "بيانات الدفع", sublabel: "Add Billing", width: 140, sortable: true },
     { id: "budget", label: "الميزانية اليومية", width: 150, sortable: true },
     { id: "account", label: "الحساب الإعلاني", width: 230, sortable: true },
 ]);
@@ -146,11 +166,14 @@ function deliveryLabel(campaign) {
 }
 
 function defaultColumnsForPlatform(platform, resultSource = "salla") {
-    return platform === "snapchat" && resultSource === "salla"
+    const columns = platform === "snapchat" && resultSource === "salla"
         ? [...CAMPAIGN_MANAGER_DEFAULT_COLUMNS]
         : CAMPAIGN_MANAGER_DEFAULT_COLUMNS.filter(
             (id) => !PROFITABILITY_COLUMNS.includes(id),
         );
+    return platform === "snapchat"
+        ? columns
+        : columns.filter((id) => !SNAPCHAT_METRIC_COLUMNS.includes(id));
 }
 
 function columnLabel(column, platform, resultSource) {
@@ -193,10 +216,16 @@ function valueForColumn(campaign, columnId) {
         case "profit": return finiteNumber(campaign.profitability?.contribution_profit_sar);
         case "profit_margin": return finiteNumber(campaign.profitability?.profit_margin_pct);
         case "impressions": return finiteNumber(campaign.impressions);
+        case "paid_reach": return finiteNumber(campaign.paid_reach);
+        case "paid_frequency": return finiteNumber(campaign.paid_frequency);
         case "cpm": return finiteNumber(campaign.cpm_sar);
         case "clicks": return finiteNumber(campaign.swipes);
         case "cpc": return finiteNumber(campaign.cpc_sar);
         case "ctr": return finiteNumber(campaign.ctr_pct);
+        case "view_content": return finiteNumber(campaign.view_content);
+        case "add_to_cart": return finiteNumber(campaign.add_to_cart);
+        case "start_checkout": return finiteNumber(campaign.start_checkout);
+        case "add_billing": return finiteNumber(campaign.add_billing);
         case "budget": return finiteNumber(campaign.budget?.daily_native);
         case "account": return String(campaign.account_name || campaign.account_id || "");
         default: return null;
@@ -237,10 +266,16 @@ export function campaignTotalsForColumn(totals, columnId) {
         case "profit": return formatMoney(profitability.contribution_profit_sar);
         case "profit_margin": return formatRatio(profitability.profit_margin_pct, "%");
         case "impressions": return formatNumber(value.impressions);
+        case "paid_reach": return formatNumber(value.paid_reach);
+        case "paid_frequency": return formatRatio(value.paid_frequency, "×");
         case "cpm": return formatMoney(value.cpm_sar);
         case "clicks": return formatNumber(value.swipes);
         case "cpc": return formatMoney(value.cpc_sar);
         case "ctr": return formatRatio(value.ctr_pct, "%");
+        case "view_content": return formatNumber(value.view_content);
+        case "add_to_cart": return formatNumber(value.add_to_cart);
+        case "start_checkout": return formatNumber(value.start_checkout);
+        case "add_billing": return formatNumber(value.add_billing);
         default: return "";
     }
 }
@@ -369,10 +404,16 @@ function cellValue(campaign, columnId, onOpenProfit, onOpenAdSquads) {
             );
         }
         case "impressions": return <MetricValue primary={formatNumber(campaign.impressions)} />;
+        case "paid_reach": return <MetricValue primary={formatNumber(campaign.paid_reach)} secondary="نافذة TOTAL" />;
+        case "paid_frequency": return <MetricValue primary={formatRatio(campaign.paid_frequency, "×")} secondary="نافذة TOTAL" />;
         case "cpm": return <MetricValue primary={formatMoney(campaign.cpm_sar)} />;
         case "clicks": return <MetricValue primary={formatNumber(campaign.swipes)} />;
         case "cpc": return <MetricValue primary={formatMoney(campaign.cpc_sar)} />;
         case "ctr": return <MetricValue primary={formatRatio(campaign.ctr_pct, "%")} />;
+        case "view_content": return <MetricValue primary={formatNumber(campaign.view_content)} />;
+        case "add_to_cart": return <MetricValue primary={formatNumber(campaign.add_to_cart)} />;
+        case "start_checkout": return <MetricValue primary={formatNumber(campaign.start_checkout)} />;
+        case "add_billing": return <MetricValue primary={formatNumber(campaign.add_billing)} />;
         case "budget": {
             const amount = finiteNumber(campaign.budget?.daily_native);
             return <MetricValue primary={amount === null ? "—" : `${formatNumber(amount)} ${campaign.budget?.currency || ""}`} />;
@@ -511,7 +552,9 @@ function campaignCsv(rows) {
         "اسم الحملة", "معرف الحملة", "الحالة", "حالة التسليم", "الحساب",
         "الصرف بالريال", "المشتريات", "المبيعات بالريال", "ROAS", "CPA",
         "تكلفة المنتجات", "ربح الحملة بعد الإعلان", "هامش الربح",
-        "الظهور", "النقرات", "CTR", "eCPC", "eCPM", "الميزانية اليومية", "عملة الميزانية",
+        "الظهور", "الوصول المدفوع", "التكرار المدفوع", "النقرات", "CTR", "eCPC", "eCPM",
+        "عرض المحتوى", "إضافة للسلة", "بدء الدفع", "بيانات الدفع",
+        "الميزانية اليومية", "عملة الميزانية",
     ];
     const body = rows.map((campaign) => [
         campaign.campaign_name,
@@ -528,10 +571,16 @@ function campaignCsv(rows) {
         campaign.profitability?.contribution_profit_sar,
         campaign.profitability?.profit_margin_pct,
         campaign.impressions,
+        campaign.paid_reach,
+        campaign.paid_frequency,
         campaign.swipes,
         campaign.ctr_pct,
         campaign.cpc_sar,
         campaign.cpm_sar,
+        campaign.view_content,
+        campaign.add_to_cart,
+        campaign.start_checkout,
+        campaign.add_billing,
         campaign.budget?.daily_native,
         campaign.budget?.currency,
     ]);
@@ -593,12 +642,13 @@ export default function CampaignManagerTable({
     readOnly = true,
     onOpenAdSquads,
 }) {
-    const storageKey = `mezan-campaign-manager-columns-v2:${platform || "all"}:${resultSource}`;
+    const storageKey = `mezan-campaign-manager-columns-v3:${platform || "all"}:${resultSource}`;
     const availableDefinitions = COLUMN_DEFINITIONS.filter(
         (column) => (
-            platform === "snapchat"
-            && resultSource === "salla"
-        ) || !PROFITABILITY_COLUMNS.includes(column.id),
+            ((platform === "snapchat" && resultSource === "salla")
+                || !PROFITABILITY_COLUMNS.includes(column.id))
+            && (platform === "snapchat" || !SNAPCHAT_METRIC_COLUMNS.includes(column.id))
+        ),
     );
     const defaultColumns = defaultColumnsForPlatform(platform, resultSource);
     const [selected, setSelected] = useState(() => new Set());
