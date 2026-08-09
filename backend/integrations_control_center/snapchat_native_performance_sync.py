@@ -33,7 +33,52 @@ from .snapchat_native_data_common import (
 STAT_FIELDS = (
     "impressions", "swipes", "spend", "video_views", "view_completion",
     "conversion_purchases", "conversion_purchases_value",
+    "conversion_view_content", "conversion_add_cart",
+    "conversion_start_checkout", "conversion_add_billing",
 )
+FUNNEL_STAT_FIELDS = (
+    "conversion_view_content",
+    "conversion_add_cart",
+    "conversion_start_checkout",
+    "conversion_add_billing",
+    "conversion_purchases",
+)
+# Audience metrics are intentionally excluded from HOUR/day summation.  A
+# frequency of 1.5 today plus 1.7 yesterday is not a 3.2 multi-day frequency;
+# each value must remain attached to the exact provider TOTAL window that
+# produced it.
+NON_ADDITIVE_TOTAL_FIELDS = ("uniques", "frequency")
+TOTAL_STAT_FIELDS = (*STAT_FIELDS, *NON_ADDITIVE_TOTAL_FIELDS)
+
+
+def _funnel_metrics(metrics: dict[str, Any]) -> dict[str, int | float | None]:
+    return {
+        key: _as_number(metrics.get(key))
+        for key in FUNNEL_STAT_FIELDS
+    }
+
+
+def _metric_provenance(
+    metrics: dict[str, Any],
+    *,
+    provider_granularity: str,
+    provider_breakdown: str | None,
+) -> dict[str, Any]:
+    return {
+        "provider": SNAPCHAT_PROVIDER_ID,
+        "api": "marketing_api_stats",
+        "fields_observed": sorted(
+            key for key, value in metrics.items() if value is not None
+        ),
+        "provider_granularity": provider_granularity,
+        "provider_breakdown": provider_breakdown,
+        "frequency_aggregation": (
+            "exact_provider_window"
+            if metrics.get("frequency") is not None
+            else "not_available_for_window"
+        ),
+        "frequency_summed": False,
+    }
 CONVERSION_SOURCE_TYPES = "total"
 ACTION_REPORT_TIME = "conversion"
 SWIPE_ATTRIBUTION_WINDOW = "28_DAY"
@@ -62,10 +107,13 @@ def _computed(metrics: dict[str, Any]) -> dict[str, float | None]:
     }
 
 
-def _new_bucket() -> dict[str, Any]:
+def _new_bucket(
+    fields: tuple[str, ...] = STAT_FIELDS,
+) -> dict[str, Any]:
     return {
-        "sums": {key: 0.0 for key in STAT_FIELDS},
-        "seen": {key: 0 for key in STAT_FIELDS},
+        "fields": tuple(fields),
+        "sums": {key: 0.0 for key in fields},
+        "seen": {key: 0 for key in fields},
         "rows": 0,
         "provider_start": None,
         "provider_end": None,
@@ -110,7 +158,7 @@ def _add_to_bucket(
     bucket["provider_end"] = _later(
         bucket.get("provider_end"), provider_end
     )
-    for key in STAT_FIELDS:
+    for key in tuple(bucket.get("fields") or STAT_FIELDS):
         value = metrics.get(key)
         if value is not None:
             bucket["sums"][key] += float(value)
@@ -120,8 +168,15 @@ def _add_to_bucket(
 def _finalize_bucket(bucket: dict[str, Any]) -> dict[str, int | float | None]:
     row_count = int(bucket.get("rows") or 0)
     metrics: dict[str, int | float | None] = {}
-    for key in STAT_FIELDS:
-        if row_count and int(bucket["seen"].get(key) or 0) == row_count:
+    for key in tuple(bucket.get("fields") or STAT_FIELDS):
+        seen = int(bucket["seen"].get(key) or 0)
+        if key in NON_ADDITIVE_TOTAL_FIELDS:
+            # A provider TOTAL audience value is valid only as one exact
+            # window.  Multiple values must never be added together.
+            complete = seen == 1
+        else:
+            complete = bool(row_count and seen == row_count)
+        if complete:
             value = float(bucket["sums"].get(key) or 0)
             metrics[key] = int(value) if value.is_integer() else value
         else:
@@ -200,6 +255,12 @@ async def _upsert_performance(
         "account_timezone": str(account.get("timezone") or "UTC"),
         "attribution_model": ATTRIBUTION_MODEL,
         "metrics": metrics,
+        "funnel_metrics": _funnel_metrics(metrics),
+        "metric_provenance": _metric_provenance(
+            metrics,
+            provider_granularity=provider_granularity,
+            provider_breakdown=provider_breakdown,
+        ),
         # Keep the provider's raw purchase count at the document top level so
         # Dashboard reads the exact account fact instead of reconstructing it
         # from unrelated order sources.
@@ -367,6 +428,7 @@ async def sync_snapchat_performance(
             metrics=metrics,
             provider_start=bucket.get("provider_start"),
             provider_end=bucket.get("provider_end"),
+            provider_breakdown="campaign",
         )
         saved += 1
         aggregate = account_daily.setdefault(date_string, _new_bucket())
@@ -387,6 +449,7 @@ async def sync_snapchat_performance(
             metrics=_finalize_bucket(aggregate),
             provider_start=aggregate.get("provider_start"),
             provider_end=aggregate.get("provider_end"),
+            provider_breakdown="campaign",
         )
         saved += 1
     return saved, errors
@@ -395,7 +458,12 @@ async def sync_snapchat_performance(
 __all__ = [
     "ACTION_REPORT_TIME",
     "CONVERSION_SOURCE_TYPES",
+    "FUNNEL_STAT_FIELDS",
+    "NON_ADDITIVE_TOTAL_FIELDS",
     "STAT_FIELDS",
+    "TOTAL_STAT_FIELDS",
+    "_funnel_metrics",
+    "_metric_provenance",
     "SWIPE_ATTRIBUTION_WINDOW",
     "VIEW_ATTRIBUTION_WINDOW",
     "riyadh_business_window",

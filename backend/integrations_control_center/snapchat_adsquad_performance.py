@@ -60,10 +60,12 @@ from .snapchat_native_data_common import (
 )
 from .snapchat_native_performance_sync import (
     CONVERSION_SOURCE_TYPES,
-    STAT_FIELDS,
+    TOTAL_STAT_FIELDS,
     _add_to_bucket,
     _computed,
     _finalize_bucket,
+    _funnel_metrics,
+    _metric_provenance,
     _new_bucket,
 )
 
@@ -237,7 +239,7 @@ async def _fetch_campaign_adsquad_totals(
         "end_time": request_end.isoformat(timespec="seconds"),
         "granularity": ADSQUAD_PROVIDER_GRANULARITY,
         "breakdown": ADSQUAD_BREAKDOWN,
-        "fields": ",".join(STAT_FIELDS),
+        "fields": ",".join(TOTAL_STAT_FIELDS),
         "limit": 200,
         "omit_empty": "false",
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
@@ -372,11 +374,11 @@ def _day_buckets(
             continue
         metrics = {
             key: _as_number((row.get("metrics") or {}).get(key))
-            for key in STAT_FIELDS
+            for key in TOTAL_STAT_FIELDS
         }
         bucket = buckets.setdefault(
             (campaign_id, adsquad_id, report_date.isoformat()),
-            _new_bucket(),
+            _new_bucket(TOTAL_STAT_FIELDS),
         )
         _add_to_bucket(
             bucket,
@@ -432,6 +434,12 @@ async def _upsert_projection(
         "account_timezone": _text(account.get("timezone")) or timezone_name,
         "attribution_model": ATTRIBUTION_MODEL,
         "metrics": metrics,
+        "funnel_metrics": _funnel_metrics(metrics),
+        "metric_provenance": _metric_provenance(
+            metrics,
+            provider_granularity=ADSQUAD_PROVIDER_GRANULARITY,
+            provider_breakdown=ADSQUAD_BREAKDOWN,
+        ),
         "purchases": purchases,
         "spend_native": spend_native,
         "spend_sar": await context.to_sar(spend_native, currency),

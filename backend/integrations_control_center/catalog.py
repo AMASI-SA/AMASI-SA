@@ -103,6 +103,7 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
             "orders.read",
             "products.read",
             "customers.read_from_orders",
+            "abandoned_carts.read",
         ),
         capability_permissions=(
             ("store.read", ("settings.read",)),
@@ -112,9 +113,11 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
                 "customers.read_from_orders",
                 ("orders.read", "orders.read_write"),
             ),
+            ("abandoned_carts.read", ("carts.read",)),
         ),
         ai_can_when_ready=(
             "قراءة بيانات المتجر والطلبات المتاحة محليًا",
+            "تحليل السلات المتروكة بعد منح صلاحية القراءة",
             "ربط نتائج التسويق بالمنتجات بعد اكتمال هوية المنتج",
         ),
         ai_cannot_phase_one=(

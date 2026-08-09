@@ -49,9 +49,12 @@ from .snapchat_native_data_common import (
 from .snapchat_native_performance_sync import (
     CONVERSION_SOURCE_TYPES,
     STAT_FIELDS,
+    TOTAL_STAT_FIELDS,
     SWIPE_ATTRIBUTION_WINDOW,
     VIEW_ATTRIBUTION_WINDOW,
     _computed,
+    _funnel_metrics,
+    _metric_provenance,
 )
 
 SNAPCHAT_ACCOUNT_TOTAL_COLLECTION = "mezan_snapchat_performance_account_total_v2"
@@ -485,7 +488,11 @@ async def fetch_account_total_campaign_rows(
         "end_time": request_end.isoformat(timespec="seconds"),
         "granularity": granularity,
         "breakdown": PLATFORM_TOTAL_BREAKDOWN,
-        "fields": ",".join(STAT_FIELDS),
+        "fields": ",".join(
+            TOTAL_STAT_FIELDS
+            if granularity == PLATFORM_TOTAL_GRANULARITY
+            else STAT_FIELDS
+        ),
         "limit": 200,
         "omit_empty": "false",
         "conversion_source_types": CONVERSION_SOURCE_TYPES,
@@ -664,6 +671,12 @@ async def _upsert_total_row(
         "account_timezone": timezone_name,
         "attribution_model": ATTRIBUTION_MODEL,
         "metrics": metrics,
+        "funnel_metrics": _funnel_metrics(metrics),
+        "metric_provenance": _metric_provenance(
+            metrics,
+            provider_granularity=PLATFORM_TOTAL_GRANULARITY,
+            provider_breakdown=provider_breakdown,
+        ),
         "purchases": purchases,
         "spend_native": spend_native,
         "spend_sar": await context.to_sar(spend_native, currency),
