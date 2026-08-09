@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from integrations_control_center import snapchat_ad_performance as module
+from integrations_control_center import snapchat_native_entities_sync as native_sync
 from integrations_control_center.snapchat_native_data_common import (
     SNAPCHAT_ENTITY_COLLECTION,
 )
@@ -190,6 +191,14 @@ async def test_total_request_keeps_conversion_only_ad_rows():
 def test_ad_delivery_separates_switch_review_and_parent_blockers():
     paused = module._delivery_for_ad({"status": "PAUSED"}, None)
     assert paused["delivery_reason_code"] == "AD_CONFIGURED_PAUSED"
+
+    deleted = module._delivery_for_ad(
+        {"status": "ACTIVE", "deleted": True},
+        None,
+    )
+    assert deleted["delivery_state"] == "NOT_DELIVERING"
+    assert deleted["delivery_reason_code"] == "AD_DELETED"
+    assert deleted["deliverable"] is False
 
     rejected = module._delivery_for_ad(
         {"status": "ACTIVE", "review_status": "REJECTED"},
@@ -409,3 +418,30 @@ async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
     assert result["identity_rows_saved"] == 3
     assert result["identity_counts"] == {"ad": 3}
     assert result["rows_saved"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ad_identity_sync_reads_deleted_ads_without_sort():
+    class Context:
+        db = object()
+        user_id = "owner-1"
+
+        async def get_json(self, client, url, *, headers, params):
+            self.url = url
+            self.params = deepcopy(params)
+            return {"ads": [], "paging": {}}
+
+    context = Context()
+    saved, counts, errors = await native_sync.sync_snapchat_ad_entities(
+        context,
+        object(),
+        "token",
+        {"ad_account_id": "account-1"},
+    )
+
+    assert context.url.endswith("/adaccounts/account-1/ads")
+    assert context.params["read_deleted_entities"] == "true"
+    assert "sort" not in context.params
+    assert saved == 0
+    assert counts == {"ad": 0}
+    assert errors == []

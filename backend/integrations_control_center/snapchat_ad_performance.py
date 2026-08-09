@@ -109,6 +109,7 @@ AD_REPORT_ENTITY_PROJECTION = {
     "ad_squad_id": 1,
     "creative_id": 1,
     "review_status": 1,
+    "deleted": 1,
     "created_at_provider": 1,
     "updated_at_provider": 1,
     "delivery_state": 1,
@@ -941,6 +942,14 @@ def _delivery_for_ad(
 ) -> dict[str, Any]:
     configured = _text(ad.get("status") or "UNKNOWN").upper()
     review = _text(ad.get("review_status") or "").upper()
+    if ad.get("deleted") is True:
+        return {
+            "configured_status": configured,
+            "delivery_state": "NOT_DELIVERING",
+            "delivery_status": "غير نشط — الإعلان محذوف",
+            "delivery_reason_code": "AD_DELETED",
+            "deliverable": False,
+        }
     if configured in {"UNKNOWN", ""}:
         return {
             "configured_status": "UNKNOWN",
