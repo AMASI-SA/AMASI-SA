@@ -18,6 +18,7 @@ from preparation_piece_operations import (
     _piece_id,
 )
 from reviewed_preparation_batches import _line_from_batch_storage
+from supplier_invoice_pdf import generate_supplier_invoice_pdf
 from supplier_receiving_routes import (
     ADD_PRODUCT_SERVICE_PERMISSION,
     EDIT_PRODUCT_PRICE_PERMISSION,
@@ -25,12 +26,16 @@ from supplier_receiving_routes import (
     SUPPLIER_INVOICES,
     SupplierReceivingInvoiceLineRequest,
     SupplierReceivingInvoiceServiceRequest,
+    _share_evidence_signature_matches,
+    _supplier_invoice_filename,
     build_supplier_receiving_invoice,
     _post_supplier_invoice_ledger,
     make_supplier_receiving_router,
     piece_scan_blocker,
+    supplier_piece_product_charge_eligible,
     supplier_piece_service_blocker,
     supplier_piece_reference_price,
+    supplier_scan_group_candidates,
     supplier_receipt_piece_patch,
     supplier_receipt_piece_rollback_update,
     supplier_receipt_previous_piece_state,
@@ -72,6 +77,23 @@ def test_batch_pdf_line_uses_unique_piece_barcode_not_order_number():
 
     assert line.barcode_payload == preparation_piece_barcode(**_identity())
     assert line.barcode_payload != line.order_number
+
+
+def test_multi_quantity_batch_card_uses_first_piece_as_its_scan_anchor():
+    line = _line_from_batch_storage(
+        {
+            "order_number": "276218536",
+            "order_item_id": "item-7",
+            "unit_indices": [1, 2, 3],
+            "quantity": 3,
+            "product_name": "سلسال بالاسم",
+        },
+        {"id": "batch-1", "user_id": "owner-1"},
+    )
+
+    assert line.barcode_payload == preparation_piece_barcode(
+        **{**_identity(), "unit_index": 1}
+    )
 
 
 def test_receiving_rejects_duplicate_cancelled_and_blocked_pieces():
@@ -208,6 +230,80 @@ def test_supplier_may_perform_one_service_from_a_product_group():
     ) is None
 
 
+@pytest.mark.asyncio
+async def test_quantity_candidates_are_limited_to_the_same_exact_card():
+    rows = [
+        {
+            "piece_id": "piece-2",
+            "batch_id": "batch-1",
+            "order_item_id": "item-7",
+            "group_key": "product:1",
+            "unit_index": 2,
+            "status": PIECE_STATUS_IN_PROGRESS,
+            "services": [{"service_id": "engrave", "required_quantity": 1}],
+        },
+        {
+            "piece_id": "piece-3",
+            "batch_id": "batch-1",
+            "order_item_id": "item-7",
+            "group_key": "product:1",
+            "unit_index": 3,
+            "status": PIECE_STATUS_IN_PROGRESS,
+            "services": [{"service_id": "engrave", "required_quantity": 1}],
+        },
+    ]
+
+    class _Cursor:
+        def __init__(self, values):
+            self.values = values
+
+        def sort(self, *_args):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        async def to_list(self, _limit):
+            return self.values
+
+    class _Collection:
+        def __init__(self):
+            self.query = None
+
+        def find(self, query, _projection):
+            self.query = query
+            return _Cursor(rows)
+
+    collection = _Collection()
+
+    class _DB:
+        def __getitem__(self, _name):
+            return collection
+
+    candidates = await supplier_scan_group_candidates(
+        _DB(),
+        user_id="owner-1",
+        scanned_piece={
+            "piece_id": "piece-1",
+            "batch_id": "batch-1",
+            "order_item_id": "item-7",
+            "group_key": "product:1",
+            "unit_index": 1,
+            "status": PIECE_STATUS_RECEIVED,
+            "services": [{"service_id": "engrave", "required_quantity": 1}],
+        },
+        session={"supplier_snapshot": {
+            "id": "supplier-1",
+            "service_links": [{"service_id": "engrave"}],
+        }},
+        allow_service_addition=False,
+    )
+
+    assert [row["piece_id"] for row in candidates] == ["piece-2", "piece-3"]
+    assert collection.query["batch_id"] == "batch-1"
+    assert collection.query["order_item_id"] == "item-7"
+
+
 def test_supplier_reference_price_uses_service_quantity_and_flags_missing_costs():
     priced = supplier_piece_reference_price({
         "services": [
@@ -275,6 +371,99 @@ def test_invoice_draft_separates_product_and_service_prices():
     assert invoice["total_halalas"] == 1700
     assert invoice["financial_invoice_created"] is False
     assert invoice["liability_created"] is False
+
+
+def test_second_supplier_invoice_rejects_product_price_and_charges_service_only():
+    scan = {
+        "piece_id": "piece-1",
+        "product_id": "product-1",
+        "product_name": "سلسال",
+        "product_charge_eligible": False,
+        "reference_product_unit_price_halalas": 0,
+        "invoice_services": [{
+            "service_id": "paint",
+            "service_name": "طلاء",
+            "required_quantity": 1,
+            "reference_unit_price_halalas": 200,
+        }],
+    }
+    assert supplier_piece_product_charge_eligible({
+        "supplier_receiving_history": [{"invoice_id": "invoice-old"}],
+    }) is False
+
+    with pytest.raises(Exception) as error:
+        build_supplier_receiving_invoice(
+            session={"supplier_snapshot": {"service_links": [{"service_id": "paint"}]}},
+            scans=[scan],
+            requested_lines=[SupplierReceivingInvoiceLineRequest(
+                piece_ids=["piece-1"],
+                product_unit_price_halalas=500,
+                services=[SupplierReceivingInvoiceServiceRequest(
+                    service_id="paint",
+                    unit_price_halalas=200,
+                )],
+            )],
+            saved_at=datetime.now(timezone.utc),
+        )
+    assert error.value.detail["code"] == "supplier_receiving_product_already_charged"
+
+    invoice = build_supplier_receiving_invoice(
+        session={"supplier_snapshot": {"service_links": [{"service_id": "paint"}]}},
+        scans=[scan],
+        requested_lines=[SupplierReceivingInvoiceLineRequest(
+            piece_ids=["piece-1"],
+            product_unit_price_halalas=0,
+            services=[SupplierReceivingInvoiceServiceRequest(
+                service_id="paint",
+                unit_price_halalas=200,
+            )],
+        )],
+        saved_at=datetime.now(timezone.utc),
+    )
+    assert invoice["lines"][0]["product_total_halalas"] == 0
+    assert invoice["lines"][0]["services_total_halalas"] == 200
+    assert invoice["total_halalas"] == 200
+
+
+def test_supplier_invoice_pdf_contains_a_valid_pdf_document():
+    pdf = generate_supplier_invoice_pdf({
+        "invoice_number": "SI-20260809-1",
+        "approved_at": datetime(2026, 8, 9, tzinfo=timezone.utc),
+        "supplier_approved_by_name": "خالد",
+        "supplier_snapshot": {"company_name": "مورد أماسي"},
+        "lines": [{
+            "product_name": "سلسال",
+            "quantity": 2,
+            "product_unit_price_halalas": 500,
+            "product_total_halalas": 1000,
+            "services": [{
+                "service_name": "حفر",
+                "total_quantity": 2,
+                "unit_price_halalas": 200,
+                "total_halalas": 400,
+            }],
+            "total_halalas": 1400,
+        }],
+        "total_halalas": 1400,
+    })
+
+    assert pdf.startswith(b"%PDF-")
+    assert len(pdf) > 1000
+
+
+def test_share_artifacts_use_supplier_name_and_validate_image_signature():
+    filename = _supplier_invoice_filename({
+        "invoice_number": "SI-1",
+        "supplier_snapshot": {"company_name": "مورد/أماسي"},
+    })
+
+    assert filename == "فاتورة-مورد-أماسي-SI-1.pdf"
+    assert _share_evidence_signature_matches(
+        "image/png", b"\x89PNG\r\n\x1a\ncontent"
+    )
+    assert not _share_evidence_signature_matches(
+        "image/png", b"not-an-image"
+    )
 
 
 def test_invoice_rejects_grouping_pieces_with_different_pending_services():
@@ -502,6 +691,10 @@ def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     assert ("/supplier-receiving-v1/sessions/{session_id}/scan", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/cancel", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/close", "POST") in routes
+    assert ("/supplier-receiving-v1/invoices/{invoice_id}", "GET") in routes
+    assert ("/supplier-receiving-v1/invoices/{invoice_id}/pdf", "GET") in routes
+    assert ("/supplier-receiving-v1/invoices/{invoice_id}/share-evidence", "POST") in routes
+    assert ("/supplier-receiving-v1/invoices/{invoice_id}/confirm-share", "POST") in routes
 
 
 def test_scan_reserves_then_close_posts_one_atomic_mezan_accounting_invoice():
@@ -518,7 +711,7 @@ def test_scan_reserves_then_close_posts_one_atomic_mezan_accounting_invoice():
     assert '"supplier_service_link_applied": True' in source
     assert "supplier_piece_service_blocker(" in source
     assert "allow_service_addition=(" in source
-    assert "supplier_receipt_previous_piece_state(piece)" in source
+    assert "supplier_receipt_previous_piece_state(original_piece)" in source
     assert '"status": "cancelled"' in source
     assert '"operational_invoice_created": False' in source
     assert "completed_at=now" in source

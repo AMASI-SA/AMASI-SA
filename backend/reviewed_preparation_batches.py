@@ -334,7 +334,11 @@ def _line_from_batch_storage(
     unit_index = row.get("unit_index")
     if unit_index in (None, ""):
         unit_indices = row.get("unit_indices") or []
-        unit_index = unit_indices[0] if len(unit_indices) == 1 else None
+        # A printed preparation card may represent more than one physical
+        # piece. Use its first materialised piece as a stable card anchor;
+        # supplier receiving expands that anchor to the remaining pieces on
+        # the same exact batch/order line before asking for a quantity.
+        unit_index = unit_indices[0] if unit_indices else None
     if all((
         _text(batch.get("user_id")),
         _text(batch.get("id")),

@@ -8,22 +8,29 @@ import {
     CaretDown,
     CheckCircle,
     ClockCounterClockwise,
-    Keyboard,
+    FilePdf,
     Package,
     PlusCircle,
+    ShareNetwork,
     SpinnerGap,
+    UploadSimple,
     UserCircle,
     WarningCircle,
+    WhatsappLogo,
     XCircle,
 } from "@phosphor-icons/react";
 
 import {
     cancelSupplierReceivingSession,
     closeSupplierReceivingSession,
+    confirmSupplierInvoiceShare,
+    downloadSupplierReceivingInvoicePdf,
+    getSupplierReceivingInvoice,
     loadSupplierReceivingCatalog,
     newSupplierReceivingRequestId,
     openSupplierReceivingSession,
     scanSupplierReceivingPiece,
+    uploadSupplierInvoiceShareEvidence,
 } from "../../services/supplierReceiving";
 
 const PREPARATION_TRACKS = [
@@ -56,6 +63,20 @@ export function formatSupplierMoney(halalas) {
     }).format(Number(halalas || 0) / 100);
 }
 
+function supplierInvoiceFilename(invoice) {
+    const supplier = String(invoice?.supplier_snapshot?.company_name || "مورد").trim() || "مورد";
+    const number = String(invoice?.invoice_number || invoice?.id || "فاتورة").trim() || "فاتورة";
+    return `فاتورة-${supplier}-${number}.pdf`.replace(/[\\/:*?"<>|\r\n]/g, "-");
+}
+
+function supplierWhatsappPhone(value) {
+    let digits = String(value || "").replace(/\D/g, "");
+    if (digits.startsWith("00")) digits = digits.slice(2);
+    if (digits.startsWith("0")) digits = `966${digits.slice(1)}`;
+    else if (digits.length === 9 && digits.startsWith("5")) digits = `966${digits}`;
+    return digits;
+}
+
 export function supplierScanReferencePriceHalalas(scan) {
     const direct = Number(scan?.reference_unit_price_halalas);
     if (Number.isFinite(direct) && direct >= 0) return Math.round(direct);
@@ -72,7 +93,13 @@ export function supplierInvoiceLineKey(scan) {
         .map((service) => `${service?.service_id || ""}:${service?.required_quantity || 1}`)
         .sort()
         .join("|");
-    return [scan?.product_id || "", scan?.sku || "", scan?.product_name || "منتج", services].join("::");
+    return [
+        scan?.product_id || "",
+        scan?.sku || "",
+        scan?.product_name || "منتج",
+        scan?.product_charge_eligible === false ? "services-only" : "product-and-services",
+        services,
+    ].join("::");
 }
 
 function serviceReferenceHalalas(service) {
@@ -106,7 +133,9 @@ export function buildSupplierInvoiceLines(scans = [], drafts = {}) {
                 quantity_per_piece: Number(service?.required_quantity || service?.quantity_per_piece || 1),
                 reference_unit_price_halalas: serviceReferenceHalalas(service),
                 unit_price_halalas: serviceReferenceHalalas(service),
-                selected: true,
+                eligibility_source: service?.eligibility_source || service?.source || "product",
+                eligibility_condition: service?.eligibility_condition || service?.condition || null,
+                selected: false,
                 add_to_product: false,
                 reference_price_complete: service?.reference_price_complete !== false
                     && serviceReferenceHalalas(service) > 0,
@@ -121,6 +150,7 @@ export function buildSupplierInvoiceLines(scans = [], drafts = {}) {
             piece_ids: [pieceId],
             reference_product_unit_price_halalas: productReferenceHalalas,
             product_unit_price_halalas: productReferenceHalalas,
+            product_charge_eligible: scan?.product_charge_eligible !== false,
             product_reference_price_complete:
                 typeof scan?.reference_product_price_complete === "boolean"
                     ? scan.reference_product_price_complete
@@ -199,6 +229,98 @@ function ScanRow({ scan }) {
     );
 }
 
+function SupplierQuantitySelection({ request, busy, onSelect, onDismiss }) {
+    if (!request) return null;
+    const options = Array.isArray(request.quantity_options)
+        ? request.quantity_options
+        : Array.from({ length: Number(request.available_quantity || 1) }, (_row, index) => index + 1);
+    return (
+        <div className="fixed inset-0 z-[140] flex items-end bg-slate-950/60 p-0 sm:items-center sm:justify-center sm:p-4" dir="rtl" role="dialog" aria-modal="true" data-testid="supplier-receiving-quantity-dialog">
+            <section className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-3xl">
+                <div className="flex items-start gap-3">
+                    {request.product?.selected_image_url ? (
+                        <img src={request.product.selected_image_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl border border-slate-200 object-cover" />
+                    ) : <EmptyImage />}
+                    <div className="min-w-0">
+                        <div className="text-xs font-black text-violet-700">تأكيد الكمية المجهزة</div>
+                        <h3 className="mt-1 line-clamp-2 text-lg font-black text-slate-950">{request.product?.product_name || "منتج"}</h3>
+                        <p className="mt-1 text-xs font-bold text-slate-500">المتبقي المتاح: {request.available_quantity} قطع</p>
+                    </div>
+                </div>
+                <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-black leading-6 text-amber-950">كم قطعة من هذا المنتج تم تجهيزها فعليًا؟ تُحتسب الخدمات المختارة بنفس العدد.</p>
+                <div className="mt-4 grid max-h-64 grid-cols-3 gap-2 overflow-auto" data-testid="supplier-receiving-quantity-options">
+                    {options.map((quantity) => (
+                        <button key={quantity} type="button" onClick={() => onSelect(Number(quantity))} disabled={busy} className="min-h-14 rounded-xl border-2 border-violet-200 bg-violet-50 text-lg font-black text-violet-900 disabled:opacity-50" data-quantity={quantity}>
+                            {quantity} {Number(quantity) === 1 ? "قطعة" : "قطع"}
+                        </button>
+                    ))}
+                </div>
+                <button type="button" onClick={onDismiss} disabled={busy} className="mt-3 min-h-11 w-full rounded-xl border border-slate-200 text-sm font-black text-slate-700 disabled:opacity-50">إلغاء الاختيار والعودة للتصوير</button>
+            </section>
+        </div>
+    );
+}
+
+function SupplierInvoiceSharePanel({
+    invoice,
+    busy,
+    error,
+    onShare,
+    onEvidence,
+    onConfirm,
+    onDone,
+}) {
+    const confirmed = invoice?.share_status === "confirmed" || invoice?.share_confirmed;
+    const evidenceUploaded = confirmed || invoice?.share_status === "evidence_uploaded" || Boolean(invoice?.share_evidence_id);
+    return (
+        <section className="mx-auto w-full max-w-xl space-y-3 p-3 sm:p-5" data-testid="supplier-invoice-share-panel">
+            <div className="rounded-3xl bg-emerald-800 p-5 text-white shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <div className="text-xs font-black text-emerald-100">تم حفظ فاتورة المورد</div>
+                        <h3 className="mt-1 text-2xl font-black">{invoice?.invoice_number || "—"}</h3>
+                    </div>
+                    <CheckCircle size={42} weight="fill" className="text-emerald-200" />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-bold">
+                    <div className="rounded-xl bg-white/10 p-3"><span className="block text-[10px] text-emerald-100">المورد</span>{invoice?.supplier_snapshot?.company_name || "—"}</div>
+                    <div className="rounded-xl bg-white/10 p-3"><span className="block text-[10px] text-emerald-100">إجمالي الفاتورة</span>{formatSupplierMoney(invoice?.total_halalas)} ر.س</div>
+                </div>
+            </div>
+
+            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">{error}</div>}
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><WhatsappLogo size={24} weight="fill" /></span><div><h4 className="font-black text-slate-950">1. أرسل الفاتورة إلى واتساب المورد</h4><p className="text-xs font-bold text-slate-500">سيُجهز ملف PDF باسم المورد ورقم الفاتورة.</p></div></div>
+                <button type="button" onClick={onShare} disabled={!!busy || confirmed} className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50" data-testid="supplier-invoice-share-whatsapp">
+                    {busy === "share" ? <SpinnerGap className="animate-spin" /> : <ShareNetwork size={21} />} مشاركة ملف الفاتورة
+                </button>
+            </div>
+
+            <div className={`rounded-2xl border bg-white p-4 shadow-sm ${evidenceUploaded ? "border-emerald-300" : "border-slate-200"}`}>
+                <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700"><UploadSimple size={23} /></span><div><h4 className="font-black text-slate-950">2. التقط صورة المحادثة بعد الإرسال</h4><p className="text-xs font-bold text-slate-500">الإثبات إلزامي قبل تأكيد اكتمال المشاركة.</p></div></div>
+                <label className={`mt-3 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-black ${evidenceUploaded ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-violet-300 bg-violet-50 text-violet-800"}`}>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" disabled={!!busy || confirmed} onChange={(event) => { const file = event.target.files?.[0]; if (file) onEvidence(file); event.target.value = ""; }} />
+                    {busy === "evidence" ? <SpinnerGap className="animate-spin" /> : evidenceUploaded ? <CheckCircle weight="fill" /> : <UploadSimple />} {evidenceUploaded ? "تم رفع صورة المحادثة" : "التقاط أو رفع صورة المحادثة"}
+                </label>
+            </div>
+
+            {!confirmed ? (
+                <button type="button" onClick={onConfirm} disabled={!!busy || !evidenceUploaded} className="min-h-13 w-full rounded-xl bg-slate-950 px-5 py-3 text-base font-black text-white disabled:opacity-40" data-testid="supplier-invoice-confirm-share">
+                    {busy === "confirm-share" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} تأكيد أن الفاتورة أُرسلت للمورد
+                </button>
+            ) : (
+                <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-center">
+                    <CheckCircle size={34} weight="fill" className="mx-auto text-emerald-700" />
+                    <div className="mt-2 font-black text-emerald-900">اكتملت المشاركة وحُفظ الإثبات في سجل الموظف</div>
+                    <button type="button" onClick={onDone} className="mt-3 min-h-11 w-full rounded-xl bg-emerald-700 text-sm font-black text-white">العودة إلى فواتير الموردين</button>
+                </div>
+            )}
+            {!confirmed && <p className="text-center text-xs font-bold text-amber-700">يمكن الخروج، لكن ستبقى الفاتورة بحالة «تحتاج تأكيد المشاركة» في سجل الموظف.</p>}
+        </section>
+    );
+}
+
 function SupplierInvoiceLineEditor({
     line,
     permissions,
@@ -221,7 +343,9 @@ function SupplierInvoiceLineEditor({
                     <div className="mt-1 text-[11px] font-bold text-slate-500">{line.quantity} قطعة{line.sku ? ` · ${line.sku}` : ""}</div>
                 </div>
                 <div className="min-w-40">
-                    <div className="mb-1 text-[10px] font-black text-slate-500">سعر المنتج الأساسي للقطعة</div>
+                    <div className="mb-1 text-[10px] font-black text-slate-500">
+                        {line.product_charge_eligible ? "سعر المنتج الأساسي للقطعة" : "سعر المنتج — محتسب في فاتورة سابقة"}
+                    </div>
                     <label className="relative block">
                         <input
                             type="number"
@@ -229,13 +353,14 @@ function SupplierInvoiceLineEditor({
                             step="0.01"
                             value={(Number(line.product_unit_price_halalas || 0) / 100).toFixed(2)}
                             onChange={(event) => onProductPriceChange(line.key, event.target.value)}
-                            disabled={!permissions.can_edit_product_price}
+                            disabled={!permissions.can_edit_product_price || !line.product_charge_eligible}
                             className="h-10 w-full rounded-lg border border-slate-200 bg-white px-2 pl-8 text-center text-sm font-black tabular-nums outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-500"
                             aria-label={`سعر المنتج ${line.product_name}`}
                         />
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">ر.س</span>
                     </label>
                     {!line.product_reference_price_complete && <div className="mt-1 text-[10px] font-black text-amber-700">السعر الأصلي للمنتج غير مسجل</div>}
+                    {!line.product_charge_eligible && <div className="mt-1 text-[10px] font-black text-violet-700">تُحسب الخدمات المتبقية فقط دون إعادة سعر المنتج.</div>}
                 </div>
             </div>
             <div className="mt-3 space-y-2">
@@ -251,7 +376,12 @@ function SupplierInvoiceLineEditor({
                         />
                         <div className="min-w-0">
                             <div className="truncate text-xs font-black text-slate-900">{service.service_name}</div>
-                            <div className="mt-0.5 text-[10px] font-bold text-slate-500">{service.quantity_per_piece || 1} لكل قطعة{service.add_to_product ? " · ستُضاف للمنتج" : ""}</div>
+                            <div className="mt-0.5 text-[10px] font-bold text-slate-500">
+                                {service.quantity_per_piece || 1} لكل قطعة · {service.eligibility_source === "option"
+                                    ? `حسب اختيار العميل${service.eligibility_condition?.value_name ? `: ${service.eligibility_condition.value_name}` : ""}`
+                                    : "خدمة عامة للمنتج"}
+                                {service.add_to_product ? " · ستُضاف للمنتج" : ""}
+                            </div>
                         </div>
                         <label className="relative">
                             <input
@@ -384,17 +514,26 @@ export function SupplierPieceCameraScanner({
     onServiceAdd = () => {},
     supplierName = "",
     employeeName = "",
-    manualBarcode = "",
-    onManualBarcodeChange = () => {},
-    onManualSubmit = () => {},
+    step = "scan",
+    onStepChange = () => {},
+    savedInvoice = null,
+    onShareInvoice = () => {},
+    onShareEvidence = () => {},
+    onConfirmShare = () => {},
+    onShareDone = () => {},
+    shareBusy = "",
+    quantityRequest = null,
+    onQuantitySelect = () => {},
+    onQuantityDismiss = () => {},
 }) {
     const videoRef = useRef(null);
     const [cameraError, setCameraError] = useState("");
     const [cameraReady, setCameraReady] = useState(false);
     const [cameraEngine, setCameraEngine] = useState("");
-    const [manualOpen, setManualOpen] = useState(false);
+    const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
 
     useEffect(() => {
+        if (step !== "scan") return undefined;
         let stopped = false;
         let detecting = false;
         let lastDetectedValue = "";
@@ -509,7 +648,7 @@ export function SupplierPieceCameraScanner({
                     NotReadableError: "الكاميرا مستخدمة في تطبيق آخر. أغلقه ثم حاول مرة أخرى.",
                     SecurityError: "تشغيل الكاميرا يحتاج فتح ميزان عبر اتصال آمن HTTPS.",
                 };
-                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا أو قارئ QR. حدّث الصفحة وحاول مرة أخرى، أو استخدم الإدخال اليدوي مؤقتًا.");
+                setCameraError(messages[cameraStartError?.name] || "تعذّر تشغيل الكاميرا أو قارئ QR. حدّث الصفحة ثم حاول مرة أخرى.");
             }
         }
 
@@ -520,7 +659,7 @@ export function SupplierPieceCameraScanner({
             zxingControls?.stop?.();
             for (const track of stream?.getTracks?.() || []) track.stop();
         };
-    }, [onDetected]);
+    }, [onDetected, step]);
 
     const total = invoiceLines.reduce((sum, line) => sum + Number(line.total_halalas || 0), 0);
     const cannotSave = saving
@@ -530,122 +669,78 @@ export function SupplierPieceCameraScanner({
             (service) => service.selected && Number(service.unit_price_halalas) > 0,
         ));
 
+    const stepLabels = [
+        ["scan", "1", "التصوير"],
+        ["review", "2", "المراجعة"],
+        ["draft", "3", "المسودة"],
+        ["share", "4", "المشاركة"],
+    ];
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white p-0 lg:bg-slate-950/90 lg:p-3" dir="rtl" role="dialog" aria-modal="true" aria-label="تصوير QR القطعة" data-testid="supplier-receiving-camera-dialog">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white p-0 lg:bg-slate-950/90 lg:p-3" dir="rtl" role="dialog" aria-modal="true" aria-label="استلام منتجات المورد" data-testid="supplier-receiving-camera-dialog">
             <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-7xl flex-col overflow-hidden bg-white shadow-2xl lg:h-[96vh] lg:max-h-[96vh] lg:rounded-3xl">
-                <header className="flex items-center justify-between gap-3 bg-emerald-800 px-3 py-3 text-white lg:border-b lg:border-slate-200 lg:bg-white lg:p-4 lg:text-slate-950">
-                    <div className="min-w-0">
-                        <h3 className="flex items-center gap-2 text-lg font-black"><Camera size={24} className="text-emerald-200 lg:text-emerald-700" weight="duotone" /> <span className="lg:hidden">استلام المورد</span><span className="hidden lg:inline">تصوير QR القطعة</span></h3>
-                        <p className="mt-0.5 truncate text-[11px] font-bold text-emerald-100 lg:mt-1 lg:text-xs lg:leading-5 lg:text-slate-500">
-                            <span className="lg:hidden">{supplierName || "جلسة المورد"}{employeeName ? ` · ${employeeName}` : ""}</span>
-                            <span className="hidden lg:inline">الكاميرا تبقى مفتوحة. وجّهها إلى كل QR، ثم احفظ فاتورة المورد بعد اكتمال التصوير.</span>
-                        </p>
+                <header className="shrink-0 bg-emerald-800 px-3 py-3 text-white lg:p-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0"><h3 className="truncate text-lg font-black">استلام المورد — {supplierName || "مورد"}</h3><p className="mt-0.5 truncate text-[11px] font-bold text-emerald-100">{employeeName || "موظف الاستلام"}</p></div>
+                        <button type="button" onClick={onClose} disabled={saving || cancelling} className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-black disabled:opacity-50"><XCircle className="ml-1 inline" /> إغلاق</button>
                     </div>
-                    <button type="button" onClick={onClose} disabled={saving || cancelling} className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-black text-white disabled:opacity-50 lg:border-slate-300 lg:bg-white lg:text-slate-800"><XCircle className="ml-1 inline lg:hidden" /> <span className="hidden lg:inline">إغلاق الكاميرا</span><span className="lg:hidden">إغلاق</span></button>
+                    <div className="mt-3 grid grid-cols-4 gap-1" data-testid="supplier-receiving-stepper">
+                        {stepLabels.map(([value, number, label]) => <div key={value} className={`rounded-lg px-1 py-1.5 text-center text-[10px] font-black ${step === value ? "bg-white text-emerald-900" : "bg-white/10 text-emerald-100"}`}><span className="ml-1">{number}</span>{label}</div>)}
+                    </div>
                 </header>
 
-                <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-2" data-testid="supplier-receiving-camera-split-layout">
-                    <section className="shrink-0 border-b border-slate-200 bg-white p-3 lg:min-h-0 lg:border-b-0 lg:border-l lg:bg-slate-950">
-                        {cameraError ? (
-                            <div className="flex min-h-[190px] items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-950 lg:min-h-0">
-                                <WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />
-                                <span>{cameraError}</span>
+                {step === "share" ? (
+                    <div className="min-h-0 flex-1 overflow-auto bg-slate-50">
+                        <SupplierInvoiceSharePanel invoice={savedInvoice} busy={saving ? "close" : shareBusy} error={error} onShare={onShareInvoice} onEvidence={onShareEvidence} onConfirm={onConfirmShare} onDone={onShareDone} />
+                    </div>
+                ) : step === "scan" ? (
+                    <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-2" data-testid="supplier-receiving-camera-split-layout">
+                        <section className="shrink-0 border-b border-slate-200 bg-white p-3 lg:min-h-0 lg:border-b-0 lg:border-l lg:bg-slate-950">
+                            {cameraError ? <div className="flex min-h-[190px] items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black leading-6 text-amber-950"><WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />{cameraError}</div> : (
+                                <div className="relative h-[29dvh] min-h-[190px] max-h-[300px] overflow-hidden rounded-2xl bg-black lg:h-full lg:max-h-none" data-camera-engine={cameraEngine || undefined}>
+                                    <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
+                                    {!cameraReady && <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-sm font-black text-white"><SpinnerGap size={24} className="ml-2 animate-spin" /> جارٍ تشغيل الكاميرا…</div>}
+                                    {cameraReady && <><div className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-black text-emerald-800 shadow">الكاميرا جاهزة</div><div className="pointer-events-none absolute inset-0 flex items-center justify-center p-12"><div className="aspect-square w-full max-w-72 rounded-3xl border-[3px] border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.30)]" /></div></>}
+                                    {scanning && <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-emerald-800 shadow-lg"><SpinnerGap size={18} className="animate-spin" /> جارٍ فحص المنتج…</div>}
+                                </div>
+                            )}
+                            <p className="mt-2 text-center text-[11px] font-black text-slate-500">التسجيل من الكاميرا فقط؛ الكمية تُختار بأزرار ثابتة بعد قراءة البطاقة.</p>
+                        </section>
+                        <section className="flex min-h-0 flex-1 flex-col bg-slate-50" data-testid="supplier-receiving-invoice-draft">
+                            <div className="min-h-0 flex-1 overflow-auto p-3">
+                                {lastScan && <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" weight="fill" /> تمت إضافة {lastScan.received_quantity || 1} من {lastScan.product_name || "المنتج"}</div>}
+                                {error && <div className="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
+                                <SupplierInvoiceCompactTable invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={serviceCatalog} showEditors={false} />
                             </div>
-                        ) : (
-                            <div className="relative h-[29dvh] min-h-[190px] max-h-[300px] overflow-hidden rounded-2xl bg-black lg:h-full lg:max-h-none" data-camera-engine={cameraEngine || undefined}>
-                                <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
-                                {!cameraReady && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-sm font-black text-white">
-                                        <SpinnerGap size={24} className="ml-2 animate-spin" /> جارٍ تشغيل الكاميرا…
-                                    </div>
-                                )}
-                                {cameraReady && (
-                                    <>
-                                        <div className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-black text-emerald-800 shadow"><span className="ml-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />الكاميرا جاهزة</div>
-                                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-12">
-                                            <div className="aspect-square w-full max-w-72 rounded-3xl border-[3px] border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.30)]" />
-                                        </div>
-                                    </>
-                                )}
-                                {scanning && (
-                                    <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-emerald-800 shadow-lg">
-                                        <SpinnerGap size={18} className="animate-spin" /> جارٍ إضافة المنتج…
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="mt-2 grid grid-cols-2 gap-2 lg:hidden">
-                            <button type="button" onClick={() => setManualOpen((value) => !value)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-800"><Keyboard size={20} /> إدخال يدوي</button>
-                            <button type="button" onClick={onClose} disabled={saving || cancelling} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-800 disabled:opacity-50"><XCircle size={20} /> إغلاق الكاميرا</button>
+                            <footer className="shrink-0 border-t border-slate-200 bg-white p-3">
+                                <button type="button" onClick={() => onStepChange("review")} disabled={!invoiceLines.length || scanning} className="min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white disabled:opacity-40" data-testid="supplier-receiving-finish-scan">انتهاء التصوير ومراجعة الفاتورة</button>
+                                <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-1 min-h-9 w-full text-xs font-black text-rose-700">إلغاء الجلسة والخروج</button>
+                            </footer>
+                        </section>
+                    </div>
+                ) : (
+                    <section className="flex min-h-0 flex-1 flex-col bg-slate-50" data-testid={`supplier-receiving-${step}-step`}>
+                        <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
+                            {error && <div className="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
+                            {step === "review" ? (
+                                <div className="mx-auto max-w-3xl space-y-3">
+                                    <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><h3 className="font-black text-violet-950">حدد الخدمات المنفذة لكل منتج</h3><p className="mt-1 text-xs font-bold leading-5 text-violet-800">الخدمة العامة تظهر دائمًا، وخدمة الخيار لا تظهر إلا إذا اختارها العميل. لا توجد أي خدمة محددة مسبقًا.</p></div>
+                                    {invoiceLines.map((line) => <SupplierInvoiceLineEditor key={line.key} line={line} permissions={{ ...permissions, can_add_service: false }} serviceCatalog={[]} onProductPriceChange={onProductPriceChange} onServicePriceChange={onServicePriceChange} onServiceToggle={onServiceToggle} onServiceAdd={onServiceAdd} />)}
+                                </div>
+                            ) : (
+                                <div className="mx-auto max-w-3xl"><div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h3 className="font-black text-emerald-950">مسودة فاتورة المورد</h3><p className="mt-1 text-xs font-bold text-emerald-800">راجع الكميات وسعر المنتج والخدمات المختارة قبل الحفظ النهائي.</p></div><SupplierInvoiceCompactTable invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={[]} showEditors={false} /></div>
+                            )}
                         </div>
-                        {manualOpen && (
-                            <form onSubmit={(event) => { event.preventDefault(); onManualSubmit(); }} className="mt-2 flex gap-2 lg:hidden">
-                                <input value={manualBarcode} onChange={(event) => onManualBarcodeChange(event.target.value)} autoComplete="off" placeholder="أدخل رمز القطعة" className="min-h-11 min-w-0 flex-1 rounded-xl border border-emerald-300 px-3 font-mono text-sm font-black outline-none focus:border-emerald-600" />
-                                <button type="submit" disabled={!manualBarcode.trim() || scanning} className="rounded-xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50">إضافة</button>
-                            </form>
-                        )}
-                        <p className="mt-2 hidden text-center text-xs font-bold text-slate-200 lg:block">أبعد QR السابق عن الإطار ثم وجّه الكاميرا إلى القطعة التالية.</p>
-                    </section>
-
-                    <section className="flex min-h-0 flex-1 flex-col bg-slate-50" data-testid="supplier-receiving-invoice-draft">
-                        {(lastScan || error) && (
-                            <div className="space-y-2 px-3 pt-3 lg:border-b lg:border-slate-200 lg:bg-white lg:p-4">
-                                {lastScan && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" weight="fill" /> تمت إضافة {lastScan.product_name || "المنتج"} إلى الفاتورة</div>}
-                                {error && <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
+                        <footer className="shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4">
+                            <div className="mx-auto max-w-3xl"><div className="mb-2 flex items-center justify-between"><span className="font-black text-slate-700">الإجمالي النهائي</span><span className="text-xl font-black text-emerald-800">{formatSupplierMoney(total)} ر.س</span></div>
+                                {step === "review" ? <button type="button" onClick={() => onStepChange("draft")} disabled={cannotSave} className="min-h-12 w-full rounded-xl bg-violet-700 text-base font-black text-white disabled:opacity-40" data-testid="supplier-receiving-create-draft">إنشاء مسودة الفاتورة</button> : <button type="button" onClick={() => setSaveConfirmOpen(true)} disabled={cannotSave} className="min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white disabled:opacity-40" data-testid="supplier-receiving-save-invoice"><CheckCircle className="ml-1 inline" weight="fill" /> حفظ فاتورة المورد</button>}
+                                <button type="button" onClick={() => onStepChange(step === "draft" ? "review" : "scan")} disabled={saving} className="mt-1 min-h-9 w-full text-xs font-black text-slate-600">رجوع</button>
                             </div>
-                        )}
-
-                        <div className="min-h-0 flex-1 overflow-auto p-3">
-                            <div className="lg:hidden">
-                                <SupplierInvoiceCompactTable
-                                    invoiceLines={invoiceLines}
-                                    permissions={permissions}
-                                    serviceCatalog={serviceCatalog}
-                                    onProductPriceChange={onProductPriceChange}
-                                    onServicePriceChange={onServicePriceChange}
-                                    onServiceToggle={onServiceToggle}
-                                    onServiceAdd={onServiceAdd}
-                                />
-                                <details className="group mt-3 rounded-xl border border-slate-200 bg-white">
-                                    <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-black text-slate-800"><span>التعليمات والمسؤوليات</span><CaretDown size={18} className="transition-transform group-open:rotate-180" /></summary>
-                                    <div className="space-y-2 border-t border-slate-100 p-3 text-xs font-bold leading-5 text-slate-600">
-                                        <p>موظف التجهيز محفوظ مع كل قطعة، وموظف الاستلام هو صاحب الجلسة.</p>
-                                        <p>اعتماد الفاتورة ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
-                                    </div>
-                                </details>
-                            </div>
-                            <div className="hidden space-y-3 lg:block">
-                                {!invoiceLines.length ? (
-                                    <div className="flex min-h-52 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">ابدأ بتصوير باركود المنتجات؛ ستظهر هنا دون إغلاق الكاميرا.</div>
-                                ) : invoiceLines.map((line) => (
-                                    <SupplierInvoiceLineEditor
-                                        key={line.key}
-                                        line={line}
-                                        permissions={permissions}
-                                        serviceCatalog={serviceCatalog}
-                                        onProductPriceChange={onProductPriceChange}
-                                        onServicePriceChange={onServicePriceChange}
-                                        onServiceToggle={onServiceToggle}
-                                        onServiceAdd={onServiceAdd}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-
-                        <footer className="shrink-0 border-t border-slate-200 bg-white p-3 lg:p-4">
-                            <div className="mb-2 flex items-center justify-between"><span className="font-black text-slate-700">الإجمالي</span><span className="text-xl font-black tabular-nums text-emerald-800 lg:text-2xl">{formatSupplierMoney(total)} ر.س</span></div>
-                            <button type="button" onClick={onSave} disabled={cannotSave} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice">
-                                {saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} اعتماد فاتورة المورد وإنهاء الجلسة
-                            </button>
-                            <p className="mt-1.5 text-center text-[10px] font-bold text-emerald-800">الاعتماد ينشئ مديونية المورد داخل ميزان 2 فقط.</p>
-                            <button type="button" onClick={onCancel} disabled={saving || cancelling || scanning} className="mt-1.5 min-h-9 w-full rounded-xl text-xs font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-camera">
-                                {cancelling ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
-                            </button>
                         </footer>
                     </section>
-                </div>
+                )}
             </div>
+            <SupplierQuantitySelection request={quantityRequest} busy={scanning} onSelect={onQuantitySelect} onDismiss={onQuantityDismiss} />
+            {saveConfirmOpen && <div className="fixed inset-0 z-[150] flex items-end bg-slate-950/60 sm:items-center sm:justify-center sm:p-4"><section className="w-full rounded-t-3xl bg-white p-5 sm:max-w-md sm:rounded-3xl"><h3 className="text-xl font-black text-slate-950">تأكيد حفظ فاتورة المورد</h3><p className="mt-2 text-sm font-bold leading-6 text-slate-600">سيُنشأ رقم فاتورة مميز ومديونية بقيمة {formatSupplierMoney(total)} ر.س، وتُحدّث الأسعار التي غيّرها الموظف داخل ميزان مع سجل تدقيق.</p><button type="button" onClick={() => { setSaveConfirmOpen(false); onSave(); }} disabled={saving} className="mt-4 min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white" data-testid="supplier-receiving-confirm-save">نعم، احفظ الفاتورة</button><button type="button" onClick={() => setSaveConfirmOpen(false)} disabled={saving} className="mt-2 min-h-10 w-full text-sm font-black text-slate-600">العودة للمسودة</button></section></div>}
         </div>
     );
 }
@@ -659,10 +754,12 @@ export default function SupplierReceivingWorkspace() {
     const [closeNote, setCloseNote] = useState("");
     const [barcode, setBarcode] = useState("");
     const [cameraOpen, setCameraOpen] = useState(false);
-    const [manualEntryOpen, setManualEntryOpen] = useState(false);
     const [error, setError] = useState("");
     const [lastScan, setLastScan] = useState(null);
     const [invoiceDrafts, setInvoiceDrafts] = useState({});
+    const [workflowStep, setWorkflowStep] = useState("scan");
+    const [savedInvoice, setSavedInvoice] = useState(null);
+    const [quantityRequest, setQuantityRequest] = useState(null);
     const barcodeRef = useRef(null);
     const scanBusyRef = useRef(false);
 
@@ -704,14 +801,6 @@ export default function SupplierReceivingWorkspace() {
         (sum, line) => sum + Number(line.total_halalas || 0),
         0,
     );
-    const invoiceCannotSave = Boolean(
-        busy
-        || !invoiceLines.length
-        || invoiceLines.some((line) => !line.services.some(
-            (service) => service.selected && Number(service.unit_price_halalas) > 0,
-        )),
-    );
-
     useEffect(() => {
         if (active && !busy) barcodeRef.current?.focus();
     }, [active, busy]);
@@ -736,6 +825,9 @@ export default function SupplierReceivingWorkspace() {
             setOpenNote("");
             setLastScan(null);
             setInvoiceDrafts({});
+            setWorkflowStep("scan");
+            setSavedInvoice(null);
+            setQuantityRequest(null);
         } catch (openError) {
             setError(openError.message);
         } finally {
@@ -743,23 +835,35 @@ export default function SupplierReceivingWorkspace() {
         }
     }
 
-    const receivePiece = useCallback(async (rawValue, { refocus = true } = {}) => {
+    const receivePiece = useCallback(async (rawValue, { refocus = true, quantity = null } = {}) => {
         const value = String(rawValue || "").trim();
         if (!active?.id || !value || scanBusyRef.current) return false;
         scanBusyRef.current = true;
         setBusy("scan");
         setError("");
         try {
-            const result = await scanSupplierReceivingPiece(active.id, value);
-            setLastScan(result.scan);
+            const result = await scanSupplierReceivingPiece(active.id, value, { quantity });
+            if (result?.requires_quantity_selection) {
+                setQuantityRequest(result);
+                setBarcode("");
+                return false;
+            }
+            const receivedScans = Array.isArray(result?.scans) && result.scans.length
+                ? result.scans
+                : result?.scan ? [result.scan] : [];
+            setQuantityRequest(null);
+            setLastScan(receivedScans[0] ? {
+                ...receivedScans[0],
+                received_quantity: Number(result?.selected_quantity || receivedScans.length || 1),
+            } : null);
             setBarcode("");
             setData((current) => ({
                 ...current,
                 active_session: result.session,
                 active_session_scans: [
-                    result.scan,
+                    ...receivedScans,
                     ...(current.active_session_scans || []).filter(
-                        (row) => row.piece_id !== result.scan?.piece_id,
+                        (row) => !receivedScans.some((scan) => scan.piece_id === row.piece_id),
                     ),
                 ],
                 sessions: (current.sessions || []).map((row) => (
@@ -786,6 +890,15 @@ export default function SupplierReceivingWorkspace() {
     const handleCameraDetected = useCallback(
         (value) => receivePiece(value, { refocus: false }),
         [receivePiece],
+    );
+
+    const selectScannedQuantity = useCallback(
+        (quantity) => {
+            const request = quantityRequest;
+            if (!request?.barcode) return;
+            receivePiece(request.barcode, { refocus: false, quantity });
+        },
+        [quantityRequest, receivePiece],
     );
 
     function changeProductPrice(lineKey, value) {
@@ -853,7 +966,7 @@ export default function SupplierReceivingWorkspace() {
         setBusy("close");
         setError("");
         try {
-            await closeSupplierReceivingSession(active.id, {
+            const result = await closeSupplierReceivingSession(active.id, {
                 note: closeNote.trim(),
                 invoice_lines: invoiceLines.map((line) => ({
                     piece_ids: line.piece_ids,
@@ -865,16 +978,106 @@ export default function SupplierReceivingWorkspace() {
                     })),
                 })),
             });
-            setCameraOpen(false);
+            setSavedInvoice(result?.supplier_invoice || null);
+            setWorkflowStep("share");
+            setData((current) => ({
+                ...current,
+                active_session: result?.session || current.active_session,
+                sessions: (current.sessions || []).map((row) => (
+                    row.id === result?.session?.id ? result.session : row
+                )),
+            }));
             setCloseNote("");
             setLastScan(null);
-            setInvoiceDrafts({});
-            await load({ quiet: true });
+            setQuantityRequest(null);
         } catch (closeError) {
             setError(closeError.message);
         } finally {
             setBusy("");
         }
+    }
+
+    async function shareSavedInvoice() {
+        if (!savedInvoice?.id || busy) return;
+        setBusy("share");
+        setError("");
+        try {
+            const blob = await downloadSupplierReceivingInvoicePdf(savedInvoice.id);
+            const filename = supplierInvoiceFilename(savedInvoice);
+            const file = new File([blob], filename, { type: "application/pdf" });
+            const supplierName = savedInvoice?.supplier_snapshot?.company_name || "المورد";
+            const shareText = `فاتورة المورد ${savedInvoice.invoice_number || ""} — ${supplierName} — الإجمالي ${formatSupplierMoney(savedInvoice.total_halalas)} ر.س`;
+            if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+                await navigator.share({ title: filename, text: shareText, files: [file] });
+            } else {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = filename;
+                link.click();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                const phone = supplierWhatsappPhone(savedInvoice?.supplier_snapshot?.phone);
+                window.open(`https://wa.me/${phone}?text=${encodeURIComponent(`${shareText}\nتم تنزيل ملف PDF؛ أرفقه في هذه المحادثة.`)}`, "_blank", "noopener,noreferrer");
+            }
+        } catch (shareError) {
+            if (shareError?.name !== "AbortError") setError(shareError.message || "تعذّرت مشاركة الفاتورة.");
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function uploadShareEvidence(file) {
+        if (!savedInvoice?.id || !file || busy) return;
+        setBusy("evidence");
+        setError("");
+        try {
+            const result = await uploadSupplierInvoiceShareEvidence(savedInvoice.id, file);
+            setSavedInvoice(result?.supplier_invoice || savedInvoice);
+        } catch (uploadError) {
+            setError(uploadError.message || "تعذّر رفع صورة محادثة المورد.");
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function confirmSavedInvoiceShare() {
+        if (!savedInvoice?.id || busy) return;
+        setBusy("confirm-share");
+        setError("");
+        try {
+            const result = await confirmSupplierInvoiceShare(savedInvoice.id);
+            setSavedInvoice(result?.supplier_invoice || savedInvoice);
+        } catch (confirmError) {
+            setError(confirmError.message || "تعذّر تأكيد مشاركة الفاتورة.");
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function resumeInvoiceShare(session) {
+        const invoiceId = session?.supplier_invoice?.id;
+        if (!invoiceId || busy) return;
+        setBusy("load-invoice");
+        setError("");
+        try {
+            const result = await getSupplierReceivingInvoice(invoiceId);
+            setSavedInvoice(result?.supplier_invoice || null);
+            setWorkflowStep("share");
+            setCameraOpen(true);
+        } catch (invoiceError) {
+            setError(invoiceError.message || "تعذّر تحميل فاتورة المورد.");
+        } finally {
+            setBusy("");
+        }
+    }
+
+    async function finishShareFlow() {
+        setCameraOpen(false);
+        setWorkflowStep("scan");
+        setSavedInvoice(null);
+        setInvoiceDrafts({});
+        setQuantityRequest(null);
+        await load({ quiet: true });
     }
 
     async function cancelSession() {
@@ -895,6 +1098,9 @@ export default function SupplierReceivingWorkspace() {
             setLastScan(null);
             setInvoiceDrafts({});
             setBarcode("");
+            setWorkflowStep("scan");
+            setSavedInvoice(null);
+            setQuantityRequest(null);
             setData((current) => ({
                 ...current,
                 active_session: null,
@@ -994,18 +1200,10 @@ export default function SupplierReceivingWorkspace() {
                             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><Barcode size={36} weight="duotone" /></span>
                             <h3 className="mt-3 text-xl font-black text-slate-950">مسح قطعة جديدة</h3>
                             <p className="mt-1 text-sm font-bold text-slate-500">امسح رمز القطعة لإضافتها إلى فاتورة المورد</p>
-                            <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-camera-button-mobile">
+                            <button type="button" onClick={() => { setError(""); setWorkflowStep("scan"); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-camera-button-mobile">
                                 <Camera size={23} weight="duotone" /> فتح الكاميرا ومسح القطعة
                             </button>
-                            <button type="button" onClick={() => setManualEntryOpen((value) => !value)} disabled={busy === "scan" || sessionCancelling} className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600 bg-white px-5 text-sm font-black text-emerald-800 disabled:opacity-50">
-                                <Keyboard size={21} /> إدخال الرمز يدويًا
-                            </button>
-                            {manualEntryOpen && (
-                                <form onSubmit={scanPiece} className="mt-3 flex gap-2" data-testid="supplier-receiving-mobile-manual-form">
-                                    <input value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" placeholder="رمز القطعة" className="min-h-11 min-w-0 flex-1 rounded-xl border border-emerald-300 px-3 font-mono text-sm font-black outline-none focus:border-emerald-600" />
-                                    <button type="submit" disabled={!barcode.trim() || busy === "scan"} className="rounded-xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50">إضافة</button>
-                                </form>
-                            )}
+                            <p className="mt-2 text-xs font-black text-slate-500">لا يوجد إدخال يدوي للكمية أو الرمز في الجوال.</p>
                         </section>
 
                         {lastScan && (
@@ -1022,6 +1220,7 @@ export default function SupplierReceivingWorkspace() {
                             onServicePriceChange={changeServicePrice}
                             onServiceToggle={toggleService}
                             onServiceAdd={addService}
+                            showEditors={false}
                         />
 
                         <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1035,8 +1234,8 @@ export default function SupplierReceivingWorkspace() {
 
                         <footer className="sticky bottom-0 z-20 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
                             <div className="mb-2 flex items-center justify-between gap-3"><span className="font-black text-slate-950">الإجمالي</span><span className="text-xl font-black tabular-nums text-emerald-800">{formatSupplierMoney(invoiceTotal)} ر.س</span></div>
-                            <button type="button" onClick={closeSession} disabled={invoiceCannotSave} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice-mobile">
-                                {busy === "close" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" weight="fill" />} مراجعة واعتماد الفاتورة
+                            <button type="button" onClick={() => { setWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice-mobile">
+                                <CheckCircle className="ml-1 inline" weight="fill" /> مراجعة المنتجات والخدمات
                             </button>
                             <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-1 min-h-9 w-full text-xs font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-mobile">
                                 {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" />} إلغاء الجلسة والخروج
@@ -1060,7 +1259,7 @@ export default function SupplierReceivingWorkspace() {
                                     <Barcode size={22} className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-700" />
                                     <input ref={barcodeRef} value={barcode} onChange={(event) => setBarcode(event.target.value)} autoComplete="off" inputMode="text" placeholder="امسح QR القطعة هنا" disabled={busy === "scan" || sessionCancelling} className="min-h-14 w-full rounded-2xl border-2 border-emerald-300 bg-white pr-12 pl-4 font-mono text-base font-black outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100 disabled:opacity-50" data-testid="supplier-receiving-barcode-input" />
                                 </label>
-                                <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white px-5 text-base font-black text-emerald-800 disabled:opacity-50" data-testid="supplier-receiving-camera-button">
+                                <button type="button" onClick={() => { setError(""); setWorkflowStep("scan"); setCameraOpen(true); }} disabled={busy === "scan" || sessionCancelling} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-600 bg-white px-5 text-base font-black text-emerald-800 disabled:opacity-50" data-testid="supplier-receiving-camera-button">
                                     <Camera size={22} weight="duotone" /> فتح الكاميرا
                                 </button>
                                 <button type="submit" disabled={!barcode.trim() || busy === "scan" || sessionCancelling} className="min-h-14 rounded-2xl bg-emerald-700 px-7 text-base font-black text-white disabled:opacity-50">
@@ -1096,7 +1295,7 @@ export default function SupplierReceivingWorkspace() {
                             <h3 className="font-black text-slate-950">إنهاء الجلسة</h3>
                             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">احفظ الفاتورة لاعتماد الاستلام، أو ألغِ الجلسة للخروج دون حفظ.</p>
                             <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={3} placeholder="ملاحظة الإغلاق — اختياري" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-400" />
-                            <button type="button" onClick={() => setCameraOpen(true)} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50"><CheckCircle className="ml-1 inline" /> مراجعة الخدمات والأسعار قبل الاعتماد</button>
+                            <button type="button" onClick={() => { setWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50"><CheckCircle className="ml-1 inline" /> مراجعة الخدمات والأسعار قبل الاعتماد</button>
                             <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-800 disabled:opacity-50" data-testid="supplier-receiving-cancel-session">
                                 {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
                             </button>
@@ -1109,18 +1308,22 @@ export default function SupplierReceivingWorkspace() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="supplier-receiving-history">
                 <div className="flex items-center gap-2"><ClockCounterClockwise size={23} className="text-violet-700" /><div><h3 className="font-black text-slate-950">سجل فواتير المورد المعتمدة</h3><p className="mt-1 text-xs font-bold text-slate-500">الجلسات الجديدة ترتبط بفاتورة محاسبية ومديونية داخل ميزان 2؛ وتبقى المسودات التشغيلية السابقة مميزة بوضوح.</p></div></div>
-                {!closedSessions.length ? <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">لا توجد جلسات مغلقة بعد.</div> : <div className="mt-4 grid gap-3 lg:grid-cols-2">{closedSessions.map((session) => (
-                    <article key={session.id} className="rounded-2xl border border-slate-200 p-4">
-                        <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{supplierDisplayName(session)}</div><div className="mt-1 font-mono text-xs font-bold text-violet-700">{session.reference}</div></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{session.scan_count} قطعة</span></div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>اعتمدها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.supplier_invoice && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">{session.supplier_invoice.invoice_number ? `${session.supplier_invoice.invoice_number} · ` : ""}{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · مديونية</span>}{!session.supplier_invoice && session.operational_invoice && <span className="rounded-full bg-amber-50 px-2.5 py-1 font-black text-amber-800">مسودة تشغيلية سابقة · {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span>}</div>
-                    </article>
-                ))}</div>}
+                {!closedSessions.length ? <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">لا توجد جلسات مغلقة بعد.</div> : <div className="mt-4 grid gap-3 lg:grid-cols-2">{closedSessions.map((session) => {
+                    const shareConfirmed = session?.supplier_invoice?.share_status === "confirmed" || session?.supplier_invoice?.share_confirmed;
+                    return (
+                        <article key={session.id} className="rounded-2xl border border-slate-200 p-4">
+                            <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{supplierDisplayName(session)}</div><div className="mt-1 font-mono text-xs font-bold text-violet-700">{session.supplier_invoice?.invoice_number || session.reference}</div></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{session.scan_count} قطعة</span></div>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>أصدرها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.supplier_invoice && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · مديونية</span>}{!session.supplier_invoice && session.operational_invoice && <span className="rounded-full bg-amber-50 px-2.5 py-1 font-black text-amber-800">مسودة تشغيلية سابقة · {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span>}</div>
+                            {session.supplier_invoice && <div className="mt-3 flex items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${shareConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{shareConfirmed ? "تمت المشاركة مع المورد" : "تحتاج تأكيد المشاركة"}</span>{!shareConfirmed && <button type="button" onClick={() => resumeInvoiceShare(session)} disabled={!!busy} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50">إكمال المشاركة</button>}</div>}
+                        </article>
+                    );
+                })}</div>}
             </section>
 
-            {cameraOpen && active && (
+            {cameraOpen && (active || savedInvoice) && (
                 <SupplierPieceCameraScanner
                     onDetected={handleCameraDetected}
-                    onClose={() => setCameraOpen(false)}
+                    onClose={() => { if (workflowStep === "share") void finishShareFlow(); else setCameraOpen(false); }}
                     onCancel={cancelSession}
                     onSave={closeSession}
                     cancelling={busy === "cancel"}
@@ -1135,11 +1338,19 @@ export default function SupplierReceivingWorkspace() {
                     onServicePriceChange={changeServicePrice}
                     onServiceToggle={toggleService}
                     onServiceAdd={addService}
-                    supplierName={supplierDisplayName(active)}
-                    employeeName={active.opened_by_name || ""}
-                    manualBarcode={barcode}
-                    onManualBarcodeChange={setBarcode}
-                    onManualSubmit={() => receivePiece(barcode, { refocus: false })}
+                    supplierName={savedInvoice?.supplier_snapshot?.company_name || supplierDisplayName(active)}
+                    employeeName={active?.opened_by_name || savedInvoice?.supplier_approved_by_name || ""}
+                    step={workflowStep}
+                    onStepChange={setWorkflowStep}
+                    savedInvoice={savedInvoice}
+                    onShareInvoice={shareSavedInvoice}
+                    onShareEvidence={uploadShareEvidence}
+                    onConfirmShare={confirmSavedInvoiceShare}
+                    onShareDone={finishShareFlow}
+                    shareBusy={busy}
+                    quantityRequest={quantityRequest}
+                    onQuantitySelect={selectScannedQuantity}
+                    onQuantityDismiss={() => setQuantityRequest(null)}
                 />
             )}
         </section>
