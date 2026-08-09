@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import product_google_taxonomy_ai_pilot as pilot_module
 from product_google_taxonomy_ai_pilot import (
     PilotStartIn,
     _candidate_rows,
@@ -15,6 +16,7 @@ from product_google_taxonomy_ai_pilot import (
     _product_evidence,
     _run_needs_resume,
     _run_counters,
+    _schedule_pilot_task,
     _select_pilot_products,
     _select_unseen_products,
 )
@@ -169,6 +171,40 @@ async def test_rollout_chunk_concurrency_is_bounded_and_keeps_input_order():
 
     assert results == [value * 2 for value in range(8)]
     assert max_active == 3
+
+
+@pytest.mark.asyncio
+async def test_worker_registry_detaches_from_request_and_deduplicates_run(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = []
+
+    async def fake_execute(db, user_id, run_id, limit, selection_mode):
+        calls.append((db, user_id, run_id, limit, selection_mode))
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(pilot_module, "_execute_pilot", fake_execute)
+    registry = {}
+    db = object()
+
+    first = _schedule_pilot_task(
+        registry, db, "user-1", "run-1", 200, "next_unseen"
+    )
+    second = _schedule_pilot_task(
+        registry, db, "user-1", "run-1", 200, "next_unseen"
+    )
+
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert first is second
+    assert len(calls) == 1
+    assert not first.done()
+    assert registry["user-1:run-1"] is first
+
+    release.set()
+    await first
+    await asyncio.sleep(0)
+    assert registry == {}
 
 
 def test_visual_failures_are_counted_separately_from_ai_failures():

@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
@@ -1167,6 +1167,22 @@ async def _execute_pilot(
                 "$unset": {"lease_owner": "", "lease_expires_at": ""},
             },
         )
+    except asyncio.CancelledError:
+        # A graceful container shutdown must release ownership immediately so
+        # the replacement worker can continue the same run without waiting for
+        # the lease timeout. A hard crash is still covered by lease expiry.
+        await db[RUNS].update_one(
+            {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
+            {
+                "$set": {
+                    "status": "queued",
+                    "heartbeat_at": _now(),
+                    "progress.phase": "interrupted",
+                },
+                "$unset": {"lease_owner": "", "lease_expires_at": ""},
+            },
+        )
+        raise
     except Exception as exc:
         await db[RUNS].update_one(
             {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
@@ -1208,30 +1224,73 @@ async def _run_payload(db: Any, user_id: str, run: dict[str, Any]) -> dict[str, 
     }
 
 
-async def _resume_active_runs_once(db: Any) -> None:
+def _schedule_pilot_task(
+    task_registry: dict[str, asyncio.Task[Any]],
+    db: Any,
+    user_id: str,
+    run_id: str,
+    limit: int,
+    selection_mode: str,
+) -> asyncio.Task[Any]:
+    """Run a pilot independently from the HTTP request that awakened it.
+
+    FastAPI ``BackgroundTasks`` are part of the response lifecycle and can be
+    cancelled by the hosting layer. This registry keeps one durable in-process
+    task per run; Mongo's lease remains the cross-process concurrency guard.
+    """
+    task_key = f"{user_id}:{run_id}"
+    existing = task_registry.get(task_key)
+    if existing is not None and not existing.done():
+        return existing
+
+    task = asyncio.create_task(
+        _execute_pilot(db, user_id, run_id, limit, selection_mode)
+    )
+    task_registry[task_key] = task
+
+    def remove_completed(done: asyncio.Task[Any]) -> None:
+        if task_registry.get(task_key) is done:
+            task_registry.pop(task_key, None)
+        if not done.cancelled():
+            # Retrieve any unexpected BaseException so it cannot become an
+            # unobserved-task warning. Normal failures are persisted by the
+            # executor itself.
+            done.exception()
+
+    task.add_done_callback(remove_completed)
+    return task
+
+
+async def _resume_active_runs_once(
+    db: Any,
+    task_registry: dict[str, asyncio.Task[Any]],
+) -> None:
     runs = await db[RUNS].find(
         {"status": {"$in": list(ACTIVE_RUN_STATUSES)}},
         {"_id": 0},
     ).sort([("created_at", 1)]).to_list(length=100)
     if not runs:
         return
-    await asyncio.gather(*(
-        _execute_pilot(
+    for run in runs:
+        if not run.get("user_id") or not run.get("run_id"):
+            continue
+        _schedule_pilot_task(
+            task_registry,
             db,
             str(run.get("user_id") or ""),
             str(run.get("run_id") or ""),
             int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
             str(run.get("selection_mode") or "sample"),
         )
-        for run in runs
-        if run.get("user_id") and run.get("run_id")
-    ))
 
 
-async def _resumable_run_loop(db: Any) -> None:
+async def _resumable_run_loop(
+    db: Any,
+    task_registry: dict[str, asyncio.Task[Any]],
+) -> None:
     while True:
         try:
-            await _resume_active_runs_once(db)
+            await _resume_active_runs_once(db, task_registry)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -1246,12 +1305,30 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
         tags=["AI Product Manager - Google Taxonomy Pilot"],
     )
     resume_task: asyncio.Task[Any] | None = None
+    worker_tasks: dict[str, asyncio.Task[Any]] = {}
+
+    def schedule_pilot(
+        user_id: str,
+        run_id: str,
+        limit: int,
+        selection_mode: str,
+    ) -> asyncio.Task[Any]:
+        return _schedule_pilot_task(
+            worker_tasks,
+            db,
+            user_id,
+            run_id,
+            limit,
+            selection_mode,
+        )
 
     @router.on_event("startup")
     async def start_resumable_run_loop() -> None:
         nonlocal resume_task
         if resume_task is None or resume_task.done():
-            resume_task = asyncio.create_task(_resumable_run_loop(db))
+            resume_task = asyncio.create_task(
+                _resumable_run_loop(db, worker_tasks)
+            )
 
     @router.on_event("shutdown")
     async def stop_resumable_run_loop() -> None:
@@ -1264,10 +1341,15 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
         except asyncio.CancelledError:
             pass
         resume_task = None
+        active_workers = list(worker_tasks.values())
+        for task in active_workers:
+            task.cancel()
+        if active_workers:
+            await asyncio.gather(*active_workers, return_exceptions=True)
+        worker_tasks.clear()
 
     @router.post("/pilot")
     async def start_pilot(
-        background_tasks: BackgroundTasks,
         payload: PilotStartIn = Body(default=PilotStartIn()),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
@@ -1283,9 +1365,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
         if active:
             active = await _recover_stale_run(db, active)
             if active.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(active):
-                background_tasks.add_task(
-                    _execute_pilot,
-                    db,
+                schedule_pilot(
                     user_id,
                     str(active.get("run_id") or ""),
                     int(active.get("requested_limit") or DEFAULT_PILOT_LIMIT),
@@ -1324,9 +1404,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "error": None,
         }
         await db[RUNS].insert_one(run)
-        background_tasks.add_task(
-            _execute_pilot,
-            db,
+        schedule_pilot(
             user_id,
             run_id,
             payload.limit,
@@ -1336,7 +1414,6 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
 
     @router.get("/pilot/latest")
     async def latest_pilot(
-        background_tasks: BackgroundTasks,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         await _ensure_indexes(db)
@@ -1346,9 +1423,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             return {"ok": True, "run": None, "items": [], "writes_to_salla": False, "auto_apply_enabled": False, "apply_confirmation": APPLY_CONFIRMATION}
         run = await _recover_stale_run(db, run)
         if run.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(run):
-            background_tasks.add_task(
-                _execute_pilot,
-                db,
+            schedule_pilot(
                 user_id,
                 str(run.get("run_id") or ""),
                 int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
@@ -1359,7 +1434,6 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
     @router.get("/pilot/{run_id}")
     async def get_pilot(
         run_id: str,
-        background_tasks: BackgroundTasks,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         await _ensure_indexes(db)
@@ -1369,9 +1443,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             raise HTTPException(status_code=404, detail={"code": "taxonomy_pilot_not_found"})
         run = await _recover_stale_run(db, run)
         if run.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(run):
-            background_tasks.add_task(
-                _execute_pilot,
-                db,
+            schedule_pilot(
                 user_id,
                 run_id,
                 int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
