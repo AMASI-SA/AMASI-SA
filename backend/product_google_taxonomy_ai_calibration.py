@@ -45,6 +45,11 @@ WALL_ART_CUES = {
 BLANK_CANVAS_CUES = {
     "فارغ", "فارغه", "فارغة", "للرسم", "رسم", "كانفس", "كانفاس", "قماش",
 }
+
+WALL_ART_INSCRIPTION_CUES = {
+    "اللهم", "دعاء", "أذكار", "اذكار", "آية", "اية", "عبارة", "عباره",
+}
+
 DRESS_WORDS = {"فستان", "الفستان", "فساتين", "الفساتين"}
 INFANT_DRESS_CUES = {
     "رضيع", "رضيعه", "رضيعة", "رضع", "الرضع", "مولود", "مواليد",
@@ -121,7 +126,10 @@ def _is_finished_wall_art(evidence: dict[str, Any]) -> bool:
     tokens = _name_tokens(evidence)
     return (
         _has_any(tokens, WALL_ART_WORDS)
-        and _has_any(tokens, WALL_ART_CUES)
+        and (
+            _has_any(tokens, WALL_ART_CUES)
+            or _has_any(tokens, WALL_ART_INSCRIPTION_CUES)
+        )
         and not _has_any(tokens, BLANK_CANVAS_CUES)
     )
 
