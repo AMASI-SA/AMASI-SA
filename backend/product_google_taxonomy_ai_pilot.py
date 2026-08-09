@@ -42,11 +42,73 @@ MAX_PRODUCTS_SCANNED = 5000
 MAX_CANDIDATES = 24
 SEARCH_TERMS_CHUNK_SIZE = 20
 CLASSIFICATION_CHUNK_SIZE = 5
-SEARCH_TERMS_CONCURRENCY = 3
 CLASSIFICATION_CONCURRENCY = 3
+CLASSIFICATION_WAVE_SIZE = min(
+    SEARCH_TERMS_CHUNK_SIZE,
+    CLASSIFICATION_CHUNK_SIZE * CLASSIFICATION_CONCURRENCY,
+)
 MAX_DESCRIPTION_CHARS = 900
 MAX_REASON_CHARS = 500
 MAX_EVIDENCE_ITEMS = 5
+
+# The Products V2 documents can contain large raw Salla payloads. Loading 5,000
+# complete documents can exceed the production container's memory before the
+# heartbeat gets a chance to run, so the pilot reads only classification facts.
+PILOT_PRODUCT_PROJECTION: dict[str, Any] = {
+    "_id": 0,
+    "mezan_product_id": 1,
+    "id": 1,
+    "salla_product_id": 1,
+    "name": 1,
+    "description_html": 1,
+    "description": 1,
+    "short_description": 1,
+    "categories": 1,
+    "options": 1,
+    "product_type": 1,
+    "brand": 1,
+    "sku": 1,
+    "google_category": 1,
+    "google_category_id": 1,
+    "main_image": 1,
+    "images": {"$slice": 1},
+    "details_loaded": 1,
+    "updated_at": 1,
+    "raw_salla.name": 1,
+    "raw_salla.description": 1,
+    "raw_salla.subtitle": 1,
+    "raw_salla.short_description": 1,
+    "raw_salla.type": 1,
+    "raw_salla.brand": 1,
+    "raw_salla.sku": 1,
+    "raw_salla.gtin": 1,
+    "raw_salla.mpn": 1,
+    "raw_salla.google_taxonomy": 1,
+    "raw_salla.google_product_category": 1,
+    "raw_salla_details.name": 1,
+    "raw_salla_details.description": 1,
+    "raw_salla_details.subtitle": 1,
+    "raw_salla_details.short_description": 1,
+    "raw_salla_details.type": 1,
+    "raw_salla_details.brand": 1,
+    "raw_salla_details.sku": 1,
+    "raw_salla_details.gtin": 1,
+    "raw_salla_details.mpn": 1,
+    "raw_salla_details.google_taxonomy": 1,
+    "raw_salla_details.google_product_category": 1,
+}
+PILOT_SELECTION_PROJECTION: dict[str, Any] = {
+    "_id": 0,
+    "mezan_product_id": 1,
+    "id": 1,
+    "name": 1,
+    "categories": {"$slice": 1},
+    "product_type": 1,
+    "google_category": 1,
+    "google_category_id": 1,
+    "details_loaded": 1,
+    "updated_at": 1,
+}
 
 APPLY_CONFIRMATION = "اعتماد تصنيفات Google عالية الثقة في ميزان"
 
@@ -79,6 +141,13 @@ def _serialize(row: dict[str, Any] | None) -> dict[str, Any] | None:
         if hasattr(value, "isoformat"):
             result[key] = value.isoformat()
     return result
+
+
+def _selected_lookup_values(selected_ids: list[str]) -> list[Any]:
+    """Match both string ids and legacy numeric Mongo ids without broad scans."""
+    values: list[Any] = list(selected_ids)
+    values.extend(int(value) for value in selected_ids if value.isdigit())
+    return values
 
 
 def _text(value: Any) -> str:
@@ -793,13 +862,6 @@ async def _execute_pilot(
         )
         taxonomy_version, taxonomy = await _get_google_taxonomy()
         by_id, by_path = _taxonomy_maps(taxonomy)
-        products = await db[PRODUCTS].find(
-            {"user_id": user_id, "archived": {"$ne": True}},
-        ).sort([("details_loaded", -1), ("updated_at", -1), ("name", 1)]).limit(MAX_PRODUCTS_SCANNED).to_list(length=MAX_PRODUCTS_SCANNED)
-        product_by_id = {
-            str(row.get("mezan_product_id") or row.get("id") or ""): row
-            for row in products
-        }
         selected_ids = [
             str(value)
             for value in (run.get("selected_product_ids") or [])
@@ -808,36 +870,47 @@ async def _execute_pilot(
         coverage: dict[str, int] | None = (
             dict(run.get("coverage")) if isinstance(run.get("coverage"), dict) else None
         )
-        if selected_ids:
-            selected = [
-                product_by_id.get(product_id, {"mezan_product_id": product_id})
-                for product_id in selected_ids
-            ]
-        else:
+        selection_by_id: dict[str, dict[str, Any]] = {}
+        if not selected_ids:
+            catalog_rows = await db[PRODUCTS].find(
+                {"user_id": user_id, "archived": {"$ne": True}},
+                PILOT_SELECTION_PROJECTION,
+            ).sort(
+                [("details_loaded", -1), ("updated_at", -1), ("name", 1)]
+            ).limit(MAX_PRODUCTS_SCANNED).to_list(length=MAX_PRODUCTS_SCANNED)
             if selection_mode == "next_unseen":
                 seen_values = await db[CLASSIFICATIONS].distinct(
                     "mezan_product_id",
                     {"user_id": user_id, "decision_status": {"$ne": "ai_failed"}},
                 )
                 seen_ids = {str(value) for value in seen_values if value not in (None, "")}
-                active_ids = set(product_by_id)
+                active_ids = {
+                    str(row.get("mezan_product_id") or row.get("id") or "")
+                    for row in catalog_rows
+                }
                 seen_before = len(active_ids.intersection(seen_ids))
-                selected = _select_unseen_products(products, seen_ids, limit)
+                selected_summaries = _select_unseen_products(
+                    catalog_rows, seen_ids, limit
+                )
                 coverage = {
-                    "total_products": len(products),
+                    "total_products": len(catalog_rows),
                     "seen_before": seen_before,
-                    "selected_now": len(selected),
+                    "selected_now": len(selected_summaries),
                     "processed_now": 0,
                     "seen_after": seen_before,
-                    "remaining_after": max(0, len(products) - seen_before),
+                    "remaining_after": max(0, len(catalog_rows) - seen_before),
                 }
             else:
-                selected = _select_pilot_products(products, limit)
+                selected_summaries = _select_pilot_products(catalog_rows, limit)
             selected_ids = [
                 str(row.get("mezan_product_id") or row.get("id") or "")
-                for row in selected
+                for row in selected_summaries
                 if row.get("mezan_product_id") or row.get("id")
             ]
+            selection_by_id = {
+                str(row.get("mezan_product_id") or row.get("id") or ""): row
+                for row in selected_summaries
+            }
             await db[RUNS].update_one(
                 {
                     "user_id": user_id,
@@ -853,6 +926,31 @@ async def _execute_pilot(
                     "counters.selected": len(selected_ids),
                 }},
             )
+
+        # Fetch evidence only for the durable selection (at most 200 rows).
+        # Numeric legacy ids are included in both their stored and string forms.
+        selected_lookup_values = _selected_lookup_values(selected_ids)
+        products = await db[PRODUCTS].find(
+            {
+                "user_id": user_id,
+                "archived": {"$ne": True},
+                "$or": [
+                    {"mezan_product_id": {"$in": selected_lookup_values}},
+                    {"id": {"$in": selected_lookup_values}},
+                ],
+            },
+            PILOT_PRODUCT_PROJECTION,
+        ).to_list(length=len(selected_ids))
+        product_by_id = {
+            str(row.get("mezan_product_id") or row.get("id") or ""): row
+            for row in products
+        }
+        selected = [
+            product_by_id.get(product_id)
+            or selection_by_id.get(product_id)
+            or {"mezan_product_id": product_id}
+            for product_id in selected_ids
+        ]
 
         if not selected:
             if selection_mode == "next_unseen":
@@ -965,12 +1063,7 @@ async def _execute_pilot(
             return
 
         client = _openai_client()
-        search_terms_by_product: dict[str, list[str]] = {}
         term_generation_errors: list[str] = []
-        evidence_chunks = [
-            evidences[start:start + SEARCH_TERMS_CHUNK_SIZE]
-            for start in range(0, len(evidences), SEARCH_TERMS_CHUNK_SIZE)
-        ]
 
         async def generate_search_terms(
             evidence_chunk: list[dict[str, Any]],
@@ -980,52 +1073,6 @@ async def _execute_pilot(
             except Exception as exc:  # per-chunk fallback keeps the rollout progressing
                 return {}, type(exc).__name__
 
-        for start in range(0, len(evidence_chunks), SEARCH_TERMS_CONCURRENCY):
-            if not await _renew_run_lease(
-                db, user_id, run_id, lease_owner, phase="generating_search_terms"
-            ):
-                return
-            wave = evidence_chunks[start:start + SEARCH_TERMS_CONCURRENCY]
-            term_chunk_results = await _gather_bounded(
-                wave,
-                generate_search_terms,
-                concurrency=SEARCH_TERMS_CONCURRENCY,
-            )
-            for chunk_terms, chunk_error in term_chunk_results:
-                search_terms_by_product.update(chunk_terms)
-                if chunk_error:
-                    term_generation_errors.append(chunk_error)
-        term_generation_error = ",".join(sorted(set(term_generation_errors))) or None
-
-        classification_inputs: list[dict[str, Any]] = []
-        metadata_by_product: dict[str, dict[str, Any]] = {}
-        for evidence in evidences:
-            product_id = evidence["product_id"]
-            current_id = _resolve_current_id(str(evidence.get("current_google_category") or ""), by_id, by_path)
-            ai_terms = search_terms_by_product.get(product_id) or []
-            candidates = _candidate_rows(evidence, ai_terms, taxonomy, current_id)
-            metadata_by_product[product_id] = {
-                "evidence": evidence,
-                "current_id": current_id,
-                "candidates": candidates,
-                "input_revision": _input_revision(evidence),
-                "limited_evidence": _evidence_limited(evidence),
-                "term_source": "openai" if ai_terms else "deterministic_fallback",
-            }
-            classification_inputs.append({
-                "product_id": product_id,
-                "facts": evidence,
-                "candidate_categories": [
-                    {"id": str(row.get("id")), "name": row.get("name"), "path": row.get("path")}
-                    for row in candidates
-                ],
-            })
-
-        classification_chunks = [
-            classification_inputs[start:start + CLASSIFICATION_CHUNK_SIZE]
-            for start in range(0, len(classification_inputs), CLASSIFICATION_CHUNK_SIZE)
-        ]
-
         async def classify_chunk(
             chunk: list[dict[str, Any]],
         ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], Exception | None]:
@@ -1034,14 +1081,70 @@ async def _execute_pilot(
             except (APITimeoutError, Exception) as exc:  # per-chunk partial failure isolation
                 return chunk, {}, exc
 
-        for start in range(0, len(classification_chunks), CLASSIFICATION_CONCURRENCY):
+        # Complete search -> classify -> persist for at most 15 products at a
+        # time. Each wave becomes durable before the next one starts, avoiding
+        # the old all-200 search-term phase that could lose every minute of work
+        # if the small production container restarted.
+        for start in range(0, len(evidences), CLASSIFICATION_WAVE_SIZE):
+            evidence_wave = evidences[start:start + CLASSIFICATION_WAVE_SIZE]
+            if not await _renew_run_lease(
+                db, user_id, run_id, lease_owner, phase="generating_search_terms"
+            ):
+                return
+            search_terms_by_product, term_error = await generate_search_terms(
+                evidence_wave
+            )
+            if term_error:
+                term_generation_errors.append(term_error)
+
+            classification_inputs: list[dict[str, Any]] = []
+            metadata_by_product: dict[str, dict[str, Any]] = {}
+            for evidence in evidence_wave:
+                product_id = evidence["product_id"]
+                current_id = _resolve_current_id(
+                    str(evidence.get("current_google_category") or ""),
+                    by_id,
+                    by_path,
+                )
+                ai_terms = search_terms_by_product.get(product_id) or []
+                candidates = _candidate_rows(
+                    evidence, ai_terms, taxonomy, current_id
+                )
+                metadata_by_product[product_id] = {
+                    "evidence": evidence,
+                    "current_id": current_id,
+                    "candidates": candidates,
+                    "input_revision": _input_revision(evidence),
+                    "limited_evidence": _evidence_limited(evidence),
+                    "term_source": (
+                        "openai" if ai_terms else "deterministic_fallback"
+                    ),
+                }
+                classification_inputs.append({
+                    "product_id": product_id,
+                    "facts": evidence,
+                    "candidate_categories": [
+                        {
+                            "id": str(row.get("id")),
+                            "name": row.get("name"),
+                            "path": row.get("path"),
+                        }
+                        for row in candidates
+                    ],
+                })
+
+            classification_chunks = [
+                classification_inputs[index:index + CLASSIFICATION_CHUNK_SIZE]
+                for index in range(
+                    0, len(classification_inputs), CLASSIFICATION_CHUNK_SIZE
+                )
+            ]
             if not await _renew_run_lease(
                 db, user_id, run_id, lease_owner, phase="classifying_products"
             ):
                 return
-            wave = classification_chunks[start:start + CLASSIFICATION_CONCURRENCY]
             classification_chunk_results = await _gather_bounded(
-                wave,
+                classification_chunks,
                 classify_chunk,
                 concurrency=CLASSIFICATION_CONCURRENCY,
             )
@@ -1059,7 +1162,7 @@ async def _execute_pilot(
                             "mezan_product_id": product_id,
                             "salla_product_id": evidence.get("salla_product_id"),
                             "product_name": evidence.get("name"),
-                            "main_image": product_by_id[product_id].get("main_image"),
+                            "main_image": product_by_id.get(product_id, {}).get("main_image"),
                             "classification_input_revision": meta["input_revision"],
                             "classification_source": "openai_pilot",
                             "classified_at": _now(),
@@ -1102,7 +1205,7 @@ async def _execute_pilot(
                         "mezan_product_id": product_id,
                         "salla_product_id": evidence.get("salla_product_id"),
                         "product_name": evidence.get("name"),
-                        "main_image": product_by_id[product_id].get("main_image"),
+                        "main_image": product_by_id.get(product_id, {}).get("main_image"),
                         "classification_input_revision": meta["input_revision"],
                         "classification_source": "openai_pilot",
                         "classified_at": _now(),
@@ -1134,6 +1237,10 @@ async def _execute_pilot(
                 phase="checkpoint_saved",
                 coverage=coverage,
             )
+
+        term_generation_error = ",".join(
+            sorted(set(term_generation_errors))
+        ) or None
 
         records = await _checkpoint_run(
             db,
