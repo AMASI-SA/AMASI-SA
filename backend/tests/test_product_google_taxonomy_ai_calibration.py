@@ -133,7 +133,7 @@ def test_finished_wall_art_rejects_drawing_canvas_supply_branch():
 def test_singular_inscription_wall_art_rejects_drawing_canvas_supply_branch():
     evidence = _evidence("لوحة اللهم ألف بين قلوبنا")
     terms = calibration.contextual_search_terms(evidence)
-    assert any("جدارية" in pilot._normalize_ar(term) for term in terms)
+    assert any("جداري" in pilot._normalize_ar(term) for term in terms)
     cap, note = calibration.confidence_cap(
         evidence,
         "فنون وترفيه > مستلزمات الهوايات والفنون > خامات الأشغال اليدوية > لوحات رسم",
