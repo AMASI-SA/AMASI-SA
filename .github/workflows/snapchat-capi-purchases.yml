@@ -25,7 +25,7 @@ jobs:
       - name: Install focused dependencies
         run: >-
           pip install pytest pytest-asyncio fastapi "pydantic>=2" httpx
-          pymongo motor cryptography openpyxl
+          pymongo motor cryptography bcrypt openpyxl
 
       - name: Compile CAPI and webhook modules
         working-directory: backend
