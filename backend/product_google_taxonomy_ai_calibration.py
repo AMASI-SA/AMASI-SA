@@ -37,6 +37,19 @@ ROSARY_WORDS = {
     "سبحه", "سبحة", "السبحه", "السبحة",
     "مسبحه", "مسبحة", "المسبحه", "المسبحة",
 }
+WALL_ART_WORDS = {"لوحه", "لوحة", "لوحات"}
+WALL_ART_CUES = {
+    "جداري", "جداريه", "جدارية", "حائطي", "حائطيه", "حائطية",
+    "ديكور", "مطبوع", "مطبوعات", "تصميم", "عصري", "ثلاثي", "ثلاثيه", "ثلاثية",
+}
+BLANK_CANVAS_CUES = {
+    "فارغ", "فارغه", "فارغة", "للرسم", "رسم", "كانفس", "كانفاس", "قماش",
+}
+DRESS_WORDS = {"فستان", "الفستان", "فساتين", "الفساتين"}
+INFANT_DRESS_CUES = {
+    "رضيع", "رضيعه", "رضيعة", "رضع", "الرضع", "مولود", "مواليد",
+    "بيبي", "baby", "toddler", "حديثي", "حديثه", "حديثة", "ولاده", "ولادة",
+}
 
 VISION_CONFIDENCE_TRIGGER = 69
 VISION_MAX_OUTPUT_TOKENS = 700
@@ -102,6 +115,20 @@ def _is_school_pinafore(evidence: dict[str, Any]) -> bool:
 
 def _is_rosary(evidence: dict[str, Any]) -> bool:
     return _has_any(_name_tokens(evidence), ROSARY_WORDS)
+
+
+def _is_finished_wall_art(evidence: dict[str, Any]) -> bool:
+    tokens = _name_tokens(evidence)
+    return (
+        _has_any(tokens, WALL_ART_WORDS)
+        and _has_any(tokens, WALL_ART_CUES)
+        and not _has_any(tokens, BLANK_CANVAS_CUES)
+    )
+
+
+def _is_non_infant_dress(evidence: dict[str, Any]) -> bool:
+    tokens = _name_tokens(evidence)
+    return _has_any(tokens, DRESS_WORDS) and not _has_any(tokens, INFANT_DRESS_CUES)
 
 
 def _is_ambiguous_bundle(evidence: dict[str, Any]) -> bool:
@@ -177,6 +204,10 @@ def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
         terms.extend(["ملابس مدرسية", "زي مدرسي للبنات", "مريول مدرسي"])
     if _is_rosary(evidence):
         terms.extend(["سبح ومسابح", "سبحة خرز", "مسبحة"])
+    if _is_finished_wall_art(evidence):
+        terms.extend(["لوحات جدارية", "أعمال فنية ومطبوعات", "ديكور جداري"])
+    if _is_non_infant_dress(evidence):
+        terms.extend(["فساتين", "ملابس وفساتين"])
     return terms
 
 
@@ -208,6 +239,16 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
             return True
     if _is_rosary(evidence):
         if "مشجعي كره القدم" in normalized:
+            return True
+    if _is_finished_wall_art(evidence):
+        if "رسم" in normalized and any(
+            term in normalized for term in ("خامات", "مستلزمات", "لوحات رسم", "كانفس", "كانفاس")
+        ):
+            return True
+    if _is_non_infant_dress(evidence):
+        if "فساتين" in normalized and (
+            "الرضع" in normalized or "الاطفال الصغار" in normalized
+        ):
             return True
     return False
 
@@ -259,6 +300,10 @@ def confidence_cap(evidence: dict[str, Any], chosen_path: Any) -> tuple[int | No
             return 49, "المريول المدرسي زي لطالبات المدرسة وليس فستاناً للرضع أو الأطفال الصغار."
         if _is_rosary(evidence):
             return 49, "شعار النادي لا يغيّر نوع المنتج؛ السبحة ليست إكسسواراً لمشجعي كرة القدم."
+        if _is_finished_wall_art(evidence):
+            return 49, "اللوحة الجدارية الجاهزة عمل فني للعرض وليست خامة أو لوحة فارغة للرسم."
+        if _is_non_infant_dress(evidence):
+            return 49, "الفستان غير الموصوف للرضع لا ينتمي إلى فساتين الرضع والأطفال الصغار."
     return None, None
 
 

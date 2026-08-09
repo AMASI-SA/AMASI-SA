@@ -118,6 +118,58 @@ def test_club_logo_does_not_turn_rosary_into_football_fan_accessory():
     assert "السبحة" in note
 
 
+def test_finished_wall_art_rejects_drawing_canvas_supply_branch():
+    evidence = _evidence("لوحات ثلاثية تصميم عصري")
+    terms = calibration.contextual_search_terms(evidence)
+    assert any("جداري" in pilot._normalize_ar(term) for term in terms)
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "فنون وترفيه > مستلزمات الهوايات والفنون > خامات الأشغال اليدوية > لوحات رسم",
+    )
+    assert cap == 49
+    assert "الجدارية الجاهزة" in note
+
+
+def test_blank_canvas_stays_eligible_for_drawing_supply_branch():
+    evidence = _evidence("لوحة كانفس فارغة للرسم")
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "فنون وترفيه > مستلزمات الهوايات والفنون > خامات الأشغال اليدوية > لوحات رسم",
+    )
+    assert cap is None
+    assert note is None
+    assert not any(
+        "لوحات جداريه" == pilot._normalize_ar(term)
+        for term in calibration.contextual_search_terms(evidence)
+    )
+
+
+def test_non_infant_dress_rejects_baby_toddler_dress_branch():
+    evidence = _evidence("الفستان البناتي الأخضر")
+    terms = calibration.contextual_search_terms(evidence)
+    assert any("فساتين" in pilot._normalize_ar(term) for term in terms)
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "ملابس وإكسسوارات > ملابس > فساتين الرضع والأطفال الصغار",
+    )
+    assert cap == 49
+    assert "غير الموصوف للرضع" in note
+
+
+def test_explicit_baby_dress_stays_eligible_for_infant_branch():
+    evidence = _evidence("فستان بيبي للرضع")
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "ملابس وإكسسوارات > ملابس > فساتين الرضع والأطفال الصغار",
+    )
+    assert cap is None
+    assert note is None
+    assert not any(
+        "ملابس وفساتين" == pilot._normalize_ar(term)
+        for term in calibration.contextual_search_terms(evidence)
+    )
+
+
 def test_product_evidence_exposes_only_public_http_image_url(monkeypatch):
     monkeypatch.setattr(
         pilot,
