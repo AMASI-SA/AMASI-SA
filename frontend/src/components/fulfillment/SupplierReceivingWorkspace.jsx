@@ -427,7 +427,7 @@ export function SupplierPieceCameraScanner({
                     return new globalThis.BarcodeDetector();
                 }
                 const supported = await getSupportedFormats.call(globalThis.BarcodeDetector);
-                const formats = ["qr_code", "code_128"].filter((value) => supported.includes(value));
+                const formats = ["qr_code", "code_128", "code_39"].filter((value) => supported.includes(value));
                 return formats.length ? new globalThis.BarcodeDetector({ formats }) : null;
             } catch {
                 return null;
@@ -486,7 +486,11 @@ export function SupplierPieceCameraScanner({
                     delayBetweenScanAttempts: 180,
                     delayBetweenScanSuccess: 500,
                 });
-                reader.possibleFormats = [BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128];
+                reader.possibleFormats = [
+                    BarcodeFormat.QR_CODE,
+                    BarcodeFormat.CODE_128,
+                    BarcodeFormat.CODE_39,
+                ];
                 zxingControls = await reader.decodeFromVideoElement(
                     videoRef.current,
                     (result) => {

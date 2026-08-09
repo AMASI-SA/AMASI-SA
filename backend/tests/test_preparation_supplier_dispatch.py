@@ -21,6 +21,7 @@ from preparation_supplier_dispatch import (
     _employee_workspace,
     _group_piece_products,
     _hydrate_piece_images_from_batches,
+    _hydrate_piece_print_facts_from_batches,
     _mark_orders_started_if_fully_dispatched,
     employee_workspace_summary,
     file_is_fully_dispatched,
@@ -28,6 +29,7 @@ from preparation_supplier_dispatch import (
     piece_is_available_for_supplier_dispatch,
     plan_piece_selections,
     supplier_dispatch_blocker,
+    supplier_dispatch_cards,
     supplier_dispatch_lines,
     supplier_receiving_dispatch_blocker,
 )
@@ -242,6 +244,43 @@ def test_existing_piece_uses_resolved_salla_image_when_manual_image_is_missing()
     assert pieces[0]["resolved_image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
     assert products[0]["resolved_image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
     assert products[0]["image_url"] == "https://cdn.salla.sa/AMS11542.jpg"
+
+
+def test_supplier_print_cards_keep_physical_barcodes_and_customer_order_facts():
+    pieces = [{
+        **_piece("a" * 32, group_key="product:ring"),
+        "batch_id": "batch-1",
+        "product_name": "خاتم لا يظهر اسمه في الطباعة",
+        "selected_image_url": None,
+        "specifications_snapshot": [],
+    }]
+    batches = [{
+        "id": "batch-1",
+        "lines": [{
+            "order_item_id": "item-1",
+            "group_key": "product:ring",
+            "resolved_image_url": "https://cdn.salla.sa/ring.jpg",
+            "shipping_company": "سمسا",
+            "total_products_in_order": 3,
+            "file_spec_fields": [
+                {"name": "اللون", "value": "ذهبي"},
+                {"name": "المقاس", "value": "17"},
+            ],
+        }],
+    }]
+
+    _hydrate_piece_print_facts_from_batches(pieces, batches)
+    cards = supplier_dispatch_cards(pieces)
+
+    assert len(cards) == 1
+    assert cards[0]["barcode_value"] == "a" * 32
+    assert cards[0]["resolved_image_url"] == "https://cdn.salla.sa/ring.jpg"
+    assert cards[0]["shipping_company"] == "سمسا"
+    assert cards[0]["order_piece_count"] == 3
+    assert cards[0]["specifications"] == [
+        {"name": "اللون", "value": "ذهبي"},
+        {"name": "المقاس", "value": "17"},
+    ]
 
 
 def test_new_dispatch_governance_requires_the_same_supplier_at_receiving():
