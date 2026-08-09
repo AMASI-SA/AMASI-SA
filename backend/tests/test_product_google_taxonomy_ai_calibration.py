@@ -130,6 +130,28 @@ def test_finished_wall_art_rejects_drawing_canvas_supply_branch():
     assert "الجدارية الجاهزة" in note
 
 
+def test_singular_inscription_wall_art_rejects_drawing_canvas_supply_branch():
+    evidence = _evidence("لوحة اللهم ألف بين قلوبنا")
+    terms = calibration.contextual_search_terms(evidence)
+    assert any("جدارية" in pilot._normalize_ar(term) for term in terms)
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "فنون وترفيه > مستلزمات الهوايات والفنون > خامات الأشغال اليدوية > لوحات رسم",
+    )
+    assert cap == 49
+    assert "الجدارية الجاهزة" in note
+
+
+def test_singular_drawing_board_without_wall_cues_stays_eligible():
+    evidence = _evidence("لوحة رسم تعليمية للأطفال")
+    cap, note = calibration.confidence_cap(
+        evidence,
+        "فنون وترفيه > مستلزمات الهوايات والفنون > خامات الأشغال اليدوية > لوحات رسم",
+    )
+    assert cap is None
+    assert note is None
+
+
 def test_blank_canvas_stays_eligible_for_drawing_supply_branch():
     evidence = _evidence("لوحة كانفس فارغة للرسم")
     cap, note = calibration.confidence_cap(
