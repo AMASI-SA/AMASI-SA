@@ -1014,6 +1014,16 @@ def _delivery_for_ad(
         }
 
     parent_row = parent or {}
+    parent_configured = _text(parent_row.get("status")).upper()
+    if parent_configured and parent_configured not in {"ACTIVE", "ENABLED"}:
+        return {
+            "configured_status": configured,
+            "delivery_state": "NOT_DELIVERING",
+            "delivery_status": "غير نشط — المجموعة الإعلانية متوقفة",
+            "delivery_reason_code": "PARENT_AD_SQUAD_CONFIGURED_PAUSED",
+            "deliverable": False,
+            "delivery_inherited_from_ad_squad": True,
+        }
     parent_state = _text(parent_row.get("delivery_state")).upper()
     parent_label = _text(
         parent_row.get("delivery_status")
