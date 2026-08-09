@@ -22,10 +22,10 @@ export async function getStoreOperationsAudit({ limit = 100 } = {}) {
     return (await api.get("/ai-store-operations/access/audit/log", { params: { limit } })).data;
 }
 
-export async function startGoogleTaxonomyPilot(limit = 20) {
+export async function startGoogleTaxonomyPilot(limit = 20, selectionMode = "sample") {
     return (await api.post(
         "/ai-store-operations/product-intelligence/google-taxonomy/pilot",
-        { limit },
+        { limit, selection_mode: selectionMode },
     )).data;
 }
 

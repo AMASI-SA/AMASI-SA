@@ -16,7 +16,7 @@ import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from openai import APITimeoutError, AsyncOpenAI
@@ -32,10 +32,11 @@ AI_ACTION_LOG = "mezan_ai_action_log_v2"
 
 DEFAULT_PILOT_LIMIT = 20
 MIN_PILOT_LIMIT = 20
-MAX_PILOT_LIMIT = 50
-PILOT_STALE_MINUTES = 20
-MAX_PRODUCTS_SCANNED = 600
+MAX_PILOT_LIMIT = 200
+PILOT_STALE_MINUTES = 120
+MAX_PRODUCTS_SCANNED = 5000
 MAX_CANDIDATES = 24
+SEARCH_TERMS_CHUNK_SIZE = 20
 CLASSIFICATION_CHUNK_SIZE = 5
 MAX_DESCRIPTION_CHARS = 900
 MAX_REASON_CHARS = 500
@@ -46,6 +47,7 @@ APPLY_CONFIRMATION = "اعتماد تصنيفات Google عالية الثقة �
 
 class PilotStartIn(BaseModel):
     limit: int = Field(default=DEFAULT_PILOT_LIMIT, ge=MIN_PILOT_LIMIT, le=MAX_PILOT_LIMIT)
+    selection_mode: Literal["sample", "next_unseen"] = "sample"
 
 
 class PilotApplyIn(BaseModel):
@@ -362,6 +364,18 @@ def _select_pilot_products(products: list[dict[str, Any]], limit: int) -> list[d
     return selected[:limit]
 
 
+def _select_unseen_products(
+    products: list[dict[str, Any]],
+    seen_product_ids: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    unseen = [
+        row for row in products
+        if str(row.get("mezan_product_id") or row.get("id") or "") not in seen_product_ids
+    ]
+    return _round_robin(unseen, limit)
+
+
 def _openai_client() -> AsyncOpenAI:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -549,7 +563,13 @@ async def _recover_stale_run(db: Any, run: dict[str, Any]) -> dict[str, Any]:
     return {**run, "status": "failed", "finished_at": _now(), "error": "pilot_stale_after_runtime_interruption"}
 
 
-async def _execute_pilot(db: Any, user_id: str, run_id: str, limit: int) -> None:
+async def _execute_pilot(
+    db: Any,
+    user_id: str,
+    run_id: str,
+    limit: int,
+    selection_mode: str = "sample",
+) -> None:
     await db[RUNS].update_one(
         {"user_id": user_id, "run_id": run_id},
         {"$set": {"status": "running", "started_at": _now()}},
@@ -561,8 +581,47 @@ async def _execute_pilot(db: Any, user_id: str, run_id: str, limit: int) -> None
         products = await db[PRODUCTS].find(
             {"user_id": user_id, "archived": {"$ne": True}},
         ).sort([("details_loaded", -1), ("updated_at", -1), ("name", 1)]).limit(MAX_PRODUCTS_SCANNED).to_list(length=MAX_PRODUCTS_SCANNED)
-        selected = _select_pilot_products(products, limit)
+        coverage: dict[str, int] | None = None
+        if selection_mode == "next_unseen":
+            seen_values = await db[CLASSIFICATIONS].distinct(
+                "mezan_product_id",
+                {"user_id": user_id},
+            )
+            seen_ids = {str(value) for value in seen_values if value not in (None, "")}
+            active_ids = {
+                str(row.get("mezan_product_id") or row.get("id") or "")
+                for row in products
+            }
+            seen_before = len(active_ids.intersection(seen_ids))
+            selected = _select_unseen_products(products, seen_ids, limit)
+            coverage = {
+                "total_products": len(products),
+                "seen_before": seen_before,
+                "selected_now": len(selected),
+                "seen_after": min(len(products), seen_before + len(selected)),
+                "remaining_after": max(0, len(products) - seen_before - len(selected)),
+            }
+            await db[RUNS].update_one(
+                {"user_id": user_id, "run_id": run_id},
+                {"$set": {"coverage": coverage}},
+            )
+        else:
+            selected = _select_pilot_products(products, limit)
+
         if not selected:
+            if selection_mode == "next_unseen":
+                await db[RUNS].update_one(
+                    {"user_id": user_id, "run_id": run_id},
+                    {"$set": {
+                        "status": "completed",
+                        "finished_at": _now(),
+                        "taxonomy_version": taxonomy_version,
+                        "counters": _run_counters([], 0),
+                        "coverage": coverage,
+                        "error": None,
+                    }},
+                )
+                return
             raise RuntimeError("no_products_available_for_pilot")
 
         evidences: list[dict[str, Any]] = []
@@ -598,12 +657,14 @@ async def _execute_pilot(db: Any, user_id: str, run_id: str, limit: int) -> None
 
         client = _openai_client()
         search_terms_by_product: dict[str, list[str]] = {}
-        term_generation_error = None
-        if evidences:
+        term_generation_errors: list[str] = []
+        for start in range(0, len(evidences), SEARCH_TERMS_CHUNK_SIZE):
+            evidence_chunk = evidences[start:start + SEARCH_TERMS_CHUNK_SIZE]
             try:
-                search_terms_by_product = await _ai_search_terms(client, evidences)
-            except Exception as exc:  # fallback keeps pilot partially useful
-                term_generation_error = type(exc).__name__
+                search_terms_by_product.update(await _ai_search_terms(client, evidence_chunk))
+            except Exception as exc:  # per-chunk fallback keeps the rollout progressing
+                term_generation_errors.append(type(exc).__name__)
+        term_generation_error = ",".join(sorted(set(term_generation_errors))) or None
 
         classification_inputs: list[dict[str, Any]] = []
         metadata_by_product: dict[str, dict[str, Any]] = {}
@@ -805,12 +866,20 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 "missing_data": 0, "visual_checked": 0, "visual_failed": 0,
                 "applied": 0,
             },
-            "mode": "proposal_only_pilot",
+            "mode": "proposal_only_pilot" if payload.selection_mode == "sample" else "proposal_only_next_unseen",
+            "selection_mode": payload.selection_mode,
             "writes_to_salla": False,
             "error": None,
         }
         await db[RUNS].insert_one(run)
-        background_tasks.add_task(_execute_pilot, db, user_id, run_id, payload.limit)
+        background_tasks.add_task(
+            _execute_pilot,
+            db,
+            user_id,
+            run_id,
+            payload.limit,
+            payload.selection_mode,
+        )
         return await _run_payload(db, user_id, run)
 
     @router.get("/pilot/latest")

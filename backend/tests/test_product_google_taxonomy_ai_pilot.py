@@ -1,4 +1,5 @@
 from product_google_taxonomy_ai_pilot import (
+    PilotStartIn,
     _candidate_rows,
     _decision_status,
     _fallback_search_terms,
@@ -6,6 +7,7 @@ from product_google_taxonomy_ai_pilot import (
     _product_evidence,
     _run_counters,
     _select_pilot_products,
+    _select_unseen_products,
 )
 
 
@@ -113,6 +115,32 @@ def test_pilot_selection_keeps_diversity_and_some_existing_categories():
     assert any(row.get("google_category") for row in selected)
     keys = {row["categories"][0]["name"] for row in selected if row.get("categories")}
     assert len(keys) >= 4
+
+
+def test_full_rollout_accepts_200_products_in_next_unseen_mode():
+    payload = PilotStartIn(limit=200, selection_mode="next_unseen")
+    assert payload.limit == 200
+    assert payload.selection_mode == "next_unseen"
+
+
+def test_full_rollout_skips_products_already_seen_in_prior_runs():
+    products = [
+        {
+            "mezan_product_id": f"product-{index}",
+            "name": f"منتج {index}",
+            "product_type": "product",
+            "categories": [{"name": f"قسم {index % 3}"}],
+        }
+        for index in range(12)
+    ]
+    selected = _select_unseen_products(
+        products,
+        {"product-0", "product-1", "product-2", "product-3"},
+        6,
+    )
+    selected_ids = {row["mezan_product_id"] for row in selected}
+    assert len(selected) == 6
+    assert not selected_ids.intersection({"product-0", "product-1", "product-2", "product-3"})
 
 
 def test_visual_failures_are_counted_separately_from_ai_failures():
