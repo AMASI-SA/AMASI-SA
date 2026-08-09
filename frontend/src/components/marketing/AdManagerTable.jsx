@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowClockwise,
     ChartBar,
@@ -19,6 +19,11 @@ import {
     getSnapchatAdPerformance,
     SNAPCHAT_ENTITY_PAGE_SIZE,
 } from "../../services/snapchatAdPerformance";
+import InfiniteScrollSentinel from "./InfiniteScrollSentinel";
+import {
+    infinitePaginationState,
+    mergePaginatedRows,
+} from "./infiniteScrollPagination";
 
 const AUTO_REFRESH_MS = 60_000;
 const NAME_WIDTH = 330;
@@ -227,8 +232,11 @@ export default function AdManagerTable({
     const [page, setPage] = useState(1);
     const [sort, setSort] = useState({ key: null, direction: "desc" });
     const [serverSort, setServerSort] = useState("orders");
+    const loadSequenceRef = useRef(0);
 
     const load = useCallback(async ({ silent = false } = {}) => {
+        const requestId = ++loadSequenceRef.current;
+        const requestPage = page;
         if (!silent) setLoading(true);
         setError("");
         const accountId = snapchatSelectedAccountId();
@@ -251,8 +259,24 @@ export default function AdManagerTable({
                 sortBy: serverSort,
                 actionReportTime,
             });
-            setReport(result);
+            if (requestId !== loadSequenceRef.current) return;
+            setReport((current) => {
+                if (requestPage <= 1 || !current) return result;
+                return {
+                    ...result,
+                    ads: mergePaginatedRows(
+                        current.ads,
+                        result.ads,
+                        (ad) => `${ad?.account_id || "unknown"}:${ad?.ad_id || "unknown"}`,
+                    ),
+                    pagination: {
+                        ...result.pagination,
+                        page: requestPage,
+                    },
+                };
+            });
         } catch (loadError) {
+            if (requestId !== loadSequenceRef.current) return;
             const detail = loadError?.response?.data?.detail;
             setError(
                 typeof detail === "string"
@@ -260,7 +284,9 @@ export default function AdManagerTable({
                     : detail?.message || "تعذر تحميل إعلانات Snapchat.",
             );
         } finally {
-            setLoading(false);
+            if (requestId === loadSequenceRef.current) {
+                setLoading(false);
+            }
         }
     }, [
         actionReportTime,
@@ -278,10 +304,15 @@ export default function AdManagerTable({
 
     useEffect(() => {
         setPage(1);
-    }, [campaignId, adSquadId]);
+    }, [actionReportTime, activeCampaignsOnly, campaignId, adSquadId]);
 
     useEffect(() => {
         const refresh = () => {
+            loadSequenceRef.current += 1;
+            if (page !== 1) {
+                setPage(1);
+                return;
+            }
             setPage(1);
             window.setTimeout(() => load({ silent: true }), 80);
         };
@@ -297,7 +328,7 @@ export default function AdManagerTable({
             window.removeEventListener(ADS_DATE_RANGE_APPLIED_EVENT, refresh);
             window.clearInterval(timer);
         };
-    }, [load]);
+    }, [load, page]);
 
     const rows = useMemo(() => {
         if (!sort.key) return [...(report?.ads || [])];
@@ -330,6 +361,11 @@ export default function AdManagerTable({
 
     const pagination = report?.pagination || {};
     const totals = report?.totals || {};
+    const paginationState = infinitePaginationState({
+        pagination,
+        requestedPage: page,
+        loaded: report?.ads?.length || 0,
+    });
 
     return (
         <section
@@ -461,15 +497,18 @@ export default function AdManagerTable({
                     نتائج الإعلانات من Snapchat فقط؛ نتائج سلة تبقى على مستوى الحملة حتى تتوفر هوية إعلان مؤكدة.
                 </span>
                 <div className="flex items-center gap-2 text-xs font-black text-slate-600">
-                    <span>{number(pagination.total || rows.length)} إعلان · الصفحة {pagination.page || page}{pagination.pages ? ` من ${pagination.pages}` : ""}</span>
-                    {(pagination.pages || 0) > 1 && (
-                        <>
-                            <button type="button" disabled={(pagination.page || page) <= 1} onClick={() => setPage((pagination.page || page) - 1)} className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-35">السابق</button>
-                            <button type="button" disabled={(pagination.page || page) >= pagination.pages} onClick={() => setPage((pagination.page || page) + 1)} className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-35">التالي</button>
-                        </>
-                    )}
+                    <span>تم عرض {number(report?.ads?.length || 0)} من {number(paginationState.total)} إعلان</span>
                 </div>
             </div>
+            <InfiniteScrollSentinel
+                hasMore={paginationState.hasMore}
+                loading={loading}
+                loaded={report?.ads?.length || 0}
+                total={paginationState.total}
+                entityLabel="إعلان"
+                onLoadMore={() => setPage(paginationState.page + 1)}
+                testId="ad-infinite-scroll-sentinel"
+            />
         </section>
     );
 }

@@ -19,6 +19,8 @@ import {
     buildProfitabilityProductCostHref,
     rememberSnapchatRangeBeforeProductNavigation,
 } from "../../campaignProfitabilityProductNavigation";
+import InfiniteScrollSentinel from "./InfiniteScrollSentinel";
+import { infinitePaginationState } from "./infiniteScrollPagination";
 
 const PROFITABILITY_COLUMNS = Object.freeze([
     "product_cost",
@@ -587,6 +589,7 @@ export default function CampaignManagerTable({
     pagination = {},
     page = 1,
     onPageChange,
+    loading = false,
     readOnly = true,
     onOpenAdSquads,
 }) {
@@ -650,8 +653,14 @@ export default function CampaignManagerTable({
     const allVisibleSelected = rows.length > 0
         && rows.every((campaign) => selected.has(campaignRowKey(campaign)));
     const columns = availableDefinitions.filter((column) => visibleColumns.includes(column.id));
-    const totalPages = Number(pagination.pages || 0);
-    const currentPage = Number(pagination.page || page || 1);
+    const paginationState = infinitePaginationState({
+        pagination,
+        requestedPage: page,
+        loaded: campaigns.length,
+    });
+    const totalPages = paginationState.pages;
+    const currentPage = paginationState.page;
+    const infiniteScroll = platform === "snapchat";
 
     function toggleRow(campaign) {
         const key = campaignRowKey(campaign);
@@ -895,9 +904,11 @@ export default function CampaignManagerTable({
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-slate-500">
-                        {formatNumber(pagination.total || campaigns.length)} حملة · الصفحة {currentPage}{totalPages > 0 ? ` من ${totalPages}` : ""}
+                        {infiniteScroll
+                            ? `تم عرض ${formatNumber(campaigns.length)} من ${formatNumber(paginationState.total)} حملة`
+                            : `${formatNumber(pagination.total || campaigns.length)} حملة · الصفحة ${currentPage}${totalPages > 0 ? ` من ${totalPages}` : ""}`}
                     </span>
-                    {totalPages > 1 && (
+                    {!infiniteScroll && totalPages > 1 && (
                         <>
                             <button
                                 type="button"
@@ -919,6 +930,17 @@ export default function CampaignManagerTable({
                     )}
                 </div>
             </div>
+            {infiniteScroll && (
+                <InfiniteScrollSentinel
+                    hasMore={paginationState.hasMore}
+                    loading={loading}
+                    loaded={campaigns.length}
+                    total={paginationState.total}
+                    entityLabel="حملة"
+                    onLoadMore={() => onPageChange?.(currentPage + 1)}
+                    testId="campaign-infinite-scroll-sentinel"
+                />
+            )}
             <ProfitabilityDialog campaign={profitCampaign} onClose={() => setProfitCampaign(null)} />
         </section>
     );
