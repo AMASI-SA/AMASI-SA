@@ -218,6 +218,22 @@ def test_ad_delivery_separates_switch_review_and_parent_blockers():
     assert inherited["delivery_inherited_from_ad_squad"] is True
     assert inherited["delivery_reason_code"] == "ACCOUNT_PAYMENT_BLOCKED"
 
+    paused_parent = module._delivery_for_ad(
+        {"status": "ACTIVE", "review_status": "APPROVED"},
+        {"status": "PAUSED"},
+    )
+    assert paused_parent["configured_status"] == "ACTIVE"
+    assert paused_parent["delivery_state"] == "NOT_DELIVERING"
+    assert (
+        paused_parent["delivery_status"]
+        == "غير نشط — المجموعة الإعلانية متوقفة"
+    )
+    assert (
+        paused_parent["delivery_reason_code"]
+        == "PARENT_AD_SQUAD_CONFIGURED_PAUSED"
+    )
+    assert paused_parent["delivery_inherited_from_ad_squad"] is True
+
 
     unknown = module._delivery_for_ad({}, None)
     assert unknown["delivery_state"] == "UNKNOWN"
