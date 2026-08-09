@@ -24,7 +24,7 @@ MAX_ENTITY_ROWS_PER_TYPE = 50_000
 ENTITY_ENDPOINTS = (
     ("campaign", "campaigns", "campaign", {}),
     ("ad_squad", "adsquads", "adsquad", {"return_placement_v2": "true"}),
-    ("ad", "ads", "ad", {}),
+    ("ad", "ads", "ad", {"read_deleted_entities": "true"}),
     ("creative", "creatives", "creative", {}),
 )
 
@@ -113,6 +113,7 @@ async def _upsert_entity(
                 "campaign_id": campaign_id,
                 "ad_squad_id": ad_squad_id,
                 "creative_id": str(entity.get("creative_id") or "").strip() or None,
+                "deleted": entity.get("deleted") is True,
                 "display_name": entity.get("name") or external_id,
                 "status": entity.get("status"),
                 "delivery_status": entity.get("delivery_status"),
@@ -166,9 +167,13 @@ async def _sync_entity_type(
     url = f"{SNAPCHAT_API_BASE}/adaccounts/{account['ad_account_id']}/{plural_key}"
     params: dict[str, Any] | None = {
         "limit": ENTITY_PAGE_SIZE,
-        "sort": "updated_at-desc",
         **extra_params,
     }
+    # Snapchat forbids combining read_deleted_entities with sort. Ads use the
+    # deleted-aware catalog so performance-only historical Ads retain their
+    # exact Ad Squad identity; other entity catalogs keep deterministic sort.
+    if "read_deleted_entities" not in params:
+        params["sort"] = "updated_at-desc"
     saved = 0
     observed = 0
     errors: list[dict[str, str]] = []
