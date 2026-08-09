@@ -39,7 +39,7 @@ function openProduct(productId) {
 
 export default function ProductGoogleTaxonomyPilotPanel() {
     const [payload, setPayload] = useState(null);
-    const [limit, setLimit] = useState(20);
+    const [limit, setLimit] = useState(200);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
     const [applying, setApplying] = useState(false);
@@ -83,10 +83,13 @@ export default function ProductGoogleTaxonomyPilotPanel() {
     async function startPilot() {
         setStarting(true);
         try {
-            const result = await startGoogleTaxonomyPilot(limit);
+            const selectionMode = limit === 200 ? "next_unseen" : "sample";
+            const result = await startGoogleTaxonomyPilot(limit, selectionMode);
             setPayload(result);
             setExpanded(true);
-            toast.success(`بدأ Pilot تصنيف Google على ${limit} منتجًا. لا توجد كتابة إلى Salla.`);
+            toast.success(limit === 200
+                ? "بدأت دفعة التصنيف التالية على المنتجات غير المحللة سابقًا. لا توجد كتابة إلى Salla."
+                : `بدأ Pilot تصنيف Google على ${limit} منتجًا. لا توجد كتابة إلى Salla.`);
         } catch (error) {
             const detail = error?.response?.data?.detail;
             toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر بدء Pilot تصنيف Google");
@@ -117,16 +120,17 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50 px-4 py-3 sm:px-5">
             <div className="min-w-0">
                 <h2 className="flex items-center gap-2 font-black text-slate-900"><Robot className="text-violet-700" /> AI Product Manager — Google Category Pilot</h2>
-                <p className="mt-1 text-xs text-slate-500">تحليل محكوم لـ20–50 منتجًا. اقتراحات فقط أولًا، ولا توجد أي كتابة إلى Salla.</p>
+                <p className="mt-1 text-xs text-slate-500">Pilot محكوم لـ20–50 منتجًا، أو دفعة 200 من المنتجات غير المحللة سابقًا. لا توجد أي كتابة إلى Salla.</p>
             </div>
             <div className="flex items-center gap-2">
                 <select value={limit} onChange={(event) => setLimit(Number(event.target.value))} disabled={starting || (run && !TERMINAL.has(run.status))} className="rounded-xl border bg-white px-3 py-2 text-sm font-bold">
                     <option value={20}>20 منتج</option>
                     <option value={30}>30 منتج</option>
                     <option value={50}>50 منتج</option>
+                    <option value={200}>200 منتج — الدفعة التالية</option>
                 </select>
                 <button disabled={starting || (run && !TERMINAL.has(run.status))} onClick={startPilot} className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">
-                    {starting ? <><SpinnerGap className="ml-1 inline animate-spin" /> بدء…</> : "تشغيل Pilot"}
+                    {starting ? <><SpinnerGap className="ml-1 inline animate-spin" /> بدء…</> : limit === 200 ? "تشغيل الدفعة التالية" : "تشغيل Pilot"}
                 </button>
                 <button type="button" onClick={() => setExpanded((value) => !value)} className="rounded-xl border bg-white px-3 py-2 text-xs font-bold">{expanded ? "إخفاء" : "إظهار"}</button>
             </div>
@@ -158,6 +162,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                         ["اعتمد", counters.applied],
                     ].map(([label, value]) => <div key={label} className="rounded-xl border bg-slate-50 p-2 text-center"><div className="num text-lg font-black text-slate-900">{Number(value || 0).toLocaleString("en-US")}</div><div className="text-[11px] text-slate-500">{label}</div></div>)}
                 </div>
+
+                {run.coverage && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">
+                    <div>تغطية الكتالوج: <b className="num">{Number(run.coverage.seen_after || 0).toLocaleString("en-US")}</b> من <b className="num">{Number(run.coverage.total_products || 0).toLocaleString("en-US")}</b> منتج</div>
+                    <div>المتبقي بعد هذه الدفعة: <b className="num">{Number(run.coverage.remaining_after || 0).toLocaleString("en-US")}</b></div>
+                </div>}
 
                 {run.error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><WarningCircle className="ml-1 inline" />{run.error}</div>}
 
