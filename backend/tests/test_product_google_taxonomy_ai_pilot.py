@@ -1,15 +1,19 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from product_google_taxonomy_ai_pilot import (
     PilotStartIn,
     _candidate_rows,
+    _claim_run_lease,
     _decision_status,
     _fallback_search_terms,
     _gather_bounded,
     _input_revision,
+    _persist_records,
     _product_evidence,
+    _run_needs_resume,
     _run_counters,
     _select_pilot_products,
     _select_unseen_products,
@@ -182,3 +186,117 @@ def test_visual_failures_are_counted_separately_from_ai_failures():
     assert counters["visual_checked"] == 2
     assert counters["visual_failed"] == 1
     assert counters["ai_failed"] == 1
+
+
+def test_interrupted_run_without_lease_is_immediately_resumable():
+    assert _run_needs_resume({"status": "running"}) is True
+
+
+def test_live_lease_prevents_duplicate_worker_and_expired_lease_recovers():
+    now = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+    assert _run_needs_resume({
+        "status": "running",
+        "lease_expires_at": now + timedelta(seconds=30),
+    }, now=now) is False
+    assert _run_needs_resume({
+        "status": "running",
+        "lease_expires_at": now - timedelta(seconds=1),
+    }, now=now) is True
+    assert _run_needs_resume({
+        "status": "completed",
+        "lease_expires_at": now - timedelta(seconds=1),
+    }, now=now) is False
+
+
+def test_run_counters_preserve_durable_apply_progress():
+    counters = _run_counters([
+        {"decision_status": "high_confidence", "apply_status": "applied"},
+        {"decision_status": "review_required", "apply_status": "not_eligible"},
+    ], 2)
+    assert counters["applied"] == 1
+
+
+@pytest.mark.asyncio
+async def test_partial_checkpoint_is_idempotent_and_never_overwrites_saved_result():
+    class Collection:
+        def __init__(self):
+            self.rows = {}
+
+        async def update_one(self, query, update, upsert=False):
+            key = (query["user_id"], query["run_id"], query["mezan_product_id"])
+            if key not in self.rows and upsert:
+                self.rows[key] = dict(update["$setOnInsert"])
+
+    class Db:
+        def __init__(self):
+            self.collection = Collection()
+
+        def __getitem__(self, _name):
+            return self.collection
+
+    db = Db()
+    first = {
+        "user_id": "user-1",
+        "run_id": "run-1",
+        "mezan_product_id": "product-1",
+        "decision_status": "high_confidence",
+        "ai_confidence": 94,
+    }
+    duplicate_after_restart = {**first, "decision_status": "ai_failed", "ai_confidence": 0}
+
+    await _persist_records(db, [first])
+    await _persist_records(db, [duplicate_after_restart])
+
+    saved = next(iter(db.collection.rows.values()))
+    assert len(db.collection.rows) == 1
+    assert saved["decision_status"] == "high_confidence"
+    assert saved["ai_confidence"] == 94
+
+
+@pytest.mark.asyncio
+async def test_atomic_lease_allows_only_one_worker_for_a_run():
+    class Result:
+        def __init__(self, modified):
+            self.modified_count = modified
+
+    class Runs:
+        def __init__(self):
+            self.doc = {
+                "user_id": "user-1",
+                "run_id": "run-1",
+                "status": "queued",
+                "lease_owner": None,
+                "lease_expires_at": None,
+                "started_at": None,
+            }
+
+        async def find_one(self, query, _projection):
+            return dict(self.doc) if query["run_id"] == self.doc["run_id"] else None
+
+        async def update_one(self, query, update):
+            now = query["$or"][2]["lease_expires_at"]["$lte"]
+            expires = self.doc.get("lease_expires_at")
+            claimable = self.doc.get("lease_owner") is None or (
+                isinstance(expires, datetime) and expires <= now
+            )
+            if not claimable:
+                return Result(0)
+            self.doc.update(update["$set"])
+            for key, value in update.get("$inc", {}).items():
+                self.doc[key] = int(self.doc.get(key) or 0) + value
+            return Result(1)
+
+    class Db:
+        def __init__(self):
+            self.runs = Runs()
+
+        def __getitem__(self, _name):
+            return self.runs
+
+    db = Db()
+    first = await _claim_run_lease(db, "user-1", "run-1", "worker-a")
+    second = await _claim_run_lease(db, "user-1", "run-1", "worker-b")
+
+    assert first is not None
+    assert second is None
+    assert db.runs.doc["lease_owner"] == "worker-a"
