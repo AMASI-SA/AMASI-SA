@@ -346,3 +346,66 @@ async def test_report_includes_zero_spend_ad_and_parent_names(monkeypatch):
     assert filtered["pagination"]["limit"] == 9
     assert filtered["pagination"]["total"] == 0
     assert filtered["campaign_id"] == "campaign-other"
+
+@pytest.mark.asyncio
+async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
+    monkeypatch,
+):
+    events = []
+
+    class Context:
+        db = object()
+        user_id = "owner-1"
+        provider_calls = 0
+
+    context = Context()
+
+    async def fake_identity_sync(
+        sync_context,
+        client,
+        access_token,
+        account,
+    ):
+        assert sync_context is context
+        assert access_token == "token"
+        assert account["ad_account_id"] == "account-1"
+        events.append("identity")
+        sync_context.provider_calls += 2
+        return 3, {"ad": 3}, []
+
+    async def fake_recent_refresh(
+        db,
+        user_id,
+        account_id,
+        *,
+        now,
+    ):
+        assert db is context.db
+        assert user_id == "owner-1"
+        assert account_id == "account-1"
+        events.append("recent")
+        return True
+
+    monkeypatch.setattr(
+        module,
+        "sync_snapchat_ad_entities",
+        fake_identity_sync,
+    )
+    monkeypatch.setattr(module, "_recent_refresh", fake_recent_refresh)
+
+    result = await module.refresh_snapchat_ad_performance(
+        context,
+        object(),
+        "token",
+        {"ad_account_id": "account-1", "timezone": "America/Los_Angeles"},
+        start_date=date(2026, 8, 9),
+        end_date=date(2026, 8, 9),
+        now=datetime(2026, 8, 9, 12, tzinfo=timezone.utc),
+    )
+
+    assert events == ["identity", "recent"]
+    assert result["skip_reason"] == "fresh_within_15_minutes"
+    assert result["provider_calls"] == 2
+    assert result["identity_rows_saved"] == 3
+    assert result["identity_counts"] == {"ad": 3}
+    assert result["rows_saved"] == 0

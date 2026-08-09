@@ -63,6 +63,7 @@ from .snapchat_native_data_common import (
     _timezone,
     _utcnow,
 )
+from .snapchat_native_entities_sync import sync_snapchat_ad_entities
 from .snapchat_native_performance_sync import (
     CONVERSION_SOURCE_TYPES,
     STAT_FIELDS,
@@ -613,6 +614,14 @@ async def refresh_snapchat_ad_performance(
         )
     timezone_name = _valid_timezone_name(account.get("timezone"))
     current = _aware_now(now)
+    calls_before = context.provider_calls
+    (
+        identity_rows_saved,
+        identity_counts,
+        identity_errors,
+    ) = await sync_snapchat_ad_entities(
+        context, client, access_token, account
+    )
     if await _recent_refresh(
         context.db,
         context.user_id,
@@ -624,7 +633,10 @@ async def refresh_snapchat_ad_performance(
             "skipped": True,
             "skip_reason": "fresh_within_15_minutes",
             "rows_saved": 0,
-            "provider_calls": 0,
+            "provider_calls": context.provider_calls - calls_before,
+            "identity_rows_saved": identity_rows_saved,
+            "identity_counts": identity_counts,
+            "identity_errors": identity_errors[:20],
             "source_only": True,
         }
 
@@ -648,7 +660,10 @@ async def refresh_snapchat_ad_performance(
             "skipped": True,
             "skip_reason": "empty_request_window",
             "rows_saved": 0,
-            "provider_calls": 0,
+            "provider_calls": context.provider_calls - calls_before,
+            "identity_rows_saved": identity_rows_saved,
+            "identity_counts": identity_counts,
+            "identity_errors": identity_errors[:20],
             "source_only": True,
         }
 
@@ -658,7 +673,6 @@ async def refresh_snapchat_ad_performance(
         account_id,
     )
     errors: list[dict[str, Any]] = []
-    calls_before = context.provider_calls
     account_local_saved = 0
     request_windows: list[dict[str, str]] = []
     breakdown_days = 0
@@ -776,6 +790,9 @@ async def refresh_snapchat_ad_performance(
         "campaign_limit_reached": campaign_limit_reached,
         "errors_count": len(errors),
         "errors": errors[:50],
+        "identity_rows_saved": identity_rows_saved,
+        "identity_counts": identity_counts,
+        "identity_errors": identity_errors[:20],
         "provider_calls": context.provider_calls - calls_before,
         "provider_granularity": AD_PROVIDER_GRANULARITY,
         "provider_breakdown": AD_BREAKDOWN,

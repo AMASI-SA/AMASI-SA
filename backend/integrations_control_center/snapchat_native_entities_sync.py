@@ -255,6 +255,45 @@ async def _sync_entity_type(
     return saved, observed, errors
 
 
+async def sync_snapchat_ad_entities(
+    context: SnapchatSyncContext,
+    client: httpx.AsyncClient,
+    access_token: str,
+    account: dict[str, Any],
+) -> tuple[int, dict[str, int], list[dict[str, str]]]:
+    """Refresh exact provider ad identities without touching performance facts."""
+    ad_endpoint = next(
+        (
+            endpoint
+            for endpoint in ENTITY_ENDPOINTS
+            if endpoint[0] == "ad"
+        ),
+        None,
+    )
+    if ad_endpoint is None:
+        return 0, {"ad": 0}, [{"kind": "ad", "error": "endpoint_missing"}]
+
+    entity_type, plural_key, singular_key, extra_params = ad_endpoint
+    try:
+        saved, observed, errors = await _sync_entity_type(
+            context,
+            client,
+            access_token,
+            account,
+            entity_type=entity_type,
+            plural_key=plural_key,
+            singular_key=singular_key,
+            extra_params=extra_params,
+        )
+        return saved, {entity_type: observed}, errors
+    except SnapchatNativeSyncError as exc:
+        if exc.code == "snapchat_needs_reauth":
+            raise
+        return 0, {entity_type: 0}, [
+            {"kind": entity_type, "error": exc.code}
+        ]
+
+
 async def sync_snapchat_entities(
     context: SnapchatSyncContext,
     client: httpx.AsyncClient,
@@ -292,5 +331,6 @@ __all__ = [
     "ENTITY_PAGE_SIZE",
     "MAX_ENTITY_PAGES",
     "MAX_ENTITY_ROWS_PER_TYPE",
+    "sync_snapchat_ad_entities",
     "sync_snapchat_entities",
 ]
