@@ -50,6 +50,7 @@ import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
 import MezanSuppliersV2 from "./pages/MezanSuppliersV2";
+import EmployeesV2 from "./pages/EmployeesV2";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
@@ -267,6 +268,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><MezanProducts /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/employees-v2"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><EmployeesV2 /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

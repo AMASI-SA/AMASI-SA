@@ -102,7 +102,7 @@ test("products section exposes a Salla-style primary group and secondary page ra
     expect(markup).toContain("إدارة المنتجات");
     expect(markup).toContain("استقبال المنتجات");
     expect(markup).toContain("استلام المخزون");
-    expect(markup).toContain("الفريق والصلاحيات");
+    expect(markup).not.toContain("الفريق والصلاحيات");
     expect(markup).toContain("مكونات المنتجات");
     expect(markup).toContain("الفروع والمخازن");
     expect(markup).toContain('data-testid="mezan-v2-open-all"');

@@ -103,6 +103,28 @@ Scope:
 - Shipping readiness
 - Full audit timeline
 
+## Employee OS Foundation — Employee, Payroll and Fulfillment Access
+
+Status: IN PROGRESS
+
+Phase 1:
+
+- Canonical employee identity in Mezan V2
+- Read-only migration preview from `operating_salaries`
+- Explicit login-account and operational-role linkage
+- Ledger-backed salary payable, advance and custody snapshot
+- Idempotent `shadow_read_only` employee and salary-contract migration
+- Owner-only migration and audit controls
+
+Required before payroll cutover:
+
+- Resolve suggested or conflicting login links manually
+- Validate employee and salary totals at 100%
+- Route new salary changes through effective-dated V2 contracts
+- Run one complete payroll cycle in parallel
+- Verify fulfillment permissions and task assignment by canonical employee ID
+- Preserve a rollback checkpoint, then retire the legacy employee page
+
 ## Sprint 5 — Unified PDF and Preparation Output
 
 Status: PLANNED
