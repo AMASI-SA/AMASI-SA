@@ -466,3 +466,29 @@ The Phase 1 boundary is mandatory:
   are contractually fixed to `false`.
 - Future live capabilities require separate ingestion, privacy, identity,
   approval, quality and rollback gates. They are not implied by this preview.
+
+---
+
+## Decision-029 — Employee Identity Is Separate from Login and Salary
+
+Status: Approved, Phase 1 implementation
+
+Mezan V2 owns one canonical employee identity. A login account, operational
+role, salary contract and financial ledger entity are linked capabilities; none
+of them is the employee's identity by itself.
+
+The initial migration is a guarded `shadow_read_only` copy:
+
+- `operating_salaries` remains payroll authority until a validated cutover.
+- `general_ledger` remains the authority for salary payable, advances and
+  custody; migration never recomputes or rewrites historical balances.
+- Existing users and operational role assignments are linked only through an
+  explicit identifier. A name match may be shown as a review suggestion but is
+  never applied automatically.
+- Migration is idempotent, audited and blocks duplicate legacy identities.
+- Salary changes become effective-dated contracts after cutover; historical
+  contracts are never overwritten.
+- The legacy employee page is retired only after one complete payroll cycle,
+  fulfillment permission checks and 100% count/value reconciliation pass.
+- AI may recommend assignments or flag anomalies. Salary payment, termination,
+  sensitive permission changes and payroll cutover require human approval.

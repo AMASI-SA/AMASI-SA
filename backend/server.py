@@ -3938,6 +3938,11 @@ api.include_router(make_order_activity_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
+from employees_v2_routes import (
+    ensure_employee_v2_indexes,
+    make_employees_v2_router,
+)
+api.include_router(make_employees_v2_router(db, current_user))
 api.include_router(make_order_review_router(db, current_user))
 api.include_router(make_return_decision_router(db, current_user))
 attach_settlement_cycle_routes(api, db)
@@ -4303,6 +4308,9 @@ async def on_startup():
     await ensure_ad_account_indexes(db)
     await ensure_bnpl_indexes(db)
     await ensure_alerts_indexes(db)
+    # Employees V2 — canonical employee identity and read-only salary-contract
+    # shadow.  These indexes do not migrate or recalculate legacy payroll.
+    await ensure_employee_v2_indexes(db)
     # Iter-160 — Universal Ledger + Audit Log indexes
     from ledger_core import ensure_indexes as ensure_ledger_indexes
     await ensure_ledger_indexes(db)

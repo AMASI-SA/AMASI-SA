@@ -13,6 +13,7 @@ import {
     Queue,
     Robot,
     Storefront,
+    UsersThree,
     X,
 } from "@phosphor-icons/react";
 
@@ -45,6 +46,15 @@ export const MEZAN_V2_NAV_SECTIONS = [
         ],
     },
     {
+        id: "employees",
+        label: "الموظفون",
+        Icon: UsersThree,
+        items: [
+            { to: "/employees-v2", label: "الموظفون والرواتب", exactSearch: true },
+            { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" },
+        ],
+    },
+    {
         id: "products",
         label: "المنتجات",
         Icon: Cube,
@@ -52,7 +62,6 @@ export const MEZAN_V2_NAV_SECTIONS = [
             { to: "/products-v2", label: "إدارة المنتجات", exactSearch: true },
             { to: "/products-v2?workspace=intake", label: "استقبال المنتجات" },
             { to: "/inventory-receiving-v2", label: "استلام المخزون" },
-            { to: "/products-v2?workspace=access", label: "الفريق والصلاحيات" },
             { to: "/components-v2", label: "مكونات المنتجات", exactSearch: true },
             { to: "/components-v2?workspace=warehouse", label: "الفروع والمخازن" },
         ],
@@ -102,6 +111,7 @@ const MEZAN_V2_PATHS = [
     "/orders-v2",
     "/fulfillment-v2",
     "/inventory-receiving-v2",
+    "/employees-v2",
     "/products-v2",
     "/components-v2",
     "/suppliers-v2",
