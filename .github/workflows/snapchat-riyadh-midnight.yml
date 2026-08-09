@@ -20,7 +20,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install focused backend dependencies
-        run: pip install pytest fastapi "pydantic>=2" httpx bcrypt openpyxl
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx pymongo
+          cryptography bcrypt PyJWT reportlab openpyxl
       - name: Compile Snapchat Riyadh aggregation
         working-directory: backend
         run: python -m py_compile integrations_control_center/snapchat_native_performance_sync.py
