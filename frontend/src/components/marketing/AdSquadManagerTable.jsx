@@ -42,8 +42,14 @@ export const AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER = Object.freeze([
     "spend",
     "sales",
     "impressions",
+    "paid_reach",
+    "paid_frequency",
     "clicks",
     "ctr",
+    "view_content",
+    "add_to_cart",
+    "start_checkout",
+    "add_billing",
     "budget",
     "optimization",
     "account",
@@ -148,7 +154,9 @@ function csv(rows) {
     const headers = [
         "اسم المجموعة الإعلانية", "معرف المجموعة", "الحالة", "اسم الحملة", "معرف الحملة",
         "حالة التسليم", "المشتريات", "CPA", "ROAS", "الصرف", "المبيعات",
-        "الظهور", "النقرات", "CTR", "الميزانية اليومية", "عملة الميزانية",
+        "الظهور", "الوصول المدفوع", "التكرار المدفوع", "النقرات", "CTR",
+        "عرض المحتوى", "إضافة للسلة", "بدء الدفع", "بيانات الدفع",
+        "الميزانية اليومية", "عملة الميزانية",
         "هدف التحسين", "إستراتيجية المزايدة", "الحساب", "تاريخ البدء",
     ];
     const body = rows.map((row) => [
@@ -164,8 +172,14 @@ function csv(rows) {
         row.spend_sar,
         row.sales_sar,
         row.impressions,
+        row.paid_reach,
+        row.paid_frequency,
         row.swipes,
         row.ctr_pct,
+        row.view_content,
+        row.add_to_cart,
+        row.start_checkout,
+        row.add_billing,
         row.budget?.daily_native,
         row.budget?.currency,
         row.optimization_goal,
@@ -372,8 +386,14 @@ export default function AdSquadManagerTable({
                             <th className="min-w-[145px] border-b border-slate-200 px-4 py-3" data-column-id="spend"><button type="button" onClick={() => sortBy("spend_sar")} className="font-black">المبلغ المصروف</button></th>
                             <th className="min-w-[145px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="sales">المبيعات</th>
                             <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="impressions">مرات الظهور</th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="paid_reach">الوصول المدفوع</th>
+                            <th className="min-w-[145px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="paid_frequency">التكرار المدفوع</th>
                             <th className="min-w-[115px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="clicks">النقرات</th>
                             <th className="min-w-[105px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="ctr">CTR</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="view_content">عرض المحتوى</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="add_to_cart">إضافة للسلة</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="start_checkout">بدء الدفع</th>
+                            <th className="min-w-[140px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="add_billing">بيانات الدفع</th>
                             <th className="min-w-[150px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="budget">الميزانية اليومية</th>
                             <th className="min-w-[170px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="optimization">هدف التحسين</th>
                             <th className="min-w-[220px] border-b border-slate-200 px-4 py-3 font-black" data-column-id="account">الحساب الإعلاني</th>
@@ -408,8 +428,14 @@ export default function AdSquadManagerTable({
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="spend"><Metric value={money(row.spend_sar)} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="sales"><Metric value={money(row.sales_sar)} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="impressions"><Metric value={number(row.impressions)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="paid_reach"><Metric value={number(row.paid_reach)} detail="Paid Reach" /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="paid_frequency"><Metric value={ratio(row.paid_frequency, "×")} detail="Paid Frequency" /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="clicks"><Metric value={number(row.swipes)} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="ctr"><Metric value={ratio(row.ctr_pct, "%")} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="view_content"><Metric value={number(row.view_content)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="add_to_cart"><Metric value={number(row.add_to_cart)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="start_checkout"><Metric value={number(row.start_checkout)} /></td>
+                                    <td className="border-b border-slate-100 px-4 py-4" data-column-id="add_billing"><Metric value={number(row.add_billing)} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="budget"><Metric value={finite(row.budget?.daily_native) === null ? "—" : `${number(row.budget.daily_native)} ${row.budget?.currency || ""}`} /></td>
                                     <td className="border-b border-slate-100 px-4 py-4 font-bold text-slate-700" data-column-id="optimization">{row.optimization_goal || "—"}</td>
                                     <td className="border-b border-slate-100 px-4 py-4" data-column-id="account"><div className="max-w-[200px] truncate font-bold text-slate-700">{row.account_name}</div><div className="mt-1 font-mono text-[10px] text-slate-400">{row.account_id}</div></td>
@@ -417,7 +443,7 @@ export default function AdSquadManagerTable({
                             );
                         })}
                         {!visible.length && (
-                            <tr><td colSpan={16} className="px-6 py-16 text-center"><ChartBar size={38} weight="duotone" className="mx-auto text-slate-300" /><div className="mt-3 font-black text-slate-600">{loading ? "جاري تحميل المجموعات الإعلانية…" : showSelectedOnly ? "لا توجد مجموعات محددة." : "لا توجد بيانات مجموعات إعلانية موثقة ضمن الفترة."}</div></td></tr>
+                            <tr><td colSpan={22} className="px-6 py-16 text-center"><ChartBar size={38} weight="duotone" className="mx-auto text-slate-300" /><div className="mt-3 font-black text-slate-600">{loading ? "جاري تحميل المجموعات الإعلانية…" : showSelectedOnly ? "لا توجد مجموعات محددة." : "لا توجد بيانات مجموعات إعلانية موثقة ضمن الفترة."}</div></td></tr>
                         )}
                     </tbody>
                     {!!visible.length && (
@@ -434,8 +460,14 @@ export default function AdSquadManagerTable({
                                 <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.spend_sar)}</td>
                                 <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{money(totals.sales_sar)}</td>
                                 <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.impressions)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">—</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">—</td>
                                 <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.swipes)}</td>
                                 <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{ratio(totals.ctr_pct, "%")}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.view_content)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.add_to_cart)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.start_checkout)}</td>
+                                <td className="border-t-2 border-slate-300 px-4 py-3 font-mono">{number(totals.add_billing)}</td>
                                 <td className="border-t-2 border-slate-300 px-4 py-3" />
                                 <td className="border-t-2 border-slate-300 px-4 py-3" />
                                 <td className="border-t-2 border-slate-300 px-4 py-3" />

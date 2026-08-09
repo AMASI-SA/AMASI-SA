@@ -653,8 +653,26 @@ def _value(row: dict[str, Any], key: str) -> float | None:
         return _number(row.get("spend_sar"))
     if key == "spend_native":
         return _number(row.get("spend_native"))
-    if key in {"impressions", "swipes", "video_views"}:
-        return _metric(row, key)
+    if key in {
+        "impressions",
+        "swipes",
+        "video_views",
+        "view_content",
+        "add_to_cart",
+        "start_checkout",
+        "add_billing",
+        "paid_reach",
+        "paid_frequency",
+    }:
+        metric_key = {
+            "view_content": "conversion_view_content",
+            "add_to_cart": "conversion_add_cart",
+            "start_checkout": "conversion_start_checkout",
+            "add_billing": "conversion_add_billing",
+            "paid_reach": "uniques",
+            "paid_frequency": "frequency",
+        }.get(key, key)
+        return _metric(row, metric_key)
     return None
 
 
@@ -688,6 +706,25 @@ def _aggregate_rows(
     impressions = _sum_or_none(rows, "impressions")
     swipes = _sum_or_none(rows, "swipes")
     video_views = _sum_or_none(rows, "video_views")
+    view_content = _sum_or_none(rows, "view_content")
+    add_to_cart = _sum_or_none(rows, "add_to_cart")
+    start_checkout = _sum_or_none(rows, "start_checkout")
+    add_billing = _sum_or_none(rows, "add_billing")
+    # Reach and frequency are non-additive. Daily TOTAL rows may be exposed
+    # only for an exact one-day request; multi-day windows require a fresh
+    # provider TOTAL for that exact interval and must never sum daily values.
+    exact_audience_row = requested_days == 1 and len(rows) == 1
+    paid_reach = _value(rows[0], "paid_reach") if exact_audience_row else None
+    frequency_values = (
+        [_value(rows[0], "paid_frequency")]
+        if exact_audience_row
+        else []
+    )
+    paid_frequency = (
+        round(frequency_values[0], 6)
+        if frequency_values and frequency_values[0] is not None
+        else None
+    )
     observed_dates = sorted({_text(row.get("date")) for row in rows if _text(row.get("date"))})
     return {
         "spend_sar": spend_sar,
@@ -698,6 +735,17 @@ def _aggregate_rows(
         "impressions": int(round(impressions)) if impressions is not None else None,
         "swipes": int(round(swipes)) if swipes is not None else None,
         "video_views": int(round(video_views)) if video_views is not None else None,
+        "view_content": int(round(view_content)) if view_content is not None else None,
+        "add_to_cart": int(round(add_to_cart)) if add_to_cart is not None else None,
+        "start_checkout": int(round(start_checkout)) if start_checkout is not None else None,
+        "add_billing": int(round(add_billing)) if add_billing is not None else None,
+        "paid_reach": int(round(paid_reach)) if paid_reach is not None else None,
+        "paid_frequency": paid_frequency,
+        "reach_frequency_scope": (
+            "exact_one_day_total"
+            if requested_days == 1 and (paid_reach is not None or paid_frequency is not None)
+            else "exact_total_window_required"
+        ),
         "roas": _ratio(sales_sar, spend_sar),
         "cpa_sar": _ratio(spend_sar, orders),
         "cpa_native": _ratio(spend_native, orders),
@@ -1185,6 +1233,10 @@ async def build_account_timezone_campaign_report(
             "orders_ready": totals.get("orders") is not None,
             "sales_ready": totals.get("sales_sar") is not None,
             "ratios_ready": any(totals.get(key) is not None for key in ("roas", "cpa_sar", "cpc_sar", "cpm_sar", "ctr_pct")),
+            "funnel_ready": any(
+                totals.get(key) is not None
+                for key in ("view_content", "add_to_cart", "start_checkout", "add_billing")
+            ),
             "ai_analysis_ready": (
                 report_ready
                 and campaign_details_ready

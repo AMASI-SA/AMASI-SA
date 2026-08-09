@@ -18,6 +18,13 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 orders: 5,
                 impressions: 1500,
                 swipes: 70,
+                view_content: 80,
+                add_to_cart: 20,
+                start_checkout: 10,
+                add_billing: 8,
+                paid_reach: 1000,
+                paid_frequency: 1.5,
+                reach_frequency_scope: "exact_one_day_total",
                 roas: 3.33,
                 cpa_sar: 30,
                 ctr_pct: 4.67,
@@ -61,6 +68,7 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 orders_ready: true,
                 sales_ready: true,
                 ratios_ready: true,
+                funnel_ready: true,
                 ai_analysis_ready: true,
                 campaign_creation_enabled: true,
                 campaign_management_enabled: true,
@@ -88,6 +96,13 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         orders: 5,
         roas: 3.33,
         cpa_sar: 30,
+        view_content: 80,
+        add_to_cart: 20,
+        start_checkout: 10,
+        add_billing: 8,
+        paid_reach: 1000,
+        paid_frequency: 1.5,
+        reach_frequency_scope: "exact_one_day_total",
     });
     expect(result.campaigns[0]).toMatchObject({
         campaign_id: "campaign-1",
@@ -104,6 +119,7 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         account_commercial_totals_source: "complete_campaign_breakdown_sum",
     });
     expect(result.ai_readiness.ai_analysis_ready).toBe(true);
+    expect(result.ai_readiness.funnel_ready).toBe(true);
     expect(result.ai_readiness.campaign_creation_enabled).toBe(false);
     expect(result.ai_readiness.campaign_management_enabled).toBe(false);
     expect(result.policy).toEqual({
