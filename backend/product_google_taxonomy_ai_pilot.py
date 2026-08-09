@@ -10,13 +10,14 @@ checks, verify-after-write, and an audit row for every applied product.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from openai import APITimeoutError, AsyncOpenAI
@@ -38,6 +39,8 @@ MAX_PRODUCTS_SCANNED = 5000
 MAX_CANDIDATES = 24
 SEARCH_TERMS_CHUNK_SIZE = 20
 CLASSIFICATION_CHUNK_SIZE = 5
+SEARCH_TERMS_CONCURRENCY = 3
+CLASSIFICATION_CONCURRENCY = 3
 MAX_DESCRIPTION_CHARS = 900
 MAX_REASON_CHARS = 500
 MAX_EVIDENCE_ITEMS = 5
@@ -491,6 +494,22 @@ async def _ai_classify_chunk(client: AsyncOpenAI, rows: list[dict[str, Any]]) ->
     return result
 
 
+async def _gather_bounded(
+    items: list[Any],
+    worker: Callable[[Any], Awaitable[Any]],
+    *,
+    concurrency: int,
+) -> list[Any]:
+    """Run rollout chunks concurrently without exceeding the provider budget."""
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def run(item: Any) -> Any:
+        async with semaphore:
+            return await worker(item)
+
+    return await asyncio.gather(*(run(item) for item in items))
+
+
 def _decision_status(
     *,
     current_id: str | None,
@@ -658,12 +677,28 @@ async def _execute_pilot(
         client = _openai_client()
         search_terms_by_product: dict[str, list[str]] = {}
         term_generation_errors: list[str] = []
-        for start in range(0, len(evidences), SEARCH_TERMS_CHUNK_SIZE):
-            evidence_chunk = evidences[start:start + SEARCH_TERMS_CHUNK_SIZE]
+        evidence_chunks = [
+            evidences[start:start + SEARCH_TERMS_CHUNK_SIZE]
+            for start in range(0, len(evidences), SEARCH_TERMS_CHUNK_SIZE)
+        ]
+
+        async def generate_search_terms(
+            evidence_chunk: list[dict[str, Any]],
+        ) -> tuple[dict[str, list[str]], str | None]:
             try:
-                search_terms_by_product.update(await _ai_search_terms(client, evidence_chunk))
+                return await _ai_search_terms(client, evidence_chunk), None
             except Exception as exc:  # per-chunk fallback keeps the rollout progressing
-                term_generation_errors.append(type(exc).__name__)
+                return {}, type(exc).__name__
+
+        term_chunk_results = await _gather_bounded(
+            evidence_chunks,
+            generate_search_terms,
+            concurrency=SEARCH_TERMS_CONCURRENCY,
+        )
+        for chunk_terms, chunk_error in term_chunk_results:
+            search_terms_by_product.update(chunk_terms)
+            if chunk_error:
+                term_generation_errors.append(chunk_error)
         term_generation_error = ",".join(sorted(set(term_generation_errors))) or None
 
         classification_inputs: list[dict[str, Any]] = []
@@ -691,11 +726,26 @@ async def _execute_pilot(
             })
 
         records: list[dict[str, Any]] = [*missing_records]
-        for start in range(0, len(classification_inputs), CLASSIFICATION_CHUNK_SIZE):
-            chunk = classification_inputs[start:start + CLASSIFICATION_CHUNK_SIZE]
+        classification_chunks = [
+            classification_inputs[start:start + CLASSIFICATION_CHUNK_SIZE]
+            for start in range(0, len(classification_inputs), CLASSIFICATION_CHUNK_SIZE)
+        ]
+
+        async def classify_chunk(
+            chunk: list[dict[str, Any]],
+        ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], Exception | None]:
             try:
-                ai_results = await _ai_classify_chunk(client, chunk)
+                return chunk, await _ai_classify_chunk(client, chunk), None
             except (APITimeoutError, Exception) as exc:  # per-chunk partial failure isolation
+                return chunk, {}, exc
+
+        classification_chunk_results = await _gather_bounded(
+            classification_chunks,
+            classify_chunk,
+            concurrency=CLASSIFICATION_CONCURRENCY,
+        )
+        for chunk, ai_results, chunk_error in classification_chunk_results:
+            if chunk_error is not None:
                 for item in chunk:
                     product_id = item["product_id"]
                     meta = metadata_by_product[product_id]
@@ -714,7 +764,7 @@ async def _execute_pilot(
                         "decision_status": "ai_failed",
                         "apply_status": "not_eligible",
                         "ai_confidence": 0,
-                        "ai_reason": f"تعذر تصنيف هذه الدفعة: {type(exc).__name__}",
+                        "ai_reason": f"تعذر تصنيف هذه الدفعة: {type(chunk_error).__name__}",
                         "google_category_id": None,
                         "google_category_path": None,
                         "current_google_category": evidence.get("current_google_category"),
