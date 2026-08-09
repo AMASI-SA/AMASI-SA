@@ -22,6 +22,7 @@ from typing import Any, Awaitable, Callable, Literal
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field
+from pymongo.errors import DuplicateKeyError
 
 from ai_provider_status import openai_runtime_status
 from product_category_variant_support import _get_google_taxonomy
@@ -34,7 +35,9 @@ AI_ACTION_LOG = "mezan_ai_action_log_v2"
 DEFAULT_PILOT_LIMIT = 20
 MIN_PILOT_LIMIT = 20
 MAX_PILOT_LIMIT = 200
-PILOT_STALE_MINUTES = 120
+RUN_LEASE_SECONDS = 180
+RESUME_SCAN_SECONDS = 30
+ACTIVE_RUN_STATUSES = ("queued", "running")
 MAX_PRODUCTS_SCANNED = 5000
 MAX_CANDIDATES = 24
 SEARCH_TERMS_CHUNK_SIZE = 20
@@ -544,7 +547,7 @@ def _run_counters(records: list[dict[str, Any]], selected_count: int) -> dict[st
             if row.get("visual_verification_status") in {"consistent", "conflict", "unclear", "failed"}
         ),
         "visual_failed": sum(1 for row in records if row.get("visual_verification_status") == "failed"),
-        "applied": 0,
+        "applied": sum(1 for row in records if row.get("apply_status") == "applied"),
     }
 
 
@@ -561,25 +564,212 @@ async def _ensure_indexes(db: Any) -> None:
     )
 
 
-async def _recover_stale_run(db: Any, run: dict[str, Any]) -> dict[str, Any]:
-    if run.get("status") not in {"queued", "running"}:
-        return run
-    started = run.get("started_at") or run.get("created_at")
-    if isinstance(started, str):
+def _as_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, str):
         try:
-            started = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
-            started = None
-    if isinstance(started, datetime):
-        if started.tzinfo is None:
-            started = started.replace(tzinfo=timezone.utc)
-        if started > _now() - timedelta(minutes=PILOT_STALE_MINUTES):
-            return run
-    await db[RUNS].update_one(
-        {"user_id": run.get("user_id"), "run_id": run.get("run_id"), "status": {"$in": ["queued", "running"]}},
-        {"$set": {"status": "failed", "finished_at": _now(), "error": "pilot_stale_after_runtime_interruption"}},
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _run_needs_resume(run: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Return whether an active run has no live worker lease.
+
+    Old runs created before resumable rollout support have no lease fields and
+    are therefore immediately eligible for recovery after deployment.
+    """
+    if run.get("status") not in ACTIVE_RUN_STATUSES:
+        return False
+    lease_expires_at = _as_utc_datetime(run.get("lease_expires_at"))
+    return lease_expires_at is None or lease_expires_at <= (now or _now())
+
+
+async def _recover_stale_run(db: Any, run: dict[str, Any]) -> dict[str, Any]:
+    """Expose recoverability without turning interrupted work into failure.
+
+    Actual recovery is claimed atomically by ``_execute_pilot``. Keeping the
+    status active means the UI continues polling while a replacement container
+    takes over the same run id.
+    """
+    if not _run_needs_resume(run):
+        return run
+    return {**run, "recovery_pending": True}
+
+
+async def _claim_run_lease(
+    db: Any,
+    user_id: str,
+    run_id: str,
+    lease_owner: str,
+) -> dict[str, Any] | None:
+    run = await db[RUNS].find_one(
+        {"user_id": user_id, "run_id": run_id, "status": {"$in": list(ACTIVE_RUN_STATUSES)}},
+        {"_id": 0},
     )
-    return {**run, "status": "failed", "finished_at": _now(), "error": "pilot_stale_after_runtime_interruption"}
+    if not run:
+        return None
+    now = _now()
+    started_at = run.get("started_at") or now
+    update: dict[str, Any] = {
+        "$set": {
+            "status": "running",
+            "started_at": started_at,
+            "heartbeat_at": now,
+            "lease_owner": lease_owner,
+            "lease_expires_at": now + timedelta(seconds=RUN_LEASE_SECONDS),
+            "finished_at": None,
+        },
+        "$inc": {"attempt_count": 1},
+    }
+    if run.get("started_at"):
+        update["$inc"]["resume_count"] = 1
+    claimed = await db[RUNS].update_one(
+        {
+            "user_id": user_id,
+            "run_id": run_id,
+            "status": {"$in": list(ACTIVE_RUN_STATUSES)},
+            "$or": [
+                {"lease_owner": {"$exists": False}},
+                {"lease_owner": None},
+                {"lease_expires_at": {"$lte": now}},
+            ],
+        },
+        update,
+    )
+    if int(getattr(claimed, "modified_count", 0) or 0) != 1:
+        return None
+    return {**run, "status": "running", "started_at": started_at, "lease_owner": lease_owner}
+
+
+async def _renew_run_lease(
+    db: Any,
+    user_id: str,
+    run_id: str,
+    lease_owner: str,
+    *,
+    phase: str,
+) -> bool:
+    now = _now()
+    result = await db[RUNS].update_one(
+        {
+            "user_id": user_id,
+            "run_id": run_id,
+            "status": "running",
+            "lease_owner": lease_owner,
+        },
+        {"$set": {
+            "heartbeat_at": now,
+            "lease_expires_at": now + timedelta(seconds=RUN_LEASE_SECONDS),
+            "progress.phase": phase,
+        }},
+    )
+    return int(getattr(result, "matched_count", 0) or 0) == 1
+
+
+async def _lease_heartbeat_loop(
+    db: Any,
+    user_id: str,
+    run_id: str,
+    lease_owner: str,
+) -> None:
+    """Keep ownership live while a provider call or visual gate is in flight."""
+    while True:
+        await asyncio.sleep(max(10, RUN_LEASE_SECONDS // 3))
+        now = _now()
+        result = await db[RUNS].update_one(
+            {
+                "user_id": user_id,
+                "run_id": run_id,
+                "status": "running",
+                "lease_owner": lease_owner,
+            },
+            {"$set": {
+                "heartbeat_at": now,
+                "lease_expires_at": now + timedelta(seconds=RUN_LEASE_SECONDS),
+            }},
+        )
+        if int(getattr(result, "matched_count", 0) or 0) != 1:
+            return
+
+
+async def _load_run_records(db: Any, user_id: str, run_id: str) -> list[dict[str, Any]]:
+    return await db[CLASSIFICATIONS].find(
+        {"user_id": user_id, "run_id": run_id},
+        {"_id": 0},
+    ).to_list(length=MAX_PILOT_LIMIT)
+
+
+async def _persist_records(db: Any, records: list[dict[str, Any]]) -> None:
+    """Durably checkpoint product results without overwriting prior work."""
+    for record in records:
+        try:
+            await db[CLASSIFICATIONS].update_one(
+                {
+                    "user_id": record["user_id"],
+                    "run_id": record["run_id"],
+                    "mezan_product_id": record["mezan_product_id"],
+                },
+                {"$setOnInsert": record},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            # Another worker may have completed the same product exactly as an
+            # expired lease changed hands. The unique index makes that safe.
+            continue
+
+
+async def _checkpoint_run(
+    db: Any,
+    user_id: str,
+    run_id: str,
+    lease_owner: str,
+    *,
+    selected_count: int,
+    phase: str,
+    coverage: dict[str, int] | None,
+) -> list[dict[str, Any]]:
+    records = await _load_run_records(db, user_id, run_id)
+    counters = _run_counters(records, selected_count)
+    now = _now()
+    processed = len(records)
+    set_fields: dict[str, Any] = {
+        "heartbeat_at": now,
+        "lease_expires_at": now + timedelta(seconds=RUN_LEASE_SECONDS),
+        "counters": counters,
+        "progress": {
+            "phase": phase,
+            "saved": processed,
+            "remaining": max(0, selected_count - processed),
+            "updated_at": now,
+        },
+    }
+    if coverage is not None:
+        seen_before = int(coverage.get("seen_before") or 0)
+        completed_now = sum(1 for row in records if row.get("decision_status") != "ai_failed")
+        set_fields["coverage"] = {
+            **coverage,
+            "processed_now": processed,
+            "seen_after": min(int(coverage.get("total_products") or 0), seen_before + completed_now),
+            "remaining_after": max(
+                0,
+                int(coverage.get("total_products") or 0) - seen_before - completed_now,
+            ),
+        }
+    await db[RUNS].update_one(
+        {
+            "user_id": user_id,
+            "run_id": run_id,
+            "status": "running",
+            "lease_owner": lease_owner,
+        },
+        {"$set": set_fields},
+    )
+    return records
 
 
 async def _execute_pilot(
@@ -589,64 +779,118 @@ async def _execute_pilot(
     limit: int,
     selection_mode: str = "sample",
 ) -> None:
-    await db[RUNS].update_one(
-        {"user_id": user_id, "run_id": run_id},
-        {"$set": {"status": "running", "started_at": _now()}},
-    )
+    lease_owner = uuid.uuid4().hex
+    run = await _claim_run_lease(db, user_id, run_id, lease_owner)
+    if not run:
+        return
     client: AsyncOpenAI | None = None
+    heartbeat_task = asyncio.create_task(
+        _lease_heartbeat_loop(db, user_id, run_id, lease_owner)
+    )
     try:
+        await _renew_run_lease(
+            db, user_id, run_id, lease_owner, phase="loading_taxonomy"
+        )
         taxonomy_version, taxonomy = await _get_google_taxonomy()
         by_id, by_path = _taxonomy_maps(taxonomy)
         products = await db[PRODUCTS].find(
             {"user_id": user_id, "archived": {"$ne": True}},
         ).sort([("details_loaded", -1), ("updated_at", -1), ("name", 1)]).limit(MAX_PRODUCTS_SCANNED).to_list(length=MAX_PRODUCTS_SCANNED)
-        coverage: dict[str, int] | None = None
-        if selection_mode == "next_unseen":
-            seen_values = await db[CLASSIFICATIONS].distinct(
-                "mezan_product_id",
-                {"user_id": user_id},
-            )
-            seen_ids = {str(value) for value in seen_values if value not in (None, "")}
-            active_ids = {
-                str(row.get("mezan_product_id") or row.get("id") or "")
-                for row in products
-            }
-            seen_before = len(active_ids.intersection(seen_ids))
-            selected = _select_unseen_products(products, seen_ids, limit)
-            coverage = {
-                "total_products": len(products),
-                "seen_before": seen_before,
-                "selected_now": len(selected),
-                "seen_after": min(len(products), seen_before + len(selected)),
-                "remaining_after": max(0, len(products) - seen_before - len(selected)),
-            }
-            await db[RUNS].update_one(
-                {"user_id": user_id, "run_id": run_id},
-                {"$set": {"coverage": coverage}},
-            )
+        product_by_id = {
+            str(row.get("mezan_product_id") or row.get("id") or ""): row
+            for row in products
+        }
+        selected_ids = [
+            str(value)
+            for value in (run.get("selected_product_ids") or [])
+            if value not in (None, "")
+        ]
+        coverage: dict[str, int] | None = (
+            dict(run.get("coverage")) if isinstance(run.get("coverage"), dict) else None
+        )
+        if selected_ids:
+            selected = [
+                product_by_id.get(product_id, {"mezan_product_id": product_id})
+                for product_id in selected_ids
+            ]
         else:
-            selected = _select_pilot_products(products, limit)
+            if selection_mode == "next_unseen":
+                seen_values = await db[CLASSIFICATIONS].distinct(
+                    "mezan_product_id",
+                    {"user_id": user_id, "decision_status": {"$ne": "ai_failed"}},
+                )
+                seen_ids = {str(value) for value in seen_values if value not in (None, "")}
+                active_ids = set(product_by_id)
+                seen_before = len(active_ids.intersection(seen_ids))
+                selected = _select_unseen_products(products, seen_ids, limit)
+                coverage = {
+                    "total_products": len(products),
+                    "seen_before": seen_before,
+                    "selected_now": len(selected),
+                    "processed_now": 0,
+                    "seen_after": seen_before,
+                    "remaining_after": max(0, len(products) - seen_before),
+                }
+            else:
+                selected = _select_pilot_products(products, limit)
+            selected_ids = [
+                str(row.get("mezan_product_id") or row.get("id") or "")
+                for row in selected
+                if row.get("mezan_product_id") or row.get("id")
+            ]
+            await db[RUNS].update_one(
+                {
+                    "user_id": user_id,
+                    "run_id": run_id,
+                    "status": "running",
+                    "lease_owner": lease_owner,
+                },
+                {"$set": {
+                    "selected_product_ids": selected_ids,
+                    "selection_saved_at": _now(),
+                    "taxonomy_version": taxonomy_version,
+                    "coverage": coverage,
+                    "counters.selected": len(selected_ids),
+                }},
+            )
 
         if not selected:
             if selection_mode == "next_unseen":
                 await db[RUNS].update_one(
-                    {"user_id": user_id, "run_id": run_id},
-                    {"$set": {
-                        "status": "completed",
-                        "finished_at": _now(),
-                        "taxonomy_version": taxonomy_version,
-                        "counters": _run_counters([], 0),
-                        "coverage": coverage,
-                        "error": None,
-                    }},
+                    {
+                        "user_id": user_id,
+                        "run_id": run_id,
+                        "status": "running",
+                        "lease_owner": lease_owner,
+                    },
+                    {
+                        "$set": {
+                            "status": "completed",
+                            "finished_at": _now(),
+                            "taxonomy_version": taxonomy_version,
+                            "counters": _run_counters([], 0),
+                            "coverage": coverage,
+                            "progress": {"phase": "completed", "saved": 0, "remaining": 0, "updated_at": _now()},
+                            "error": None,
+                        },
+                        "$unset": {"lease_owner": "", "lease_expires_at": ""},
+                    },
                 )
                 return
             raise RuntimeError("no_products_available_for_pilot")
 
+        existing_records = await _load_run_records(db, user_id, run_id)
+        saved_product_ids = {
+            str(row.get("mezan_product_id") or "")
+            for row in existing_records
+        }
+        remaining_selected = [
+            product for product in selected
+            if str(product.get("mezan_product_id") or product.get("id") or "") not in saved_product_ids
+        ]
         evidences: list[dict[str, Any]] = []
-        product_by_id: dict[str, dict[str, Any]] = {}
         missing_records: list[dict[str, Any]] = []
-        for product in selected:
+        for product in remaining_selected:
             evidence = _product_evidence(product)
             product_id = evidence["product_id"]
             product_by_id[product_id] = product
@@ -674,6 +918,52 @@ async def _execute_pilot(
                 continue
             evidences.append(evidence)
 
+        if missing_records:
+            await _persist_records(db, missing_records)
+            await _checkpoint_run(
+                db,
+                user_id,
+                run_id,
+                lease_owner,
+                selected_count=len(selected_ids),
+                phase="saved_missing_data",
+                coverage=coverage,
+            )
+
+        if not evidences:
+            records = await _checkpoint_run(
+                db,
+                user_id,
+                run_id,
+                lease_owner,
+                selected_count=len(selected_ids),
+                phase="finalizing",
+                coverage=coverage,
+            )
+            counters = _run_counters(records, len(selected_ids))
+            status = (
+                "completed"
+                if counters["ai_failed"] == 0 and counters["visual_failed"] == 0
+                else "completed_with_errors"
+            )
+            await db[RUNS].update_one(
+                {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
+                {
+                    "$set": {
+                        "status": status,
+                        "finished_at": _now(),
+                        "taxonomy_version": taxonomy_version,
+                        "model": _model(),
+                        "counters": counters,
+                        "progress.phase": "completed",
+                        "progress.remaining": 0,
+                        "error": None,
+                    },
+                    "$unset": {"lease_owner": "", "lease_expires_at": ""},
+                },
+            )
+            return
+
         client = _openai_client()
         search_terms_by_product: dict[str, list[str]] = {}
         term_generation_errors: list[str] = []
@@ -690,15 +980,21 @@ async def _execute_pilot(
             except Exception as exc:  # per-chunk fallback keeps the rollout progressing
                 return {}, type(exc).__name__
 
-        term_chunk_results = await _gather_bounded(
-            evidence_chunks,
-            generate_search_terms,
-            concurrency=SEARCH_TERMS_CONCURRENCY,
-        )
-        for chunk_terms, chunk_error in term_chunk_results:
-            search_terms_by_product.update(chunk_terms)
-            if chunk_error:
-                term_generation_errors.append(chunk_error)
+        for start in range(0, len(evidence_chunks), SEARCH_TERMS_CONCURRENCY):
+            if not await _renew_run_lease(
+                db, user_id, run_id, lease_owner, phase="generating_search_terms"
+            ):
+                return
+            wave = evidence_chunks[start:start + SEARCH_TERMS_CONCURRENCY]
+            term_chunk_results = await _gather_bounded(
+                wave,
+                generate_search_terms,
+                concurrency=SEARCH_TERMS_CONCURRENCY,
+            )
+            for chunk_terms, chunk_error in term_chunk_results:
+                search_terms_by_product.update(chunk_terms)
+                if chunk_error:
+                    term_generation_errors.append(chunk_error)
         term_generation_error = ",".join(sorted(set(term_generation_errors))) or None
 
         classification_inputs: list[dict[str, Any]] = []
@@ -725,7 +1021,6 @@ async def _execute_pilot(
                 ],
             })
 
-        records: list[dict[str, Any]] = [*missing_records]
         classification_chunks = [
             classification_inputs[start:start + CLASSIFICATION_CHUNK_SIZE]
             for start in range(0, len(classification_inputs), CLASSIFICATION_CHUNK_SIZE)
@@ -739,18 +1034,68 @@ async def _execute_pilot(
             except (APITimeoutError, Exception) as exc:  # per-chunk partial failure isolation
                 return chunk, {}, exc
 
-        classification_chunk_results = await _gather_bounded(
-            classification_chunks,
-            classify_chunk,
-            concurrency=CLASSIFICATION_CONCURRENCY,
-        )
-        for chunk, ai_results, chunk_error in classification_chunk_results:
-            if chunk_error is not None:
+        for start in range(0, len(classification_chunks), CLASSIFICATION_CONCURRENCY):
+            if not await _renew_run_lease(
+                db, user_id, run_id, lease_owner, phase="classifying_products"
+            ):
+                return
+            wave = classification_chunks[start:start + CLASSIFICATION_CONCURRENCY]
+            classification_chunk_results = await _gather_bounded(
+                wave,
+                classify_chunk,
+                concurrency=CLASSIFICATION_CONCURRENCY,
+            )
+            wave_records: list[dict[str, Any]] = []
+            for chunk, ai_results, chunk_error in classification_chunk_results:
+                if chunk_error is not None:
+                    for item in chunk:
+                        product_id = item["product_id"]
+                        meta = metadata_by_product[product_id]
+                        evidence = meta["evidence"]
+                        wave_records.append({
+                            "id": uuid.uuid4().hex,
+                            "user_id": user_id,
+                            "run_id": run_id,
+                            "mezan_product_id": product_id,
+                            "salla_product_id": evidence.get("salla_product_id"),
+                            "product_name": evidence.get("name"),
+                            "main_image": product_by_id[product_id].get("main_image"),
+                            "classification_input_revision": meta["input_revision"],
+                            "classification_source": "openai_pilot",
+                            "classified_at": _now(),
+                            "decision_status": "ai_failed",
+                            "apply_status": "not_eligible",
+                            "ai_confidence": 0,
+                            "ai_reason": f"تعذر تصنيف هذه الدفعة: {type(chunk_error).__name__}",
+                            "google_category_id": None,
+                            "google_category_path": None,
+                            "current_google_category": evidence.get("current_google_category"),
+                            "model": _model(),
+                        })
+                    continue
+
                 for item in chunk:
                     product_id = item["product_id"]
                     meta = metadata_by_product[product_id]
                     evidence = meta["evidence"]
-                    records.append({
+                    result = ai_results.get(product_id) or {}
+                    chosen_id = _text(result.get("category_id"))
+                    candidate_ids = {str(row.get("id")) for row in meta["candidates"]}
+                    if chosen_id and chosen_id not in candidate_ids:
+                        chosen_id = ""
+                        invalid_reason = "أعاد النموذج تصنيفًا خارج قائمة المرشحين الرسمية؛ تم رفضه."
+                    else:
+                        invalid_reason = ""
+                    confidence = max(0, min(100, int(result.get("confidence") or 0)))
+                    if meta["limited_evidence"]:
+                        confidence = min(confidence, 79)
+                    category = by_id.get(chosen_id) if chosen_id else None
+                    current_id = meta["current_id"]
+                    status = _decision_status(current_id=current_id, chosen_id=chosen_id or None, confidence=confidence)
+                    reason = _text(result.get("reason"))[:MAX_REASON_CHARS] or invalid_reason or "لم يقدم النموذج سببًا صالحًا."
+                    if invalid_reason:
+                        reason = invalid_reason
+                    wave_records.append({
                         "id": uuid.uuid4().hex,
                         "user_id": user_id,
                         "run_id": run_id,
@@ -761,95 +1106,86 @@ async def _execute_pilot(
                         "classification_input_revision": meta["input_revision"],
                         "classification_source": "openai_pilot",
                         "classified_at": _now(),
-                        "decision_status": "ai_failed",
-                        "apply_status": "not_eligible",
-                        "ai_confidence": 0,
-                        "ai_reason": f"تعذر تصنيف هذه الدفعة: {type(chunk_error).__name__}",
-                        "google_category_id": None,
-                        "google_category_path": None,
+                        "decision_status": status,
+                        "apply_status": "not_needed" if status == "no_change" else ("pending" if status == "high_confidence" else "not_eligible"),
+                        "ai_confidence": confidence,
+                        "ai_reason": reason,
+                        "ai_evidence": [_text(value)[:220] for value in (result.get("evidence") or [])[:MAX_EVIDENCE_ITEMS]],
+                        "google_category_id": chosen_id or None,
+                        "google_category_path": category.get("path") if category else None,
+                        "google_category_name": category.get("name") if category else None,
                         "current_google_category": evidence.get("current_google_category"),
+                        "current_google_category_id": current_id,
+                        "candidate_count": len(meta["candidates"]),
+                        "evidence_limited": meta["limited_evidence"],
+                        "search_term_source": meta["term_source"],
+                        "visual_verification_status": result.get("visual_verification_status"),
+                        "visual_verification_attempts": int(result.get("visual_verification_attempts") or 0),
+                        "visual_verification_error_code": result.get("visual_verification_error_code"),
                         "model": _model(),
                     })
-                continue
+            await _persist_records(db, wave_records)
+            await _checkpoint_run(
+                db,
+                user_id,
+                run_id,
+                lease_owner,
+                selected_count=len(selected_ids),
+                phase="checkpoint_saved",
+                coverage=coverage,
+            )
 
-            for item in chunk:
-                product_id = item["product_id"]
-                meta = metadata_by_product[product_id]
-                evidence = meta["evidence"]
-                result = ai_results.get(product_id) or {}
-                chosen_id = _text(result.get("category_id"))
-                candidate_ids = {str(row.get("id")) for row in meta["candidates"]}
-                if chosen_id and chosen_id not in candidate_ids:
-                    chosen_id = ""
-                    invalid_reason = "أعاد النموذج تصنيفًا خارج قائمة المرشحين الرسمية؛ تم رفضه."
-                else:
-                    invalid_reason = ""
-                confidence = max(0, min(100, int(result.get("confidence") or 0)))
-                if meta["limited_evidence"]:
-                    confidence = min(confidence, 79)
-                category = by_id.get(chosen_id) if chosen_id else None
-                current_id = meta["current_id"]
-                status = _decision_status(current_id=current_id, chosen_id=chosen_id or None, confidence=confidence)
-                reason = _text(result.get("reason"))[:MAX_REASON_CHARS] or invalid_reason or "لم يقدم النموذج سببًا صالحًا."
-                if invalid_reason:
-                    reason = invalid_reason
-                records.append({
-                    "id": uuid.uuid4().hex,
-                    "user_id": user_id,
-                    "run_id": run_id,
-                    "mezan_product_id": product_id,
-                    "salla_product_id": evidence.get("salla_product_id"),
-                    "product_name": evidence.get("name"),
-                    "main_image": product_by_id[product_id].get("main_image"),
-                    "classification_input_revision": meta["input_revision"],
-                    "classification_source": "openai_pilot",
-                    "classified_at": _now(),
-                    "decision_status": status,
-                    "apply_status": "not_needed" if status == "no_change" else ("pending" if status == "high_confidence" else "not_eligible"),
-                    "ai_confidence": confidence,
-                    "ai_reason": reason,
-                    "ai_evidence": [_text(value)[:220] for value in (result.get("evidence") or [])[:MAX_EVIDENCE_ITEMS]],
-                    "google_category_id": chosen_id or None,
-                    "google_category_path": category.get("path") if category else None,
-                    "google_category_name": category.get("name") if category else None,
-                    "current_google_category": evidence.get("current_google_category"),
-                    "current_google_category_id": current_id,
-                    "candidate_count": len(meta["candidates"]),
-                    "evidence_limited": meta["limited_evidence"],
-                    "search_term_source": meta["term_source"],
-                    "visual_verification_status": result.get("visual_verification_status"),
-                    "visual_verification_attempts": int(result.get("visual_verification_attempts") or 0),
-                    "visual_verification_error_code": result.get("visual_verification_error_code"),
-                    "model": _model(),
-                })
-
-        if records:
-            await db[CLASSIFICATIONS].insert_many(records, ordered=False)
-
-        counters = _run_counters(records, len(selected))
+        records = await _checkpoint_run(
+            db,
+            user_id,
+            run_id,
+            lease_owner,
+            selected_count=len(selected_ids),
+            phase="finalizing",
+            coverage=coverage,
+        )
+        counters = _run_counters(records, len(selected_ids))
         status = (
             "completed"
             if counters["ai_failed"] == 0 and counters["visual_failed"] == 0
             else "completed_with_errors"
         )
         await db[RUNS].update_one(
-            {"user_id": user_id, "run_id": run_id},
-            {"$set": {
-                "status": status,
-                "finished_at": _now(),
-                "taxonomy_version": taxonomy_version,
-                "model": _model(),
-                "counters": counters,
-                "term_generation_error": term_generation_error,
-                "error": None,
-            }},
+            {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
+            {
+                "$set": {
+                    "status": status,
+                    "finished_at": _now(),
+                    "taxonomy_version": taxonomy_version,
+                    "model": _model(),
+                    "counters": counters,
+                    "progress.phase": "completed",
+                    "progress.remaining": 0,
+                    "term_generation_error": term_generation_error,
+                    "error": None,
+                },
+                "$unset": {"lease_owner": "", "lease_expires_at": ""},
+            },
         )
     except Exception as exc:
         await db[RUNS].update_one(
-            {"user_id": user_id, "run_id": run_id},
-            {"$set": {"status": "failed", "finished_at": _now(), "error": f"{type(exc).__name__}: {str(exc)[:300]}"}},
+            {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
+            {
+                "$set": {
+                    "status": "failed",
+                    "finished_at": _now(),
+                    "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                    "progress.phase": "failed",
+                },
+                "$unset": {"lease_owner": "", "lease_expires_at": ""},
+            },
         )
     finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         if client is not None:
             try:
                 await client.close()
@@ -872,11 +1208,62 @@ async def _run_payload(db: Any, user_id: str, run: dict[str, Any]) -> dict[str, 
     }
 
 
+async def _resume_active_runs_once(db: Any) -> None:
+    runs = await db[RUNS].find(
+        {"status": {"$in": list(ACTIVE_RUN_STATUSES)}},
+        {"_id": 0},
+    ).sort([("created_at", 1)]).to_list(length=100)
+    if not runs:
+        return
+    await asyncio.gather(*(
+        _execute_pilot(
+            db,
+            str(run.get("user_id") or ""),
+            str(run.get("run_id") or ""),
+            int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
+            str(run.get("selection_mode") or "sample"),
+        )
+        for run in runs
+        if run.get("user_id") and run.get("run_id")
+    ))
+
+
+async def _resumable_run_loop(db: Any) -> None:
+    while True:
+        try:
+            await _resume_active_runs_once(db)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A transient database/startup problem must not terminate recovery.
+            pass
+        await asyncio.sleep(RESUME_SCAN_SECONDS)
+
+
 def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(
         prefix="/ai-store-operations/product-intelligence/google-taxonomy",
         tags=["AI Product Manager - Google Taxonomy Pilot"],
     )
+    resume_task: asyncio.Task[Any] | None = None
+
+    @router.on_event("startup")
+    async def start_resumable_run_loop() -> None:
+        nonlocal resume_task
+        if resume_task is None or resume_task.done():
+            resume_task = asyncio.create_task(_resumable_run_loop(db))
+
+    @router.on_event("shutdown")
+    async def stop_resumable_run_loop() -> None:
+        nonlocal resume_task
+        if resume_task is None:
+            return
+        resume_task.cancel()
+        try:
+            await resume_task
+        except asyncio.CancelledError:
+            pass
+        resume_task = None
 
     @router.post("/pilot")
     async def start_pilot(
@@ -890,12 +1277,20 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
         if not provider.get("connected"):
             raise HTTPException(status_code=503, detail={"code": "openai_not_configured", "message": "OpenAI غير مهيأ في بيئة الإنتاج."})
         active = await db[RUNS].find_one(
-            {"user_id": user_id, "status": {"$in": ["queued", "running"]}},
+            {"user_id": user_id, "status": {"$in": list(ACTIVE_RUN_STATUSES)}},
             {"_id": 0}, sort=[("created_at", -1)],
         )
         if active:
             active = await _recover_stale_run(db, active)
-            if active.get("status") in {"queued", "running"}:
+            if active.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(active):
+                background_tasks.add_task(
+                    _execute_pilot,
+                    db,
+                    user_id,
+                    str(active.get("run_id") or ""),
+                    int(active.get("requested_limit") or DEFAULT_PILOT_LIMIT),
+                    str(active.get("selection_mode") or "sample"),
+                )
                 return {**(await _run_payload(db, user_id, active)), "reused": True}
 
         run_id = uuid.uuid4().hex
@@ -908,6 +1303,12 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "created_at": now,
             "started_at": None,
             "finished_at": None,
+            "heartbeat_at": None,
+            "lease_owner": None,
+            "lease_expires_at": None,
+            "attempt_count": 0,
+            "resume_count": 0,
+            "selected_product_ids": [],
             "model": _model(),
             "taxonomy_version": None,
             "counters": {
@@ -918,6 +1319,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             },
             "mode": "proposal_only_pilot" if payload.selection_mode == "sample" else "proposal_only_next_unseen",
             "selection_mode": payload.selection_mode,
+            "progress": {"phase": "queued", "saved": 0, "remaining": payload.limit, "updated_at": now},
             "writes_to_salla": False,
             "error": None,
         }
@@ -933,23 +1335,48 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
         return await _run_payload(db, user_id, run)
 
     @router.get("/pilot/latest")
-    async def latest_pilot(user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def latest_pilot(
+        background_tasks: BackgroundTasks,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
         await _ensure_indexes(db)
         user_id = str(user["id"])
         run = await db[RUNS].find_one({"user_id": user_id}, {"_id": 0}, sort=[("created_at", -1)])
         if not run:
             return {"ok": True, "run": None, "items": [], "writes_to_salla": False, "auto_apply_enabled": False, "apply_confirmation": APPLY_CONFIRMATION}
         run = await _recover_stale_run(db, run)
+        if run.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(run):
+            background_tasks.add_task(
+                _execute_pilot,
+                db,
+                user_id,
+                str(run.get("run_id") or ""),
+                int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
+                str(run.get("selection_mode") or "sample"),
+            )
         return await _run_payload(db, user_id, run)
 
     @router.get("/pilot/{run_id}")
-    async def get_pilot(run_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def get_pilot(
+        run_id: str,
+        background_tasks: BackgroundTasks,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
         await _ensure_indexes(db)
         user_id = str(user["id"])
         run = await db[RUNS].find_one({"user_id": user_id, "run_id": run_id}, {"_id": 0})
         if not run:
             raise HTTPException(status_code=404, detail={"code": "taxonomy_pilot_not_found"})
         run = await _recover_stale_run(db, run)
+        if run.get("status") in ACTIVE_RUN_STATUSES and _run_needs_resume(run):
+            background_tasks.add_task(
+                _execute_pilot,
+                db,
+                user_id,
+                run_id,
+                int(run.get("requested_limit") or DEFAULT_PILOT_LIMIT),
+                str(run.get("selection_mode") or "sample"),
+            )
         return await _run_payload(db, user_id, run)
 
     @router.post("/pilot/{run_id}/apply-high-confidence")

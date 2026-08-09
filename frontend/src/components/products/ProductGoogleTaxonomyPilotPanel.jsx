@@ -48,6 +48,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
     const run = payload?.run || null;
     const items = payload?.items || [];
     const counters = run?.counters || {};
+    const progress = run?.progress || {};
     const pendingHighConfidence = useMemo(
         () => items.filter((row) => row.decision_status === "high_confidence" && row.apply_status === "pending").length,
         [items],
@@ -146,6 +147,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                     <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
                     <div className="text-xs text-slate-500">Run: <span className="font-mono">{String(run.run_id || "").slice(0, 10)}</span> · Model: {run.model || "—"} · Taxonomy: {run.taxonomy_version || "—"}</div>
                 </div>
+
+                {!TERMINAL.has(run.status) && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">
+                    <div>تم حفظ <b className="num">{Number(progress.saved || 0).toLocaleString("en-US")}</b> من <b className="num">{Number(counters.selected || run.requested_limit || 0).toLocaleString("en-US")}</b> منتج حتى الآن</div>
+                    <div>{Number(run.resume_count || 0) > 0 ? <>استؤنف تلقائيًا <b className="num">{Number(run.resume_count).toLocaleString("en-US")}</b> مرة</> : "الحفظ المرحلي والاستئناف التلقائي مفعّلان"}</div>
+                </div>}
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-11">
                     {[
