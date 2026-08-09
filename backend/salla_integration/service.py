@@ -74,7 +74,32 @@ _DEFAULT_SCOPES_FALLBACK = (
     "shipping.read_write "
     "webhooks.read_write"
 )
-DEFAULT_SCOPES = (os.environ.get("SALLA_OAUTH_SCOPES") or _DEFAULT_SCOPES_FALLBACK).strip()
+
+
+def _truthy_env(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+_configured_scopes = os.environ.get("SALLA_OAUTH_SCOPES")
+DEFAULT_SCOPES = (
+    _configured_scopes.strip()
+    if _configured_scopes
+    else _DEFAULT_SCOPES_FALLBACK
+)
+if (
+    _truthy_env("SALLA_CARTS_READ_APPROVED")
+    and "carts.read" not in DEFAULT_SCOPES.split()
+):
+    # Keep production OAuth safe while the Partners approval is pending.
+    # Once Salla approves the permission, enabling this flag makes the next
+    # reconnect request carts.read without another code change, including
+    # installations that already override the base scope list.
+    DEFAULT_SCOPES = f"{DEFAULT_SCOPES} carts.read"
 
 
 class SallaError(Exception):

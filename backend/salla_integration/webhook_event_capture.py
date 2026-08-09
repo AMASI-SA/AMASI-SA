@@ -14,6 +14,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .abandoned_carts import (
+    ABANDONED_CART_EVENTS,
+    persist_abandoned_cart_event,
+)
 from .webhook_order_sync import (
     sync_order_from_verified_webhook,
     sync_shipment_payload_from_verified_webhook,
@@ -33,19 +37,54 @@ _SECRET_KEYS = {
     "password",
 }
 
+_PII_KEYS = {
+    "name",
+    "email",
+    "phone",
+    "mobile",
+    "mobile_number",
+    "phone_number",
+    "first_name",
+    "last_name",
+    "full_name",
+    "street",
+    "city",
+    "country",
+    "postal_code",
+    "postcode",
+    "zip",
+    "ip",
+    "ip_address",
+    "device_id",
+}
+_PII_CONTAINERS = {
+    "customer",
+    "customer_data",
+    "contact",
+    "address",
+    "billing_address",
+    "shipping_address",
+    "user",
+}
 
-def _sanitize(value: Any) -> Any:
+
+def _sanitize(value: Any, *, redact_pii: bool = False) -> Any:
     if isinstance(value, dict):
         cleaned: dict[str, Any] = {}
         for key, child in value.items():
             key_text = str(key)
-            if key_text.strip().lower() in _SECRET_KEYS:
+            normalized_key = key_text.strip().lower()
+            if normalized_key in _SECRET_KEYS:
                 cleaned[key_text] = "[REDACTED]"
+            elif redact_pii and normalized_key in _PII_CONTAINERS:
+                cleaned[key_text] = "[REDACTED_PII]"
+            elif redact_pii and normalized_key in _PII_KEYS:
+                cleaned[key_text] = "[REDACTED_PII]"
             else:
-                cleaned[key_text] = _sanitize(child)
+                cleaned[key_text] = _sanitize(child, redact_pii=redact_pii)
         return cleaned
     if isinstance(value, list):
-        return [_sanitize(child) for child in value]
+        return [_sanitize(child, redact_pii=redact_pii) for child in value]
     return value
 
 
@@ -79,7 +118,11 @@ async def capture_unknown_event(
             "event": event_name,
         }
 
-    sanitized = _sanitize(event_body)
+    is_abandoned_cart_event = event_name in ABANDONED_CART_EVENTS
+    sanitized = _sanitize(
+        event_body,
+        redact_pii=is_abandoned_cart_event,
+    )
     merchant_id = str(event_body.get("merchant") or "").strip() or None
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
@@ -96,6 +139,24 @@ async def capture_unknown_event(
         "queued": False,
         "reason": "order_not_synced",
     }
+    cart_sync: dict[str, Any] = {
+        "attempted": False,
+        "reason": "not_abandoned_cart_event",
+    }
+
+    if is_abandoned_cart_event:
+        try:
+            cart_sync = await persist_abandoned_cart_event(db, event_body)
+        except Exception as exc:  # webhook acknowledgement remains independent
+            log.exception("abandoned_cart_webhook.unhandled event=%s", event_name)
+            cart_sync = {
+                "attempted": True,
+                "synced": False,
+                "reason": "unhandled_exception",
+                "error": str(exc)[:500],
+                "provider_write_reached": False,
+                "pii_stored": False,
+            }
 
     try:
         order_sync = await sync_order_from_verified_webhook(db, event_body)
@@ -153,11 +214,13 @@ async def capture_unknown_event(
 
     log.info(
         "salla_webhook.result event=%s order_synced=%s shipment_synced=%s "
-        "snapchat_capi_queued=%s order_number=%s shipment_id=%s reason=%s",
+        "snapchat_capi_queued=%s cart_synced=%s order_number=%s "
+        "shipment_id=%s reason=%s",
         event_name or "<none>",
         order_sync.get("synced"),
         shipment_sync.get("synced"),
         snapchat_capi.get("queued"),
+        cart_sync.get("synced"),
         order_sync.get("order_number") or shipment_sync.get("order_reference_id"),
         shipment_sync.get("shipment_id"),
         shipment_sync.get("reason") or order_sync.get("reason"),
@@ -184,6 +247,7 @@ async def capture_unknown_event(
             "order_sync": order_sync,
             "shipment_sync": shipment_sync,
             "snapchat_capi": snapchat_capi,
+            "abandoned_cart_sync": cart_sync,
             "order_mutation_scope": (
                 "full_order_from_webhook"
                 if order_sync.get("synced")
@@ -208,6 +272,7 @@ async def capture_unknown_event(
         "order_sync": order_sync,
         "shipment_sync": shipment_sync,
         "snapchat_capi": snapchat_capi,
+        "abandoned_cart_sync": cart_sync,
         "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }

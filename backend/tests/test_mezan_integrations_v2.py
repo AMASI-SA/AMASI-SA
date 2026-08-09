@@ -332,6 +332,7 @@ def test_advertising_mutations_need_a_management_connection_before_approval():
 def test_salla_capabilities_use_permission_specific_evidence():
     definition = PROVIDER_BY_ID["salla"]
     production_permissions = {
+        "carts.read",
         "offline_access",
         "settings.read",
         "orders.read_write",
@@ -346,6 +347,26 @@ def test_salla_capabilities_use_permission_specific_evidence():
         permissions_observed=True,
     )
     assert {entry["state"] for entry in matrix.values()} == {"available"}
+
+    without_carts = build_capability_matrix(
+        definition,
+        connection_status="connected",
+        has_data=True,
+        current_permissions=production_permissions - {"carts.read"},
+        permissions_observed=True,
+    )
+    assert without_carts["abandoned_carts.read"]["state"] == (
+        "blocked_missing_permission"
+    )
+    assert {
+        without_carts[key]["state"]
+        for key in {
+            "store.read",
+            "orders.read",
+            "products.read",
+            "customers.read_from_orders",
+        }
+    } == {"available"}
 
     without_products = build_capability_matrix(
         definition,

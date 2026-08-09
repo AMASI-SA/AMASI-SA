@@ -59,6 +59,11 @@ from .sync import (
     run_orders_sync,
     run_products_sync,
 )
+from .abandoned_carts import (
+    AbandonedCartScopeError,
+    backfill_abandoned_carts,
+    ensure_abandoned_cart_indexes,
+)
 
 
 # Where the frontend wants to land after the callback completes
@@ -301,6 +306,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "source": (
                 "env:SALLA_OAUTH_SCOPES"
                 if os.environ.get("SALLA_OAUTH_SCOPES")
+                else "env:SALLA_CARTS_READ_APPROVED"
+                if "carts.read" in DEFAULT_SCOPES.split()
                 else "code_default"
             ),
             "note": (
@@ -566,6 +573,36 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             )
         return {"ok": True, **result}
 
+    @router.post("/sync/abandoned-carts")
+    async def sync_abandoned_carts(user: dict = Depends(current_user)):
+        """Read-only historical import, locked until carts.read is granted."""
+        try:
+            return await backfill_abandoned_carts(
+                db,
+                user["id"],
+                call_provider=call_salla,
+            )
+        except AbandonedCartScopeError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "required_scope": "carts.read",
+                    "scope_request_enabled": "carts.read" in DEFAULT_SCOPES.split(),
+                    "needs_reauth": "carts.read" in DEFAULT_SCOPES.split(),
+                    "approval_pending": "carts.read" not in DEFAULT_SCOPES.split(),
+                },
+            ) from exc
+        except SallaError as exc:
+            raise HTTPException(
+                status_code=exc.status_code if exc.status_code != 200 else 400,
+                detail={
+                    "message": str(exc),
+                    "needs_reauth": exc.needs_reauth,
+                },
+            ) from exc
+
     # ── 9. Sync logs ──────────────────────────────────────────────────
     @router.get("/sync/logs")
     async def list_sync_logs(
@@ -606,6 +643,7 @@ async def ensure_salla_indexes(db) -> None:
     # Auto-expire stale OAuth states after 10 min so the collection
     # doesn't grow forever.
     await db.salla_oauth_states.create_index("expires_at", expireAfterSeconds=0)
+    await ensure_abandoned_cart_indexes(db)
     # Phase 2 — sync indexes
     await ensure_sync_indexes(db)
     # Warm up the credentials cache from DB so the very first OAuth
