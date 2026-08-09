@@ -19,10 +19,14 @@ jest.mock("react-router-dom", () => ({
 jest.mock("../../services/supplierReceiving", () => ({
     cancelSupplierReceivingSession: jest.fn(),
     closeSupplierReceivingSession: jest.fn(),
+    confirmSupplierInvoiceShare: jest.fn(),
+    downloadSupplierReceivingInvoicePdf: jest.fn(),
+    getSupplierReceivingInvoice: jest.fn(),
     loadSupplierReceivingCatalog: jest.fn(),
     newSupplierReceivingRequestId: jest.fn(() => "supplier-receiving:test-1"),
     openSupplierReceivingSession: jest.fn(),
     scanSupplierReceivingPiece: jest.fn(),
+    uploadSupplierInvoiceShareEvidence: jest.fn(),
 }));
 
 import SupplierReceivingWorkspace, {
@@ -61,7 +65,7 @@ test("supplier session helpers keep supplier and Riyadh display stable", () => {
     expect(formatReceivingDate("2026-08-04T10:00:00Z")).not.toBe("—");
 });
 
-test("supplier camera stays open beside the live invoice draft", () => {
+test("supplier camera keeps scan separate from review draft", () => {
     const markup = renderToStaticMarkup(
         <SupplierPieceCameraScanner onDetected={() => {}} onClose={() => {}} />,
     );
@@ -69,11 +73,12 @@ test("supplier camera stays open beside the live invoice draft", () => {
     expect(markup).toContain('data-testid="supplier-receiving-camera-dialog"');
     expect(markup).toContain('data-testid="supplier-receiving-camera-split-layout"');
     expect(markup).toContain('data-testid="supplier-receiving-invoice-draft"');
-    expect(markup).toContain("تصوير QR القطعة");
-    expect(markup).toContain("الكاميرا تبقى مفتوحة");
+    expect(markup).toContain('data-testid="supplier-receiving-stepper"');
+    expect(markup).toContain("انتهاء التصوير ومراجعة الفاتورة");
+    expect(markup).toContain("التسجيل من الكاميرا فقط");
     expect(markup).toContain("فاتورة المورد");
-    expect(markup).toContain("اعتماد فاتورة المورد وإنهاء الجلسة");
-    expect(markup).toContain("إغلاق الكاميرا");
+    expect(markup).not.toContain("سعر المنتج الأساسي للقطعة");
+    expect(markup).not.toContain("إدخال الباركود يدويًا");
     expect(markup).toContain("إلغاء الجلسة والخروج");
 });
 
@@ -156,11 +161,15 @@ test("invoice lines group identical scanned products and calculate totals", () =
     expect(initial[0].quantity).toBe(2);
     expect(initial[0].product_unit_price_halalas).toBe(700);
     expect(initial[0].services[0].unit_price_halalas).toBe(350);
-    expect(initial[0].total_halalas).toBe(2100);
+    expect(initial[0].services[0].selected).toBe(false);
+    expect(initial[0].total_halalas).toBe(1400);
 
     const key = supplierInvoiceLineKey(base);
     const overridden = buildSupplierInvoiceLines(scans, {
-        [key]: { product_unit_price_halalas: 800 },
+        [key]: {
+            product_unit_price_halalas: 800,
+            services: { engrave: { selected: true } },
+        },
     });
     expect(overridden[0].product_unit_price_halalas).toBe(800);
     expect(overridden[0].total_halalas).toBe(2300);
@@ -194,6 +203,33 @@ test("invoice lines do not merge pieces with different pending supplier services
     expect(lines.map((line) => line.services[0].service_id).sort()).toEqual(["engrave", "paint"]);
 });
 
+test("a later supplier invoice charges only the incomplete service", () => {
+    const scan = {
+        piece_id: "piece-partial-1",
+        product_id: "product-1",
+        product_name: "تعليقة",
+        product_charge_eligible: false,
+        reference_product_unit_price_halalas: 0,
+        reference_product_price_complete: true,
+        invoice_services: [{
+            service_id: "paint",
+            service_name: "طلاء",
+            required_quantity: 1,
+            reference_unit_price_halalas: 200,
+        }],
+    };
+    const key = supplierInvoiceLineKey(scan);
+    const [line] = buildSupplierInvoiceLines([scan], {
+        [key]: { services: { paint: { selected: true } } },
+    });
+
+    expect(line.product_charge_eligible).toBe(false);
+    expect(line.product_unit_price_halalas).toBe(0);
+    expect(line.product_total_halalas).toBe(0);
+    expect(line.services_total_halalas).toBe(200);
+    expect(line.total_halalas).toBe(200);
+});
+
 test("camera invoice shows one compact row with image quantity unit price and total", () => {
     const markup = renderToStaticMarkup(
         <SupplierPieceCameraScanner
@@ -221,14 +257,69 @@ test("camera invoice shows one compact row with image quantity unit price and to
         />,
     );
 
-    expect(markup).toContain("سعر المنتج الأساسي للقطعة");
-    expect(markup).toContain("الخدمات التي نفذها المورد");
     expect(markup).toContain("سعر الوحدة");
     expect(markup).toContain("الإجمالي");
     expect(markup).toContain("تعليقة اليوم الوطني");
     expect(markup).toContain('data-testid="supplier-receiving-mobile-invoice-row"');
     expect(markup).toContain("https://cdn.example.test/national-day.png");
     expect(markup).toContain("<img");
+});
+
+test("quantity prompt uses fixed choices without a numeric input", () => {
+    const markup = renderToStaticMarkup(
+        <SupplierPieceCameraScanner
+            onDetected={() => {}}
+            onClose={() => {}}
+            quantityRequest={{
+                available_quantity: 3,
+                quantity_options: [1, 2, 3],
+                product: { product_name: "كفر زهور الجوري" },
+            }}
+        />,
+    );
+
+    expect(markup).toContain('data-testid="supplier-receiving-quantity-dialog"');
+    expect(markup).toContain('data-quantity="1"');
+    expect(markup).toContain('data-quantity="2"');
+    expect(markup).toContain('data-quantity="3"');
+    expect(markup).not.toContain('type="number"');
+    expect(markup).not.toContain("زيادة");
+    expect(markup).not.toContain("نقص");
+});
+
+test("review starts linked services unchecked and explains their eligibility", () => {
+    const markup = renderToStaticMarkup(
+        <SupplierPieceCameraScanner
+            onDetected={() => {}}
+            onClose={() => {}}
+            step="review"
+            invoiceLines={[{
+                key: "product-1",
+                product_name: "تعليقة",
+                quantity: 1,
+                product_unit_price_halalas: 500,
+                product_charge_eligible: true,
+                product_reference_price_complete: true,
+                services: [{
+                    service_id: "engrave",
+                    service_name: "حفر الاسم",
+                    quantity_per_piece: 1,
+                    unit_price_halalas: 250,
+                    total_halalas: 0,
+                    selected: false,
+                    eligibility_source: "option",
+                    eligibility_condition: { value_name: "حفر اسم" },
+                }],
+                total_halalas: 500,
+            }]}
+            permissions={{ can_edit_product_price: true, can_edit_service_price: true }}
+        />,
+    );
+
+    expect(markup).toContain("حدد الخدمات المنفذة لكل منتج");
+    expect(markup).toContain("حسب اختيار العميل: حفر اسم");
+    expect(markup).toContain('type="checkbox"');
+    expect(markup).not.toContain('checked=""');
 });
 
 test("an open supplier session shows the camera launch button", async () => {
@@ -301,7 +392,21 @@ test("saving sends every grouped piece and edited unit price in one request", as
         },
         service_catalog: [{ id: "engrave", name: "حفر", unit_cost: 4 }],
     });
-    closeSupplierReceivingSession.mockResolvedValue({ ok: true });
+    closeSupplierReceivingSession.mockResolvedValue({
+        ok: true,
+        session: {
+            id: "session-save-1",
+            status: "closed",
+            supplier: { company_name: "مورد أماسي" },
+        },
+        supplier_invoice: {
+            id: "invoice-1",
+            invoice_number: "SI-SAVE-1",
+            total_halalas: 900,
+            share_status: "pending",
+            supplier_snapshot: { company_name: "مورد أماسي", phone: "966500000000" },
+        },
+    });
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -320,10 +425,29 @@ test("saving sends every grouped piece and edited unit price in one request", as
             reviewButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
             await new Promise((resolve) => window.setTimeout(resolve, 0));
         });
+        const checkbox = container.querySelector('input[aria-label="اختيار خدمة حفر"]');
+        expect(checkbox).not.toBeNull();
+        await act(async () => {
+            checkbox.click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+        const draftButton = container.querySelector('[data-testid="supplier-receiving-create-draft"]');
+        expect(draftButton).not.toBeNull();
+        expect(draftButton.disabled).toBe(false);
+        await act(async () => {
+            draftButton.click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
         const saveButton = container.querySelector('[data-testid="supplier-receiving-save-invoice"]');
         expect(saveButton).not.toBeNull();
         await act(async () => {
-            saveButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            saveButton.click();
+            await new Promise((resolve) => window.setTimeout(resolve, 0));
+        });
+        const confirmButton = container.querySelector('[data-testid="supplier-receiving-confirm-save"]');
+        expect(confirmButton).not.toBeNull();
+        await act(async () => {
+            confirmButton.click();
             await new Promise((resolve) => window.setTimeout(resolve, 0));
         });
 
@@ -339,6 +463,9 @@ test("saving sends every grouped piece and edited unit price in one request", as
                 }],
             }],
         });
+        expect(container.querySelector('[data-testid="supplier-invoice-share-panel"]')).not.toBeNull();
+        expect(container.textContent).toContain("SI-SAVE-1");
+        expect(container.textContent).toContain("تحتاج تأكيد المشاركة");
     } finally {
         act(() => root.unmount());
         container.remove();
