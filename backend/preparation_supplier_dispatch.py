@@ -373,6 +373,51 @@ def supplier_dispatch_lines(
     return lines
 
 
+def supplier_dispatch_cards(
+    pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return one printable card per physical piece.
+
+    Supplier receiving resolves a raw piece UUID, so the printed barcode must
+    keep the physical-piece grain instead of reusing a grouped product/order
+    barcode.  Product names remain in the operational snapshot for internal
+    traceability, while the print template intentionally does not display
+    them.
+    """
+    cards: list[dict[str, Any]] = []
+    for piece in sorted(pieces, key=_piece_sort_key):
+        piece_id = _text(piece.get("piece_id") or piece.get("id"))
+        try:
+            order_piece_count = max(
+                1,
+                int(piece.get("total_products_in_order") or 1),
+            )
+        except (TypeError, ValueError, OverflowError):
+            order_piece_count = 1
+        cards.append({
+            "piece_id": piece_id or None,
+            # The receiving parser accepts the raw deterministic UUID.  Its
+            # hex alphabet is also safe for the compact Code 39 renderer.
+            "barcode_value": piece_id or None,
+            "order_number": _text(piece.get("order_number")) or None,
+            "quantity": 1,
+            "order_piece_count": order_piece_count,
+            "shipping_company": _text(piece.get("shipping_company")) or None,
+            "product_name": _text(piece.get("product_name")) or None,
+            "sku": _text(piece.get("sku")) or None,
+            "selected_image_url": _text(piece.get("selected_image_url")) or None,
+            "resolved_image_url": _text(piece.get("resolved_image_url")) or None,
+            "image_url": _text(piece.get("image_url")) or None,
+            "specifications": list(piece.get("specifications_snapshot") or []),
+            "product_options": dict(piece.get("product_options_snapshot") or {}),
+            "service_specifications": list(
+                piece.get("service_specifications_snapshot") or []
+            ),
+            "preparation_note": _text(piece.get("preparation_note")) or None,
+        })
+    return cards
+
+
 def supplier_receiving_dispatch_blocker(
     piece: dict[str, Any],
     supplier_id: Any,
@@ -516,6 +561,64 @@ def _hydrate_piece_images_from_batches(
         piece["selected_image_url"] = selected or None
         piece["resolved_image_url"] = resolved or None
         piece["image_url"] = source or None
+
+
+def _hydrate_piece_print_facts_from_batches(
+    pieces: list[dict[str, Any]],
+    batches: list[dict[str, Any]],
+) -> None:
+    """Restore printable customer/order facts for old and new piece records."""
+    _hydrate_piece_images_from_batches(pieces, batches)
+    lines_by_item: dict[tuple[str, str], dict[str, Any]] = {}
+    lines_by_group: dict[tuple[str, str], dict[str, Any]] = {}
+    for batch in batches:
+        batch_id = _text(batch.get("id"))
+        if not batch_id:
+            continue
+        for line in batch.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            order_item_id = _text(line.get("order_item_id"))
+            group_key = _text(line.get("group_key"))
+            if order_item_id:
+                lines_by_item[(batch_id, order_item_id)] = line
+            if group_key:
+                lines_by_group[(batch_id, group_key)] = line
+
+    for piece in pieces:
+        batch_id = _text(piece.get("batch_id"))
+        line = (
+            lines_by_item.get((batch_id, _text(piece.get("order_item_id"))))
+            or lines_by_group.get((batch_id, _text(piece.get("group_key"))))
+        )
+        if not line:
+            continue
+        if not _text(piece.get("shipping_company")):
+            piece["shipping_company"] = _text(line.get("shipping_company")) or None
+        if not piece.get("total_products_in_order"):
+            try:
+                piece["total_products_in_order"] = max(
+                    1,
+                    int(line.get("total_products_in_order") or 1),
+                )
+            except (TypeError, ValueError, OverflowError):
+                piece["total_products_in_order"] = 1
+        if not piece.get("specifications_snapshot"):
+            piece["specifications_snapshot"] = list(
+                line.get("file_spec_fields") or []
+            )
+        if not piece.get("product_options_snapshot"):
+            piece["product_options_snapshot"] = dict(
+                line.get("product_options") or {}
+            )
+        if not _text(piece.get("preparation_note")):
+            piece["preparation_note"] = _text(
+                line.get("preparation_note")
+            ) or None
+        if not piece.get("service_specifications_snapshot"):
+            piece["service_specifications_snapshot"] = list(
+                line.get("service_spec_fields") or []
+            )
 
 
 def _file_view(
@@ -1110,6 +1213,36 @@ def make_preparation_supplier_dispatch_router(
         #     if blocker:
         #         raise HTTPException(status_code=409, detail=blocker)
 
+        selected_batch_ids = sorted({
+            _text(piece.get("batch_id"))
+            for piece in selected
+            if _text(piece.get("batch_id"))
+        })
+        print_batches = (
+            await db[BATCHES].find(
+                {"user_id": user_id, "id": {"$in": selected_batch_ids}},
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "lines.order_item_id": 1,
+                    "lines.group_key": 1,
+                    "lines.selected_image_url": 1,
+                    "lines.resolved_image_url": 1,
+                    "lines.image_url": 1,
+                    "lines.image_candidates": 1,
+                    "lines.shipping_company": 1,
+                    "lines.total_products_in_order": 1,
+                    "lines.file_spec_fields": 1,
+                    "lines.product_options": 1,
+                    "lines.service_spec_fields": 1,
+                    "lines.preparation_note": 1,
+                },
+            ).to_list(max(1, len(selected_batch_ids)))
+            if selected_batch_ids
+            else []
+        )
+        _hydrate_piece_print_facts_from_batches(selected, print_batches)
+
         dispatch_id = f"sdv1_{uuid.uuid4().hex}"
         now = _now()
         piece_ids = [_text(row.get("piece_id")) for row in selected]
@@ -1133,6 +1266,7 @@ def make_preparation_supplier_dispatch_router(
                 "registered_at": registry.get("registered_at"),
                 "piece_count": len(selected_by_file[file_number]),
                 "lines": file_lines,
+                "cards": supplier_dispatch_cards(selected_by_file[file_number]),
             }
             source_files.append(source_file)
             lines.extend([
@@ -1627,6 +1761,7 @@ __all__ = [
     "piece_is_available_for_supplier_dispatch",
     "plan_piece_selections",
     "supplier_dispatch_blocker",
+    "supplier_dispatch_cards",
     "supplier_dispatch_lines",
     "supplier_receiving_dispatch_blocker",
 ]

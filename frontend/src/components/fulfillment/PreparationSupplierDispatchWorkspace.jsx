@@ -57,6 +57,97 @@ export function selectedFileDispatches(files = [], selected = {}) {
         .filter((file) => file.file_number && file.selections.length > 0);
 }
 
+export function applySupplierDispatchToWorkspaceData(
+    data,
+    fileDispatches = [],
+    dispatch = {},
+) {
+    if (!data || typeof data !== "object") return data;
+    const selectionsByFile = new Map(
+        fileDispatches.map((file) => [
+            String(file?.file_number || ""),
+            new Map((file?.selections || []).map((selection) => [
+                String(selection?.group_key || ""),
+                Math.max(0, Number(selection?.quantity || 0)),
+            ])),
+        ]),
+    );
+    const completedFiles = new Set(
+        Array.isArray(dispatch?.completed_source_file_numbers)
+            ? dispatch.completed_source_file_numbers.map(String)
+            : [],
+    );
+    const files = (data.files || []).map((file) => {
+        const fileNumber = String(file?.file_number || "");
+        const selections = selectionsByFile.get(fileNumber);
+        if (!selections) return file;
+        let dispatchedQuantity = 0;
+        const products = (file.products || []).map((product) => {
+            const selectedQuantity = selections.get(String(product?.group_key || "")) || 0;
+            if (!selectedQuantity) return product;
+            const availableQuantity = Math.max(0, Number(product?.available_quantity || 0));
+            const movedQuantity = Math.min(availableQuantity, selectedQuantity);
+            dispatchedQuantity += movedQuantity;
+            return {
+                ...product,
+                available_quantity: availableQuantity - movedQuantity,
+                sent_quantity: Math.max(0, Number(product?.sent_quantity || 0)) + movedQuantity,
+            };
+        });
+        return {
+            ...file,
+            products,
+            available_quantity: Math.max(
+                0,
+                Number(file?.available_quantity || 0) - dispatchedQuantity,
+            ),
+            sent_quantity: Math.max(0, Number(file?.sent_quantity || 0)) + dispatchedQuantity,
+            execution_status: completedFiles.has(fileNumber)
+                ? "in_progress"
+                : file.execution_status,
+            is_new: products.some((product) => Number(product?.available_quantity || 0) > 0),
+        };
+    });
+    const summary = {
+        ...(data.summary || {}),
+        new_files: files.filter((file) => file.is_new).length,
+        available_to_send: files.reduce(
+            (total, file) => total + Number(file?.available_quantity || 0),
+            0,
+        ),
+        sent: files.reduce(
+            (total, file) => total + Number(file?.sent_quantity || 0),
+            0,
+        ),
+        waiting_review_pieces: files.reduce(
+            (total, file) => total + Number(file?.available_quantity || 0),
+            0,
+        ),
+        in_progress_pieces: files.reduce(
+            (total, file) => total
+                + Number(file?.sent_quantity || 0)
+                + Number(file?.ready_quantity || 0),
+            0,
+        ),
+        waiting_review_products: files.reduce(
+            (total, file) => total + (file.products || []).filter(
+                (product) => Number(product?.available_quantity || 0) > 0,
+            ).length,
+            0,
+        ),
+        in_progress_products: files.reduce(
+            (total, file) => total + (file.products || []).filter(
+                (product) => (
+                    Number(product?.sent_quantity || 0)
+                    + Number(product?.ready_quantity || 0)
+                ) > 0,
+            ).length,
+            0,
+        ),
+    };
+    return { ...data, files, summary };
+}
+
 export function supplierDispatchForPrint(dispatch = {}, suppliers = [], supplierId = "") {
     const selectedSupplier = suppliers.find(
         (supplier) => String(supplier?.id || "") === String(supplierId || ""),
@@ -362,6 +453,7 @@ export function WaitingReviewView({
     error,
     onRefresh,
     onChanged,
+    onDispatchSaved = () => {},
     onBack,
     title = "بانتظار المراجعة",
     description = "المنتجات المسندة إليك ولم تُرسل إلى مورد بعد.",
@@ -390,6 +482,11 @@ export function WaitingReviewView({
     const send = async () => {
         if (!selectedFiles.length || !supplierId || busyFile) return;
         const printWindow = globalThis.window?.open?.("", "_blank") || null;
+        const savedSelections = selectedFiles.map((file) => ({
+            ...file,
+            selections: file.selections.map((selection) => ({ ...selection })),
+        }));
+        let shouldRefresh = false;
         setBusyFile("supplier-file");
         setActionError("");
         setNotice("");
@@ -405,7 +502,14 @@ export function WaitingReviewView({
                 suppliers,
                 supplierId,
             );
-            const printed = printSupplierDispatch(dispatch, printWindow);
+            shouldRefresh = true;
+            onDispatchSaved(savedSelections, dispatch);
+            let printed = false;
+            try {
+                printed = printSupplierDispatch(dispatch, printWindow);
+            } catch {
+                printWindow?.close?.();
+            }
             const completedFiles = Array.isArray(dispatch?.completed_source_file_numbers)
                 ? dispatch.completed_source_file_numbers
                 : [];
@@ -417,12 +521,21 @@ export function WaitingReviewView({
             setNotice(
                 `${printed ? "تم حفظ ملف المورد وفتح نافذة الطباعة." : "تم حفظ ملف المورد، لكن المتصفح منع نافذة الطباعة. يمكنك إعادة طباعته من قيد التنفيذ."}${completionNotice}`,
             );
-            await onChanged();
         } catch (sendError) {
             printWindow?.close?.();
             setActionError(sendError.message || "تعذّر حفظ ملف المورد.");
         } finally {
             setBusyFile("");
+            if (shouldRefresh) {
+                void Promise.resolve()
+                    .then(() => onChanged())
+                    .catch((refreshError) => {
+                        setActionError(
+                            refreshError?.message
+                            || "تم حفظ ملف المورد، لكن تعذّر تحديث القائمة تلقائيًا. اضغط تحديث.",
+                        );
+                    });
+            }
         }
     };
 
@@ -791,6 +904,13 @@ function EmployeeProductsWorkspace({ onDataChanged, initialSection = "overview" 
     const load = useCallback(async () => { setLoading(true); setError(""); try { setData(await getPreparationSupplierWorkspace({ limit: 200 })); } catch (loadError) { setError(loadError.message || "تعذّر تحميل إدارة منتجاتي."); } finally { setLoading(false); } }, []);
     useEffect(() => { load(); }, [load]);
     const changed = useCallback(async () => { await Promise.all([load(), onDataChanged()]); }, [load, onDataChanged]);
+    const dispatchSaved = useCallback((fileDispatches, dispatch) => {
+        setData((current) => applySupplierDispatchToWorkspaceData(
+            current,
+            fileDispatches,
+            dispatch,
+        ));
+    }, []);
     if (loading && !data) return <div className="flex min-h-48 items-center justify-center gap-2 font-black text-violet-700"><SpinnerGap className="animate-spin" /> جارٍ تحميل إدارة منتجاتي…</div>;
     if (section === "waiting-review") {
         const directExecutionView = initialSection === "waiting-review";
@@ -800,6 +920,7 @@ function EmployeeProductsWorkspace({ onDataChanged, initialSection = "overview" 
             error={error}
             onRefresh={load}
             onChanged={changed}
+            onDispatchSaved={dispatchSaved}
             onBack={directExecutionView ? undefined : () => setSection("overview")}
             title={directExecutionView ? "رفع المنتجات للمورد" : "بانتظار المراجعة"}
             description={directExecutionView

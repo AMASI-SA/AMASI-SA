@@ -6,7 +6,7 @@ const mockZxingStop = jest.fn();
 const mockZxingDecodeFromVideoElement = jest.fn();
 
 jest.mock("@zxing/browser", () => ({
-    BarcodeFormat: { QR_CODE: "QR_CODE", CODE_128: "CODE_128" },
+    BarcodeFormat: { QR_CODE: "QR_CODE", CODE_128: "CODE_128", CODE_39: "CODE_39" },
     BrowserMultiFormatReader: jest.fn().mockImplementation(() => ({
         decodeFromVideoElement: mockZxingDecodeFromVideoElement,
     })),

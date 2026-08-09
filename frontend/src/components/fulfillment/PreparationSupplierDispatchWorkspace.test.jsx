@@ -1,10 +1,25 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+
+const mockGetPreparationSupplierWorkspace = jest.fn();
+const mockSendPreparationPiecesToSupplier = jest.fn();
+
+jest.mock("../../services/preparationSupplierDispatch", () => ({
+    getPreparationSupplierWorkspace: (...args) => mockGetPreparationSupplierWorkspace(...args),
+    getUnassignedPreparationPieces: jest.fn(),
+    newPreparationDispatchRequestId: jest.fn(() => "supplier-dispatch:test-1"),
+    reassignPreparationPieces: jest.fn(),
+    rejectPreparationPieces: jest.fn(),
+    sendPreparationPiecesToSupplier: (...args) => mockSendPreparationPiecesToSupplier(...args),
+}));
 
 jest.mock("./SupplierReceivingWorkspace", () => () => (
     <div data-testid="supplier-receiving-workspace">فاتورة المورد داخل إدارة منتجاتي</div>
 ));
 
 import PreparationSupplierDispatchWorkspace, {
+    applySupplierDispatchToWorkspaceData,
     dispatchSelections,
     dispatchSelectionState,
     MyProductsOverview,
@@ -59,6 +74,128 @@ test("one supplier file keeps selections grouped by their source preparation fil
         { file_number: "PF-100", selections: [{ group_key: "product:1", quantity: 2 }] },
         { file_number: "PF-101", selections: [{ group_key: "product:1", quantity: 1 }] },
     ]);
+});
+
+
+test("a saved supplier dispatch immediately removes moved products from waiting review", () => {
+    const updated = applySupplierDispatchToWorkspaceData({
+        summary: {
+            available_to_send: 3,
+            sent: 0,
+            waiting_review_pieces: 3,
+            in_progress_pieces: 0,
+        },
+        files: [{
+            file_number: "PF-100",
+            available_quantity: 3,
+            sent_quantity: 0,
+            products: [
+                { group_key: "product:1", available_quantity: 1, sent_quantity: 0 },
+                { group_key: "product:2", available_quantity: 2, sent_quantity: 0 },
+            ],
+        }],
+    }, [{
+        file_number: "PF-100",
+        selections: [{ group_key: "product:1", quantity: 1 }],
+    }], {
+        completed_source_file_numbers: [],
+    });
+
+    expect(updated.files[0].available_quantity).toBe(2);
+    expect(updated.files[0].sent_quantity).toBe(1);
+    expect(updated.files[0].products[0].available_quantity).toBe(0);
+    expect(updated.files[0].products[0].sent_quantity).toBe(1);
+    expect(updated.summary.waiting_review_pieces).toBe(2);
+    expect(updated.summary.in_progress_pieces).toBe(1);
+});
+
+
+test("saving a supplier file does not leave the page blocked while background refresh waits", async () => {
+    const initialData = {
+        summary: { available_to_send: 1, waiting_review_pieces: 1 },
+        suppliers: [{ id: "supplier-1", company_name: "مورد النقش" }],
+        supplier_accounts: [],
+        files: [{
+            file_number: "PF-100",
+            registered_at: "2026-08-08T08:00:00Z",
+            available_quantity: 1,
+            sent_quantity: 0,
+            products: [{
+                group_key: "product:1",
+                product_name: "قطعة يجب أن تختفي",
+                available_quantity: 1,
+                sent_quantity: 0,
+                services: [],
+            }],
+        }],
+    };
+    mockGetPreparationSupplierWorkspace
+        .mockResolvedValueOnce(initialData)
+        .mockImplementation(() => new Promise(() => {}));
+    mockSendPreparationPiecesToSupplier.mockResolvedValue({
+        dispatch: {
+            id: "dispatch-1",
+            supplier_name: "مورد النقش",
+            supplier_file_number: "PF-100",
+            completed_source_file_numbers: ["PF-100"],
+            source_files: [{ file_number: "PF-100", cards: [] }],
+        },
+    });
+    const printWindow = {
+        document: {
+            open: jest.fn(),
+            write: jest.fn(),
+            close: jest.fn(),
+            title: "",
+        },
+        focus: jest.fn(),
+        print: jest.fn(),
+        close: jest.fn(),
+    };
+    const openSpy = jest.spyOn(window, "open").mockReturnValue(printWindow);
+    const onDataChanged = jest.fn(() => new Promise(() => {}));
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    try {
+        await act(async () => {
+            root.render(
+                <PreparationSupplierDispatchWorkspace
+                    view="waiting-review"
+                    onDataChanged={onDataChanged}
+                />,
+            );
+            await new Promise((resolve) => window.setTimeout(resolve, 20));
+        });
+
+        await act(async () => {
+            container.querySelector('[data-testid="dispatch-product-selector"]').click();
+            const supplierSelect = container.querySelector("select");
+            supplierSelect.value = "supplier-1";
+            supplierSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        const saveButton = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("حفظ وطباعة ملف المورد"));
+        await act(async () => {
+            saveButton.click();
+            await new Promise((resolve) => window.setTimeout(resolve, 20));
+        });
+
+        expect(mockSendPreparationPiecesToSupplier).toHaveBeenCalled();
+        expect(container.textContent).not.toContain("قطعة يجب أن تختفي");
+        expect(container.textContent).toContain("لا توجد منتجات بانتظار الإرسال للمورد");
+        expect(container.textContent).not.toContain("جارٍ تحميل إدارة منتجاتي");
+        expect(onDataChanged).toHaveBeenCalled();
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        openSpy.mockRestore();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+        jest.clearAllMocks();
+    }
 });
 
 
