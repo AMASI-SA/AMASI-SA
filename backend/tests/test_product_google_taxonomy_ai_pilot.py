@@ -5,6 +5,9 @@ import pytest
 
 import product_google_taxonomy_ai_pilot as pilot_module
 from product_google_taxonomy_ai_pilot import (
+    CLASSIFICATION_WAVE_SIZE,
+    PILOT_PRODUCT_PROJECTION,
+    PILOT_SELECTION_PROJECTION,
     PilotStartIn,
     _candidate_rows,
     _claim_run_lease,
@@ -17,6 +20,7 @@ from product_google_taxonomy_ai_pilot import (
     _run_needs_resume,
     _run_counters,
     _schedule_pilot_task,
+    _selected_lookup_values,
     _select_pilot_products,
     _select_unseen_products,
 )
@@ -132,6 +136,22 @@ def test_full_rollout_accepts_200_products_in_next_unseen_mode():
     payload = PilotStartIn(limit=200, selection_mode="next_unseen")
     assert payload.limit == 200
     assert payload.selection_mode == "next_unseen"
+
+
+def test_rollout_catalog_scan_is_lightweight_and_work_waves_are_bounded():
+    assert CLASSIFICATION_WAVE_SIZE == 15
+    assert PILOT_SELECTION_PROJECTION["categories"] == {"$slice": 1}
+    assert "description" not in PILOT_SELECTION_PROJECTION
+    assert "options" not in PILOT_SELECTION_PROJECTION
+    assert "raw_salla" not in PILOT_PRODUCT_PROJECTION
+    assert "raw_salla.description" in PILOT_PRODUCT_PROJECTION
+    assert PILOT_PRODUCT_PROJECTION["images"] == {"$slice": 1}
+
+
+def test_selected_product_lookup_supports_string_and_legacy_numeric_ids():
+    assert _selected_lookup_values(["mpv2_1", "123"]) == [
+        "mpv2_1", "123", 123,
+    ]
 
 
 def test_full_rollout_skips_products_already_seen_in_prior_runs():
