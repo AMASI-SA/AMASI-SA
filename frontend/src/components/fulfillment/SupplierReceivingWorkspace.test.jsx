@@ -320,6 +320,35 @@ test("review starts linked services unchecked and explains their eligibility", (
     expect(markup).toContain("حسب اختيار العميل: حفر اسم");
     expect(markup).toContain('type="checkbox"');
     expect(markup).not.toContain('checked=""');
+    const draftButton = markup.match(/<button[^>]*data-testid="supplier-receiving-create-draft"[^>]*>/)?.[0];
+    expect(draftButton).toContain('disabled=""');
+});
+
+test("review allows a normal priced product that has no services", () => {
+    const markup = renderToStaticMarkup(
+        <SupplierPieceCameraScanner
+            onDetected={() => {}}
+            onClose={() => {}}
+            step="review"
+            invoiceLines={[{
+                key: "product-without-services",
+                product_name: "كفر زهور الجوري",
+                quantity: 1,
+                product_unit_price_halalas: 1500,
+                product_total_halalas: 1500,
+                product_charge_eligible: true,
+                product_reference_price_complete: true,
+                services: [],
+                total_halalas: 1500,
+            }]}
+            permissions={{ can_edit_product_price: true, can_edit_service_price: true }}
+        />,
+    );
+
+    expect(markup).toContain("هذا المنتج لا يحتاج خدمات إضافية؛ سيُعتمد بسعر المنتج الأساسي.");
+    expect(markup).not.toContain("لا توجد خدمة مرتبطة يستطيع هذا المورد تنفيذها.");
+    const draftButton = markup.match(/<button[^>]*data-testid="supplier-receiving-create-draft"[^>]*>/)?.[0];
+    expect(draftButton).not.toContain('disabled=""');
 });
 
 test("an open supplier session shows the camera launch button", async () => {

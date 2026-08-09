@@ -399,7 +399,11 @@ function SupplierInvoiceLineEditor({
                         <div className="text-left text-xs font-black tabular-nums text-violet-800">{formatSupplierMoney(service.total_halalas)}</div>
                     </div>
                 ))}
-                {!line.services.length && <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-xs font-black text-amber-900">لا توجد خدمة مرتبطة يستطيع هذا المورد تنفيذها.</div>}
+                {!line.services.length && (
+                    <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-3 text-xs font-black text-emerald-900">
+                        هذا المنتج لا يحتاج خدمات إضافية؛ سيُعتمد بسعر المنتج الأساسي.
+                    </div>
+                )}
             </div>
             {permissions.can_add_service && availableServices.length > 0 && (
                 <div className="mt-3 flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-2">
@@ -665,9 +669,12 @@ export function SupplierPieceCameraScanner({
     const cannotSave = saving
         || scanning
         || !invoiceLines.length
-        || invoiceLines.some((line) => !line.services.some(
-            (service) => service.selected && Number(service.unit_price_halalas) > 0,
-        ));
+        || invoiceLines.some((line) => {
+            if (!line.services.length) return Number(line.total_halalas || 0) <= 0;
+            return !line.services.some(
+                (service) => service.selected && Number(service.unit_price_halalas) > 0,
+            );
+        });
 
     const stepLabels = [
         ["scan", "1", "التصوير"],
@@ -1080,6 +1087,11 @@ export default function SupplierReceivingWorkspace() {
         await load({ quiet: true });
     }
 
+    function changeWorkflowStep(nextStep) {
+        setError("");
+        setWorkflowStep(nextStep);
+    }
+
     async function cancelSession() {
         if (!active?.id || busy) return;
         const pieceCount = invoiceLines.reduce((sum, line) => sum + line.quantity, 0);
@@ -1234,7 +1246,7 @@ export default function SupplierReceivingWorkspace() {
 
                         <footer className="sticky bottom-0 z-20 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
                             <div className="mb-2 flex items-center justify-between gap-3"><span className="font-black text-slate-950">الإجمالي</span><span className="text-xl font-black tabular-nums text-emerald-800">{formatSupplierMoney(invoiceTotal)} ر.س</span></div>
-                            <button type="button" onClick={() => { setWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice-mobile">
+                            <button type="button" onClick={() => { changeWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length} className="min-h-12 w-full rounded-xl bg-emerald-700 px-5 text-base font-black text-white disabled:opacity-50" data-testid="supplier-receiving-save-invoice-mobile">
                                 <CheckCircle className="ml-1 inline" weight="fill" /> مراجعة المنتجات والخدمات
                             </button>
                             <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-1 min-h-9 w-full text-xs font-black text-rose-700 disabled:opacity-50" data-testid="supplier-receiving-cancel-session-mobile">
@@ -1295,7 +1307,7 @@ export default function SupplierReceivingWorkspace() {
                             <h3 className="font-black text-slate-950">إنهاء الجلسة</h3>
                             <p className="mt-1 text-xs font-bold leading-5 text-slate-500">احفظ الفاتورة لاعتماد الاستلام، أو ألغِ الجلسة للخروج دون حفظ.</p>
                             <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={3} placeholder="ملاحظة الإغلاق — اختياري" className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-rose-400" />
-                            <button type="button" onClick={() => { setWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50"><CheckCircle className="ml-1 inline" /> مراجعة الخدمات والأسعار قبل الاعتماد</button>
+                            <button type="button" onClick={() => { changeWorkflowStep("review"); setCameraOpen(true); }} disabled={!!busy || !invoiceLines.length || sessionCancelling} className="mt-3 min-h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50"><CheckCircle className="ml-1 inline" /> مراجعة الخدمات والأسعار قبل الاعتماد</button>
                             <button type="button" onClick={cancelSession} disabled={!!busy} className="mt-2 min-h-11 w-full rounded-xl border-2 border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-800 disabled:opacity-50" data-testid="supplier-receiving-cancel-session">
                                 {busy === "cancel" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <XCircle className="ml-1 inline" weight="fill" />} إلغاء الجلسة والخروج
                             </button>
@@ -1341,7 +1353,7 @@ export default function SupplierReceivingWorkspace() {
                     supplierName={savedInvoice?.supplier_snapshot?.company_name || supplierDisplayName(active)}
                     employeeName={active?.opened_by_name || savedInvoice?.supplier_approved_by_name || ""}
                     step={workflowStep}
-                    onStepChange={setWorkflowStep}
+                    onStepChange={changeWorkflowStep}
                     savedInvoice={savedInvoice}
                     onShareInvoice={shareSavedInvoice}
                     onShareEvidence={uploadShareEvidence}
