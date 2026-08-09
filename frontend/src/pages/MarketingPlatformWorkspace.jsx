@@ -17,6 +17,7 @@ import {
 import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
 import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
+import { mergePaginatedRows } from "../components/marketing/infiniteScrollPagination";
 import { isValidISODate } from "../components/DateInput";
 import { todaySA } from "../lib/dates";
 import {
@@ -222,9 +223,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [selectedAdSquad, setSelectedAdSquad] = useState(null);
     const loadSequenceRef = useRef(0);
+    const adSquadLoadSequenceRef = useRef(0);
 
     const load = useCallback(async ({ silent = false } = {}) => {
         const requestId = ++loadSequenceRef.current;
+        const requestPage = page;
         if (silent) setRefreshing(true);
         else setLoading(true);
         setError("");
@@ -260,7 +263,23 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     ));
                 }
             }
-            setData(result);
+            setData((current) => {
+                if (platform !== "snapchat" || requestPage <= 1 || !current) {
+                    return result;
+                }
+                return {
+                    ...result,
+                    campaigns: mergePaginatedRows(
+                        current.campaigns,
+                        result.campaigns,
+                        (campaign) => `${campaign?.account_id || "unknown"}:${campaign?.campaign_id || "unknown"}`,
+                    ),
+                    campaign_pagination: {
+                        ...result.campaign_pagination,
+                        page: requestPage,
+                    },
+                };
+            });
             setError("");
         } catch (loadError) {
             if (requestId !== loadSequenceRef.current) return;
@@ -281,6 +300,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const selectedAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
         if (platform !== "snapchat" || !selectedAccountId) return;
+        const requestId = ++adSquadLoadSequenceRef.current;
+        const requestPage = adSquadPage;
         setAdSquadLoading(true);
         setAdSquadError("");
         try {
@@ -296,8 +317,24 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 sortBy: adSquadSort,
                 actionReportTime,
             });
-            setAdSquadReport(result);
+            if (requestId !== adSquadLoadSequenceRef.current) return;
+            setAdSquadReport((current) => {
+                if (requestPage <= 1 || !current) return result;
+                return {
+                    ...result,
+                    ad_squads: mergePaginatedRows(
+                        current.ad_squads,
+                        result.ad_squads,
+                        (adSquad) => `${adSquad?.account_id || "unknown"}:${adSquad?.ad_squad_id || "unknown"}`,
+                    ),
+                    pagination: {
+                        ...result.pagination,
+                        page: requestPage,
+                    },
+                };
+            });
         } catch (loadError) {
+            if (requestId !== adSquadLoadSequenceRef.current) return;
             const detail = loadError?.response?.data?.detail;
             setAdSquadError(
                 typeof detail === "string"
@@ -305,7 +342,9 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     : detail?.message || "تعذر تحميل المجموعات الإعلانية.",
             );
         } finally {
-            setAdSquadLoading(false);
+            if (requestId === adSquadLoadSequenceRef.current) {
+                setAdSquadLoading(false);
+            }
         }
     }, [
         actionReportTime,
@@ -649,6 +688,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     campaignPagination={pagination}
                     campaignPage={page}
                     onCampaignPageChange={setPage}
+                    campaignLoading={loading}
                     readOnly={data?.policy?.mutations_allowed !== true}
                     activeCampaignsOnly={activeCampaignsOnly}
                     onActiveCampaignsOnlyChange={(value) => {

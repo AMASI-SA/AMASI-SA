@@ -76,6 +76,7 @@ export default function AdsEntityLevelWorkspace({
     campaignPagination,
     campaignPage,
     onCampaignPageChange,
+    campaignLoading = false,
     readOnly,
     activeCampaignsOnly = true,
     onActiveCampaignsOnlyChange,
@@ -160,6 +161,7 @@ export default function AdsEntityLevelWorkspace({
                     pagination={campaignPagination}
                     page={campaignPage}
                     onPageChange={onCampaignPageChange}
+                    loading={campaignLoading}
                     readOnly={readOnly}
                     onOpenAdSquads={platform === "snapchat" ? onOpenAdSquads : undefined}
                 />

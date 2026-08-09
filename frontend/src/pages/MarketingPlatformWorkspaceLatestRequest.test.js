@@ -10,6 +10,7 @@ test("ignores stale report success, error and completion state", () => {
     expect(source).toContain("const requestId = ++loadSequenceRef.current;");
     expect(source.match(/requestId !== loadSequenceRef\.current/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).toContain("if (requestId === loadSequenceRef.current)");
-    expect(source).toContain("setData(result);");
+    expect(source).toContain("setData((current) => {");
+    expect(source).toContain("mergePaginatedRows(");
     expect(source).toContain("setError(\"\");");
 });

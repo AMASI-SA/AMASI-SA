@@ -8,6 +8,9 @@ import {
     Trash,
 } from "@phosphor-icons/react";
 
+import InfiniteScrollSentinel from "./InfiniteScrollSentinel";
+import { infinitePaginationState } from "./infiniteScrollPagination";
+
 const STATUS_LABELS = Object.freeze({
     ACTIVE: "نشطة",
     active: "نشطة",
@@ -280,8 +283,12 @@ export default function AdSquadManagerTable({
         ? sorted.filter((row) => selected.has(rowKey(row)))
         : sorted;
     const allSelected = visible.length > 0 && visible.every((row) => selected.has(rowKey(row)));
-    const totalPages = Number(pagination.pages || 0);
-    const currentPage = Number(pagination.page || page || 1);
+    const paginationState = infinitePaginationState({
+        pagination,
+        requestedPage: page,
+        loaded: rows.length,
+    });
+    const currentPage = paginationState.page;
 
     function toggle(row) {
         const key = rowKey(row);
@@ -440,8 +447,17 @@ export default function AdSquadManagerTable({
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
                 <span className="text-xs font-bold text-slate-500">نتائج المجموعات من Snapchat فقط؛ مطابقة سلة تبقى على مستوى الحملة حتى تتوفر هوية أدق.</span>
-                <div className="flex items-center gap-3"><span className="text-xs font-bold text-slate-500">{number(pagination.total || rows.length)} مجموعة · الصفحة {currentPage}{totalPages > 0 ? ` من ${totalPages}` : ""}</span>{totalPages > 1 && <><button type="button" disabled={currentPage <= 1} onClick={() => onPageChange?.(currentPage - 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black disabled:opacity-35">السابق</button><button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange?.(currentPage + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black disabled:opacity-35">التالي</button></>}</div>
+                <span className="text-xs font-bold text-slate-500">تم عرض {number(rows.length)} من {number(paginationState.total)} مجموعة</span>
             </div>
+            <InfiniteScrollSentinel
+                hasMore={paginationState.hasMore}
+                loading={loading}
+                loaded={rows.length}
+                total={paginationState.total}
+                entityLabel="مجموعة إعلانية"
+                onLoadMore={() => onPageChange?.(currentPage + 1)}
+                testId="ad-squad-infinite-scroll-sentinel"
+            />
         </section>
     );
 }
