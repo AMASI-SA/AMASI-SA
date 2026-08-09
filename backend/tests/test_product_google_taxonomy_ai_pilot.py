@@ -1,8 +1,13 @@
+import asyncio
+
+import pytest
+
 from product_google_taxonomy_ai_pilot import (
     PilotStartIn,
     _candidate_rows,
     _decision_status,
     _fallback_search_terms,
+    _gather_bounded,
     _input_revision,
     _product_evidence,
     _run_counters,
@@ -141,6 +146,25 @@ def test_full_rollout_skips_products_already_seen_in_prior_runs():
     selected_ids = {row["mezan_product_id"] for row in selected}
     assert len(selected) == 6
     assert not selected_ids.intersection({"product-0", "product-1", "product-2", "product-3"})
+
+
+@pytest.mark.asyncio
+async def test_rollout_chunk_concurrency_is_bounded_and_keeps_input_order():
+    active = 0
+    max_active = 0
+
+    async def worker(value):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return value * 2
+
+    results = await _gather_bounded(list(range(8)), worker, concurrency=3)
+
+    assert results == [value * 2 for value in range(8)]
+    assert max_active == 3
 
 
 def test_visual_failures_are_counted_separately_from_ai_failures():
