@@ -638,8 +638,13 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
         "missing": ["shipping.read_write"],
         "unknown": False,
     }
+    assert incomplete_salla["capabilities"]["abandoned_carts.read"]["state"] == (
+        "blocked_missing_permission"
+    )
     assert {
-        entry["state"] for entry in incomplete_salla["capabilities"].values()
+        entry["state"]
+        for key, entry in incomplete_salla["capabilities"].items()
+        if key != "abandoned_carts.read"
     } == {"available"}
 
 
