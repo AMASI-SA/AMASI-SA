@@ -33,9 +33,10 @@ test("supplier dispatch print contains the saved supplier file facts", () => {
     expect(html).toContain("grid-template-columns: repeat(3");
     expect(html).toContain("https://cdn.salla.sa/necklace.jpg");
     expect(html).toContain(`باركود ${"A".repeat(32)}`);
-    expect(html).toContain("ط:3001");
+    expect(html).toContain('class="qr-code"');
+    expect(html).toContain("ط:</span><span dir=\"ltr\">3001");
     expect(html).toContain("2026/08/07");
-    expect(html).toContain("الكمية: 1");
+    expect(html).toContain("الكمية:</span> 1");
     expect(html).toContain("سمسا - 3");
     expect(html).toContain("اللون");
     expect(html).toContain("ذهبي");
@@ -60,7 +61,7 @@ test("supplier dispatch print escapes customer specification text", () => {
 });
 
 
-test("combined supplier print preserves a block for every preparation file", () => {
+test("combined supplier print places products from every preparation file in one grid", () => {
     const html = buildSupplierDispatchPrintHtml({
         id: "dispatch-2",
         supplier_file_number: "SF-20260808-ABC123",
@@ -86,9 +87,12 @@ test("combined supplier print preserves a block for every preparation file", () 
     expect(html).toContain("ملف تجهيز المورد — مورد الذهب");
     expect(html).toContain("رقم ملف المورد:");
     expect(html).toContain("SF-20260808-ABC123");
-    expect(html).toContain("ملف التجهيز: PF-100");
-    expect(html).toContain("ملف التجهيز: PF-101");
+    expect(html).toContain("PF-100، PF-101");
+    expect(html).not.toContain('class="source-file"');
+    expect(html).not.toContain('class="source-title"');
+    expect((html.match(/class="product-grid"/g) || [])).toHaveLength(1);
     expect((html.match(/class="product-card"/g) || [])).toHaveLength(3);
-    expect(html).toContain("ط:3001");
-    expect(html).toContain("ط:3003");
+    expect(html).toContain("3001");
+    expect(html).toContain("3003");
+    expect(html).toContain("color: #d12b2b");
 });

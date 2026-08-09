@@ -1,3 +1,5 @@
+import { create as createQrCode } from "qrcode";
+
 function escapeHtml(value) {
     return String(value ?? "")
         .replaceAll("&", "&amp;")
@@ -40,50 +42,29 @@ function positiveInteger(value, fallback = 1) {
         : fallback;
 }
 
-const CODE39 = {
-    "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw", "3": "wnwwnnnnn",
-    "4": "nnnwwnnnw", "5": "wnnwwnnnn", "6": "nnwwwnnnn", "7": "nnnwnnwnw",
-    "8": "wnnwnnwnn", "9": "nnwwnnwnn", A: "wnnnnwnnw", B: "nnwnnwnnw",
-    C: "wnwnnwnnn", D: "nnnnwwnnw", E: "wnnnwwnnn", F: "nnwnwwnnn",
-    G: "nnnnnwwnw", H: "wnnnnwwnn", I: "nnwnnwwnn", J: "nnnnwwwnn",
-    K: "wnnnnnnww", L: "nnwnnnnww", M: "wnwnnnnwn", N: "nnnnwnnww",
-    O: "wnnnwnnwn", P: "nnwnwnnwn", Q: "nnnnnnwww", R: "wnnnnnwwn",
-    S: "nnwnnnwwn", T: "nnnnwnwwn", U: "wwnnnnnnw", V: "nwwnnnnnw",
-    W: "wwwnnnnnn", X: "nwnnwnnnw", Y: "wwnnwnnnn", Z: "nwwnwnnnn",
-    "-": "nwnnnnwnw", ".": "wwnnnnwnn", " ": "nwwnnnwnn", "*": "nwnnwnwnn",
-};
-
-function normalizedBarcodeValue(value) {
-    const raw = String(value || "").trim();
-    const withoutPrefix = raw.toUpperCase().startsWith("MEZAN-PIECE:")
-        ? raw.slice("MEZAN-PIECE:".length)
-        : raw;
-    return withoutPrefix.toUpperCase().replace(/[^0-9A-Z.\- ]/g, "");
-}
-
-function code39Svg(rawValue) {
-    const barcodeValue = normalizedBarcodeValue(rawValue);
+function qrCodeSvg(rawValue) {
+    const barcodeValue = String(rawValue || "").trim();
     if (!barcodeValue) return '<div class="barcode-missing">—</div>';
-    const value = `*${barcodeValue}*`;
-    const narrow = 2;
-    const wide = 5;
-    const gap = 2;
-    const height = 82;
-    let x = 8;
-    const bars = [];
-    for (const char of value) {
-        const pattern = CODE39[char];
-        if (!pattern) continue;
-        pattern.split("").forEach((unit, index) => {
-            const width = unit === "w" ? wide : narrow;
-            if (index % 2 === 0) {
-                bars.push(`<rect x="${x}" y="4" width="${width}" height="${height}" />`);
+    try {
+        const qrValue = barcodeValue.toUpperCase();
+        const qr = createQrCode(
+            [{ data: qrValue, mode: "alphanumeric" }],
+            { errorCorrectionLevel: "H" },
+        );
+        const quietZone = 2;
+        const viewBoxSize = qr.modules.size + (quietZone * 2);
+        const modules = [];
+        for (let row = 0; row < qr.modules.size; row += 1) {
+            for (let column = 0; column < qr.modules.size; column += 1) {
+                if (qr.modules.get(row, column)) {
+                    modules.push(`M${column + quietZone} ${row + quietZone}h1v1h-1z`);
+                }
             }
-            x += width;
-        });
-        x += gap;
+        }
+        return `<svg class="qr-code" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="باركود ${escapeHtml(qrValue)}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#fff"/><path d="${modules.join("")}" fill="#050505"/></svg>`;
+    } catch {
+        return '<div class="barcode-missing">تعذّر إنشاء الباركود</div>';
     }
-    return `<svg class="barcode" viewBox="0 0 ${x + 8} 90" role="img" aria-label="باركود ${escapeHtml(barcodeValue)}" xmlns="http://www.w3.org/2000/svg"><g fill="#050505">${bars.join("")}</g></svg>`;
 }
 
 function specificationRows(card = {}) {
@@ -148,24 +129,24 @@ function renderProductCard(card = {}, registeredAt) {
     );
     return `
         <article class="product-card">
-            <div class="product-visual">
+            <div class="order-side">
                 <div class="media-box product-image-box">
                     ${imageUrl
         ? `<img src="${escapeHtml(imageUrl)}" alt="" />`
         : '<div class="image-missing">لا توجد صورة</div>'}
                 </div>
-                <div class="specifications">
-                    ${specs.length
-        ? specs.map((row) => `<div><b>${escapeHtml(row.name)}:</b> ${escapeHtml(row.value)}</div>`).join("")
-        : '<div class="muted">بدون مواصفات إضافية</div>'}
+                <div class="dispatch-facts">
+                    <div class="order-number"><span class="detail-label">ط:</span><span dir="ltr">${escapeHtml(orderNumber)}</span></div>
+                    <div class="registered-date" dir="ltr">${escapeHtml(formatRiyadhDateOnly(registeredAt))}</div>
+                    <div class="compact-facts"><span><span class="detail-label">الكمية:</span> ${quantity}</span><span>${escapeHtml(shippingCompany)} - ${orderPieceCount}</span></div>
                 </div>
             </div>
-            <div class="product-identity">
-                <div class="media-box barcode-box">${code39Svg(card.barcode_value || card.piece_id || orderNumber)}</div>
-                <div class="dispatch-facts">
-                    <div class="order-number" dir="ltr">ط:${escapeHtml(orderNumber)}</div>
-                    <div class="registered-date" dir="ltr">${escapeHtml(formatRiyadhDateOnly(registeredAt))}</div>
-                    <div class="compact-facts"><span>الكمية: ${quantity}</span><span>${escapeHtml(shippingCompany)} - ${orderPieceCount}</span></div>
+            <div class="specification-side">
+                <div class="media-box qr-box">${qrCodeSvg(card.barcode_value || card.piece_id || orderNumber)}</div>
+                <div class="specifications">
+                    ${specs.length
+        ? specs.map((row) => `<div><span class="detail-label">${escapeHtml(row.name)}:</span> <span>${escapeHtml(row.value)}</span></div>`).join("")
+        : '<div class="muted">بدون مواصفات إضافية</div>'}
                 </div>
             </div>
         </article>`;
@@ -184,16 +165,9 @@ export function buildSupplierDispatchPrintHtml(dispatch = {}) {
         .map((file) => file?.file_number)
         .filter(Boolean)
         .join("، ");
-    const sourceSections = sourceFiles.map((file) => `
-        <section class="source-file">
-            <div class="source-title">
-                <b>ملف التجهيز: ${escapeHtml(file.file_number || "—")}</b>
-                <span>تاريخ الرفع: ${escapeHtml(formatRiyadhDate(file.registered_at))}</span>
-            </div>
-            <div class="product-grid">
-                ${sourceCards(file).map((card) => renderProductCard(card, file.registered_at)).join("")}
-            </div>
-        </section>`).join("");
+    const productCards = sourceFiles.flatMap((file) => (
+        sourceCards(file).map((card) => renderProductCard(card, file.registered_at))
+    ));
     return `<!doctype html>
         <html lang="ar" dir="rtl">
         <head>
@@ -206,25 +180,22 @@ export function buildSupplierDispatchPrintHtml(dispatch = {}) {
                 header { border: 2px solid #6d28d9; border-radius: 14px; padding: 16px; }
                 h1 { margin: 0 0 10px; color: #5b21b6; font-size: 24px; }
                 .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; font-size: 13px; }
-                .source-file { margin-top: 16px; }
-                .source-title { display: flex; justify-content: space-between; gap: 12px; border: 1px solid #ddd6fe; border-radius: 10px; background: #faf5ff; padding: 9px 11px; color: #4c1d95; font-size: 12px; }
-                .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3mm; margin-top: 4mm; }
-                .product-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; min-width: 0; border: 1.6px solid #9b5de5; border-radius: 10px; background: linear-gradient(180deg, #fff 0%, #faf5ff 100%); direction: ltr; break-inside: avoid; page-break-inside: avoid; }
-                .product-visual, .product-identity { min-width: 0; padding: 2.2mm; }
-                .product-identity { border-left: 1px solid #d8b4fe; }
-                .media-box { display: flex; width: 100%; height: 31mm; align-items: center; justify-content: center; overflow: hidden; background: #fff; }
+                .products-section { margin-top: 5mm; }
+                .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 5mm 3mm; direction: rtl; }
+                .product-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; background: #fff; direction: ltr; break-inside: avoid; page-break-inside: avoid; }
+                .order-side, .specification-side { min-width: 0; padding: 1.2mm; }
+                .media-box { display: flex; width: 100%; height: 34mm; align-items: center; justify-content: center; overflow: hidden; background: #fff; }
                 .product-image-box img { width: 100%; height: 100%; object-fit: contain; }
-                .image-missing, .barcode-missing { color: #94a3b8; font-size: 9px; font-weight: 700; }
-                .barcode-box { padding: 1.5mm 0.8mm; }
-                .barcode { width: 100%; height: 100%; }
-                .specifications, .dispatch-facts { min-height: 22mm; padding-top: 2mm; direction: rtl; color: #111827; font-size: 8.5px; font-weight: 700; line-height: 1.55; }
+                .image-missing, .barcode-missing { color: #94a3b8; font-size: 10px; font-weight: 700; text-align: center; }
+                .qr-box { padding: .5mm; }
+                .qr-code { width: 100%; height: 100%; }
+                .specifications, .dispatch-facts { min-height: 23mm; padding-top: 2mm; direction: rtl; color: #151515; font-size: 10.5px; font-weight: 800; line-height: 1.45; text-align: right; }
                 .specifications > div { overflow-wrap: anywhere; }
-                .specifications b { font-weight: 900; }
+                .detail-label { color: #d12b2b; font-weight: 900; }
                 .muted { color: #94a3b8; }
-                .dispatch-facts { text-align: center; }
-                .order-number { font-weight: 900; font-size: 9px; }
-                .registered-date { margin-top: 1mm; font-size: 8.5px; }
-                .compact-facts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1mm 2mm; margin-top: 2mm; direction: rtl; font-size: 8.5px; font-weight: 900; }
+                .order-number { display: flex; justify-content: flex-start; gap: 2px; font-weight: 900; }
+                .registered-date { margin-top: .5mm; font-weight: 900; text-align: right; }
+                .compact-facts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 1mm 2mm; margin-top: .5mm; direction: rtl; font-weight: 900; }
                 footer { margin-top: 18px; border-top: 1px solid #d9deea; padding-top: 10px; color: #667085; font-size: 11px; }
                 @media screen { body { max-width: 210mm; margin: 10px auto; padding: 10mm; box-shadow: 0 4px 22px rgba(15, 23, 42, .16); } }
             </style>
@@ -241,7 +212,11 @@ export function buildSupplierDispatchPrintHtml(dispatch = {}) {
                     <div><b>ملفات التجهيز:</b> ${escapeHtml(sourceNumbers || "—")}</div>
                 </div>
             </header>
-            ${sourceSections}
+            <section class="products-section">
+                <div class="product-grid">
+                    ${productCards.length ? productCards.join("") : '<div class="empty-products">لا توجد منتجات للطباعة.</div>'}
+                </div>
+            </section>
             <footer>هذا الملف تشغيلي داخل ميزان، ويجب مطابقة كل قطعة بباركودها عند الاستلام من المورد.</footer>
         </body>
         </html>`;
