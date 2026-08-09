@@ -45,7 +45,7 @@ WALL_ART_CUES = {
 BLANK_CANVAS_CUES = {
     "فارغ", "فارغه", "فارغة", "للرسم", "رسم", "كانفس", "كانفاس", "قماش",
 }
-DRESS_WORDS = {"فستان", "فساتين"}
+DRESS_WORDS = {"فستان", "الفستان", "فساتين", "الفساتين"}
 INFANT_DRESS_CUES = {
     "رضيع", "رضيعه", "رضيعة", "رضع", "الرضع", "مولود", "مواليد",
     "بيبي", "baby", "toddler", "حديثي", "حديثه", "حديثة", "ولاده", "ولادة",
@@ -241,7 +241,7 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
         if "مشجعي كره القدم" in normalized:
             return True
     if _is_finished_wall_art(evidence):
-        if "الرسم" in normalized and any(
+        if "رسم" in normalized and any(
             term in normalized for term in ("خامات", "مستلزمات", "لوحات رسم", "كانفس", "كانفاس")
         ):
             return True
