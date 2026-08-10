@@ -10,7 +10,7 @@ import { LogoIcon } from "../components/MezanLogo";
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
 
 export default function Login() {
-    const { login, verifyMfa, formatApiErrorDetail } = useAuth();
+    const { login, verifyMfa, refreshUser, formatApiErrorDetail } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [email, setEmail] = useState("");
@@ -88,7 +88,12 @@ export default function Login() {
         if (!mfaCode.trim()) return;
         setBusy(true);
         try {
-            const result = await verifyMfa(challengeToken, mfaCode.trim());
+            const isEnrollment = mfaMode === "setup";
+            const result = await verifyMfa(
+                challengeToken,
+                mfaCode.trim(),
+                { deferRefresh: isEnrollment },
+            );
             const codes = Array.isArray(result?.recovery_codes) ? result.recovery_codes : [];
             if (codes.length) {
                 setRecoveryCodes(codes);
@@ -100,6 +105,21 @@ export default function Login() {
             finishLogin();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر التحقق من الرمز");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const continueAfterRecovery = async () => {
+        setBusy(true);
+        try {
+            const hydrated = await refreshUser();
+            if (!hydrated) {
+                toast.error("تعذر تأكيد الجلسة. سجّل الدخول من جديد.");
+                resetMfa();
+                return;
+            }
+            finishLogin();
         } finally {
             setBusy(false);
         }
@@ -319,11 +339,12 @@ export default function Login() {
             </button>
             <button
                 type="button"
-                onClick={finishLogin}
-                className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors"
+                onClick={continueAfterRecovery}
+                disabled={busy}
+                className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
                 data-testid="recovery-codes-continue"
             >
-                حفظت الرموز — المتابعة إلى ميزان
+                {busy ? "جاري تأكيد الجلسة…" : "حفظت الرموز — المتابعة إلى ميزان"}
             </button>
         </div>
     );
