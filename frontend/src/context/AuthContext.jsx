@@ -17,6 +17,11 @@ function clearLegacyBrowserAccessToken() {
     }
 }
 
+// Run the migration at module bootstrap, before AuthProvider's children can
+// mount and issue API calls. `api.js` reads localStorage only at request time,
+// so this prevents even one legacy bearer-token request during the first render.
+clearLegacyBrowserAccessToken();
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null); // null while checking, false if anon
     const [loading, setLoading] = useState(true);
