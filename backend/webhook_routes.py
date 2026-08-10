@@ -38,6 +38,10 @@ from report_builder import build_report
 from orders_db import upsert_order, orders_to_parsed
 from product_costs import attach_cost_to_order_doc
 from import_jobs import get_order_lock
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -873,6 +877,16 @@ def _build_router(db) -> APIRouter:
                 status_code=400,
                 detail=f"لا توجد طلبات بين {payload.date_from} و {payload.date_to}",
             )
+
+        attribution_query = {
+            "user_id": user["id"],
+            "order_date": {"$gte": payload.date_from, "$lte": payload.date_to},
+        }
+        attribution_rows = await db.unified_orders.find(
+            attribution_query,
+            SALLA_RAW_ATTRIBUTION_PROJECTION,
+        ).to_list(50000)
+        attach_projected_salla_attribution(orders, attribution_rows)
 
         parsed = orders_to_parsed(orders)
         settings = await ensure_user_settings(db, user["id"])

@@ -22,6 +22,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from salla_marketing_attribution import (
+    canonical_marketing_source,
+    promoted_salla_attribution,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,6 +68,19 @@ SHIPPING_WITHOUT_ACTIVE_LABEL = {
     "canceled",
     "void",
     "deleted",
+}
+MARKETING_ATTRIBUTION_FIELDS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "campaign_id",
+    "campaign_name",
+    "source_campaign_id",
+    "source_campaign_name",
+    "source_native",
+    "traffic_source",
+    "marketing_source",
+    "ad_platform_source",
 }
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
@@ -690,6 +708,7 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                     "order_status_slug",
                     *COLLECTION_FIELDS,
                     *PAYMENT_EVIDENCE_FIELDS,
+                    *MARKETING_ATTRIBUTION_FIELDS,
                     "shipping_label_url",
                 }
             )
@@ -827,6 +846,12 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
     if not order_number:
         raise ValueError("order_number is required")
 
+    if source == "salla_direct":
+        incoming = dict(incoming)
+        for field, value in promoted_salla_attribution(raw or incoming).items():
+            if value not in (None, ""):
+                incoming[field] = value
+
     existing = await db.unified_orders.find_one(
         {"user_id": user_id, "order_number": order_number}
     ) or {}
@@ -903,7 +928,11 @@ def orders_to_parsed(orders: list[dict]) -> dict:
         amount = float(o.get("total_amount") or 0)
         pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
         ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
-        src = (o.get("source") or "").strip() or (o.get("data_source") or "غير محدد")
+        src = (
+            canonical_marketing_source(o)
+            or str(o.get("source") or "").strip()
+            or str(o.get("data_source") or "غير محدد")
+        )
 
         total_sales += amount
         total_orders += 1
