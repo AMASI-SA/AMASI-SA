@@ -5,16 +5,21 @@ import pytest
 
 import product_google_taxonomy_ai_pilot as pilot_module
 from product_google_taxonomy_ai_pilot import (
+    CLASSIFICATION_CONCURRENCY,
     CLASSIFICATION_WAVE_SIZE,
+    OPENAI_REQUEST_SPACING_SECONDS,
+    OPENAI_RETRY_BASE_SECONDS,
     PILOT_PRODUCT_PROJECTION,
     PILOT_SELECTION_PROJECTION,
     PilotStartIn,
+    _call_openai_with_backoff,
     _candidate_rows,
     _claim_run_lease,
     _decision_status,
     _fallback_search_terms,
     _gather_bounded,
     _input_revision,
+    _is_retryable_openai_error,
     _persist_records,
     _product_evidence,
     _run_needs_resume,
@@ -191,6 +196,62 @@ async def test_rollout_chunk_concurrency_is_bounded_and_keeps_input_order():
 
     assert results == [value * 2 for value in range(8)]
     assert max_active == 3
+
+
+@pytest.mark.asyncio
+async def test_provider_backoff_honors_retry_after_then_exponential_delay():
+    class Response:
+        def __init__(self, retry_after=None):
+            self.headers = (
+                {"retry-after": str(retry_after)}
+                if retry_after is not None
+                else {}
+            )
+
+    class TransientProviderError(Exception):
+        status_code = 429
+
+        def __init__(self, retry_after=None):
+            super().__init__("rate limited")
+            self.response = Response(retry_after)
+
+    attempts = 0
+    sleeps = []
+
+    async def operation():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TransientProviderError(7)
+        if attempts == 2:
+            raise TransientProviderError()
+        return "ok"
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    result = await _call_openai_with_backoff(operation, sleep=fake_sleep)
+
+    assert result == "ok"
+    assert attempts == 3
+    assert sleeps == [
+        7.0,
+        OPENAI_RETRY_BASE_SECONDS * 2,
+        OPENAI_REQUEST_SPACING_SECONDS,
+    ]
+
+
+def test_hard_quota_error_is_not_retried():
+    class HardQuotaError(Exception):
+        status_code = 429
+        body = {"error": {"code": "insufficient_quota"}}
+
+    assert _is_retryable_openai_error(HardQuotaError()) is False
+
+
+def test_taxonomy_provider_calls_are_sequential_but_checkpoints_remain_bounded():
+    assert CLASSIFICATION_CONCURRENCY == 1
+    assert CLASSIFICATION_WAVE_SIZE == 15
 
 
 @pytest.mark.asyncio

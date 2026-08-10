@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from openai import APITimeoutError, AsyncOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
@@ -42,11 +42,14 @@ MAX_PRODUCTS_SCANNED = 5000
 MAX_CANDIDATES = 24
 SEARCH_TERMS_CHUNK_SIZE = 20
 CLASSIFICATION_CHUNK_SIZE = 5
-CLASSIFICATION_CONCURRENCY = 3
-CLASSIFICATION_WAVE_SIZE = min(
-    SEARCH_TERMS_CHUNK_SIZE,
-    CLASSIFICATION_CHUNK_SIZE * CLASSIFICATION_CONCURRENCY,
-)
+# Keep provider calls sequential. The previous three-way burst caused a 200-item
+# run to persist 170 transient 429 failures before the account window recovered.
+CLASSIFICATION_CONCURRENCY = 1
+CLASSIFICATION_WAVE_SIZE = 15
+OPENAI_RETRY_ATTEMPTS = 6
+OPENAI_RETRY_BASE_SECONDS = 3.0
+OPENAI_RETRY_MAX_SECONDS = 45.0
+OPENAI_REQUEST_SPACING_SECONDS = 1.0
 MAX_DESCRIPTION_CHARS = 900
 MAX_REASON_CHARS = 500
 MAX_EVIDENCE_ITEMS = 5
@@ -455,7 +458,7 @@ def _openai_client() -> AsyncOpenAI:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail={"code": "openai_not_configured"})
-    return AsyncOpenAI(api_key=api_key, max_retries=1, timeout=35.0)
+    return AsyncOpenAI(api_key=api_key, max_retries=0, timeout=35.0)
 
 
 def _model() -> str:
@@ -516,8 +519,84 @@ CLASSIFICATION_SCHEMA = {
 }
 
 
+def _openai_error_code(exc: Exception) -> str:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        nested = body.get("error")
+        if isinstance(nested, dict) and nested.get("code"):
+            return _text(nested.get("code"))
+        if body.get("code"):
+            return _text(body.get("code"))
+    return _text(getattr(exc, "code", None))
+
+
+def _is_retryable_openai_error(exc: Exception) -> bool:
+    if _openai_error_code(exc) in {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    }:
+        return False
+    if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
+        return True
+    try:
+        status_code = int(getattr(exc, "status_code", 0) or 0)
+    except (TypeError, ValueError):
+        status_code = 0
+    return status_code == 429 or 500 <= status_code < 600
+
+
+def _retry_after_seconds(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if not hasattr(headers, "get"):
+        return None
+    raw_value = headers.get("retry-after")
+    if raw_value in (None, ""):
+        return None
+    try:
+        return max(
+            0.0,
+            min(float(raw_value), OPENAI_RETRY_MAX_SECONDS),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+async def _call_openai_with_backoff(
+    operation: Callable[[], Awaitable[Any]],
+    *,
+    sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
+) -> Any:
+    """Retry transient provider failures without converting a whole wave to failure."""
+    for attempt in range(OPENAI_RETRY_ATTEMPTS):
+        try:
+            result = await operation()
+        except Exception as exc:
+            if (
+                not _is_retryable_openai_error(exc)
+                or attempt + 1 >= OPENAI_RETRY_ATTEMPTS
+            ):
+                raise
+            retry_after = _retry_after_seconds(exc)
+            delay = (
+                retry_after
+                if retry_after is not None
+                else min(
+                    OPENAI_RETRY_MAX_SECONDS,
+                    OPENAI_RETRY_BASE_SECONDS * (2 ** attempt),
+                )
+            )
+            await sleep(delay)
+            continue
+        await sleep(OPENAI_REQUEST_SPACING_SECONDS)
+        return result
+    raise RuntimeError("openai_retry_loop_exhausted")
+
+
 async def _ai_search_terms(client: AsyncOpenAI, evidences: list[dict[str, Any]]) -> dict[str, list[str]]:
-    response = await client.responses.create(
+    response = await _call_openai_with_backoff(
+        lambda: client.responses.create(
         model=_model(),
         instructions=(
             "أنت خبير في Google Product Taxonomy. لكل منتج أعطِ من 2 إلى 8 عبارات بحث قصيرة "
@@ -528,6 +607,7 @@ async def _ai_search_terms(client: AsyncOpenAI, evidences: list[dict[str, Any]])
         input=json.dumps({"products": evidences}, ensure_ascii=False),
         max_output_tokens=1800,
         text={"format": {"type": "json_schema", "name": "google_taxonomy_search_terms", "strict": True, "schema": SEARCH_TERMS_SCHEMA}},
+        )
     )
     payload = json.loads(response.output_text)
     result: dict[str, list[str]] = {}
@@ -542,7 +622,8 @@ async def _ai_search_terms(client: AsyncOpenAI, evidences: list[dict[str, Any]])
 
 
 async def _ai_classify_chunk(client: AsyncOpenAI, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    response = await client.responses.create(
+    response = await _call_openai_with_backoff(
+        lambda: client.responses.create(
         model=_model(),
         instructions=(
             "أنت مصنف منتجات داخل Mezan OS. اختر لكل منتج Google Product Category واحدة فقط من "
@@ -555,6 +636,7 @@ async def _ai_classify_chunk(client: AsyncOpenAI, rows: list[dict[str, Any]]) ->
         input=json.dumps({"products": rows}, ensure_ascii=False),
         max_output_tokens=2400,
         text={"format": {"type": "json_schema", "name": "google_taxonomy_classification", "strict": True, "schema": CLASSIFICATION_SCHEMA}},
+        )
     )
     payload = json.loads(response.output_text)
     result: dict[str, dict[str, Any]] = {}
@@ -1078,7 +1160,7 @@ async def _execute_pilot(
         ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], Exception | None]:
             try:
                 return chunk, await _ai_classify_chunk(client, chunk), None
-            except (APITimeoutError, Exception) as exc:  # per-chunk partial failure isolation
+            except Exception as exc:  # per-chunk partial failure isolation
                 return chunk, {}, exc
 
         # Complete search -> classify -> persist for at most 15 products at a
@@ -1151,6 +1233,11 @@ async def _execute_pilot(
             wave_records: list[dict[str, Any]] = []
             for chunk, ai_results, chunk_error in classification_chunk_results:
                 if chunk_error is not None:
+                    # Do not checkpoint a transient provider throttle as a
+                    # durable product failure. Requeue the same run so its
+                    # saved waves remain intact and the unsaved wave resumes.
+                    if _is_retryable_openai_error(chunk_error):
+                        raise chunk_error
                     for item in chunk:
                         product_id = item["product_id"]
                         meta = metadata_by_product[product_id]
@@ -1291,15 +1378,23 @@ async def _execute_pilot(
         )
         raise
     except Exception as exc:
+        retryable_provider_error = _is_retryable_openai_error(exc)
+        now = _now()
+        set_fields: dict[str, Any] = {
+            "status": "queued" if retryable_provider_error else "failed",
+            "finished_at": None if retryable_provider_error else now,
+            "heartbeat_at": now,
+            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+            "progress.phase": (
+                "provider_rate_limited"
+                if retryable_provider_error
+                else "failed"
+            ),
+        }
         await db[RUNS].update_one(
             {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
             {
-                "$set": {
-                    "status": "failed",
-                    "finished_at": _now(),
-                    "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-                    "progress.phase": "failed",
-                },
+                "$set": set_fields,
                 "$unset": {"lease_owner": "", "lease_expires_at": ""},
             },
         )
