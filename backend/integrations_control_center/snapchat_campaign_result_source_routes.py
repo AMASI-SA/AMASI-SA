@@ -15,6 +15,12 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from salla_marketing_attribution import (
+    campaign_id_candidates,
+    campaign_name_candidates,
+    canonical_ad_platform,
+)
+
 from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_campaign_report_routes import read_snapchat_campaign_report
 from .snapchat_native_data_common import (
@@ -73,15 +79,7 @@ def _ratio(numerator: float | None, denominator: float | None, multiplier: float
 
 
 def _source_is_snapchat(order: dict[str, Any]) -> bool:
-    values = [
-        order.get("source"),
-        order.get("utm_source"),
-        order.get("platform"),
-        order.get("channel"),
-        order.get("source_native"),
-    ]
-    haystack = " ".join(_norm(value) for value in values if _text(value))
-    return any(alias in haystack for alias in ("snapchat", "snap chat", "snap", "سناب"))
+    return canonical_ad_platform(order) == "snapchat"
 
 
 def _unique_lookup(rows: list[dict[str, Any]], field: str) -> dict[str, tuple[str, str] | None]:
@@ -103,24 +101,14 @@ def _match_order_campaign(
     id_lookup: dict[str, tuple[str, str] | None],
     name_lookup: dict[str, tuple[str, str] | None],
 ) -> tuple[tuple[str, str] | None, str]:
-    id_candidates = [
-        order.get("campaign_id"),
-        order.get("source_campaign_id"),
-        order.get("utm_campaign"),
-    ]
-    for candidate in id_candidates:
+    for candidate in campaign_id_candidates(order):
         normalized = _norm(candidate)
         if normalized and normalized in id_lookup:
             key = id_lookup[normalized]
             return (key, "campaign_id") if key else (None, "ambiguous_id")
 
     if _source_is_snapchat(order):
-        name_candidates = [
-            order.get("campaign_name"),
-            order.get("source_campaign_name"),
-            order.get("utm_campaign"),
-        ]
-        for candidate in name_candidates:
+        for candidate in campaign_name_candidates(order):
             normalized = _norm(candidate)
             if normalized and normalized in name_lookup:
                 key = name_lookup[normalized]
@@ -231,6 +219,7 @@ async def _salla_outcomes(
         to_date=date_to,
         payment_methods=None,
         shipping_companies=None,
+        include_marketing_attribution=True,
     )
     id_lookup = _unique_lookup(identities, "campaign_id")
     name_lookup = _unique_lookup(identities, "campaign_name")

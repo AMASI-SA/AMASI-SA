@@ -31,6 +31,8 @@ from typing import Any, Optional
 
 from pymongo.errors import DuplicateKeyError
 
+from salla_marketing_attribution import promoted_salla_attribution
+
 from .service import SallaError, call_salla
 
 # orders_db is imported at module top-level to keep `salla_direct` writes
@@ -746,6 +748,10 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "total_amount": _money(total_obj),
         "currency": _str(total_obj.get("currency") if isinstance(total_obj, dict) else "") or "SAR",
         "source": _str(salla_order.get("source") or "salla_direct"),
+        # Keep Salla's raw payload for audit while promoting only the stable
+        # marketing fields needed by ad attribution.  This does not change the
+        # order, accounting, fulfilment or Qoyod source of truth.
+        **promoted_salla_attribution(salla_order),
         "products": products,
     }
 

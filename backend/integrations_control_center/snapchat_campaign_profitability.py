@@ -531,6 +531,7 @@ async def build_campaign_profitability(
         to_date=date_to,
         payment_methods=None,
         shipping_companies=None,
+        include_marketing_attribution=True,
     )
     cost_context = await _load_cost_context(db, user_id)
 

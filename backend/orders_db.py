@@ -128,6 +128,14 @@ TRACKED_FIELDS = (
     "utm_source",
     "utm_medium",
     "utm_campaign",
+    "campaign_id",
+    "campaign_name",
+    "source_campaign_id",
+    "source_campaign_name",
+    "source_native",
+    "traffic_source",
+    "marketing_source",
+    "ad_platform_source",
     "device",
 )
 

@@ -170,7 +170,7 @@ async def test_builds_selected_four_platform_daily_and_riyadh_hourly_spend():
                     "spend_sar": 7.5,
                 }
             ],
-            "mezan_snapchat_performance_account_hour_v1": [
+            module.SNAPCHAT_ACCOUNT_LOCAL_HOURLY_COLLECTION: [
                 {
                     "user_id": "owner-1",
                     "provider": "snapchat_ads",

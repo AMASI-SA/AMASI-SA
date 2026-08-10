@@ -818,6 +818,7 @@ async def _salla_account_outcomes(
         to_date=(end + timedelta(days=1)).isoformat(),
         payment_methods=None,
         shipping_companies=None,
+        include_marketing_attribution=True,
     )
     id_lookup = _unique_lookup(identities, "campaign_id")
     name_lookup = _unique_lookup(identities, "campaign_name")

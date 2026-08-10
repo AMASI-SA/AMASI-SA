@@ -24,6 +24,7 @@ async def test_fallback_builder_preserves_filters_and_is_read_only(monkeypatch):
         to_date,
         payment_methods,
         shipping_companies,
+        include_marketing_attribution=False,
     ):
         calls["orders"] = {
             "db": db,
@@ -32,6 +33,7 @@ async def test_fallback_builder_preserves_filters_and_is_read_only(monkeypatch):
             "to_date": to_date,
             "payment_methods": payment_methods,
             "shipping_companies": shipping_companies,
+            "include_marketing_attribution": include_marketing_attribution,
         }
         return [{"order_number": "A-1", "utm_source": "meta", "total_amount": 250}]
 
@@ -83,6 +85,7 @@ async def test_fallback_builder_preserves_filters_and_is_read_only(monkeypatch):
         "to_date": "2026-08-03",
         "payment_methods": "tabby,tamara",
         "shipping_companies": "smsa",
+        "include_marketing_attribution": True,
     }
     assert calls["ads"]["from_date"] == "2026-08-01"
     assert calls["ads"]["to_date"] == "2026-08-03"
