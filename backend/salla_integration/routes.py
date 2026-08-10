@@ -31,6 +31,8 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 
+from customer_identity import CUSTOMER_IDENTITY_COLLECTION
+
 from .service import (
     DEFAULT_SCOPES,
     SallaError,
@@ -64,6 +66,7 @@ from .abandoned_carts import (
     ABANDONED_CART_COLLECTION,
     ABANDONED_CART_EVENT_COLLECTION,
     ABANDONED_CART_EVENTS,
+    ABANDONED_CART_SCHEMA_VERSION,
     AbandonedCartScopeError,
     backfill_abandoned_carts,
     ensure_abandoned_cart_indexes,
@@ -599,6 +602,13 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "last_error",
             "provider_write_reached",
             "pii_stored",
+            "plaintext_pii_stored",
+            "schema_version",
+            "identity_linked",
+            "attributed",
+            "order_linked",
+            "private_context_encrypted",
+            "customer_orders_linked",
         )
         public = {key: row.get(key) for key in allowed if key in row}
         for key in ("started_at", "ended_at", "updated_at"):
@@ -631,6 +641,7 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     "updated_at": datetime.now(timezone.utc),
                     "provider_write_reached": False,
                     "pii_stored": False,
+                    "plaintext_pii_stored": False,
                 }},
             )
             return
@@ -658,11 +669,47 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         )
         carts = getattr(db, ABANDONED_CART_COLLECTION)
         events = getattr(db, ABANDONED_CART_EVENT_COLLECTION)
+        identities = getattr(db, CUSTOMER_IDENTITY_COLLECTION)
         total_carts = await carts.count_documents({"user_id": user_id})
         purchased_carts = await carts.count_documents(
             {"user_id": user_id, "purchased": True}
         )
         webhook_events = await events.count_documents({"user_id": user_id})
+        identity_linked_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "customer_identity_id": {"$exists": True, "$ne": None},
+            }
+        )
+        attributed_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"attribution.platform": {"$exists": True, "$ne": None}},
+                    {"attribution.campaign_id": {"$exists": True, "$ne": None}},
+                    {"attribution.utm_source": {"$exists": True, "$ne": None}},
+                ],
+            }
+        )
+        order_linked_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"order_id": {"$exists": True, "$ne": None}},
+                    {"order_number": {"$exists": True, "$ne": None}},
+                ],
+            }
+        )
+        encrypted_private_carts = await carts.count_documents(
+            {"user_id": user_id, "private_cart_context_encrypted": True}
+        )
+        customer_identities = await identities.count_documents({"user_id": user_id})
+        customer_memory_orders = await db.unified_orders.count_documents(
+            {
+                "user_id": user_id,
+                "customer_identity_id": {"$exists": True, "$ne": None},
+            }
+        )
         event_counts = {
             event_name: await events.count_documents(
                 {"user_id": user_id, "event": event_name}
@@ -695,6 +742,13 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "active_carts": max(total_carts - purchased_carts, 0),
             "purchased_carts": purchased_carts,
             "webhook_events": webhook_events,
+            "schema_version": ABANDONED_CART_SCHEMA_VERSION,
+            "customer_identities": customer_identities,
+            "customer_memory_orders": customer_memory_orders,
+            "identity_linked_carts": identity_linked_carts,
+            "attributed_carts": attributed_carts,
+            "order_linked_carts": order_linked_carts,
+            "encrypted_private_carts": encrypted_private_carts,
             "event_counts": event_counts,
             "latest_cart_at": iso(
                 (latest_cart or {}).get("cart_updated_at")
@@ -705,6 +759,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "import_running": (latest_sync or {}).get("status") == "running",
             "provider_write_reached": False,
             "pii_stored": False,
+            "plaintext_pii_stored": False,
+            "private_data_encrypted_at_rest": True,
         }
 
     @router.post("/sync/abandoned-carts", status_code=202)
@@ -781,6 +837,13 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 "updated_at": now,
                 "provider_write_reached": False,
                 "pii_stored": False,
+                "plaintext_pii_stored": False,
+                "schema_version": ABANDONED_CART_SCHEMA_VERSION,
+                "identity_linked": 0,
+                "attributed": 0,
+                "order_linked": 0,
+                "private_context_encrypted": 0,
+                "customer_orders_linked": 0,
             }},
             upsert=True,
         )
@@ -792,6 +855,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "status": "running",
             "provider_write_reached": False,
             "pii_stored": False,
+            "plaintext_pii_stored": False,
+            "schema_version": ABANDONED_CART_SCHEMA_VERSION,
         }
 
     # ── 9. Sync logs ──────────────────────────────────────────────────
