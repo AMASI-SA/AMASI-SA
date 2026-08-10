@@ -138,33 +138,81 @@ async def _install_login_security_for_loaded_app(db) -> None:
     await install_login_security(app, db)
 
 
+def _initial_owner_password() -> str:
+    """Return the explicitly configured password for a *new* installation.
+
+    Historical builds silently used ``admin123`` when ADMIN_PASSWORD was
+    absent.  A production authentication system must never manufacture a
+    privileged credential from source-code defaults, so fresh installations
+    now fail closed until an operator supplies a real secret.
+    """
+    value = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+    if not value:
+        raise RuntimeError(
+            "ADMIN_PASSWORD must be configured before creating the initial Owner account"
+        )
+    if value.lower() == "admin123":
+        raise RuntimeError(
+            "ADMIN_PASSWORD cannot use the retired insecure default value"
+        )
+    return value
+
+
 async def seed_admin(db) -> None:
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@hesab.app").lower()
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    """Ensure one initial Owner exists without ever resetting a live password.
+
+    Security invariants:
+    - No source-code/default privileged password.
+    - ADMIN_PASSWORD is creation-only; changing the environment later does not
+      mutate an existing user's password.
+    - If another Owner already exists under a different email, do not create a
+      second Owner simply because ADMIN_EMAIL changed.
+    """
+    admin_email = (os.environ.get("ADMIN_EMAIL") or "admin@hesab.app").strip().lower()
     existing = await db.users.find_one({"email": admin_email})
+
     if existing is None:
-        import uuid
-        await db.users.insert_one({
-            "id": str(uuid.uuid4()),
-            "email": admin_email,
-            "password_hash": hash_password(admin_password),
-            "name": "المدير",
-            # iter-51 — the seeded user is the Owner (highest privilege).
-            # Only one Owner per installation; cannot be downgraded via API.
-            "role": "owner",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-    else:
-        updates = {}
-        if not verify_password(admin_password, existing.get("password_hash", "")):
-            updates["password_hash"] = hash_password(admin_password)
-        # iter-51 — promote the existing seeded admin to Owner so the team
-        # management endpoints work out of the box. Idempotent: skipped
-        # if already owner.
-        if (existing.get("role") or "").lower() != "owner":
-            updates["role"] = "owner"
-        if updates:
-            await db.users.update_one({"email": admin_email}, {"$set": updates})
+        existing_owner = await db.users.find_one({"role": "owner"})
+        if existing_owner is None:
+            import uuid
+
+            admin_password = _initial_owner_password()
+            await db.users.insert_one({
+                "id": str(uuid.uuid4()),
+                "email": admin_email,
+                "password_hash": hash_password(admin_password),
+                "name": "المدير",
+                "role": "owner",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            logger.info("Created initial Owner account for %s", admin_email)
+        else:
+            logger.info(
+                "Owner already exists; skipped seed creation for configured ADMIN_EMAIL=%s",
+                admin_email,
+            )
+    elif (existing.get("role") or "").lower() != "owner":
+        # Preserve the historical one-owner invariant.  If a separate owner
+        # already exists, changing ADMIN_EMAIL must not silently create a second
+        # owner via promotion.
+        other_owner = await db.users.find_one(
+            {"role": "owner", "id": {"$ne": existing.get("id")}}
+        )
+        if other_owner is None:
+            await db.users.update_one(
+                {"email": admin_email},
+                {"$set": {"role": "owner"}},
+            )
+            logger.info("Promoted configured admin account to Owner: %s", admin_email)
+        else:
+            logger.warning(
+                "Configured ADMIN_EMAIL is not Owner, but another Owner already exists; "
+                "left roles unchanged"
+            )
+
+    # Deliberately do not compare or overwrite password_hash for an existing
+    # user. Password changes must go through authenticated account-management
+    # flows, never through a process restart or environment-variable drift.
 
     # Install the distributed login guard after the normal seed work succeeds.
     # Any index/setup failure is allowed to fail startup rather than silently
