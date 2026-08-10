@@ -48,6 +48,35 @@ export async function linkEmployeesV2PilotAccount(employeeId, accountUserId) {
     )).data;
 }
 
+export async function createAndLinkEmployeesV2PilotAccount(employeeId, payload) {
+    const catalogue = (await api.get("/auth/permissions/catalogue")).data;
+    const viewerDefaults = catalogue?.role_defaults?.viewer;
+    if (!Array.isArray(viewerDefaults) || viewerDefaults.length === 0) {
+        const error = new Error("employee_v2_viewer_permissions_unavailable");
+        error.code = "employee_v2_viewer_permissions_unavailable";
+        throw error;
+    }
+    const account = (await api.post("/team/users", {
+        name: payload.name,
+        email: payload.email,
+        password: payload.password,
+        role: "viewer",
+        extra_permissions: [],
+        // The Employee OS assignment becomes the source of operational access.
+        // Deny the legacy viewer defaults so this new pilot login starts at zero.
+        denied_permissions: viewerDefaults,
+    })).data;
+
+    try {
+        return await linkEmployeesV2PilotAccount(employeeId, account.id);
+    } catch (error) {
+        // Preserve enough context for the UI to explain the recoverable partial
+        // state. The account will appear as a safe candidate after refresh.
+        error.employeeV2CreatedAccount = account;
+        throw error;
+    }
+}
+
 export async function unlinkEmployeesV2PilotAccount(employeeId) {
     return (await api.delete(
         `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}/account`,

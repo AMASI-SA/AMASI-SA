@@ -7,6 +7,7 @@ jest.mock("react-router-dom", () => ({
 
 jest.mock("../services/employeesV2", () => ({
     assignEmployeesV2PilotRole: jest.fn(),
+    createAndLinkEmployeesV2PilotAccount: jest.fn(),
     createEmployeesV2Pilot: jest.fn(),
     getEmployeesV2Management: jest.fn(),
     getEmployeesV2PilotEvents: jest.fn(),
@@ -21,6 +22,7 @@ jest.mock("sonner", () => ({
 
 import EmployeesV2ManagementPilot from "./EmployeesV2ManagementPilot";
 import {
+    createAndLinkEmployeesV2PilotAccount,
     createEmployeesV2Pilot,
     getEmployeesV2Management,
 } from "../services/employeesV2";
@@ -151,9 +153,19 @@ test("creates one pilot employee exactly once and renders it as payroll-disabled
 });
 
 
-test("unlinked pilot opens account setup from the primary action instead of disabling it", async () => {
+test("unlinked pilot creates a zero-access login inline and links it without leaving Employee OS", async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     getEmployeesV2Management.mockResolvedValue(pilotWorkspace);
+    createAndLinkEmployeesV2PilotAccount.mockResolvedValue({
+        ...pilotWorkspace,
+        management: {
+            ...pilotWorkspace.management,
+            employees: [{
+                ...pilotWorkspace.management.employees[0],
+                account: { status: "linked", user_id: "account-1", name: "موظف تجريبي", email: "pilot@example.com" },
+            }],
+        },
+    });
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -170,8 +182,28 @@ test("unlinked pilot opens account setup from the primary action instead of disa
         });
 
         expect(document.body.querySelector('[data-testid="employees-v2-account-dialog"]')).not.toBeNull();
-        expect(document.body.textContent).toContain("لا يوجد حساب آمن متاح للتجربة");
-        expect(document.body.querySelector('a[href="/team"]')).not.toBeNull();
+        expect(document.body.textContent).toContain("صفر صلاحيات قديمة");
+        expect(document.body.querySelector('a[href="/team"]')).toBeNull();
+
+        const email = document.body.querySelector('[data-testid="employees-v2-account-email"]');
+        const password = document.body.querySelector('[data-testid="employees-v2-account-password"]');
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            setter.call(email, "pilot@example.com");
+            email.dispatchEvent(new Event("input", { bubbles: true }));
+            setter.call(password, "Pilot123!");
+            password.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await act(async () => {
+            document.body.querySelector('[data-testid="employees-v2-create-link-account"]').closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+
+        expect(createAndLinkEmployeesV2PilotAccount).toHaveBeenCalledWith("pilot-1", {
+            name: "موظف تجريبي",
+            email: "pilot@example.com",
+            password: "Pilot123!",
+        });
+        expect(container.querySelector('[data-testid="employees-v2-primary-action"]').textContent).toContain("تعيين الدور والصلاحيات");
     } finally {
         await act(async () => root.unmount());
         container.remove();
