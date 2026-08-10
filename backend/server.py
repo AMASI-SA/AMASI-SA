@@ -68,6 +68,10 @@ from payment_gateway_metrics import attach_payment_gateway_metrics_routes
 from order_status_policy import attach_order_status_policy_routes
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
 from order_engine.routes import make_order_engine_router
 from order_activity_routes import make_order_activity_router
 from order_item_engine.routes import make_order_item_engine_router
@@ -1878,6 +1882,12 @@ async def dashboard(
     all_orders = await db.unified_orders.find(
         orders_q, {"_id": 0, "raw_by_source": 0}
     ).to_list(100000)
+    if all_orders:
+        attribution_rows = await db.unified_orders.find(
+            orders_q,
+            SALLA_RAW_ATTRIBUTION_PROJECTION,
+        ).to_list(100000)
+        attach_projected_salla_attribution(all_orders, attribution_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
@@ -3093,8 +3103,10 @@ async def electronic_net_sync_to_salla(user: dict = Depends(current_user)):
 async def _attributed_orders_from_store(
     db, uid: str, source_aliases: tuple, start: str, end: str,
 ) -> tuple[int, float]:
-    """Count orders + revenue in `unified_orders` whose `utm_source`
-    matches any of `source_aliases` (case-insensitive, partial-match).
+    """Count orders + revenue using normalized and raw Salla source paths.
+
+    Source matching includes the current ``source_details.utm_source`` shape
+    as well as durable normalized fields (case-insensitive, partial-match).
     Date filter uses `order_date` BETWEEN start and end (inclusive).
 
     Returns (orders, revenue).
@@ -3103,11 +3115,27 @@ async def _attributed_orders_from_store(
         return 0, 0.0
     # Build case-insensitive regex matching ANY alias substring.
     pattern = "|".join(source_aliases)
+    source_paths = (
+        "utm_source",
+        "source_native",
+        "traffic_source",
+        "marketing_source",
+        "ad_platform_source",
+        "raw_by_source.salla_direct.utm_source",
+        "raw_by_source.salla_direct.source_details.utm_source",
+        "raw_by_source.salla_direct.utm.source",
+        "raw_by_source.salla_direct.marketing.utm_source",
+        "raw_by_source.salla_direct.attribution.utm_source",
+        "raw_by_source.salla_direct.campaign.source",
+    )
     pipeline = [
         {"$match": {
             "user_id": uid,
             "order_date": {"$gte": start, "$lte": end},
-            "utm_source": {"$regex": pattern, "$options": "i"},
+            "$or": [
+                {path: {"$regex": pattern, "$options": "i"}}
+                for path in source_paths
+            ],
         }},
         {"$group": {"_id": None,
                     "orders": {"$sum": 1},

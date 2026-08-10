@@ -9,12 +9,19 @@ from integrations_control_center.snapchat_campaign_result_source_routes import (
 from integrations_control_center.snapchat_order_source_audit import (
     build_order_audit_rows,
 )
+from integrations_control_center.snapchat_campaign_created_order_semantics import (
+    _all_orders_in_padded_window,
+)
 from dashboard_v2_ads_executive import resolve_salla_ad_platform
 from dashboard_v2_routes import _filtered_orders
-from orders_db import _merge_into
+from order_engine.service import _map_row
+from orders_db import _merge_into, orders_to_parsed
 from salla_integration.sync import _salla_order_to_doc
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+    canonical_marketing_source,
+    canonical_order_source,
     meaningful_source_label,
     promoted_salla_attribution,
 )
@@ -145,6 +152,35 @@ def test_salla_live_source_details_shape_resolves_exact_snapchat_campaign():
         "source_native": "snapchat",
         "ad_platform_source": "snapchat",
     }
+
+
+def test_orders_v2_uses_same_source_details_normalizer_as_ad_reports():
+    raw = {
+        "id": "1986136862",
+        "reference_id": "277225915",
+        "date": {"date": "2026-08-10T01:23:00+03:00"},
+        "status": {"slug": "under_review", "name": "بإنتظار المراجعة"},
+        "customer": {"full_name": "عميل"},
+        "amounts": {"total": {"amount": 127.57, "currency": "SAR"}},
+        "items": [],
+        "source": "store",
+        "source_details": {
+            "utm_source": "snapchat",
+            "utm_medium": "paid",
+            "utm_campaign": "campaign-1",
+        },
+    }
+
+    dto = _map_row(raw)
+
+    assert canonical_marketing_source(raw) == "snapchat"
+    assert canonical_order_source(raw)["source"] == "snapchat"
+    assert dto.source.source == "snapchat"
+    assert dto.source.channel == "snapchat"
+    assert dto.source.platform == "snapchat"
+    assert dto.source.source_native == "snapchat"
+    assert dto.source.utm_campaign == "campaign-1"
+    assert dto.source.campaign_name == "campaign-1"
 
 
 def test_new_salla_source_details_order_promotes_live_marketing_fields():
@@ -278,6 +314,49 @@ def test_new_salla_order_promotes_only_stable_marketing_fields():
     assert stored["ad_platform_source"] == "snapchat"
 
 
+def test_salla_marketing_fields_override_stale_make_attribution_only():
+    existing = {
+        "source": "make",
+        "utm_source": "direct",
+        "source_native": "store",
+        "last_make_update_at": "2026-08-10T00:00:00+00:00",
+    }
+    incoming = {
+        "source": "store",
+        "utm_source": "snapchat",
+        "source_native": "snapchat",
+        "marketing_source": "snapchat",
+        "ad_platform_source": "snapchat",
+    }
+
+    stored = _merge_into(existing, incoming, "salla_direct")
+
+    assert stored["source"] == "make"
+    assert stored["utm_source"] == "snapchat"
+    assert stored["source_native"] == "snapchat"
+    assert stored["ad_platform_source"] == "snapchat"
+
+
+def test_legacy_report_source_breakdown_uses_central_source_details():
+    parsed = orders_to_parsed([{
+        "order_number": "3007",
+        "order_date": "2026-08-10",
+        "source": "store",
+        "total_amount": 175,
+        "raw_by_source": {
+            "salla_direct": {
+                "source_details": {"utm_source": "snapchat"},
+            },
+        },
+    }])
+
+    assert parsed["order_sources"] == [{
+        "name": "snapchat",
+        "orders_count": 1,
+        "total_sales": 175.0,
+    }]
+
+
 def test_raw_projection_is_attribution_only():
     paths = " ".join(SALLA_RAW_ATTRIBUTION_PROJECTION).casefold()
     for forbidden in (
@@ -397,3 +476,70 @@ async def test_filtered_orders_safely_enriches_existing_raw_attribution(monkeypa
         "campaign_id"
     ] == "campaign-4"
     assert _source_is_snapchat(orders[0]) is True
+
+
+def test_projected_attribution_attachment_is_shared_and_order_number_scoped():
+    orders = [{"order_number": "3005", "source": "store"}]
+    attribution_rows = [{
+        "order_number": "3005",
+        "raw_by_source": {
+            "salla_direct": {
+                "source_details": {"utm_source": "snapchat"},
+            },
+        },
+    }]
+
+    result = attach_projected_salla_attribution(orders, attribution_rows)
+
+    assert result is orders
+    assert canonical_marketing_source(result[0]) == "snapchat"
+
+
+class _CreatedOrderCollection:
+    def __init__(self):
+        self.projections = []
+
+    def find(self, query, projection):
+        self.projections.append(projection)
+        if projection.get("raw_by_source") == 0:
+            return _Cursor([{
+                "order_number": "3006",
+                "order_date": "2026-08-10",
+                "order_status": "completed",
+                "source": "store",
+                "total_amount": 200,
+            }])
+        return _Cursor([{
+            "order_number": "3006",
+            "raw_by_source": {
+                "salla_direct": {
+                    "source_details": {
+                        "utm_source": "snapchat",
+                        "utm_campaign": "campaign-6",
+                    },
+                },
+            },
+        }])
+
+
+@pytest.mark.asyncio
+async def test_created_order_campaign_path_keeps_safe_raw_attribution():
+    db = type("DB", (), {"unified_orders": _CreatedOrderCollection()})()
+
+    orders = await _all_orders_in_padded_window(
+        db,
+        "owner-1",
+        date_from="2026-08-10",
+        date_to="2026-08-10",
+        hide_inferred=False,
+    )
+
+    assert len(db.unified_orders.projections) == 2
+    assert canonical_marketing_source(orders[0]) == "snapchat"
+    key, method = _match_order_campaign(
+        orders[0],
+        id_lookup={"campaign-6": ("account-1", "campaign-6")},
+        name_lookup={},
+    )
+    assert key == ("account-1", "campaign-6")
+    assert method == "campaign_id"

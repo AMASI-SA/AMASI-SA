@@ -17,6 +17,12 @@ from datetime import timedelta
 import re
 from typing import Any, Final
 
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    canonical_marketing_source,
+    order_source_candidates,
+)
+
 HYBRID_SOURCE: Final[str] = "mezan_v2_snapchat_hybrid_salla_source_v1"
 HYBRID_CONTRACT_VERSION: Final[str] = "salla_reported_source_hybrid_v1"
 
@@ -33,100 +39,6 @@ def _normalized(value: Any) -> str:
 
 def _dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _source_candidates_from_container(container: dict[str, Any]) -> list[str]:
-    if not isinstance(container, dict):
-        return []
-    source = container.get("source")
-    source_obj = _dict(source)
-    utm = _dict(container.get("utm"))
-    marketing = _dict(container.get("marketing"))
-    attribution = _dict(container.get("attribution"))
-
-    raw: list[Any] = [
-        container.get("utm_source"),
-        utm.get("source"),
-        marketing.get("utm_source"),
-        attribution.get("utm_source"),
-        container.get("source_native"),
-        container.get("channel"),
-        container.get("platform"),
-        source_obj.get("source"),
-        source_obj.get("channel"),
-        source_obj.get("platform"),
-        source_obj.get("name"),
-        source_obj.get("label"),
-        source_obj.get("value"),
-        source_obj.get("slug"),
-        source if isinstance(source, str) else None,
-        container.get("traffic_source"),
-        container.get("marketing_source"),
-        container.get("source_name"),
-        marketing.get("source"),
-        marketing.get("channel"),
-        attribution.get("source"),
-        attribution.get("channel"),
-    ]
-    result: list[str] = []
-    for value in raw:
-        text = _text(value)
-        if text and text not in result:
-            result.append(text)
-    return result
-
-
-def order_source_candidates(order: dict[str, Any]) -> list[str]:
-    """Return ordered Salla attribution evidence without scanning unrelated data."""
-    candidates = _source_candidates_from_container(order)
-    raw_by_source = _dict(order.get("raw_by_source"))
-    salla_raw = _dict(raw_by_source.get("salla_direct"))
-    for value in _source_candidates_from_container(salla_raw):
-        if value not in candidates:
-            candidates.append(value)
-    return candidates
-
-
-def canonical_marketing_source(order: dict[str, Any]) -> str | None:
-    """Normalize Salla's reported source to one stable platform identifier."""
-    first_unknown: str | None = None
-    for candidate in order_source_candidates(order):
-        normalized = _normalized(candidate)
-        if not normalized:
-            continue
-        compact = normalized.replace(" ", "")
-        words = set(normalized.split())
-
-        if (
-            "snapchat" in compact
-            or "سنابشات" in compact
-            or "snap" in words
-            or "سناب" in words
-        ):
-            return "snapchat"
-        if "tiktok" in compact or "تيكتوك" in compact or "تيك توك" in normalized:
-            return "tiktok"
-        if "instagram" in compact or "انستقرام" in compact or "انستغرام" in compact:
-            return "instagram"
-        if "facebook" in compact or "فيسبوك" in compact or normalized == "fb":
-            return "facebook"
-        if "meta" in words or "ميتا" in words:
-            return "meta"
-        if "google" in compact or "adwords" in compact or "جوجل" in compact:
-            return "google"
-        if normalized in {
-            "direct",
-            "direct visit",
-            "store",
-            "website",
-            "زيارة مباشرة",
-            "زياره مباشره",
-            "المتجر",
-        }:
-            return "direct"
-        if first_unknown is None:
-            first_unknown = normalized
-    return first_unknown
 
 
 def _order_total(order: dict[str, Any]) -> float:
@@ -290,6 +202,7 @@ async def _load_salla_marketing_orders(
     if settings.get("hide_inferred_date_orders"):
         query["order_date_inferred"] = {"$ne": True}
     projection = {
+        **SALLA_RAW_ATTRIBUTION_PROJECTION,
         "_id": 0,
         "order_number": 1,
         "order_date": 1,
@@ -306,14 +219,6 @@ async def _load_salla_marketing_orders(
         "traffic_source": 1,
         "marketing_source": 1,
         "source_name": 1,
-        "raw_by_source.salla_direct.source": 1,
-        "raw_by_source.salla_direct.utm_source": 1,
-        "raw_by_source.salla_direct.utm": 1,
-        "raw_by_source.salla_direct.marketing": 1,
-        "raw_by_source.salla_direct.attribution": 1,
-        "raw_by_source.salla_direct.traffic_source": 1,
-        "raw_by_source.salla_direct.marketing_source": 1,
-        "raw_by_source.salla_direct.source_name": 1,
     }
     return await dashboard._to_list(
         db.unified_orders.find(query, projection),

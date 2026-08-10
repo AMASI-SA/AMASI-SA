@@ -17,6 +17,11 @@ from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
+
 from . import snapchat_account_timezone_manager as manager
 
 SOURCE_MODE = "snapchat_salla_created_orders_fixed_v1"
@@ -112,7 +117,16 @@ async def _all_orders_in_padded_window(
     if hide_inferred:
         query["order_date_inferred"] = {"$ne": True}
     cursor = db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0})
-    return await manager._to_list(cursor, 100_000)
+    orders = await manager._to_list(cursor, 100_000)
+    if not orders:
+        return orders
+
+    attribution_cursor = db.unified_orders.find(
+        query,
+        SALLA_RAW_ATTRIBUTION_PROJECTION,
+    )
+    attribution_rows = await manager._to_list(attribution_cursor, 100_000)
+    return attach_projected_salla_attribution(orders, attribution_rows)
 
 
 async def build_created_and_financial_outcomes(

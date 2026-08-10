@@ -177,14 +177,63 @@ def canonical_ad_platform(order: dict[str, Any]) -> str | None:
             or "انستغرام" in compact
             or "facebook" in compact
             or "فيسبوك" in compact
-            or normalized == "fb"
+            or {"fb", "ig", "insta"}.intersection(words)
             or "meta" in words
             or "ميتا" in words
         ):
             return "meta"
-        if "google" in compact or "adwords" in compact or "جوجل" in compact or "قوقل" in compact:
+        if (
+            "google" in compact
+            or "adwords" in compact
+            or "gads" in compact
+            or "جوجل" in compact
+            or "قوقل" in compact
+        ):
             return "google"
     return None
+
+
+def canonical_marketing_source(order: dict[str, Any]) -> str | None:
+    """Resolve one stable commerce source from approved Salla evidence.
+
+    Advertising evidence takes precedence over Salla's generic ``store``
+    value. Current Order API payloads use ``store`` for the storefront while
+    the actual campaign source is nested under ``source_details``.
+    """
+    platform = canonical_ad_platform(order)
+    if platform:
+        return platform
+
+    first_unknown: str | None = None
+    direct_observed = False
+    for candidate in order_source_candidates(order):
+        normalized = re.sub(r"[_\-./]+", " ", candidate.casefold())
+        normalized = " ".join(normalized.split())
+        compact = normalized.replace(" ", "")
+        if not normalized:
+            continue
+        if normalized in {
+            "direct",
+            "direct visit",
+            "store",
+            "website",
+            "زيارة مباشرة",
+            "زياره مباشره",
+            "المتجر",
+        }:
+            direct_observed = True
+            continue
+        if "whatsapp" in compact or "واتساب" in compact:
+            return "whatsapp"
+        if normalized in {"manual", "manually", "يدوي", "يدويا", "يدويًا"}:
+            return "manual"
+        if normalized in {"buy as gift", "gift", "gift order", "هدية", "طلب كهدية"}:
+            return "gift"
+        if normalized in _INTERNAL_INGESTION_SOURCES:
+            continue
+        if first_unknown is None:
+            first_unknown = normalized
+    return first_unknown or ("direct" if direct_observed else None)
 
 
 def campaign_id_candidates(order: dict[str, Any]) -> list[str]:
@@ -274,6 +323,67 @@ def promoted_salla_attribution(order: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def canonical_order_source(order: dict[str, Any]) -> dict[str, str | None]:
+    """Build the source contract consumed by Order Engine and detail pages."""
+    promoted = promoted_salla_attribution(order)
+    canonical = canonical_marketing_source(order)
+    source_native = promoted.get("source_native") or meaningful_source_label(order)
+
+    platform = canonical
+    candidates = order_source_candidates(order)
+    if canonical == "meta":
+        normalized = " ".join(candidates).casefold().replace("_", " ")
+        if (
+            "instagram" in normalized
+            or "انستقرام" in normalized
+            or "انستغرام" in normalized
+        ):
+            platform = "instagram"
+        elif (
+            "facebook" in normalized
+            or "فيسبوك" in normalized
+            or re.search(r"\bfb\b", normalized)
+        ):
+            platform = "facebook"
+    elif canonical == "direct":
+        platform = "store"
+
+    if not source_native and canonical == "direct":
+        source_native = next(
+            (
+                candidate
+                for candidate in candidates
+                if " ".join(candidate.casefold().replace("_", " ").split())
+                in {"store", "website", "direct", "direct visit"}
+            ),
+            "store",
+        )
+
+    campaign_ids = field_values(
+        order,
+        "campaign_id",
+        "source_campaign_id",
+        "utm_campaign_id",
+        "ad_campaign_id",
+    )
+    campaign_names = campaign_name_candidates(order)
+    devices = field_values(order, "device", "device_type", "client_device")
+    return {
+        "source": canonical,
+        "channel": canonical,
+        "platform": platform,
+        "source_native": source_native or None,
+        "utm_source": promoted.get("utm_source"),
+        "utm_medium": promoted.get("utm_medium"),
+        "utm_campaign": promoted.get("utm_campaign"),
+        "campaign_id": promoted.get("campaign_id")
+        or (campaign_ids[0] if campaign_ids else None),
+        "campaign_name": promoted.get("campaign_name")
+        or (campaign_names[0] if campaign_names else None),
+        "device": devices[0] if devices else None,
+    }
+
+
 # Safe second-query projection used to enrich existing orders.  Every included
 # leaf is marketing metadata; no whole metadata object and no customer,
 # address, payment or product field can leave MongoDB through this projection.
@@ -325,12 +435,35 @@ for _object_key in ("source", "campaign"):
         ] = 1
 
 
+def attach_projected_salla_attribution(
+    orders: list[dict[str, Any]],
+    attribution_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach only projected Salla attribution to already-loaded rows."""
+    attribution_by_order = {
+        str(row.get("order_number") or "").strip(): row.get("raw_by_source")
+        for row in attribution_rows
+        if str(row.get("order_number") or "").strip()
+        and isinstance(row.get("raw_by_source"), dict)
+    }
+    for order in orders:
+        raw_by_source = attribution_by_order.get(
+            str(order.get("order_number") or "").strip()
+        )
+        if raw_by_source:
+            order["raw_by_source"] = raw_by_source
+    return orders
+
+
 __all__ = [
     "SALLA_RAW_ATTRIBUTION_PROJECTION",
     "attribution_containers",
+    "attach_projected_salla_attribution",
     "campaign_id_candidates",
     "campaign_name_candidates",
     "canonical_ad_platform",
+    "canonical_marketing_source",
+    "canonical_order_source",
     "field_values",
     "meaningful_source_label",
     "order_source_candidates",

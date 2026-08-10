@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from salla_marketing_attribution import canonical_order_source
+
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
 from .repository import OrderRepository
@@ -240,85 +242,8 @@ def _is_gift_label(value: Any) -> bool:
     }
 
 
-def _dict_value(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
 def _provider_marketing_source(raw: dict[str, Any]) -> dict[str, Optional[str]]:
-    source_obj = _dict_value(raw.get("source"))
-    utm_obj = _dict_value(raw.get("utm"))
-    marketing_obj = _dict_value(raw.get("marketing"))
-    attribution_obj = _dict_value(raw.get("attribution"))
-
-    utm_source = _text(
-        raw.get("utm_source")
-        or utm_obj.get("source")
-        or marketing_obj.get("utm_source")
-        or attribution_obj.get("utm_source")
-    )
-    utm_medium = _text(
-        raw.get("utm_medium")
-        or utm_obj.get("medium")
-        or marketing_obj.get("utm_medium")
-        or attribution_obj.get("utm_medium")
-    )
-    utm_campaign = _text(
-        raw.get("utm_campaign")
-        or utm_obj.get("campaign")
-        or marketing_obj.get("utm_campaign")
-        or attribution_obj.get("utm_campaign")
-    )
-
-    source_native = _text(
-        utm_source
-        or source_obj.get("source")
-        or source_obj.get("channel")
-        or source_obj.get("platform")
-        or source_obj.get("name")
-        or (raw.get("source") if isinstance(raw.get("source"), str) else None)
-        or raw.get("traffic_source")
-        or raw.get("marketing_source")
-        or raw.get("source_name")
-    )
-
-    normalized = " ".join(str(source_native or "").replace("_", " ").strip().casefold().split())
-    canonical_source: Optional[str] = None
-    platform: Optional[str] = None
-
-    if "snap" in normalized:
-        canonical_source = "snapchat"
-        platform = "snapchat"
-    elif normalized in {"ig", "insta"} or "instagram" in normalized:
-        canonical_source = "meta"
-        platform = "instagram"
-    elif normalized in {"fb"} or "facebook" in normalized:
-        canonical_source = "meta"
-        platform = "facebook"
-    elif "meta" in normalized:
-        canonical_source = "meta"
-        platform = "meta"
-    elif "tiktok" in normalized or "tik tok" in normalized:
-        canonical_source = "tiktok"
-        platform = "tiktok"
-    elif "google" in normalized or "adwords" in normalized or "gads" in normalized:
-        canonical_source = "google"
-        platform = "google"
-    elif normalized in {"direct", "direct visit", "زيارة مباشرة", "زياره مباشره", "store", "website"}:
-        canonical_source = "direct"
-        platform = "store"
-    elif normalized:
-        canonical_source = normalized
-
-    return {
-        "source": canonical_source,
-        "channel": canonical_source,
-        "platform": platform,
-        "source_native": source_native,
-        "utm_source": utm_source,
-        "utm_medium": utm_medium,
-        "utm_campaign": utm_campaign,
-        "device": _text(raw.get("device") or source_obj.get("device")),
-    }
+    return canonical_order_source(raw)
 
 
 def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:

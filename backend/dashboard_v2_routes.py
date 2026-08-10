@@ -35,7 +35,10 @@ from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
-from salla_marketing_attribution import SALLA_RAW_ATTRIBUTION_PROJECTION
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -289,18 +292,7 @@ async def _filtered_orders(
             db.unified_orders.find(query, SALLA_RAW_ATTRIBUTION_PROJECTION),
             100000,
         )
-        attribution_by_order = {
-            str(row.get("order_number") or "").strip(): row.get("raw_by_source")
-            for row in attribution_rows
-            if str(row.get("order_number") or "").strip()
-            and isinstance(row.get("raw_by_source"), dict)
-        }
-        for order in orders:
-            raw_by_source = attribution_by_order.get(
-                str(order.get("order_number") or "").strip()
-            )
-            if raw_by_source:
-                order["raw_by_source"] = raw_by_source
+        attach_projected_salla_attribution(orders, attribution_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
