@@ -1055,16 +1055,19 @@ async def backfill_abandoned_carts(
 
 
 async def reconcile_purchased_cart_flags(db: Any, user_id: str) -> int:
-    """Repair legacy snapshots that already carry a verified purchase event.
+    """Repair legacy snapshots from either durable verified purchase marker.
 
     Older deployments could persist ``abandoned.cart.purchased`` in the
     snapshot's append-only ``source_events`` audit trail without promoting the
-    operational ``purchased`` flag.  The audit marker is tenant-scoped and can
-    only be written by the verified Salla webhook path, so it is a safe,
-    deterministic source for an idempotent repair after a read-only backfill.
+    operational ``purchased`` flag.  Deployments from before cart-specific
+    ingestion still retained the sanitized payload in
+    ``salla_webhook_event_captures`` after signature verification.  Both
+    markers are merchant- and tenant-scoped, so the repair remains safe and
+    idempotent after a read-only backfill.
     """
     now = datetime.now(timezone.utc)
-    result = await getattr(db, ABANDONED_CART_COLLECTION).update_many(
+    carts = getattr(db, ABANDONED_CART_COLLECTION)
+    source_event_result = await carts.update_many(
         {
             "user_id": user_id,
             "purchased": {"$ne": True},
@@ -1080,7 +1083,57 @@ async def reconcile_purchased_cart_flags(db: Any, user_id: str) -> int:
             }
         },
     )
-    return int(getattr(result, "modified_count", 0) or 0)
+    repaired = int(getattr(source_event_result, "modified_count", 0) or 0)
+
+    integration = await db.salla_integrations.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "store_id": 1},
+    )
+    merchant_id = _text((integration or {}).get("store_id"))
+    if not merchant_id:
+        return repaired
+
+    capture_cursor = db.salla_webhook_event_captures.find(
+        {
+            "merchant_id": merchant_id,
+            "event": "abandoned.cart.purchased",
+            "verified_before_capture": True,
+        },
+        {"_id": 0, "payload": 1},
+    )
+    captures = await capture_cursor.to_list(length=10_000)
+    captured_cart_ids: set[str] = set()
+    for capture in captures:
+        payload = _mapping(capture.get("payload"))
+        record = normalize_abandoned_cart_event(payload)
+        if record and record.get("purchased") and record.get("cart_id"):
+            captured_cart_ids.add(str(record["cart_id"]))
+
+    if not captured_cart_ids:
+        return repaired
+
+    capture_result = await carts.update_many(
+        {
+            "user_id": user_id,
+            "merchant_id": merchant_id,
+            "cart_id": {"$in": sorted(captured_cart_ids)},
+            "purchased": {"$ne": True},
+        },
+        {
+            "$set": {
+                "purchased": True,
+                "status": "purchased",
+                "purchase_state_source": (
+                    "verified_webhook_capture:abandoned.cart.purchased"
+                ),
+                "purchase_reconciled_at": now,
+                "updated_at": now,
+            },
+            "$addToSet": {"source_events": "abandoned.cart.purchased"},
+        },
+    )
+    repaired += int(getattr(capture_result, "modified_count", 0) or 0)
+    return repaired
 
 
 async def ensure_abandoned_cart_indexes(db: Any) -> None:
