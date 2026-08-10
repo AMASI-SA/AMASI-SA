@@ -4054,9 +4054,16 @@ api.include_router(make_integrations_control_center_router(db, current_user))
 from ads_manager import make_ads_manager_router
 api.include_router(make_ads_manager_router(db, current_user))
 
-# ── Customer Intelligence Phase 1 (owner-only synthetic preview) ───
-from customer_intelligence import make_customer_intelligence_router
+# ── Customer Intelligence Phase 1 preview + channel-neutral memory core ──
+from customer_intelligence import (
+    make_customer_intelligence_router,
+)
+from customer_intelligence.foundation import (
+    ensure_customer_intelligence_foundation_indexes,
+)
+from customer_intelligence.whatsapp import make_whatsapp_inbound_router
 api.include_router(make_customer_intelligence_router(current_user))
+api.include_router(make_whatsapp_inbound_router(db))
 
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
@@ -4354,6 +4361,10 @@ async def on_startup():
     # Apps & Integrations V2 — isolated metadata, health, activity,
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
+    # Customer Intelligence conversation core.  This creates only Mongo
+    # indexes and reuses the encrypted customer identity vault; it does not
+    # connect a channel, send a message or expose any mutation endpoint.
+    await ensure_customer_intelligence_foundation_indexes(db)
     # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
     # `qoyod_*` collections. Idempotent — safe to call on every boot.
     # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
