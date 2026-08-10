@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
     ArrowClockwise,
@@ -127,7 +127,10 @@ function MigrationWorkspace() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [query, setQuery] = useState("");
+    const applyInFlight = useRef(false);
+    const cancelButtonRef = useRef(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -141,6 +144,9 @@ function MigrationWorkspace() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        if (confirmOpen) cancelButtonRef.current?.focus();
+    }, [confirmOpen]);
 
     const employees = useMemo(() => {
         const rows = data?.employees || [];
@@ -149,21 +155,30 @@ function MigrationWorkspace() {
         return rows.filter((row) => `${row.name || ""} ${row.account?.account_email || ""} ${row.legacy_employee_id || ""}`.toLocaleLowerCase("ar").includes(needle));
     }, [data?.employees, query]);
 
-    async function applyShadow() {
+    function requestShadowMigration() {
         const summary = data?.summary;
         if (!summary || summary.blocking_issues > 0 || summary.ready_to_create === 0) return;
-        const accepted = window.confirm(
-            `سيتم إنشاء نسخة تجريبية آمنة لـ ${summary.ready_to_create} موظف وعقد راتب داخل ميزان 2. لن تتغير الرواتب القديمة أو القيود أو السلف والعهد. هل تريد المتابعة؟`,
-        );
-        if (!accepted) return;
+        setConfirmOpen(true);
+    }
+
+    async function applyShadow() {
+        const summary = data?.summary;
+        if (!summary || summary.blocking_issues > 0 || summary.ready_to_create === 0) {
+            setConfirmOpen(false);
+            return;
+        }
+        if (applyInFlight.current) return;
+        applyInFlight.current = true;
         setApplying(true);
         try {
             const result = await applyEmployeesV2ShadowMigration();
             setData(result.preview);
+            setConfirmOpen(false);
             toast.success(result.idempotent_replay ? "النسخة التجريبية موجودة مسبقًا ومطابقة" : "تم إنشاء نواة الموظفين وعقود الرواتب التجريبية");
         } catch (error) {
             toast.error(errorCode(error));
         } finally {
+            applyInFlight.current = false;
             setApplying(false);
         }
     }
@@ -182,7 +197,7 @@ function MigrationWorkspace() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <button type="button" onClick={load} disabled={loading || applying} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-50"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث التقرير</button>
-                            <button type="button" onClick={applyShadow} disabled={!canApply || applying} className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-50"><IdentificationCard size={20} weight="duotone" />{applying ? "جارٍ إنشاء النواة…" : "إنشاء النسخة التجريبية"}</button>
+                            <button type="button" onClick={requestShadowMigration} disabled={!canApply || applying} data-testid="employees-v2-open-shadow-confirmation" className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-50"><IdentificationCard size={20} weight="duotone" />{applying ? "جارٍ إنشاء النواة…" : "إنشاء النسخة التجريبية"}</button>
                         </div>
                     </div>
                 </div>
@@ -197,6 +212,52 @@ function MigrationWorkspace() {
             </section>
 
             <SafetyPanel safety={data?.safety} />
+
+            {confirmOpen && (
+                <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/70 p-4">
+                    <section
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="employees-v2-shadow-confirmation-title"
+                        aria-describedby="employees-v2-shadow-confirmation-description"
+                        dir="rtl"
+                        data-testid="employees-v2-shadow-confirmation"
+                        onKeyDown={(event) => {
+                            if (event.key === "Escape" && !applying) setConfirmOpen(false);
+                        }}
+                        className="w-full max-w-xl rounded-2xl border border-emerald-200 bg-white p-6 text-right shadow-2xl"
+                    >
+                        <h2 id="employees-v2-shadow-confirmation-title" className="flex items-center gap-2 text-lg font-black text-emerald-950">
+                            <IdentificationCard size={24} weight="duotone" />
+                            تأكيد إنشاء النسخة التجريبية
+                        </h2>
+                        <p id="employees-v2-shadow-confirmation-description" className="mt-3 text-sm leading-7 text-slate-600">
+                            سيتم إنشاء نسخة تجريبية آمنة لـ {numberFormatter.format(summary.ready_to_create || 0)} موظف وعقد راتب داخل ميزان 2. لن تتغير الرواتب القديمة أو القيود أو السلف والعهد. هل تريد المتابعة؟
+                        </p>
+                        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <button
+                                ref={cancelButtonRef}
+                                type="button"
+                                onClick={() => setConfirmOpen(false)}
+                                disabled={applying}
+                                data-testid="employees-v2-cancel-shadow-migration"
+                                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                إلغاء
+                            </button>
+                            <button
+                                type="button"
+                                onClick={applyShadow}
+                                disabled={applying}
+                                data-testid="employees-v2-confirm-shadow-migration"
+                                className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {applying ? "جارٍ إنشاء النواة…" : "نعم، إنشاء النسخة التجريبية"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
 
             <section className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">رواتب مستحقة حسب Ledger</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.salary_payable_total || 0)}</div></div>
