@@ -1,21 +1,23 @@
 import api from "../lib/api";
 import {
-    assignEmployeesV2PilotRole,
     applyEmployeesV2ShadowMigration,
-    createAndLinkEmployeesV2PilotAccount,
-    createEmployeesV2Pilot,
-    EMPLOYEE_PILOT_ACCOUNT_LINK_CONFIRMATION,
-    EMPLOYEE_PILOT_ACCOUNT_UNLINK_CONFIRMATION,
-    EMPLOYEE_PILOT_CREATE_CONFIRMATION,
-    EMPLOYEE_PILOT_ROLE_CONFIRMATION,
+    assignEmployeesV2Role,
+    createAndLinkEmployeesV2Account,
+    createEmployeesV2,
+    EMPLOYEE_ACCOUNT_LINK_CONFIRMATION,
+    EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION,
+    EMPLOYEE_CREATE_CONFIRMATION,
+    EMPLOYEE_PASSWORD_CONFIRMATION,
+    EMPLOYEE_ROLE_CONFIRMATION,
     EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION,
     getEmployeesV2,
+    getEmployeesV2Events,
     getEmployeesV2Management,
-    getEmployeesV2PilotEvents,
-    linkEmployeesV2PilotAccount,
+    linkEmployeesV2Account,
     previewEmployeesV2Migration,
-    unlinkEmployeesV2PilotAccount,
-    updateEmployeesV2Pilot,
+    resetEmployeesV2AccountPassword,
+    unlinkEmployeesV2Account,
+    updateEmployeesV2,
 } from "./employeesV2";
 
 jest.mock("../lib/api", () => ({
@@ -36,54 +38,63 @@ beforeEach(() => {
     api.delete.mockResolvedValue({ data: { ok: true } });
 });
 
-test("management pilot uses guarded create, edit, account, role, and audit contracts", async () => {
+test("full management uses guarded employee, account, role, password, and audit contracts", async () => {
     await getEmployeesV2Management();
-    await createEmployeesV2Pilot({ name: "موظف تجريبي", monthly_salary: 1000 });
-    await updateEmployeesV2Pilot("pilot/1", { name: "موظف معدل", expected_version: 1 });
-    await linkEmployeesV2PilotAccount("pilot/1", "account-1");
-    await assignEmployeesV2PilotRole("pilot/1", {
-        role_key: "warehouse_operator",
+    await createEmployeesV2({ name: "تركي صادق", status: "active" });
+    await updateEmployeesV2("employee/1", { name: "تركي", expected_version: 1 });
+    await linkEmployeesV2Account("employee/1", "account-1");
+    await assignEmployeesV2Role("employee/1", {
+        role_key: "preparation_operator",
         enabled: true,
         extra_permissions: [],
         denied_permissions: [],
         warehouse_ids: [],
         fulfillment_responsibilities: [],
     });
-    await getEmployeesV2PilotEvents("pilot/1");
-    await unlinkEmployeesV2PilotAccount("pilot/1");
+    await resetEmployeesV2AccountPassword("employee/1", "Temporary123!");
+    await getEmployeesV2Events("employee/1");
+    await unlinkEmployeesV2Account("employee/1");
 
-    expect(EMPLOYEE_PILOT_CREATE_CONFIRMATION).toBe("CREATE_EMPLOYEE_V2_PILOT");
-    expect(EMPLOYEE_PILOT_ACCOUNT_LINK_CONFIRMATION).toBe("LINK_EMPLOYEE_V2_PILOT_ACCOUNT");
-    expect(EMPLOYEE_PILOT_ACCOUNT_UNLINK_CONFIRMATION).toBe("UNLINK_EMPLOYEE_V2_PILOT_ACCOUNT");
-    expect(EMPLOYEE_PILOT_ROLE_CONFIRMATION).toBe("ASSIGN_EMPLOYEE_V2_PILOT_ROLE");
+    expect(EMPLOYEE_CREATE_CONFIRMATION).toBe("CREATE_EMPLOYEE_V2");
+    expect(EMPLOYEE_ACCOUNT_LINK_CONFIRMATION).toBe("LINK_EMPLOYEE_V2_ACCOUNT");
+    expect(EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION).toBe("UNLINK_EMPLOYEE_V2_ACCOUNT");
+    expect(EMPLOYEE_ROLE_CONFIRMATION).toBe("ASSIGN_EMPLOYEE_V2_ROLE");
+    expect(EMPLOYEE_PASSWORD_CONFIRMATION).toBe("RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD");
     expect(api.get).toHaveBeenNthCalledWith(1, "/employees-v2/management");
-    expect(api.post).toHaveBeenCalledWith("/employees-v2/management/pilot", {
-        name: "موظف تجريبي",
-        monthly_salary: 1000,
-        confirmation: "CREATE_EMPLOYEE_V2_PILOT",
+    expect(api.post).toHaveBeenCalledWith("/employees-v2/management/employees", {
+        name: "تركي صادق",
+        status: "active",
+        confirmation: "CREATE_EMPLOYEE_V2",
     });
     expect(api.put).toHaveBeenCalledWith(
-        "/employees-v2/management/pilot/pilot%2F1",
-        { name: "موظف معدل", expected_version: 1 },
+        "/employees-v2/management/employees/employee%2F1",
+        { name: "تركي", expected_version: 1 },
     );
     expect(api.put).toHaveBeenCalledWith(
-        "/employees-v2/management/pilot/pilot%2F1/account",
+        "/employees-v2/management/employees/employee%2F1/account",
         {
             account_user_id: "account-1",
-            confirmation: "LINK_EMPLOYEE_V2_PILOT_ACCOUNT",
+            confirmation: "LINK_EMPLOYEE_V2_ACCOUNT",
+        },
+    );
+    expect(api.put).toHaveBeenCalledWith(
+        "/employees-v2/management/employees/employee%2F1/account/password",
+        {
+            new_password: "Temporary123!",
+            confirmation: "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD",
         },
     );
     expect(api.get).toHaveBeenNthCalledWith(
         2,
-        "/employees-v2/management/pilot/pilot%2F1/events",
+        "/employees-v2/management/employees/employee%2F1/events",
     );
     expect(api.delete).toHaveBeenCalledWith(
-        "/employees-v2/management/pilot/pilot%2F1/account",
-        { data: { confirmation: "UNLINK_EMPLOYEE_V2_PILOT_ACCOUNT" } },
+        "/employees-v2/management/employees/employee%2F1/account",
+        { data: { confirmation: "UNLINK_EMPLOYEE_V2_ACCOUNT" } },
     );
 });
 
-test("loads the unified employee workspace and the read-only preview separately", async () => {
+test("loads the unified employee workspace and read-only migration report separately", async () => {
     await getEmployeesV2();
     await previewEmployeesV2Migration();
 
@@ -91,7 +102,7 @@ test("loads the unified employee workspace and the read-only preview separately"
     expect(api.get).toHaveBeenNthCalledWith(2, "/employees-v2/migration/preview");
 });
 
-test("shadow migration uses the exact guarded confirmation contract", async () => {
+test("shadow migration keeps its exact guarded confirmation", async () => {
     await applyEmployeesV2ShadowMigration();
 
     expect(EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION).toBe("MIGRATE_EMPLOYEES_V2_SHADOW");
@@ -100,20 +111,16 @@ test("shadow migration uses the exact guarded confirmation contract", async () =
     });
 });
 
-test("creates a pilot login with zero legacy viewer access before linking it", async () => {
+test("creates a login with zero legacy viewer access before linking it", async () => {
     api.get.mockResolvedValueOnce({
-        data: {
-            role_defaults: {
-                viewer: ["dashboard.view", "orders.view"],
-            },
-        },
+        data: { role_defaults: { viewer: ["dashboard.view", "orders.view"] } },
     });
     api.post.mockResolvedValueOnce({
         data: { id: "safe-account-1", name: "تركي صادق", email: "turki@example.com" },
     });
     api.put.mockResolvedValueOnce({ data: { ok: true, management: { employees: [] } } });
 
-    await createAndLinkEmployeesV2PilotAccount("pilot/1", {
+    await createAndLinkEmployeesV2Account("employee/1", {
         name: "تركي صادق",
         email: "turki@example.com",
         password: "Pilot123!",
@@ -129,18 +136,18 @@ test("creates a pilot login with zero legacy viewer access before linking it", a
         denied_permissions: ["dashboard.view", "orders.view"],
     });
     expect(api.put).toHaveBeenCalledWith(
-        "/employees-v2/management/pilot/pilot%2F1/account",
+        "/employees-v2/management/employees/employee%2F1/account",
         {
             account_user_id: "safe-account-1",
-            confirmation: "LINK_EMPLOYEE_V2_PILOT_ACCOUNT",
+            confirmation: "LINK_EMPLOYEE_V2_ACCOUNT",
         },
     );
 });
 
-test("fails closed before account creation when viewer defaults cannot be verified", async () => {
+test("fails closed before account creation when viewer defaults are unavailable", async () => {
     api.get.mockResolvedValueOnce({ data: { role_defaults: {} } });
 
-    await expect(createAndLinkEmployeesV2PilotAccount("pilot-1", {
+    await expect(createAndLinkEmployeesV2Account("employee-1", {
         name: "تركي صادق",
         email: "turki@example.com",
         password: "Pilot123!",

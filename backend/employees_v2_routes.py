@@ -1,18 +1,19 @@
-"""Mezan Employees V2 foundation and guarded shadow migration.
+"""Mezan Employees V2 identity management and guarded shadow migration.
 
 The legacy salary engine continues to own payroll until a later, separately
 validated cutover.  This module creates the employee identity that Mezan V2
 needs and links it to the existing salary, login, operational-role and ledger
-records without rewriting any of them.
+records without rewriting legacy payroll or financial history.
 
 Migration modes
 ---------------
 preview
     Read-only projection.  No collection is modified.
 shadow_read_only
-    Creates idempotent employee and salary-contract snapshots in V2.  Legacy
-    payroll and the general ledger remain authoritative and writable; the V2
-    records are deliberately read-only until cutover acceptance criteria pass.
+    Creates idempotent employee and salary-contract snapshots in V2. Legacy
+    payroll and the general ledger remain authoritative. After pilot acceptance,
+    Employee OS may edit operational identity and access fields, but salary and
+    financial snapshots stay read-only until payroll cutover.
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
+from auth import hash_password
 from ai_store_access_contract import (
     PERMISSIONS,
     ROLE_CATALOG,
@@ -41,13 +43,13 @@ EMPLOYEE_EVENTS = "mezan_employee_events_v2"
 MIGRATION_RUNS = "mezan_employee_migration_runs_v2"
 ROLE_ASSIGNMENTS = "mezan_role_assignments_v2"
 APPLY_CONFIRMATION = "MIGRATE_EMPLOYEES_V2_SHADOW"
-PILOT_SOURCE_SYSTEM = "mezan_employees_v2_pilot"
-PILOT_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2_PILOT"
-PILOT_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_PILOT_ACCOUNT"
-PILOT_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_PILOT_ACCOUNT"
-PILOT_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_PILOT_ROLE"
-PILOT_EMPLOYEE_LIMIT = 1
-PILOT_STATUSES = {"draft", "inactive"}
+NATIVE_SOURCE_SYSTEM = "mezan_employees_v2_native"
+EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2"
+EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT"
+EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT"
+EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE"
+EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
+EMPLOYEE_STATUSES = {"active", "inactive"}
 
 
 def _now() -> str:
@@ -92,17 +94,12 @@ def _iso_date(value: Any, *, field: str) -> str | None:
         raise ValueError(f"{field}_invalid") from exc
 
 
-def normalize_pilot_employee_payload(
+def normalize_employee_payload(
     payload: dict[str, Any],
     *,
     partial: bool = False,
 ) -> dict[str, Any]:
-    """Validate the deliberately narrow employee-management pilot contract.
-
-    Pilot employee records are never payroll-active.  Salary is stored only in
-    the V2 pilot contract and is not written to ``operating_salaries`` or the
-    general ledger.
-    """
+    """Validate operational employee identity fields without financial writes."""
     normalized: dict[str, Any] = {}
     if not partial or "name" in payload:
         name = _text(payload.get("name"))
@@ -139,47 +136,21 @@ def normalize_pilot_employee_payload(
         )
 
     if not partial or "status" in payload:
-        status = _text(payload.get("status") or "draft").casefold()
-        if status not in PILOT_STATUSES:
-            raise ValueError("employee_pilot_status_invalid")
+        status = _text(payload.get("status") or "active").casefold()
+        if status not in EMPLOYEE_STATUSES:
+            raise ValueError("employee_status_invalid")
         normalized["status"] = status
-
-    if not partial or "monthly_salary" in payload:
-        raw_amount = payload.get("monthly_salary")
-        try:
-            amount = float(raw_amount or 0)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("employee_monthly_salary_invalid") from exc
-        if amount < 0 or amount > 10_000_000:
-            raise ValueError("employee_monthly_salary_invalid")
-        normalized["monthly_salary"] = _money(amount)
 
     if partial and not normalized:
         raise ValueError("employee_update_empty")
     return normalized
 
 
-def _is_pilot_employee(employee: dict[str, Any] | None) -> bool:
-    return bool(
-        employee
-        and (employee.get("source") or {}).get("system") == PILOT_SOURCE_SYSTEM
-        and (employee.get("management") or {}).get("mode") == "pilot_only"
-    )
-
-
-def _require_pilot_employee(employee: dict[str, Any] | None) -> dict[str, Any]:
+def _require_managed_employee(employee: dict[str, Any] | None) -> dict[str, Any]:
     if not employee:
         raise HTTPException(
             status_code=404,
             detail={"code": "employee_v2_not_found"},
-        )
-    if not _is_pilot_employee(employee):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "employee_management_pilot_only",
-                "migrated_employee_writes_enabled": False,
-            },
         )
     return employee
 
@@ -203,29 +174,18 @@ def _employee_audit_view(employee: dict[str, Any] | None) -> dict[str, Any] | No
     }
 
 
-def _reserved_review_account_ids(
-    preview_employees: list[dict[str, Any]],
-) -> set[str]:
-    """Protect suggested migrated-employee links (including Arafat) in pilot."""
-    return {
-        _text((row.get("account") or {}).get("suggested_account", {}).get("id"))
-        for row in preview_employees
-        if (row.get("account") or {}).get("status") == "review_required"
-        and _text((row.get("account") or {}).get("suggested_account", {}).get("id"))
-    }
-
-
 def build_employee_management_snapshot(
     *,
-    pilot_employees: list[dict[str, Any]],
+    owner_id: str,
+    employees: list[dict[str, Any]],
     salary_contracts: list[dict[str, Any]],
     team_users: list[dict[str, Any]],
-    all_employee_links: list[dict[str, Any]],
     role_assignments: list[dict[str, Any]],
     preview_employees: list[dict[str, Any]],
     latest_events: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Build the pilot workspace without granting writes to migrated rows."""
+    """Build the owner-managed Employee OS workspace for all V2 identities."""
+    owner_id = _text(owner_id)
     contracts_by_employee = {
         _text(row.get("employee_id")): row
         for row in salary_contracts
@@ -236,6 +196,17 @@ def build_employee_management_snapshot(
         for row in role_assignments
         if _text(row.get("user_id"))
     }
+    users_by_id = {
+        _text(row.get("id")): row
+        for row in team_users
+        if _text(row.get("id"))
+    }
+    preview_by_employee: dict[str, dict[str, Any]] = {}
+    for row in preview_employees:
+        for key in (row.get("employee_id"), row.get("legacy_employee_id")):
+            normalized = _text(key)
+            if normalized:
+                preview_by_employee[normalized] = row
     events_by_employee: dict[str, dict[str, Any]] = {}
     for row in latest_events:
         employee_id = _text(row.get("employee_id"))
@@ -243,10 +214,30 @@ def build_employee_management_snapshot(
             events_by_employee[employee_id] = row
 
     rows: list[dict[str, Any]] = []
-    for employee in pilot_employees:
+    for employee in employees:
         employee_id = _text(employee.get("id"))
-        account_user_id = _text(employee.get("account_user_id"))
+        legacy_employee_id = _text(employee.get("legacy_employee_id"))
+        preview = (
+            preview_by_employee.get(employee_id)
+            or preview_by_employee.get(legacy_employee_id)
+            or {}
+        )
+        preview_account = preview.get("account") or {}
+        account_user_id = _text(
+            employee.get("account_user_id")
+            or preview_account.get("account_user_id")
+        )
+        account = users_by_id.get(account_user_id)
         assignment = assignments_by_user.get(account_user_id)
+        raw_status = _text(employee.get("status") or preview.get("status"))
+        status = "active" if raw_status == "active" else "inactive"
+        contract = contracts_by_employee.get(employee_id) or preview.get("salary_contract")
+        account_status = "linked" if account_user_id else _text(
+            preview_account.get("status") or "not_linked"
+        )
+        if account_user_id and not account:
+            account_status = "missing"
+        source_system = _text((employee.get("source") or {}).get("system"))
         rows.append({
             "id": employee_id,
             "name": _text(employee.get("display_name")),
@@ -255,23 +246,48 @@ def build_employee_management_snapshot(
             "job_title": employee.get("job_title"),
             "department": employee.get("department"),
             "hire_date": employee.get("hire_date"),
-            "status": employee.get("status") or "draft",
+            "status": status,
+            "legacy_status": raw_status or None,
             "notes": employee.get("notes"),
             "version": int(employee.get("version") or 1),
-            "management_mode": "pilot_only",
-            "payroll_enabled": False,
-            "salary_contract": contracts_by_employee.get(employee_id),
+            "management_mode": "full_management",
+            "source_system": source_system,
+            "migrated": source_system == "mezan_legacy",
+            "payroll_writes_enabled": False,
+            "salary_contract": contract,
+            "financial_snapshot": preview.get("financial_snapshot") or {
+                "salary_payable": 0.0,
+                "advance": 0.0,
+                "custody": 0.0,
+            },
+            "financial_history_preserved": True,
             "account": {
-                "status": employee.get("account_link_status") or "not_linked",
+                "status": account_status,
                 "user_id": account_user_id or None,
-                "name": (employee.get("account_link") or {}).get("account_name"),
-                "email": (employee.get("account_link") or {}).get("account_email"),
-                "effect_scope": "employees_v2_pilot_only",
+                "name": (account or {}).get("name")
+                or (employee.get("account_link") or {}).get("account_name"),
+                "email": (account or {}).get("email")
+                or (employee.get("account_link") or {}).get("account_email"),
+                "account_role": (account or {}).get("role"),
+                "access_enabled": bool(
+                    account
+                    and account.get("disabled") is not True
+                    and account.get("is_active") is not False
+                    and not account.get("deleted_at")
+                ),
+                "suggested_account": preview_account.get("suggested_account"),
+                "effect_scope": "employee_account_access",
             },
             "operational_role": {
                 "role_key": (assignment or {}).get("role_key"),
                 "enabled": bool((assignment or {}).get("enabled", False)),
                 "effective_permissions": effective_permissions(assignment),
+                "extra_permissions": list(
+                    (assignment or {}).get("extra_permissions") or []
+                ),
+                "denied_permissions": list(
+                    (assignment or {}).get("denied_permissions") or []
+                ),
                 "warehouse_ids": list((assignment or {}).get("warehouse_ids") or []),
                 "workplace_warehouse_id": (assignment or {}).get("workplace_warehouse_id"),
                 "fulfillment_responsibilities": list(
@@ -285,34 +301,21 @@ def build_employee_management_snapshot(
 
     used_account_ids = {
         _text(row.get("account_user_id"))
-        for row in all_employee_links
+        for row in employees
         if _text(row.get("account_user_id"))
-    }
-    reserved_account_ids = _reserved_review_account_ids(preview_employees)
-    pilot_employee_ids = {_text(row.get("id")) for row in pilot_employees}
-    assigned_account_ids = {
-        account_id
-        for account_id, assignment in assignments_by_user.items()
-        if not (
-            assignment.get("assignment_scope") == "employee_pilot"
-            and assignment.get("enabled") is False
-            and _text(assignment.get("employee_v2_id"))
-            in pilot_employee_ids
-        )
     }
     candidates = []
     for account in team_users:
         account_id = _text(account.get("id"))
+        assignment = assignments_by_user.get(account_id)
         if (
             not account_id
+            or account_id == owner_id
             or _text(account.get("role")).casefold() == "owner"
             or account.get("is_owner") is True
-            or account.get("disabled") is True
-            or account.get("is_active") is False
             or account.get("deleted_at")
             or account_id in used_account_ids
-            or account_id in reserved_account_ids
-            or account_id in assigned_account_ids
+            or _text((assignment or {}).get("employee_v2_id"))
         ):
             continue
         candidates.append({
@@ -320,22 +323,28 @@ def build_employee_management_snapshot(
             "name": _text(account.get("name")),
             "email": _text(account.get("email")),
             "account_role": _text(account.get("role") or "viewer"),
+            "disabled": account.get("disabled") is True
+            or account.get("is_active") is False,
+            "has_existing_role": bool((assignment or {}).get("role_key")),
+            "role_key": (assignment or {}).get("role_key"),
         })
 
-    rows.sort(key=lambda row: (row.get("created_at") or "", row["id"]), reverse=True)
+    rows.sort(key=lambda row: (row["status"] != "active", row["name"].casefold(), row["id"]))
     candidates.sort(key=lambda row: (row["name"].casefold(), row["email"].casefold()))
     return {
-        "rollout_mode": "pilot_only",
-        "pilot_limit": PILOT_EMPLOYEE_LIMIT,
-        "pilot_count": len(rows),
-        "can_create_pilot": len(rows) < PILOT_EMPLOYEE_LIMIT,
-        "migrated_employee_writes_enabled": False,
+        "rollout_mode": "full_management",
+        "managed_count": len(rows),
+        "active_count": sum(row["status"] == "active" for row in rows),
+        "inactive_count": sum(row["status"] != "active" for row in rows),
+        "linked_account_count": sum(bool(row["account"]["user_id"]) for row in rows),
+        "employees_with_roles": sum(bool(row["operational_role"]["role_key"]) for row in rows),
+        "can_create_employee": True,
+        "migrated_employee_writes_enabled": True,
         "legacy_payroll_writes_enabled": False,
         "general_ledger_writes_enabled": False,
-        "account_link_effect_scope": "employees_v2_pilot_only",
-        "role_assignment_scope": "linked_pilot_account_only",
-        "reserved_review_accounts": len(reserved_account_ids),
-        "accounts_with_existing_roles_excluded": len(assigned_account_ids),
+        "account_link_effect_scope": "employee_account_access",
+        "role_assignment_scope": "linked_employee_account_only",
+        "financial_writes": 0,
         "employees": rows,
         "login_account_candidates": candidates,
         "role_catalog": ROLE_CATALOG,
@@ -396,18 +405,36 @@ def _financial_balances(
 def _account_resolution(
     legacy: dict[str, Any],
     team_users: list[dict[str, Any]],
+    *,
+    owner_id: str,
 ) -> dict[str, Any]:
     legacy_id = _text(legacy.get("id"))
-    users_by_id = {
+    all_users_by_id = {
         _text(row.get("id")): row for row in team_users if _text(row.get("id"))
+    }
+    users_by_id = {
+        account_id: row
+        for account_id, row in all_users_by_id.items()
+        if account_id != _text(owner_id)
+        and _text(row.get("role")).casefold() != "owner"
+        and row.get("is_owner") is not True
     }
     explicit_id = _text(
         legacy.get("account_user_id")
         or legacy.get("linked_user_id")
         or legacy.get("user_account_id")
     )
+    if explicit_id and explicit_id in all_users_by_id and explicit_id not in users_by_id:
+        return {
+            "status": "review_required",
+            "method": "owner_account_forbidden",
+            "account_user_id": None,
+            "account_name": None,
+            "account_email": None,
+            "suggested_account": None,
+        }
     reverse_links = [
-        row for row in team_users
+        row for row in users_by_id.values()
         if _text(row.get("linked_employee_id")) == legacy_id
     ]
 
@@ -451,7 +478,7 @@ def _account_resolution(
 
     normalized_name = _normalized_name(legacy.get("name"))
     name_matches = [
-        row for row in team_users
+        row for row in users_by_id.values()
         if normalized_name and _normalized_name(row.get("name")) == normalized_name
     ]
     if len(name_matches) == 1:
@@ -556,7 +583,7 @@ def build_employee_migration_preview(
             _text(legacy.get("start_date")),
             _money(legacy.get("monthly_amount")),
         )
-        account = _account_resolution(legacy, team_users)
+        account = _account_resolution(legacy, team_users, owner_id=owner_id)
         existing = existing_by_legacy.get(legacy_id)
         existing_contract = contracts_by_legacy.get(legacy_id)
         duplicate_source_id = not legacy_id or source_id_counts.get(legacy_id, 0) > 1
@@ -843,29 +870,29 @@ async def _management_from_db(
     owner_id: str,
     preview: dict[str, Any],
 ) -> dict[str, Any]:
-    pilot_employees = await db[EMPLOYEES].find(
-        {
-            "user_id": owner_id,
-            "source.system": PILOT_SOURCE_SYSTEM,
-            "management.mode": "pilot_only",
-        },
+    employees = await db[EMPLOYEES].find(
+        {"user_id": owner_id},
         {"_id": 0},
-    ).sort("created_at", -1).to_list(PILOT_EMPLOYEE_LIMIT + 10)
-    pilot_ids = [_text(row.get("id")) for row in pilot_employees if _text(row.get("id"))]
+    ).sort("created_at", -1).to_list(5000)
+    employee_ids = [_text(row.get("id")) for row in employees if _text(row.get("id"))]
+    linked_account_ids = [
+        _text(row.get("account_user_id"))
+        for row in employees
+        if _text(row.get("account_user_id"))
+    ]
     salary_contracts = await db[SALARY_CONTRACTS].find(
         {
             "user_id": owner_id,
-            "employee_id": {"$in": pilot_ids},
-            "source_authority": "employees_v2_pilot_only",
+            "employee_id": {"$in": employee_ids},
         },
         {"_id": 0},
-    ).to_list(max(len(pilot_ids), 1))
-    all_employee_links = await db[EMPLOYEES].find(
-        {"user_id": owner_id, "account_user_id": {"$type": "string"}},
-        {"_id": 0, "id": 1, "account_user_id": 1},
-    ).to_list(5000)
+    ).to_list(max(len(employee_ids) * 2, 1))
     team_users = await db.users.find(
-        {"created_by": owner_id},
+        {"$or": [
+            {"id": owner_id},
+            {"created_by": owner_id},
+            {"id": {"$in": linked_account_ids}},
+        ]},
         {
             "_id": 0,
             "id": 1,
@@ -883,14 +910,14 @@ async def _management_from_db(
         {"_id": 0},
     ).to_list(5000)
     latest_events = await db[EMPLOYEE_EVENTS].find(
-        {"user_id": owner_id, "employee_id": {"$in": pilot_ids}},
+        {"user_id": owner_id, "employee_id": {"$in": employee_ids}},
         {"_id": 0},
-    ).sort("occurred_at", -1).to_list(500)
+    ).sort("occurred_at", -1).to_list(5000)
     return build_employee_management_snapshot(
-        pilot_employees=pilot_employees,
+        owner_id=owner_id,
+        employees=employees,
         salary_contracts=salary_contracts,
         team_users=team_users,
-        all_employee_links=all_employee_links,
         role_assignments=role_assignments,
         preview_employees=preview.get("employees") or [],
         latest_events=latest_events,
@@ -910,9 +937,105 @@ async def _employee_management_response(
     )
     return {
         **preview,
-        "mode": "pilot_management",
+        "mode": "full_management",
         "management": management,
     }
+
+
+def _account_access_view(account: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not account:
+        return None
+    return {
+        "id": account.get("id"),
+        "name": account.get("name"),
+        "email": account.get("email"),
+        "disabled": account.get("disabled") is True,
+        "is_active": account.get("is_active") is not False,
+        "password_updated_at": account.get("password_updated_at"),
+    }
+
+
+def _role_audit_view(assignment: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not assignment:
+        return None
+    return {
+        key: assignment.get(key)
+        for key in (
+            "role_key",
+            "enabled",
+            "effective_permissions",
+            "warehouse_ids",
+            "workplace_warehouse_id",
+            "fulfillment_responsibilities",
+            "employee_v2_id",
+            "assignment_scope",
+        )
+    }
+
+
+async def _set_employee_account_access(
+    db: Any,
+    *,
+    account_id: str,
+    active: bool,
+    owner_id: str,
+    reason: str,
+) -> None:
+    """Enable or revoke login and operational permissions as one policy step."""
+    account_id = _text(account_id)
+    if not account_id:
+        return
+    now = _now()
+    account_update = await db.users.update_one(
+        {"id": account_id, "created_by": owner_id, "role": {"$ne": "owner"}},
+        {"$set": {
+            "disabled": not active,
+            "is_active": active,
+            "employee_access_state": "active" if active else "disabled",
+            "employee_access_reason": reason,
+            "employee_access_updated_at": now,
+            "employee_access_updated_by": owner_id,
+        }},
+    )
+    if not account_update.matched_count:
+        return
+    assignment = await db[ROLE_ASSIGNMENTS].find_one(
+        {"user_id": account_id},
+        {"_id": 0},
+    )
+    if not assignment:
+        return
+    if active:
+        restored_enabled = bool(
+            assignment.get("enabled_before_employee_suspension", False)
+        ) if assignment.get("suspended_by_employee_v2") else bool(
+            assignment.get("enabled", False)
+        )
+        restored = {**assignment, "enabled": restored_enabled}
+        role_updates = {
+            "enabled": restored_enabled,
+            "effective_permissions": effective_permissions(restored),
+            "suspended_by_employee_v2": False,
+            "updated_at": now,
+            "updated_by": owner_id,
+        }
+    else:
+        role_updates = {
+            "enabled_before_employee_suspension": bool(
+                assignment.get("enabled_before_employee_suspension")
+                if assignment.get("suspended_by_employee_v2")
+                else assignment.get("enabled", False)
+            ),
+            "enabled": False,
+            "effective_permissions": [],
+            "suspended_by_employee_v2": True,
+            "updated_at": now,
+            "updated_by": owner_id,
+        }
+    await db[ROLE_ASSIGNMENTS].update_one(
+        {"user_id": account_id},
+        {"$set": role_updates},
+    )
 
 
 def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
@@ -934,19 +1057,19 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             owner_id=_text(user.get("id")),
         )
 
-    @router.post("/management/pilot")
-    async def create_pilot_employee(
+    @router.post("/management/employees")
+    async def create_employee(
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
-        if _text(payload.get("confirmation")) != PILOT_CREATE_CONFIRMATION:
+        if _text(payload.get("confirmation")) != EMPLOYEE_CREATE_CONFIRMATION:
             raise HTTPException(
                 status_code=422,
-                detail={"code": "employee_pilot_confirmation_required"},
+                detail={"code": "employee_create_confirmation_required"},
             )
         try:
-            values = normalize_pilot_employee_payload(payload)
+            values = normalize_employee_payload(payload)
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
@@ -955,45 +1078,30 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
 
         owner_id = _text(user.get("id"))
         await ensure_employee_v2_indexes(db)
-        existing_count = await db[EMPLOYEES].count_documents({
-            "user_id": owner_id,
-            "source.system": PILOT_SOURCE_SYSTEM,
-            "management.mode": "pilot_only",
-        })
-        if existing_count >= PILOT_EMPLOYEE_LIMIT:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "employee_pilot_limit_reached",
-                    "pilot_limit": PILOT_EMPLOYEE_LIMIT,
-                },
-            )
-
-        employee_id = _stable_id("emppilot", owner_id, "single")
+        employee_id = f"empv2_{uuid.uuid4().hex}"
         now = _now()
-        monthly_salary = values.pop("monthly_salary")
         employee = {
             "id": employee_id,
             "user_id": owner_id,
-            # The existing production index requires a non-null unique legacy
-            # key.  This sentinel is never treated as a payroll identity.
-            "legacy_employee_id": f"pilot:{employee_id}",
+            # Preserve the existing unique legacy-key index without claiming a
+            # salary identity in the legacy payroll source.
+            "legacy_employee_id": f"native:{employee_id}",
             "financial_entity_id": None,
             **values,
             "account_user_id": None,
             "account_link_status": "not_linked",
             "account_link": None,
             "source": {
-                "system": PILOT_SOURCE_SYSTEM,
+                "system": NATIVE_SOURCE_SYSTEM,
                 "collection": EMPLOYEES,
                 "record_id": employee_id,
             },
             "management": {
-                "mode": "pilot_only",
+                "mode": "full_management",
                 "payroll_enabled": False,
                 "legacy_writes_enabled": False,
                 "general_ledger_writes_enabled": False,
-                "migrated_employee_writes_enabled": False,
+                "migrated_employee_writes_enabled": True,
             },
             "version": 1,
             "created_at": now,
@@ -1006,66 +1114,35 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         except DuplicateKeyError as exc:
             raise HTTPException(
                 status_code=409,
-                detail={
-                    "code": "employee_pilot_limit_reached",
-                    "pilot_limit": PILOT_EMPLOYEE_LIMIT,
-                },
+                detail={"code": "employee_v2_identity_conflict"},
             ) from exc
         employee.pop("_id", None)
-
-        contract = {
-            "id": _stable_id("empctpilot", owner_id, employee_id),
-            "user_id": owner_id,
-            "employee_id": employee_id,
-            "legacy_salary_id": f"pilot:{employee_id}",
-            "contract_type": "monthly",
-            "monthly_amount": monthly_salary,
-            "currency": "SAR",
-            "effective_from": values.get("hire_date"),
-            "effective_to": None,
-            "status": "pilot_only",
-            "payroll_enabled": False,
-            "accrual_policy": "disabled_during_pilot",
-            "source_authority": "employees_v2_pilot_only",
-            "created_at": now,
-            "created_by": owner_id,
-            "updated_at": now,
-            "updated_by": owner_id,
-        }
-        await db[SALARY_CONTRACTS].update_one(
-            {"user_id": owner_id, "employee_id": employee_id},
-            {"$setOnInsert": contract},
-            upsert=True,
-        )
         await _record_employee_event(
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_pilot_created",
+            event_type="employee_created",
             actor=user,
-            after={
-                **(_employee_audit_view(employee) or {}),
-                "monthly_salary": monthly_salary,
-                "payroll_enabled": False,
-            },
+            after=_employee_audit_view(employee),
             metadata={
-                "rollout_mode": "pilot_only",
+                "rollout_mode": "full_management",
                 "legacy_writes_made": False,
                 "general_ledger_writes_made": False,
+                "salary_contract_created": False,
             },
         )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "employee_id": employee_id, **response}
 
-    @router.put("/management/pilot/{employee_id}")
-    async def update_pilot_employee(
+    @router.put("/management/employees/{employee_id}")
+    async def update_employee(
         employee_id: str,
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
         owner_id = _text(user.get("id"))
-        employee = _require_pilot_employee(await db[EMPLOYEES].find_one(
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
         ))
@@ -1085,65 +1162,55 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             key: value for key, value in payload.items()
             if key in {
                 "name", "phone", "contact_email", "job_title", "department",
-                "hire_date", "status", "notes", "monthly_salary",
+                "hire_date", "status", "notes",
             }
         }
         try:
-            values = normalize_pilot_employee_payload(editable, partial=True)
+            values = normalize_employee_payload(editable, partial=True)
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
                 detail={"code": str(exc)},
             ) from exc
 
-        salary_supplied = "monthly_salary" in values
-        monthly_salary = values.pop("monthly_salary", None)
-        previous_contract = await db[SALARY_CONTRACTS].find_one(
-            {
-                "user_id": owner_id,
-                "employee_id": employee_id,
-                "source_authority": "employees_v2_pilot_only",
-            },
-            {"_id": 0},
-        )
+        account_id = _text(employee.get("account_user_id"))
+        before_account = await db.users.find_one(
+            {"id": account_id}, {"_id": 0}
+        ) if account_id else None
+        before_assignment = await db[ROLE_ASSIGNMENTS].find_one(
+            {"user_id": account_id}, {"_id": 0}
+        ) if account_id else None
         now = _now()
         update_fields = {
             **values,
+            "version": expected_version + 1,
             "updated_at": now,
             "updated_by": owner_id,
         }
+        version_query: dict[str, Any] = {
+            "user_id": owner_id,
+            "id": employee_id,
+        }
+        if expected_version == 1 and "version" not in employee:
+            version_query["version"] = {"$exists": False}
+        else:
+            version_query["version"] = expected_version
         result = await db[EMPLOYEES].update_one(
-            {
-                "user_id": owner_id,
-                "id": employee_id,
-                "version": expected_version,
-                "source.system": PILOT_SOURCE_SYSTEM,
-            },
-            {"$set": update_fields, "$inc": {"version": 1}},
+            version_query,
+            {"$set": update_fields},
         )
         if not result.matched_count:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "employee_version_conflict"},
             )
-        contract_updates: dict[str, Any] = {}
-        if salary_supplied:
-            contract_updates["monthly_amount"] = monthly_salary
-        if "hire_date" in values:
-            contract_updates["effective_from"] = values.get("hire_date")
-        if contract_updates:
-            await db[SALARY_CONTRACTS].update_one(
-                {
-                    "user_id": owner_id,
-                    "employee_id": employee_id,
-                    "source_authority": "employees_v2_pilot_only",
-                },
-                {"$set": {
-                    **contract_updates,
-                    "payroll_enabled": False,
-                    "updated_at": now,
-                    "updated_by": owner_id,
-                }},
+        if "status" in values and account_id:
+            await _set_employee_account_access(
+                db,
+                account_id=account_id,
+                active=values["status"] == "active",
+                owner_id=owner_id,
+                reason="employee_status_changed",
             )
         updated = await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
@@ -1153,39 +1220,48 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_pilot_updated",
+            event_type="employee_updated",
             actor=user,
             before={
-                **(_employee_audit_view(employee) or {}),
-                "monthly_salary": (previous_contract or {}).get("monthly_amount"),
+                "employee": _employee_audit_view(employee),
+                "account_access": _account_access_view(before_account),
+                "role_assignment": _role_audit_view(before_assignment),
             },
             after={
-                **(_employee_audit_view(updated) or {}),
-                "monthly_salary": monthly_salary if salary_supplied else (previous_contract or {}).get("monthly_amount"),
+                "employee": _employee_audit_view(updated),
+                "account_access": _account_access_view(
+                    await db.users.find_one({"id": account_id}, {"_id": 0})
+                    if account_id else None
+                ),
+                "role_assignment": _role_audit_view(
+                    await db[ROLE_ASSIGNMENTS].find_one(
+                        {"user_id": account_id}, {"_id": 0}
+                    ) if account_id else None
+                ),
             },
             metadata={
-                "changed_fields": sorted(values.keys())
-                + (["monthly_salary"] if salary_supplied else []),
-                "payroll_enabled": False,
+                "changed_fields": sorted(values.keys()),
+                "legacy_payroll_writes_made": False,
+                "general_ledger_writes_made": False,
             },
         )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "employee_id": employee_id, **response}
 
-    @router.put("/management/pilot/{employee_id}/account")
-    async def link_pilot_employee_account(
+    @router.put("/management/employees/{employee_id}/account")
+    async def link_employee_account(
         employee_id: str,
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
-        if _text(payload.get("confirmation")) != PILOT_ACCOUNT_LINK_CONFIRMATION:
+        if _text(payload.get("confirmation")) != EMPLOYEE_ACCOUNT_LINK_CONFIRMATION:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_account_link_confirmation_required"},
             )
         owner_id = _text(user.get("id"))
-        employee = _require_pilot_employee(await db[EMPLOYEES].find_one(
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
         ))
@@ -1204,20 +1280,11 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         if current_account_id == account_id:
             response = await _employee_management_response(db, owner_id=owner_id)
             return {"ok": True, "idempotent_replay": True, **response}
-
-        preview = await _preview_from_db(db, owner_id)
-        if account_id in _reserved_review_account_ids(preview.get("employees") or []):
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "employee_account_reserved_for_migrated_review"},
-            )
         account = await db.users.find_one(
             {
                 "id": account_id,
                 "created_by": owner_id,
                 "role": {"$ne": "owner"},
-                "disabled": {"$ne": True},
-                "is_active": {"$ne": False},
                 "$or": [
                     {"deleted_at": {"$exists": False}},
                     {"deleted_at": None},
@@ -1234,13 +1301,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             {"user_id": account_id},
             {"_id": 0},
         )
-        reusable_pilot_assignment = bool(
-            existing_assignment
-            and existing_assignment.get("assignment_scope") == "employee_pilot"
-            and existing_assignment.get("enabled") is False
-            and _text(existing_assignment.get("employee_v2_id")) == employee_id
-        )
-        if existing_assignment and not reusable_pilot_assignment:
+        assigned_employee_id = _text((existing_assignment or {}).get("employee_v2_id"))
+        if assigned_employee_id and assigned_employee_id != employee_id:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "employee_account_has_existing_role"},
@@ -1267,7 +1329,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "account_email": _text(account.get("email")),
                 "linked_at": now,
                 "linked_by": owner_id,
-                "effect_scope": "employees_v2_pilot_only",
+                "effect_scope": "employee_account_access",
                 "legacy_user_reverse_link_written": False,
             },
             "updated_at": now,
@@ -1276,47 +1338,75 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         try:
             await db[EMPLOYEES].update_one(
                 {"user_id": owner_id, "id": employee_id},
-                {"$set": link, "$inc": {"version": 1}},
+                {"$set": {
+                    **link,
+                    "version": int(employee.get("version") or 1) + 1,
+                }},
             )
         except DuplicateKeyError as exc:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "employee_account_linked_elsewhere"},
             ) from exc
+        if existing_assignment:
+            await db[ROLE_ASSIGNMENTS].update_one(
+                {"user_id": account_id},
+                {"$set": {
+                    "employee_v2_id": employee_id,
+                    "assignment_scope": "employee_v2",
+                    "updated_at": now,
+                    "updated_by": owner_id,
+                }},
+            )
+        await _set_employee_account_access(
+            db,
+            account_id=account_id,
+            active=_text(employee.get("status")) == "active",
+            owner_id=owner_id,
+            reason="employee_account_linked",
+        )
+        updated_account = await db.users.find_one({"id": account_id}, {"_id": 0})
+        updated_assignment = await db[ROLE_ASSIGNMENTS].find_one(
+            {"user_id": account_id}, {"_id": 0}
+        )
         await _record_employee_event(
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_pilot_account_linked",
+            event_type="employee_account_linked",
             actor=user,
-            before={"account_user_id": None},
+            before={
+                "account_user_id": None,
+                "account_access": _account_access_view(account),
+                "role_assignment": _role_audit_view(existing_assignment),
+            },
             after={
                 "account_user_id": account_id,
-                "account_name": account.get("name"),
-                "account_email": account.get("email"),
+                "account_access": _account_access_view(updated_account),
+                "role_assignment": _role_audit_view(updated_assignment),
             },
             metadata={
-                "effect_scope": "employees_v2_pilot_only",
+                "effect_scope": "employee_account_access",
                 "legacy_user_reverse_link_written": False,
             },
         )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "idempotent_replay": False, **response}
 
-    @router.delete("/management/pilot/{employee_id}/account")
-    async def unlink_pilot_employee_account(
+    @router.delete("/management/employees/{employee_id}/account")
+    async def unlink_employee_account(
         employee_id: str,
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
-        if _text(payload.get("confirmation")) != PILOT_ACCOUNT_UNLINK_CONFIRMATION:
+        if _text(payload.get("confirmation")) != EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_account_unlink_confirmation_required"},
             )
         owner_id = _text(user.get("id"))
-        employee = _require_pilot_employee(await db[EMPLOYEES].find_one(
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
         ))
@@ -1324,20 +1414,28 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         if not account_id:
             response = await _employee_management_response(db, owner_id=owner_id)
             return {"ok": True, "idempotent_replay": True, **response}
+        before_account = await db.users.find_one(
+            {"id": account_id}, {"_id": 0}
+        )
         before_assignment = await db[ROLE_ASSIGNMENTS].find_one(
-            {
-                "user_id": account_id,
-                "employee_v2_id": employee_id,
-                "assignment_scope": "employee_pilot",
-            },
+            {"user_id": account_id},
             {"_id": 0},
+        )
+        await _set_employee_account_access(
+            db,
+            account_id=account_id,
+            active=False,
+            owner_id=owner_id,
+            reason="employee_account_unlinked",
         )
         if before_assignment:
             await db[ROLE_ASSIGNMENTS].update_one(
-                {"user_id": account_id, "employee_v2_id": employee_id},
+                {"user_id": account_id},
                 {"$set": {
                     "enabled": False,
                     "effective_permissions": [],
+                    "employee_v2_id": None,
+                    "assignment_scope": "employee_v2_unlinked",
                     "updated_at": _now(),
                     "updated_by": owner_id,
                 }},
@@ -1351,40 +1449,51 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     "account_link": None,
                     "updated_at": _now(),
                     "updated_by": owner_id,
+                    "version": int(employee.get("version") or 1) + 1,
                 },
-                "$inc": {"version": 1},
             },
         )
         await _record_employee_event(
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_pilot_account_unlinked",
+            event_type="employee_account_unlinked",
             actor=user,
             before={
                 "account_user_id": account_id,
-                "role_assignment_enabled": bool(before_assignment),
+                "account_access": _account_access_view(before_account),
+                "role_assignment": _role_audit_view(before_assignment),
             },
-            after={"account_user_id": None, "role_assignment_enabled": False},
-            metadata={"effect_scope": "employees_v2_pilot_only"},
+            after={
+                "account_user_id": None,
+                "account_access": _account_access_view(
+                    await db.users.find_one({"id": account_id}, {"_id": 0})
+                ),
+                "role_assignment": _role_audit_view(
+                    await db[ROLE_ASSIGNMENTS].find_one(
+                        {"user_id": account_id}, {"_id": 0}
+                    )
+                ),
+            },
+            metadata={"effect_scope": "employee_account_access"},
         )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "idempotent_replay": False, **response}
 
-    @router.put("/management/pilot/{employee_id}/role")
-    async def assign_pilot_employee_role(
+    @router.put("/management/employees/{employee_id}/role")
+    async def assign_employee_role(
         employee_id: str,
         payload: dict[str, Any] = Body(...),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
-        if _text(payload.get("confirmation")) != PILOT_ROLE_ASSIGNMENT_CONFIRMATION:
+        if _text(payload.get("confirmation")) != EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_role_assignment_confirmation_required"},
             )
         owner_id = _text(user.get("id"))
-        employee = _require_pilot_employee(await db[EMPLOYEES].find_one(
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
         ))
@@ -1396,7 +1505,15 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             )
         account = await db.users.find_one(
             {"id": account_id, "created_by": owner_id, "role": {"$ne": "owner"}},
-            {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1},
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "email": 1,
+                "role": 1,
+                "disabled": 1,
+                "is_active": 1,
+            },
         )
         if not account:
             raise HTTPException(
@@ -1430,24 +1547,30 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             {"user_id": account_id},
             {"_id": 0},
         )
-        if before and (
-            before.get("assignment_scope") != "employee_pilot"
-            or _text(before.get("employee_v2_id")) != employee_id
-        ):
+        bound_employee_id = _text((before or {}).get("employee_v2_id"))
+        if bound_employee_id and bound_employee_id != employee_id:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "employee_account_has_existing_role"},
             )
         now = _now()
+        requested_enabled = bool(assignment["enabled"])
+        employee_active = _text(employee.get("status")) == "active"
+        persisted_assignment = {
+            **assignment,
+            "enabled": requested_enabled if employee_active else False,
+        }
         document = {
             "id": (before or {}).get("id") or uuid.uuid4().hex,
             "user_id": account_id,
             "user_name": account.get("name"),
             "user_email": account.get("email"),
             "employee_v2_id": employee_id,
-            "assignment_scope": "employee_pilot",
-            **assignment,
-            "effective_permissions": effective_permissions(assignment),
+            "assignment_scope": "employee_v2",
+            **persisted_assignment,
+            "effective_permissions": effective_permissions(persisted_assignment),
+            "enabled_before_employee_suspension": requested_enabled,
+            "suspended_by_employee_v2": not employee_active,
             "updated_at": now,
             "updated_by": owner_id,
         }
@@ -1459,30 +1582,103 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             {"$set": document},
             upsert=True,
         )
+        await _set_employee_account_access(
+            db,
+            account_id=account_id,
+            active=employee_active,
+            owner_id=owner_id,
+            reason="employee_role_assigned",
+        )
+        saved = await db[ROLE_ASSIGNMENTS].find_one(
+            {"user_id": account_id}, {"_id": 0}
+        ) or document
         await _record_employee_event(
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_pilot_role_assigned",
+            event_type="employee_role_assigned",
             actor=user,
-            before=before,
-            after=document,
+            before=_role_audit_view(before),
+            after=_role_audit_view(saved),
             metadata={
-                "permission_count": len(document["effective_permissions"]),
-                "assignment_scope": "employee_pilot",
+                "permission_count": len(saved.get("effective_permissions") or []),
+                "assignment_scope": "employee_v2",
+                "employee_active": employee_active,
             },
         )
         response = await _employee_management_response(db, owner_id=owner_id)
-        return {"ok": True, "assignment": document, **response}
+        return {"ok": True, "assignment": saved, **response}
 
-    @router.get("/management/pilot/{employee_id}/events")
-    async def pilot_employee_events(
+    @router.put("/management/employees/{employee_id}/account/password")
+    async def reset_employee_account_password(
+        employee_id: str,
+        payload: dict[str, Any] = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        _require_owner(user)
+        if _text(payload.get("confirmation")) != EMPLOYEE_PASSWORD_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_password_confirmation_required"},
+            )
+        password = str(payload.get("new_password") or "")
+        if len(password) < 6 or len(password) > 128:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_password_invalid"},
+            )
+        owner_id = _text(user.get("id"))
+        employee = _require_managed_employee(await db[EMPLOYEES].find_one(
+            {"user_id": owner_id, "id": employee_id},
+            {"_id": 0},
+        ))
+        account_id = _text(employee.get("account_user_id"))
+        if not account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "employee_account_link_required_before_password"},
+            )
+        account = await db.users.find_one(
+            {"id": account_id, "created_by": owner_id, "role": {"$ne": "owner"}},
+        )
+        if not account:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "employee_login_account_not_available"},
+            )
+        now = _now()
+        await db.users.update_one(
+            {"id": account_id},
+            {"$set": {
+                "password_hash": hash_password(password),
+                "password_updated_at": now,
+                "password_updated_by": owner_id,
+            }},
+        )
+        updated_account = await db.users.find_one(
+            {"id": account_id}, {"_id": 0}
+        )
+        await _record_employee_event(
+            db,
+            owner_id=owner_id,
+            employee_id=employee_id,
+            event_type="employee_account_password_reset",
+            actor=user,
+            before=_account_access_view(account),
+            after=_account_access_view(updated_account),
+            metadata={"password_secret_recorded": False},
+        )
+        response = await _employee_management_response(db, owner_id=owner_id)
+        return {"ok": True, **response}
+
+    @router.get("/management/employees/{employee_id}/events")
+    async def employee_events(
         employee_id: str,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         _require_owner(user)
         owner_id = _text(user.get("id"))
-        _require_pilot_employee(await db[EMPLOYEES].find_one(
+        _require_managed_employee(await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0, "id": 1, "source": 1, "management": 1},
         ))
@@ -1682,15 +1878,16 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
 __all__ = [
     "APPLY_CONFIRMATION",
     "EMPLOYEES",
-    "PILOT_ACCOUNT_LINK_CONFIRMATION",
-    "PILOT_ACCOUNT_UNLINK_CONFIRMATION",
-    "PILOT_CREATE_CONFIRMATION",
-    "PILOT_ROLE_ASSIGNMENT_CONFIRMATION",
-    "PILOT_SOURCE_SYSTEM",
+    "EMPLOYEE_ACCOUNT_LINK_CONFIRMATION",
+    "EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION",
+    "EMPLOYEE_CREATE_CONFIRMATION",
+    "EMPLOYEE_PASSWORD_CONFIRMATION",
+    "EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION",
+    "NATIVE_SOURCE_SYSTEM",
     "SALARY_CONTRACTS",
     "build_employee_management_snapshot",
     "build_employee_migration_preview",
     "ensure_employee_v2_indexes",
     "make_employees_v2_router",
-    "normalize_pilot_employee_payload",
+    "normalize_employee_payload",
 ]

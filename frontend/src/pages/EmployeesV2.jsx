@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 
 import StoreOperationsAccessWorkspace from "./StoreOperationsAccessWorkspace";
-import EmployeesV2ManagementPilot from "./EmployeesV2ManagementPilot";
+import EmployeesV2Management from "./EmployeesV2Management";
 import {
     applyEmployeesV2ShadowMigration,
     getEmployeesV2,
@@ -292,7 +292,7 @@ export default function EmployeesV2() {
                 <Link to="/employees-v2?workspace=migration" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "migration" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700"}`}>تقرير الترحيل والرواتب</Link>
                 <Link to="/employees-v2?workspace=permissions" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "permissions" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-700"}`}>الصلاحيات وإدارة التجهيز</Link>
             </nav>
-            {workspace === "permissions" ? <StoreOperationsAccessWorkspace /> : workspace === "migration" ? <MigrationWorkspace /> : <EmployeesV2ManagementPilot />}
+            {workspace === "permissions" ? <StoreOperationsAccessWorkspace /> : workspace === "migration" ? <MigrationWorkspace /> : <EmployeesV2Management />}
         </div>
     );
 }

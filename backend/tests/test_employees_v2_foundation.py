@@ -133,6 +133,32 @@ def test_name_only_match_is_never_silently_linked():
     assert result["summary"]["blocking_issues"] == 0
 
 
+def test_owner_account_is_never_linked_even_when_legacy_reference_is_explicit():
+    result = _preview(
+        legacy_rows=[{
+            "id": "legacy-owner-link",
+            "name": "المالك",
+            "monthly_amount": 1000,
+            "start_date": "2026-01-01",
+            "status": "active",
+            "linked_user_id": "owner-1",
+        }],
+        team_users=[{
+            "id": "owner-1",
+            "name": "المالك",
+            "email": "owner@example.com",
+            "role": "owner",
+        }],
+        role_assignments=[],
+        ledger_rows=[],
+    )
+
+    account = result["employees"][0]["account"]
+    assert account["status"] == "review_required"
+    assert account["method"] == "owner_account_forbidden"
+    assert account["account_user_id"] is None
+
+
 def test_duplicate_legacy_identity_blocks_shadow_apply_readiness():
     duplicate = {
         "id": "legacy-dup",

@@ -29,6 +29,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+def account_is_disabled(user: dict | None) -> bool:
+    """Return whether an account must be denied at every authentication gate."""
+    return bool(
+        user
+        and (
+            user.get("disabled") is True
+            or user.get("is_active") is False
+            or user.get("deleted_at")
+        )
+    )
+
+
 def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
@@ -104,6 +116,8 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         user = await db.users.find_one({"id": user_id})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if account_is_disabled(user):
+            raise HTTPException(status_code=401, detail="Account disabled")
         user.pop("password_hash", None)
         user.pop("_id", None)
         return user
