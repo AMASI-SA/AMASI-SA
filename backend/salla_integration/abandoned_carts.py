@@ -9,6 +9,7 @@ collection owned by this module.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -448,7 +449,8 @@ async def persist_abandoned_cart_event(
         return {
             "attempted": True,
             "synced": True,
-            "created": event_result.upserted_id is not None,
+            "created": False,
+            "event_created": event_result.upserted_id is not None,
             "cart_id": record["cart_id"],
             "ignored_out_of_order": out_of_order,
             "ignored_after_purchase": purchase_downgrade,
@@ -466,7 +468,7 @@ async def persist_abandoned_cart_event(
     if out_of_order and purchase_upgrade:
         snapshot.pop("cart_updated_at", None)
         snapshot.pop("cart_created_at", None)
-    await getattr(db, ABANDONED_CART_COLLECTION).update_one(
+    snapshot_result = await getattr(db, ABANDONED_CART_COLLECTION).update_one(
         identity,
         {
             "$set": snapshot,
@@ -479,7 +481,8 @@ async def persist_abandoned_cart_event(
     return {
         "attempted": True,
         "synced": True,
-        "created": event_result.upserted_id is not None,
+        "created": snapshot_result.upserted_id is not None,
+        "event_created": event_result.upserted_id is not None,
         "cart_id": record["cart_id"],
         "ignored_out_of_order": False,
         "purchase_upgrade": purchase_upgrade,
@@ -546,6 +549,7 @@ async def backfill_abandoned_carts(
     call_provider: Callable[..., Awaitable[dict[str, Any]]],
     max_pages: int = MAX_BACKFILL_PAGES,
     per_page: int = SALLA_PAGE_SIZE,
+    progress_hook: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     """Read Salla pages sequentially after an explicit scope gate."""
     integration = await require_carts_read(db, user_id)
@@ -555,16 +559,30 @@ async def backfill_abandoned_carts(
     pages_fetched = 0
     rows_seen = 0
     rows_saved = 0
+    created = 0
+    updated = 0
+    errors_count = 0
     stopped_reason = "max_pages_reached"
 
     for page in range(1, bounded_pages + 1):
-        payload = await call_provider(
-            db,
-            user_id,
-            "GET",
-            "/carts/abandoned",
-            params={"page": page, "per_page": bounded_per_page},
-        )
+        retry_number = 0
+        while True:
+            try:
+                payload = await call_provider(
+                    db,
+                    user_id,
+                    "GET",
+                    "/carts/abandoned",
+                    params={"page": page, "per_page": bounded_per_page},
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - provider owns error type
+                status_code = int(getattr(exc, "status_code", 0) or 0)
+                transient = status_code == 429 or status_code >= 500
+                if not transient or retry_number >= 5:
+                    raise
+                await asyncio.sleep(min(2**retry_number, 8))
+                retry_number += 1
         pages_fetched += 1
         rows = _payload_rows(payload)
         rows_seen += len(rows)
@@ -581,7 +599,27 @@ async def backfill_abandoned_carts(
                 user_id=user_id,
                 source="salla_abandoned_carts_api",
             )
-            rows_saved += int(bool(result.get("synced")))
+            if result.get("synced"):
+                rows_saved += 1
+                if result.get("created"):
+                    created += 1
+                else:
+                    updated += 1
+            else:
+                errors_count += 1
+        progress = {
+            "pages_fetched": pages_fetched,
+            "rows_seen": rows_seen,
+            "rows_saved": rows_saved,
+            "created": created,
+            "updated": updated,
+            "errors_count": errors_count,
+        }
+        if progress_hook is not None:
+            try:
+                await progress_hook(progress)
+            except Exception:  # noqa: BLE001 - monitoring cannot stop ingestion
+                pass
         total_pages = _total_pages(payload)
         if total_pages is not None and page >= total_pages:
             stopped_reason = "pagination_complete"
@@ -597,6 +635,9 @@ async def backfill_abandoned_carts(
         "pages_fetched": pages_fetched,
         "rows_seen": rows_seen,
         "rows_saved": rows_saved,
+        "created": created,
+        "updated": updated,
+        "errors_count": errors_count,
         "stopped_reason": stopped_reason,
         "provider_write_reached": False,
         "pii_stored": False,
@@ -613,10 +654,18 @@ async def ensure_abandoned_cart_indexes(db: Any) -> None:
         [("user_id", 1), ("cart_updated_at", -1)],
         name="salla_abandoned_cart_user_updated",
     )
+    await getattr(db, ABANDONED_CART_COLLECTION).create_index(
+        [("user_id", 1), ("purchased", 1), ("updated_at", -1)],
+        name="salla_abandoned_cart_user_status",
+    )
     await getattr(db, ABANDONED_CART_EVENT_COLLECTION).create_index(
         [("merchant_id", 1), ("cart_id", 1), ("event_hash", 1)],
         unique=True,
         name="salla_abandoned_cart_event_unique",
+    )
+    await getattr(db, ABANDONED_CART_EVENT_COLLECTION).create_index(
+        [("user_id", 1), ("event", 1), ("last_received_at", -1)],
+        name="salla_abandoned_cart_event_user_status",
     )
 
 
