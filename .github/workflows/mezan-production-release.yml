@@ -1,4 +1,4 @@
-name: Mezan Production Release
+name: Mezan Release Readiness
 
 on:
   pull_request:
@@ -13,11 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: mezan-production-release
+  group: mezan-release-readiness
   cancel-in-progress: false
-
-env:
-  PRODUCTION_URL: https://mezansalla.com
 
 jobs:
   backend-preflight:
@@ -51,41 +48,31 @@ jobs:
           CI: "false"
         run: yarn build
 
-  production-availability:
-    name: Production availability after release
+  release-handoff:
+    name: Emergent manual redeploy required
     if: github.event_name == 'push'
     needs:
       - backend-preflight
       - frontend-build
     runs-on: ubuntu-latest
     steps:
-      - name: Allow continuous deployment to start
-        run: sleep 90
-      - name: Wait for backend health
+      - name: Record supported deployment handoff
         shell: bash
         run: |
-          set -euo pipefail
-          for attempt in $(seq 1 30); do
-            http_code="$(curl -sS -o /tmp/mezan-health.json -w '%{http_code}' --max-time 15 "${PRODUCTION_URL}/health" || true)"
-            if [ "$http_code" = "200" ] && python - <<'PY'
-          import json
-          from pathlib import Path
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Mezan release is CI-ready, not deployed
 
-          try:
-              payload = json.loads(Path('/tmp/mezan-health.json').read_text())
-          except Exception:
-              raise SystemExit(1)
+          Emergent does not pull, sync, webhook, or auto-redeploy this existing project from GitHub.
 
-          raise SystemExit(0 if payload.get('ok') is True and payload.get('service') == 'backend' else 1)
-          PY
-            then
-              echo "Mezan backend health check passed."
-              exit 0
-            fi
-            echo "Health attempt ${attempt}/30 not ready (HTTP ${http_code})."
-            sleep 20
-          done
-          echo "Mezan backend did not become healthy within the release window."
-          exit 1
-      - name: Verify public app responds
-        run: curl --fail --silent --show-error --location --max-time 20 "${PRODUCTION_URL}/" -o /dev/null
+          A merge to `hotfix/prod-snap-meta-final` **does not update Preview or Production**.
+
+          Supported production path:
+          1. Apply the reviewed changes in the existing Emergent Preview environment.
+          2. Verify Preview.
+          3. In the same project open **Manage Publishing / Redeploy**.
+          4. Choose **Overview → Re-deploy changes**.
+          5. Keep the existing deployment; do not replace the database, domain, or unchanged secrets.
+
+          GitHub is the review/CI/audit source. Emergent Preview is the deployment source for this project.
+          EOF
+          echo "::notice title=Emergent redeploy required::CI passed. GitHub cannot deploy this existing Emergent project. Apply the reviewed change to Preview, verify it, then use Manage Publishing > Re-deploy changes."
