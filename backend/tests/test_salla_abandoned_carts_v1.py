@@ -692,6 +692,49 @@ async def test_v2_older_event_cannot_overwrite_newer_customer_profile():
 
 
 @pytest.mark.asyncio
+async def test_v2_older_event_adds_missing_memory_without_replacing_newer_cart():
+    db = FakeDB()
+    db.collections[module.ABANDONED_CART_COLLECTION].documents.append(
+        {
+            "merchant_id": "123",
+            "cart_id": "cart-1",
+            "user_id": "owner-1",
+            "schema_version": 1,
+            "purchased": False,
+            "status": "newer-status",
+            "total": 999.0,
+            "cart_updated_at": "2026-08-09T11:00:00+00:00",
+        }
+    )
+    older = _cart_event(updated_at="2026-08-09T10:00:00Z")
+    older["data"]["customer"]["id"] = "salla-customer-1"
+    older["data"]["urls"] = {
+        "checkout": "https://example.test/recover/private-token"
+    }
+
+    result = await module.persist_abandoned_cart_event(
+        db,
+        older,
+        user_id="owner-1",
+    )
+
+    snapshot = db.collections[module.ABANDONED_CART_COLLECTION].documents[0]
+    identity = db.collections[
+        customer_identity.CUSTOMER_IDENTITY_COLLECTION
+    ].documents[0]
+    assert result["ignored_out_of_order"] is True
+    assert snapshot["status"] == "newer-status"
+    assert snapshot["total"] == 999.0
+    assert snapshot["cart_updated_at"] == "2026-08-09T11:00:00+00:00"
+    assert snapshot["schema_version"] == 2
+    assert snapshot["customer_identity_id"] == identity["customer_identity_id"]
+    assert snapshot["private_cart_context_encrypted"] is True
+    assert snapshot["attribution"]["campaign_id"] == "campaign-1"
+    assert identity["last_cart_id"] == "cart-1"
+    assert "private-token" not in repr(snapshot)
+
+
+@pytest.mark.asyncio
 async def test_v2_links_the_customer_previous_orders_without_overwriting_history():
     db = FakeDB()
     for order_number in ("order-old-1", "order-old-2"):
