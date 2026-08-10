@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
     ArrowClockwise,
     CheckCircle,
@@ -19,6 +18,7 @@ import { toast } from "sonner";
 
 import {
     assignEmployeesV2PilotRole,
+    createAndLinkEmployeesV2PilotAccount,
     createEmployeesV2Pilot,
     getEmployeesV2Management,
     getEmployeesV2PilotEvents,
@@ -63,6 +63,12 @@ const ROLE_FALLBACK_LABELS = {
 
 
 function errorCode(error) {
+    if (error?.employeeV2CreatedAccount) {
+        return "تم إنشاء حساب الدخول، لكن تعذر ربطه تلقائيًا. اضغط تحديث ثم اختر الحساب الجديد لإكمال الربط.";
+    }
+    if (error?.code === "employee_v2_viewer_permissions_unavailable") {
+        return "تعذر التحقق من تصفير صلاحيات الحساب الجديد؛ لم يُنشأ الحساب حفاظًا على الأمان.";
+    }
     const detail = error?.response?.data?.detail;
     const code = typeof detail === "string" ? detail : detail?.code;
     const messages = {
@@ -158,9 +164,17 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
 }
 
 
-function AccountLinkModal({ employee, candidates, busy, onClose, onLink, onUnlink }) {
+function AccountLinkModal({ employee, candidates, busy, onClose, onLink, onCreateAndLink, onUnlink }) {
     const [selected, setSelected] = useState(candidates?.[0]?.id || "");
+    const [creating, setCreating] = useState(!candidates?.length);
+    const [account, setAccount] = useState({
+        name: employee.name || "",
+        email: employee.contact_email || "",
+        password: "",
+    });
     const linked = Boolean(employee.account?.user_id);
+    const setAccountField = (key, value) => setAccount((current) => ({ ...current, [key]: value }));
+    const inputClass = "mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-violet-500";
     return (
         <ModalShell title="حساب الدخول" onClose={onClose} busy={busy} testId="employees-v2-account-dialog">
             <div className="p-5">
@@ -170,17 +184,36 @@ function AccountLinkModal({ employee, candidates, busy, onClose, onLink, onUnlin
                         <p className="mt-3 text-xs leading-6 text-slate-500">الفصل يعطّل الدور الذي أنشأته هذه التجربة، ولا يحذف حساب الدخول.</p>
                         <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={onUnlink} disabled={busy} data-testid="employees-v2-unlink-account" className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الفصل…" : "فصل الحساب"}</button></div>
                     </>
-                ) : candidates?.length ? (
+                ) : candidates?.length && !creating ? (
                     <>
                         <p className="mb-3 text-sm leading-7 text-slate-600">اختر حسابًا تجريبيًا غير مرتبط ولا يحمل صلاحيات سابقة. الحسابات المحجوزة لمراجعة الموظفين المرحّلين لا تظهر هنا.</p>
                         <label className="text-xs font-bold text-slate-600">الحساب<select value={selected} onChange={(event) => setSelected(event.target.value)} className="mt-1 h-12 w-full rounded-xl border px-3 text-sm" data-testid="employees-v2-account-select">{candidates.map((account) => <option key={account.id} value={account.id}>{account.name || "حساب"} — {account.email}</option>)}</select></label>
+                        <button type="button" onClick={() => setCreating(true)} disabled={busy} className="mt-3 text-xs font-black text-violet-700 underline">إنشاء حساب دخول جديد بدلًا من ذلك</button>
                         <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onLink(selected)} disabled={busy || !selected} data-testid="employees-v2-link-account" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الربط…" : "ربط الحساب"}</button></div>
                     </>
                 ) : (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-950">
-                        <p><WarningCircle className="ml-1 inline" /> لا يوجد حساب آمن متاح للتجربة. أنشئ حساب Viewer جديدًا بلا صلاحيات ثم عد إلى هنا واضغط تحديث.</p>
-                        <Link to="/team" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white"><UserPlus size={18} /> فتح إدارة الفريق وإنشاء حساب</Link>
-                    </div>
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (!account.name.trim()) return toast.error("اسم حساب الدخول مطلوب");
+                            if (!account.email.trim()) return toast.error("البريد الإلكتروني مطلوب");
+                            if (account.password.length < 6) return toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+                            onCreateAndLink({
+                                name: account.name.trim(),
+                                email: account.email.trim(),
+                                password: account.password,
+                            });
+                        }}
+                    >
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-6 text-emerald-950"><ShieldCheck className="ml-1 inline" /> سيُنشأ حساب Viewer جديد بصفر صلاحيات قديمة، ثم يُربط بهذا الموظف فقط. تعيين صلاحياته التشغيلية يأتي في الخطوة التالية.</div>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <label className="text-xs font-bold text-slate-600">اسم حساب الدخول *<input value={account.name} onChange={(event) => setAccountField("name", event.target.value)} maxLength={80} className={inputClass} data-testid="employees-v2-account-name" /></label>
+                            <label className="text-xs font-bold text-slate-600">البريد الإلكتروني *<input type="email" value={account.email} onChange={(event) => setAccountField("email", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-account-email" /></label>
+                            <label className="text-xs font-bold text-slate-600 sm:col-span-2">كلمة مرور مؤقتة *<input type="password" value={account.password} onChange={(event) => setAccountField("password", event.target.value)} minLength={6} className={inputClass} dir="ltr" autoComplete="new-password" data-testid="employees-v2-account-password" /></label>
+                        </div>
+                        {candidates?.length > 0 && <button type="button" onClick={() => setCreating(false)} disabled={busy} className="mt-3 text-xs font-black text-violet-700 underline">العودة لاختيار حساب متاح</button>}
+                        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="submit" disabled={busy} data-testid="employees-v2-create-link-account" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الإنشاء والربط…" : "إنشاء الحساب وربطه"}</button></div>
+                    </form>
                 )}
             </div>
         </ModalShell>
@@ -326,7 +359,7 @@ export default function EmployeesV2ManagementPilot() {
             {!loading && !employee && <section className="rounded-3xl border border-dashed border-emerald-300 bg-white p-10 text-center"><UserPlus className="mx-auto text-emerald-700" size={42} weight="duotone" /><h2 className="mt-3 text-xl font-black">ابدأ بموظف تجريبي واحد</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">اختبر الإنشاء والتعديل وربط الحساب والدور والسجل من البداية للنهاية. بعد نجاح المعايير نفتح نفس الواجهة للـ15 موظفًا.</p></section>}
 
             {modal?.type === "form" && <EmployeeFormModal employee={modal.employee} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => modal.employee ? updateEmployeesV2Pilot(modal.employee.id, payload) : createEmployeesV2Pilot(payload), modal.employee ? "تم تحديث الموظف التجريبي" : "تم إنشاء الموظف التجريبي دون تفعيل مالي")} />}
-            {modal?.type === "account" && employee && <AccountLinkModal employee={employee} candidates={management.login_account_candidates || []} busy={busy} onClose={() => setModal(null)} onLink={(accountId) => mutate(() => linkEmployeesV2PilotAccount(employee.id, accountId), "تم ربط حساب الدخول بنطاق التجربة")} onUnlink={() => mutate(() => unlinkEmployeesV2PilotAccount(employee.id), "تم فصل الحساب وتعطيل دوره التجريبي")} />}
+            {modal?.type === "account" && employee && <AccountLinkModal employee={employee} candidates={management.login_account_candidates || []} busy={busy} onClose={() => setModal(null)} onLink={(accountId) => mutate(() => linkEmployeesV2PilotAccount(employee.id, accountId), "تم ربط حساب الدخول بنطاق التجربة")} onCreateAndLink={(payload) => mutate(() => createAndLinkEmployeesV2PilotAccount(employee.id, payload), "تم إنشاء حساب الدخول وربطه بالموظف التجريبي")} onUnlink={() => mutate(() => unlinkEmployeesV2PilotAccount(employee.id), "تم فصل الحساب وتعطيل دوره التجريبي")} />}
             {modal?.type === "role" && employee && <RoleModal employee={employee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2PilotRole(employee.id, payload), "تم حفظ الدور والصلاحيات للموظف التجريبي")} />}
             {modal?.type === "events" && <EventsModal items={events.items} loading={events.loading} onClose={() => setModal(null)} />}
         </div>

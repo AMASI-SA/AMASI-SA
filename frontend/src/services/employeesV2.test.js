@@ -2,6 +2,7 @@ import api from "../lib/api";
 import {
     assignEmployeesV2PilotRole,
     applyEmployeesV2ShadowMigration,
+    createAndLinkEmployeesV2PilotAccount,
     createEmployeesV2Pilot,
     EMPLOYEE_PILOT_ACCOUNT_LINK_CONFIRMATION,
     EMPLOYEE_PILOT_ACCOUNT_UNLINK_CONFIRMATION,
@@ -97,4 +98,54 @@ test("shadow migration uses the exact guarded confirmation contract", async () =
     expect(api.post).toHaveBeenCalledWith("/employees-v2/migration/apply-shadow", {
         confirmation: "MIGRATE_EMPLOYEES_V2_SHADOW",
     });
+});
+
+test("creates a pilot login with zero legacy viewer access before linking it", async () => {
+    api.get.mockResolvedValueOnce({
+        data: {
+            role_defaults: {
+                viewer: ["dashboard.view", "orders.view"],
+            },
+        },
+    });
+    api.post.mockResolvedValueOnce({
+        data: { id: "safe-account-1", name: "تركي صادق", email: "turki@example.com" },
+    });
+    api.put.mockResolvedValueOnce({ data: { ok: true, management: { employees: [] } } });
+
+    await createAndLinkEmployeesV2PilotAccount("pilot/1", {
+        name: "تركي صادق",
+        email: "turki@example.com",
+        password: "Pilot123!",
+    });
+
+    expect(api.get).toHaveBeenCalledWith("/auth/permissions/catalogue");
+    expect(api.post).toHaveBeenCalledWith("/team/users", {
+        name: "تركي صادق",
+        email: "turki@example.com",
+        password: "Pilot123!",
+        role: "viewer",
+        extra_permissions: [],
+        denied_permissions: ["dashboard.view", "orders.view"],
+    });
+    expect(api.put).toHaveBeenCalledWith(
+        "/employees-v2/management/pilot/pilot%2F1/account",
+        {
+            account_user_id: "safe-account-1",
+            confirmation: "LINK_EMPLOYEE_V2_PILOT_ACCOUNT",
+        },
+    );
+});
+
+test("fails closed before account creation when viewer defaults cannot be verified", async () => {
+    api.get.mockResolvedValueOnce({ data: { role_defaults: {} } });
+
+    await expect(createAndLinkEmployeesV2PilotAccount("pilot-1", {
+        name: "تركي صادق",
+        email: "turki@example.com",
+        password: "Pilot123!",
+    })).rejects.toMatchObject({ code: "employee_v2_viewer_permissions_unavailable" });
+
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
 });
