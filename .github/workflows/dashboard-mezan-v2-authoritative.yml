@@ -24,7 +24,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install focused backend dependencies
-        run: pip install pytest fastapi "pydantic>=2" httpx openpyxl
+        run: >-
+          pip install pytest fastapi "pydantic>=2" httpx openpyxl
+          bcrypt PyJWT cryptography pymongo==4.5.0 reportlab
       - name: Compile Dashboard V2 routes
         working-directory: backend
         run: |

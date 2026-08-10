@@ -711,6 +711,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                     onOpenAdSquads={openCampaignAdSquads}
                     onOpenAds={openAdSquadAds}
                     onClearHierarchy={clearEntityHierarchy}
+                    onManagementChanged={refreshReports}
                 />
             )}
 
@@ -742,9 +743,13 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             <ShieldCheck size={22} weight="fill" />
                             <span className="font-black">حوكمة التنفيذ</span>
                         </div>
-                        <h2 className="mt-4 text-xl font-black">الذكاء يحلل الآن، ولا ينفذ بعد</h2>
+                        <h2 className="mt-4 text-xl font-black">
+                            {platform === "snapchat" ? "الذكاء يحلل، والتنفيذ اليدوي محكوم" : "الذكاء يحلل الآن، ولا ينفذ بعد"}
+                        </h2>
                         <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
-                            إنشاء الحملات وتعديل الميزانية والإيقاف والاستئناف تبقى مقفلة حتى اكتمال دورة آمنة يمكن مراجعتها والتراجع عنها.
+                            {platform === "snapchat"
+                                ? "يمكن لمالك الحساب تنفيذ إنشاء أو تعديل أو إيقاف من لوحة الإدارة بعد معاينة واعتماد صريح، مع تحقق وسجل وتراجع. لا ينفذ الذكاء أي تغيير تلقائيًا."
+                                : "إنشاء الحملات وتعديل الميزانية والإيقاف والاستئناف تبقى مقفلة حتى اكتمال دورة آمنة يمكن مراجعتها والتراجع عنها."}
                         </p>
                         <div className="mt-5 space-y-2">
                             {(data?.ai_readiness?.required_lifecycle || []).map((step, index) => (
