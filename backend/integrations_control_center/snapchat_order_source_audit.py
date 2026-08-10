@@ -11,7 +11,6 @@ from datetime import date, timedelta
 from typing import Any, Callable
 
 from auth import ensure_user_settings
-from dashboard_v2_routes import _matches_any
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     meaningful_source_label,
@@ -76,6 +75,22 @@ AUDIT_ORDER_PROJECTION = {
 
 def _norm(value: Any) -> str:
     return " ".join(str(value or "").strip().casefold().replace("_", " ").split())
+
+
+def _matches_any(value: str, allowed: list[str]) -> bool:
+    """Match configured statuses without importing the Dashboard route graph."""
+    if not allowed:
+        return True
+    normalized = str(value or "").strip().casefold()
+    return any(
+        candidate
+        and (
+            candidate == normalized
+            or candidate in normalized
+            or normalized in candidate
+        )
+        for candidate in (str(item).strip().casefold() for item in allowed)
+    )
 
 
 def _first_text(order: dict[str, Any], fields: tuple[str, ...]) -> str:
