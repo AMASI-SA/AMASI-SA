@@ -1,25 +1,14 @@
 """Privileged MFA enforcement for Mezan Owner/Admin sign-in.
 
-This module deliberately sits around the existing password login route instead
-of rewriting the legacy auth controller.  The password endpoint still performs
-its normal bcrypt verification; when it succeeds for an Owner/Admin this guard
-suppresses the password-only session cookies and returns a short-lived MFA
-challenge instead.
+The existing FastAPI password route remains the password authority. This ASGI
+layer observes a successful password response for Owner/Admin and replaces it
+with a short-lived MFA flow, so password-only privileged cookies/tokens never
+reach the client.
 
-Security properties
--------------------
-* Owner/Admin cannot obtain a usable access token without MFA (`auth.py` also
-  rejects privileged access tokens that do not carry `mfa=true`).
-* First privileged login enrolls RFC 6238 TOTP before a session is issued.
-* Existing enrolled users verify a 6-digit authenticator code or a one-time
-  recovery code.
-* TOTP secrets are encrypted at rest with Fernet using MFA_ENCRYPTION_KEY when
-  configured, otherwise a domain-separated key derived from JWT_SECRET.
-* Challenge JWTs live for five minutes, are backed by a one-time Mongo record,
-  and are invalidated after five wrong MFA codes.
-* TOTP counters cannot be reused, preventing replay inside the normal 30-second
-  validity window.
-* Recovery codes are stored only as keyed HMAC digests and are consumed once.
+First enrollment additionally requires MFA_BOOTSTRAP_CODE. The bootstrap secret
+is an out-of-band deployment secret and is never stored in MongoDB. This closes
+the first-enrollment takeover gap: possession of the account password alone is
+not sufficient to register an attacker's authenticator.
 """
 from __future__ import annotations
 
@@ -49,6 +38,7 @@ LOGIN_PATH = "/api/auth/login"
 VERIFY_PATH = "/api/auth/mfa/verify"
 PRIVILEGED_ROLES = {"owner", "admin"}
 JWT_ALGORITHM = "HS256"
+MIN_BOOTSTRAP_LENGTH = 12
 
 
 def _now() -> datetime:
@@ -82,27 +72,58 @@ def _jwt_secret() -> str:
     return value
 
 
-def _encryption_material() -> bytes:
+def _bootstrap_secret() -> str | None:
+    value = (os.environ.get("MFA_BOOTSTRAP_CODE") or "").strip()
+    if len(value) < MIN_BOOTSTRAP_LENGTH:
+        return None
+    return value
+
+
+def _bootstrap_matches(value: str | None) -> bool:
+    expected = _bootstrap_secret()
+    provided = (value or "").strip()
+    if not expected or not provided:
+        return False
+    return hmac.compare_digest(expected, provided)
+
+
+def _derive_fernet(source: str) -> Fernet:
+    material = hashlib.sha256(("mezan:mfa:fernet:v1:" + source).encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(material))
+
+
+def _primary_fernet() -> Fernet:
     explicit = (os.environ.get("MFA_ENCRYPTION_KEY") or "").strip()
-    source = explicit or _jwt_secret()
-    return hashlib.sha256(("mezan:mfa:fernet:v1:" + source).encode("utf-8")).digest()
-
-
-def _fernet() -> Fernet:
-    return Fernet(base64.urlsafe_b64encode(_encryption_material()))
+    return _derive_fernet(explicit or _jwt_secret())
 
 
 def encrypt_totp_secret(secret: str) -> str:
-    return _fernet().encrypt(secret.encode("ascii")).decode("ascii")
+    return _primary_fernet().encrypt(secret.encode("ascii")).decode("ascii")
 
 
 def decrypt_totp_secret(ciphertext: str | None) -> str | None:
     if not ciphertext:
         return None
-    try:
-        return _fernet().decrypt(ciphertext.encode("ascii")).decode("ascii")
-    except (InvalidToken, ValueError, UnicodeError):
-        return None
+
+    # If operators later introduce MFA_ENCRYPTION_KEY, try it first but retain
+    # the previous JWT-derived key as a migration fallback. That lets existing
+    # enrollments survive the transition to an independent encryption secret.
+    sources: list[str] = []
+    explicit = (os.environ.get("MFA_ENCRYPTION_KEY") or "").strip()
+    if explicit:
+        sources.append(explicit)
+    sources.append(_jwt_secret())
+
+    seen: set[str] = set()
+    for source in sources:
+        if source in seen:
+            continue
+        seen.add(source)
+        try:
+            return _derive_fernet(source).decrypt(ciphertext.encode("ascii")).decode("ascii")
+        except (InvalidToken, ValueError, UnicodeError):
+            continue
+    return None
 
 
 def generate_totp_secret() -> str:
@@ -174,7 +195,7 @@ def recovery_code_digest(value: str) -> str:
 
 
 def generate_recovery_codes(count: int = 8) -> list[str]:
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I ambiguity
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # avoid 0/O and 1/I ambiguity
     codes: list[str] = []
     for _ in range(count):
         raw = "".join(secrets.choice(alphabet) for _ in range(12))
@@ -215,8 +236,7 @@ class MfaChallengeStore:
     async def ensure_indexes(self) -> None:
         await self.challenges.create_index("jti", unique=True)
         await self.challenges.create_index("expires_at", expireAfterSeconds=0)
-        # login_security already creates the event TTL index; these calls are
-        # idempotent and keep MFA safe if the module is exercised independently.
+        # login_security creates the same event indexes; these are idempotent.
         await self.events.create_index([("created_at", -1)])
         await self.events.create_index("expires_at", expireAfterSeconds=0)
 
@@ -231,6 +251,14 @@ class MfaChallengeStore:
         }
         doc.update(extra)
         await self.events.insert_one(doc)
+
+    async def safe_event(self, event_type: str, user: dict, **extra: Any) -> None:
+        try:
+            await self.event(event_type, user, **extra)
+        except Exception:
+            # Audit storage degradation must be loud but cannot strand a user
+            # after a cryptographically successful MFA verification.
+            logger.exception("MFA security event write failed: %s", event_type)
 
     async def create(self, *, user: dict, purpose: str) -> str:
         now = _now()
@@ -345,7 +373,8 @@ def _session_response(user: dict, *, recovery_codes: list[str] | None = None) ->
         "name": user.get("name"),
         "email": user.get("email"),
         "role": user.get("role"),
-        # Kept for API-client compatibility; browser AuthContext never stores it.
+        # Kept for non-browser API-client compatibility. Browser AuthContext
+        # never persists this token and authenticates with HttpOnly cookies.
         "access_token": access,
     }
     if recovery_codes:
@@ -389,6 +418,8 @@ class MfaSecurityMiddleware:
         async def capture_send(message: dict[str, Any]):
             captured.append(dict(message))
 
+        # First let the existing route prove the password. Until it returns 200
+        # we do not reveal role/MFA state and we do not inspect bootstrap input.
         await self.app(scope, _replay_receive(request_messages), capture_send)
         if _response_status(captured) != 200:
             await _send_messages(captured, send)
@@ -403,7 +434,7 @@ class MfaSecurityMiddleware:
         try:
             if bool(user.get("mfa_enabled")):
                 challenge = await self.store.create(user=user, purpose="login")
-                await self.store.event("mfa_challenge_issued", user, purpose="login")
+                await self.store.safe_event("mfa_challenge_issued", user, purpose="login")
                 response = JSONResponse(
                     {
                         "mfa_required": True,
@@ -413,34 +444,65 @@ class MfaSecurityMiddleware:
                     status_code=202,
                 )
             else:
-                secret = generate_totp_secret()
-                encrypted = encrypt_totp_secret(secret)
-                now = _now()
-                await self.db.users.update_one(
-                    {"id": user["id"]},
-                    {
-                        "$set": {
-                            "mfa_pending_secret_enc": encrypted,
-                            "mfa_pending_created_at": now,
-                        }
-                    },
-                )
-                challenge = await self.store.create(user=user, purpose="setup")
-                await self.store.event("mfa_enrollment_started", user)
-                response = JSONResponse(
-                    {
-                        "mfa_setup_required": True,
-                        "challenge_token": challenge,
-                        "setup_secret": secret,
-                        "otpauth_uri": provisioning_uri(user.get("email") or email, secret),
-                        "message": "يلزم تفعيل التحقق بخطوتين لهذا الحساب قبل المتابعة.",
-                    },
-                    status_code=202,
-                )
+                expected_bootstrap = _bootstrap_secret()
+                provided_bootstrap = str((payload or {}).get("mfa_bootstrap_code") or "").strip()
 
-            # The legacy login route already created password-only cookies.
-            # Because we replace its response they are not forwarded, and we
-            # explicitly expire any older browser auth cookies as well.
+                if not expected_bootstrap:
+                    response = JSONResponse(
+                        {
+                            "detail": "لم يتم تجهيز رمز التفعيل الأولي للتحقق بخطوتين على الخادم. يلزم ضبط MFA_BOOTSTRAP_CODE أولاً.",
+                            "code": "mfa_bootstrap_not_configured",
+                        },
+                        status_code=503,
+                    )
+                elif not provided_bootstrap:
+                    # Password is correct, but no bootstrap proof was supplied.
+                    # Return a challenge *request*, not the TOTP secret itself.
+                    response = JSONResponse(
+                        {
+                            "mfa_bootstrap_required": True,
+                            "message": "أدخل رمز التفعيل الأولي الخاص بميزان لبدء ربط تطبيق المصادقة.",
+                        },
+                        status_code=202,
+                    )
+                elif not _bootstrap_matches(provided_bootstrap):
+                    # 401 is intentional: the outer login-security middleware
+                    # counts these as failed sign-in attempts, so five wrong
+                    # bootstrap guesses lock the browser device for one hour.
+                    await self.store.safe_event("mfa_bootstrap_failed", user)
+                    response = JSONResponse(
+                        {"detail": "رمز التفعيل الأولي غير صحيح."},
+                        status_code=401,
+                    )
+                else:
+                    secret = generate_totp_secret()
+                    encrypted = encrypt_totp_secret(secret)
+                    now = _now()
+                    await self.db.users.update_one(
+                        {"id": user["id"]},
+                        {
+                            "$set": {
+                                "mfa_pending_secret_enc": encrypted,
+                                "mfa_pending_created_at": now,
+                            }
+                        },
+                    )
+                    challenge = await self.store.create(user=user, purpose="setup")
+                    await self.store.safe_event("mfa_enrollment_started", user)
+                    response = JSONResponse(
+                        {
+                            "mfa_setup_required": True,
+                            "challenge_token": challenge,
+                            "setup_secret": secret,
+                            "otpauth_uri": provisioning_uri(user.get("email") or email, secret),
+                            "message": "يلزم تفعيل التحقق بخطوتين لهذا الحساب قبل المتابعة.",
+                        },
+                        status_code=202,
+                    )
+
+            # The legacy login route already built password-only auth cookies,
+            # but its captured response is discarded for privileged accounts.
+            # Explicit deletion also removes any older privileged session.
             _clear_auth_on_response(response)
             await response(scope, _replay_receive(request_messages), send)
         except Exception:
@@ -503,6 +565,7 @@ class MfaSecurityMiddleware:
                 )
                 await response(scope, _replay_receive(request_messages), send)
                 return
+
             pending = user.get("mfa_pending_secret_enc")
             secret = decrypt_totp_secret(pending)
             matched_counter = match_totp_counter(secret or "", code) if secret else None
@@ -536,23 +599,17 @@ class MfaSecurityMiddleware:
                 secret = decrypt_totp_secret(user.get("mfa_totp_secret_enc"))
                 matched_counter = match_totp_counter(secret or "", code) if secret else None
                 if matched_counter is not None:
-                    last_counter = user.get("mfa_last_totp_counter")
                     # One 30-second code may authorize only one session. Atomic
                     # compare/update closes concurrent replay races.
                     counter_filter: dict[str, Any] = {
                         "id": user["id"],
                         "mfa_enabled": True,
                         "$or": [
-                            {"mfa_last_totp_counter": {"$lt": matched_counter}},
-                            {"mfa_last_totp_counter": {"$exists": False}},
-                        ],
-                    }
-                    if last_counter is None:
-                        counter_filter["$or"] = [
                             {"mfa_last_totp_counter": None},
                             {"mfa_last_totp_counter": {"$exists": False}},
                             {"mfa_last_totp_counter": {"$lt": matched_counter}},
-                        ]
+                        ],
+                    }
                     result = await self.db.users.update_one(
                         counter_filter,
                         {"$set": {"mfa_last_totp_counter": matched_counter}},
@@ -575,7 +632,7 @@ class MfaSecurityMiddleware:
 
         if not ok:
             remaining = await self.store.fail(challenge["jti"])
-            await self.store.event(
+            await self.store.safe_event(
                 "mfa_verification_failed",
                 user,
                 purpose=purpose,
@@ -602,7 +659,7 @@ class MfaSecurityMiddleware:
 
         await self.store.consume(challenge["jti"])
         user = await self.db.users.find_one({"id": user["id"]}) or user
-        await self.store.event(
+        await self.store.safe_event(
             "mfa_enabled" if purpose == "setup" else "mfa_login_succeeded",
             user,
             recovery_code_used=recovery_used,
@@ -622,8 +679,9 @@ async def install_mfa_security(app, db) -> None:
     app.middleware_stack = app.build_middleware_stack()
     app.state.mezan_mfa_security_installed = True
     logger.info(
-        "Mezan privileged MFA enabled: roles=%s challenge=%ss attempts=%s",
+        "Mezan privileged MFA enabled: roles=%s challenge=%ss attempts=%s bootstrap=%s",
         ",".join(sorted(PRIVILEGED_ROLES)),
         _challenge_seconds(),
         _max_attempts(),
+        "configured" if _bootstrap_secret() else "missing",
     )
