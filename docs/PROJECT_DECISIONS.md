@@ -524,3 +524,40 @@ The pilot boundary is mandatory:
 Opening writes for the 15 migrated employees requires a separate acceptance
 decision after the pilot passes create/edit/link/role/unlink/audit checks and
 financial invariants remain unchanged.
+
+---
+
+## Decision-031 — Live Customer Memory Ingestion Is Encrypted and Read-Only
+
+Status: Approved, Abandoned Carts V2 foundation
+
+Mezan may ingest live Salla abandoned-cart and customer identity evidence into
+a dedicated tenant-scoped memory before Customer Intelligence exits its
+synthetic preview, provided that the ingestion boundary remains read-only and
+does not activate any customer or advertising action.
+
+The mandatory boundary is:
+
+- Customer name, email, mobile and address fields are encrypted at rest and
+  never copied into analytics snapshots, event audit records, logs or public
+  status responses as plaintext.
+- Customer lookup aliases are keyed HMAC digests; provider customer IDs are
+  provider-scoped, while contact aliases may join future channels to the same
+  identity inside the same tenant and merchant only.
+- Cart recovery URLs and coupon codes are encrypted. Public cart records expose
+  only presence and coverage facts.
+- Existing abandoned-cart collections are upgraded in place to schema V2 so
+  historical carts are not split or discarded.
+- First-touch and last-touch attribution are both preserved. Platform,
+  account, campaign, ad-group, ad, creative, click and UTM identifiers are
+  stored only when supplied by verified cart/order evidence; missing evidence
+  is not inferred.
+- A converted cart may recover attribution from its linked authoritative order.
+- Customer identity links added to `unified_orders` are additive metadata only.
+  They never change order state, totals, payment, shipment, accounting or
+  product facts, and an existing identity link is never overwritten silently.
+- Historical imports remain idempotent, retry bounded and read-only toward
+  Salla. Encryption configuration fails closed rather than storing plaintext.
+- The Customer Intelligence UI remains synthetic under Decision-028. Live PII
+  decryption, messaging, discounts, order creation, campaign mutation and AI
+  execution require later owner-only APIs, approvals, audit and rollback gates.

@@ -4,18 +4,45 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 
+import customer_identity
 from salla_integration import abandoned_carts as module
 from salla_integration import webhook_event_capture as webhook_capture
 from salla_integration.webhook_event_capture import _sanitize
 from salla_integration.webhook_monitor_routes import APPROVED_EVENTS
 
 
+def _get_path(document, path):
+    value = document
+    for part in str(path).split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None, False
+        value = value[part]
+    return value, True
+
+
 def _matches(document, selector):
     for key, expected in selector.items():
-        actual = document.get(key)
-        if isinstance(expected, dict) and "$in" in expected:
-            if actual not in expected["$in"]:
+        if key == "$or":
+            if not any(_matches(document, part) for part in expected):
+                return False
+            continue
+        if key == "$and":
+            if not all(_matches(document, part) for part in expected):
+                return False
+            continue
+        actual, exists = _get_path(document, key)
+        if isinstance(expected, dict):
+            if "$in" in expected:
+                if isinstance(actual, list):
+                    if not set(actual).intersection(expected["$in"]):
+                        return False
+                elif actual not in expected["$in"]:
+                    return False
+            if "$exists" in expected and bool(expected["$exists"]) != exists:
+                return False
+            if "$ne" in expected and actual == expected["$ne"]:
                 return False
         elif actual != expected:
             return False
@@ -35,6 +62,15 @@ class FakeCollection:
             return None
         if not projection:
             return deepcopy(document)
+        included = [
+            key for key, enabled in projection.items() if key != "_id" and enabled
+        ]
+        if not included:
+            return {
+                key: deepcopy(value)
+                for key, value in document.items()
+                if key != "_id"
+            }
         return {
             key: deepcopy(value)
             for key, value in document.items()
@@ -60,9 +96,23 @@ class FakeCollection:
             document[key] = document.get(key, 0) + value
         for key, value in update.get("$addToSet", {}).items():
             values = document.setdefault(key, [])
-            if value not in values:
-                values.append(deepcopy(value))
+            candidates = value.get("$each", []) if isinstance(value, dict) else [value]
+            for candidate in candidates:
+                if candidate not in values:
+                    values.append(deepcopy(candidate))
         return SimpleNamespace(upserted_id="created" if inserted else None)
+
+    async def update_many(self, selector, update):
+        modified = 0
+        for document in self.documents:
+            if not _matches(document, selector):
+                continue
+            before = deepcopy(document)
+            for key, value in update.get("$set", {}).items():
+                document[key] = deepcopy(value)
+            if document != before:
+                modified += 1
+        return SimpleNamespace(modified_count=modified)
 
     async def create_index(self, *args, **kwargs):
         return kwargs.get("name")
@@ -74,10 +124,25 @@ class FakeDB:
             "salla_integrations": FakeCollection(integrations),
             module.ABANDONED_CART_COLLECTION: FakeCollection(),
             module.ABANDONED_CART_EVENT_COLLECTION: FakeCollection(),
+            customer_identity.CUSTOMER_IDENTITY_COLLECTION: FakeCollection(),
+            "unified_orders": FakeCollection(),
         }
 
     def __getattr__(self, name):
         return self.collections.setdefault(name, FakeCollection())
+
+
+@pytest.fixture(autouse=True)
+def _customer_encryption_key(monkeypatch):
+    monkeypatch.setenv(
+        "MEZAN_CUSTOMER_PII_ENC_KEY",
+        Fernet.generate_key().decode("utf-8"),
+    )
+    monkeypatch.delenv("MEZAN_CUSTOMER_PII_ENC_KEY_OLD", raising=False)
+    monkeypatch.delenv("MEZAN_CUSTOMER_IDENTITY_HMAC_KEY", raising=False)
+    customer_identity._fernet = None
+    yield
+    customer_identity._fernet = None
 
 
 def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
@@ -99,6 +164,10 @@ def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
             "metadata": {
                 "utm_source": "snapchat",
                 "campaign_id": "campaign-1",
+                "ad_account_id": "account-1",
+                "ad_squad_id": "ad-group-1",
+                "ad_id": "ad-1",
+                "creative_id": "creative-1",
                 "sc_click_id": "click-1",
                 "email": "nested@example.test",
             },
@@ -109,6 +178,14 @@ def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
                     "name": "Product 88",
                     "quantity": 2,
                     "price": {"amount": 62.75, "currency": "SAR"},
+                    "options": [
+                        {
+                            "option_id": "size",
+                            "name": "المقاس",
+                            "value_id": "12",
+                            "value": "12 سنة",
+                        }
+                    ],
                 }
             ],
         },
@@ -123,10 +200,24 @@ def test_normalizer_keeps_analytics_fields_without_customer_pii():
     assert record["total"] == 125.5
     assert record["items"][0]["product_id"] == "88"
     assert record["attribution"] == {
+        "platform": "snapchat",
+        "account_id": "account-1",
         "utm_source": "snapchat",
         "campaign_id": "campaign-1",
+        "ad_group_id": "ad-group-1",
+        "ad_id": "ad-1",
+        "creative_id": "creative-1",
         "click_id": "click-1",
     }
+    assert record["schema_version"] == 2
+    assert record["items"][0]["options"] == [
+        {
+            "option_id": "size",
+            "name": "المقاس",
+            "value_id": "12",
+            "value": "12 سنة",
+        }
+    ]
     assert record["pii_stored"] is False
     serialized = repr(record)
     assert "Private Buyer" not in serialized
@@ -142,6 +233,27 @@ def test_cart_token_is_never_used_as_persisted_identity():
     payload["data"]["token"] = "private-cart-token"
 
     assert module.normalize_abandoned_cart_event(payload) is None
+
+
+def test_customer_contact_aliases_can_link_future_channels_without_plaintext():
+    salla_keys = customer_identity.build_identity_keys(
+        user_id="owner-1",
+        merchant_id="123",
+        source_system="salla",
+        external_customer_id="salla-customer-1",
+        mobile="050 000 0000",
+    )
+    whatsapp_keys = customer_identity.build_identity_keys(
+        user_id="owner-1",
+        merchant_id="123",
+        source_system="whatsapp",
+        external_customer_id="whatsapp-contact-1",
+        mobile="966500000000",
+    )
+
+    assert salla_keys[0] != whatsapp_keys[0]
+    assert salla_keys[1] == whatsapp_keys[1]
+    assert "966500000000" not in repr(salla_keys + whatsapp_keys)
 
 
 def test_all_four_salla_cart_events_are_ingested_and_monitored():
@@ -210,6 +322,27 @@ async def test_cart_without_tenant_owner_is_not_persisted():
     assert result["reason"] == "owner_not_found"
     assert db.collections[module.ABANDONED_CART_COLLECTION].documents == []
     assert db.collections[module.ABANDONED_CART_EVENT_COLLECTION].documents == []
+
+
+@pytest.mark.asyncio
+async def test_v2_fails_closed_when_private_encryption_key_is_missing(monkeypatch):
+    db = FakeDB()
+    monkeypatch.delenv("MEZAN_CUSTOMER_PII_ENC_KEY", raising=False)
+    monkeypatch.delenv("SALLA_TOKEN_ENC_KEY", raising=False)
+    customer_identity._fernet = None
+
+    with pytest.raises(RuntimeError, match="must be configured"):
+        await module.persist_abandoned_cart_event(
+            db,
+            _cart_event(),
+            user_id="owner-1",
+        )
+
+    assert db.collections[module.ABANDONED_CART_COLLECTION].documents == []
+    assert db.collections[module.ABANDONED_CART_EVENT_COLLECTION].documents == []
+    assert db.collections[
+        customer_identity.CUSTOMER_IDENTITY_COLLECTION
+    ].documents == []
 
 
 @pytest.mark.asyncio
@@ -335,6 +468,11 @@ async def test_backfill_reads_pages_sequentially_and_marks_api_provenance():
         "created": 2,
         "updated": 0,
         "errors_count": 0,
+        "identity_linked": 2,
+        "attributed": 2,
+        "order_linked": 0,
+        "private_context_encrypted": 0,
+        "customer_orders_linked": 0,
     }
     assert result["provider_write_reached"] is False
     snapshots = db.collections[module.ABANDONED_CART_COLLECTION].documents
@@ -415,3 +553,182 @@ async def test_purchased_state_cannot_be_downgraded_by_later_or_duplicate_events
     assert snapshot["order_id"] == "order-1"
     assert result["ignored_after_purchase"] is True
     assert result["ignored_out_of_order"] is False
+
+
+@pytest.mark.asyncio
+async def test_v2_encrypts_customer_and_cart_private_context_without_plaintext():
+    db = FakeDB()
+    event = _cart_event()
+    event["data"]["customer"]["id"] = "salla-customer-1"
+    event["data"]["customer"]["shipping_address"] = {
+        "city": "Riyadh",
+        "street": "Private street 22",
+    }
+    event["data"]["urls"] = {
+        "checkout": "https://example.test/recover/private-token"
+    }
+    event["data"]["coupon"] = {"code": "WELCOME-PRIVATE"}
+
+    result = await module.persist_abandoned_cart_event(
+        db,
+        event,
+        user_id="owner-1",
+    )
+
+    assert result["customer_identity_linked"] is True
+    assert result["private_context_encrypted"] is True
+    snapshot = db.collections[module.ABANDONED_CART_COLLECTION].documents[0]
+    identity = db.collections[
+        customer_identity.CUSTOMER_IDENTITY_COLLECTION
+    ].documents[0]
+    rendered = repr({"snapshot": snapshot, "identity": identity})
+    for private_value in (
+        "Private Buyer",
+        "buyer@example.test",
+        "+966500000000",
+        "Private street 22",
+        "private-token",
+        "WELCOME-PRIVATE",
+    ):
+        assert private_value not in rendered
+
+    private_cart = customer_identity.decrypt_private_payload(
+        snapshot["private_cart_ciphertext"]
+    )
+    private_profile = customer_identity.decrypt_private_payload(
+        identity["private_profile_ciphertext"]
+    )
+    assert private_cart == {
+        "coupon_code": "WELCOME-PRIVATE",
+        "recovery_url": "https://example.test/recover/private-token",
+    }
+    assert private_profile["email"] == "buyer@example.test"
+    assert private_profile["shipping_address"]["city"] == "Riyadh"
+    assert snapshot["customer_identity_id"] == identity["customer_identity_id"]
+    assert snapshot["plaintext_pii_stored"] is False
+
+
+@pytest.mark.asyncio
+async def test_v2_preserves_first_touch_and_updates_last_touch():
+    db = FakeDB()
+    await module.persist_abandoned_cart_event(db, _cart_event(), user_id="owner-1")
+
+    later = _cart_event(updated_at="2026-08-09T11:00:00Z")
+    later["data"]["metadata"].update(
+        {
+            "campaign_id": "campaign-2",
+            "ad_squad_id": "ad-group-2",
+            "ad_id": "ad-2",
+            "creative_id": "creative-2",
+        }
+    )
+    await module.persist_abandoned_cart_event(db, later, user_id="owner-1")
+
+    snapshot = db.collections[module.ABANDONED_CART_COLLECTION].documents[0]
+    assert snapshot["attribution_first_touch"]["campaign_id"] == "campaign-1"
+    assert snapshot["attribution_last_touch"]["campaign_id"] == "campaign-2"
+    assert snapshot["attribution"]["ad_group_id"] == "ad-group-2"
+    assert snapshot["attribution"]["creative_id"] == "creative-2"
+
+
+@pytest.mark.asyncio
+async def test_v2_older_event_cannot_overwrite_newer_customer_profile():
+    db = FakeDB()
+    newer = _cart_event(updated_at="2026-08-09T11:00:00Z")
+    newer["data"]["customer"]["name"] = "New Customer Name"
+    older = _cart_event(updated_at="2026-08-09T10:00:00Z")
+    older["data"]["customer"]["name"] = "Stale Customer Name"
+
+    await module.persist_abandoned_cart_event(db, newer, user_id="owner-1")
+    result = await module.persist_abandoned_cart_event(
+        db,
+        older,
+        user_id="owner-1",
+    )
+
+    identity = db.collections[
+        customer_identity.CUSTOMER_IDENTITY_COLLECTION
+    ].documents[0]
+    profile = customer_identity.decrypt_private_payload(
+        identity["private_profile_ciphertext"]
+    )
+    assert result["ignored_out_of_order"] is True
+    assert profile["name"] == "New Customer Name"
+    assert "Stale Customer Name" not in repr(identity)
+
+
+@pytest.mark.asyncio
+async def test_v2_links_the_customer_previous_orders_without_overwriting_history():
+    db = FakeDB()
+    for order_number in ("order-old-1", "order-old-2"):
+        db.collections["unified_orders"].documents.append(
+            {
+                "user_id": "owner-1",
+                "order_number": order_number,
+                "raw_by_source": {
+                    "salla_direct": {"customer": {"id": "salla-customer-1"}}
+                },
+            }
+        )
+    event = _cart_event()
+    event["data"]["customer"]["id"] = "salla-customer-1"
+
+    first = await module.persist_abandoned_cart_event(
+        db,
+        event,
+        user_id="owner-1",
+    )
+    second = await module.persist_abandoned_cart_event(
+        db,
+        event,
+        user_id="owner-1",
+    )
+
+    assert first["customer_orders_linked"] == 2
+    assert second["customer_orders_linked"] == 0
+    linked_ids = {
+        row.get("customer_identity_id")
+        for row in db.collections["unified_orders"].documents
+    }
+    customer_identity_id = db.collections[
+        module.ABANDONED_CART_COLLECTION
+    ].documents[0]["customer_identity_id"]
+    assert linked_ids == {customer_identity_id}
+
+
+@pytest.mark.asyncio
+async def test_v2_recovers_attribution_from_the_linked_order():
+    db = FakeDB()
+    db.collections["unified_orders"].documents.append(
+        {
+            "user_id": "owner-1",
+            "order_number": "order-900",
+            "raw_by_source": {
+                "salla_direct": {
+                    "source_details": {
+                        "utm_source": "snapchat",
+                        "utm_campaign": "campaign-from-order",
+                        "ad_squad_id": "group-from-order",
+                        "ad_id": "ad-from-order",
+                        "creative_id": "creative-from-order",
+                    }
+                }
+            },
+        }
+    )
+    event = _cart_event(event="abandoned.cart.purchased")
+    event["data"].pop("metadata")
+    event["data"]["order_number"] = "order-900"
+
+    result = await module.persist_abandoned_cart_event(
+        db,
+        event,
+        user_id="owner-1",
+    )
+
+    snapshot = db.collections[module.ABANDONED_CART_COLLECTION].documents[0]
+    assert result["order_linked"] is True
+    assert snapshot["attribution_method"] == "linked_order"
+    assert snapshot["attribution"]["platform"] == "snapchat"
+    assert snapshot["attribution"]["utm_campaign"] == "campaign-from-order"
+    assert snapshot["attribution"]["ad_group_id"] == "group-from-order"

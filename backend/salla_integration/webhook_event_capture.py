@@ -151,7 +151,7 @@ async def capture_unknown_event(
 
     if is_abandoned_cart_event:
         # Abandoned-cart webhooks have a deliberately isolated execution
-        # boundary.  They may update only the privacy-minimised cart stores and
+        # boundary. They may update only the encrypted customer/cart memory and
         # the sanitized webhook audit below; order, shipment, Qoyod and ads
         # conversion paths are never entered for these events.
         order_sync["reason"] = "isolated_abandoned_cart_event"
@@ -168,6 +168,7 @@ async def capture_unknown_event(
                 "error": str(exc)[:500],
                 "provider_write_reached": False,
                 "pii_stored": False,
+                "plaintext_pii_stored": False,
             }
 
     if not is_abandoned_cart_event:
