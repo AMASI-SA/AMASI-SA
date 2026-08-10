@@ -20,22 +20,30 @@ Emergent support confirmed the existing Mezan project has **no GitHub-to-Emergen
 - no automatic redeploy after a GitHub push or merge;
 - `Save to GitHub` is one-way from Emergent to GitHub.
 
-Therefore a GitHub merge does **not** update Emergent Preview and does **not** deploy `mezansalla.com`.
+Therefore a GitHub merge does **not** deploy `mezansalla.com`.
+
+## Production is the required acceptance target
+
+The user does **not** require manual Preview review for routine releases. Production is the required user-facing target.
+
+Emergent still requires the intended code to exist inside the **same existing project workspace/Preview environment** because `Re-deploy changes` publishes from that project state. Preview is therefore a technical staging/source state, not a mandatory user acceptance step.
+
+For routine releases, agents should not stop and ask the user to inspect Preview unless Preview verification is materially needed because the change is risky, ambiguous, or production verification cannot safely detect failure.
 
 ## Required release flow
 
 For every normal Mezan change:
 
-1. Apply the intended change in the **existing Emergent Preview environment**.
-2. Verify the affected behavior in Preview.
-3. Save the exact reviewed Preview change to GitHub on a controlled feature/fix branch.
-4. Open/validate a PR into `hotfix/prod-snap-meta-final` and run the applicable CI.
-5. Merge only when CI is green and GitHub matches the verified Preview change.
-6. In the **same existing Emergent project**, open **Manage Publishing / Redeploy**.
-7. Use **Overview → Re-deploy changes**.
-8. Verify `mezansalla.com` after redeploy.
+1. Apply the intended change in the **existing Emergent project workspace/Preview state** without relying on terminal deployment commands.
+2. Save/record the exact reviewed change in GitHub on a controlled feature/fix branch and run the applicable CI.
+3. Open/validate a PR into `hotfix/prod-snap-meta-final` and merge only when CI is green and GitHub matches the project change.
+4. In the **same existing Emergent project**, open **Manage Publishing / Redeploy**.
+5. Use **Overview → Re-deploy changes**.
+6. Verify `mezansalla.com` after redeploy.
 
-The user accepts and expects the required **Re-deploy changes** click. The goal is to eliminate routine terminal commands, not to bypass Emergent's supported redeploy step.
+Manual visual Preview verification is optional for normal low-risk changes. It remains available as a safety gate when needed, but it is not the user's required destination.
+
+The user accepts and expects the required **Re-deploy changes** click. The goal is to eliminate routine terminal commands, not to bypass Emergent's supported in-project redeploy step.
 
 ## Production safety
 
@@ -48,9 +56,9 @@ The user accepts and expects the required **Re-deploy changes** click. The goal 
 
 ## Roles of the systems
 
-- **Emergent Preview**: source that can actually be redeployed for this existing project.
+- **Existing Emergent project workspace/Preview state**: technical source that `Re-deploy changes` can publish for this project.
 - **GitHub**: review, CI, audit history, controlled production code reference, and rollback reference.
-- **Emergent Production**: updated only by the supported in-project redeploy flow.
+- **Emergent Production (`mezansalla.com`)**: required acceptance target; updated by the supported in-project redeploy flow.
 
 ## Release documentation
 
