@@ -177,7 +177,10 @@ function AccountLinkModal({ employee, candidates, busy, onClose, onLink, onUnlin
                         <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onLink(selected)} disabled={busy || !selected} data-testid="employees-v2-link-account" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الربط…" : "ربط الحساب"}</button></div>
                     </>
                 ) : (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><WarningCircle className="ml-1 inline" /> لا يوجد حساب آمن متاح للتجربة. أنشئ حساب Viewer جديدًا بلا صلاحيات من <Link to="/team" className="font-black underline">إدارة الفريق</Link> ثم عد إلى هنا.</div>
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-950">
+                        <p><WarningCircle className="ml-1 inline" /> لا يوجد حساب آمن متاح للتجربة. أنشئ حساب Viewer جديدًا بلا صلاحيات ثم عد إلى هنا واضغط تحديث.</p>
+                        <Link to="/team" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white"><UserPlus size={18} /> فتح إدارة الفريق وإنشاء حساب</Link>
+                    </div>
                 )}
             </div>
         </ModalShell>
@@ -239,7 +242,7 @@ function PilotEmployeeCard({ employee, management, onEdit, onAccount, onRole, on
                 <div className="rounded-2xl border bg-slate-50 p-4"><div className="text-[11px] font-bold text-slate-500">الدور التشغيلي</div><div className="mt-1 truncate font-black">{role.role_key ? management.role_labels?.[role.role_key] || ROLE_FALLBACK_LABELS[role.role_key] || role.role_key : "غير محدد"}</div><div className="mt-1 text-[10px] text-slate-500">{numberFormatter.format(role.effective_permissions?.length || 0)} صلاحية</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-4"><div className="text-[11px] font-bold text-slate-500">الربط المالي</div><div className="mt-1 font-black text-emerald-800">معطّل وآمن</div><div className="mt-1 text-[10px] text-slate-500">لا Ledger · لا سلف · لا عهد</div></div>
             </div>
-            <button type="button" onClick={onRole} disabled={!linked} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"><ShieldCheck size={18} />{linked ? "تعيين الدور والصلاحيات" : "اربط حساب الدخول أولًا"}</button>
+            <button type="button" onClick={linked ? onRole : onAccount} data-testid="employees-v2-primary-action" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white"><ShieldCheck size={18} />{linked ? "تعيين الدور والصلاحيات" : "ربط حساب الدخول"}</button>
         </article>
     );
 }

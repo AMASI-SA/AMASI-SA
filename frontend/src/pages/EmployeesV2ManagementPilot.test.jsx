@@ -149,3 +149,32 @@ test("creates one pilot employee exactly once and renders it as payroll-disabled
         globalThis.IS_REACT_ACT_ENVIRONMENT = false;
     }
 });
+
+
+test("unlinked pilot opens account setup from the primary action instead of disabling it", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    getEmployeesV2Management.mockResolvedValue(pilotWorkspace);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => { root.render(<EmployeesV2ManagementPilot />); });
+
+        const primaryAction = container.querySelector('[data-testid="employees-v2-primary-action"]');
+        expect(primaryAction).not.toBeNull();
+        expect(primaryAction.disabled).toBe(false);
+        expect(primaryAction.textContent).toContain("ربط حساب الدخول");
+
+        await act(async () => {
+            primaryAction.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+
+        expect(document.body.querySelector('[data-testid="employees-v2-account-dialog"]')).not.toBeNull();
+        expect(document.body.textContent).toContain("لا يوجد حساب آمن متاح للتجربة");
+        expect(document.body.querySelector('a[href="/team"]')).not.toBeNull();
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
