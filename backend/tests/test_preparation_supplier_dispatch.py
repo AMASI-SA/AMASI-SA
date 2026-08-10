@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from preparation_supplier_dispatch import (
@@ -23,6 +24,7 @@ from preparation_supplier_dispatch import (
     _hydrate_piece_images_from_batches,
     _hydrate_piece_print_facts_from_batches,
     _mark_orders_started_if_fully_dispatched,
+    _require_preparation_worker,
     employee_workspace_summary,
     file_is_fully_dispatched,
     make_preparation_supplier_dispatch_router,
@@ -33,6 +35,52 @@ from preparation_supplier_dispatch import (
     supplier_dispatch_lines,
     supplier_receiving_dispatch_blocker,
 )
+
+
+@pytest.mark.asyncio
+async def test_preparation_operator_role_can_open_and_work_only_its_assignment():
+    assignment_collection = MagicMock()
+    assignment_collection.find_one = AsyncMock(return_value={
+        "user_id": "employee-1",
+        "role_key": "preparation_operator",
+        "enabled": True,
+    })
+    db = MagicMock()
+    db.__getitem__.return_value = assignment_collection
+    worker = {"id": "employee-1", "role": "viewer", "created_by": "owner-1"}
+
+    assert await _require_preparation_worker(
+        db,
+        worker,
+        permission="preparation.assigned.read",
+    ) == worker
+    assert await _require_preparation_worker(
+        db,
+        worker,
+        permission="preparation.assigned.work",
+    ) == worker
+
+
+@pytest.mark.asyncio
+async def test_unrelated_operational_role_cannot_open_employee_preparation():
+    assignment_collection = MagicMock()
+    assignment_collection.find_one = AsyncMock(return_value={
+        "user_id": "employee-1",
+        "role_key": "product_operator",
+        "enabled": True,
+    })
+    db = MagicMock()
+    db.__getitem__.return_value = assignment_collection
+
+    with pytest.raises(HTTPException) as error:
+        await _require_preparation_worker(
+            db,
+            {"id": "employee-1", "role": "viewer", "created_by": "owner-1"},
+            permission="preparation.assigned.read",
+        )
+
+    assert error.value.status_code == 403
+    assert error.value.detail["permission"] == "preparation.assigned.read"
 
 
 def _piece(piece_id, group_key="product:1", unit_index=1, **patch):
