@@ -40,6 +40,7 @@ jobs:
           pymongo==4.5.0
           motor==3.3.1
           cryptography==48.0.0
+          openpyxl==3.1.5
 
       - name: Compile isolated Salla cart modules
         run: |
