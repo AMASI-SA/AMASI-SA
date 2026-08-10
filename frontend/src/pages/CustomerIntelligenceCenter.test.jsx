@@ -2,6 +2,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 jest.mock("react-router-dom", () => ({
     useSearchParams: () => [new URLSearchParams(), jest.fn()],
+}), { virtual: true });
+
+jest.mock("../lib/api", () => ({
+    __esModule: true,
+    default: {
+        get: jest.fn(),
+    },
 }));
 
 import {

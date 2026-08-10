@@ -589,3 +589,70 @@ The approved boundary is:
   creates no salary contract and makes zero financial writes.
 - Payroll cutover, salary editing and retirement of the legacy employee page
   still require the reconciliation and parallel-cycle gates in Decision-029.
+
+---
+
+## Decision-033 — Customer Conversations Use One Channel-Neutral Mezan Core
+
+Status: Approved, persistence foundation only
+
+Mezan owns the customer and conversation memory. WhatsApp, Instagram and
+TikTok are transport adapters around that core; no channel platform or external
+AI product becomes the customer source of truth.
+
+The persistence foundation consists of five logical entities:
+
+- `customers` is the non-PII profile and routing record.
+- `customer_identities` is the existing encrypted
+  `mezan_customer_identities_v1` vault. It is reused, not copied or replaced.
+- `channels` identifies a tenant's provider account without storing provider
+  credentials or customer contact details in plaintext.
+- `conversations` links one provider thread to one canonical Mezan customer.
+- `conversation_messages` stores immutable channel evidence with encrypted
+  content and provider idempotency keys.
+
+Customer, conversation and message identity and lookup indexes are scoped by
+the authenticated Mezan tenant and merchant. Provider account, conversation
+and message references are non-reversible keys rather than raw phone numbers,
+handles or external IDs. A signed provider webhook is resolved through one
+global, unique provider-account HMAC; that binding contains no raw provider
+identifier and is used only to select the tenant before normal scoped access.
+
+This decision creates models and Mongo indexes only. It adds no channel
+webhook, provider client, GPT call, mutation endpoint or send worker. Outbound
+messaging, automatic replies, order creation, discounts, payment links and
+product mutations remain disabled. A later Channel Gateway decision must
+preserve this core and introduce inbound adapters before any egress capability.
+
+---
+
+## Decision-034 — WhatsApp Is the First Receive-Only Channel Adapter
+
+Status: Approved, disabled-by-default ingress implementation
+
+WhatsApp Cloud API is the first real channel connected to the shared Channel
+Gateway. The implementation accepts only Meta webhook verification and signed
+inbound message notifications.
+
+The boundary is mandatory:
+
+- Meta's GET challenge must match a backend-only verify token.
+- Every POST must carry a valid `X-Hub-Signature-256` computed over the exact
+  raw request body with the backend-only Meta App Secret.
+- A verified `phone_number_id` resolves through a non-reversible binding to
+  exactly one tenant channel. It is never accepted as `user_id` from the
+  webhook body.
+- Text and supported media/interactive evidence is normalized through the
+  shared Channel Gateway. Raw webhook bodies are not persisted.
+- Message text, contact identity and media references are encrypted at rest;
+  message IDs are idempotent HMAC keys.
+- Status-only and unsupported events never become fabricated customer
+  messages.
+- The adapter has no WhatsApp access token or send client. The router exposes
+  only GET/POST on `/channels/whatsapp/webhook`; no send operation exists.
+- GPT execution, auto-reply, employee reply, orders, discounts, payment links
+  and product mutations remain disabled and absent from this adapter.
+
+Production ingress stays off until the owner-approved channel binding, App
+Secret, verify token, HMAC key and PII encryption key are installed in the
+backend deployment environment.
