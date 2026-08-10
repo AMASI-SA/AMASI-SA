@@ -117,12 +117,45 @@ class FakeCollection:
             before = deepcopy(document)
             for key, value in update.get("$set", {}).items():
                 document[key] = deepcopy(value)
+            for key, value in update.get("$addToSet", {}).items():
+                values = document.setdefault(key, [])
+                candidates = value.get("$each", []) if isinstance(value, dict) else [value]
+                for candidate in candidates:
+                    if candidate not in values:
+                        values.append(deepcopy(candidate))
             if document != before:
                 modified += 1
         return SimpleNamespace(modified_count=modified)
 
+    def find(self, selector, projection=None):
+        documents = [
+            deepcopy(item) for item in self.documents if _matches(item, selector)
+        ]
+        if projection:
+            included = [
+                key for key, enabled in projection.items() if key != "_id" and enabled
+            ]
+            if included:
+                documents = [
+                    {
+                        key: deepcopy(document[key])
+                        for key in included
+                        if key in document
+                    }
+                    for document in documents
+                ]
+        return FakeCursor(documents)
+
     async def create_index(self, *args, **kwargs):
         return kwargs.get("name")
+
+
+class FakeCursor:
+    def __init__(self, documents):
+        self.documents = documents
+
+    async def to_list(self, length):
+        return deepcopy(self.documents[:length])
 
 
 class FakeDB:
@@ -634,6 +667,104 @@ async def test_reconcile_purchased_cart_flags_repairs_legacy_snapshot_once():
     assert purchased["purchase_state_source"] == "abandoned.cart.purchased"
     assert purchased["purchase_reconciled_at"] is not None
     assert active["purchased"] is False
+    assert other["purchased"] is False
+
+
+@pytest.mark.asyncio
+async def test_reconcile_purchased_cart_flags_uses_verified_legacy_capture():
+    db = FakeDB(integrations=[{"user_id": "owner-1", "store_id": 123}])
+    carts = db.collections[module.ABANDONED_CART_COLLECTION]
+    carts.documents.extend(
+        [
+            {
+                "user_id": "owner-1",
+                "merchant_id": "123",
+                "cart_id": "captured-purchased",
+                "purchased": False,
+                "status": "active",
+                "source_events": ["abandoned.cart"],
+            },
+            {
+                "user_id": "owner-1",
+                "merchant_id": "123",
+                "cart_id": "unverified-capture",
+                "purchased": False,
+                "status": "active",
+            },
+            {
+                "user_id": "other-owner",
+                "merchant_id": "999",
+                "cart_id": "other-merchant-capture",
+                "purchased": False,
+                "status": "active",
+            },
+        ]
+    )
+    captures = db.collections.setdefault(
+        "salla_webhook_event_captures", FakeCollection()
+    )
+    captures.documents.extend(
+        [
+            {
+                "merchant_id": "123",
+                "event": "abandoned.cart.purchased",
+                "verified_before_capture": True,
+                "payload": {
+                    "event": "abandoned.cart.purchased",
+                    "merchant": 123,
+                    "data": {"id": "captured-purchased", "status": "purchased"},
+                },
+            },
+            {
+                "merchant_id": "123",
+                "event": "abandoned.cart.purchased",
+                "verified_before_capture": False,
+                "payload": {
+                    "event": "abandoned.cart.purchased",
+                    "merchant": 123,
+                    "data": {"id": "unverified-capture", "status": "purchased"},
+                },
+            },
+            {
+                "merchant_id": "999",
+                "event": "abandoned.cart.purchased",
+                "verified_before_capture": True,
+                "payload": {
+                    "event": "abandoned.cart.purchased",
+                    "merchant": 999,
+                    "data": {
+                        "id": "other-merchant-capture",
+                        "status": "purchased",
+                    },
+                },
+            },
+        ]
+    )
+
+    repaired = await module.reconcile_purchased_cart_flags(db, "owner-1")
+    rerun = await module.reconcile_purchased_cart_flags(db, "owner-1")
+
+    assert repaired == 1
+    assert rerun == 0
+    captured = next(
+        row for row in carts.documents if row["cart_id"] == "captured-purchased"
+    )
+    unverified = next(
+        row for row in carts.documents if row["cart_id"] == "unverified-capture"
+    )
+    other = next(
+        row for row in carts.documents if row["cart_id"] == "other-merchant-capture"
+    )
+    assert captured["purchased"] is True
+    assert captured["status"] == "purchased"
+    assert captured["source_events"] == [
+        "abandoned.cart",
+        "abandoned.cart.purchased",
+    ]
+    assert captured["purchase_state_source"] == (
+        "verified_webhook_capture:abandoned.cart.purchased"
+    )
+    assert unverified["purchased"] is False
     assert other["purchased"] is False
 
 
