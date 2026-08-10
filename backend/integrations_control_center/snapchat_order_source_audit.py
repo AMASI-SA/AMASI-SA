@@ -12,6 +12,10 @@ from typing import Any, Callable
 
 from auth import ensure_user_settings
 from dashboard_v2_routes import _matches_any
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    meaningful_source_label,
+)
 
 from . import snapchat_account_timezone_manager as manager
 from .snapchat_account_selection import _load_selected_accounts
@@ -26,6 +30,48 @@ from .snapchat_native_data_common import (
 )
 
 MAX_AUDIT_ROWS = 500
+
+AUDIT_ORDER_PROJECTION = {
+    **SALLA_RAW_ATTRIBUTION_PROJECTION,
+    "order_number": 1,
+    "reference_id": 1,
+    "order_id": 1,
+    "id": 1,
+    "created_at": 1,
+    "order_created_at": 1,
+    "created_at_utc": 1,
+    "source_created_at": 1,
+    "updated_at": 1,
+    "order_date": 1,
+    "order_date_inferred": 1,
+    "order_status_native": 1,
+    "status_native": 1,
+    "order_status": 1,
+    "status": 1,
+    "total_amount": 1,
+    "total": 1,
+    "source_native": 1,
+    "source": 1,
+    "order_source": 1,
+    "utm_source": 1,
+    "utm_medium": 1,
+    "utm_campaign": 1,
+    "campaign_id": 1,
+    "campaign_name": 1,
+    "source_campaign_id": 1,
+    "source_campaign_name": 1,
+    "channel": 1,
+    "platform": 1,
+    "traffic_source": 1,
+    "marketing_source": 1,
+    "source_name": 1,
+    "created_via": 1,
+    "created_by_type": 1,
+    "order_type": 1,
+    "order_kind": 1,
+    "type_of_order": 1,
+    "is_gift": 1,
+}
 
 
 def _norm(value: Any) -> str:
@@ -42,19 +88,7 @@ def _first_text(order: dict[str, Any], fields: tuple[str, ...]) -> str:
 
 def classify_order_origin(order: dict[str, Any]) -> tuple[str, str]:
     """Classify the recorded order origin without changing attribution."""
-    source_label = _first_text(
-        order,
-        (
-            "source_native",
-            "source",
-            "order_source",
-            "utm_source",
-            "channel",
-            "platform",
-            "created_via",
-            "created_by_type",
-        ),
-    )
+    source_label = meaningful_source_label(order)
     order_type = _first_text(
         order,
         ("order_type", "order_kind", "type_of_order"),
@@ -349,7 +383,7 @@ async def build_snapchat_order_source_audit(
     if settings.get("hide_inferred_date_orders"):
         order_query["order_date_inferred"] = {"$ne": True}
     orders = await manager._to_list(
-        db.unified_orders.find(order_query, {"_id": 0, "raw_by_source": 0}),
+        db.unified_orders.find(order_query, AUDIT_ORDER_PROJECTION),
         100_000,
     )
     result = build_order_audit_rows(

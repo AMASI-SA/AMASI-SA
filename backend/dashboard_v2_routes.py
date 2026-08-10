@@ -35,6 +35,7 @@ from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
+from salla_marketing_attribution import SALLA_RAW_ATTRIBUTION_PROJECTION
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -264,6 +265,7 @@ async def _filtered_orders(
     to_date: str | None,
     payment_methods: str | None,
     shipping_companies: str | None,
+    include_marketing_attribution: bool = False,
 ) -> list[dict[str, Any]]:
     settings = await ensure_user_settings(db, user_id)
     query: dict[str, Any] = {"user_id": user_id}
@@ -279,6 +281,26 @@ async def _filtered_orders(
         db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
         100000,
     )
+    if include_marketing_attribution and orders:
+        # Fetch only Salla's whitelisted attribution metadata in a separate
+        # projection.  The main dashboard query remains lightweight and no
+        # customer, address, payment or product raw data is loaded.
+        attribution_rows = await _to_list(
+            db.unified_orders.find(query, SALLA_RAW_ATTRIBUTION_PROJECTION),
+            100000,
+        )
+        attribution_by_order = {
+            str(row.get("order_number") or "").strip(): row.get("raw_by_source")
+            for row in attribution_rows
+            if str(row.get("order_number") or "").strip()
+            and isinstance(row.get("raw_by_source"), dict)
+        }
+        for order in orders:
+            raw_by_source = attribution_by_order.get(
+                str(order.get("order_number") or "").strip()
+            )
+            if raw_by_source:
+                order["raw_by_source"] = raw_by_source
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
@@ -889,6 +911,7 @@ def make_dashboard_v2_router(
             to_date=to_date,
             payment_methods=payment_methods,
             shipping_companies=shipping_companies,
+            include_marketing_attribution=True,
         )
         product_cost = await build_mezan_v2_product_cost(db, user_id, orders)
         ads = await build_mezan_v2_ads(

@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from salla_marketing_attribution import canonical_ad_platform
+
 
 PROVIDER_ORDER = ("snapchat", "tiktok", "meta", "google")
 PROVIDER_LABELS = {
@@ -52,6 +54,9 @@ def _fragments(value: Any) -> list[str]:
 
 def resolve_salla_ad_platform(order: dict[str, Any]) -> str | None:
     """Resolve Salla traffic attribution without provider conversion data."""
+    provider = canonical_ad_platform(order)
+    if provider:
+        return provider
     fragments: list[str] = []
     for key in (
         "source", "utm_source", "utm_medium", "utm_campaign",

@@ -58,6 +58,7 @@ async def capture_exact_matched_orders(
         to_date=date_to,
         payment_methods=None,
         shipping_companies=None,
+        include_marketing_attribution=True,
     )
     id_lookup = routes._unique_lookup(identities, "campaign_id")
     name_lookup = routes._unique_lookup(identities, "campaign_name")

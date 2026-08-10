@@ -32,6 +32,7 @@ async def build_dashboard_ads_executive_breakdown(
         to_date=to_date,
         payment_methods=payment_methods,
         shipping_companies=shipping_companies,
+        include_marketing_attribution=True,
     )
     ads = await build_mezan_v2_ads(
         db,

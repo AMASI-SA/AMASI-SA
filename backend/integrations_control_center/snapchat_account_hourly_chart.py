@@ -416,6 +416,7 @@ async def _salla_hourly_outcomes(
         to_date=(selected_date + timedelta(days=1)).isoformat(),
         payment_methods=None,
         shipping_companies=None,
+        include_marketing_attribution=True,
     )
     zone = _timezone(timezone_name)
     by_hour: dict[int, dict[str, Any]] = defaultdict(
