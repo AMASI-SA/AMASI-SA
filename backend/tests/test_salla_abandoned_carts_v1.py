@@ -234,6 +234,31 @@ def test_normalizer_keeps_analytics_fields_without_customer_pii():
     assert "nested@example.test" not in serialized
 
 
+def test_normalizer_accepts_official_salla_purchased_webhook_shape():
+    payload = {
+        "event": "abandoned.cart.purchased",
+        "merchant": 935918575,
+        "created_at": "Tue Mar 25 2025 11:59:37 GMT+0300",
+        "data": {
+            "id": 1305879817,
+            "status": "purchased",
+            "currency": "SAR",
+            "total": 34.99,
+            "subtotal": 30.43,
+            "total_discount": 0,
+        },
+    }
+
+    record = module.normalize_abandoned_cart_event(payload)
+
+    assert record is not None
+    assert record["cart_id"] == "1305879817"
+    assert record["purchased"] is True
+    assert record["status"] == "purchased"
+    assert record["currency"] == "SAR"
+    assert record["total"] == 34.99
+
+
 def test_cart_token_is_never_used_as_persisted_identity():
     payload = _cart_event()
     payload["data"].pop("id")
@@ -560,6 +585,56 @@ async def test_purchased_state_cannot_be_downgraded_by_later_or_duplicate_events
     assert snapshot["order_id"] == "order-1"
     assert result["ignored_after_purchase"] is True
     assert result["ignored_out_of_order"] is False
+
+
+@pytest.mark.asyncio
+async def test_reconcile_purchased_cart_flags_repairs_legacy_snapshot_once():
+    db = FakeDB()
+    carts = db.collections[module.ABANDONED_CART_COLLECTION]
+    carts.documents.extend(
+        [
+            {
+                "user_id": "owner-1",
+                "cart_id": "purchased-cart",
+                "purchased": False,
+                "status": "active",
+                "source_events": ["abandoned.cart.purchased"],
+            },
+            {
+                "user_id": "owner-1",
+                "cart_id": "active-cart",
+                "purchased": False,
+                "status": "active",
+                "source_events": ["abandoned.cart"],
+            },
+            {
+                "user_id": "other-owner",
+                "cart_id": "other-tenant-cart",
+                "purchased": False,
+                "status": "active",
+                "source_events": ["abandoned.cart.purchased"],
+            },
+        ]
+    )
+
+    repaired = await module.reconcile_purchased_cart_flags(db, "owner-1")
+    rerun = await module.reconcile_purchased_cart_flags(db, "owner-1")
+
+    assert repaired == 1
+    assert rerun == 0
+    purchased = next(
+        row for row in carts.documents if row["cart_id"] == "purchased-cart"
+    )
+    active = next(row for row in carts.documents if row["cart_id"] == "active-cart")
+    other = next(
+        row for row in carts.documents if row["cart_id"] == "other-tenant-cart"
+    )
+    assert purchased["purchased"] is True
+    assert purchased["status"] == "purchased"
+    assert purchased["purchase_state_source"] == "abandoned.cart.purchased"
+    assert purchased["purchase_reconciled_at"] is not None
+    assert active["purchased"] is False
+    assert other["purchased"] is False
 
 
 @pytest.mark.asyncio

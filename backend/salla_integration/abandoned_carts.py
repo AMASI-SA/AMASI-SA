@@ -1028,6 +1028,8 @@ async def backfill_abandoned_carts(
             stopped_reason = "short_page"
             break
 
+    purchased_flags_repaired = await reconcile_purchased_cart_flags(db, user_id)
+
     return {
         "ok": True,
         "scope": ABANDONED_CART_SCOPE,
@@ -1043,12 +1045,42 @@ async def backfill_abandoned_carts(
         "order_linked": order_linked,
         "private_context_encrypted": private_context_encrypted,
         "customer_orders_linked": customer_orders_linked,
+        "purchased_flags_repaired": purchased_flags_repaired,
         "stopped_reason": stopped_reason,
         "provider_write_reached": False,
         "pii_stored": False,
         "plaintext_pii_stored": False,
         "schema_version": ABANDONED_CART_SCHEMA_VERSION,
     }
+
+
+async def reconcile_purchased_cart_flags(db: Any, user_id: str) -> int:
+    """Repair legacy snapshots that already carry a verified purchase event.
+
+    Older deployments could persist ``abandoned.cart.purchased`` in the
+    snapshot's append-only ``source_events`` audit trail without promoting the
+    operational ``purchased`` flag.  The audit marker is tenant-scoped and can
+    only be written by the verified Salla webhook path, so it is a safe,
+    deterministic source for an idempotent repair after a read-only backfill.
+    """
+    now = datetime.now(timezone.utc)
+    result = await getattr(db, ABANDONED_CART_COLLECTION).update_many(
+        {
+            "user_id": user_id,
+            "purchased": {"$ne": True},
+            "source_events": {"$in": ["abandoned.cart.purchased"]},
+        },
+        {
+            "$set": {
+                "purchased": True,
+                "status": "purchased",
+                "purchase_state_source": "abandoned.cart.purchased",
+                "purchase_reconciled_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    return int(getattr(result, "modified_count", 0) or 0)
 
 
 async def ensure_abandoned_cart_indexes(db: Any) -> None:
@@ -1099,6 +1131,7 @@ __all__ = [
     "ensure_abandoned_cart_indexes",
     "normalize_abandoned_cart_event",
     "persist_abandoned_cart_event",
+    "reconcile_purchased_cart_flags",
     "require_carts_read",
     "split_scopes",
 ]
