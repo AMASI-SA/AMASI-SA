@@ -497,7 +497,7 @@ The initial migration is a guarded `shadow_read_only` copy:
 
 ## Decision-030 — Employee Management Opens Through a Single-Employee Pilot
 
-Status: Approved, Phase 2 pilot implementation
+Status: Superseded by Decision-032 after pilot acceptance
 
 Write-capable Employees V2 management starts with one native pilot employee
 before any of the 15 shadow-migrated employee records can be edited.
@@ -561,3 +561,31 @@ The mandatory boundary is:
 - The Customer Intelligence UI remains synthetic under Decision-028. Live PII
   decryption, messaging, discounts, order creation, campaign mutation and AI
   execution require later owner-only APIs, approvals, audit and rollback gates.
+
+---
+
+## Decision-032 — Employee Management Is Open While Payroll Remains Read-Only
+
+Status: Approved, Employee OS management closeout
+
+The single-employee pilot in Decision-030 has passed its management and audit
+checks. Owner-managed identity and access writes are now open for all canonical
+Employee V2 records, including the previously shadow-migrated employees.
+
+The approved boundary is:
+
+- The owner may create or edit employees, activate or deactivate them, link or
+  unlink a non-owner team login, reset its password and assign an operational
+  role.
+- Deactivation and unlinking revoke current and future authenticated access
+  immediately. Reactivation restores only the account and role state that was
+  explicitly preserved for that employee.
+- The preparation employee role remains limited to assigned-work read and work
+  permissions. It does not inherit owner, financial or broad operational access.
+- Every employee, account, password and role action appends an actor-stamped
+  event with before/after state. Password plaintext is never recorded.
+- `operating_salaries`, liabilities, advances, custody and `general_ledger`
+  remain authoritative and read-only from Employee OS. Employee management
+  creates no salary contract and makes zero financial writes.
+- Payroll cutover, salary editing and retirement of the legacy employee page
+  still require the reconciliation and parallel-cycle gates in Decision-029.

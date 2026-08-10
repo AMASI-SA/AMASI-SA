@@ -13,8 +13,8 @@ jest.mock("./StoreOperationsAccessWorkspace", () => function AccessFixture() {
     return <div data-testid="store-operations-access-fixture">صلاحيات إدارة التجهيز الفعلية</div>;
 });
 
-jest.mock("./EmployeesV2ManagementPilot", () => function ManagementFixture() {
-    return <div data-testid="employees-v2-management-fixture">إدارة موظف تجريبي آمن</div>;
+jest.mock("./EmployeesV2Management", () => function ManagementFixture() {
+    return <div data-testid="employees-v2-management-fixture">إدارة جميع الموظفين</div>;
 });
 
 jest.mock("../services/employeesV2", () => ({
@@ -72,10 +72,10 @@ beforeEach(() => {
     applyEmployeesV2ShadowMigration.mockReset();
 });
 
-test("employee workspace opens safe management before the migrated employees", () => {
+test("employee workspace opens full employee management by default", () => {
     const markup = renderToStaticMarkup(<EmployeesV2 />);
 
-    expect(markup).toContain("إدارة موظف تجريبي آمن");
+    expect(markup).toContain("إدارة جميع الموظفين");
     expect(markup).toContain("إدارة الموظفين");
     expect(markup).toContain("تقرير الترحيل والرواتب");
     expect(markup).not.toContain("صلاحيات إدارة التجهيز الفعلية");
@@ -90,7 +90,7 @@ test("migration report remains available as a separate guarded workspace", () =>
     expect(markup).toContain("لا تعديل على الرواتب القديمة");
     expect(markup).toContain("لا قيود جديدة أو إعادة احتساب");
     expect(markup).toContain("لا تعديل على السلف والعهد");
-    expect(markup).not.toContain("إدارة موظف تجريبي آمن");
+    expect(markup).not.toContain("إدارة جميع الموظفين");
 });
 
 test("permissions stay in the same employee workspace instead of a second page", () => {

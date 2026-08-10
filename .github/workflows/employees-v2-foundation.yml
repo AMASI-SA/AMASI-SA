@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "backend/employees_v2_routes.py"
+      - "backend/auth.py"
       - "backend/ai_store_access_contract.py"
       - "backend/ai_store_access_control.py"
       - "backend/ai_store_operations_foundation.py"
       - "backend/tests/test_employees_v2_foundation.py"
       - "backend/tests/test_employees_v2_management.py"
+      - "backend/tests/test_employee_account_access_revocation.py"
       - "backend/server.py"
       - "frontend/src/App.js"
       - "frontend/src/components/Layout.jsx"
@@ -16,8 +18,8 @@ on:
       - "frontend/src/components/MezanV2NavigationShell.test.jsx"
       - "frontend/src/components/MezanV2NavigationShell.employees.test.jsx"
       - "frontend/src/pages/EmployeesV2.jsx"
-      - "frontend/src/pages/EmployeesV2ManagementPilot.jsx"
-      - "frontend/src/pages/EmployeesV2ManagementPilot.test.jsx"
+      - "frontend/src/pages/EmployeesV2Management.jsx"
+      - "frontend/src/pages/EmployeesV2Management.test.jsx"
       - "frontend/src/pages/EmployeesV2.test.jsx"
       - "frontend/src/services/employeesV2.js"
       - "frontend/src/services/employeesV2.test.js"
@@ -51,6 +53,7 @@ jobs:
           python -m pytest -q --tb=short
           backend/tests/test_employees_v2_foundation.py
           backend/tests/test_employees_v2_management.py
+          backend/tests/test_employee_account_access_revocation.py
 
   frontend-test-and-build:
     runs-on: ubuntu-latest
@@ -71,7 +74,7 @@ jobs:
           yarn test --watchAll=false --runInBand --runTestsByPath
           src/services/employeesV2.test.js
           src/pages/EmployeesV2.test.jsx
-          src/pages/EmployeesV2ManagementPilot.test.jsx
+          src/pages/EmployeesV2Management.test.jsx
           src/components/MezanV2NavigationShell.employees.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
       - name: Build production frontend

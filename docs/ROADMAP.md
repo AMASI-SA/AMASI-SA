@@ -105,7 +105,7 @@ Scope:
 
 ## Employee OS Foundation — Employee, Payroll and Fulfillment Access
 
-Status: IN PROGRESS
+Status: EMPLOYEE MANAGEMENT COMPLETE; PAYROLL CUTOVER PENDING
 
 Phase 1:
 
@@ -116,15 +116,18 @@ Phase 1:
 - Idempotent `shadow_read_only` employee and salary-contract migration
 - Owner-only migration and audit controls
 
-Phase 2 pilot:
+Phase 2 employee management:
 
-- One owner-managed pilot employee
-- Create and edit employee identity fields
-- V2-only link to one unused team login account
-- Canonical operational role and permission assignment
-- Append-only employee activity timeline
+- Owner-managed creation and editing for native and migrated employees
+- Active/inactive employee lifecycle with immediate login revocation
+- V2-only link, unlink and password reset for non-owner team accounts
+- Canonical operational role and permission assignment, including the
+  assigned-work-only preparation role
+- Search and filters for status, account and role across responsive employee cards
+- Append-only before/after employee activity timeline
 - Zero writes to legacy payroll, liabilities, advances, custody or ledger
-- Existing 15 migrated employees remain read-only until pilot acceptance
+- Existing migrated salary, advance and custody data remains read-only until
+  payroll cutover
 
 Required before payroll cutover:
 

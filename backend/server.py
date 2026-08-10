@@ -42,6 +42,7 @@ from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 from auth import (
     hash_password,
     verify_password,
+    account_is_disabled,
     create_access_token,
     create_refresh_token,
     set_auth_cookies,
@@ -538,7 +539,11 @@ async def register(payload: RegisterIn, response: Response):
 async def login(payload: LoginIn, response: Response):
     email = payload.email.lower()
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user.get("password_hash", "")):
+    if (
+        not user
+        or account_is_disabled(user)
+        or not verify_password(payload.password, user.get("password_hash", ""))
+    ):
         raise HTTPException(status_code=401, detail="البريد الإلكتروني أو كلمة المرور غير صحيحة")
     await ensure_user_settings(db, user["id"])
     access = create_access_token(user["id"], user["email"])
@@ -702,6 +707,8 @@ def _public_user_view(u: dict) -> dict:
         "denied_permissions": sorted(u.get("denied_permissions") or []),
         "effective_permissions": sorted(_effective_perms(u)),
         "is_owner": _is_owner(u),
+        "disabled": u.get("disabled") is True,
+        "is_active": u.get("is_active") is not False,
         "created_at": u.get("created_at"),
         "updated_at": u.get("updated_at"),
         "last_login_at": u.get("last_login_at"),

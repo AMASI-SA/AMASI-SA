@@ -1,10 +1,11 @@
 import api from "../lib/api";
 
 export const EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION = "MIGRATE_EMPLOYEES_V2_SHADOW";
-export const EMPLOYEE_PILOT_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2_PILOT";
-export const EMPLOYEE_PILOT_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_PILOT_ACCOUNT";
-export const EMPLOYEE_PILOT_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_PILOT_ACCOUNT";
-export const EMPLOYEE_PILOT_ROLE_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_PILOT_ROLE";
+export const EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2";
+export const EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT";
+export const EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT";
+export const EMPLOYEE_ROLE_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE";
+export const EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD";
 
 export async function getEmployeesV2() {
     return (await api.get("/employees-v2")).data;
@@ -24,31 +25,31 @@ export async function getEmployeesV2Management() {
     return (await api.get("/employees-v2/management")).data;
 }
 
-export async function createEmployeesV2Pilot(payload) {
-    return (await api.post("/employees-v2/management/pilot", {
+export async function createEmployeesV2(payload) {
+    return (await api.post("/employees-v2/management/employees", {
         ...payload,
-        confirmation: EMPLOYEE_PILOT_CREATE_CONFIRMATION,
+        confirmation: EMPLOYEE_CREATE_CONFIRMATION,
     })).data;
 }
 
-export async function updateEmployeesV2Pilot(employeeId, payload) {
+export async function updateEmployeesV2(employeeId, payload) {
     return (await api.put(
-        `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}`,
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}`,
         payload,
     )).data;
 }
 
-export async function linkEmployeesV2PilotAccount(employeeId, accountUserId) {
+export async function linkEmployeesV2Account(employeeId, accountUserId) {
     return (await api.put(
-        `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}/account`,
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/account`,
         {
             account_user_id: accountUserId,
-            confirmation: EMPLOYEE_PILOT_ACCOUNT_LINK_CONFIRMATION,
+            confirmation: EMPLOYEE_ACCOUNT_LINK_CONFIRMATION,
         },
     )).data;
 }
 
-export async function createAndLinkEmployeesV2PilotAccount(employeeId, payload) {
+export async function createAndLinkEmployeesV2Account(employeeId, payload) {
     const catalogue = (await api.get("/auth/permissions/catalogue")).data;
     const viewerDefaults = catalogue?.role_defaults?.viewer;
     if (!Array.isArray(viewerDefaults) || viewerDefaults.length === 0) {
@@ -68,7 +69,7 @@ export async function createAndLinkEmployeesV2PilotAccount(employeeId, payload) 
     })).data;
 
     try {
-        return await linkEmployeesV2PilotAccount(employeeId, account.id);
+        return await linkEmployeesV2Account(employeeId, account.id);
     } catch (error) {
         // Preserve enough context for the UI to explain the recoverable partial
         // state. The account will appear as a safe candidate after refresh.
@@ -77,25 +78,35 @@ export async function createAndLinkEmployeesV2PilotAccount(employeeId, payload) 
     }
 }
 
-export async function unlinkEmployeesV2PilotAccount(employeeId) {
+export async function unlinkEmployeesV2Account(employeeId) {
     return (await api.delete(
-        `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}/account`,
-        { data: { confirmation: EMPLOYEE_PILOT_ACCOUNT_UNLINK_CONFIRMATION } },
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/account`,
+        { data: { confirmation: EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION } },
     )).data;
 }
 
-export async function assignEmployeesV2PilotRole(employeeId, payload) {
+export async function assignEmployeesV2Role(employeeId, payload) {
     return (await api.put(
-        `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}/role`,
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/role`,
         {
             ...payload,
-            confirmation: EMPLOYEE_PILOT_ROLE_CONFIRMATION,
+            confirmation: EMPLOYEE_ROLE_CONFIRMATION,
         },
     )).data;
 }
 
-export async function getEmployeesV2PilotEvents(employeeId) {
+export async function resetEmployeesV2AccountPassword(employeeId, newPassword) {
+    return (await api.put(
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/account/password`,
+        {
+            new_password: newPassword,
+            confirmation: EMPLOYEE_PASSWORD_CONFIRMATION,
+        },
+    )).data;
+}
+
+export async function getEmployeesV2Events(employeeId) {
     return (await api.get(
-        `/employees-v2/management/pilot/${encodeURIComponent(employeeId)}/events`,
+        `/employees-v2/management/employees/${encodeURIComponent(employeeId)}/events`,
     )).data;
 }
