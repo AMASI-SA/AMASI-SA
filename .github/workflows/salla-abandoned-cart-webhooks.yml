@@ -1,0 +1,57 @@
+name: Salla Abandoned Cart Webhooks
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/salla_integration/abandoned_carts.py"
+      - "backend/salla_integration/webhook_event_capture.py"
+      - "backend/salla_integration/webhook_monitor_routes.py"
+      - "backend/tests/test_salla_abandoned_carts_v1.py"
+      - ".github/workflows/salla-abandoned-cart-webhooks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    name: Isolated cart webhook contract
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          pytest==9.0.3
+          pytest-asyncio
+          fastapi==0.110.1
+          pydantic==2.13.4
+          httpx==0.28.1
+          pymongo==4.5.0
+          motor==3.3.1
+          cryptography==48.0.0
+
+      - name: Compile isolated Salla cart modules
+        run: |
+          python -m py_compile \
+            salla_integration/abandoned_carts.py \
+            salla_integration/webhook_event_capture.py \
+            salla_integration/webhook_monitor_routes.py \
+            tests/test_salla_abandoned_carts_v1.py
+
+      - name: Run privacy, idempotency, and isolation tests
+        run: >-
+          python -m pytest
+          tests/test_salla_abandoned_carts_v1.py
+          -q
+          --tb=short

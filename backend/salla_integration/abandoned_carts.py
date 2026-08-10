@@ -26,7 +26,11 @@ ABANDONED_CART_SCOPE = "carts.read"
 ABANDONED_CART_COLLECTION = "salla_abandoned_carts_v1"
 ABANDONED_CART_EVENT_COLLECTION = "salla_abandoned_cart_events_v1"
 ABANDONED_CART_SCHEMA_VERSION = 1
-MAX_BACKFILL_PAGES = 200
+# The connected Amasi store already has more than 6,000 abandoned carts.  At
+# Salla's conservative 30-row page size, a 200-page ceiling would silently
+# stop before the historical read completes.  Keep the read bounded, but high
+# enough to cover the current catalogue with room for growth.
+MAX_BACKFILL_PAGES = 500
 SALLA_PAGE_SIZE = 30
 
 
@@ -229,7 +233,6 @@ def normalize_abandoned_cart_event(
             source.get("cart_id"),
             data.get("cart_id"),
             source.get("reference_id"),
-            source.get("token"),
         )
     )
     if not cart_id:
@@ -366,8 +369,18 @@ async def persist_abandoned_cart_event(
             "pii_stored": False,
         }
     owner_id = _text(user_id) or await _owner_for_merchant(db, merchant_id)
-    if owner_id:
-        record["user_id"] = owner_id
+    if not owner_id:
+        # Multi-tenant records must never be persisted without an owner.  The
+        # verified audit capture remains available with PII redacted, while
+        # the cart-specific collections stay empty until the Salla merchant is
+        # bound to a Mezan tenant.
+        return {
+            "attempted": True,
+            "synced": False,
+            "reason": "owner_not_found",
+            "pii_stored": False,
+        }
+    record["user_id"] = owner_id
     event_hash = _fingerprint(record)
     now = datetime.now(timezone.utc)
     event_selector = {

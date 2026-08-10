@@ -6,7 +6,9 @@ from types import SimpleNamespace
 import pytest
 
 from salla_integration import abandoned_carts as module
+from salla_integration import webhook_event_capture as webhook_capture
 from salla_integration.webhook_event_capture import _sanitize
+from salla_integration.webhook_monitor_routes import APPROVED_EVENTS
 
 
 def _matches(document, selector):
@@ -134,12 +136,41 @@ def test_normalizer_keeps_analytics_fields_without_customer_pii():
     assert "nested@example.test" not in serialized
 
 
+def test_cart_token_is_never_used_as_persisted_identity():
+    payload = _cart_event()
+    payload["data"].pop("id")
+    payload["data"]["token"] = "private-cart-token"
+
+    assert module.normalize_abandoned_cart_event(payload) is None
+
+
+def test_all_four_salla_cart_events_are_ingested_and_monitored():
+    expected = {
+        "abandoned.cart",
+        "abandoned.cart.updated",
+        "abandoned.cart.status.changed",
+        "abandoned.cart.purchased",
+    }
+    monitored = {
+        name
+        for name, _label, group in APPROVED_EVENTS
+        if group == "abandoned_carts"
+    }
+
+    assert module.ABANDONED_CART_EVENTS == expected
+    assert monitored == expected
+    assert module.MAX_BACKFILL_PAGES >= 300
+
+
 def test_raw_cart_audit_redacts_customer_and_loose_pii_fields():
     payload = _cart_event()
     payload["data"]["checkout"] = {
         "name": "Loose Buyer Name",
         "city": "Riyadh",
         "ip_address": "192.0.2.1",
+    }
+    payload["data"]["urls"] = {
+        "checkout": "https://example.test/private-recovery-token",
     }
 
     sanitized = _sanitize(payload, redact_pii=True)
@@ -148,7 +179,9 @@ def test_raw_cart_audit_redacts_customer_and_loose_pii_fields():
     assert "Loose Buyer Name" not in serialized
     assert "buyer@example.test" not in serialized
     assert "192.0.2.1" not in serialized
+    assert "private-recovery-token" not in serialized
     assert sanitized["data"]["customer"] == "[REDACTED_PII]"
+    assert sanitized["data"]["urls"] == "[REDACTED_PII]"
 
 
 @pytest.mark.asyncio
@@ -166,6 +199,64 @@ async def test_cart_without_merchant_identity_is_not_persisted():
     assert result["reason"] == "merchant_id_missing"
     assert db.collections[module.ABANDONED_CART_COLLECTION].documents == []
     assert db.collections[module.ABANDONED_CART_EVENT_COLLECTION].documents == []
+
+
+@pytest.mark.asyncio
+async def test_cart_without_tenant_owner_is_not_persisted():
+    db = FakeDB()
+
+    result = await module.persist_abandoned_cart_event(db, _cart_event())
+
+    assert result["reason"] == "owner_not_found"
+    assert db.collections[module.ABANDONED_CART_COLLECTION].documents == []
+    assert db.collections[module.ABANDONED_CART_EVENT_COLLECTION].documents == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("event_name", sorted(module.ABANDONED_CART_EVENTS))
+async def test_cart_events_never_enter_order_or_shipment_paths(
+    monkeypatch,
+    event_name,
+):
+    db = FakeDB(
+        [
+            {
+                "user_id": "owner-1",
+                "store_id": 123,
+                "scope": "orders.read_write carts.read",
+            }
+        ]
+    )
+    forbidden_calls = []
+
+    async def forbidden(*args, **kwargs):
+        forbidden_calls.append((args, kwargs))
+        raise AssertionError("cart event reached an order/shipment path")
+
+    monkeypatch.setattr(
+        webhook_capture,
+        "sync_order_from_verified_webhook",
+        forbidden,
+    )
+    monkeypatch.setattr(
+        webhook_capture,
+        "sync_shipment_payload_from_verified_webhook",
+        forbidden,
+    )
+
+    result = await webhook_capture.capture_unknown_event(
+        db,
+        _cart_event(event=event_name),
+        known_events=(),
+    )
+
+    assert forbidden_calls == []
+    assert result["abandoned_cart_isolated"] is True
+    assert result["abandoned_cart_sync"]["synced"] is True
+    assert result["order_sync"]["reason"] == "isolated_abandoned_cart_event"
+    assert result["shipment_sync"]["reason"] == "isolated_abandoned_cart_event"
+    assert result["snapchat_capi"]["reason"] == "isolated_abandoned_cart_event"
+    assert result["order_mutation_scope"] == "none"
 
 
 @pytest.mark.asyncio

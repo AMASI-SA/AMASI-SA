@@ -56,6 +56,11 @@ _PII_KEYS = {
     "ip",
     "ip_address",
     "device_id",
+    "url",
+    "urls",
+    "checkout_url",
+    "recovery_url",
+    "cart_url",
 }
 _PII_CONTAINERS = {
     "customer",
@@ -145,6 +150,13 @@ async def capture_unknown_event(
     }
 
     if is_abandoned_cart_event:
+        # Abandoned-cart webhooks have a deliberately isolated execution
+        # boundary.  They may update only the privacy-minimised cart stores and
+        # the sanitized webhook audit below; order, shipment, Qoyod and ads
+        # conversion paths are never entered for these events.
+        order_sync["reason"] = "isolated_abandoned_cart_event"
+        shipment_sync["reason"] = "isolated_abandoned_cart_event"
+        snapchat_capi["reason"] = "isolated_abandoned_cart_event"
         try:
             cart_sync = await persist_abandoned_cart_event(db, event_body)
         except Exception as exc:  # webhook acknowledgement remains independent
@@ -158,22 +170,23 @@ async def capture_unknown_event(
                 "pii_stored": False,
             }
 
-    try:
-        order_sync = await sync_order_from_verified_webhook(db, event_body)
-    except Exception as exc:  # webhook must still return HTTP 200
-        log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
-        order_sync = {
-            "attempted": True,
-            "synced": False,
-            "reason": "unhandled_exception",
-            "error": str(exc)[:500],
-            "no_salla_api_calls": True,
-            "no_qoyod_calls": True,
-        }
+    if not is_abandoned_cart_event:
+        try:
+            order_sync = await sync_order_from_verified_webhook(db, event_body)
+        except Exception as exc:  # webhook must still return HTTP 200
+            log.exception("order_webhook.unhandled event=%s", event_name or "<none>")
+            order_sync = {
+                "attempted": True,
+                "synced": False,
+                "reason": "unhandled_exception",
+                "error": str(exc)[:500],
+                "no_salla_api_calls": True,
+                "no_qoyod_calls": True,
+            }
 
     # Provider delivery is never performed inside the webhook.  This call only
     # creates a hashed, idempotent outbox record when CAPI is explicitly enabled.
-    if order_sync.get("synced"):
+    if not is_abandoned_cart_event and order_sync.get("synced"):
         try:
             from integrations_control_center.snapchat_capi_purchases import (
                 enqueue_snapchat_purchase_from_salla_event,
@@ -196,21 +209,22 @@ async def capture_unknown_event(
                 "provider_call_reached": False,
             }
 
-    try:
-        shipment_sync = await sync_shipment_payload_from_verified_webhook(
-            db,
-            event_body,
-        )
-    except Exception as exc:  # webhook must still return HTTP 200
-        log.exception("shipment_webhook.unhandled event=%s", event_name or "<none>")
-        shipment_sync = {
-            "attempted": True,
-            "synced": False,
-            "reason": "unhandled_exception",
-            "error": str(exc)[:500],
-            "no_salla_api_calls": True,
-            "no_qoyod_calls": True,
-        }
+    if not is_abandoned_cart_event:
+        try:
+            shipment_sync = await sync_shipment_payload_from_verified_webhook(
+                db,
+                event_body,
+            )
+        except Exception as exc:  # webhook must still return HTTP 200
+            log.exception("shipment_webhook.unhandled event=%s", event_name or "<none>")
+            shipment_sync = {
+                "attempted": True,
+                "synced": False,
+                "reason": "unhandled_exception",
+                "error": str(exc)[:500],
+                "no_salla_api_calls": True,
+                "no_qoyod_calls": True,
+            }
 
     log.info(
         "salla_webhook.result event=%s order_synced=%s shipment_synced=%s "
@@ -231,6 +245,13 @@ async def capture_unknown_event(
         "event": event_name or None,
         "event_hash": event_hash,
     }
+    order_mutation_scope = (
+        "full_order_from_webhook"
+        if order_sync.get("synced")
+        else "shipping_fields_only"
+        if shipment_sync.get("order_modified")
+        else "none"
+    )
     update = {
         "$setOnInsert": {
             **selector,
@@ -248,13 +269,8 @@ async def capture_unknown_event(
             "shipment_sync": shipment_sync,
             "snapchat_capi": snapchat_capi,
             "abandoned_cart_sync": cart_sync,
-            "order_mutation_scope": (
-                "full_order_from_webhook"
-                if order_sync.get("synced")
-                else "shipping_fields_only"
-                if shipment_sync.get("order_modified")
-                else "none"
-            ),
+            "abandoned_cart_isolated": is_abandoned_cart_event,
+            "order_mutation_scope": order_mutation_scope,
         },
         "$inc": {"delivery_count": 1},
     }
@@ -273,6 +289,8 @@ async def capture_unknown_event(
         "shipment_sync": shipment_sync,
         "snapchat_capi": snapchat_capi,
         "abandoned_cart_sync": cart_sync,
+        "abandoned_cart_isolated": is_abandoned_cart_event,
+        "order_mutation_scope": order_mutation_scope,
         "no_salla_api_calls": True,
         "no_qoyod_calls": True,
     }
