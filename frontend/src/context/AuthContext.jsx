@@ -3,6 +3,20 @@ import api, { formatApiErrorDetail } from "../lib/api";
 
 const AuthContext = createContext(null);
 
+function clearLegacyBrowserAccessToken() {
+    // Browser authentication is cookie-only. Older Mezan builds persisted the
+    // JWT in localStorage, which made a long-lived bearer token readable by any
+    // script running in the page. Remove that legacy copy before the first
+    // authenticated request; the server-issued HttpOnly/Secure cookie remains
+    // the browser session source of truth.
+    try {
+        localStorage.removeItem("access_token");
+    } catch {
+        // Storage can be unavailable in hardened/private browser modes. Cookie
+        // authentication still works, so this cleanup is best-effort.
+    }
+}
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null); // null while checking, false if anon
     const [loading, setLoading] = useState(true);
@@ -20,6 +34,7 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         (async () => {
+            clearLegacyBrowserAccessToken();
             await refreshUser();
             setLoading(false);
         })();
@@ -27,7 +42,10 @@ export function AuthProvider({ children }) {
 
     const login = async (email, password) => {
         const { data } = await api.post("/auth/login", { email, password });
-        if (data?.access_token) localStorage.setItem("access_token", data.access_token);
+        // Do not persist data.access_token in Web Storage. The backend already
+        // sets HttpOnly/Secure auth cookies and api is configured with
+        // withCredentials=true, so JavaScript never needs the browser token.
+        clearLegacyBrowserAccessToken();
         // Fetch the FULL /auth/me payload (includes permissions + is_owner + has_security_question)
         // so RBAC-aware navigation works immediately after login.
         await refreshUser();
@@ -36,7 +54,7 @@ export function AuthProvider({ children }) {
 
     const register = async (name, email, password) => {
         const { data } = await api.post("/auth/register", { name, email, password });
-        if (data?.access_token) localStorage.setItem("access_token", data.access_token);
+        clearLegacyBrowserAccessToken();
         await refreshUser();
         return data;
     };
@@ -47,7 +65,7 @@ export function AuthProvider({ children }) {
         } catch {
             // Best-effort: server may already consider us logged out. Still clear client state.
         }
-        localStorage.removeItem("access_token");
+        clearLegacyBrowserAccessToken();
         // Hard reload to /login guarantees protected-route logic re-evaluates immediately
         // (and clears any in-flight state on Dashboard/Reports pages).
         window.location.replace("/login");
