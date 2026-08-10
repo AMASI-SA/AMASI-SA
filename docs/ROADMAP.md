@@ -116,6 +116,16 @@ Phase 1:
 - Idempotent `shadow_read_only` employee and salary-contract migration
 - Owner-only migration and audit controls
 
+Phase 2 pilot:
+
+- One owner-managed pilot employee
+- Create and edit employee identity fields
+- V2-only link to one unused team login account
+- Canonical operational role and permission assignment
+- Append-only employee activity timeline
+- Zero writes to legacy payroll, liabilities, advances, custody or ledger
+- Existing 15 migrated employees remain read-only until pilot acceptance
+
 Required before payroll cutover:
 
 - Resolve suggested or conflicting login links manually

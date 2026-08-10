@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 
 import StoreOperationsAccessWorkspace from "./StoreOperationsAccessWorkspace";
+import EmployeesV2ManagementPilot from "./EmployeesV2ManagementPilot";
 import {
     applyEmployeesV2ShadowMigration,
     getEmployeesV2,
@@ -283,14 +284,15 @@ function MigrationWorkspace() {
 
 export default function EmployeesV2() {
     const [searchParams] = useSearchParams();
-    const workspace = searchParams.get("workspace") || "employees";
+    const workspace = searchParams.get("workspace") || "management";
     return (
         <div className="space-y-5" dir="rtl" data-testid="employees-v2-page">
             <nav className="flex flex-wrap gap-2 rounded-2xl border bg-white p-2 shadow-sm" aria-label="أقسام الموظفين">
-                <Link to="/employees-v2" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "employees" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>الموظفون والرواتب</Link>
+                <Link to="/employees-v2" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "management" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>إدارة الموظفين</Link>
+                <Link to="/employees-v2?workspace=migration" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "migration" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700"}`}>تقرير الترحيل والرواتب</Link>
                 <Link to="/employees-v2?workspace=permissions" className={`rounded-xl px-4 py-2.5 text-sm font-black ${workspace === "permissions" ? "bg-violet-700 text-white" : "bg-slate-100 text-slate-700"}`}>الصلاحيات وإدارة التجهيز</Link>
             </nav>
-            {workspace === "permissions" ? <StoreOperationsAccessWorkspace /> : <MigrationWorkspace />}
+            {workspace === "permissions" ? <StoreOperationsAccessWorkspace /> : workspace === "migration" ? <MigrationWorkspace /> : <EmployeesV2ManagementPilot />}
         </div>
     );
 }

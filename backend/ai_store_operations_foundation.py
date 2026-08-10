@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ai_store_access_contract import AI_ACTION_LOG, PERMISSIONS, ROLE_ASSIGNMENTS, ROLE_CATALOG
 from product_intelligence_foundation import (
     action_candidates,
     product_intelligence_foundation,
@@ -19,106 +20,8 @@ from product_intelligence_foundation import (
 from product_v2_routes import PRODUCTS
 from product_v2_details_routes import COST_PROFILES
 
-ROLE_ASSIGNMENTS = "mezan_role_assignments_v2"
-AI_ACTION_LOG = "mezan_ai_action_log_v2"
 PRODUCT_MEDIA = "mezan_product_media_v2"
 PRODUCT_MEDIA_DRAFTS = "mezan_product_media_drafts_v2"
-
-PERMISSIONS = {
-    "products.read",
-    "products.create",
-    "products.review",
-    "products.publish",
-    "products.cost.read",
-    "products.cost.write",
-    "products.media.read",
-    "products.media.upload",
-    "products.media.edit",
-    "products.media.delete",
-    "products.media.reorder",
-    "products.media.publish",
-    "products.media.ai_generate",
-    "products.media.ai_edit",
-    "products.ai.recommend",
-    "products.ai.execute_low_risk",
-    "products.ai.execute_high_risk",
-    "employees.read",
-    "employees.manage",
-    "roles.manage",
-    "audit.read",
-    "fulfillment.ready.read",
-    "fulfillment.batch.claim",
-    "fulfillment.labels.print",
-    "fulfillment.labels.reprint",
-    "fulfillment.pack.confirm",
-    "fulfillment.carrier.handoff",
-    "inventory.receipts.read",
-    "inventory.receipts.write",
-    "inventory.preparation.read",
-    "inventory.preparation.create",
-    "inventory.preparation.work",
-    "inventory.preparation.receive",
-    "supplier_receiving.product_price.edit",
-    "supplier_receiving.service_price.edit",
-    "supplier_receiving.service.add",
-    "suppliers.read",
-    "suppliers.manage",
-    "inventory.salla_sync.read",
-    "inventory.salla_sync.manage_mappings",
-    "inventory.salla_sync.publish",
-}
-
-ROLE_CATALOG = {
-    "owner": sorted(PERMISSIONS),
-    "product_manager": sorted({
-        "products.read", "products.create", "products.review", "products.publish",
-        "products.cost.read", "products.media.read", "products.media.upload",
-        "products.media.edit", "products.media.delete", "products.media.reorder",
-        "products.media.publish", "products.ai.recommend", "audit.read",
-        "suppliers.read",
-    }),
-    "product_operator": sorted({
-        "products.read", "products.create", "products.review", "products.cost.read",
-        "products.media.read", "products.media.upload", "products.media.edit",
-        "products.media.reorder", "products.ai.recommend",
-    }),
-    "cost_manager": sorted({
-        "products.read", "products.cost.read", "products.cost.write", "audit.read",
-        "inventory.receipts.read", "inventory.receipts.write",
-        "inventory.preparation.read", "inventory.preparation.create",
-        "inventory.preparation.receive",
-        "inventory.salla_sync.read",
-        "suppliers.read",
-    }),
-    "warehouse_operator": sorted({
-        "products.read", "products.cost.read",
-        "fulfillment.ready.read", "fulfillment.batch.claim",
-        "fulfillment.pack.confirm",
-        "inventory.receipts.read", "inventory.receipts.write",
-        "inventory.preparation.read", "inventory.preparation.create",
-        "inventory.preparation.work", "inventory.preparation.receive",
-        "inventory.salla_sync.read",
-        "suppliers.read",
-    }),
-    "shipping_operator": sorted({
-        "products.read",
-        "fulfillment.ready.read",
-        "fulfillment.batch.claim",
-        "fulfillment.labels.print",
-        "fulfillment.pack.confirm",
-        "fulfillment.carrier.handoff",
-    }),
-    "marketing_manager": sorted({
-        "products.read", "products.review", "products.media.read",
-        "products.media.upload", "products.media.edit", "products.media.reorder",
-        "products.ai.recommend", "audit.read",
-    }),
-    "ai_product_optimizer": sorted({
-        "products.read", "products.cost.read", "products.media.read",
-        "products.media.ai_generate", "products.media.ai_edit",
-        "products.ai.recommend", "products.ai.execute_low_risk",
-    }),
-}
 
 
 def _now() -> datetime:

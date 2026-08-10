@@ -50,7 +50,8 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "الموظفون",
         Icon: UsersThree,
         items: [
-            { to: "/employees-v2", label: "الموظفون والرواتب", exactSearch: true },
+            { to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true },
+            { to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" },
             { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" },
         ],
     },
