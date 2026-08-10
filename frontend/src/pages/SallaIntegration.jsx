@@ -686,13 +686,13 @@ export default function SallaIntegration() {
                     <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 px-5 py-3 flex items-start gap-2">
                         <Storefront size={19} weight="bold" className="text-amber-700 mt-0.5" />
                         <div className="flex-1">
-                            <h3 className="font-extrabold text-slate-900">السلات المتروكة</h3>
+                            <h3 className="font-extrabold text-slate-900">ذاكرة السلات والعملاء V2</h3>
                             <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                استيراد تاريخي ومتابعة مباشرة للأحداث الأربعة. الحفظ تحليلي ومُنقّح؛ لا تُخزَّن بيانات العميل الشخصية.
+                                استيراد تاريخي ومتابعة مباشرة للأحداث الأربعة. بيانات العميل وروابط الاستعادة تُحفظ مشفّرة، ولا تُخزَّن كنص صريح.
                             </p>
                         </div>
                         <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-extrabold whitespace-nowrap">
-                            قراءة فقط
+                            قراءة آمنة
                         </span>
                     </div>
 
@@ -711,6 +711,33 @@ export default function SallaIntegration() {
                             ))}
                         </div>
 
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3" data-testid="salla-cart-v2-memory-coverage">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                                <div>
+                                    <div className="text-xs font-extrabold text-indigo-950">تغطية ذاكرة ميزان</div>
+                                    <div className="text-[10px] text-indigo-700 mt-0.5">المخطط V{cartStatus?.schema_version || 1} · لا تعرض هذه الصفحة أي بيانات شخصية</div>
+                                </div>
+                                <span className="px-2 py-1 rounded-full bg-white border border-indigo-200 text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">
+                                    مشفّر عند الحفظ
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+                                {[
+                                    ["هويات العملاء", cartStatus?.customer_identities || 0],
+                                    ["مرتبطة بعميل", cartStatus?.identity_linked_carts || 0],
+                                    ["مرتبطة بمصدر/حملة", cartStatus?.attributed_carts || 0],
+                                    ["مرتبطة بطلب", cartStatus?.order_linked_carts || 0],
+                                    ["طلبات في ملف العميل", cartStatus?.customer_memory_orders || 0],
+                                    ["روابط/كوبونات مشفرة", cartStatus?.encrypted_private_carts || 0],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="rounded-lg bg-white border border-indigo-100 px-2.5 py-2">
+                                        <div className="text-[10px] font-bold text-slate-500 leading-tight">{label}</div>
+                                        <div className="text-lg font-extrabold text-indigo-800 font-mono mt-1">{Number(value).toLocaleString("en-US")}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3 flex-wrap">
                             <div>
                                 <div className="font-extrabold text-amber-950 text-sm">
@@ -718,9 +745,9 @@ export default function SallaIntegration() {
                                 </div>
                                 <div className="text-xs text-amber-800 mt-1" data-testid="salla-cart-sync-progress">
                                     {cartStatus?.import_running ? (
-                                        <>تمت قراءة {cartStatus?.last_sync?.pages_fetched || 0} صفحة · {cartStatus?.last_sync?.rows_seen || 0} سلة · حُفظت {cartStatus?.last_sync?.rows_saved || 0}</>
+                                        <>تمت قراءة {cartStatus?.last_sync?.pages_fetched || 0} صفحة · {cartStatus?.last_sync?.rows_seen || 0} سلة · حُفظت {cartStatus?.last_sync?.rows_saved || 0} · رُبطت {cartStatus?.last_sync?.identity_linked || 0} بعميل و{cartStatus?.last_sync?.attributed || 0} بمصدر/حملة</>
                                     ) : cartStatus?.last_sync?.status === "completed" ? (
-                                        <>آخر مزامنة مكتملة: {cartStatus.last_sync.rows_saved || 0} سلة · {cartStatus.last_sync.pages_fetched || 0} صفحة · {cartStatus.last_sync.ended_at ? new Date(cartStatus.last_sync.ended_at).toLocaleString("en-US") : "—"}</>
+                                        <>آخر مزامنة مكتملة: {cartStatus.last_sync.rows_saved || 0} سلة · {cartStatus.last_sync.identity_linked || 0} مرتبطة بعميل · {cartStatus.last_sync.attributed || 0} مرتبطة بمصدر/حملة · {cartStatus.last_sync.ended_at ? new Date(cartStatus.last_sync.ended_at).toLocaleString("en-US") : "—"}</>
                                     ) : cartStatus?.last_sync?.status === "failed" ? (
                                         <span className="text-rose-700">آخر محاولة فشلت: {cartStatus.last_sync.last_error || "خطأ غير معروف"}</span>
                                     ) : (
