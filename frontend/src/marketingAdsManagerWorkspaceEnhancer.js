@@ -35,9 +35,13 @@ function lockedButton(label, className, title) {
   return button;
 }
 
-function ensureManagerActions(table) {
+function ensureManagerActions(table, workspace) {
   const tabBar = table.firstElementChild;
-  if (!tabBar || tabBar.querySelector(`[${ACTIONS_ATTRIBUTE}]`)) return;
+  if (
+    !tabBar
+    || workspace?.querySelector('[data-testid="snapchat-campaign-management-panel"]')
+    || tabBar.querySelector(`[${ACTIONS_ATTRIBUTE}]`)
+  ) return;
 
   const actions = document.createElement("div");
   actions.setAttribute(ACTIONS_ATTRIBUTE, "true");
@@ -266,7 +270,7 @@ export function enhanceMarketingAdsManager(root = document) {
   workspace.dataset.adsManagerMode = "campaigns";
   table.dataset.adsManagerDesign = "v1";
   markEntityTabs(table);
-  ensureManagerActions(table);
+  ensureManagerActions(table, workspace);
   applyNativeCampaignCurrency(table, platform);
   return true;
 }

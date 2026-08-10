@@ -77,4 +77,18 @@ describe("marketing ads manager workspace enhancer", () => {
     expect(refresh.click).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-result-source="platform"]').dataset.active).toBe("true");
   });
+
+  test("does not inject obsolete locked actions beside the native management panel", () => {
+    document.body.innerHTML = `
+      <main data-testid="marketing-platform-workspace">
+        <header><div></div><div>status</div></header>
+        <section data-testid="snapchat-campaign-management-panel"></section>
+        <section data-testid="campaign-manager-table"><div><button>الحملات</button></div></section>
+      </main>
+    `;
+
+    enhanceMarketingAdsManager(document);
+
+    expect(document.querySelector("[data-mezan-ads-manager-actions]")).toBeNull();
+  });
 });

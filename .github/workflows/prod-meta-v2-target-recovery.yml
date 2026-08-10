@@ -37,6 +37,7 @@ jobs:
           pytest
           pytest-asyncio
           openpyxl
+          reportlab
       - name: Compile recovery modules
         run: >-
           python -m py_compile

@@ -69,6 +69,9 @@ from .snapchat_adsquad_status_delivery_separation import (
 from .snapchat_campaign_catalog_refresh import (
     install_snapchat_campaign_catalog_refresh,
 )
+from .snapchat_campaign_management import (
+    attach_snapchat_campaign_management_routes,
+)
 from .snapchat_campaign_result_source_routes import (
     attach_snapchat_campaign_result_source_routes,
 )
@@ -187,6 +190,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
     attach_snapchat_ad_routes(
+        router, db, current_user, _require_owner
+    )
+    attach_snapchat_campaign_management_routes(
         router, db, current_user, _require_owner
     )
     attach_snapchat_dashboard_summary_routes(router, db, current_user, _require_owner)

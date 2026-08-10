@@ -2,10 +2,11 @@ import CampaignManagerTable from "./CampaignManagerTable";
 import AdSquadManagerTable from "./AdSquadManagerTable";
 import AdSquadSortControls from "./AdSquadSortControls";
 import AdManagerTable from "./AdManagerTable";
+import SnapchatCampaignManagementPanel from "./SnapchatCampaignManagementPanel";
 import SnapchatOrderSourceAudit from "./SnapchatOrderSourceAudit";
 import { hydrateCampaignProfitability } from "../../marketingCampaignProfitabilityHydration";
 
-function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled }) {
+function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, adsEnabled, managementEnabled }) {
     const items = [
         { id: "campaigns", label: "الحملات", enabled: true },
         { id: "ad_squads", label: "المجموعات الإعلانية", enabled: adSquadsEnabled },
@@ -30,7 +31,9 @@ function EntityTabs({ platformLabel, entityLevel, onChange, adSquadsEnabled, ads
                     </button>
                 );
             })}
-            <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">{platformLabel || "المنصة"} · قراءة فقط</span>
+            <span className="mr-auto pb-3 text-[11px] font-bold text-slate-400">
+                {platformLabel || "المنصة"} · {managementEnabled ? "تقارير قراءة فقط · إدارة محكومة" : "قراءة فقط"}
+            </span>
         </div>
     );
 }
@@ -92,6 +95,7 @@ export default function AdsEntityLevelWorkspace({
     onOpenAdSquads,
     onOpenAds,
     onClearHierarchy,
+    onManagementChanged,
 }) {
     const adSquadsEnabled = platform === "snapchat";
     const adsEnabled = platform === "snapchat";
@@ -108,7 +112,16 @@ export default function AdsEntityLevelWorkspace({
                 [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] > div:first-child { display: none; }
                 [data-testid="ads-entity-level-workspace"] [data-testid="campaign-manager-table"] { border-top-left-radius: 0; border-top-right-radius: 0; }
             `}</style>
-            <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} />
+            {platform === "snapchat" && (
+                <SnapchatCampaignManagementPanel
+                    accountId={auditAccountId}
+                    entityLevel={entityLevel}
+                    selectedCampaign={selectedCampaign}
+                    selectedAdSquad={selectedAdSquad}
+                    onChanged={onManagementChanged}
+                />
+            )}
+            <EntityTabs platformLabel={platformLabel} entityLevel={entityLevel} onChange={onEntityLevelChange} adSquadsEnabled={adSquadsEnabled} adsEnabled={adsEnabled} managementEnabled={platform === "snapchat"} />
             {platform === "snapchat" && (selectedCampaign || selectedAdSquad) && (
                 <div
                     className="flex flex-wrap items-center gap-2 border-x border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600"
