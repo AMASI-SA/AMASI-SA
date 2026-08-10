@@ -78,6 +78,13 @@ class FakeCollection:
         }
 
     async def update_one(self, selector, update, upsert=False):
+        conflicting_paths = set(update.get("$set", {})).intersection(
+            update.get("$setOnInsert", {})
+        )
+        assert not conflicting_paths, (
+            "MongoDB rejects paths shared by $set and $setOnInsert: "
+            f"{sorted(conflicting_paths)}"
+        )
         document = next(
             (item for item in self.documents if _matches(item, selector)),
             None,
@@ -629,6 +636,33 @@ async def test_v2_preserves_first_touch_and_updates_last_touch():
     assert snapshot["attribution_last_touch"]["campaign_id"] == "campaign-2"
     assert snapshot["attribution"]["ad_group_id"] == "ad-group-2"
     assert snapshot["attribution"]["creative_id"] == "creative-2"
+
+
+@pytest.mark.asyncio
+async def test_v2_upgrades_v1_cart_without_conflicting_first_touch_operators():
+    db = FakeDB()
+    db.collections[module.ABANDONED_CART_COLLECTION].documents.append(
+        {
+            "merchant_id": "123",
+            "cart_id": "cart-1",
+            "schema_version": 1,
+            "purchased": False,
+            "cart_updated_at": "2026-08-09T09:00:00+00:00",
+        }
+    )
+
+    result = await module.persist_abandoned_cart_event(
+        db,
+        _cart_event(),
+        user_id="owner-1",
+    )
+
+    snapshot = db.collections[module.ABANDONED_CART_COLLECTION].documents[0]
+    assert result["synced"] is True
+    assert result["created"] is False
+    assert snapshot["schema_version"] == 2
+    assert snapshot["attribution_first_touch"]["campaign_id"] == "campaign-1"
+    assert snapshot["attribution_last_touch"]["campaign_id"] == "campaign-1"
 
 
 @pytest.mark.asyncio

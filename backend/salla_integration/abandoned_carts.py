@@ -774,8 +774,6 @@ async def persist_abandoned_cart_event(
         snapshot.pop("cart_updated_at", None)
         snapshot.pop("cart_created_at", None)
     set_on_insert: dict[str, Any] = {"first_seen_at": now, "created_at": now}
-    if attribution:
-        set_on_insert["attribution_first_touch"] = attribution
     snapshot_result = await getattr(db, ABANDONED_CART_COLLECTION).update_one(
         identity,
         {
