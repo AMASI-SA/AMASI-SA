@@ -61,12 +61,22 @@ export function AuthProvider({ children }) {
         return data;
     };
 
-    const verifyMfa = async (challengeToken, code) => {
+    const verifyMfa = async (challengeToken, code, { deferRefresh = false } = {}) => {
         const { data } = await api.post("/auth/mfa/verify", {
             challenge_token: challengeToken,
             code,
         });
         clearLegacyBrowserAccessToken();
+
+        // First-time enrollment returns recovery codes that must remain visible
+        // before PublicOnly sees an authenticated user and redirects away from
+        // /login. The HttpOnly session cookie is already set; Login calls
+        // refreshUser only after the merchant confirms the codes are saved.
+        if (deferRefresh) {
+            setUser(false);
+            return data;
+        }
+
         await refreshUser();
         return data;
     };
