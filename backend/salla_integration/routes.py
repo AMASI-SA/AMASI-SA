@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import os
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 
 from .service import (
@@ -60,9 +61,14 @@ from .sync import (
     run_products_sync,
 )
 from .abandoned_carts import (
+    ABANDONED_CART_COLLECTION,
+    ABANDONED_CART_EVENT_COLLECTION,
+    ABANDONED_CART_EVENTS,
     AbandonedCartScopeError,
     backfill_abandoned_carts,
     ensure_abandoned_cart_indexes,
+    require_carts_read,
+    split_scopes,
 )
 
 
@@ -573,15 +579,143 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             )
         return {"ok": True, **result}
 
-    @router.post("/sync/abandoned-carts")
-    async def sync_abandoned_carts(user: dict = Depends(current_user)):
-        """Read-only historical import, locked until carts.read is granted."""
-        try:
-            return await backfill_abandoned_carts(
-                db,
-                user["id"],
-                call_provider=call_salla,
+    def _public_cart_sync_log(row: Optional[dict]) -> Optional[dict]:
+        if not row:
+            return None
+        allowed = (
+            "id",
+            "kind",
+            "status",
+            "created",
+            "updated",
+            "errors_count",
+            "pages_fetched",
+            "rows_seen",
+            "rows_saved",
+            "stopped_reason",
+            "started_at",
+            "ended_at",
+            "updated_at",
+            "last_error",
+            "provider_write_reached",
+            "pii_stored",
+        )
+        public = {key: row.get(key) for key in allowed if key in row}
+        for key in ("started_at", "ended_at", "updated_at"):
+            value = public.get(key)
+            if hasattr(value, "isoformat"):
+                public[key] = value.isoformat()
+        return public
+
+    async def _run_abandoned_cart_sync(user_id: str, run_id: str) -> None:
+        async def update_progress(progress: dict) -> None:
+            await db.salla_sync_logs.update_one(
+                {"id": run_id, "user_id": user_id},
+                {"$set": {**progress, "updated_at": datetime.now(timezone.utc)}},
             )
+
+        try:
+            result = await backfill_abandoned_carts(
+                db,
+                user_id,
+                call_provider=call_salla,
+                progress_hook=update_progress,
+            )
+        except Exception as exc:  # noqa: BLE001 - task must persist terminal state
+            await db.salla_sync_logs.update_one(
+                {"id": run_id, "user_id": user_id},
+                {"$set": {
+                    "status": "failed",
+                    "last_error": str(exc)[:500],
+                    "ended_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                    "provider_write_reached": False,
+                    "pii_stored": False,
+                }},
+            )
+            return
+
+        now = datetime.now(timezone.utc)
+        await db.salla_sync_logs.update_one(
+            {"id": run_id, "user_id": user_id},
+            {"$set": {
+                **result,
+                "status": "completed",
+                "ended_at": now,
+                "updated_at": now,
+                "last_error": None,
+            }},
+        )
+
+    @router.get("/abandoned-carts/status")
+    async def abandoned_carts_status(user: dict = Depends(current_user)):
+        """Privacy-safe progress and coverage summary for the current tenant."""
+        user_id = user["id"]
+        integration = await get_integration(db, user_id)
+        scope_granted = bool(
+            integration
+            and "carts.read" in split_scopes(integration.get("scope"))
+        )
+        carts = getattr(db, ABANDONED_CART_COLLECTION)
+        events = getattr(db, ABANDONED_CART_EVENT_COLLECTION)
+        total_carts = await carts.count_documents({"user_id": user_id})
+        purchased_carts = await carts.count_documents(
+            {"user_id": user_id, "purchased": True}
+        )
+        webhook_events = await events.count_documents({"user_id": user_id})
+        event_counts = {
+            event_name: await events.count_documents(
+                {"user_id": user_id, "event": event_name}
+            )
+            for event_name in sorted(ABANDONED_CART_EVENTS)
+        }
+        latest_cart = await carts.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "updated_at": 1, "cart_updated_at": 1},
+            sort=[("updated_at", -1)],
+        )
+        latest_event = await events.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "last_received_at": 1},
+            sort=[("last_received_at", -1)],
+        )
+        latest_sync = await db.salla_sync_logs.find_one(
+            {"user_id": user_id, "kind": "abandoned_carts"},
+            {"_id": 0},
+            sort=[("started_at", -1)],
+        )
+
+        def iso(value):
+            return value.isoformat() if hasattr(value, "isoformat") else value
+
+        return {
+            "ok": True,
+            "scope_granted": scope_granted,
+            "total_carts": total_carts,
+            "active_carts": max(total_carts - purchased_carts, 0),
+            "purchased_carts": purchased_carts,
+            "webhook_events": webhook_events,
+            "event_counts": event_counts,
+            "latest_cart_at": iso(
+                (latest_cart or {}).get("cart_updated_at")
+                or (latest_cart or {}).get("updated_at")
+            ),
+            "latest_event_at": iso((latest_event or {}).get("last_received_at")),
+            "last_sync": _public_cart_sync_log(latest_sync),
+            "import_running": (latest_sync or {}).get("status") == "running",
+            "provider_write_reached": False,
+            "pii_stored": False,
+        }
+
+    @router.post("/sync/abandoned-carts", status_code=202)
+    async def sync_abandoned_carts(
+        background_tasks: BackgroundTasks,
+        user: dict = Depends(current_user),
+    ):
+        """Start a tracked read-only backfill without holding the HTTP request."""
+        user_id = user["id"]
+        try:
+            await require_carts_read(db, user_id)
         except AbandonedCartScopeError as exc:
             raise HTTPException(
                 status_code=409,
@@ -594,14 +728,71 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     "approval_pending": "carts.read" not in DEFAULT_SCOPES.split(),
                 },
             ) from exc
-        except SallaError as exc:
-            raise HTTPException(
-                status_code=exc.status_code if exc.status_code != 200 else 400,
-                detail={
-                    "message": str(exc),
-                    "needs_reauth": exc.needs_reauth,
-                },
-            ) from exc
+
+        now = datetime.now(timezone.utc)
+        running = await db.salla_sync_logs.find_one(
+            {
+                "user_id": user_id,
+                "kind": "abandoned_carts",
+                "status": "running",
+            },
+            {"_id": 0},
+            sort=[("started_at", -1)],
+        )
+        if running:
+            started_at = running.get("started_at")
+            if isinstance(started_at, datetime):
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                else:
+                    started_at = started_at.astimezone(timezone.utc)
+            if isinstance(started_at, datetime) and started_at >= now - timedelta(hours=2):
+                return {
+                    "ok": True,
+                    "accepted": False,
+                    "already_running": True,
+                    "run": _public_cart_sync_log(running),
+                }
+            await db.salla_sync_logs.update_one(
+                {"id": running.get("id"), "user_id": user_id},
+                {"$set": {
+                    "status": "failed",
+                    "last_error": "stale_background_import_replaced",
+                    "ended_at": now,
+                    "updated_at": now,
+                }},
+            )
+
+        run_id = uuid.uuid4().hex
+        await db.salla_sync_logs.update_one(
+            {"id": run_id, "user_id": user_id},
+            {"$setOnInsert": {
+                "id": run_id,
+                "user_id": user_id,
+                "kind": "abandoned_carts",
+                "status": "running",
+                "created": 0,
+                "updated": 0,
+                "errors_count": 0,
+                "pages_fetched": 0,
+                "rows_seen": 0,
+                "rows_saved": 0,
+                "started_at": now,
+                "updated_at": now,
+                "provider_write_reached": False,
+                "pii_stored": False,
+            }},
+            upsert=True,
+        )
+        background_tasks.add_task(_run_abandoned_cart_sync, user_id, run_id)
+        return {
+            "ok": True,
+            "accepted": True,
+            "run_id": run_id,
+            "status": "running",
+            "provider_write_reached": False,
+            "pii_stored": False,
+        }
 
     # ── 9. Sync logs ──────────────────────────────────────────────────
     @router.get("/sync/logs")
