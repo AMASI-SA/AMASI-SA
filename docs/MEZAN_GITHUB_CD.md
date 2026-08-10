@@ -1,45 +1,60 @@
-# Mezan GitHub Continuous Delivery
+# Mezan release flow with GitHub and Emergent
 
-## Goal
+## Confirmed platform constraint
 
-Make GitHub the only source of code for routine Mezan releases. Normal releases must not require copying commands into the Emergent terminal.
+For the existing Mezan project, Emergent does **not** provide GitHub-to-project Continuous Deployment.
+
+There is no supported GitHub pull/sync, branch watcher, webhook, or automatic redeploy path for this existing project. `Save to GitHub` is one-way from Emergent to GitHub. A push or merge to GitHub does not update Emergent Preview and does not redeploy `mezansalla.com`.
 
 ## Production branch
 
 `hotfix/prod-snap-meta-final`
 
-This branch is currently the authoritative production code line and is intentionally kept separate from `main` until the historical branch divergence is resolved explicitly.
+This remains the authoritative reviewed production code line in GitHub while `main` remains historically diverged.
 
-## Release flow
+## Roles of each system
 
-1. Create a feature/fix branch from the current production branch.
-2. Open a pull request into `hotfix/prod-snap-meta-final`.
-3. Let the domain-specific GitHub Actions run for the changed area.
-4. The central `Mezan Production Release` workflow also verifies:
-   - all backend Python sources compile on Python 3.11;
-   - the frontend installs and builds successfully.
-5. Merge only after CI is green.
-6. Emergent Continuous Deployment watches `hotfix/prod-snap-meta-final` and redeploys the existing Mezan deployment after the merge.
-7. GitHub then checks `https://mezansalla.com/health` and the public root URL for availability.
+- **Emergent Preview**: deployment source for this existing project.
+- **GitHub**: code review, CI, audit trail, release history, and rollback reference.
+- **Existing Emergent Production deployment**: must be redeployed in place; do not replace it for routine releases.
 
-## One-time Emergent setup
+## Supported no-terminal release flow
 
-The existing Mezan deployment must be connected to repository `AMASI-SA/AMASI-SA` with Continuous Deployment enabled for branch `hotfix/prod-snap-meta-final`.
+1. Apply the intended code change in the **existing Emergent Preview environment**.
+2. Verify the affected feature in Preview.
+3. Save the reviewed Preview change to GitHub on a controlled feature/fix branch.
+4. Open a PR into `hotfix/prod-snap-meta-final`.
+5. Run the applicable domain-specific CI plus the central `Mezan Release Readiness` checks.
+6. Merge only when CI is green and the merged code matches the verified Preview change.
+7. In the same existing Emergent project open **Manage Publishing / Redeploy**.
+8. Use **Overview → Re-deploy changes**.
+9. Verify `mezansalla.com` after the redeploy.
 
-Use **redeploy/update existing deployment**, never replace the deployment for routine releases. Production database, domain and existing production secrets must remain attached to the current deployment.
+This removes the need to copy deployment commands into the terminal. The remaining platform-required action is the in-project redeploy click because Emergent does not expose a GitHub-triggered redeploy for this project.
 
-No deployment credentials, Salla credentials, ad-platform tokens, Qoyod credentials, database URLs, or other production secrets are stored in this workflow or committed to GitHub.
+## GitHub-first changes
+
+If a change is authored in GitHub first, it is **not deployable by merge alone**. Before production, the exact reviewed change must still be applied to the existing Emergent Preview environment and verified there. Do not assume GitHub and Preview are synchronized.
 
 ## Safety rules
 
+- Do not treat a GitHub merge as a production deployment.
+- Do not use `Save to GitHub` to push an unknown/stale Preview state over the production branch.
 - Do not deploy from `main` while it remains diverged from the production branch.
-- Do not merge a feature PR into production before its applicable CI is green.
-- Do not use Replace Deployment for routine code updates.
-- Do not copy production secrets into repository files or workflow YAML.
-- A failed post-release health check means the release is not considered healthy and must be investigated before additional production changes.
+- Do not use Replace Deployment for routine releases.
+- Do not move or recreate the production database for routine releases.
+- Keep existing production domain and unchanged secrets attached to the same deployment.
+- Never commit Salla, Qoyod, ad-platform, database, or other production secrets to GitHub.
+- A release is complete only after Preview verification, in-place redeploy, and production verification.
 
-## Result
+## CI behavior
 
-After the one-time Emergent Continuous Deployment connection is enabled, routine Mezan updates become:
+The central `.github/workflows/mezan-production-release.yml` workflow verifies backend compilation and frontend production build. On a push to the production branch it records an explicit handoff notice that **manual Emergent redeploy is still required**. It intentionally does not claim that Production was updated merely because GitHub CI passed.
 
-`code change -> GitHub PR -> CI -> merge -> automatic Emergent redeploy -> production health check`
+## Target operating model
+
+For the current Emergent project:
+
+`Emergent Preview change -> Preview verification -> Save to GitHub -> PR/CI -> merge -> in-place Re-deploy changes -> production verification`
+
+If Emergent later exposes a supported GitHub pull/sync or deploy API for existing projects, this contract can be revisited and automated further.
