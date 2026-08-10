@@ -274,10 +274,8 @@ def promoted_salla_attribution(order: dict[str, Any]) -> dict[str, str]:
 # address, payment or product field can leave MongoDB through this projection.
 _PROJECTED_ATTRIBUTION_FIELDS = (
     *_SOURCE_FIELDS,
-    "source",
     "utm_medium",
     "utm_campaign",
-    "campaign",
     "medium",
     "campaign_id",
     "campaign_name",

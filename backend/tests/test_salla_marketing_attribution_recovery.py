@@ -188,6 +188,23 @@ def test_raw_projection_is_attribution_only():
         assert broad_container not in SALLA_RAW_ATTRIBUTION_PROJECTION
 
 
+def test_raw_projection_has_no_mongodb_path_collisions():
+    paths = set(SALLA_RAW_ATTRIBUTION_PROJECTION)
+    for path in paths:
+        parts = path.split(".")
+        for index in range(1, len(parts)):
+            assert ".".join(parts[:index]) not in paths
+
+    assert (
+        "raw_by_source.salla_direct.marketing.source.name"
+        in SALLA_RAW_ATTRIBUTION_PROJECTION
+    )
+    assert (
+        "raw_by_source.salla_direct.marketing.campaign.id"
+        in SALLA_RAW_ATTRIBUTION_PROJECTION
+    )
+
+
 class _Cursor:
     def __init__(self, rows):
         self.rows = rows
