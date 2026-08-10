@@ -45,14 +45,16 @@ export function AuthProvider({ children }) {
         })();
     }, [refreshUser]);
 
-    const login = async (email, password) => {
-        const { data } = await api.post("/auth/login", { email, password });
+    const login = async (email, password, mfaBootstrapCode = "") => {
+        const payload = { email, password };
+        if (mfaBootstrapCode) payload.mfa_bootstrap_code = mfaBootstrapCode;
+        const { data } = await api.post("/auth/login", payload);
         clearLegacyBrowserAccessToken();
 
         // Owner/Admin password success is deliberately not a browser session.
-        // The backend returns a short-lived MFA challenge and withholds auth
-        // cookies until the second factor succeeds.
-        if (data?.mfa_required || data?.mfa_setup_required) {
+        // First enrollment may require an out-of-band bootstrap proof before
+        // the TOTP secret is exposed; returning users get an MFA challenge.
+        if (data?.mfa_bootstrap_required || data?.mfa_required || data?.mfa_setup_required) {
             setUser(false);
             return data;
         }
