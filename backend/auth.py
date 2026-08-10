@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import Request, HTTPException
 
 JWT_ALGORITHM = "HS256"
+PRIVILEGED_MFA_ROLES = {"owner", "admin"}
 logger = logging.getLogger(__name__)
 
 
@@ -29,19 +30,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False) -> str:
     payload = {
         "sub": user_id,
         "email": email,
+        "mfa": bool(mfa_verified),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=60 * 12),
         "type": "access",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, *, mfa_verified: bool = False) -> str:
     payload = {
         "sub": user_id,
+        "mfa": bool(mfa_verified),
         "exp": datetime.now(timezone.utc) + timedelta(days=7),
         "type": "refresh",
     }
@@ -104,6 +107,16 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         user = await db.users.find_one({"id": user_id})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+
+        # Owner/Admin sessions are valid only after a second factor has been
+        # verified. This intentionally invalidates privileged browser/API tokens
+        # minted before MFA rollout; the user must sign in again and complete
+        # enrollment/verification instead of silently inheriting a password-only
+        # privileged session.
+        role = (user.get("role") or "").strip().lower()
+        if role in PRIVILEGED_MFA_ROLES and payload.get("mfa") is not True:
+            raise HTTPException(status_code=401, detail="يلزم التحقق بخطوتين لإكمال تسجيل الدخول")
+
         user.pop("password_hash", None)
         user.pop("_id", None)
         return user
@@ -114,13 +127,7 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
-    """Attach the login guard during the existing auth startup sequence.
-
-    ``server.py`` is a large legacy bootstrap module.  Keeping the hook here
-    lets the security layer remain isolated without touching order, ads,
-    accounting, or fulfillment routes.  The import is intentionally local so
-    unit tests that use the auth helpers alone do not import the application.
-    """
+    """Attach the login-abuse and privileged MFA guards at app startup."""
     app = None
     for module_name in ("server", "backend.server"):
         module = sys.modules.get(module_name)
@@ -130,19 +137,22 @@ async def _install_login_security_for_loaded_app(db) -> None:
             break
 
     if app is None:
-        logger.warning("Mezan login security hook skipped: FastAPI app is not loaded")
+        logger.warning("Mezan auth security hook skipped: FastAPI app is not loaded")
         return
 
     # Mezan policy: five failed sign-in attempts in the rolling one-hour
-    # window lock the *browser device* for one hour, not just the email/device
-    # pair. Keep it configurable for emergency operations, but make five the
-    # installation default so deleting/changing the target email cannot bypass
-    # the user's requested device lockout policy.
+    # window lock the browser device for one hour.
     os.environ.setdefault("AUTH_LOGIN_DEVICE_LIMIT", "5")
 
     from login_security import install_login_security
+    from mfa_security import install_mfa_security
 
+    # Order matters: login_security is installed first, then MFA is appended as
+    # the inner login guard. The outer abuse middleware therefore sees the final
+    # 202 MFA challenge as a successful password check and still records 401
+    # password failures normally.
     await install_login_security(app, db)
+    await install_mfa_security(app, db)
 
 
 def _initial_owner_password() -> str:
@@ -221,9 +231,8 @@ async def seed_admin(db) -> None:
     # user. Password changes must go through authenticated account-management
     # flows, never through a process restart or environment-variable drift.
 
-    # Install the distributed login guard after the normal seed work succeeds.
-    # Any index/setup failure is allowed to fail startup rather than silently
-    # claiming that the abuse protection is active when it is not.
+    # Install the distributed auth guards after the normal seed work succeeds.
+    # Index/setup failures fail startup rather than claiming the controls are on.
     await _install_login_security_for_loaded_app(db)
 
 
