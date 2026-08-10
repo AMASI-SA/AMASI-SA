@@ -4,6 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+import httpx
 from cryptography.fernet import Fernet
 
 import customer_identity
@@ -576,6 +577,43 @@ async def test_backfill_retries_transient_provider_throttling(monkeypatch):
         calls.append(kwargs["params"]["page"])
         if len(calls) == 1:
             raise Throttled("retry later")
+        return {"data": [], "pagination": {"totalPages": 1}}
+
+    async def no_wait(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", no_wait)
+
+    result = await module.backfill_abandoned_carts(
+        db,
+        "owner-1",
+        call_provider=provider,
+    )
+
+    assert calls == [1, 1]
+    assert delays == [1]
+    assert result["pages_fetched"] == 1
+    assert result["stopped_reason"] == "pagination_complete"
+
+
+@pytest.mark.asyncio
+async def test_backfill_retries_transport_failure(monkeypatch):
+    db = FakeDB(
+        [
+            {
+                "user_id": "owner-1",
+                "store_id": 123,
+                "scope": "orders.read_write carts.read",
+            }
+        ]
+    )
+    calls = []
+    delays = []
+
+    async def provider(*args, **kwargs):
+        calls.append(kwargs["params"]["page"])
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("temporary Salla read timeout")
         return {"data": [], "pagination": {"totalPages": 1}}
 
     async def no_wait(seconds):
