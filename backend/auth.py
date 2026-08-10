@@ -133,6 +133,13 @@ async def _install_login_security_for_loaded_app(db) -> None:
         logger.warning("Mezan login security hook skipped: FastAPI app is not loaded")
         return
 
+    # Mezan policy: five failed sign-in attempts in the rolling one-hour
+    # window lock the *browser device* for one hour, not just the email/device
+    # pair. Keep it configurable for emergency operations, but make five the
+    # installation default so deleting/changing the target email cannot bypass
+    # the user's requested device lockout policy.
+    os.environ.setdefault("AUTH_LOGIN_DEVICE_LIMIT", "5")
+
     from login_security import install_login_security
 
     await install_login_security(app, db)
