@@ -15,6 +15,7 @@ from orders_db import _merge_into
 from salla_integration.sync import _salla_order_to_doc
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
+    meaningful_source_label,
     promoted_salla_attribution,
 )
 
@@ -47,6 +48,7 @@ def test_existing_raw_salla_order_resolves_platform_and_exact_campaign():
 
     assert _source_is_snapchat(order) is True
     assert resolve_salla_ad_platform(order) == "snapchat"
+    assert meaningful_source_label(order) == "snapchat"
     key, method = _match_order_campaign(
         order,
         id_lookup={"campaign-1": ("account-1", "campaign-1")},
@@ -90,6 +92,115 @@ def test_salla_utm_object_shape_resolves_source_and_campaign_name():
     assert _source_is_snapchat(order) is True
     assert key == ("account-1", "campaign-1")
     assert method == "campaign_name"
+
+
+def test_salla_live_source_details_shape_resolves_exact_snapchat_campaign():
+    order = {
+        "source": "store",
+        "raw_by_source": {
+            "salla_direct": {
+                "source": "store",
+                "source_details": {
+                    "utm_source": "snapchat",
+                    "utm_medium": "paid",
+                    "utm_campaign": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+                    "utm_content": "652827c1-4810-4419-ad9f-4a2b671f8b24",
+                    "ip": "must-not-be-projected",
+                    "user-agent": "must-not-be-projected",
+                },
+                "campaign": {
+                    "medium": "paid",
+                    "source": "snapchat",
+                    "campaign": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+                },
+            },
+        },
+    }
+
+    key, method = _match_order_campaign(
+        order,
+        id_lookup={
+            "5ae08447-23b6-4921-a54d-7ec641a099e2": (
+                "account-1",
+                "5ae08447-23b6-4921-a54d-7ec641a099e2",
+            ),
+        },
+        name_lookup={},
+    )
+
+    assert _source_is_snapchat(order) is True
+    assert resolve_salla_ad_platform(order) == "snapchat"
+    assert meaningful_source_label(order) == "snapchat"
+    assert key == (
+        "account-1",
+        "5ae08447-23b6-4921-a54d-7ec641a099e2",
+    )
+    assert method == "campaign_id"
+    assert promoted_salla_attribution(order) == {
+        "utm_source": "snapchat",
+        "utm_medium": "paid",
+        "utm_campaign": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+        "campaign_name": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+        "marketing_source": "snapchat",
+        "source_native": "snapchat",
+        "ad_platform_source": "snapchat",
+    }
+
+
+def test_new_salla_source_details_order_promotes_live_marketing_fields():
+    payload = {
+        "id": "1986136862",
+        "reference_id": "277225915",
+        "date": {"date": "2026-08-10T01:23:00+03:00"},
+        "amounts": {"total": {"amount": 127.57, "currency": "SAR"}},
+        "source": "store",
+        "source_details": {
+            "utm_source": "snapchat",
+            "utm_medium": "paid",
+            "utm_campaign": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+            "utm_content": "652827c1-4810-4419-ad9f-4a2b671f8b24",
+        },
+        "campaign": {
+            "medium": "paid",
+            "source": "snapchat",
+            "campaign": "5ae08447-23b6-4921-a54d-7ec641a099e2",
+        },
+    }
+
+    doc = _salla_order_to_doc(payload)
+
+    assert doc["order_number"] == "277225915"
+    assert doc["source"] == "store"
+    assert doc["utm_source"] == "snapchat"
+    assert doc["utm_medium"] == "paid"
+    assert doc["utm_campaign"] == "5ae08447-23b6-4921-a54d-7ec641a099e2"
+    assert doc["marketing_source"] == "snapchat"
+    assert doc["ad_platform_source"] == "snapchat"
+
+
+def test_salla_campaign_object_shape_resolves_without_source_details():
+    order = {
+        "source": "store",
+        "raw_by_source": {
+            "salla_direct": {
+                "campaign": {
+                    "medium": "paid",
+                    "source": "snapchat",
+                    "campaign": "campaign-1",
+                },
+            },
+        },
+    }
+
+    key, method = _match_order_campaign(
+        order,
+        id_lookup={"campaign-1": ("account-1", "campaign-1")},
+        name_lookup={},
+    )
+
+    assert _source_is_snapchat(order) is True
+    assert key == ("account-1", "campaign-1")
+    assert method == "campaign_id"
 
 
 def test_audit_counts_raw_exact_match_without_distributing_other_orders():
@@ -178,14 +289,30 @@ def test_raw_projection_is_attribution_only():
         "payment",
         "products",
         "items",
+        "user-agent",
+        ".ip",
     ):
         assert forbidden not in paths
     for broad_container in (
+        "raw_by_source.salla_direct.source_details",
         "raw_by_source.salla_direct.marketing",
         "raw_by_source.salla_direct.attribution",
         "raw_by_source.salla_direct.metadata",
     ):
         assert broad_container not in SALLA_RAW_ATTRIBUTION_PROJECTION
+
+    assert (
+        "raw_by_source.salla_direct.source_details.utm_source"
+        in SALLA_RAW_ATTRIBUTION_PROJECTION
+    )
+    assert (
+        "raw_by_source.salla_direct.source_details.utm_campaign"
+        in SALLA_RAW_ATTRIBUTION_PROJECTION
+    )
+    assert (
+        "raw_by_source.salla_direct.campaign.campaign"
+        in SALLA_RAW_ATTRIBUTION_PROJECTION
+    )
 
 
 def test_raw_projection_has_no_mongodb_path_collisions():
