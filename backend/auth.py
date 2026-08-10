@@ -1,5 +1,7 @@
 """Auth helpers: password hashing, JWT, current user dependency, admin seed."""
+import logging
 import os
+import sys
 import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
@@ -8,6 +10,7 @@ from typing import Optional
 from fastapi import Request, HTTPException
 
 JWT_ALGORITHM = "HS256"
+logger = logging.getLogger(__name__)
 
 
 def get_jwt_secret() -> str:
@@ -110,6 +113,31 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def _install_login_security_for_loaded_app(db) -> None:
+    """Attach the login guard during the existing auth startup sequence.
+
+    ``server.py`` is a large legacy bootstrap module.  Keeping the hook here
+    lets the security layer remain isolated without touching order, ads,
+    accounting, or fulfillment routes.  The import is intentionally local so
+    unit tests that use the auth helpers alone do not import the application.
+    """
+    app = None
+    for module_name in ("server", "backend.server"):
+        module = sys.modules.get(module_name)
+        candidate = getattr(module, "app", None) if module else None
+        if candidate is not None:
+            app = candidate
+            break
+
+    if app is None:
+        logger.warning("Mezan login security hook skipped: FastAPI app is not loaded")
+        return
+
+    from login_security import install_login_security
+
+    await install_login_security(app, db)
+
+
 async def seed_admin(db) -> None:
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@hesab.app").lower()
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -137,6 +165,11 @@ async def seed_admin(db) -> None:
             updates["role"] = "owner"
         if updates:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
+
+    # Install the distributed login guard after the normal seed work succeeds.
+    # Any index/setup failure is allowed to fail startup rather than silently
+    # claiming that the abuse protection is active when it is not.
+    await _install_login_security_for_loaded_app(db)
 
 
 from payment_methods import DEFAULT_PAYMENT_METHODS  # noqa: F401 — re-exported
