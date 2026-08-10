@@ -802,7 +802,22 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                     started_at = started_at.replace(tzinfo=timezone.utc)
                 else:
                     started_at = started_at.astimezone(timezone.utc)
-            if isinstance(started_at, datetime) and started_at >= now - timedelta(hours=2):
+            updated_at = running.get("updated_at")
+            if isinstance(updated_at, datetime):
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                else:
+                    updated_at = updated_at.astimezone(timezone.utc)
+            activity_at = updated_at if isinstance(updated_at, datetime) else started_at
+            # A healthy cart import updates its log after every page.  Using
+            # started_at alone kept a process killed during a hung provider
+            # request locked as "running" for two hours.  Six minutes is
+            # longer than the bounded request plus all transport retries, but
+            # short enough to replace a genuinely abandoned background task.
+            if (
+                isinstance(activity_at, datetime)
+                and activity_at >= now - timedelta(minutes=6)
+            ):
                 return {
                     "ok": True,
                     "accepted": False,

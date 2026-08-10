@@ -15,6 +15,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable
 
+import httpx
+
 from customer_identity import (
     attach_customer_activity,
     encrypt_private_payload,
@@ -44,6 +46,7 @@ ABANDONED_CART_SCHEMA_VERSION = 2
 # enough to cover the current catalogue with room for growth.
 MAX_BACKFILL_PAGES = 500
 SALLA_PAGE_SIZE = 30
+SALLA_PAGE_REQUEST_TIMEOUT_SECONDS = 45
 
 
 class AbandonedCartScopeError(RuntimeError):
@@ -954,17 +957,26 @@ async def backfill_abandoned_carts(
         retry_number = 0
         while True:
             try:
-                payload = await call_provider(
-                    db,
-                    user_id,
-                    "GET",
-                    "/carts/abandoned",
-                    params={"page": page, "per_page": bounded_per_page},
+                payload = await asyncio.wait_for(
+                    call_provider(
+                        db,
+                        user_id,
+                        "GET",
+                        "/carts/abandoned",
+                        params={"page": page, "per_page": bounded_per_page},
+                    ),
+                    timeout=SALLA_PAGE_REQUEST_TIMEOUT_SECONDS,
                 )
                 break
             except Exception as exc:  # noqa: BLE001 - provider owns error type
                 status_code = int(getattr(exc, "status_code", 0) or 0)
-                transient = status_code == 429 or status_code >= 500
+                transient_transport = isinstance(
+                    exc,
+                    (asyncio.TimeoutError, httpx.TransportError),
+                )
+                transient = (
+                    transient_transport or status_code == 429 or status_code >= 500
+                )
                 if not transient or retry_number >= 5:
                     raise
                 await asyncio.sleep(min(2**retry_number, 8))
