@@ -17,6 +17,7 @@ from typing import Any, Iterable
 
 _CONTAINER_KEYS = (
     "utm",
+    "source_details",
     "marketing",
     "attribution",
     "tracking",
@@ -50,6 +51,7 @@ _SOURCE_OBJECT_FIELDS = (
 )
 
 _INTERNAL_INGESTION_SOURCES = {
+    "store",
     "salla direct",
     "salla_direct",
     "make",
@@ -107,6 +109,9 @@ def attribution_containers(order: dict[str, Any]) -> list[dict[str, Any]]:
         source = _dict(container.get("source"))
         if source:
             queue.append((source, depth + 1))
+        campaign = _dict(container.get("campaign"))
+        if campaign:
+            queue.append((campaign, depth + 1))
     return result
 
 
@@ -287,6 +292,8 @@ _PROJECTED_ATTRIBUTION_FIELDS = (
 )
 _PROJECTED_OBJECT_FIELDS = (
     *_SOURCE_OBJECT_FIELDS,
+    "campaign",
+    "medium",
     "id",
     "external_id",
     "display_name",
