@@ -310,19 +310,86 @@ async def test_backfill_reads_pages_sequentially_and_marks_api_provenance():
             "pagination": {"totalPages": 2},
         }
 
+    progress = []
+
+    async def capture_progress(value):
+        progress.append(deepcopy(value))
+
     result = await module.backfill_abandoned_carts(
         db,
         "owner-1",
         call_provider=provider,
         per_page=1,
+        progress_hook=capture_progress,
     )
 
     assert pages == [1, 2]
     assert result["rows_saved"] == 2
+    assert result["created"] == 2
+    assert result["updated"] == 0
+    assert result["errors_count"] == 0
+    assert progress[-1] == {
+        "pages_fetched": 2,
+        "rows_seen": 2,
+        "rows_saved": 2,
+        "created": 2,
+        "updated": 0,
+        "errors_count": 0,
+    }
     assert result["provider_write_reached"] is False
     snapshots = db.collections[module.ABANDONED_CART_COLLECTION].documents
     assert {row["source"] for row in snapshots} == {"salla_abandoned_carts_api"}
     assert all(row["pii_stored"] is False for row in snapshots)
+
+    rerun = await module.backfill_abandoned_carts(
+        db,
+        "owner-1",
+        call_provider=provider,
+        per_page=1,
+    )
+    assert rerun["created"] == 0
+    assert rerun["updated"] == 2
+    assert rerun["rows_saved"] == 2
+
+
+@pytest.mark.asyncio
+async def test_backfill_retries_transient_provider_throttling(monkeypatch):
+    db = FakeDB(
+        [
+            {
+                "user_id": "owner-1",
+                "store_id": 123,
+                "scope": "orders.read_write carts.read",
+            }
+        ]
+    )
+    calls = []
+    delays = []
+
+    class Throttled(RuntimeError):
+        status_code = 429
+
+    async def provider(*args, **kwargs):
+        calls.append(kwargs["params"]["page"])
+        if len(calls) == 1:
+            raise Throttled("retry later")
+        return {"data": [], "pagination": {"totalPages": 1}}
+
+    async def no_wait(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", no_wait)
+
+    result = await module.backfill_abandoned_carts(
+        db,
+        "owner-1",
+        call_provider=provider,
+    )
+
+    assert calls == [1, 1]
+    assert delays == [1]
+    assert result["pages_fetched"] == 1
+    assert result["stopped_reason"] == "pagination_complete"
 
 
 @pytest.mark.asyncio
