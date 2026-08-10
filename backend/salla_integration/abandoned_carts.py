@@ -1,10 +1,10 @@
-"""Privacy-minimised Salla abandoned-cart ingestion and historical backfill.
+"""Salla abandoned-cart ingestion and encrypted Customer Memory foundation.
 
 The webhook path calls :func:`persist_abandoned_cart_event` only after the
 existing Easy Mode signature/token verification succeeds.  Historical reads
 remain dormant until the stored OAuth grant explicitly contains ``carts.read``.
-No customer name, email, phone number, or address is copied into either
-collection owned by this module.
+Customer PII and cart-recovery secrets are routed to Mezan's encrypted private
+store.  Analytics snapshots and event history remain plaintext-PII-free.
 """
 
 from __future__ import annotations
@@ -14,6 +14,14 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable
+
+from customer_identity import (
+    attach_customer_activity,
+    encrypt_private_payload,
+    ensure_customer_identity_indexes,
+    link_unified_customer_orders,
+    resolve_customer_identity,
+)
 
 ABANDONED_CART_EVENTS = frozenset(
     {
@@ -26,7 +34,10 @@ ABANDONED_CART_EVENTS = frozenset(
 ABANDONED_CART_SCOPE = "carts.read"
 ABANDONED_CART_COLLECTION = "salla_abandoned_carts_v1"
 ABANDONED_CART_EVENT_COLLECTION = "salla_abandoned_cart_events_v1"
-ABANDONED_CART_SCHEMA_VERSION = 1
+# Keep the existing collection names so the production history is upgraded in
+# place on the next idempotent backfill instead of splitting the 6,824+ carts
+# across incompatible V1/V2 stores.
+ABANDONED_CART_SCHEMA_VERSION = 2
 # The connected Amasi store already has more than 6,000 abandoned carts.  At
 # Salla's conservative 30-row page size, a 200-page ceiling would silently
 # stop before the historical read completes.  Keep the read bounded, but high
@@ -115,11 +126,27 @@ def _currency(*values: Any) -> str | None:
 
 
 _ATTRIBUTION_ALIASES: dict[str, frozenset[str]] = {
+    "platform": frozenset(
+        {
+            "platform",
+            "ad_platform",
+            "channel",
+            "source",
+            "source_native",
+            "utm_source",
+        }
+    ),
+    "account_id": frozenset(
+        {"account_id", "ad_account_id", "advertiser_id", "sc_ad_account_id"}
+    ),
     "campaign_id": frozenset({"campaign_id", "campaignid", "sc_campaign_id"}),
-    "ad_squad_id": frozenset(
+    "ad_group_id": frozenset(
         {"ad_squad_id", "adsquad_id", "adset_id", "ad_set_id", "sc_ad_squad_id"}
     ),
-    "ad_id": frozenset({"ad_id", "adid", "creative_id", "sc_ad_id"}),
+    "ad_id": frozenset({"ad_id", "adid", "sc_ad_id"}),
+    "creative_id": frozenset(
+        {"creative_id", "creativeid", "sc_creative_id", "asset_id"}
+    ),
     "click_id": frozenset(
         {"click_id", "sc_click_id", "scclid", "gclid", "fbclid", "ttclid"}
     ),
@@ -130,6 +157,20 @@ _ATTRIBUTION_ALIASES: dict[str, frozenset[str]] = {
     "utm_content": frozenset({"utm_content"}),
     "utm_term": frozenset({"utm_term"}),
 }
+_ATTRIBUTION_CONTAINERS = frozenset(
+    {
+        "utm",
+        "source_details",
+        "marketing",
+        "attribution",
+        "tracking",
+        "traffic",
+        "metadata",
+        "meta",
+        "source",
+        "campaign",
+    }
+)
 _PII_CONTAINERS = frozenset(
     {
         "customer",
@@ -164,11 +205,52 @@ def _attribution(source: Any) -> dict[str, str]:
                     rendered = _text(child)
                     if rendered:
                         output[canonical] = rendered[:500]
-            if isinstance(child, (dict, list)):
+            if key in _ATTRIBUTION_CONTAINERS and isinstance(child, (dict, list)):
                 visit(child, depth=depth + 1)
 
     visit(source)
+    raw_platform = output.get("platform") or output.get("utm_source")
+    if raw_platform:
+        normalized = raw_platform.casefold().replace("_", "").replace("-", "")
+        platform = None
+        if "snap" in normalized or "سناب" in normalized:
+            platform = "snapchat"
+        elif "tiktok" in normalized or "تيكتوك" in normalized:
+            platform = "tiktok"
+        elif any(value in normalized for value in ("meta", "facebook", "instagram")):
+            platform = "meta"
+        elif "google" in normalized or "adwords" in normalized:
+            platform = "google"
+        if platform:
+            output["platform"] = platform
     return output
+
+
+def _option_rows(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        value = value.get("values") or value.get("options") or [value]
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for raw in value[:100]:
+        if isinstance(raw, dict):
+            option = {
+                "option_id": _text(_first(raw.get("option_id"), raw.get("id"))),
+                "name": _text(_first(raw.get("name"), raw.get("option_name"))),
+                "value_id": _text(_first(raw.get("value_id"), raw.get("option_value_id"))),
+                "value": _text(
+                    _first(
+                        raw.get("value"),
+                        raw.get("option_value"),
+                        raw.get("label"),
+                    )
+                ),
+            }
+        else:
+            option = {"option_id": None, "name": None, "value_id": None, "value": _text(raw)}
+        if any(item is not None for item in option.values()):
+            rows.append(option)
+    return rows
 
 
 def _normalise_item(item: Any) -> dict[str, Any] | None:
@@ -193,6 +275,13 @@ def _normalise_item(item: Any) -> dict[str, Any] | None:
         "unit_price": _number(unit_price_source),
         "total_price": _number(total_price_source),
         "currency": _currency(unit_price_source, total_price_source),
+        "options": _option_rows(
+            _first(
+                source.get("options"),
+                source.get("product_options"),
+                variant.get("options"),
+            )
+        ),
     }
     if not any(value is not None for value in row.values()):
         return None
@@ -216,12 +305,145 @@ def _items(data: dict[str, Any]) -> list[dict[str, Any]]:
     return output
 
 
+def _address_private(value: Any) -> dict[str, str]:
+    source = _mapping(value)
+    aliases = {
+        "country": ("country", "country_name"),
+        "country_code": ("country_code", "code"),
+        "city": ("city", "city_name"),
+        "district": ("district", "district_name"),
+        "street": ("street", "address_line", "description"),
+        "postal_code": ("postal_code", "postcode", "zip"),
+        "building_number": ("building_number",),
+        "additional_number": ("additional_number",),
+        "short_address": ("short_address", "national_address"),
+    }
+    result: dict[str, str] = {}
+    for target, fields in aliases.items():
+        rendered = _text(_first(*(source.get(field) for field in fields)))
+        if rendered:
+            result[target] = rendered[:1000]
+    return result
+
+
+def _customer_private_context(event_body: dict[str, Any]) -> dict[str, Any]:
+    data = _mapping(event_body.get("data"))
+    cart = _mapping(data.get("cart"))
+    source = cart or data
+    customer = _mapping(
+        _first(
+            source.get("customer"),
+            data.get("customer"),
+            source.get("customer_data"),
+            source.get("contact"),
+        )
+    )
+    profile: dict[str, Any] = {}
+    fields = {
+        "name": ("full_name", "name"),
+        "first_name": ("first_name",),
+        "last_name": ("last_name",),
+        "email": ("email",),
+        "mobile": ("mobile", "phone", "mobile_number", "phone_number"),
+        "gender": ("gender",),
+    }
+    for target, aliases in fields.items():
+        rendered = _text(_first(*(customer.get(alias) for alias in aliases)))
+        if rendered:
+            profile[target] = rendered[:1000]
+    for target, values in {
+        "shipping_address": (
+            customer.get("shipping_address"),
+            source.get("shipping_address"),
+        ),
+        "billing_address": (
+            customer.get("billing_address"),
+            source.get("billing_address"),
+        ),
+        "address": (customer.get("address"), source.get("address")),
+    }.items():
+        address = _address_private(_first(*values))
+        if address:
+            profile[target] = address
+    return {
+        "external_customer_id": _text(
+            _first(
+                customer.get("id"),
+                source.get("customer_id"),
+                data.get("customer_id"),
+            )
+        ),
+        "email": profile.get("email"),
+        "mobile": profile.get("mobile"),
+        "private_profile": profile,
+    }
+
+
+def _cart_private_context(event_body: dict[str, Any]) -> dict[str, str]:
+    data = _mapping(event_body.get("data"))
+    cart = _mapping(data.get("cart"))
+    source = cart or data
+    urls = _mapping(source.get("urls"))
+    coupon = _mapping(_first(source.get("coupon"), data.get("coupon")))
+    recovery_url = _text(
+        _first(
+            source.get("recovery_url"),
+            source.get("checkout_url"),
+            source.get("cart_url"),
+            source.get("url"),
+            urls.get("checkout"),
+            urls.get("recovery"),
+            urls.get("cart"),
+        )
+    )
+    coupon_code = _text(
+        _first(
+            source.get("coupon_code"),
+            data.get("coupon_code"),
+            coupon.get("code"),
+            coupon.get("coupon_code"),
+        )
+    )
+    private: dict[str, str] = {}
+    if recovery_url:
+        private["recovery_url"] = recovery_url[:10000]
+    if coupon_code:
+        private["coupon_code"] = coupon_code[:500]
+    return private
+
+
+def _record_attribution(data: dict[str, Any]) -> dict[str, str]:
+    raw_by_source = _mapping(data.get("raw_by_source"))
+    salla_direct = _mapping(raw_by_source.get("salla_direct"))
+    merged = _attribution(salla_direct)
+    merged.update(_attribution(data))
+    return merged
+
+
+async def _linked_order_attribution(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str | None,
+    order_id: str | None,
+) -> dict[str, str]:
+    selector: dict[str, Any] | None = None
+    if order_number:
+        selector = {"user_id": user_id, "order_number": str(order_number)}
+    elif order_id:
+        selector = {"user_id": user_id, "order_id": str(order_id)}
+    if selector is None:
+        return {}
+    order = await db.unified_orders.find_one(selector, {"_id": 0})
+    return _record_attribution(order or {})
+
+
 def normalize_abandoned_cart_event(
     event_body: dict[str, Any],
     *,
     ingestion_source: str = "salla_verified_webhook",
 ) -> dict[str, Any] | None:
-    """Return a stable analytics record without copying customer PII."""
+    """Return a stable analytics record without copying plaintext PII."""
     event_name = _text(event_body.get("event")) or "abandoned.cart"
     if event_name not in ABANDONED_CART_EVENTS:
         return None
@@ -294,6 +516,7 @@ def normalize_abandoned_cart_event(
             order.get("reference_id"),
         )
     )
+    private_context = _cart_private_context(event_body)
     return {
         "schema_version": ABANDONED_CART_SCHEMA_VERSION,
         "merchant_id": _text(event_body.get("merchant")),
@@ -312,12 +535,15 @@ def normalize_abandoned_cart_event(
         "subtotal": _number(subtotal_source),
         "discount": _number(discount_source),
         "items": _items(source),
-        "attribution": _attribution(data),
+        "attribution": _record_attribution(data),
+        "coupon_present": bool(private_context.get("coupon_code")),
+        "recovery_url_present": bool(private_context.get("recovery_url")),
         "cart_created_at": created_at,
         "cart_updated_at": updated_at,
         "source_event": event_name,
         "source": ingestion_source,
         "pii_stored": False,
+        "plaintext_pii_stored": False,
     }
 
 
@@ -380,8 +606,57 @@ async def persist_abandoned_cart_event(
             "synced": False,
             "reason": "owner_not_found",
             "pii_stored": False,
+            "plaintext_pii_stored": False,
         }
     record["user_id"] = owner_id
+
+    customer_context = _customer_private_context(event_body)
+    customer_link = await resolve_customer_identity(
+        db,
+        user_id=owner_id,
+        merchant_id=merchant_id,
+        source_system="salla",
+        external_customer_id=customer_context.get("external_customer_id"),
+        email=customer_context.get("email"),
+        mobile=customer_context.get("mobile"),
+        private_profile=customer_context.get("private_profile") or {},
+        observed_at=record.get("cart_updated_at"),
+    )
+    if customer_link:
+        record["customer_identity_id"] = customer_link["customer_identity_id"]
+
+    customer_orders_linked = 0
+    if customer_link:
+        customer_orders_linked = await link_unified_customer_orders(
+            db,
+            user_id=owner_id,
+            customer_identity_id=customer_link["customer_identity_id"],
+            external_customer_id=customer_context.get("external_customer_id"),
+            email=customer_context.get("email"),
+            mobile=customer_context.get("mobile"),
+            order_number=record.get("order_number"),
+        )
+
+    private_context = _cart_private_context(event_body)
+    private_context_ciphertext = encrypt_private_payload(private_context)
+
+    direct_attribution = dict(record.get("attribution") or {})
+    order_attribution = await _linked_order_attribution(
+        db,
+        user_id=owner_id,
+        order_number=record.get("order_number"),
+        order_id=record.get("order_id"),
+    )
+    if order_attribution:
+        merged_attribution = dict(order_attribution)
+        merged_attribution.update(direct_attribution)
+        record["attribution"] = merged_attribution
+        record["attribution_method"] = (
+            "cart_event" if direct_attribution else "linked_order"
+        )
+    elif direct_attribution:
+        record["attribution_method"] = "cart_event"
+
     event_hash = _fingerprint(record)
     now = datetime.now(timezone.utc)
     event_selector = {
@@ -400,6 +675,10 @@ async def persist_abandoned_cart_event(
                 "first_received_at": now,
                 "created_at": now,
                 "pii_stored": False,
+                "plaintext_pii_stored": False,
+                "customer_private_profile_encrypted": bool(
+                    customer_link and customer_link.get("private_profile_encrypted")
+                ),
             },
             "$set": {"last_received_at": now, "updated_at": now},
             "$inc": {"delivery_count": 1},
@@ -415,6 +694,7 @@ async def persist_abandoned_cart_event(
             "cart_updated_at": 1,
             "purchased": 1,
             "first_seen_at": 1,
+            "attribution_first_touch": 1,
         },
     )
     incoming_time = _datetime(record.get("cart_updated_at"))
@@ -455,6 +735,12 @@ async def persist_abandoned_cart_event(
             "ignored_out_of_order": out_of_order,
             "ignored_after_purchase": purchase_downgrade,
             "pii_stored": False,
+            "plaintext_pii_stored": False,
+            "customer_identity_linked": bool(customer_link),
+            "private_context_encrypted": bool(private_context_ciphertext),
+            "attributed": bool(record.get("attribution")),
+            "order_linked": bool(record.get("order_id") or record.get("order_number")),
+            "customer_orders_linked": customer_orders_linked,
         }
 
     snapshot = dict(record)
@@ -463,21 +749,52 @@ async def persist_abandoned_cart_event(
             "last_received_at": now,
             "updated_at": now,
             "pii_stored": False,
+            "plaintext_pii_stored": False,
+            "customer_private_profile_encrypted": bool(
+                customer_link and customer_link.get("private_profile_encrypted")
+            ),
         }
     )
+    attribution = dict(record.get("attribution") or {})
+    if attribution:
+        snapshot["attribution_last_touch"] = attribution
+        if not (existing or {}).get("attribution_first_touch"):
+            snapshot["attribution_first_touch"] = attribution
+    else:
+        # Sparse status events must not erase previously captured attribution.
+        snapshot.pop("attribution", None)
+    if private_context_ciphertext:
+        snapshot["private_cart_ciphertext"] = private_context_ciphertext
+        snapshot["private_cart_fields"] = sorted(private_context)
+        snapshot["private_cart_schema_version"] = 1
+        snapshot["private_cart_context_encrypted"] = True
+    if purchase_upgrade:
+        snapshot["converted_at"] = incoming_time or now
     if out_of_order and purchase_upgrade:
         snapshot.pop("cart_updated_at", None)
         snapshot.pop("cart_created_at", None)
+    set_on_insert: dict[str, Any] = {"first_seen_at": now, "created_at": now}
+    if attribution:
+        set_on_insert["attribution_first_touch"] = attribution
     snapshot_result = await getattr(db, ABANDONED_CART_COLLECTION).update_one(
         identity,
         {
             "$set": snapshot,
-            "$setOnInsert": {"first_seen_at": now, "created_at": now},
+            "$setOnInsert": set_on_insert,
             "$inc": {"delivery_count": 1},
             "$addToSet": {"source_events": record["source_event"]},
         },
         upsert=True,
     )
+    if customer_link:
+        await attach_customer_activity(
+            db,
+            user_id=owner_id,
+            customer_identity_id=customer_link["customer_identity_id"],
+            cart_id=record["cart_id"],
+            order_number=record.get("order_number") if record.get("purchased") else None,
+            activity_at=incoming_time or now,
+        )
     return {
         "attempted": True,
         "synced": True,
@@ -487,6 +804,12 @@ async def persist_abandoned_cart_event(
         "ignored_out_of_order": False,
         "purchase_upgrade": purchase_upgrade,
         "pii_stored": False,
+        "plaintext_pii_stored": False,
+        "customer_identity_linked": bool(customer_link),
+        "private_context_encrypted": bool(private_context_ciphertext),
+        "attributed": bool(record.get("attribution")),
+        "order_linked": bool(record.get("order_id") or record.get("order_number")),
+        "customer_orders_linked": customer_orders_linked,
     }
 
 
@@ -562,6 +885,11 @@ async def backfill_abandoned_carts(
     created = 0
     updated = 0
     errors_count = 0
+    identity_linked = 0
+    attributed = 0
+    order_linked = 0
+    private_context_encrypted = 0
+    customer_orders_linked = 0
     stopped_reason = "max_pages_reached"
 
     for page in range(1, bounded_pages + 1):
@@ -601,6 +929,15 @@ async def backfill_abandoned_carts(
             )
             if result.get("synced"):
                 rows_saved += 1
+                identity_linked += int(bool(result.get("customer_identity_linked")))
+                attributed += int(bool(result.get("attributed")))
+                order_linked += int(bool(result.get("order_linked")))
+                private_context_encrypted += int(
+                    bool(result.get("private_context_encrypted"))
+                )
+                customer_orders_linked += int(
+                    result.get("customer_orders_linked") or 0
+                )
                 if result.get("created"):
                     created += 1
                 else:
@@ -614,6 +951,11 @@ async def backfill_abandoned_carts(
             "created": created,
             "updated": updated,
             "errors_count": errors_count,
+            "identity_linked": identity_linked,
+            "attributed": attributed,
+            "order_linked": order_linked,
+            "private_context_encrypted": private_context_encrypted,
+            "customer_orders_linked": customer_orders_linked,
         }
         if progress_hook is not None:
             try:
@@ -638,13 +980,21 @@ async def backfill_abandoned_carts(
         "created": created,
         "updated": updated,
         "errors_count": errors_count,
+        "identity_linked": identity_linked,
+        "attributed": attributed,
+        "order_linked": order_linked,
+        "private_context_encrypted": private_context_encrypted,
+        "customer_orders_linked": customer_orders_linked,
         "stopped_reason": stopped_reason,
         "provider_write_reached": False,
         "pii_stored": False,
+        "plaintext_pii_stored": False,
+        "schema_version": ABANDONED_CART_SCHEMA_VERSION,
     }
 
 
 async def ensure_abandoned_cart_indexes(db: Any) -> None:
+    await ensure_customer_identity_indexes(db)
     await getattr(db, ABANDONED_CART_COLLECTION).create_index(
         [("merchant_id", 1), ("cart_id", 1)],
         unique=True,
@@ -657,6 +1007,18 @@ async def ensure_abandoned_cart_indexes(db: Any) -> None:
     await getattr(db, ABANDONED_CART_COLLECTION).create_index(
         [("user_id", 1), ("purchased", 1), ("updated_at", -1)],
         name="salla_abandoned_cart_user_status",
+    )
+    await getattr(db, ABANDONED_CART_COLLECTION).create_index(
+        [("user_id", 1), ("customer_identity_id", 1), ("cart_updated_at", -1)],
+        name="salla_abandoned_cart_customer_history",
+    )
+    await getattr(db, ABANDONED_CART_COLLECTION).create_index(
+        [("user_id", 1), ("attribution.campaign_id", 1), ("cart_updated_at", -1)],
+        name="salla_abandoned_cart_campaign_history",
+    )
+    await getattr(db, ABANDONED_CART_COLLECTION).create_index(
+        [("user_id", 1), ("order_number", 1)],
+        name="salla_abandoned_cart_order_link",
     )
     await getattr(db, ABANDONED_CART_EVENT_COLLECTION).create_index(
         [("merchant_id", 1), ("cart_id", 1), ("event_hash", 1)],
@@ -672,6 +1034,7 @@ async def ensure_abandoned_cart_indexes(db: Any) -> None:
 __all__ = [
     "ABANDONED_CART_COLLECTION",
     "ABANDONED_CART_EVENTS",
+    "ABANDONED_CART_SCHEMA_VERSION",
     "ABANDONED_CART_SCOPE",
     "AbandonedCartScopeError",
     "backfill_abandoned_carts",
