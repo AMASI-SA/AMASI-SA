@@ -55,10 +55,14 @@ const EVENT_LABELS = {
 const ROLE_FALLBACK_LABELS = {
     product_manager: "مدير المنتجات",
     product_operator: "موظف المنتجات",
+    preparation_operator: "موظف التجهيز",
     cost_manager: "مسؤول التكاليف والمشتريات",
     warehouse_operator: "موظف المخزن",
     shipping_operator: "موظف الشحن والعنونة",
     marketing_manager: "مسؤول التسويق",
+};
+const ROLE_DESCRIPTIONS = {
+    preparation_operator: "يرى ملفات ومنتجات التجهيز المسندة إليه فقط، ويرفعها للمورد ويتابعها حتى تصبح جاهزة للتسليم. لا يملك إسناد المنتجات أو إعادة توزيعها أو الاستلام النهائي.",
 };
 
 
@@ -231,6 +235,7 @@ function RoleModal({ employee, management, busy, onClose, onSubmit }) {
             <div className="max-h-[calc(95vh-65px)] overflow-y-auto p-5">
                 <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950"><ShieldCheck className="ml-1 inline" /> يعرض ميزان الصلاحيات قبل الحفظ. هذه المرحلة تطبق الدور على حساب الموظف التجريبي فقط.</div>
                 <label className="mt-4 block text-xs font-bold text-slate-600">الدور التشغيلي<select value={roleKey} onChange={(event) => setRoleKey(event.target.value)} className="mt-1 h-12 w-full rounded-xl border px-3 text-sm" data-testid="employees-v2-role-select">{selectableRoles.map((key) => <option key={key} value={key}>{management.role_labels?.[key] || ROLE_FALLBACK_LABELS[key] || key}</option>)}</select></label>
+                {ROLE_DESCRIPTIONS[roleKey] && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold leading-6 text-emerald-950" data-testid="employees-v2-role-description">{ROLE_DESCRIPTIONS[roleKey]}</div>}
                 <label className="mt-3 flex items-center gap-2 rounded-xl border p-3 text-sm font-bold"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> الدور مفعّل</label>
                 <section className="mt-4 rounded-2xl border bg-slate-50 p-4"><h3 className="text-sm font-black">الصلاحيات المشمولة ({numberFormatter.format(permissions.length)})</h3><div className="mt-3 flex flex-wrap gap-2">{permissions.map((permission) => <span key={permission} className="rounded-lg border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-900" dir="ltr">{permission}</span>)}</div></section>
                 <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ role_key: roleKey, enabled, extra_permissions: [], denied_permissions: [], warehouse_ids: [], workplace_warehouse_id: null, fulfillment_responsibilities: [] })} disabled={busy || !roleKey} data-testid="employees-v2-role-submit" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : "حفظ الدور"}</button></div>

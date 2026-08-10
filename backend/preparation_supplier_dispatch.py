@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
+from ai_store_access_contract import ROLE_ASSIGNMENTS, effective_permissions
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
@@ -227,11 +228,30 @@ def _is_manager(user: dict[str, Any]) -> bool:
     )
 
 
-def _require_preparation_worker(user: Any) -> dict[str, Any]:
-    if not isinstance(user, dict) or not user_can_manage_preparation(user):
+async def _require_preparation_worker(
+    db: Any,
+    user: Any,
+    *,
+    permission: str,
+) -> dict[str, Any]:
+    if not isinstance(user, dict):
         raise HTTPException(
             status_code=403,
             detail={"code": "preparation_manage_permission_required"},
+        )
+    if user_can_manage_preparation(user):
+        return user
+    assignment = await db[ROLE_ASSIGNMENTS].find_one(
+        {"user_id": _text(user.get("id"))},
+        {"_id": 0},
+    )
+    if permission not in set(effective_permissions(assignment)):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "preparation_manage_permission_required",
+                "permission": permission,
+            },
         )
     return user
 
@@ -1074,7 +1094,11 @@ def make_preparation_supplier_dispatch_router(
         limit: int = Query(100, ge=1, le=200),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        worker = _require_preparation_worker(user)
+        worker = await _require_preparation_worker(
+            db,
+            user,
+            permission="preparation.assigned.read",
+        )
         await ensure_supplier_dispatch_indexes(db)
         result = await _employee_workspace(
             db,
@@ -1112,7 +1136,11 @@ def make_preparation_supplier_dispatch_router(
         payload: CreateSupplierDispatchRequest,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        worker = _require_preparation_worker(user)
+        worker = await _require_preparation_worker(
+            db,
+            user,
+            permission="preparation.assigned.work",
+        )
         user_id = _merchant_user_id(worker)
         employee_id = _text(worker.get("id"))
         await ensure_supplier_dispatch_indexes(db)
@@ -1422,7 +1450,11 @@ def make_preparation_supplier_dispatch_router(
         payload: RejectPreparationPiecesRequest,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        worker = _require_preparation_worker(user)
+        worker = await _require_preparation_worker(
+            db,
+            user,
+            permission="preparation.assigned.work",
+        )
         user_id = _merchant_user_id(worker)
         employee_id = _text(worker.get("id"))
         await ensure_supplier_dispatch_indexes(db)
@@ -1665,7 +1697,11 @@ def make_preparation_supplier_dispatch_router(
         payload: MarkSupplierDispatchReadyRequest,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        worker = _require_preparation_worker(user)
+        worker = await _require_preparation_worker(
+            db,
+            user,
+            permission="preparation.assigned.work",
+        )
         user_id = _merchant_user_id(worker)
         dispatch = await db[DISPATCHES].find_one(
             {"user_id": user_id, "id": _text(dispatch_id), "status": DISPATCH_STATUS_SENT},

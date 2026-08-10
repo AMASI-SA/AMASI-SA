@@ -46,10 +46,12 @@ const emptyWorkspace = {
         login_account_candidates: [],
         role_catalog: {
             product_operator: ["products.read"],
+            preparation_operator: ["preparation.assigned.read", "preparation.assigned.work"],
             warehouse_operator: ["inventory.receipts.read"],
         },
         role_labels: {
             product_operator: "موظف المنتجات",
+            preparation_operator: "موظف التجهيز",
             warehouse_operator: "موظف المخزن",
         },
     },
@@ -204,6 +206,52 @@ test("unlinked pilot creates a zero-access login inline and links it without lea
             password: "Pilot123!",
         });
         expect(container.querySelector('[data-testid="employees-v2-primary-action"]').textContent).toContain("تعيين الدور والصلاحيات");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+
+test("offers a dedicated preparation employee role with assigned-products-only scope", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    getEmployeesV2Management.mockResolvedValue({
+        ...pilotWorkspace,
+        management: {
+            ...pilotWorkspace.management,
+            employees: [{
+                ...pilotWorkspace.management.employees[0],
+                account: {
+                    status: "linked",
+                    user_id: "account-1",
+                    name: "موظف تجريبي",
+                    email: "pilot@example.com",
+                },
+            }],
+        },
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => { root.render(<EmployeesV2ManagementPilot />); });
+        await act(async () => {
+            container.querySelector('[data-testid="employees-v2-primary-action"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+
+        const roleSelect = document.body.querySelector('[data-testid="employees-v2-role-select"]');
+        expect([...roleSelect.options].map((option) => option.textContent)).toContain("موظف التجهيز");
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+            setter.call(roleSelect, "preparation_operator");
+            roleSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        expect(document.body.querySelector('[data-testid="employees-v2-role-description"]').textContent).toContain("المسندة إليه فقط");
+        expect(document.body.textContent).toContain("preparation.assigned.read");
+        expect(document.body.textContent).toContain("preparation.assigned.work");
+        expect(document.body.textContent).not.toContain("inventory.preparation.receive");
     } finally {
         await act(async () => root.unmount());
         container.remove();

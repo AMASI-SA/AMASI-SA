@@ -68,6 +68,21 @@ def test_disabled_assignment_has_no_permissions():
     assert effective_permissions({"role_key": "product_manager", "enabled": False}) == []
 
 
+def test_preparation_operator_is_scoped_to_assigned_preparation_work():
+    permissions = effective_permissions({
+        "role_key": "preparation_operator",
+        "enabled": True,
+    })
+
+    assert permissions == [
+        "preparation.assigned.read",
+        "preparation.assigned.work",
+    ]
+    assert "inventory.preparation.receive" not in permissions
+    assert "products.publish" not in permissions
+    assert "roles.manage" not in permissions
+
+
 def test_shipping_assignment_scopes_employee_to_warehouses_and_responsibilities():
     assignment = validate_assignment({
         "role_key": "shipping_operator",
