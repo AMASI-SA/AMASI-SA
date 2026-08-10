@@ -6,9 +6,11 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "backend/salla_integration/abandoned_carts.py"
+      - "backend/salla_integration/routes.py"
       - "backend/salla_integration/webhook_event_capture.py"
       - "backend/salla_integration/webhook_monitor_routes.py"
       - "backend/tests/test_salla_abandoned_carts_v1.py"
+      - "frontend/src/pages/SallaIntegration.jsx"
       - ".github/workflows/salla-abandoned-cart-webhooks.yml"
   workflow_dispatch:
 
@@ -46,6 +48,7 @@ jobs:
         run: |
           python -m py_compile \
             salla_integration/abandoned_carts.py \
+            salla_integration/routes.py \
             salla_integration/webhook_event_capture.py \
             salla_integration/webhook_monitor_routes.py \
             tests/test_salla_abandoned_carts_v1.py
