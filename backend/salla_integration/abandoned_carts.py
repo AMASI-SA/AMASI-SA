@@ -691,10 +691,14 @@ async def persist_abandoned_cart_event(
         identity,
         {
             "_id": 0,
+            "customer_identity_id": 1,
             "cart_updated_at": 1,
             "purchased": 1,
             "first_seen_at": 1,
+            "attribution": 1,
             "attribution_first_touch": 1,
+            "attribution_last_touch": 1,
+            "private_cart_context_encrypted": 1,
         },
     )
     incoming_time = _datetime(record.get("cart_updated_at"))
@@ -710,10 +714,55 @@ async def persist_abandoned_cart_event(
     )
 
     if purchase_downgrade or (out_of_order and not purchase_upgrade):
+        # Preserve the newer operational snapshot, but still allow an older
+        # V1 record to receive additive V2 memory fields.  Historical Salla
+        # backfills often return a snapshot older than a webhook already held
+        # by Mezan.  Treating the entire event as ignored left those carts
+        # without their resolved customer identity even though the progress
+        # counter correctly reported that an identity had been found.
+        safe_enrichment: dict[str, Any] = {
+            "last_received_at": now,
+            "updated_at": now,
+            "schema_version": ABANDONED_CART_SCHEMA_VERSION,
+            "user_id": owner_id,
+            "pii_stored": False,
+            "plaintext_pii_stored": False,
+        }
+        if customer_link and not (existing or {}).get("customer_identity_id"):
+            safe_enrichment.update(
+                {
+                    "customer_identity_id": customer_link["customer_identity_id"],
+                    "customer_private_profile_encrypted": bool(
+                        customer_link.get("private_profile_encrypted")
+                    ),
+                }
+            )
+        if (
+            private_context_ciphertext
+            and not (existing or {}).get("private_cart_context_encrypted")
+        ):
+            safe_enrichment.update(
+                {
+                    "private_cart_ciphertext": private_context_ciphertext,
+                    "private_cart_fields": sorted(private_context),
+                    "private_cart_schema_version": 1,
+                    "private_cart_context_encrypted": True,
+                }
+            )
+        attribution = dict(record.get("attribution") or {})
+        if attribution and not (existing or {}).get("attribution"):
+            safe_enrichment["attribution"] = attribution
+            safe_enrichment["attribution_method"] = record.get(
+                "attribution_method"
+            )
+            if not (existing or {}).get("attribution_first_touch"):
+                safe_enrichment["attribution_first_touch"] = attribution
+            if not (existing or {}).get("attribution_last_touch"):
+                safe_enrichment["attribution_last_touch"] = attribution
         await getattr(db, ABANDONED_CART_COLLECTION).update_one(
             identity,
             {
-                "$set": {"last_received_at": now, "updated_at": now},
+                "$set": safe_enrichment,
                 "$inc": {
                     "delivery_count": 1,
                     (
@@ -726,6 +775,17 @@ async def persist_abandoned_cart_event(
             },
             upsert=True,
         )
+        if customer_link:
+            await attach_customer_activity(
+                db,
+                user_id=owner_id,
+                customer_identity_id=customer_link["customer_identity_id"],
+                cart_id=record["cart_id"],
+                order_number=(
+                    record.get("order_number") if record.get("purchased") else None
+                ),
+                activity_at=incoming_time or now,
+            )
         return {
             "attempted": True,
             "synced": True,
