@@ -20,10 +20,10 @@ export default function Login() {
     const [showForgot, setShowForgot] = useState(false);
     const [showRegisterLink, setShowRegisterLink] = useState(false);
 
-    // Privileged Owner/Admin MFA flow. `mode=setup` is first enrollment;
-    // `mode=verify` is a normal returning login. No auth cookie exists until
-    // verifyMfa succeeds.
-    const [mfaMode, setMfaMode] = useState(null); // null | setup | verify | recovery
+    // Privileged Owner/Admin MFA flow:
+    // bootstrap → setup → recovery is first enrollment; verify is returning login.
+    const [mfaMode, setMfaMode] = useState(null); // null | bootstrap | setup | verify | recovery
+    const [bootstrapCode, setBootstrapCode] = useState("");
     const [challengeToken, setChallengeToken] = useState("");
     const [setupSecret, setSetupSecret] = useState("");
     const [mfaCode, setMfaCode] = useState("");
@@ -50,10 +50,35 @@ export default function Login() {
 
     const resetMfa = () => {
         setMfaMode(null);
+        setBootstrapCode("");
         setChallengeToken("");
         setSetupSecret("");
         setMfaCode("");
         setRecoveryCodes([]);
+    };
+
+    const applyLoginResult = (result) => {
+        if (result?.mfa_bootstrap_required) {
+            setBootstrapCode("");
+            setMfaMode("bootstrap");
+            toast.info("يلزم رمز التفعيل الأولي لربط تطبيق المصادقة لأول مرة");
+            return true;
+        }
+        if (result?.mfa_setup_required) {
+            setChallengeToken(result.challenge_token || "");
+            setSetupSecret(result.setup_secret || "");
+            setMfaCode("");
+            setMfaMode("setup");
+            toast.info("فعّل التحقق بخطوتين لإكمال تسجيل الدخول");
+            return true;
+        }
+        if (result?.mfa_required) {
+            setChallengeToken(result.challenge_token || "");
+            setMfaCode("");
+            setMfaMode("verify");
+            return true;
+        }
+        return false;
     };
 
     const submit = async (e) => {
@@ -61,23 +86,23 @@ export default function Login() {
         setBusy(true);
         try {
             const result = await login(email, password);
-            if (result?.mfa_setup_required) {
-                setChallengeToken(result.challenge_token || "");
-                setSetupSecret(result.setup_secret || "");
-                setMfaCode("");
-                setMfaMode("setup");
-                toast.info("فعّل التحقق بخطوتين لإكمال تسجيل الدخول");
-                return;
-            }
-            if (result?.mfa_required) {
-                setChallengeToken(result.challenge_token || "");
-                setMfaCode("");
-                setMfaMode("verify");
-                return;
-            }
-            finishLogin();
+            if (!applyLoginResult(result)) finishLogin();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر تسجيل الدخول");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const submitBootstrap = async (e) => {
+        e.preventDefault();
+        if (!bootstrapCode.trim()) return;
+        setBusy(true);
+        try {
+            const result = await login(email, password, bootstrapCode.trim());
+            if (!applyLoginResult(result)) finishLogin();
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر التحقق من رمز التفعيل الأولي");
         } finally {
             setBusy(false);
         }
@@ -225,6 +250,59 @@ export default function Login() {
         </>
     );
 
+    const renderBootstrapForm = () => (
+        <div data-testid="mfa-bootstrap-step">
+            <div className="w-14 h-14 rounded-2xl bg-accent text-brand flex items-center justify-center mb-6">
+                <LockKey size={30} weight="duotone" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-3" style={{ fontFamily: "Tajawal" }}>
+                رمز التفعيل الأولي
+            </h1>
+            <p className="text-muted-foreground mb-6 text-sm leading-7">
+                هذه خطوة تُستخدم مرة واحدة فقط قبل ربط تطبيق المصادقة لأول مرة. أدخل رمز التفعيل الأولي الذي تم ضبطه في إعدادات نشر ميزان. لا يتم حفظ هذا الرمز في قاعدة بيانات ميزان.
+            </p>
+            <form onSubmit={submitBootstrap} className="space-y-5">
+                <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2">رمز التفعيل الأولي</label>
+                    <div className="relative">
+                        <ShieldCheck size={20} className="absolute top-3.5 right-3 text-muted-foreground" />
+                        <input
+                            type="password"
+                            value={bootstrapCode}
+                            onChange={(e) => setBootstrapCode(e.target.value)}
+                            placeholder="أدخل رمز التفعيل"
+                            className="w-full ps-3 pe-10 py-3 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-shadow"
+                            autoComplete="off"
+                            autoFocus
+                            required
+                            data-testid="mfa-bootstrap-input"
+                            dir="ltr"
+                        />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                        خمس محاولات غير صحيحة تخضع لنفس حماية حظر الجهاز المفعّلة في صفحة الدخول.
+                    </p>
+                </div>
+                <button
+                    type="submit"
+                    disabled={busy || !bootstrapCode.trim()}
+                    className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
+                    data-testid="mfa-bootstrap-submit"
+                >
+                    {busy ? "جاري التحقق…" : "تحقق وابدأ الربط"}
+                </button>
+                <button
+                    type="button"
+                    onClick={resetMfa}
+                    disabled={busy}
+                    className="w-full text-sm text-muted-foreground hover:text-brand font-semibold"
+                >
+                    العودة إلى تسجيل الدخول
+                </button>
+            </form>
+        </div>
+    );
+
     const renderMfaForm = () => {
         const isSetup = mfaMode === "setup";
         return (
@@ -366,6 +444,7 @@ export default function Login() {
                     </div>
 
                     {mfaMode === null && renderPasswordForm()}
+                    {mfaMode === "bootstrap" && renderBootstrapForm()}
                     {(mfaMode === "setup" || mfaMode === "verify") && renderMfaForm()}
                     {mfaMode === "recovery" && renderRecoveryCodes()}
                 </div>
