@@ -492,3 +492,35 @@ The initial migration is a guarded `shadow_read_only` copy:
   fulfillment permission checks and 100% count/value reconciliation pass.
 - AI may recommend assignments or flag anomalies. Salary payment, termination,
   sensitive permission changes and payroll cutover require human approval.
+
+---
+
+## Decision-030 — Employee Management Opens Through a Single-Employee Pilot
+
+Status: Approved, Phase 2 pilot implementation
+
+Write-capable Employees V2 management starts with one native pilot employee
+before any of the 15 shadow-migrated employee records can be edited.
+
+The pilot boundary is mandatory:
+
+- Only the owner can create, edit, link or assign the pilot employee.
+- At most one pilot employee exists per owner.
+- Pilot status is limited to `draft` or `inactive`; it cannot become payroll
+  active.
+- Pilot salary stays in an `employees_v2_pilot_only` contract with payroll,
+  legacy salary, liability and general-ledger writes disabled.
+- The 15 shadow-migrated employees remain read-only.
+- A login account must belong to the owner's team, must not be the owner, and
+  must have no employee link or operational role already.
+- Accounts suggested for migrated employees remain reserved for manual review;
+  this includes the unresolved Arafat suggestion.
+- Pilot account linkage is V2-only and does not write the legacy
+  `users.linked_employee_id` reverse link.
+- Role assignment uses the canonical `mezan_role_assignments_v2` catalogue and
+  is limited to the linked pilot account.
+- Create, edit, link, unlink and role actions append employee audit events.
+
+Opening writes for the 15 migrated employees requires a separate acceptance
+decision after the pilot passes create/edit/link/role/unlink/audit checks and
+financial invariants remain unchanged.

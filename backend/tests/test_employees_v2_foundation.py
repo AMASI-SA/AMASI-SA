@@ -224,5 +224,6 @@ def test_employee_v2_router_page_and_navigation_are_wired_together():
     assert "await ensure_employee_v2_indexes(db)" in server
     assert 'import EmployeesV2 from "./pages/EmployeesV2";' in app
     assert 'path="/employees-v2"' in app
-    assert '{ to: "/employees-v2", label: "الموظفون والرواتب", exactSearch: true }' in navigation
+    assert '{ to: "/employees-v2", label: "إدارة الموظفين", exactSearch: true }' in navigation
+    assert '{ to: "/employees-v2?workspace=migration", label: "تقرير الترحيل والرواتب" }' in navigation
     assert '{ to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز" }' in navigation

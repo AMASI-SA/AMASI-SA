@@ -13,6 +13,10 @@ jest.mock("./StoreOperationsAccessWorkspace", () => function AccessFixture() {
     return <div data-testid="store-operations-access-fixture">صلاحيات إدارة التجهيز الفعلية</div>;
 });
 
+jest.mock("./EmployeesV2ManagementPilot", () => function ManagementFixture() {
+    return <div data-testid="employees-v2-management-fixture">إدارة موظف تجريبي آمن</div>;
+});
+
 jest.mock("../services/employeesV2", () => ({
     getEmployeesV2: jest.fn(),
     applyEmployeesV2ShadowMigration: jest.fn(),
@@ -68,16 +72,25 @@ beforeEach(() => {
     applyEmployeesV2ShadowMigration.mockReset();
 });
 
-test("employee workspace exposes the guarded salary-preserving migration", () => {
+test("employee workspace opens safe management before the migrated employees", () => {
+    const markup = renderToStaticMarkup(<EmployeesV2 />);
+
+    expect(markup).toContain("إدارة موظف تجريبي آمن");
+    expect(markup).toContain("إدارة الموظفين");
+    expect(markup).toContain("تقرير الترحيل والرواتب");
+    expect(markup).not.toContain("صلاحيات إدارة التجهيز الفعلية");
+});
+
+test("migration report remains available as a separate guarded workspace", () => {
+    mockSearchParams = new URLSearchParams("workspace=migration");
     const markup = renderToStaticMarkup(<EmployeesV2 />);
 
     expect(markup).toContain("Mezan Employee OS");
-    expect(markup).toContain("الموظفون والرواتب");
     expect(markup).toContain("إنشاء النسخة التجريبية");
     expect(markup).toContain("لا تعديل على الرواتب القديمة");
     expect(markup).toContain("لا قيود جديدة أو إعادة احتساب");
     expect(markup).toContain("لا تعديل على السلف والعهد");
-    expect(markup).not.toContain("صلاحيات إدارة التجهيز الفعلية");
+    expect(markup).not.toContain("إدارة موظف تجريبي آمن");
 });
 
 test("permissions stay in the same employee workspace instead of a second page", () => {
@@ -89,6 +102,7 @@ test("permissions stay in the same employee workspace instead of a second page",
 });
 
 test("uses an in-app confirmation and submits the shadow migration exactly once", async () => {
+    mockSearchParams = new URLSearchParams("workspace=migration");
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const container = document.createElement("div");
     document.body.appendChild(container);
