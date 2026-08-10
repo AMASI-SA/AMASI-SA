@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 
 import jwt
 import pytest
@@ -11,9 +10,12 @@ os.environ.setdefault("JWT_SECRET", "test-mfa-secret-for-unit-tests")
 
 from auth import create_access_token, get_current_user_from_db  # noqa: E402
 from mfa_security import (  # noqa: E402
+    MIN_BOOTSTRAP_LENGTH,
+    _bootstrap_matches,
+    _bootstrap_secret,
+    _challenge_token,
     _decode_challenge_token,
     _normalize_recovery_code,
-    _challenge_token,
     decrypt_totp_secret,
     encrypt_totp_secret,
     generate_recovery_codes,
@@ -64,13 +66,40 @@ def test_totp_matching_accepts_current_and_adjacent_window_only():
     assert match_totp_counter(secret, "abcdef", timestamp=timestamp) is None
 
 
-def test_totp_secret_is_encrypted_at_rest_and_round_trips():
+def test_totp_secret_is_encrypted_at_rest_and_round_trips(monkeypatch):
+    monkeypatch.delenv("MFA_ENCRYPTION_KEY", raising=False)
     secret = generate_totp_secret()
     encrypted = encrypt_totp_secret(secret)
     assert encrypted != secret
     assert secret not in encrypted
     assert decrypt_totp_secret(encrypted) == secret
     assert decrypt_totp_secret("not-a-valid-fernet-token") is None
+
+
+def test_existing_jwt_derived_ciphertext_survives_later_independent_key(monkeypatch):
+    monkeypatch.delenv("MFA_ENCRYPTION_KEY", raising=False)
+    secret = generate_totp_secret()
+    legacy_ciphertext = encrypt_totp_secret(secret)
+
+    # Operators may add an independent key after the first rollout. Decryption
+    # retains the legacy JWT-derived key as a migration fallback.
+    monkeypatch.setenv("MFA_ENCRYPTION_KEY", "independent-stable-mfa-key-v2")
+    assert decrypt_totp_secret(legacy_ciphertext) == secret
+
+
+def test_bootstrap_code_is_required_and_has_minimum_length(monkeypatch):
+    monkeypatch.delenv("MFA_BOOTSTRAP_CODE", raising=False)
+    assert _bootstrap_secret() is None
+    assert _bootstrap_matches("anything") is False
+
+    monkeypatch.setenv("MFA_BOOTSTRAP_CODE", "x" * (MIN_BOOTSTRAP_LENGTH - 1))
+    assert _bootstrap_secret() is None
+
+    configured = "Bootstrap-Secret-2026!"
+    monkeypatch.setenv("MFA_BOOTSTRAP_CODE", configured)
+    assert _bootstrap_secret() == configured
+    assert _bootstrap_matches(configured) is True
+    assert _bootstrap_matches(configured + "-wrong") is False
 
 
 def test_provisioning_uri_is_local_totp_standard_and_contains_no_password():
