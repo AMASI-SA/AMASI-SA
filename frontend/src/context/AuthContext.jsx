@@ -45,14 +45,40 @@ export function AuthProvider({ children }) {
         })();
     }, [refreshUser]);
 
-    const login = async (email, password) => {
-        const { data } = await api.post("/auth/login", { email, password });
-        // Do not persist data.access_token in Web Storage. The backend already
-        // sets HttpOnly/Secure auth cookies and api is configured with
-        // withCredentials=true, so JavaScript never needs the browser token.
+    const login = async (email, password, mfaBootstrapCode = "") => {
+        const payload = { email, password };
+        if (mfaBootstrapCode) payload.mfa_bootstrap_code = mfaBootstrapCode;
+        const { data } = await api.post("/auth/login", payload);
         clearLegacyBrowserAccessToken();
-        // Fetch the FULL /auth/me payload (includes permissions + is_owner + has_security_question)
-        // so RBAC-aware navigation works immediately after login.
+
+        // Owner/Admin password success is deliberately not a browser session.
+        // First enrollment may require an out-of-band bootstrap proof before
+        // the TOTP secret is exposed; returning users get an MFA challenge.
+        if (data?.mfa_bootstrap_required || data?.mfa_required || data?.mfa_setup_required) {
+            setUser(false);
+            return data;
+        }
+
+        await refreshUser();
+        return data;
+    };
+
+    const verifyMfa = async (challengeToken, code, { deferRefresh = false } = {}) => {
+        const { data } = await api.post("/auth/mfa/verify", {
+            challenge_token: challengeToken,
+            code,
+        });
+        clearLegacyBrowserAccessToken();
+
+        // First-time enrollment returns recovery codes that must remain visible
+        // before PublicOnly sees an authenticated user and redirects away from
+        // /login. The HttpOnly session cookie is already set; Login calls
+        // refreshUser only after the merchant confirms the codes are saved.
+        if (deferRefresh) {
+            setUser(false);
+            return data;
+        }
+
         await refreshUser();
         return data;
     };
@@ -77,7 +103,16 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, formatApiErrorDetail }}>
+        <AuthContext.Provider value={{
+            user,
+            loading,
+            login,
+            verifyMfa,
+            register,
+            logout,
+            refreshUser,
+            formatApiErrorDetail,
+        }}>
             {children}
         </AuthContext.Provider>
     );
