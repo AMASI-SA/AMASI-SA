@@ -77,7 +77,7 @@ function finiteCount(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
 }
 
-function sourceDescription(source, snapshot) {
+export function sourceDescription(source, snapshot) {
   if (source !== "salla") {
     return {
       text: "المشتريات والعائد كما أبلغت بها المنصة",
@@ -91,7 +91,13 @@ function sourceDescription(source, snapshot) {
       status: "pending",
     };
   }
-  const matched = finiteCount(coverage.matched_orders);
+  // The created-order semantics layer is authoritative for the campaign
+  // totals shown in the workspace. Keep the legacy field as a fallback for
+  // older report payloads, but do not let its stale zero override the current
+  // created-order match count.
+  const matched = finiteCount(
+    coverage.created_orders_matched ?? coverage.matched_orders,
+  );
   const unmatched = finiteCount(coverage.unattributed_snapchat_orders);
   const ambiguous = finiteCount(coverage.ambiguous_orders);
   const parts = [`مطابقة ${matched.toLocaleString("en-US")} طلب من سلة بالحملات`];

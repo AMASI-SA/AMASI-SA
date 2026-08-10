@@ -1,6 +1,7 @@
 import {
   enhanceMarketingAdsManager,
   marketingPlatformFromLocation,
+  sourceDescription,
 } from "./marketingAdsManagerWorkspaceEnhancer";
 import { campaignResultsSource } from "./marketingCampaignResultSource";
 
@@ -15,6 +16,24 @@ describe("marketing ads manager workspace enhancer", () => {
     expect(marketingPlatformFromLocation({ search: "?provider=meta" })).toBe("meta");
     expect(marketingPlatformFromLocation({ search: "?provider=tiktok" })).toBe("tiktok");
     expect(marketingPlatformFromLocation({ search: "?provider=unknown" })).toBe("snapchat");
+  });
+
+  test("uses the current created-order match count in the Salla source description", () => {
+    const state = sourceDescription("salla", {
+      source: {
+        salla_attribution: {
+          matched_orders: 0,
+          created_orders_matched: 18,
+          unattributed_snapchat_orders: 0,
+          ambiguous_orders: 0,
+        },
+      },
+    });
+
+    expect(state).toEqual({
+      text: "مطابقة 18 طلب من سلة بالحملات",
+      status: "complete",
+    });
   });
 
   test("marks the campaigns workspace and adds locked primary actions once", () => {
