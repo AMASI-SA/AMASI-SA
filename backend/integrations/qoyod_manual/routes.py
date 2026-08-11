@@ -238,7 +238,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 # This operator-confirmed path is bounded to explicit order
                 # numbers and already rechecks the live native Salla status.
                 # Qoyod invoice/payment dates remain the send date.
-                allow_missing_salla_order_date=True)
+                allow_missing_salla_order_date=True,
+                allow_historical_positive_total=True)
             return result
         except ManualSendRefused as exc:
             # 409 = business-rule / guard refusal.
