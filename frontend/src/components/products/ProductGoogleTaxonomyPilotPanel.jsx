@@ -11,8 +11,7 @@ import {
     startGoogleTaxonomyPilot,
 } from "../../services/aiStoreOperations";
 
-const TERMINAL = new Set(["completed", "completed_with_errors", "failed", "credit_exhausted"]);
-const COMPLETE = new Set(["completed", "completed_with_errors"]);
+const TERMINAL = new Set(["completed", "completed_with_errors", "failed"]);
 
 const STATUS_LABELS = {
     high_confidence: "جاهز للاعتماد ≥90%",
@@ -43,15 +42,23 @@ export default function ProductGoogleTaxonomyPilotPanel() {
     const [limit, setLimit] = useState(200);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
+    const [retrying, setRetrying] = useState(false);
     const [applying, setApplying] = useState(false);
     const [expanded, setExpanded] = useState(true);
 
     const run = payload?.run || null;
-    const items = payload?.items || [];
+    const items = useMemo(() => payload?.items || [], [payload?.items]);
     const counters = run?.counters || {};
     const progress = run?.progress || {};
     const pendingHighConfidence = useMemo(
         () => items.filter((row) => row.decision_status === "high_confidence" && row.apply_status === "pending").length,
+        [items],
+    );
+    const pendingRetry = useMemo(
+        () => items.filter((row) => (
+            row.apply_status !== "applied"
+            && ["review_required", "review_required_existing_category", "low_confidence"].includes(row.decision_status)
+        )).length,
         [items],
     );
 
@@ -118,6 +125,25 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         }
     }
 
+    async function retryReviewQueue() {
+        if (!pendingRetry) return;
+        setRetrying(true);
+        try {
+            const result = await startGoogleTaxonomyPilot(
+                Math.max(20, Math.min(200, pendingRetry)),
+                "retry_review",
+            );
+            setPayload(result);
+            setExpanded(true);
+            toast.success(`بدأت إعادة تحليل ${pendingRetry} منتجًا من المراجعة والثقة المنخفضة فقط. لا توجد كتابة إلى Salla.`);
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر إعادة تحليل قائمة المراجعة");
+        } finally {
+            setRetrying(false);
+        }
+    }
+
     return <section className="rounded-2xl border border-violet-200 bg-white shadow-sm sm:rounded-3xl" dir="rtl" data-testid="google-taxonomy-ai-pilot">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50 px-4 py-3 sm:px-5">
             <div className="min-w-0">
@@ -145,7 +171,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
 
             {loading ? <div className="p-8 text-center text-slate-400"><SpinnerGap className="inline animate-spin" /> جاري تحميل آخر Pilot…</div> : !run ? <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">لم يتم تشغيل Pilot بعد.</div> : <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "credit_exhausted" ? <span className="text-amber-700">متوقف — رصيد OpenAI غير كافٍ</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
+                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
                     <div className="text-xs text-slate-500">Run: <span className="font-mono">{String(run.run_id || "").slice(0, 10)}</span> · Model: {run.model || "—"} · Taxonomy: {run.taxonomy_version || "—"}</div>
                 </div>
 
@@ -177,13 +203,14 @@ export default function ProductGoogleTaxonomyPilotPanel() {
 
                 {run.error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><WarningCircle className="ml-1 inline" />{run.error}</div>}
 
-                {run.status === "credit_exhausted" && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
-                    لم تُسجل المنتجات غير المكتملة كفشل. بعد شحن رصيد OpenAI اختر «200 منتج — الدفعة التالية» ثم اضغط «تشغيل الدفعة التالية»؛ سيكمل ميزان المنتجات المتبقية فقط.
-                </div>}
-
-                {COMPLETE.has(run.status) && pendingHighConfidence > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                {TERMINAL.has(run.status) && pendingHighConfidence > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                     <div className="text-sm text-emerald-900"><CheckCircle className="ml-1 inline" />يوجد <b>{pendingHighConfidence}</b> اقتراحًا ≥90% لمنتجات بلا تصنيف Google حالي.</div>
                     <button disabled={applying} onClick={applyHighConfidence} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{applying ? "جارٍ الاعتماد…" : "اعتماد عالي الثقة في ميزان"}</button>
+                </div>}
+
+                {TERMINAL.has(run.status) && pendingRetry > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-sm text-amber-950"><WarningCircle className="ml-1 inline" />يوجد <b>{pendingRetry}</b> منتجًا في المراجعة أو الثقة المنخفضة. ستُعاد هذه النتائج فقط، ولن تُمس المنتجات المعتمدة.</div>
+                    <button disabled={retrying || starting || applying} onClick={retryReviewQueue} className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{retrying ? "جارٍ بدء الإعادة…" : "إعادة تحليل قائمة المراجعة"}</button>
                 </div>}
 
                 {!!items.length && <div className="overflow-hidden rounded-2xl border">
