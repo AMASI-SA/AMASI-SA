@@ -204,7 +204,7 @@ def smtp_settings() -> SmtpSettings:
         username=username,
         password=password,
         from_email=from_email,
-        from_name=_safe_header(os.environ.get("EMAIL_OTP_FROM_NAME") or "MEZAN", "MEZAN"),
+        from_name=_safe_header(os.environ.get("EMAIL_OTP_FROM_NAME") or "AMASI", "AMASI"),
         use_starttls=use_starttls,
         use_ssl=use_ssl,
         timeout_seconds=_env_int("EMAIL_OTP_SMTP_TIMEOUT_SECONDS", 12),
@@ -219,22 +219,22 @@ def validate_email_otp_runtime() -> None:
     smtp_settings()
 
 
-def _send_email_sync(recipient: str, code: str) -> None:
+def _send_email_sync(recipient: str, code: str, recipient_name: str | None = None) -> None:
     settings = smtp_settings()
     if not _valid_recipient(recipient):
         raise ValueError("invalid email OTP recipient")
 
     message = EmailMessage()
-    message["Subject"] = "رمز التحقق لتسجيل الدخول إلى ميزان"
+    message["Subject"] = "رمز التحقق لتسجيل الدخول إلى نظام أماسي"
     message["From"] = f"{settings.from_name} <{settings.from_email}>"
     message["To"] = recipient
     message.set_content(
-        "مرحباً،\n\n"
-        f"رمز التحقق الخاص بك لتسجيل الدخول إلى ميزان هو: {code}\n\n"
+        (f"مرحبًا {' '.join(str(recipient_name).split())[:80]}،\n\n" if str(recipient_name or "").strip() else "مرحبًا،\n\n")
+        + f"رمز التحقق الخاص بك لتسجيل الدخول إلى نظام أماسي هو: {code}\n\n"
         f"الرمز صالح لمدة {max(1, math.ceil(_challenge_seconds() / 60))} دقائق، "
         "ويعمل مرة واحدة فقط.\n"
-        "إذا لم تحاول تسجيل الدخول إلى ميزان فتجاهل هذه الرسالة ولا تشارك الرمز مع أي شخص.\n\n"
-        "MEZAN"
+        "إذا لم تحاول تسجيل الدخول إلى نظام أماسي فتجاهل هذه الرسالة ولا تشارك الرمز مع أي شخص.\n\n"
+        "AMASI"
     )
 
     if settings.use_ssl:
@@ -265,8 +265,8 @@ def _send_email_sync(recipient: str, code: str) -> None:
             server.close()
 
 
-async def send_otp_email(recipient: str, code: str) -> None:
-    await asyncio.to_thread(_send_email_sync, recipient, code)
+async def send_otp_email(recipient: str, code: str, recipient_name: str | None = None) -> None:
+    await asyncio.to_thread(_send_email_sync, recipient, code, recipient_name)
 
 
 class EmailOtpChallengeStore:
@@ -594,7 +594,7 @@ class EmailOtpSecurityMiddleware:
             challenge, code = await self.store.issue_for_login(user)
             if code is not None:
                 try:
-                    await send_otp_email(recipient, code)
+                    await send_otp_email(recipient, code, user.get("name"))
                 except Exception:
                     await self.store.consume(str(challenge["jti"]))
                     await self.store.safe_event("email_otp_delivery_failed", user)
@@ -730,7 +730,7 @@ class EmailOtpSecurityMiddleware:
 
             _, updated, code, new_token = await self.store.prepare_resend(token)
             try:
-                await send_otp_email(str(user.get("email") or ""), code)
+                await send_otp_email(str(user.get("email") or ""), code, user.get("name"))
             except Exception:
                 await self.store.consume(str(challenge["jti"]))
                 await self.store.safe_event("email_otp_delivery_failed", user, resend=True)
