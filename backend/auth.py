@@ -141,7 +141,7 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
-    """Attach the login-abuse and privileged MFA guards at app startup."""
+    """Attach login abuse, trusted-device passkeys, and privileged MFA."""
     app = None
     for module_name in ("server", "backend.server"):
         module = sys.modules.get(module_name)
@@ -159,13 +159,16 @@ async def _install_login_security_for_loaded_app(db) -> None:
     os.environ.setdefault("AUTH_LOGIN_DEVICE_LIMIT", "5")
 
     from login_security import install_login_security
+    from passkey_security import install_passkey_security
     from mfa_security import install_mfa_security
 
-    # Order matters: login_security is installed first, then MFA is appended as
-    # the inner login guard. The outer abuse middleware therefore sees the final
-    # 202 MFA challenge as a successful password check and still records 401
-    # password failures normally.
+    # Order matters. Starlette appends each later guard inside the earlier one:
+    # login_security remains outermost and records password outcomes; passkey
+    # security can observe/replace the normal Owner TOTP challenge for an exact
+    # trusted device; MFA remains the innermost authority that proves password
+    # + TOTP enrollment/verification and provides the safe fallback.
     await install_login_security(app, db)
+    await install_passkey_security(app, db)
     await install_mfa_security(app, db)
 
 
