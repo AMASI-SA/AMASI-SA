@@ -25,6 +25,7 @@ PUBLISH_CONFIRMATION = "نشر تصنيفات Google المعتمدة إلى س�
 PROBE_CONFIRMATION = "فحص نشر تصنيف Google إلى سلة"
 MAX_BATCH = 200
 PROVIDER_FIELD = "google_product_category"
+WRITE_SUPPORTED = False
 AI_ACTION_LOG = "mezan_ai_action_log_v2"
 APPROVED_SOURCES = (
     "openai_pilot_human_approved",
@@ -211,6 +212,8 @@ def make_product_google_taxonomy_salla_publish_router(db: Any, current_user: Cal
         return {
             "ok": True,
             "eligible": eligible,
+            "write_supported": WRITE_SUPPORTED,
+            "blocked_reason": "salla_public_api_google_taxonomy_writer_not_supported",
             "provider_field": PROVIDER_FIELD,
             "probe_confirmation": PROBE_CONFIRMATION,
             "publish_confirmation": PUBLISH_CONFIRMATION,
@@ -218,6 +221,14 @@ def make_product_google_taxonomy_salla_publish_router(db: Any, current_user: Cal
 
     @router.post("/probe")
     async def probe(payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
+        if not WRITE_SUPPORTED:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "salla_google_taxonomy_writer_not_supported",
+                    "message": "واجهة سلة العامة لا توفر حقلًا موثقًا لكتابة تصنيف Google؛ لم تُرسل أي كتابة.",
+                },
+            )
         if payload.get("confirmation") != PROBE_CONFIRMATION:
             raise HTTPException(status_code=409, detail={"code": "taxonomy_salla_probe_confirmation_required"})
         result = await publish_google_taxonomy_batch(
@@ -230,6 +241,14 @@ def make_product_google_taxonomy_salla_publish_router(db: Any, current_user: Cal
 
     @router.post("")
     async def publish(payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
+        if not WRITE_SUPPORTED:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "salla_google_taxonomy_writer_not_supported",
+                    "message": "واجهة سلة العامة لا توفر حقلًا موثقًا لكتابة تصنيف Google؛ لم تُرسل أي كتابة.",
+                },
+            )
         if payload.get("confirmation") != PUBLISH_CONFIRMATION:
             raise HTTPException(status_code=409, detail={"code": "taxonomy_salla_publish_confirmation_required"})
         result = await publish_google_taxonomy_batch(

@@ -6,11 +6,11 @@ import { toast } from "sonner";
 
 import {
     applyHighConfidenceGoogleTaxonomy,
+    downloadGoogleTaxonomyMerchantFeed,
     getGoogleTaxonomyPilot,
+    getGoogleTaxonomyMerchantFeedPreview,
     getGoogleTaxonomySallaPublishPreview,
     getLatestGoogleTaxonomyPilot,
-    probeGoogleTaxonomySallaPublish,
-    publishGoogleTaxonomyToSalla,
     startGoogleTaxonomyPilot,
 } from "../../services/aiStoreOperations";
 
@@ -50,7 +50,9 @@ export default function ProductGoogleTaxonomyPilotPanel() {
     const [retrying, setRetrying] = useState(false);
     const [applying, setApplying] = useState(false);
     const [sallaPreview, setSallaPreview] = useState(null);
-    const [sallaPublishing, setSallaPublishing] = useState(false);
+    const [merchantFeedPreview, setMerchantFeedPreview] = useState(null);
+    const [merchantFeedLoading, setMerchantFeedLoading] = useState(true);
+    const [merchantFeedDownloading, setMerchantFeedDownloading] = useState(false);
     const [expanded, setExpanded] = useState(true);
 
     const run = payload?.run || null;
@@ -87,7 +89,14 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         catch { setSallaPreview(null); }
     }
 
-    useEffect(() => { loadLatest(); loadSallaPreview(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    async function loadMerchantFeedPreview() {
+        setMerchantFeedLoading(true);
+        try { setMerchantFeedPreview(await getGoogleTaxonomyMerchantFeedPreview()); }
+        catch { setMerchantFeedPreview(null); }
+        finally { setMerchantFeedLoading(false); }
+    }
+
+    useEffect(() => { loadLatest(); loadSallaPreview(); loadMerchantFeedPreview(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!run?.run_id || TERMINAL.has(run.status)) return undefined;
@@ -157,32 +166,23 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         }
     }
 
-    async function publishToSalla() {
-        if (!sallaPreview?.eligible) return;
-        setSallaPublishing(true);
+    async function downloadMerchantFeed() {
+        setMerchantFeedDownloading(true);
         try {
-            const probe = await probeGoogleTaxonomySallaPublish(sallaPreview.probe_confirmation);
-            const probeResult = probe?.result || {};
-            if (!probe?.ok || Number(probeResult.failed || 0) > 0) {
-                const reason = probeResult.items?.[0]?.error || "لم تُثبت سلة حفظ تصنيف Google بعد إعادة القراءة";
-                toast.error(`توقف النشر الآمن بعد فحص منتج واحد: ${reason}`);
-                await loadSallaPreview();
-                return;
-            }
-            const remaining = Math.max(0, Number(sallaPreview.eligible || 0) - Number(probeResult.synced || 0));
-            let batch = { result: { synced: 0, failed: 0 } };
-            if (remaining > 0) {
-                batch = await publishGoogleTaxonomyToSalla(sallaPreview.publish_confirmation, Math.min(200, remaining));
-            }
-            const synced = Number(probeResult.synced || 0) + Number(batch?.result?.synced || 0);
-            const failed = Number(batch?.result?.failed || 0);
-            if (failed) toast.error(`نُشر وتحقق ${synced} منتجًا، وتعذر التحقق من ${failed}.`);
-            else toast.success(`تم نشر والتحقق من ${synced} تصنيف Google في سلة عبر تطبيق إدارة أماسي.`);
-            await loadSallaPreview();
+            const result = await downloadGoogleTaxonomyMerchantFeed();
+            const url = URL.createObjectURL(result.blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = "mezan-google-taxonomy-supplemental-feed.csv";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+            toast.success(`تم تجهيز ملف Merchant Center المكمل بـ${result.rows || Number(merchantFeedPreview?.matched || 0)} تصنيفًا مطابق المعرّف.`);
         } catch (error) {
             const detail = error?.response?.data?.detail;
-            toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر نشر تصنيفات Google إلى سلة");
-        } finally { setSallaPublishing(false); }
+            toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر تجهيز ملف Merchant Center المكمل");
+        } finally { setMerchantFeedDownloading(false); }
     }
 
     return <section className="rounded-2xl border border-violet-200 bg-white shadow-sm sm:rounded-3xl" dir="rtl" data-testid="google-taxonomy-ai-pilot">
@@ -263,9 +263,13 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                     <button disabled={retrying || starting || applying} onClick={retryReviewQueue} className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{retrying ? "جارٍ بدء الإعادة…" : "إعادة تحليل قائمة المراجعة"}</button>
                 </div>}
 
-                {TERMINAL.has(run.status) && Number(sallaPreview?.eligible || 0) > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
-                    <div className="text-sm text-sky-950"><CheckCircle className="ml-1 inline" />يوجد <b>{Number(sallaPreview.eligible || 0).toLocaleString("en-US")}</b> تصنيفًا معتمدًا داخل ميزان وجاهزًا لفحص النشر عبر تطبيق إدارة أماسي. يبدأ النظام بمنتج واحد ولا يكمل إلا بعد read-back مطابق من سلة.</div>
-                    <button disabled={sallaPublishing} onClick={publishToSalla} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{sallaPublishing ? "جارٍ النشر والتحقق…" : "نشر المعتمد إلى سلة"}</button>
+                {TERMINAL.has(run.status) && Number(sallaPreview?.eligible || 0) > 0 && sallaPreview?.write_supported === false && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <WarningCircle className="ml-1 inline" />حُفظ <b>{Number(sallaPreview.eligible || 0).toLocaleString("en-US")}</b> تصنيفًا معتمدًا داخل ميزان. واجهة سلة العامة لا توفر حقلًا موثقًا لكتابة Google Product Category، لذلك أوقف ميزان إعادة المحاولة ولم يضع علامة مزامنة على أي منتج.
+                </div>}
+
+                {TERMINAL.has(run.status) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+                    <div className="text-sm text-sky-950"><CheckCircle className="ml-1 inline" />{merchantFeedLoading ? "جارٍ مطابقة معرفات المنتجات مع Merchant Center…" : merchantFeedPreview?.ready ? <>ملف Merchant Center المكمل جاهز: <b>{Number(merchantFeedPreview.matched || 0).toLocaleString("en-US")}</b> تصنيفًا بمعرّف Google مطابق{Number(merchantFeedPreview.unmatched || 0) ? <>، و<b>{Number(merchantFeedPreview.unmatched).toLocaleString("en-US")}</b> غير مطابق لم يُضمّن</> : ""}. الملف للمعاينة/الرفع فقط ولا ينشر تلقائيًا.</> : "تعذر تجهيز ملف Merchant Center المكمل أو لم تتطابق معرفات المنتجات بعد."}</div>
+                    <button disabled={merchantFeedLoading || merchantFeedDownloading || !merchantFeedPreview?.ready} onClick={downloadMerchantFeed} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{merchantFeedDownloading ? "جارٍ التجهيز…" : "تنزيل ملف Google المكمل"}</button>
                 </div>}
 
                 {!!items.length && <div className="overflow-hidden rounded-2xl border">
