@@ -43,15 +43,23 @@ export default function ProductGoogleTaxonomyPilotPanel() {
     const [limit, setLimit] = useState(200);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
+    const [retrying, setRetrying] = useState(false);
     const [applying, setApplying] = useState(false);
     const [expanded, setExpanded] = useState(true);
 
     const run = payload?.run || null;
-    const items = payload?.items || [];
+    const items = useMemo(() => payload?.items || [], [payload?.items]);
     const counters = run?.counters || {};
     const progress = run?.progress || {};
     const pendingHighConfidence = useMemo(
         () => items.filter((row) => row.decision_status === "high_confidence" && row.apply_status === "pending").length,
+        [items],
+    );
+    const pendingRetry = useMemo(
+        () => items.filter((row) => (
+            row.apply_status !== "applied"
+            && ["review_required", "review_required_existing_category", "low_confidence"].includes(row.decision_status)
+        )).length,
         [items],
     );
 
@@ -115,6 +123,25 @@ export default function ProductGoogleTaxonomyPilotPanel() {
             toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر اعتماد نتائج Pilot");
         } finally {
             setApplying(false);
+        }
+    }
+
+    async function retryReviewQueue() {
+        if (!pendingRetry) return;
+        setRetrying(true);
+        try {
+            const result = await startGoogleTaxonomyPilot(
+                Math.max(20, Math.min(200, pendingRetry)),
+                "retry_review",
+            );
+            setPayload(result);
+            setExpanded(true);
+            toast.success(`بدأت إعادة تحليل ${pendingRetry} منتجًا من المراجعة والثقة المنخفضة فقط. لا توجد كتابة إلى Salla.`);
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            toast.error((typeof detail === "string" ? detail : detail?.message) || "تعذر إعادة تحليل قائمة المراجعة");
+        } finally {
+            setRetrying(false);
         }
     }
 
@@ -184,6 +211,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                 {COMPLETE.has(run.status) && pendingHighConfidence > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                     <div className="text-sm text-emerald-900"><CheckCircle className="ml-1 inline" />يوجد <b>{pendingHighConfidence}</b> اقتراحًا ≥90% لمنتجات بلا تصنيف Google حالي.</div>
                     <button disabled={applying} onClick={applyHighConfidence} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{applying ? "جارٍ الاعتماد…" : "اعتماد عالي الثقة في ميزان"}</button>
+                </div>}
+
+                {TERMINAL.has(run.status) && pendingRetry > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-sm text-amber-950"><WarningCircle className="ml-1 inline" />يوجد <b>{pendingRetry}</b> منتجًا في المراجعة أو الثقة المنخفضة. ستُعاد هذه النتائج فقط، ولن تُمس المنتجات المعتمدة.</div>
+                    <button disabled={retrying || starting || applying} onClick={retryReviewQueue} className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{retrying ? "جارٍ بدء الإعادة…" : "إعادة تحليل قائمة المراجعة"}</button>
                 </div>}
 
                 {!!items.length && <div className="overflow-hidden rounded-2xl border">

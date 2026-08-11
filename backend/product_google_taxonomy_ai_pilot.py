@@ -128,7 +128,7 @@ CREDIT_EXHAUSTED_MESSAGE = (
 
 class PilotStartIn(BaseModel):
     limit: int = Field(default=DEFAULT_PILOT_LIMIT, ge=MIN_PILOT_LIMIT, le=MAX_PILOT_LIMIT)
-    selection_mode: Literal["sample", "next_unseen"] = "sample"
+    selection_mode: Literal["sample", "next_unseen", "retry_review"] = "sample"
 
 
 class PilotApplyIn(BaseModel):
@@ -214,6 +214,14 @@ def _tokens(value: Any) -> set[str]:
 _ALIAS_TERMS = {
     "عبايه": ["ملابس تقليديه", "ملابس الاحتفالات"],
     "عبايات": ["ملابس تقليديه", "ملابس الاحتفالات"],
+    "فروه": ["المعاطف والسترات"],
+    "معطف": ["المعاطف والسترات"],
+    "جاكيت": ["المعاطف والسترات"],
+    "جاكت": ["المعاطف والسترات"],
+    "بشت": ["ملابس الاحتفالات والملابس التقليديه"],
+    "دقله": ["ملابس الاحتفالات والملابس التقليديه"],
+    "ثوب": ["ملابس الاحتفالات والملابس التقليديه"],
+    "سديري": ["ملابس الاحتفالات والملابس التقليديه"],
     "سلسال": ["قلادات"],
     "سلاسل": ["قلادات"],
     "قلاده": ["قلادات"],
@@ -227,9 +235,47 @@ _ALIAS_TERMS = {
     "حلق": ["اقراط"],
     "اقراط": ["اقراط"],
     "بروش": ["دبابيس زينه", "حلي"],
-    "تيشيرت": ["قمصان", "تي شيرت"],
-    "قميص": ["قمصان"],
+    "طوق": ["اكسسوارات الشعر", "اطقم مجوهرات"],
+    "فواحه": ["معطرات هواء للمركبات"],
+    "شنطه": ["حقائب ظهر"],
+    "كبك": ["ازرار الاكمام"],
+    "هودي": ["قمصان وبلوزات"],
+    "سويتر": ["قمصان وبلوزات"],
+    "بلوفر": ["قمصان وبلوزات"],
+    "تيشيرت": ["قمصان وبلوزات"],
+    "تيشبرت": ["قمصان وبلوزات"],
+    "تیشیرت": ["قمصان وبلوزات"],
+    "قميص": ["قمصان وبلوزات"],
+    "وشاح": ["الاوشحه والشالات"],
+    "شال": ["الاوشحه والشالات"],
+    "قلم": ["اقلام حبر"],
+    "ساعه": ["ساعات يد"],
+    "كاسيو": ["ساعات يد"],
+    "سواتش": ["ساعات يد"],
+    "بجامه": ["البيجامات"],
+    "بيجامه": ["البيجامات"],
+    "افرول": ["ملابس الرضع والاطفال الصغار"],
+    "كوب": ["الاكواب"],
+    "لابوبو": ["حيوانات محشوه"],
+    "مجسم": ["دمي وشخصيات ومجموعات لعب"],
     "مريول": ["ملابس", "فساتين"],
+}
+
+_PHRASE_ALIAS_TERMS = {
+    "طقم بناتي بالاسم": ["اطقم مجوهرات"],
+    "طوق الورد وسلسال": ["اطقم مجوهرات", "اكسسوارات الشعر", "قلادات"],
+    "طقم اطفال رمضاني": ["اطقم ملابس"],
+    "وشاح تخرج": ["الاوشحه والشالات"],
+    "تعليقه سياره": ["ديكور المركبات"],
+    "افرول رمضان مواليد": ["ملابس الرضع والاطفال الصغار"],
+    "كوب شعار": ["الاكواب"],
+    "مجسم لابوبو": ["حيوانات محشوه", "دمي وشخصيات ومجموعات لعب"],
+}
+
+RETRYABLE_DECISION_STATUSES = {
+    "review_required",
+    "review_required_existing_category",
+    "low_confidence",
 }
 
 
@@ -330,10 +376,23 @@ def _evidence_limited(evidence: dict[str, Any]) -> bool:
 
 def _fallback_search_terms(evidence: dict[str, Any]) -> list[str]:
     terms: list[str] = []
-    for value in [evidence.get("name"), *(evidence.get("salla_categories") or [])]:
+    primary_values = [evidence.get("name"), *(evidence.get("salla_categories") or [])]
+    primary_text = " ".join(_normalize_ar(value) for value in primary_values if value)
+    for phrase, aliases in _PHRASE_ALIAS_TERMS.items():
+        if phrase in primary_text:
+            terms.extend(aliases)
+    for value in primary_values:
         normalized = _normalize_ar(value)
         if normalized:
             terms.append(normalized[:160])
+        for token in normalized.split():
+            for alias in _ALIAS_TERMS.get(token, []):
+                terms.append(alias)
+    # Descriptions rescue placeholder names such as ".", "0", and "D1".
+    # Only known aliases are emitted from free text so long marketing copy
+    # cannot swamp the official-taxonomy candidate set.
+    for value in [evidence.get("short_description"), evidence.get("description")]:
+        normalized = _normalize_ar(value)
         for token in normalized.split():
             for alias in _ALIAS_TERMS.get(token, []):
                 terms.append(alias)
@@ -344,7 +403,29 @@ def _fallback_search_terms(evidence: dict[str, Any]) -> list[str]:
         if key and key not in seen:
             seen.add(key)
             result.append(term)
-    return result[:12]
+    return result[:24]
+
+
+def _retryable_product_ids(
+    records: list[dict[str, Any]],
+    limit: int,
+) -> list[str]:
+    """Return a stable, unique retry set without touching approved results."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        if record.get("decision_status") not in RETRYABLE_DECISION_STATUSES:
+            continue
+        if record.get("apply_status") == "applied":
+            continue
+        product_id = str(record.get("mezan_product_id") or "")
+        if not product_id or product_id in seen:
+            continue
+        seen.add(product_id)
+        result.append(product_id)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _taxonomy_maps(items: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
@@ -1624,8 +1705,54 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 )
                 return {**(await _run_payload(db, user_id, active)), "reused": True}
 
+        retry_source_run_id: str | None = None
+        selected_product_ids: list[str] = []
+        if payload.selection_mode == "retry_review":
+            source_run = await db[RUNS].find_one(
+                {
+                    "user_id": user_id,
+                    "status": {"$in": ["completed", "completed_with_errors"]},
+                },
+                {"_id": 0, "run_id": 1},
+                sort=[("created_at", -1)],
+            )
+            if not source_run:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "taxonomy_retry_source_not_found"},
+                )
+            retry_source_run_id = str(source_run.get("run_id") or "")
+            retry_records = await db[CLASSIFICATIONS].find(
+                {
+                    "user_id": user_id,
+                    "run_id": retry_source_run_id,
+                    "decision_status": {"$in": list(RETRYABLE_DECISION_STATUSES)},
+                },
+                {
+                    "_id": 0,
+                    "mezan_product_id": 1,
+                    "decision_status": 1,
+                    "apply_status": 1,
+                    "classified_at": 1,
+                },
+            ).sort([("classified_at", 1)]).to_list(length=MAX_PILOT_LIMIT)
+            selected_product_ids = _retryable_product_ids(
+                retry_records,
+                payload.limit,
+            )
+            if not selected_product_ids:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "taxonomy_retry_queue_empty"},
+                )
+
         run_id = uuid.uuid4().hex
         now = _now()
+        mode = {
+            "sample": "proposal_only_pilot",
+            "next_unseen": "proposal_only_next_unseen",
+            "retry_review": "proposal_only_retry_review",
+        }[payload.selection_mode]
         run = {
             "run_id": run_id,
             "user_id": user_id,
@@ -1639,7 +1766,8 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "lease_expires_at": None,
             "attempt_count": 0,
             "resume_count": 0,
-            "selected_product_ids": [],
+            "selected_product_ids": selected_product_ids,
+            "retry_source_run_id": retry_source_run_id,
             "model": _model(),
             "taxonomy_version": None,
             "counters": {
@@ -1648,9 +1776,14 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 "missing_data": 0, "visual_checked": 0, "visual_failed": 0,
                 "applied": 0,
             },
-            "mode": "proposal_only_pilot" if payload.selection_mode == "sample" else "proposal_only_next_unseen",
+            "mode": mode,
             "selection_mode": payload.selection_mode,
-            "progress": {"phase": "queued", "saved": 0, "remaining": payload.limit, "updated_at": now},
+            "progress": {
+                "phase": "queued",
+                "saved": 0,
+                "remaining": len(selected_product_ids) or payload.limit,
+                "updated_at": now,
+            },
             "writes_to_salla": False,
             "error": None,
         }

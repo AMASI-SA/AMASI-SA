@@ -23,6 +23,7 @@ from product_google_taxonomy_ai_pilot import (
     _is_retryable_openai_error,
     _persist_records,
     _product_evidence,
+    _retryable_product_ids,
     _run_needs_resume,
     _run_error_fields,
     _run_counters,
@@ -53,6 +54,24 @@ def _evidence(name, *, categories=None, current=""):
     }
 
 
+_RECOVERY_TAXONOMY = [
+    {"id": "5598", "name": "المعاطف والسترات", "path": "ملابس وإكسسوارات > ملابس > ملابس خارجية > المعاطف والسترات", "depth": 3},
+    {"id": "5388", "name": "ملابس الاحتفالات والملابس التقليدية", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية", "depth": 2},
+    {"id": "6463", "name": "أطقم مجوهرات", "path": "ملابس وإكسسوارات > حُلي > أطقم مجوهرات", "depth": 2},
+    {"id": "2789", "name": "معطرات هواء للمركبات", "path": "المركبات وقطع الغيار > إكسسوارات العربات وقطع غيارها > صيانة المركبات والعناية بها وتزيينها > ديكور المركبات > معطرات هواء للمركبات", "depth": 4},
+    {"id": "100", "name": "حقائب ظهر", "path": "أمتعة وحقائب > حقائب ظهر", "depth": 1},
+    {"id": "193", "name": "أزرار الأكمام", "path": "ملابس وإكسسوارات > إكسسوارات الملابس > أزرار الأكمام", "depth": 2},
+    {"id": "212", "name": "قمصان وبلوزات", "path": "ملابس وإكسسوارات > ملابس > قمصان وبلوزات", "depth": 2},
+    {"id": "177", "name": "الأوشحة والشالات", "path": "ملابس وإكسسوارات > إكسسوارات الملابس > الأوشحة والشالات", "depth": 2},
+    {"id": "982", "name": "أقلام حبر", "path": "المستلزمات المكتبية > أدوات مكتب > أدوات الكتابة والرسم > أقلام الرصاص والحبر الجاف > أقلام حبر", "depth": 4},
+    {"id": "201", "name": "ساعات يد", "path": "ملابس وإكسسوارات > حُلي > ساعات يد", "depth": 2},
+    {"id": "2580", "name": "البيجامات", "path": "ملابس وإكسسوارات > ملابس > ملابس نوم وملابس مريحة > البيجامات", "depth": 3},
+    {"id": "182", "name": "ملابس الرضع والأطفال الصغار", "path": "ملابس وإكسسوارات > ملابس > ملابس الرضع والأطفال الصغار", "depth": 2},
+    {"id": "2169", "name": "الأكواب", "path": "الحديقة والمنزل > المطبخ وتناول الطعام > أدوات المائدة > أدوات تناول الشراب > الأكواب", "depth": 4},
+    {"id": "1259", "name": "حيوانات محشوة", "path": "ألعاب أطفال > ألعاب الطفل > دمى وشخصيات ومجموعات لعب > حيوانات محشوة", "depth": 3},
+]
+
+
 def test_abaya_alias_retrieves_traditional_clothing_candidate():
     taxonomy = [
         {"id": "5388", "name": "ملابس الاحتفالات والملابس التقليدية", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية", "depth": 2},
@@ -75,6 +94,37 @@ def test_necklace_alias_retrieves_necklaces_candidate():
 def test_ai_search_terms_are_combined_with_deterministic_aliases():
     terms = _fallback_search_terms(_evidence("سلسال بالاسم"))
     assert any("قلادات" in term for term in terms)
+
+
+@pytest.mark.parametrize(
+    ("name", "description", "expected_id"),
+    [
+        ("جاكيت شتوي", "", "5598"),
+        ("طقم بناتي بالاسم", "", "6463"),
+        ("فواحة - leather", "", "2789"),
+        ("شنطة مدرسيه بالاسم", "", "100"),
+        ("كبك اطفال بالاسم", "", "193"),
+        ("هودي أسود كاجوال", "", "212"),
+        ("وشاح تخرج تطريز", "", "177"),
+        ("قلم رجالي انيق بالاسم", "", "982"),
+        ("ساعة كاسيو LTP", "", "201"),
+        ("D1", "بجامة قابلة للتطريز", "2580"),
+        ("افرول رمضان مواليد", "", "182"),
+        ("كوب شعار", "", "2169"),
+        ("مجسم لابوبو", "", "1259"),
+    ],
+)
+def test_sparse_catalog_products_receive_relevant_official_candidates(
+    name,
+    description,
+    expected_id,
+):
+    evidence = {**_evidence(name), "description": description}
+    candidate_ids = {
+        str(row["id"])
+        for row in _candidate_rows(evidence, [], _RECOVERY_TAXONOMY, None)
+    }
+    assert expected_id in candidate_ids
 
 
 def test_existing_category_never_batch_overwritten_when_ai_disagrees():
@@ -144,6 +194,21 @@ def test_full_rollout_accepts_200_products_in_next_unseen_mode():
     payload = PilotStartIn(limit=200, selection_mode="next_unseen")
     assert payload.limit == 200
     assert payload.selection_mode == "next_unseen"
+
+
+def test_retry_review_mode_is_explicit_and_never_retries_approved_rows():
+    payload = PilotStartIn(limit=200, selection_mode="retry_review")
+    assert payload.selection_mode == "retry_review"
+    assert _retryable_product_ids(
+        [
+            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
+            {"mezan_product_id": "low", "decision_status": "low_confidence", "apply_status": "pending"},
+            {"mezan_product_id": "approved", "decision_status": "high_confidence", "apply_status": "applied"},
+            {"mezan_product_id": "already-applied", "decision_status": "review_required", "apply_status": "applied"},
+            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
+        ],
+        200,
+    ) == ["review", "low"]
 
 
 def test_rollout_catalog_scan_is_lightweight_and_work_waves_are_bounded():
