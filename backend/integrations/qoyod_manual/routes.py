@@ -24,6 +24,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from pydantic import BaseModel, ConfigDict
 
 from integrations.qoyod_manual.pending import list_pending_orders
+from integrations.qoyod.orders_owner import orders_owner_id
 from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
 )
@@ -135,7 +136,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         if exact_order.isdigit():
             try:
                 from salla_integration.sync import resync_single_order
-                await resync_single_order(db, str(user["id"]), exact_order)
+                await resync_single_order(db, orders_owner_id(user), exact_order)
             except Exception:
                 # Listing remains available from local evidence when Salla
                 # is temporarily unavailable; resync diagnostics live in the
@@ -143,7 +144,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 logger.exception(
                     "Plan-B exact-search resync failed order=%s", exact_order)
         return await list_pending_orders(
-            db, user_id=_TENANT, orders_user_id=str(user["id"]),
+            db, user_id=_TENANT, orders_user_id=orders_owner_id(user),
             days=days, limit=limit,
             search=search, status=status)
 
@@ -204,7 +205,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             pass
         try:
             result = await manual_send_one(
-                db, user_id=_TENANT, orders_user_id=str(user["id"]),
+                db, user_id=_TENANT, orders_user_id=orders_owner_id(user),
                 order_number=str(order_number),
                 actor=actor)
             return result
@@ -359,7 +360,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             return await manual_send_one(
                 db,
                 user_id=_TENANT,
-                orders_user_id=str(user["id"]),
+                orders_user_id=orders_owner_id(user),
                 order_number=order_number,
                 actor=actor,
             )
@@ -519,7 +520,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         """
         return await list_missing_from_plan_b(
             db,
-            orders_user_id=user["id"],
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             days=days, limit=limit,
             search=search, include_already_sent=include_already_sent)
@@ -535,7 +536,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         reason. No side-effects, no writes."""
         return await audit_plan_b_vs_diagnostic(
             db,
-            orders_user_id=user["id"],
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             days=days,
         )
@@ -551,7 +552,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         return await diagnose_totals(
             db,
             user_id=_TENANT,
-            orders_user_id=str(user["id"]),
+            orders_user_id=orders_owner_id(user),
             order_number=str(order_number),
         )
 
@@ -629,7 +630,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
 
         accounting_repair = await repair_qoyod_order_accounting(
             db,
-            orders_user_id=str(user["id"]),
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             actor=str(actor),
         )
@@ -658,4 +659,3 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         }
 
     return router
-

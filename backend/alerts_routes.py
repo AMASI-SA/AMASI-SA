@@ -344,7 +344,76 @@ async def _gen_high_ad_debt(db, user_id: str, settings: dict) -> int:
     return n
 
 
+async def _gen_integration_health(db, user_id: str, settings: dict) -> int:
+    """Surface operational failures from the unified integrations center.
+
+    Only an integration with real connection provenance is eligible. Apps
+    that were never configured (and planned providers) must not create noise.
+    Resolved incidents are closed automatically once the provider is healthy.
+    """
+    from integrations_control_center.service import (
+        IntegrationsControlCenterService,
+    )
+
+    overview = await IntegrationsControlCenterService(db).overview(user_id)
+    active_fingerprints: list[str] = []
+    count = 0
+    for provider in overview.get("providers") or []:
+        provenance = str(provider.get("connection_provenance") or "")
+        connection = str(provider.get("connection_status") or "")
+        health = str((provider.get("health") or {}).get("status") or "")
+        if provenance not in {"api_connection", "legacy_integration"}:
+            continue
+        stopped = connection in {"needs_reauth", "expired", "error"}
+        unhealthy = health in {"unhealthy", "error"}
+        if not stopped and not unhealthy:
+            continue
+
+        provider_id = str(provider.get("provider") or "unknown")
+        label = provider.get("name_ar") or provider.get("name") or provider_id
+        fp = _fp("integration_health", "integration", provider_id)
+        active_fingerprints.append(fp)
+        actions = provider.get("actions") or {}
+        settings_action = actions.get("settings") or {}
+        reconnect_action = actions.get("reconnect") or {}
+        latest_error = provider.get("latest_error") or {}
+        message = latest_error.get("message") or (
+            "توقف التشغيل الآلي لحماية البيانات. راجع الربط وآخر خطأ."
+        )
+        await _upsert_alert(db, user_id, {
+            "alert_type": "integration_health",
+            "severity": "critical" if stopped else "warning",
+            "title": f"تطبيق {label} متوقف",
+            "message": message,
+            "related_entity_type": "integration",
+            "related_entity_id": provider_id,
+            "related_entity_url": (
+                settings_action.get("href")
+                or reconnect_action.get("href")
+                or "/integrations-v2"
+            ),
+            "fingerprint": fp,
+            "metadata": {
+                "connection_status": connection,
+                "health_status": health,
+            },
+        })
+        count += 1
+
+    await db.settlement_alerts.update_many(
+        {
+            "user_id": user_id,
+            "alert_type": "integration_health",
+            "status": {"$in": ["new", "snoozed"]},
+            "fingerprint": {"$nin": active_fingerprints},
+        },
+        {"$set": {"status": "resolved", "updated_at": _now_iso()}},
+    )
+    return count
+
+
 GENERATORS = [
+    ("integration_health",     _gen_integration_health),
     ("overdue_bnpl",          _gen_overdue_bnpl),
     ("amount_diff",           _gen_amount_diff),
     ("missing_salla",         _gen_missing_salla),
@@ -403,6 +472,12 @@ def attach_alerts_routes(api, db, current_user_dep):
         user: dict = Depends(current_user_dep),
     ):
         await _expire_snoozed(db, user["id"])
+        # Opening the bell must immediately reflect a stopped integration;
+        # the operator should not need a second explicit refresh click.
+        try:
+            await _gen_integration_health(db, user["id"], {})
+        except Exception as exc:
+            print(f"[alerts] integration health refresh failed: {exc}")
         q = {"user_id": user["id"]}
         if status:
             q["status"] = status

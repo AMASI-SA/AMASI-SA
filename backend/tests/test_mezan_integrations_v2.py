@@ -857,6 +857,45 @@ async def test_database_failure_is_not_misreported_as_disconnected():
 
 
 @pytest.mark.asyncio
+async def test_qoyod_circuit_breaker_is_reported_as_stopped_in_overview():
+    db = FakeDB(
+        {
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "encrypted-never-project",
+                    "last_verified_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+            "qoyod_settings": [
+                {
+                    "user_id": "main",
+                    "enabled": True,
+                    "auto_send": False,
+                    "plan_b_auto_send_disabled_reason": "circuit_breaker",
+                    "plan_b_auto_send_disabled_at": "2026-07-28T11:00:00+00:00",
+                    "plan_b_auto_send_last_error": {
+                        "code": "salla_status_refresh_failed",
+                        "at": "2026-07-28T11:00:00+00:00",
+                    },
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    qoyod = next(
+        card for card in overview["providers"] if card["provider"] == "qoyod"
+    )
+
+    assert qoyod["connection_status"] == "error"
+    assert qoyod["connection_provenance"] == "legacy_integration"
+    assert qoyod["latest_error"]["code"] == "salla_status_refresh_failed"
+    assert qoyod["health"]["status"] == "unhealthy"
+    assert overview["summary"]["attention_required"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_local_connection_test_only_writes_mezan_v2_and_sanitizes_errors():
     db = FakeDB(
         {

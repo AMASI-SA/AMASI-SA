@@ -216,6 +216,9 @@ LEGACY_PROJECTIONS: dict[str, dict[str, int]] = {
         "production_writes_locked": 1,
         "selective_live_send_enabled": 1,
         "legacy_pipeline_frozen": 1,
+        "plan_b_auto_send_disabled_reason": 1,
+        "plan_b_auto_send_disabled_at": 1,
+        "plan_b_auto_send_last_error": 1,
         "last_verified_at": 1,
         "updated_at": 1,
     },
@@ -1062,10 +1065,28 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
         if credential_present
         else "not_connected"
     )
+    breaker_tripped = (
+        str((settings or {}).get("plan_b_auto_send_disabled_reason") or "")
+        == "circuit_breaker"
+    )
+    if breaker_tripped:
+        status = "error"
     invoice_status = str((invoice or {}).get("status") or "").lower()
     invoice_stage = str((invoice or {}).get("pipeline_stage") or "").lower()
     latest_error = None
-    if (invoice or {}).get("error_code") or invoice_status in {
+    if breaker_tripped:
+        breaker_error = (settings or {}).get("plan_b_auto_send_last_error") or {}
+        latest_error = _safe_legacy_error(
+            provider_label=definition.name,
+            code=breaker_error.get("code") or "qoyod_auto_send_stopped",
+            occurred_at=(
+                breaker_error.get("at")
+                or (settings or {}).get("plan_b_auto_send_disabled_at")
+                or (settings or {}).get("updated_at")
+            ),
+            source_mode="legacy_connection",
+        )
+    elif (invoice or {}).get("error_code") or invoice_status in {
         "error",
         "failed",
         "dead_letter",

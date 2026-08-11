@@ -41,6 +41,16 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
     assert "completed_only_required" in codes
     assert "trigger_once_required" in codes
 
+    issues = auto_send.activation_issues(
+        _ready_settings(),
+        credentials_configured=True,
+        canary_succeeded=True,
+        salla_connected=False,
+    )
+    assert {issue["code"] for issue in issues} == {
+        "salla_connection_required"
+    }
+
 
 @pytest.mark.asyncio
 async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):

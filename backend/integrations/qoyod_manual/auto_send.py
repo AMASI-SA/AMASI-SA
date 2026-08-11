@@ -76,6 +76,7 @@ def activation_issues(
     *,
     credentials_configured: bool,
     canary_succeeded: bool,
+    salla_connected: bool = True,
 ) -> list[dict[str, str]]:
     """Return the closed list of reasons that block live Plan-B auto-send."""
     issues: list[dict[str, str]] = []
@@ -85,6 +86,11 @@ def activation_issues(
 
     if not credentials_configured:
         add("credentials_missing", "مفتاح قيود غير محفوظ")
+    if not salla_connected:
+        add(
+            "salla_connection_required",
+            "يجب ربط متجر سلة بحساب مالك المتجر قبل تشغيل الإرسال التلقائي",
+        )
     if not settings.get("legacy_pipeline_frozen"):
         add("legacy_pipeline_not_frozen", "يجب إبقاء مسار قيود القديم مجمداً")
     if list(settings.get("invoice_trigger_statuses") or []) != ["completed"]:

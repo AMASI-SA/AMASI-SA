@@ -21,6 +21,7 @@ import GlobalSearch from "./GlobalSearch";
 import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
+import GlobalIntegrationAlert from "./GlobalIntegrationAlert";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
 import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement";
@@ -234,6 +235,8 @@ export default function Layout({ children }) {
                     </div>
                 </div>
             )}
+
+            <GlobalIntegrationAlert />
 
             <main
                 className="min-h-screen"
