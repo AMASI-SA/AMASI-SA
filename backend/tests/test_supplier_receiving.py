@@ -738,7 +738,9 @@ def test_scan_reserves_then_close_posts_one_atomic_mezan_accounting_invoice():
     assert "with_transaction(finalize)" in source
     assert SUPPLIER_INVOICES == "mezan_supplier_invoices_v2"
     assert '"supplier_invoice": invoice_summary' in source
-    assert '"supplier_service_link_applied": True' in source
+    assert '"supplier_service_link_applied": not is_experiment' in source
+    assert '"financial_invoice_created": not is_experiment' in source
+    assert "supplier_receiving_piece_stopped_before_invoice" in source
     assert "supplier_piece_service_blocker(" in source
     assert "allow_service_addition=(" in source
     assert "supplier_receipt_previous_piece_state(original_piece)" in source

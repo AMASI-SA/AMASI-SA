@@ -20,6 +20,7 @@ from order_review_export_controls import (
     assignable_employee_view,
     user_can_manage_preparation,
 )
+from ai_store_access_contract import ROLE_ASSIGNMENTS, effective_permissions
 from order_review_routes import EVENTS, _merchant_user_id, _require_reviewer, _text
 from reviewed_preparation_batches import BATCHES
 from tz_utils import riyadh_now_aware
@@ -135,6 +136,18 @@ async def _assignable_employees(
         },
     ).sort("name", 1).to_list(500)
     candidates = [reviewer, *docs]
+    candidate_ids = [
+        _text(row.get("id")) for row in candidates if _text(row.get("id"))
+    ]
+    assignment_rows = await db[ROLE_ASSIGNMENTS].find(
+        {"user_id": {"$in": candidate_ids}},
+        {"_id": 0},
+    ).to_list(max(len(candidate_ids), 1))
+    permissions_by_employee = {
+        _text(row.get("user_id")): set(effective_permissions(row))
+        for row in assignment_rows
+        if _text(row.get("user_id"))
+    }
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in candidates:
@@ -145,7 +158,13 @@ async def _assignable_employees(
             or row.get("disabled") is True
             or row.get("is_active") is False
             or row.get("deleted_at")
-            or not user_can_manage_preparation(row)
+            or not (
+                user_can_manage_preparation(row)
+                or {
+                    "preparation.assigned.read",
+                    "preparation.assigned.work",
+                }.issubset(permissions_by_employee.get(employee_id, set()))
+            )
         ):
             continue
         seen.add(employee_id)

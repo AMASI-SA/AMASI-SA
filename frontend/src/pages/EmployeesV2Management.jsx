@@ -64,13 +64,22 @@ const ROLE_FALLBACK_LABELS = {
     product_manager: "مدير المنتجات",
     product_operator: "موظف المنتجات",
     preparation_operator: "موظف التجهيز",
+    customer_service: "خدمة العملاء",
     cost_manager: "مسؤول التكاليف والمشتريات",
     warehouse_operator: "موظف المخزن",
     shipping_operator: "موظف الشحن والعنونة",
     marketing_manager: "مسؤول التسويق",
 };
 const ROLE_DESCRIPTIONS = {
-    preparation_operator: "يرى ملفات ومنتجات التجهيز المسندة إليه فقط، ويتابعها حتى تصبح جاهزة للتسليم. لا يملك الإسناد أو إعادة التوزيع أو الاستلام النهائي.",
+    preparation_operator: "يرى ملفات ومنتجات التجهيز المسندة إليه فقط، ويستطيع إيقاف قطعة مع كتابة السبب. الاستلام النهائي وتعديل الأسعار وإضافة خدمة تُمنح كصلاحيات إضافية أدناه.",
+    customer_service: "يستطيع تسجيل إيقاف إلغاء أو تعديل أو ملاحظة على الطلب أو المنتج أو القطعة، ويصل الإشعار إلى موظف التجهيز المسؤول.",
+};
+const OPTIONAL_PERMISSION_LABELS = {
+    "inventory.preparation.receive": "استلام منتجات التجهيز واعتماد فاتورة المورد",
+    "supplier_receiving.product_price.edit": "تعديل سعر المنتج عند الاستلام",
+    "supplier_receiving.service_price.edit": "تعديل سعر الخدمة عند الاستلام",
+    "supplier_receiving.service.add": "إضافة خدمة للمنتج عند الاستلام",
+    "fulfillment.stop.manage": "إدارة إيقافات خدمة العملاء",
 };
 
 
@@ -230,20 +239,45 @@ function AccountModal({ employee, candidates, busy, onClose, onLink, onCreateAnd
 function RoleModal({ employee, management, busy, onClose, onSubmit }) {
     const roles = useMemo(() => Object.keys(management.role_catalog || {}).filter((key) => !["owner", "ai_product_optimizer"].includes(key)), [management.role_catalog]);
     const initialRole = employee.operational_role?.role_key || roles[0] || "";
+    const existingRole = employee.operational_role || {};
     const [roleKey, setRoleKey] = useState(initialRole);
     const [enabled, setEnabled] = useState(employee.status !== "active" ? true : employee.operational_role?.enabled !== false);
+    const [extraPermissions, setExtraPermissions] = useState(() => initialRole === existingRole.role_key ? existingRole.extra_permissions || [] : []);
+    const [deniedPermissions, setDeniedPermissions] = useState(() => initialRole === existingRole.role_key ? existingRole.denied_permissions || [] : []);
     const permissions = management.role_catalog?.[roleKey] || [];
-    const existingRole = employee.operational_role || {};
     const preserveExistingScope = roleKey === existingRole.role_key;
+    const optionalPermissions = Object.keys(OPTIONAL_PERMISSION_LABELS).filter((permission) => (
+        (management.permissions || []).includes(permission) && !permissions.includes(permission)
+    ));
+
+    function changeRole(nextRole) {
+        setRoleKey(nextRole);
+        if (nextRole === existingRole.role_key) {
+            setExtraPermissions(existingRole.extra_permissions || []);
+            setDeniedPermissions(existingRole.denied_permissions || []);
+        } else {
+            setExtraPermissions([]);
+            setDeniedPermissions([]);
+        }
+    }
+
+    function toggleExtra(permission, selected) {
+        setExtraPermissions((current) => selected
+            ? [...new Set([...current, permission])]
+            : current.filter((value) => value !== permission));
+        if (selected) setDeniedPermissions((current) => current.filter((value) => value !== permission));
+    }
+
     return (
         <ModalShell title="الدور والصلاحيات" onClose={onClose} busy={busy} testId="employees-v2-role-dialog">
             <div className="max-h-[calc(95vh-65px)] overflow-y-auto p-5">
                 <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950"><ShieldCheck className="ml-1 inline" /> الدور مرتبط بحساب هذا الموظف وحده. إذا كان الموظف موقوفًا تُحفظ اختياراته لكن يبقى الوصول معطّلًا حتى إعادة تفعيله.</div>
-                <label className="mt-4 block text-xs font-bold text-slate-600">الدور التشغيلي<select value={roleKey} onChange={(event) => setRoleKey(event.target.value)} className="mt-1 h-12 w-full rounded-xl border px-3 text-sm" data-testid="employees-v2-role-select">{roles.map((key) => <option key={key} value={key}>{management.role_labels?.[key] || ROLE_FALLBACK_LABELS[key] || key}</option>)}</select></label>
+                <label className="mt-4 block text-xs font-bold text-slate-600">الدور التشغيلي<select value={roleKey} onChange={(event) => changeRole(event.target.value)} className="mt-1 h-12 w-full rounded-xl border px-3 text-sm" data-testid="employees-v2-role-select">{roles.map((key) => <option key={key} value={key}>{management.role_labels?.[key] || ROLE_FALLBACK_LABELS[key] || key}</option>)}</select></label>
                 {ROLE_DESCRIPTIONS[roleKey] && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold leading-6 text-emerald-950" data-testid="employees-v2-role-description">{ROLE_DESCRIPTIONS[roleKey]}</div>}
                 <label className="mt-3 flex items-center gap-2 rounded-xl border p-3 text-sm font-bold"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> الدور مفعّل عند تفعيل الموظف</label>
                 <section className="mt-4 rounded-2xl border bg-slate-50 p-4"><h3 className="text-sm font-black">الصلاحيات المشمولة ({numberFormatter.format(permissions.length)})</h3><div className="mt-3 flex flex-wrap gap-2">{permissions.map((permission) => <span key={permission} className="rounded-lg border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-900" dir="ltr">{permission}</span>)}</div></section>
-                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ role_key: roleKey, enabled, extra_permissions: preserveExistingScope ? existingRole.extra_permissions || [] : [], denied_permissions: preserveExistingScope ? existingRole.denied_permissions || [] : [], warehouse_ids: preserveExistingScope ? existingRole.warehouse_ids || [] : [], workplace_warehouse_id: preserveExistingScope ? existingRole.workplace_warehouse_id || null : null, fulfillment_responsibilities: preserveExistingScope ? existingRole.fulfillment_responsibilities || [] : [] })} disabled={busy || !roleKey} data-testid="employees-v2-role-submit" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ الدور</button></div>
+                {optionalPermissions.length > 0 && <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4" data-testid="employees-v2-optional-permissions"><h3 className="text-sm font-black text-amber-950">صلاحيات إضافية للاختبار والتشغيل</h3><p className="mt-1 text-xs font-bold leading-5 text-amber-800">لا تُمنح تلقائيًا. فعّل فقط ما يحتاجه هذا الموظف.</p><div className="mt-3 space-y-2">{optionalPermissions.map((permission) => <label key={permission} className="flex items-start gap-2 rounded-xl border border-amber-200 bg-white p-3 text-sm font-bold text-slate-800"><input type="checkbox" checked={extraPermissions.includes(permission)} onChange={(event) => toggleExtra(permission, event.target.checked)} className="mt-1 h-4 w-4 accent-violet-700" /><span>{OPTIONAL_PERMISSION_LABELS[permission]}<span className="mt-1 block text-[10px] font-semibold text-slate-400" dir="ltr">{permission}</span></span></label>)}</div></section>}
+                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ role_key: roleKey, enabled, extra_permissions: extraPermissions, denied_permissions: deniedPermissions, warehouse_ids: preserveExistingScope ? existingRole.warehouse_ids || [] : [], workplace_warehouse_id: preserveExistingScope ? existingRole.workplace_warehouse_id || null : null, fulfillment_responsibilities: preserveExistingScope ? existingRole.fulfillment_responsibilities || [] : [] })} disabled={busy || !roleKey} data-testid="employees-v2-role-submit" className="rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ الدور</button></div>
             </div>
         </ModalShell>
     );

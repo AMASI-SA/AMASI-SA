@@ -34,6 +34,7 @@ import {
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
+import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -999,6 +1000,8 @@ export default function OrderDetailsV2() {
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
                 {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} />)}</div>}
             </section>
+
+            <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
 

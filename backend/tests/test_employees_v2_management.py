@@ -312,6 +312,7 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
     assert assignment["assignment_scope"] == "employee_v2"
     assert assignment["effective_permissions"] == [
         "preparation.assigned.read",
+        "preparation.assigned.stop",
         "preparation.assigned.work",
     ]
 

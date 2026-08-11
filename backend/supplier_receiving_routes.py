@@ -687,6 +687,10 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "supplier_invoice": dict(row.get("supplier_invoice") or {}) or None,
         "financial_invoice_created": bool(row.get("financial_invoice_created")),
         "liability_created": bool(row.get("liability_created")),
+        "experiment_mode": bool(row.get("experiment_mode")),
+        "experiment_run_id": _text(row.get("experiment_run_id")) or None,
+        "experiment_generation": int(row.get("experiment_generation") or 0) or None,
+        "financial_writes_allowed": row.get("financial_writes_allowed") is not False,
         "mezan_only": True,
         "salla_updated": False,
         "qoyod_updated": False,
@@ -772,6 +776,32 @@ def piece_scan_blocker(piece: dict[str, Any]) -> dict[str, Any] | None:
         "message": "حالة القطعة الحالية لا تسمح بالاستلام.",
         "status": status,
     }
+
+
+def supplier_invoice_experiment_run_id(
+    scans: list[dict[str, Any]],
+) -> str | None:
+    """Return one experiment run id, rejecting mixed real/test invoices."""
+    run_ids = {
+        _text(row.get("experiment_run_id"))
+        for row in scans
+        if _text(row.get("experiment_run_id"))
+    }
+    experiment_markers = {
+        bool(row.get("experiment_mode") or _text(row.get("experiment_run_id")))
+        for row in scans
+    }
+    if len(run_ids) > 1 or len(experiment_markers) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+        )
+    if experiment_markers == {True} and not run_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "supplier_receiving_experiment_run_missing"},
+        )
+    return next(iter(run_ids), None)
 
 
 def supplier_piece_service_blocker(
@@ -1539,7 +1569,14 @@ async def resolve_scanned_piece(
     piece_id = parse_preparation_piece_barcode(raw)
     if piece_id:
         piece = await db[PIECES].find_one(
-            {"user_id": user_id, "piece_id": piece_id},
+            {
+                "user_id": user_id,
+                "piece_id": piece_id,
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
             {"_id": 0},
         )
         if not piece:
@@ -1558,7 +1595,14 @@ async def resolve_scanned_piece(
     rows = (
         await db[PIECES]
         .find(
-            {"user_id": user_id, "order_number": raw},
+            {
+                "user_id": user_id,
+                "order_number": raw,
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
             {"_id": 0},
         )
         .sort([("file_number", 1), ("order_item_id", 1), ("unit_index", 1)])
@@ -1626,6 +1670,12 @@ async def supplier_scan_group_candidates(
                 "batch_id": batch_id,
                 "order_item_id": order_item_id,
                 "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                "$and": [{
+                    "$or": [
+                        {"experiment_archived_at": {"$exists": False}},
+                        {"experiment_archived_at": None},
+                    ],
+                }],
                 "$or": [
                     {"supplier_receiving_session_id": {"$exists": False}},
                     {"supplier_receiving_session_id": None},
@@ -1836,10 +1886,16 @@ def make_supplier_receiving_router(
             {
                 "user_id": merchant_id,
                 "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
-                "$or": [
-                    {"supplier_receiving_session_id": {"$exists": False}},
-                    {"supplier_receiving_session_id": None},
-                    {"supplier_receiving_session_id": ""},
+                "$and": [
+                    {"$or": [
+                        {"experiment_archived_at": {"$exists": False}},
+                        {"experiment_archived_at": None},
+                    ]},
+                    {"$or": [
+                        {"supplier_receiving_session_id": {"$exists": False}},
+                        {"supplier_receiving_session_id": None},
+                        {"supplier_receiving_session_id": ""},
+                    ]},
                 ],
             }
         )
@@ -2334,6 +2390,7 @@ def make_supplier_receiving_router(
         reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
         inserted_event_ids: list[str] = []
         session_incremented = 0
+        experiment_session_initialized = False
         try:
             scanned_piece = await resolve_scanned_piece(
                 db,
@@ -2353,6 +2410,25 @@ def make_supplier_receiving_router(
             # was already completed, the first still-eligible piece on the
             # same exact card becomes the scan target.
             piece = candidates[0]
+            piece_experiment_run_id = _text(piece.get("experiment_run_id"))
+            session_experiment_run_id = _text(session.get("experiment_run_id"))
+            if (
+                session_experiment_run_id
+                and piece_experiment_run_id != session_experiment_run_id
+            ) or (
+                not session_experiment_run_id
+                and session.get("experiment_mode") is True
+                and not piece_experiment_run_id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                )
+            if not piece_experiment_run_id and session_experiment_run_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                )
             blocker = piece_scan_blocker(piece)
             if blocker:
                 raise HTTPException(status_code=409, detail=blocker)
@@ -2432,8 +2508,49 @@ def make_supplier_receiving_router(
                     detail={"code": "supplier_receiving_session_scan_limit"},
                 )
 
+            selected_candidates = candidates[:selected_quantity]
+            selected_run_ids = {
+                _text(row.get("experiment_run_id")) for row in selected_candidates
+            }
+            if selected_run_ids != {piece_experiment_run_id}:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                )
+            if piece_experiment_run_id and not session_experiment_run_id:
+                experiment_session_result = await db[SESSIONS].update_one(
+                    {
+                        "user_id": context["merchant_id"],
+                        "id": session_id,
+                        "status": "open",
+                        "opened_by": context["actor_id"],
+                        "scan_lock_token": lock_token,
+                        "scan_count": 0,
+                    },
+                    {"$set": {
+                        "experiment_mode": True,
+                        "experiment_run_id": piece_experiment_run_id,
+                        "experiment_generation": int(piece.get("experiment_generation") or 1),
+                        "financial_writes_allowed": False,
+                        "liability_created": False,
+                        "updated_at": _now(),
+                    }},
+                )
+                if not experiment_session_result.modified_count:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                    )
+                experiment_session_initialized = True
+                session.update({
+                    "experiment_mode": True,
+                    "experiment_run_id": piece_experiment_run_id,
+                    "experiment_generation": int(piece.get("experiment_generation") or 1),
+                    "financial_writes_allowed": False,
+                })
+
             now = _now()
-            for original_piece in candidates[:selected_quantity]:
+            for original_piece in selected_candidates:
                 piece_id = _text(original_piece.get("piece_id"))
                 patch = supplier_receipt_piece_patch(
                     session=session,
@@ -2563,6 +2680,13 @@ def make_supplier_receiving_router(
                     "salla_updated": False,
                     "qoyod_updated": False,
                 }
+                if _text(updated_piece.get("experiment_run_id")):
+                    event.update({
+                        "experiment_mode": True,
+                        "experiment_run_id": _text(updated_piece.get("experiment_run_id")),
+                        "experiment_generation": int(updated_piece.get("experiment_generation") or 1),
+                        "financial_writes_allowed": False,
+                    })
                 product_charge_eligible = supplier_piece_product_charge_eligible(
                     original_piece
                 )
@@ -2627,6 +2751,14 @@ def make_supplier_receiving_router(
             }
             if session_incremented:
                 session_update["$inc"] = {"scan_count": -session_incremented}
+            if experiment_session_initialized:
+                session_update["$unset"].update({
+                    "experiment_mode": "",
+                    "experiment_run_id": "",
+                    "experiment_generation": "",
+                    "financial_writes_allowed": "",
+                    "liability_created": "",
+                })
             await db[SESSIONS].update_one(
                 {
                     "user_id": context["merchant_id"],
@@ -2943,8 +3075,16 @@ def make_supplier_receiving_router(
                 "ok": True,
                 "session": _public_session(session),
                 "supplier_invoice": _public_supplier_invoice(saved_invoice),
-                "financial_invoice_created": bool(saved_invoice),
-                "liability_created": bool(saved_invoice),
+                "financial_invoice_created": bool(
+                    (saved_invoice or {}).get("financial_invoice_created")
+                ),
+                "liability_created": bool(
+                    (saved_invoice or {}).get("liability_created")
+                ),
+                "experiment_mode": bool((saved_invoice or {}).get("experiment_mode")),
+                "experiment_run_id": _text(
+                    (saved_invoice or {}).get("experiment_run_id")
+                ) or None,
                 "qoyod_updated": False,
             }
         if _text(session.get("status")) != "open":
@@ -2993,6 +3133,66 @@ def make_supplier_receiving_router(
                 mongo_session=mongo_session,
             )
             actual_count = len(scans)
+            scanned_piece_ids = [
+                _text(row.get("piece_id"))
+                for row in scans
+                if _text(row.get("piece_id"))
+            ]
+            current_pieces = await db[PIECES].find(
+                {
+                    "user_id": merchant_id,
+                    "piece_id": {"$in": scanned_piece_ids},
+                    "supplier_receiving_session_id": session_id,
+                },
+                {"_id": 0},
+                session=mongo_session,
+            ).to_list(MAX_SESSION_SCANS)
+            current_by_id = {
+                _text(row.get("piece_id")): row for row in current_pieces
+            }
+            if (
+                len(scanned_piece_ids) != len(set(scanned_piece_ids))
+                or set(current_by_id) != set(scanned_piece_ids)
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_invoice_piece_mismatch"},
+                )
+            for piece_id in scanned_piece_ids:
+                piece = current_by_id[piece_id]
+                blocker = piece_scan_blocker(piece)
+                if blocker or _text(piece.get("active_hold_id")):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "supplier_receiving_piece_stopped_before_invoice",
+                            "piece_id": piece_id,
+                            "hold_id": _text(piece.get("active_hold_id")) or None,
+                            "stop_type": _text(piece.get("hold_stop_type")) or None,
+                            "message": (
+                                _text(piece.get("hold_note"))
+                                or _text((blocker or {}).get("message"))
+                                or "توقفت القطعة بعد المسح؛ لم تُنشأ الفاتورة."
+                            ),
+                        },
+                    )
+            experiment_run_id = supplier_invoice_experiment_run_id(scans)
+            current_run_ids = {
+                _text(row.get("experiment_run_id"))
+                for row in current_pieces
+                if _text(row.get("experiment_run_id"))
+            }
+            if (
+                (experiment_run_id and current_run_ids != {experiment_run_id})
+                or (not experiment_run_id and current_run_ids)
+                or _text(fresh_session.get("experiment_run_id"))
+                not in {"", experiment_run_id or ""}
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                )
+            is_experiment = bool(experiment_run_id)
             service_catalog = await _supplier_service_catalog(
                 db,
                 user_id=merchant_id,
@@ -3009,7 +3209,7 @@ def make_supplier_receiving_router(
             )
             invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
             invoice_number = _text(fresh_session.get("reference")).replace(
-                "SR-", "SI-", 1
+                "SR-", "SI-TEST-" if is_experiment else "SI-", 1
             )
             supplier = dict(fresh_session.get("supplier_snapshot") or {})
             invoice = {
@@ -3022,52 +3222,82 @@ def make_supplier_receiving_router(
                 "session_reference": _text(fresh_session.get("reference")),
                 "supplier_id": _text(supplier.get("id")),
                 "supplier_snapshot": supplier,
-                "status": "payable_posted",
-                "payment_status": "unpaid",
+                "status": "experiment_completed" if is_experiment else "payable_posted",
+                "payment_status": "not_applicable" if is_experiment else "unpaid",
                 "paid_halalas": 0,
-                "outstanding_halalas": int(draft["total_halalas"]),
+                "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
                 "supplier_approved_at": now,
                 "supplier_approved_by": context["actor_id"],
                 "supplier_approved_by_name": _actor_name(user),
-                "payable_posted_at": now,
+                "payable_posted_at": None if is_experiment else now,
                 "approved_at": now,
                 "created_at": now,
                 "updated_at": now,
-                "financial_invoice_created": True,
-                "liability_created": True,
-                "share_required": True,
-                "share_status": "pending",
-                "share_confirmed": False,
+                "financial_invoice_created": not is_experiment,
+                "liability_created": not is_experiment,
+                "share_required": not is_experiment,
+                "share_status": "not_required" if is_experiment else "pending",
+                "share_confirmed": bool(is_experiment),
                 "legacy_supplier_data_used": False,
                 "qoyod_updated": False,
                 "salla_updated": False,
+                "experiment_mode": is_experiment,
+                "experiment_run_id": experiment_run_id,
+                "financial_writes_allowed": not is_experiment,
             }
-            invoice["price_changes"] = await apply_supplier_invoice_price_changes(
-                db,
-                user_id=merchant_id,
-                actor=user,
-                invoice_id=invoice_id,
-                changes=list(invoice.get("price_changes") or []),
-                changed_at=now,
-                mongo_session=mongo_session,
-            )
-            invoice["price_updates_applied"] = True
-            ledger = await _post_supplier_invoice_ledger(
-                db,
-                user_id=merchant_id,
-                actor=user,
-                invoice=invoice,
-                mongo_session=mongo_session,
-            )
-            invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
-            invoice["ledger_entry_ids"] = ledger["entry_ids"]
+            if is_experiment:
+                invoice["price_changes"] = [
+                    {
+                        **change,
+                        "applied": False,
+                        "simulation_only": True,
+                        "experiment_run_id": experiment_run_id,
+                    }
+                    for change in (invoice.get("price_changes") or [])
+                ]
+                invoice["price_updates_applied"] = False
+                invoice["ledger_txn_group_id"] = None
+                invoice["ledger_entry_ids"] = []
+                ledger = None
+            else:
+                invoice["price_changes"] = await apply_supplier_invoice_price_changes(
+                    db,
+                    user_id=merchant_id,
+                    actor=user,
+                    invoice_id=invoice_id,
+                    changes=list(invoice.get("price_changes") or []),
+                    changed_at=now,
+                    mongo_session=mongo_session,
+                )
+                invoice["price_updates_applied"] = True
+                ledger = await _post_supplier_invoice_ledger(
+                    db,
+                    user_id=merchant_id,
+                    actor=user,
+                    invoice=invoice,
+                    mongo_session=mongo_session,
+                )
+                invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
+                invoice["ledger_entry_ids"] = ledger["entry_ids"]
+            if is_experiment:
+                invoice["added_product_services"] = [
+                    {
+                        **addition,
+                        "applied": False,
+                        "simulation_only": True,
+                        "experiment_run_id": experiment_run_id,
+                    }
+                    for addition in (invoice.get("added_product_services") or [])
+                ]
             await db[SUPPLIER_INVOICES].insert_one(
                 dict(invoice),
                 session=mongo_session,
             )
 
             added_pairs: set[tuple[str, str]] = set()
-            for addition in invoice.get("added_product_services") or []:
+            for addition in (
+                [] if is_experiment else invoice.get("added_product_services") or []
+            ):
                 product_id = _text(addition.get("product_id"))
                 service_id = _text(addition.get("service_id"))
                 if not product_id or not service_id or (product_id, service_id) in added_pairs:
@@ -3224,13 +3454,19 @@ def make_supplier_receiving_router(
                         },
                     )
                 event_patch = {
-                    "event_type": "supplier_piece_service_recorded",
+                    "event_type": (
+                        "supplier_piece_service_simulated"
+                        if is_experiment
+                        else "supplier_piece_service_recorded"
+                    ),
                     "supplier_invoice_id": invoice_id,
                     "supplier_invoice_number": invoice_number,
                     "recorded_services": list(line.get("services") or []),
                     "supplier_service_link_status": "service_recorded",
-                    "financial_invoice_created": True,
-                    "liability_created": True,
+                    "financial_invoice_created": not is_experiment,
+                    "liability_created": not is_experiment,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
                     "finalized_at": now,
                 }
                 receiving_event_result = await db[RECEIVING_EVENTS].update_one(
@@ -3268,7 +3504,7 @@ def make_supplier_receiving_router(
             invoice_summary = {
                 "id": invoice_id,
                 "invoice_number": invoice_number,
-                "status": "payable_posted",
+                "status": "experiment_completed" if is_experiment else "payable_posted",
                 "currency": "SAR",
                 "piece_count": invoice["piece_count"],
                 "line_count": invoice["line_count"],
@@ -3276,10 +3512,12 @@ def make_supplier_receiving_router(
                 "outstanding_halalas": invoice["outstanding_halalas"],
                 "price_change_count": len(invoice.get("price_changes") or []),
                 "approved_at": now,
-                "ledger_txn_group_id": ledger["txn_group_id"],
-                "share_required": True,
-                "share_status": "pending",
-                "share_confirmed": False,
+                "ledger_txn_group_id": ledger["txn_group_id"] if ledger else None,
+                "share_required": not is_experiment,
+                "share_status": "not_required" if is_experiment else "pending",
+                "share_confirmed": bool(is_experiment),
+                "experiment_mode": is_experiment,
+                "experiment_run_id": experiment_run_id,
             }
             updated = await db[SESSIONS].find_one_and_update(
                 {
@@ -3296,11 +3534,15 @@ def make_supplier_receiving_router(
                         "closed_by": context["actor_id"],
                         "closed_by_name": _actor_name(user),
                         "close_note": _text(payload.note) or None,
-                        "supplier_service_link_status": "service_recorded",
+                        "supplier_service_link_status": (
+                            "service_simulated" if is_experiment else "service_recorded"
+                        ),
                         "supplier_invoice_id": invoice_id,
                         "supplier_invoice": invoice_summary,
-                        "financial_invoice_created": True,
-                        "liability_created": True,
+                        "financial_invoice_created": not is_experiment,
+                        "liability_created": not is_experiment,
+                        "experiment_mode": is_experiment,
+                        "experiment_run_id": experiment_run_id,
                         "updated_at": now,
                     },
                     "$unset": {
@@ -3333,11 +3575,15 @@ def make_supplier_receiving_router(
                 "actor_name": _actor_name(user),
                 "note": _text(payload.note) or None,
                 "occurred_at": now,
-                "supplier_service_link_status": "service_recorded",
+                "supplier_service_link_status": (
+                    "service_simulated" if is_experiment else "service_recorded"
+                ),
                 "supplier_invoice_id": invoice_id,
                 "supplier_invoice": invoice_summary,
-                "financial_invoice_created": True,
-                "liability_created": True,
+                "financial_invoice_created": not is_experiment,
+                "liability_created": not is_experiment,
+                "experiment_mode": is_experiment,
+                "experiment_run_id": experiment_run_id,
                 "mezan_only": True,
                 "salla_updated": False,
                 "qoyod_updated": False,
@@ -3355,7 +3601,11 @@ def make_supplier_receiving_router(
                     )),
                     "user_id": merchant_id,
                     "session_id": session_id,
-                    "event_type": "supplier_receiving_price_changed",
+                    "event_type": (
+                        "supplier_receiving_price_change_simulated"
+                        if is_experiment
+                        else "supplier_receiving_price_changed"
+                    ),
                     "supplier_invoice_id": invoice_id,
                     "actor_id": context["actor_id"],
                     "actor_name": _actor_name(user),
@@ -3364,6 +3614,8 @@ def make_supplier_receiving_router(
                     "change": change,
                     "occurred_at": now,
                     "mezan_only": True,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
                 })
             for index, addition in enumerate(invoice.get("added_product_services") or []):
                 audit_events.append({
@@ -3373,13 +3625,19 @@ def make_supplier_receiving_router(
                     )),
                     "user_id": merchant_id,
                     "session_id": session_id,
-                    "event_type": "supplier_receiving_service_added_to_product",
+                    "event_type": (
+                        "supplier_receiving_service_addition_simulated"
+                        if is_experiment
+                        else "supplier_receiving_service_added_to_product"
+                    ),
                     "supplier_invoice_id": invoice_id,
                     "actor_id": context["actor_id"],
                     "actor_name": _actor_name(user),
                     "addition": addition,
                     "occurred_at": now,
                     "mezan_only": True,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
                 })
             if audit_events:
                 await db[RECEIVING_EVENTS].insert_many(
@@ -3390,11 +3648,21 @@ def make_supplier_receiving_router(
                 "ok": True,
                 "session": _public_session(updated),
                 "supplier_invoice": _public_supplier_invoice(invoice),
-                "next_step": "supplier_invoice_payable_posted",
-                "share_next_step": "share_invoice_with_supplier_and_upload_evidence",
-                "supplier_service_link_applied": True,
-                "financial_invoice_created": True,
-                "liability_created": True,
+                "next_step": (
+                    "experiment_completed_without_financial_writes"
+                    if is_experiment
+                    else "supplier_invoice_payable_posted"
+                ),
+                "share_next_step": (
+                    None
+                    if is_experiment
+                    else "share_invoice_with_supplier_and_upload_evidence"
+                ),
+                "supplier_service_link_applied": not is_experiment,
+                "financial_invoice_created": not is_experiment,
+                "liability_created": not is_experiment,
+                "experiment_mode": is_experiment,
+                "experiment_run_id": experiment_run_id,
                 "salla_updated": False,
                 "qoyod_updated": False,
             }
@@ -3442,5 +3710,6 @@ __all__ = [
     "supplier_receipt_piece_rollback_update",
     "supplier_receipt_previous_piece_state",
     "supplier_piece_reference_price",
+    "supplier_invoice_experiment_run_id",
     "supplier_service_completion_update",
 ]
