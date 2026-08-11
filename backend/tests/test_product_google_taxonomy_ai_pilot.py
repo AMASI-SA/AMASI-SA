@@ -19,16 +19,19 @@ from product_google_taxonomy_ai_pilot import (
     _fallback_search_terms,
     _gather_bounded,
     _input_revision,
+    _is_credit_exhausted_openai_error,
     _is_retryable_openai_error,
     _persist_records,
     _product_evidence,
     _retryable_product_ids,
     _run_needs_resume,
+    _run_error_fields,
     _run_counters,
     _schedule_pilot_task,
     _selected_lookup_values,
     _select_pilot_products,
     _select_unseen_products,
+    _successfully_seen_filter,
 )
 
 
@@ -244,6 +247,13 @@ def test_full_rollout_skips_products_already_seen_in_prior_runs():
     assert not selected_ids.intersection({"product-0", "product-1", "product-2", "product-3"})
 
 
+def test_next_unseen_retries_old_ai_failures():
+    assert _successfully_seen_filter("user-1") == {
+        "user_id": "user-1",
+        "decision_status": {"$ne": "ai_failed"},
+    }
+
+
 @pytest.mark.asyncio
 async def test_rollout_chunk_concurrency_is_bounded_and_keeps_input_order():
     active = 0
@@ -312,6 +322,53 @@ def test_hard_quota_error_is_not_retried():
         body = {"error": {"code": "insufficient_quota"}}
 
     assert _is_retryable_openai_error(HardQuotaError()) is False
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "credit_balance_exhausted",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    ],
+)
+def test_credit_exhaustion_codes_stop_without_product_failures(code):
+    class CreditError(Exception):
+        status_code = 429
+
+        def __init__(self):
+            super().__init__(code)
+            self.body = {"error": {"code": code}}
+
+    error = CreditError()
+    now = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
+    fields = _run_error_fields(error, now=now)
+
+    assert _is_credit_exhausted_openai_error(error) is True
+    assert _is_retryable_openai_error(error) is False
+    assert fields["status"] == "credit_exhausted"
+    assert fields["provider_error_code"] == code
+    assert fields["action_required"] == "top_up_openai_credit"
+    assert fields["progress.phase"] == "provider_credit_exhausted"
+    assert "رصيد OpenAI API" in fields["error"]
+
+
+def test_credit_exhaustion_marker_is_detected_when_provider_omits_code():
+    error = RuntimeError("provider error: credit_balance_exhausted")
+    assert _is_credit_exhausted_openai_error(error) is True
+
+
+def test_transient_rate_limit_remains_resumable():
+    class TransientRateLimit(Exception):
+        status_code = 429
+
+    now = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
+    fields = _run_error_fields(TransientRateLimit("slow down"), now=now)
+
+    assert fields["status"] == "queued"
+    assert fields["finished_at"] is None
+    assert fields["progress.phase"] == "provider_rate_limited"
 
 
 def test_taxonomy_provider_calls_are_sequential_but_checkpoints_remain_bounded():
