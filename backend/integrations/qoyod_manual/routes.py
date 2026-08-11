@@ -234,7 +234,11 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             result = await manual_send_one(
                 db, user_id=_TENANT, orders_user_id=orders_user,
                 order_number=str(order_number),
-                actor=actor)
+                actor=actor,
+                # This operator-confirmed path is bounded to explicit order
+                # numbers and already rechecks the live native Salla status.
+                # Qoyod invoice/payment dates remain the send date.
+                allow_missing_salla_order_date=True)
             return result
         except ManualSendRefused as exc:
             # 409 = business-rule / guard refusal.
