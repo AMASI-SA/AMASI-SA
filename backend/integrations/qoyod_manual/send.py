@@ -1948,10 +1948,38 @@ async def _retry_payment_only(
 
 
 # ─── Main entrypoint ─────────────────────────────────────────────────
+async def _find_historical_positive_canon(
+    db, *, owner_ids: list[str], order_number: str,
+) -> Optional[dict]:
+    """Return the newest complete positive inbox payload for recovery.
+
+    A status-authoritative Salla refresh can be accounting-empty. This helper
+    never invents an amount: it accepts only a stored canonical payload for the
+    same owner/order with both a positive total and at least one item.
+    """
+    historical = db.integration_inbox.find(
+        {
+            "user_id": {"$in": owner_ids},
+            "salla_order_number": str(order_number),
+        },
+    ).sort("received_at", -1).limit(100)
+    async for candidate in historical:
+        candidate_canon = candidate.get("canonical_payload") or {}
+        candidate_items = candidate_canon.get("items") or []
+        if (
+            _q2(candidate_canon.get("total_amount")) > 0
+            and isinstance(candidate_items, list)
+            and candidate_items
+        ):
+            return candidate_canon
+    return None
+
+
 async def manual_send_one(
     db, *, user_id: str, order_number: str,
     orders_user_id: Optional[str] = None, actor: str = "manual-ui",
     allow_missing_salla_order_date: bool = False,
+    allow_historical_positive_total: bool = False,
 ) -> dict:
     """Push a single Salla order to Qoyod using the 4-step manual path.
 
@@ -2070,6 +2098,19 @@ async def manual_send_one(
     #      below — the only real source of truth).
 
     canon = row.get("canonical_payload") or {}
+    # Only the operator-confirmed bounded recovery route may reuse stored
+    # positive accounting facts when the live status refresh is stripped to
+    # 0.00. The automatic worker never opts in and remains blocked by G0.
+    if allow_historical_positive_total and _q2(
+        canon.get("total_amount")
+    ) <= 0:
+        historical_canon = await _find_historical_positive_canon(
+            db,
+            owner_ids=inbox_owner_ids,
+            order_number=str(order_number),
+        )
+        if historical_canon is not None:
+            canon = historical_canon
     # Reuse the exact mapper behind New Orders / Order Details. This keeps
     # aliases such as "مصرف الإنماء" and "بنك الإنماء" in one place.
     payment_facts = await get_order_payment_facts(
