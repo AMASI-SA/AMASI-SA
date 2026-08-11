@@ -72,6 +72,9 @@ OUTERWEAR_WORDS = {"جاكيت", "جاكت", "معطف", "معاطف", "فروه
 PYJAMA_WORDS = {"بجامه", "بجامة", "بيجامه", "بيجامة", "بيجامات"}
 BABY_ONESIE_WORDS = {"افرول", "أفرول", "رومبر", "سالوبيت"}
 GIFT_WRAP_WORDS = {"تغليف", "تغليفات"}
+FRESH_FLOWER_WORDS = {"ورد", "ورود", "زهره", "زهرة", "زهور"}
+FLOWER_BOUQUET_CUES = {"باقه", "باقة", "بوكيه", "مظله", "مظلة"}
+FLOWER_CORSAGE_CUES = {"صدر", "للصدر", "كورسيج", "corsage"}
 CAR_SCENT_WORDS = {"فواحه", "فواحة", "معطر", "معطره", "معطرة"}
 KEYCHAIN_WORDS = {"ميداليه", "ميدالية", "مفاتيح", "لابوبو", "labubu"}
 JEWELRY_SET_WORDS = {
@@ -149,6 +152,16 @@ def _is_local_traditional(evidence: dict[str, Any]) -> bool:
 def _is_wrist_watch(evidence: dict[str, Any]) -> bool:
     tokens = _retrieval_tokens(evidence)
     return _has_any(tokens, WATCH_WORDS) and not _has_any(tokens, WATCH_ACCESSORY_WORDS)
+
+
+def _is_fresh_flower_bouquet(evidence: dict[str, Any]) -> bool:
+    tokens = _name_tokens(evidence)
+    return (
+        _has_any(tokens, FRESH_FLOWER_WORDS)
+        and _has_any(tokens, FLOWER_BOUQUET_CUES)
+        and not _has_any(tokens, FLOWER_CORSAGE_CUES)
+        and not _has_any(tokens, GIFT_WRAP_WORDS)
+    )
 
 
 def _is_jewelry_bracelet(evidence: dict[str, Any]) -> bool:
@@ -275,6 +288,8 @@ def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
         terms.extend(["ملابس الاحتفالات والملابس التقليدية", "أطقم ملابس"])
     if _is_wrist_watch(evidence):
         terms.append("ساعات يد")
+    if _is_fresh_flower_bouquet(evidence):
+        terms.extend(["زهور نضرة", "باقات زهور نضرة"])
     if _has_any(tokens, SCHOOL_BAG_WORDS) and _has_any(tokens, SCHOOL_WORDS):
         terms.extend(["حقائب ظهر", "أمتعة وحقائب حقائب ظهر"])
     if _has_any(tokens, PEN_WORDS):
@@ -332,6 +347,9 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
             return True
     if _is_wrist_watch(evidence):
         if "اكسسوارت ساعات اليد" in normalized or "اكسسوارات ساعات اليد" in normalized:
+            return True
+    if _is_fresh_flower_bouquet(evidence):
+        if "باقات الزهور الصغيره التي تزين الصدر" in normalized:
             return True
     if _is_jewelry_bracelet(evidence):
         if "اساور المعصم" in normalized or (
@@ -405,6 +423,8 @@ def confidence_cap(evidence: dict[str, Any], chosen_path: Any) -> tuple[int | No
             return 49, "العباية/الدقلة/البشت المحلي يصنّف كملابس تقليدية عامة، لا كفرع أجنبي أو ديني فرعي."
         if _is_wrist_watch(evidence):
             return 49, "المنتج ساعة يد فعلية وليس حزامًا أو ملصقًا أو ملفافًا للساعة."
+        if _is_fresh_flower_bouquet(evidence):
+            return 49, "باقة الورد المحمولة ليست باقة صغيرة لتزيين الصدر."
         if _is_jewelry_bracelet(evidence):
             return 49, "اسم المنتج يدل على حُلي/سوار زينة وليس Wristband من إكسسوارات الملابس."
         if _is_school_pinafore(evidence):
