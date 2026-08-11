@@ -76,6 +76,7 @@ def test_preparation_operator_is_scoped_to_assigned_preparation_work():
 
     assert permissions == [
         "preparation.assigned.read",
+        "preparation.assigned.stop",
         "preparation.assigned.work",
     ]
     assert "inventory.preparation.receive" not in permissions
