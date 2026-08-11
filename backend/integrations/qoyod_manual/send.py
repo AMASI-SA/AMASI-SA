@@ -1951,6 +1951,7 @@ async def _retry_payment_only(
 async def manual_send_one(
     db, *, user_id: str, order_number: str,
     orders_user_id: Optional[str] = None, actor: str = "manual-ui",
+    allow_missing_salla_order_date: bool = False,
 ) -> dict:
     """Push a single Salla order to Qoyod using the 4-step manual path.
 
@@ -1993,12 +1994,12 @@ async def manual_send_one(
             odate = _salla_order_created_date(historical_row)
             if odate is not None:
                 break
-    if odate is None:
+    if odate is None and not allow_missing_salla_order_date:
         raise ManualSendRefused(
             "no_salla_order_date",
             "لا يوجد تاريخ إنشاء للطلب في بيانات سلة — يتعذّر التحقق من "
             "تاريخ التكامل")
-    if odate < _FLOOR_DATE:
+    if odate is not None and odate < _FLOOR_DATE:
         raise ManualSendRefused(
             "before_floor_date",
             f"تاريخ إنشاء الطلب ({odate.isoformat()}) أقدم من "
