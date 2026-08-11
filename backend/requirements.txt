@@ -125,7 +125,7 @@ uritemplate==4.2.0
 urllib3==2.7.0
 uvicorn==0.25.0
 watchfiles==1.2.0
-webauthn==3.0.0
+webauthn==2.7.1
 websockets==16.0
 xlsxwriter==3.2.9
 yarl==1.24.2
