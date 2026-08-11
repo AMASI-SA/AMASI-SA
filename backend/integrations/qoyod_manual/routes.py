@@ -204,8 +204,35 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         except Exception:
             pass
         try:
+            # A manual recovery request is still an accounting write.  Refresh
+            # the order from Salla immediately before the Qoyod path and accept
+            # only the exact native status ``تم التنفيذ``.  This mirrors the
+            # automatic worker's final gate and prevents a stale completed
+            # inbox row from posting an order that has since moved backwards.
+            from integrations.qoyod_manual.auto_send import (
+                _refresh_and_verify_salla_status,
+            )
+            orders_user = orders_owner_id(user)
+            still_completed, refresh = await _refresh_and_verify_salla_status(
+                db,
+                orders_user_id=orders_user,
+                order_number=str(order_number),
+            )
+            if not still_completed:
+                snapshot = refresh.get("plan_b_status_snapshot") or {}
+                raise ManualSendRefused(
+                    "not_exactly_completed",
+                    "حالة الطلب الحالية في سلة ليست «تم التنفيذ»",
+                    {
+                        "order_number": str(order_number),
+                        "current_status": (
+                            snapshot.get("status_native")
+                            or snapshot.get("status_slug")
+                        ),
+                    },
+                )
             result = await manual_send_one(
-                db, user_id=_TENANT, orders_user_id=orders_owner_id(user),
+                db, user_id=_TENANT, orders_user_id=orders_user,
                 order_number=str(order_number),
                 actor=actor)
             return result
