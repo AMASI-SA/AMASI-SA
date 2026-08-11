@@ -9,6 +9,7 @@ from email_otp_security import (
     _challenge_token,
     _decode_challenge_token,
     _now,
+    _send_email_sync,
     generate_otp,
     mask_email,
     otp_digest,
@@ -172,3 +173,43 @@ def test_auth_middleware_order_and_frontend_contract():
     assert 'api.post("/auth/email-otp/verify"' in login_source
     assert 'api.post("/auth/email-otp/resend"' in login_source
     assert "حساب المالك في ميزان يتطلب تطبيق مصادقة" in login_source
+
+
+def test_email_message_uses_amasi_brand_and_recipient_name(monkeypatch):
+    sent = []
+
+    class FakeSmtp:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def ehlo(self):
+            pass
+
+        def send_message(self, message):
+            sent.append(message)
+
+        def quit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setenv("EMAIL_OTP_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("EMAIL_OTP_FROM_EMAIL", "no-reply@example.com")
+    monkeypatch.setenv("EMAIL_OTP_FROM_NAME", "AMASI")
+    monkeypatch.setenv("EMAIL_OTP_SMTP_STARTTLS", "0")
+    monkeypatch.setenv("EMAIL_OTP_SMTP_SSL", "0")
+    monkeypatch.delenv("EMAIL_OTP_SMTP_USERNAME", raising=False)
+    monkeypatch.delenv("EMAIL_OTP_SMTP_PASSWORD", raising=False)
+    monkeypatch.setattr("email_otp_security.smtplib.SMTP", FakeSmtp)
+
+    _send_email_sync("employee@example.com", "123456", "عرفات")
+
+    assert len(sent) == 1
+    message = sent[0]
+    assert message["Subject"] == "رمز التحقق لتسجيل الدخول إلى نظام أماسي"
+    assert message["From"] == "AMASI <no-reply@example.com>"
+    body = message.get_content()
+    assert "مرحبًا عرفات،" in body
+    assert "نظام أماسي" in body
+    assert "MEZAN" not in body
