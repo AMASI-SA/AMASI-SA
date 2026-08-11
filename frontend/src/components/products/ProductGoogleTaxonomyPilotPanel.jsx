@@ -13,7 +13,7 @@ import {
 
 const TERMINAL = new Set(["completed", "completed_with_errors", "failed", "credit_exhausted"]);
 const COMPLETE = new Set(["completed", "completed_with_errors"]);
-const CANDIDATE_RETRIEVER_VERSION = 2;
+const CANDIDATE_RETRIEVER_VERSION = 3;
 
 const STATUS_LABELS = {
     high_confidence: "جاهز للاعتماد ≥90%",

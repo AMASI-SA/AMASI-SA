@@ -122,6 +122,38 @@ def test_watch_candidate_prefers_watch_and_filters_watch_accessories():
     assert [row["id"] for row in rows] == ["201"]
 
 
+def test_flower_umbrella_prefers_fresh_flowers_and_filters_corsages():
+    evidence = _evidence("مظلة الورد هدية أمطار الشتاء")
+    taxonomy = [
+        {
+            "id": "2899",
+            "name": "زهور نضرة",
+            "path": "الفن والترفيه > حفلات واحتفالات > تقديم الهدايا > زهور نضرة",
+            "depth": 3,
+        },
+        {
+            "id": "5916",
+            "name": "باقات الزهور الصغيرة التي تزين الصدر",
+            "path": "الفن والترفيه > حفلات واحتفالات > تقديم الهدايا > باقات الزهور الصغيرة التي تزين الصدر",
+            "depth": 3,
+        },
+    ]
+    terms = calibration.contextual_search_terms(evidence)
+    rows = calibration.calibrated_candidate_rows(evidence, [], taxonomy, None)
+    assert "زهور نضرة" in terms
+    assert [row["id"] for row in rows] == ["2899"]
+    cap, note = calibration.confidence_cap(evidence, taxonomy[1]["path"])
+    assert cap == 49
+    assert "الصدر" in note
+
+
+def test_flowered_gift_wrap_is_not_forced_into_fresh_flowers():
+    terms = calibration.contextual_search_terms(
+        _evidence("تغليف هدية أخضر بالقماش والورد")
+    )
+    assert "زهور نضرة" not in terms
+
+
 def test_local_traditional_candidate_keeps_parent_and_filters_foreign_children():
     evidence = _evidence("كشخة اولادك بدقلة العيد")
     taxonomy = [
