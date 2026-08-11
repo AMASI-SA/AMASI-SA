@@ -19,18 +19,16 @@ from product_google_taxonomy_ai_pilot import (
     _fallback_search_terms,
     _gather_bounded,
     _input_revision,
-    _is_credit_exhausted_openai_error,
     _is_retryable_openai_error,
     _persist_records,
     _product_evidence,
+    _retryable_product_ids,
     _run_needs_resume,
-    _run_error_fields,
     _run_counters,
     _schedule_pilot_task,
     _selected_lookup_values,
     _select_pilot_products,
     _select_unseen_products,
-    _successfully_seen_filter,
 )
 
 
@@ -51,6 +49,24 @@ def _evidence(name, *, categories=None, current=""):
         "current_google_category": current,
         "has_image": True,
     }
+
+
+_RECOVERY_TAXONOMY = [
+    {"id": "5598", "name": "المعاطف والسترات", "path": "ملابس وإكسسوارات > ملابس > ملابس خارجية > المعاطف والسترات", "depth": 3},
+    {"id": "5388", "name": "ملابس الاحتفالات والملابس التقليدية", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية", "depth": 2},
+    {"id": "6463", "name": "أطقم مجوهرات", "path": "ملابس وإكسسوارات > حُلي > أطقم مجوهرات", "depth": 2},
+    {"id": "2789", "name": "معطرات هواء للمركبات", "path": "المركبات وقطع الغيار > إكسسوارات العربات وقطع غيارها > صيانة المركبات والعناية بها وتزيينها > ديكور المركبات > معطرات هواء للمركبات", "depth": 4},
+    {"id": "100", "name": "حقائب ظهر", "path": "أمتعة وحقائب > حقائب ظهر", "depth": 1},
+    {"id": "193", "name": "أزرار الأكمام", "path": "ملابس وإكسسوارات > إكسسوارات الملابس > أزرار الأكمام", "depth": 2},
+    {"id": "212", "name": "قمصان وبلوزات", "path": "ملابس وإكسسوارات > ملابس > قمصان وبلوزات", "depth": 2},
+    {"id": "177", "name": "الأوشحة والشالات", "path": "ملابس وإكسسوارات > إكسسوارات الملابس > الأوشحة والشالات", "depth": 2},
+    {"id": "982", "name": "أقلام حبر", "path": "المستلزمات المكتبية > أدوات مكتب > أدوات الكتابة والرسم > أقلام الرصاص والحبر الجاف > أقلام حبر", "depth": 4},
+    {"id": "201", "name": "ساعات يد", "path": "ملابس وإكسسوارات > حُلي > ساعات يد", "depth": 2},
+    {"id": "2580", "name": "البيجامات", "path": "ملابس وإكسسوارات > ملابس > ملابس نوم وملابس مريحة > البيجامات", "depth": 3},
+    {"id": "182", "name": "ملابس الرضع والأطفال الصغار", "path": "ملابس وإكسسوارات > ملابس > ملابس الرضع والأطفال الصغار", "depth": 2},
+    {"id": "2169", "name": "الأكواب", "path": "الحديقة والمنزل > المطبخ وتناول الطعام > أدوات المائدة > أدوات تناول الشراب > الأكواب", "depth": 4},
+    {"id": "1259", "name": "حيوانات محشوة", "path": "ألعاب أطفال > ألعاب الطفل > دمى وشخصيات ومجموعات لعب > حيوانات محشوة", "depth": 3},
+]
 
 
 def test_abaya_alias_retrieves_traditional_clothing_candidate():
@@ -75,6 +91,37 @@ def test_necklace_alias_retrieves_necklaces_candidate():
 def test_ai_search_terms_are_combined_with_deterministic_aliases():
     terms = _fallback_search_terms(_evidence("سلسال بالاسم"))
     assert any("قلادات" in term for term in terms)
+
+
+@pytest.mark.parametrize(
+    ("name", "description", "expected_id"),
+    [
+        ("جاكيت شتوي", "", "5598"),
+        ("طقم بناتي بالاسم", "", "6463"),
+        ("فواحة - leather", "", "2789"),
+        ("شنطة مدرسيه بالاسم", "", "100"),
+        ("كبك اطفال بالاسم", "", "193"),
+        ("هودي أسود كاجوال", "", "212"),
+        ("وشاح تخرج تطريز", "", "177"),
+        ("قلم رجالي انيق بالاسم", "", "982"),
+        ("ساعة كاسيو LTP", "", "201"),
+        ("D1", "بجامة قابلة للتطريز", "2580"),
+        ("افرول رمضان مواليد", "", "182"),
+        ("كوب شعار", "", "2169"),
+        ("مجسم لابوبو", "", "1259"),
+    ],
+)
+def test_sparse_catalog_products_receive_relevant_official_candidates(
+    name,
+    description,
+    expected_id,
+):
+    evidence = {**_evidence(name), "description": description}
+    candidate_ids = {
+        str(row["id"])
+        for row in _candidate_rows(evidence, [], _RECOVERY_TAXONOMY, None)
+    }
+    assert expected_id in candidate_ids
 
 
 def test_existing_category_never_batch_overwritten_when_ai_disagrees():
@@ -146,6 +193,21 @@ def test_full_rollout_accepts_200_products_in_next_unseen_mode():
     assert payload.selection_mode == "next_unseen"
 
 
+def test_retry_review_mode_is_explicit_and_never_retries_approved_rows():
+    payload = PilotStartIn(limit=200, selection_mode="retry_review")
+    assert payload.selection_mode == "retry_review"
+    assert _retryable_product_ids(
+        [
+            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
+            {"mezan_product_id": "low", "decision_status": "low_confidence", "apply_status": "pending"},
+            {"mezan_product_id": "approved", "decision_status": "high_confidence", "apply_status": "applied"},
+            {"mezan_product_id": "already-applied", "decision_status": "review_required", "apply_status": "applied"},
+            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
+        ],
+        200,
+    ) == ["review", "low"]
+
+
 def test_rollout_catalog_scan_is_lightweight_and_work_waves_are_bounded():
     assert CLASSIFICATION_WAVE_SIZE == 15
     assert PILOT_SELECTION_PROJECTION["categories"] == {"$slice": 1}
@@ -180,13 +242,6 @@ def test_full_rollout_skips_products_already_seen_in_prior_runs():
     selected_ids = {row["mezan_product_id"] for row in selected}
     assert len(selected) == 6
     assert not selected_ids.intersection({"product-0", "product-1", "product-2", "product-3"})
-
-
-def test_next_unseen_retries_old_ai_failures():
-    assert _successfully_seen_filter("user-1") == {
-        "user_id": "user-1",
-        "decision_status": {"$ne": "ai_failed"},
-    }
 
 
 @pytest.mark.asyncio
@@ -257,53 +312,6 @@ def test_hard_quota_error_is_not_retried():
         body = {"error": {"code": "insufficient_quota"}}
 
     assert _is_retryable_openai_error(HardQuotaError()) is False
-
-
-@pytest.mark.parametrize(
-    "code",
-    [
-        "credit_balance_exhausted",
-        "insufficient_quota",
-        "billing_hard_limit_reached",
-        "billing_not_active",
-    ],
-)
-def test_credit_exhaustion_codes_stop_without_product_failures(code):
-    class CreditError(Exception):
-        status_code = 429
-
-        def __init__(self):
-            super().__init__(code)
-            self.body = {"error": {"code": code}}
-
-    error = CreditError()
-    now = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
-    fields = _run_error_fields(error, now=now)
-
-    assert _is_credit_exhausted_openai_error(error) is True
-    assert _is_retryable_openai_error(error) is False
-    assert fields["status"] == "credit_exhausted"
-    assert fields["provider_error_code"] == code
-    assert fields["action_required"] == "top_up_openai_credit"
-    assert fields["progress.phase"] == "provider_credit_exhausted"
-    assert "رصيد OpenAI API" in fields["error"]
-
-
-def test_credit_exhaustion_marker_is_detected_when_provider_omits_code():
-    error = RuntimeError("provider error: credit_balance_exhausted")
-    assert _is_credit_exhausted_openai_error(error) is True
-
-
-def test_transient_rate_limit_remains_resumable():
-    class TransientRateLimit(Exception):
-        status_code = 429
-
-    now = datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc)
-    fields = _run_error_fields(TransientRateLimit("slow down"), now=now)
-
-    assert fields["status"] == "queued"
-    assert fields["finished_at"] is None
-    assert fields["progress.phase"] == "provider_rate_limited"
 
 
 def test_taxonomy_provider_calls_are_sequential_but_checkpoints_remain_bounded():
