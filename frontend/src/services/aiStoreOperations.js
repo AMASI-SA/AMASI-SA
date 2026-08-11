@@ -47,3 +47,23 @@ export async function applyHighConfidenceGoogleTaxonomy(runId, confirmation) {
         { confirmation },
     )).data;
 }
+
+export async function getGoogleTaxonomySallaPublishPreview() {
+    return (await api.get(
+        "/ai-store-operations/product-intelligence/google-taxonomy/salla-publish/preview",
+    )).data;
+}
+
+export async function probeGoogleTaxonomySallaPublish(confirmation) {
+    return (await api.post(
+        "/ai-store-operations/product-intelligence/google-taxonomy/salla-publish/probe",
+        { confirmation },
+    )).data;
+}
+
+export async function publishGoogleTaxonomyToSalla(confirmation, limit = 200) {
+    return (await api.post(
+        "/ai-store-operations/product-intelligence/google-taxonomy/salla-publish",
+        { confirmation, limit, stop_on_failure: false },
+    )).data;
+}
