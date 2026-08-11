@@ -5,6 +5,10 @@ jest.mock("../../services/preparationWorkService", () => ({
     getPreparationManagerSummary: jest.fn(),
 }));
 
+jest.mock("../../services/fulfillmentExperiment", () => ({
+    createFulfillmentHold: jest.fn(),
+}));
+
 import PreparationWorkDashboard, {
     fileEstimatedDueAt,
     filePieces,

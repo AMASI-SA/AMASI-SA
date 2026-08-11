@@ -36,6 +36,9 @@ PERMISSIONS = {
     "audit.read",
     "preparation.assigned.read",
     "preparation.assigned.work",
+    "preparation.assigned.stop",
+    "fulfillment.stop.manage",
+    "fulfillment.experiment.reset",
     "fulfillment.ready.read",
     "fulfillment.batch.claim",
     "fulfillment.labels.print",
@@ -74,6 +77,10 @@ ROLE_CATALOG = {
     }),
     "preparation_operator": sorted({
         "preparation.assigned.read", "preparation.assigned.work",
+        "preparation.assigned.stop",
+    }),
+    "customer_service": sorted({
+        "products.read", "fulfillment.stop.manage",
     }),
     "cost_manager": sorted({
         "products.read", "products.cost.read", "products.cost.write", "audit.read",
@@ -111,6 +118,7 @@ ROLE_LABELS = {
     "product_manager": "مدير المنتجات",
     "product_operator": "موظف المنتجات",
     "preparation_operator": "موظف التجهيز",
+    "customer_service": "خدمة العملاء",
     "cost_manager": "مسؤول التكاليف والمشتريات",
     "warehouse_operator": "موظف المخزن",
     "shipping_operator": "موظف الشحن والعنونة",

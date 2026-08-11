@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
+from fulfillment_v2_routes import _actor_context
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
     EVENTS,
@@ -523,7 +524,15 @@ async def materialize_preparation_pieces(
             detail={"code": "preparation_batch_missing_for_piece_materialization"},
         )
     history = await db[PIECES].find(
-        {"user_id": user_id, "completed_at": {"$ne": None}, "started_at": {"$ne": None}},
+        {
+            "user_id": user_id,
+            "completed_at": {"$ne": None},
+            "started_at": {"$ne": None},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
         {
             "_id": 0,
             "responsible_employee_id": 1,
@@ -546,6 +555,40 @@ async def materialize_preparation_pieces(
         assigned_at=assigned_at,
         duration_by_signature=duration_history,
     )
+    order_numbers = sorted({
+        _text(piece.get("order_number"))
+        for piece in pieces
+        if _text(piece.get("order_number"))
+    })
+    experiment_workflows = await db[WORKFLOWS].find(
+        {
+            "user_id": user_id,
+            "order_number": {"$in": order_numbers},
+            "experiment_mode": True,
+            "experiment_run_id": {"$nin": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "order_number": 1,
+            "experiment_run_id": 1,
+            "experiment_generation": 1,
+        },
+    ).to_list(max(len(order_numbers), 1)) if order_numbers else []
+    experiment_by_order = {
+        _text(row.get("order_number")): row
+        for row in experiment_workflows
+        if _text(row.get("order_number"))
+    }
+    for piece in pieces:
+        experiment = experiment_by_order.get(_text(piece.get("order_number")))
+        if experiment:
+            piece.update({
+                "experiment_mode": True,
+                "experiment_run_id": _text(experiment.get("experiment_run_id")),
+                "experiment_generation": int(experiment.get("experiment_generation") or 1),
+                "financial_writes_allowed": False,
+                "supplier_payable_allowed": False,
+            })
     validate_materialized_piece_count(
         batch=batch,
         registry=registry,
@@ -564,6 +607,10 @@ async def materialize_preparation_pieces(
             upsert=True,
         )
     now = _now()
+    experiment_run_ids = sorted({
+        _text(piece.get("experiment_run_id"))
+        for piece in pieces if _text(piece.get("experiment_run_id"))
+    })
     runtime_patch = {
         "execution_status": "assigned",
         "piece_count": len(pieces),
@@ -571,6 +618,12 @@ async def materialize_preparation_pieces(
         "piece_registry_materialized_at": now,
         "updated_at": now,
     }
+    if len(experiment_run_ids) == 1:
+        runtime_patch.update({
+            "experiment_mode": True,
+            "experiment_run_id": experiment_run_ids[0],
+            "financial_writes_allowed": False,
+        })
     runtime_unset = {
         "piece_registry_last_error": "",
         "piece_registry_last_error_code": "",
@@ -692,8 +745,16 @@ async def _assigned_reconcile_order_stage(
     return False, remaining
 
 
-def _can_start_assigned_file(user: dict[str, Any], registry: dict[str, Any]) -> bool:
-    if not user_can_manage_preparation(user):
+def _can_start_assigned_file(
+    user: dict[str, Any],
+    registry: dict[str, Any],
+    permissions: set[str] | None = None,
+) -> bool:
+    permissions = permissions or set()
+    if not (
+        user_can_manage_preparation(user)
+        or "preparation.assigned.work" in permissions
+    ):
         return False
     actor_id = _text(user.get("id"))
     if actor_id == _text(registry.get("responsible_employee_id")):
@@ -709,12 +770,13 @@ async def _start_file_execution(
     registry: dict[str, Any],
     actor: dict[str, Any],
     note: str | None,
+    permissions: set[str] | None = None,
 ) -> dict[str, Any]:
     batch_id = _text(registry.get("batch_id"))
     file_number = _text(registry.get("file_number"))
     if not batch_id:
         raise HTTPException(status_code=409, detail={"code": "file_batch_missing"})
-    if not _can_start_assigned_file(actor, registry):
+    if not _can_start_assigned_file(actor, registry, permissions):
         raise HTTPException(
             status_code=403,
             detail={"code": "assigned_file_start_permission_required"},
@@ -764,7 +826,15 @@ async def _start_file_execution(
         }},
     )
     await db[PIECES].update_many(
-        {"user_id": user_id, "batch_id": batch_id, "status": PIECE_STATUS_ASSIGNED},
+        {
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "status": PIECE_STATUS_ASSIGNED,
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
         {"$set": {
             "status": PIECE_STATUS_IN_PROGRESS,
             "execution_status": "in_progress",
@@ -775,7 +845,14 @@ async def _start_file_execution(
         }},
     )
     order_rows = await db[PIECES].find(
-        {"user_id": user_id, "batch_id": batch_id},
+        {
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
         {"_id": 0, "order_number": 1},
     ).to_list(10000)
     order_numbers = sorted({_text(row.get("order_number")) for row in order_rows if _text(row.get("order_number"))})
@@ -856,7 +933,19 @@ async def _my_work_view(db: Any, *, user_id: str, employee_id: str, limit: int) 
         {
             "user_id": user_id,
             "responsible_employee_id": employee_id,
-            "status": {"$ne": PIECE_STATUS_CANCELLED},
+            "$and": [
+                {"$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ]},
+                {"$or": [
+                    {"status": {"$ne": PIECE_STATUS_CANCELLED}},
+                    {
+                        "active_hold_id": {"$exists": True, "$nin": [None, ""]},
+                        "status": PIECE_STATUS_CANCELLED,
+                    },
+                ]},
+            ],
         },
         {"_id": 0},
     ).sort("updated_at", -1).limit(20000).to_list(20000)
@@ -906,7 +995,13 @@ async def _my_work_view(db: Any, *, user_id: str, employee_id: str, limit: int) 
 
 async def _manager_summary(db: Any, *, user_id: str, date: str) -> dict[str, Any]:
     pieces = await db[PIECES].find(
-        {"user_id": user_id},
+        {
+            "user_id": user_id,
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
         {
             "_id": 0,
             "responsible_employee_id": 1,
@@ -968,15 +1063,20 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         limit: int = Query(50, ge=1, le=200),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        if not user_can_manage_preparation(user):
+        context = await _actor_context(db, user)
+        if not (
+            context["is_owner"]
+            or "preparation.assigned.read" in context["permissions"]
+            or user_can_manage_preparation(user)
+        ):
             raise HTTPException(
                 status_code=403,
                 detail={"code": "preparation_manage_permission_required"},
             )
         return await _my_work_view(
             db,
-            user_id=_merchant_user_id(user),
-            employee_id=_text(user.get("id")),
+            user_id=context["merchant_id"],
+            employee_id=context["actor_id"],
             limit=limit,
         )
 
@@ -998,7 +1098,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         payload: StartPreparationFileRequest,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        user_id = _merchant_user_id(user)
+        context = await _actor_context(db, user)
+        user_id = context["merchant_id"]
         registry = await db[REGISTRY].find_one(
             {"user_id": user_id, "file_number": file_number, "status": "ready"},
             {"_id": 0},
@@ -1011,6 +1112,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             registry=registry,
             actor=user,
             note=payload.note,
+            permissions=set(context["permissions"]),
         )
         return {
             "ok": True,

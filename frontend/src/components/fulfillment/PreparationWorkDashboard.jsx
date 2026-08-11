@@ -16,6 +16,7 @@ import {
     getMyPreparationWork,
     getPreparationManagerSummary,
 } from "../../services/preparationWorkService";
+import { createFulfillmentHold } from "../../services/fulfillmentExperiment";
 import PreparationSupplierDispatchWorkspace from "./PreparationSupplierDispatchWorkspace";
 
 const STATUS_LABELS = {
@@ -107,12 +108,38 @@ function PieceServiceSummary({ piece }) {
 }
 
 function MyWorkView({ work, loading, error, onRefresh }) {
+    const [holdBusy, setHoldBusy] = useState("");
+    const [holdError, setHoldError] = useState("");
     const files = inProgressFiles(Array.isArray(work?.files) ? work.files : []);
     const pieces = Array.isArray(work?.pieces) ? work.pieces : [];
     const summary = work?.summary || {};
     const materializationWarnings = Array.isArray(work?.materialization_warnings)
         ? work.materialization_warnings
         : [];
+
+    async function selfStop(piece) {
+        const note = window.prompt("اكتب سبب إيقاف هذه القطعة. سيظهر السبب في سجل الطلب ولموظفي الإدارة.");
+        if (note == null) return;
+        if (note.trim().length < 3) {
+            setHoldError("سبب الإيقاف يجب أن يكون 3 أحرف على الأقل.");
+            return;
+        }
+        setHoldBusy(piece.piece_id);
+        setHoldError("");
+        try {
+            await createFulfillmentHold(piece.order_number, {
+                scope: "piece",
+                target_id: piece.piece_id,
+                stop_type: "employee",
+                note: note.trim(),
+            });
+            await onRefresh();
+        } catch (stopError) {
+            setHoldError(stopError?.message || "تعذّر إيقاف القطعة.");
+        } finally {
+            setHoldBusy("");
+        }
+    }
 
     if (loading && !files.length) {
         return (
@@ -154,6 +181,7 @@ function MyWorkView({ work, loading, error, onRefresh }) {
                     {error}
                 </div>
             )}
+            {holdError && <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-900"><WarningCircle size={20} className="mt-0.5 shrink-0" />{holdError}</div>}
 
             {materializationWarnings.length > 0 && (
                 <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-rose-950" data-testid="preparation-piece-recovery-warning">
@@ -232,10 +260,10 @@ function MyWorkView({ work, loading, error, onRefresh }) {
                                                 <div className="font-black text-slate-900">{piece.product_name || "منتج"}</div>
                                                 <div className="mt-1 text-xs font-bold text-slate-500">طلب {piece.order_number} · قطعة {piece.unit_index} · {piece.sku || "بدون SKU"}</div>
                                                 <div className="mt-2"><PieceServiceSummary piece={piece} /></div>
+                                                {piece.experiment_mode && <div className="mt-2 w-fit rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-800">تجربة معزولة ماليًا</div>}
+                                                {piece.active_hold_id && <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs font-black leading-5 text-rose-900">{piece.hold_stop_label || "متوقف"}: {piece.hold_note || "راجع الإدارة"}</div>}
                                             </div>
-                                            <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-700">
-                                                {STATUS_LABELS[piece.status] || piece.status || "مسند"}
-                                            </span>
+                                            <div className="flex flex-col items-start gap-2"><span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-extrabold text-slate-700">{STATUS_LABELS[piece.status] || piece.status || "مسند"}</span>{["assigned", "in_progress", "ready_for_employee_receipt"].includes(piece.status) && !piece.active_hold_id && <button type="button" onClick={() => selfStop(piece)} disabled={Boolean(holdBusy)} className="min-h-9 rounded-lg border border-rose-300 bg-rose-50 px-3 text-[11px] font-black text-rose-800 disabled:opacity-40">{holdBusy === piece.piece_id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <WarningCircle className="ml-1 inline" />} إيقاف القطعة</button>}</div>
                                         </div>
                                     ))}
                                 </div>

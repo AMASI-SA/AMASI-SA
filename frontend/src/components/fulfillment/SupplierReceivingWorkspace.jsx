@@ -9,6 +9,7 @@ import {
     CheckCircle,
     ClockCounterClockwise,
     FilePdf,
+    Flask,
     Package,
     PlusCircle,
     ShareNetwork,
@@ -272,6 +273,21 @@ function SupplierInvoiceSharePanel({
 }) {
     const confirmed = invoice?.share_status === "confirmed" || invoice?.share_confirmed;
     const evidenceUploaded = confirmed || invoice?.share_status === "evidence_uploaded" || Boolean(invoice?.share_evidence_id);
+    if (invoice?.experiment_mode) {
+        return (
+            <section className="mx-auto w-full max-w-xl space-y-3 p-3 sm:p-5" data-testid="supplier-invoice-experiment-complete">
+                <div className="rounded-3xl border-2 border-violet-300 bg-violet-50 p-5 text-violet-950 shadow-sm">
+                    <Flask size={42} weight="fill" className="text-violet-700" />
+                    <div className="mt-3 text-xs font-black text-violet-600">اكتملت تجربة فاتورة المورد</div>
+                    <h3 className="mt-1 text-2xl font-black">{invoice?.invoice_number || "—"}</h3>
+                    <p className="mt-3 text-sm font-bold leading-7">تم اختبار الأسعار والخدمات على القطع التجريبية فقط. لم تُنشأ مديونية، ولم يتغير سعر المنتج أو الخدمة الفعلي، ولا يلزم إرسال الفاتورة للمورد.</p>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-black"><div className="rounded-xl bg-white p-3">القيد المالي: 0</div><div className="rounded-xl bg-white p-3">مديونية المورد: 0</div></div>
+                </div>
+                {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">{error}</div>}
+                <button type="button" onClick={onDone} className="min-h-12 w-full rounded-xl bg-violet-700 text-sm font-black text-white">العودة إلى جلسات الموردين</button>
+            </section>
+        );
+    }
     return (
         <section className="mx-auto w-full max-w-xl space-y-3 p-3 sm:p-5" data-testid="supplier-invoice-share-panel">
             <div className="rounded-3xl bg-emerald-800 p-5 text-white shadow-sm">
@@ -529,6 +545,7 @@ export function SupplierPieceCameraScanner({
     quantityRequest = null,
     onQuantitySelect = () => {},
     onQuantityDismiss = () => {},
+    experimentMode = false,
 }) {
     const videoRef = useRef(null);
     const [cameraError, setCameraError] = useState("");
@@ -747,7 +764,7 @@ export function SupplierPieceCameraScanner({
                 )}
             </div>
             <SupplierQuantitySelection request={quantityRequest} busy={scanning} onSelect={onQuantitySelect} onDismiss={onQuantityDismiss} />
-            {saveConfirmOpen && <div className="fixed inset-0 z-[150] flex items-end bg-slate-950/60 sm:items-center sm:justify-center sm:p-4"><section className="w-full rounded-t-3xl bg-white p-5 sm:max-w-md sm:rounded-3xl"><h3 className="text-xl font-black text-slate-950">تأكيد حفظ فاتورة المورد</h3><p className="mt-2 text-sm font-bold leading-6 text-slate-600">سيُنشأ رقم فاتورة مميز ومديونية بقيمة {formatSupplierMoney(total)} ر.س، وتُحدّث الأسعار التي غيّرها الموظف داخل ميزان مع سجل تدقيق.</p><button type="button" onClick={() => { setSaveConfirmOpen(false); onSave(); }} disabled={saving} className="mt-4 min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white" data-testid="supplier-receiving-confirm-save">نعم، احفظ الفاتورة</button><button type="button" onClick={() => setSaveConfirmOpen(false)} disabled={saving} className="mt-2 min-h-10 w-full text-sm font-black text-slate-600">العودة للمسودة</button></section></div>}
+            {saveConfirmOpen && <div className="fixed inset-0 z-[150] flex items-end bg-slate-950/60 sm:items-center sm:justify-center sm:p-4"><section className="w-full rounded-t-3xl bg-white p-5 sm:max-w-md sm:rounded-3xl"><h3 className="text-xl font-black text-slate-950">{experimentMode ? "تأكيد إكمال تجربة فاتورة المورد" : "تأكيد حفظ فاتورة المورد"}</h3><p className="mt-2 text-sm font-bold leading-6 text-slate-600">{experimentMode ? `سيُختبر إجمالي ${formatSupplierMoney(total)} ر.س دون إنشاء مديونية ودون تطبيق تغييرات الأسعار أو الخدمات فعليًا.` : `سيُنشأ رقم فاتورة مميز ومديونية بقيمة ${formatSupplierMoney(total)} ر.س، وتُحدّث الأسعار التي غيّرها الموظف داخل ميزان مع سجل تدقيق.`}</p><button type="button" onClick={() => { setSaveConfirmOpen(false); onSave(); }} disabled={saving} className="mt-4 min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white" data-testid="supplier-receiving-confirm-save">{experimentMode ? "نعم، أكمل التجربة" : "نعم، احفظ الفاتورة"}</button><button type="button" onClick={() => setSaveConfirmOpen(false)} disabled={saving} className="mt-2 min-h-10 w-full text-sm font-black text-slate-600">العودة للمسودة</button></section></div>}
         </div>
     );
 }
@@ -1198,7 +1215,7 @@ export default function SupplierReceivingWorkspace() {
                                     <h3 className="mt-1 truncate text-xl font-black">{supplierDisplayName(active)}</h3>
                                     <p className="mt-1 text-xs font-bold text-emerald-100">{active.opened_by_name || "—"} · {Number(active.scan_count || 0)} قطعة</p>
                                 </div>
-                                <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${sessionCancelling ? "bg-rose-600" : "bg-white/15"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : "جلسة مفتوحة"}</span>
+                                <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${sessionCancelling ? "bg-rose-600" : "bg-white/15"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : active.experiment_mode ? "جلسة تجريبية · بلا مديونية" : "جلسة مفتوحة"}</span>
                             </div>
                         </header>
 
@@ -1239,7 +1256,7 @@ export default function SupplierReceivingWorkspace() {
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-slate-800"><span>التعليمات والمسؤوليات</span><CaretDown size={18} className="transition-transform group-open:rotate-180" /></summary>
                             <div className="space-y-3 border-t border-slate-100 p-4 text-xs font-bold leading-5 text-slate-600">
                                 <p>موظف التجهيز محفوظ أصلًا مع كل قطعة، وموظف الاستلام هو صاحب هذه الجلسة.</p>
-                                <p>الاعتماد ينشئ فاتورة ومديونية داخل ميزان 2 فقط، ولا يرسل شيئًا إلى قيود أو سلة.</p>
+                                <p>{active.experiment_mode ? "هذه تجربة معزولة: لن تُنشأ مديونية ولن تُطبّق تغييرات الأسعار أو الخدمات فعليًا." : "الاعتماد ينشئ فاتورة ومديونية داخل ميزان 2 فقط، ولا يرسل شيئًا إلى قيود أو سلة."}</p>
                                 <textarea value={closeNote} onChange={(event) => setCloseNote(event.target.value)} rows={2} placeholder="ملاحظة الإغلاق — اختياري" className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-emerald-500" />
                             </div>
                         </details>
@@ -1260,7 +1277,7 @@ export default function SupplierReceivingWorkspace() {
                         <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm" data-testid="supplier-receiving-active-session">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${sessionCancelling ? "bg-rose-700" : "bg-emerald-700"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : "جلسة مفتوحة"}</span><span className="font-mono text-xs font-bold text-emerald-900">{active.reference}</span></div>
+                                    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${sessionCancelling ? "bg-rose-700" : active.experiment_mode ? "bg-violet-700" : "bg-emerald-700"}`}>{sessionCancelling ? "الإلغاء غير مكتمل" : active.experiment_mode ? "جلسة تجريبية · بلا مديونية" : "جلسة مفتوحة"}</span><span className="font-mono text-xs font-bold text-emerald-900">{active.reference}</span></div>
                                     <h3 className="mt-2 text-xl font-black text-emerald-950">{supplierDisplayName(active)}</h3>
                                     <p className="mt-1 text-xs font-bold text-emerald-800">فتحها: {active.opened_by_name || "—"} · {formatReceivingDate(active.opened_at)}</p>
                                 </div>
@@ -1325,8 +1342,8 @@ export default function SupplierReceivingWorkspace() {
                     return (
                         <article key={session.id} className="rounded-2xl border border-slate-200 p-4">
                             <div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-950">{supplierDisplayName(session)}</div><div className="mt-1 font-mono text-xs font-bold text-violet-700">{session.supplier_invoice?.invoice_number || session.reference}</div></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{session.scan_count} قطعة</span></div>
-                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>أصدرها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.supplier_invoice && <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · مديونية</span>}{!session.supplier_invoice && session.operational_invoice && <span className="rounded-full bg-amber-50 px-2.5 py-1 font-black text-amber-800">مسودة تشغيلية سابقة · {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span>}</div>
-                            {session.supplier_invoice && <div className="mt-3 flex items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${shareConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{shareConfirmed ? "تمت المشاركة مع المورد" : "تحتاج تأكيد المشاركة"}</span>{!shareConfirmed && <button type="button" onClick={() => resumeInvoiceShare(session)} disabled={!!busy} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50">إكمال المشاركة</button>}</div>}
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500"><span>أصدرها {session.closed_by_name || session.opened_by_name || "—"} · {formatReceivingDate(session.closed_at)}</span>{session.supplier_invoice?.experiment_mode ? <span className="rounded-full bg-violet-50 px-2.5 py-1 font-black text-violet-800">{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · تجربة بلا مديونية</span> : session.supplier_invoice ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">{formatSupplierMoney(session.supplier_invoice.total_halalas)} ر.س · مديونية</span> : session.operational_invoice ? <span className="rounded-full bg-amber-50 px-2.5 py-1 font-black text-amber-800">مسودة تشغيلية سابقة · {formatSupplierMoney(session.operational_invoice.total_halalas)} ر.س</span> : null}</div>
+                            {session.supplier_invoice && !session.supplier_invoice.experiment_mode && <div className="mt-3 flex items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${shareConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{shareConfirmed ? "تمت المشاركة مع المورد" : "تحتاج تأكيد المشاركة"}</span>{!shareConfirmed && <button type="button" onClick={() => resumeInvoiceShare(session)} disabled={!!busy} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50">إكمال المشاركة</button>}</div>}
                         </article>
                     );
                 })}</div>}
@@ -1363,6 +1380,7 @@ export default function SupplierReceivingWorkspace() {
                     quantityRequest={quantityRequest}
                     onQuantitySelect={selectScannedQuantity}
                     onQuantityDismiss={() => setQuantityRequest(null)}
+                    experimentMode={Boolean(active?.experiment_mode || savedInvoice?.experiment_mode)}
                 />
             )}
         </section>
