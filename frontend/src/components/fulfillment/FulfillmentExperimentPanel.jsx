@@ -36,6 +36,7 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
     const [busy, setBusy] = useState("");
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
     const [scope, setScope] = useState("order");
     const [targetId, setTargetId] = useState("");
     const [stopType, setStopType] = useState("note");
@@ -98,8 +99,7 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
     }
 
     async function resetOrder() {
-        const message = `سيُعاد الطلب #${orderNumber} إلى مرحلة تمت المراجعة، وتؤرشف مراحل التجهيز التشغيلية فقط. الفاتورة والمحاسبة السابقة لن تتغير. هل تريد المتابعة؟`;
-        if (!window.confirm(message)) return;
+        setResetConfirmationOpen(false);
         setBusy("reset");
         setError("");
         setNotice("");
@@ -174,9 +174,27 @@ export default function FulfillmentExperimentPanel({ orderNumber, items = [] }) 
             {state?.latest_run?.status === "active" && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-black leading-6 text-amber-900">وضع تجريبي نشط: قيود مالية 0 · مديونية مورد 0 · تحديث سلة 0 · تحديث قيود 0.</div>}
 
             {state?.capabilities?.can_reset_experiment && (
-                <button type="button" onClick={resetOrder} disabled={Boolean(busy)} className="mt-4 min-h-11 w-full rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50" data-testid="fulfillment-experiment-reset">
+                <button type="button" onClick={() => setResetConfirmationOpen(true)} disabled={Boolean(busy)} className="mt-4 min-h-11 w-full rounded-xl bg-violet-700 px-4 text-sm font-black text-white disabled:opacity-50" data-testid="fulfillment-experiment-reset">
                     {busy === "reset" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <Flask className="ml-1 inline" />} إعادة الطلب إلى «تمت المراجعة» كتجربة جديدة
                 </button>
+            )}
+
+            {resetConfirmationOpen && (
+                <div className="fixed inset-0 z-[160] flex items-end justify-center bg-slate-950/60 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="fulfillment-experiment-reset-title" data-testid="fulfillment-experiment-reset-dialog">
+                    <div className="w-full max-w-lg rounded-2xl bg-white p-5 text-right shadow-2xl" dir="rtl">
+                        <div className="flex items-start gap-3">
+                            <span className="rounded-xl bg-violet-100 p-3 text-violet-700"><Flask size={24} weight="fill" /></span>
+                            <div>
+                                <h3 id="fulfillment-experiment-reset-title" className="text-lg font-black text-slate-950">تأكيد إعادة الطلب للتجربة</h3>
+                                <p className="mt-2 text-sm font-bold leading-7 text-slate-600">سيُعاد الطلب #{orderNumber} إلى مرحلة تمت المراجعة، وتؤرشف مراحل التجهيز التشغيلية فقط. الفاتورة والمحاسبة السابقة لن تتغير.</p>
+                            </div>
+                        </div>
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                            <button type="button" onClick={() => setResetConfirmationOpen(false)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-black text-slate-700" data-testid="fulfillment-experiment-reset-cancel">إلغاء</button>
+                            <button type="button" onClick={resetOrder} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-black text-white" data-testid="fulfillment-experiment-reset-confirm">تأكيد إعادة الطلب</button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {state?.capabilities?.can_manage_stops && (
