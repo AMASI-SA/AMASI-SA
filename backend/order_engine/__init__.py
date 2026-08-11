@@ -136,6 +136,7 @@ def make_order_engine_router(*args, **kwargs):
     from ai_store_access_control import make_ai_store_access_router
     from product_google_taxonomy_ai_visual_gate import make_product_google_taxonomy_ai_pilot_router
     from product_google_taxonomy_salla_publish import make_product_google_taxonomy_salla_publish_router
+    from product_google_taxonomy_merchant_feed import make_product_google_taxonomy_merchant_feed_router
 
     import product_v2_routes as _product_v2_routes
     from product_v2_sync_hotfix import run_product_v2_sync_fixed
@@ -163,6 +164,7 @@ def make_order_engine_router(*args, **kwargs):
         make_ai_store_operations_router(db, current_user),
         make_product_google_taxonomy_ai_pilot_router(db, current_user),
         make_product_google_taxonomy_salla_publish_router(db, current_user),
+        make_product_google_taxonomy_merchant_feed_router(db, current_user),
         make_ai_store_access_router(db, current_user),
         make_product_media_upload_router(db, current_user),
         # Static Products V2 routes must be registered before

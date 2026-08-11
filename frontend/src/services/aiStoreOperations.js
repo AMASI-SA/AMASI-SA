@@ -67,3 +67,20 @@ export async function publishGoogleTaxonomyToSalla(confirmation, limit = 200) {
         { confirmation, limit, stop_on_failure: false },
     )).data;
 }
+
+export async function getGoogleTaxonomyMerchantFeedPreview() {
+    return (await api.get(
+        "/ai-store-operations/product-intelligence/google-taxonomy/merchant-feed/preview",
+    )).data;
+}
+
+export async function downloadGoogleTaxonomyMerchantFeed() {
+    const response = await api.get(
+        "/ai-store-operations/product-intelligence/google-taxonomy/merchant-feed.csv",
+        { responseType: "blob" },
+    );
+    return {
+        blob: response.data,
+        rows: Number(response.headers?.["x-mezan-feed-rows"] || 0),
+    };
+}
