@@ -224,6 +224,26 @@ async def test_send_refuses_when_already_sent(db):
     assert exc.value.code == "already_sent"
 
 
+@pytest.mark.asyncio
+async def test_send_reads_fresh_owner_inbox_row_after_salla_resync(db):
+    """The live Salla refresh writes under the merchant owner, not ``main``."""
+    owner_id = "merchant-owner-1"
+    row = _inbox_row(order_number="A100-OWNER", with_manual_id=True)
+    row["user_id"] = owner_id
+    row["manual_qoyod_payment_id"] = "8888"
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            orders_user_id=owner_id,
+            order_number="A100-OWNER",
+        )
+
+    assert exc.value.code == "already_sent"
+
+
 # ────────────────────────────────────────────────────────────────────
 # T3 — G4: payment method unmapped
 # ────────────────────────────────────────────────────────────────────
