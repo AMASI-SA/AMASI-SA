@@ -741,6 +741,34 @@ async def test_send_refuses_when_no_salla_date(db):
     assert exc.value.code == "no_salla_order_date"
 
 
+@pytest.mark.asyncio
+async def test_confirmed_recovery_can_continue_without_salla_date(db):
+    """The bounded recovery route may skip only the missing-date guard."""
+    await _seed_settings(db)
+    await _seed_credentials(db)
+    row = _inbox_row(
+        order_number="ORDER-NO-DATE-RECOVERY",
+        with_manual_id=True,
+    )
+    row["manual_qoyod_payment_id"] = "8888"
+    row["canonical_payload"].pop("order_date", None)
+    row["canonical_payload"].pop("created_at", None)
+    row["raw_payload"] = {}
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="ORDER-NO-DATE-RECOVERY",
+            allow_missing_salla_order_date=True,
+        )
+
+    # Reaching the duplicate guard proves the missing-date guard was skipped
+    # without creating an invoice or payment.
+    assert exc.value.code == "already_sent"
+
+
 # ────────────────────────────────────────────────────────────────────
 # T15 — Freeze toggle round-trip: worker respects the flag AFTER
 #       flip, and the flag also short-circuits _one_round.
