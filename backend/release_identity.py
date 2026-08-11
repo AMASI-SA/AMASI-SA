@@ -1,0 +1,76 @@
+"""Read-only identity embedded into an Emergent production package."""
+from __future__ import annotations
+
+import json
+import hashlib
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+RELEASE_PROTOCOL_VERSION = 1
+DEFAULT_RELEASE_IDENTITY_PATH = Path(__file__).with_name(
+    "release_identity.json"
+)
+_FULL_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+BACKEND_ROOT = Path(__file__).resolve().parent
+CRITICAL_FILES = (
+    "server.py",
+    "integrations/qoyod_manual/routes.py",
+    "integrations/qoyod_manual/send.py",
+)
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def read_release_identity(path: Path | None = None) -> dict[str, Any]:
+    """Return a safe public identity; never raise during a health probe."""
+    identity_path = path or DEFAULT_RELEASE_IDENTITY_PATH
+    try:
+        payload = json.loads(identity_path.read_text(encoding="utf-8"))
+        git_sha = str(payload.get("git_sha") or "").strip().lower()
+        if not _FULL_GIT_SHA.fullmatch(git_sha):
+            raise ValueError("invalid git_sha")
+        protocol_version = int(payload.get("protocol_version") or 0)
+        if protocol_version != RELEASE_PROTOCOL_VERSION:
+            raise ValueError("unsupported protocol_version")
+        expected_hashes = payload.get("critical_file_hashes") or {}
+        actual_hashes = {
+            relative: _sha256(BACKEND_ROOT / relative)
+            for relative in CRITICAL_FILES
+        }
+        hashes_match = all(
+            expected_hashes.get(relative) == actual_hashes[relative]
+            for relative in CRITICAL_FILES
+        )
+        return {
+            "verified_identity_available": True,
+            "git_sha": git_sha,
+            "branch": str(payload.get("branch") or ""),
+            "prepared_at": str(payload.get("prepared_at") or ""),
+            "protocol_version": protocol_version,
+            "critical_file_hashes_match": hashes_match,
+            "critical_file_hashes": actual_hashes,
+        }
+    except Exception:
+        return {
+            "verified_identity_available": False,
+            "git_sha": None,
+            "branch": None,
+            "prepared_at": None,
+            "protocol_version": RELEASE_PROTOCOL_VERSION,
+            "critical_file_hashes_match": False,
+            "critical_file_hashes": {},
+        }
+
+
+# Captured exactly once while the backend process imports this module. A git
+# pull that does not restart the process cannot change the public identity.
+BOOT_STARTED_AT = datetime.now(timezone.utc).isoformat()
+BOOT_RELEASE_IDENTITY = {
+    **read_release_identity(),
+    "boot_started_at": BOOT_STARTED_AT,
+}
