@@ -62,14 +62,14 @@ async def requires_email_otp(db: Any, user: dict[str, Any] | None) -> bool:
     Resolution order:
     - feature disabled -> false (existing TOTP behavior stays intact)
     - Owner -> false, always
-    - explicit per-user flag -> true/false when present
+    - explicit per-user ``email_otp_required=true`` -> true
     - configured legacy account role (Admin/Accountant by default) -> true
     - Employee OS operational assignment with a sensitive effective permission
       -> true
 
-    The assignment lookup is scoped by the login account's user_id and uses the
-    same effective-permission resolver as Employee OS, so denied permissions are
-    respected rather than inferred from role names alone.
+    A false per-user flag never weakens a sensitive role/permission rule. The
+    assignment lookup is scoped by login user_id and uses the same effective-
+    permission resolver as Employee OS, so denied permissions are respected.
     """
     if not email_otp_enabled() or not user:
         return False
@@ -78,8 +78,8 @@ async def requires_email_otp(db: Any, user: dict[str, Any] | None) -> bool:
     if role == "owner":
         return False
 
-    if "email_otp_required" in user:
-        return bool(user.get("email_otp_required"))
+    if user.get("email_otp_required") is True:
+        return True
 
     if role in sensitive_roles():
         return True
