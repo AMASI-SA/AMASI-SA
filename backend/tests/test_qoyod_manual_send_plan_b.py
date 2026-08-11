@@ -13,7 +13,7 @@ Coverage:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import mongomock_motor
@@ -22,7 +22,7 @@ import pytest
 from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
-    _preflight_qoyod_invoice_payload,
+    _preflight_qoyod_invoice_payload, _find_historical_positive_canon,
 )
 from integrations.qoyod.worker import _one_round
 
@@ -767,6 +767,29 @@ async def test_confirmed_recovery_can_continue_without_salla_date(db):
     # Reaching the duplicate guard proves the missing-date guard was skipped
     # without creating an invoice or payment.
     assert exc.value.code == "already_sent"
+
+
+@pytest.mark.asyncio
+async def test_recovery_selects_complete_positive_historical_payload(db):
+    historical = _inbox_row(order_number="ORDER-ZERO-LIVE", total=170.83)
+    historical["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    await db.integration_inbox.insert_one(historical)
+
+    stripped_live = _inbox_row(order_number="ORDER-ZERO-LIVE", total=0.0)
+    stripped_live["canonical_payload"]["items"] = []
+    stripped_live["received_at"] = datetime.now(timezone.utc)
+    await db.integration_inbox.insert_one(stripped_live)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number="ORDER-ZERO-LIVE",
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["items"]
 
 
 # ────────────────────────────────────────────────────────────────────
