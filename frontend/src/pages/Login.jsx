@@ -9,6 +9,89 @@ import { LogoIcon } from "../components/MezanLogo";
 
 const AUTH_BG = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/9126576d79013e8b54614eb6ef7268db1c88914c10825a71376e455fc32c7233.png";
 
+function supportsPlatformPasskey() {
+    return typeof window !== "undefined"
+        && typeof window.PublicKeyCredential !== "undefined"
+        && !!navigator?.credentials;
+}
+
+function base64urlToArrayBuffer(value) {
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const binary = window.atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+}
+
+function arrayBufferToBase64url(value) {
+    if (value == null) return null;
+    const bytes = new Uint8Array(value);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function creationOptionsFromJson(options = {}) {
+    return {
+        ...options,
+        challenge: base64urlToArrayBuffer(options.challenge),
+        user: {
+            ...options.user,
+            id: base64urlToArrayBuffer(options?.user?.id),
+        },
+        excludeCredentials: (options.excludeCredentials || []).map((item) => ({
+            ...item,
+            id: base64urlToArrayBuffer(item.id),
+        })),
+    };
+}
+
+function requestOptionsFromJson(options = {}) {
+    return {
+        ...options,
+        challenge: base64urlToArrayBuffer(options.challenge),
+        allowCredentials: (options.allowCredentials || []).map((item) => ({
+            ...item,
+            id: base64urlToArrayBuffer(item.id),
+        })),
+    };
+}
+
+function credentialToJson(credential) {
+    const response = credential?.response || {};
+    const serializedResponse = {
+        clientDataJSON: arrayBufferToBase64url(response.clientDataJSON),
+    };
+    if (response.attestationObject) {
+        serializedResponse.attestationObject = arrayBufferToBase64url(response.attestationObject);
+    }
+    if (response.authenticatorData) {
+        serializedResponse.authenticatorData = arrayBufferToBase64url(response.authenticatorData);
+    }
+    if (response.signature) {
+        serializedResponse.signature = arrayBufferToBase64url(response.signature);
+    }
+    if (response.userHandle) {
+        serializedResponse.userHandle = arrayBufferToBase64url(response.userHandle);
+    }
+    if (typeof response.getTransports === "function") {
+        serializedResponse.transports = response.getTransports();
+    }
+    return {
+        id: credential.id,
+        rawId: arrayBufferToBase64url(credential.rawId),
+        type: credential.type,
+        authenticatorAttachment: credential.authenticatorAttachment || undefined,
+        response: serializedResponse,
+        clientExtensionResults: credential.getClientExtensionResults?.() || {},
+    };
+}
+
+function deviceLabel() {
+    return navigator?.userAgentData?.platform || navigator?.platform || "هذا الجهاز";
+}
+
 export default function Login() {
     const { login, verifyMfa, refreshUser, formatApiErrorDetail } = useAuth();
     const navigate = useNavigate();
@@ -20,14 +103,19 @@ export default function Login() {
     const [showForgot, setShowForgot] = useState(false);
     const [showRegisterLink, setShowRegisterLink] = useState(false);
 
-    // Privileged Owner/Admin MFA flow:
-    // bootstrap → setup → recovery is first enrollment; verify is returning login.
-    const [mfaMode, setMfaMode] = useState(null); // null | bootstrap | setup | verify | recovery
+    // Privileged auth flow:
+    // bootstrap → setup → recovery is first TOTP enrollment.
+    // Returning Owner may use a trusted-device passkey instead of TOTP.
+    // After a fresh Owner TOTP, trust offers a 30-day platform passkey.
+    const [mfaMode, setMfaMode] = useState(null); // null | bootstrap | setup | verify | recovery | passkey | trust
     const [bootstrapCode, setBootstrapCode] = useState("");
     const [challengeToken, setChallengeToken] = useState("");
     const [setupSecret, setSetupSecret] = useState("");
     const [mfaCode, setMfaCode] = useState("");
     const [recoveryCodes, setRecoveryCodes] = useState([]);
+    const [verifiedRole, setVerifiedRole] = useState("");
+    const [passkeyChallengeId, setPasskeyChallengeId] = useState("");
+    const [passkeyOptions, setPasskeyOptions] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -48,6 +136,17 @@ export default function Login() {
         toast.success("مرحباً بعودتك!");
     };
 
+    const hydrateAndFinish = async () => {
+        const hydrated = await refreshUser();
+        if (!hydrated) {
+            toast.error("تعذر تأكيد الجلسة. سجّل الدخول من جديد.");
+            resetMfa();
+            return false;
+        }
+        finishLogin();
+        return true;
+    };
+
     const resetMfa = () => {
         setMfaMode(null);
         setBootstrapCode("");
@@ -55,9 +154,18 @@ export default function Login() {
         setSetupSecret("");
         setMfaCode("");
         setRecoveryCodes([]);
+        setVerifiedRole("");
+        setPasskeyChallengeId("");
+        setPasskeyOptions(null);
     };
 
     const applyLoginResult = (result) => {
+        if (result?.passkey_required) {
+            setPasskeyChallengeId(result.challenge_id || "");
+            setPasskeyOptions(result.webauthn_options || null);
+            setMfaMode("passkey");
+            return true;
+        }
         if (result?.mfa_bootstrap_required) {
             setBootstrapCode("");
             setMfaMode("bootstrap");
@@ -113,12 +221,13 @@ export default function Login() {
         if (!mfaCode.trim()) return;
         setBusy(true);
         try {
-            const isEnrollment = mfaMode === "setup";
             const result = await verifyMfa(
                 challengeToken,
                 mfaCode.trim(),
-                { deferRefresh: isEnrollment },
+                { deferRefresh: true },
             );
+            const role = String(result?.role || "").toLowerCase();
+            setVerifiedRole(role);
             const codes = Array.isArray(result?.recovery_codes) ? result.recovery_codes : [];
             if (codes.length) {
                 setRecoveryCodes(codes);
@@ -127,7 +236,12 @@ export default function Login() {
                 toast.success("تم تفعيل التحقق بخطوتين");
                 return;
             }
-            finishLogin();
+            if (role === "owner") {
+                setMfaMode("trust");
+                setMfaCode("");
+                return;
+            }
+            await hydrateAndFinish();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر التحقق من الرمز");
         } finally {
@@ -136,15 +250,100 @@ export default function Login() {
     };
 
     const continueAfterRecovery = async () => {
+        if (verifiedRole === "owner") {
+            setMfaMode("trust");
+            return;
+        }
         setBusy(true);
         try {
-            const hydrated = await refreshUser();
-            if (!hydrated) {
-                toast.error("تعذر تأكيد الجلسة. سجّل الدخول من جديد.");
-                resetMfa();
-                return;
+            await hydrateAndFinish();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const submitPasskey = async () => {
+        if (!passkeyChallengeId || !passkeyOptions) return;
+        if (!supportsPlatformPasskey()) {
+            toast.error("هذا المتصفح لا يدعم بصمة/PIN الجهاز. استخدم Google Authenticator.");
+            return;
+        }
+        setBusy(true);
+        try {
+            const credential = await navigator.credentials.get({
+                publicKey: requestOptionsFromJson(passkeyOptions),
+            });
+            if (!credential) throw new Error("passkey_cancelled");
+            await api.post("/auth/passkey/authenticate/verify", {
+                challenge_id: passkeyChallengeId,
+                credential: credentialToJson(credential),
+            });
+            await hydrateAndFinish();
+        } catch (err) {
+            if (err?.name === "NotAllowedError") {
+                toast.info("تم إلغاء التحقق من الجهاز. يمكنك استخدام Google Authenticator.");
+            } else {
+                toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر التحقق من الجهاز");
             }
-            finishLogin();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const useTotpFallback = async () => {
+        setBusy(true);
+        try {
+            const result = await login(email, password, "", true);
+            if (!applyLoginResult(result)) finishLogin();
+        } catch (err) {
+            toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر بدء التحقق من التطبيق");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const trustThisDevice = async () => {
+        if (!supportsPlatformPasskey()) {
+            toast.error("هذا المتصفح لا يدعم Windows Hello / بصمة أو PIN الجهاز. يمكنك المتابعة بدون حفظ الجهاز.");
+            return;
+        }
+        setBusy(true);
+        try {
+            const { data: start } = await api.post("/auth/passkey/trust/options", {});
+            const ceremony = start?.ceremony;
+            let credential;
+            if (ceremony === "renew") {
+                credential = await navigator.credentials.get({
+                    publicKey: requestOptionsFromJson(start.webauthn_options || {}),
+                });
+            } else {
+                credential = await navigator.credentials.create({
+                    publicKey: creationOptionsFromJson(start.webauthn_options || {}),
+                });
+            }
+            if (!credential) throw new Error("passkey_cancelled");
+            await api.post("/auth/passkey/trust/verify", {
+                challenge_id: start.challenge_id,
+                credential: credentialToJson(credential),
+                device_label: deviceLabel(),
+            });
+            toast.success(`تم توثيق هذا الجهاز لمدة ${start?.trust_days || 30} يومًا`);
+            await hydrateAndFinish();
+        } catch (err) {
+            if (err?.name === "NotAllowedError") {
+                toast.info("تم إلغاء حفظ الجهاز. يمكنك المتابعة بدون حفظه.");
+            } else {
+                toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر حفظ الجهاز الموثوق");
+            }
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const skipTrustedDevice = async () => {
+        setBusy(true);
+        try {
+            await hydrateAndFinish();
         } finally {
             setBusy(false);
         }
@@ -422,7 +621,92 @@ export default function Login() {
                 className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
                 data-testid="recovery-codes-continue"
             >
-                {busy ? "جاري تأكيد الجلسة…" : "حفظت الرموز — المتابعة إلى ميزان"}
+                {busy ? "جاري تأكيد الجلسة…" : "حفظت الرموز — المتابعة"}
+            </button>
+        </div>
+    );
+
+    const renderPasskeyForm = () => (
+        <div data-testid="passkey-login-step">
+            <div className="w-14 h-14 rounded-2xl bg-accent text-brand flex items-center justify-center mb-6">
+                <ShieldCheck size={30} weight="duotone" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-3" style={{ fontFamily: "Tajawal" }}>
+                تحقق من هذا الجهاز
+            </h1>
+            <p className="text-muted-foreground mb-6 text-sm leading-7">
+                هذا جهاز موثوق. استخدم Windows Hello أو البصمة/الوجه أو PIN الجهاز بدل فتح Google Authenticator.
+            </p>
+            <button
+                type="button"
+                onClick={submitPasskey}
+                disabled={busy || !supportsPlatformPasskey()}
+                className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
+                data-testid="passkey-login-submit"
+            >
+                {busy ? "جاري التحقق…" : "التحقق ببصمة / PIN الجهاز"}
+            </button>
+            {!supportsPlatformPasskey() && (
+                <p className="text-xs text-muted-foreground mt-3 text-center">
+                    هذا المتصفح لا يدعم تحقق الجهاز المحلي؛ استخدم تطبيق المصادقة.
+                </p>
+            )}
+            <button
+                type="button"
+                onClick={useTotpFallback}
+                disabled={busy}
+                className="w-full mt-4 py-3 px-4 border border-border bg-white text-brand font-semibold rounded-lg hover:bg-accent transition-colors"
+                data-testid="passkey-use-totp"
+            >
+                استخدام Google Authenticator بدلاً من ذلك
+            </button>
+            <button
+                type="button"
+                onClick={resetMfa}
+                disabled={busy}
+                className="w-full mt-4 text-sm text-muted-foreground hover:text-brand font-semibold"
+            >
+                العودة إلى تسجيل الدخول
+            </button>
+        </div>
+    );
+
+    const renderTrustDevice = () => (
+        <div data-testid="trusted-device-step">
+            <div className="w-14 h-14 rounded-2xl bg-accent text-brand flex items-center justify-center mb-6">
+                <ShieldCheck size={30} weight="duotone" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-3" style={{ fontFamily: "Tajawal" }}>
+                الوثوق بهذا الجهاز؟
+            </h1>
+            <p className="text-muted-foreground mb-5 text-sm leading-7">
+                يمكنك حفظ هذا الجهاز لمدة <strong>30 يومًا</strong>. في المرات القادمة ستدخل بكلمة المرور ثم Windows Hello أو البصمة/PIN الجهاز، بدون الحاجة لفتح Google Authenticator كل مرة.
+            </p>
+            <div className="rounded-xl border border-border bg-accent/40 p-4 mb-6 text-xs text-muted-foreground leading-6">
+                ميزان لا يستلم بصمتك ولا PIN جهازك؛ التحقق يتم داخل الجهاز. عند انتهاء 30 يومًا سيطلب منك رمز المصادقة مرة واحدة لتجديد الثقة.
+            </div>
+            <button
+                type="button"
+                onClick={trustThisDevice}
+                disabled={busy || !supportsPlatformPasskey()}
+                className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
+                data-testid="trust-device-submit"
+            >
+                {busy ? "جاري حفظ الجهاز…" : "نعم، وثّق هذا الجهاز"}
+            </button>
+            {!supportsPlatformPasskey() && (
+                <p className="text-xs text-muted-foreground mt-3 text-center">
+                    التحقق المحلي غير متاح في هذا المتصفح؛ يمكنك الدخول بدون حفظ الجهاز.
+                </p>
+            )}
+            <button
+                type="button"
+                onClick={skipTrustedDevice}
+                disabled={busy}
+                className="w-full mt-4 py-3 px-4 border border-border bg-white text-brand font-semibold rounded-lg hover:bg-accent transition-colors"
+                data-testid="trust-device-skip"
+            >
+                ليس الآن — المتابعة إلى ميزان
             </button>
         </div>
     );
@@ -447,6 +731,8 @@ export default function Login() {
                     {mfaMode === "bootstrap" && renderBootstrapForm()}
                     {(mfaMode === "setup" || mfaMode === "verify") && renderMfaForm()}
                     {mfaMode === "recovery" && renderRecoveryCodes()}
+                    {mfaMode === "passkey" && renderPasskeyForm()}
+                    {mfaMode === "trust" && renderTrustDevice()}
                 </div>
             </div>
 

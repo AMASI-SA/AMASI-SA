@@ -1,0 +1,49 @@
+name: Auth Passkey Security
+
+on:
+  pull_request:
+    paths:
+      - "backend/auth.py"
+      - "backend/passkey_security.py"
+      - "backend/requirements.txt"
+      - "backend/tests/test_passkey_security_v1.py"
+      - "frontend/src/context/AuthContext.jsx"
+      - "frontend/src/pages/Login.jsx"
+      - ".github/workflows/auth-passkey-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  trusted-device-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+      - name: Install focused auth dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "pytest==9.0.3" \
+            "openpyxl==3.1.5" \
+            "webauthn==2.7.1" \
+            "cryptography==48.0.0" \
+            "pymongo==4.5.0" \
+            "fastapi==0.110.1" \
+            "starlette==0.37.2" \
+            "PyJWT==2.13.0"
+      - name: Import passkey security module
+        env:
+          JWT_SECRET: ci-only-auth-secret
+          FRONTEND_URL: https://salla-analytics.emergent.host
+        run: PYTHONPATH=backend python -c "import passkey_security; print(passkey_security._rp_id())"
+      - name: Run trusted-device security contracts
+        env:
+          JWT_SECRET: ci-only-auth-secret
+          FRONTEND_URL: https://salla-analytics.emergent.host
+        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_passkey_security_v1.py

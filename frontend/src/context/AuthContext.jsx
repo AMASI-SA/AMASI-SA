@@ -45,16 +45,22 @@ export function AuthProvider({ children }) {
         })();
     }, [refreshUser]);
 
-    const login = async (email, password, mfaBootstrapCode = "") => {
+    const login = async (email, password, mfaBootstrapCode = "", forceTotp = false) => {
         const payload = { email, password };
         if (mfaBootstrapCode) payload.mfa_bootstrap_code = mfaBootstrapCode;
+        if (forceTotp) payload.force_totp = true;
         const { data } = await api.post("/auth/login", payload);
         clearLegacyBrowserAccessToken();
 
         // Owner/Admin password success is deliberately not a browser session.
-        // First enrollment may require an out-of-band bootstrap proof before
-        // the TOTP secret is exposed; returning users get an MFA challenge.
-        if (data?.mfa_bootstrap_required || data?.mfa_required || data?.mfa_setup_required) {
+        // First enrollment may require an out-of-band bootstrap proof; returning
+        // Owner devices may receive a platform-passkey challenge before TOTP.
+        if (
+            data?.mfa_bootstrap_required
+            || data?.mfa_required
+            || data?.mfa_setup_required
+            || data?.passkey_required
+        ) {
             setUser(false);
             return data;
         }
@@ -70,10 +76,8 @@ export function AuthProvider({ children }) {
         });
         clearLegacyBrowserAccessToken();
 
-        // First-time enrollment returns recovery codes that must remain visible
-        // before PublicOnly sees an authenticated user and redirects away from
-        // /login. The HttpOnly session cookie is already set; Login calls
-        // refreshUser only after the merchant confirms the codes are saved.
+        // Login may deliberately defer hydration while recovery codes or the
+        // optional trusted-device enrollment screen must remain visible.
         if (deferRefresh) {
             setUser(false);
             return data;
