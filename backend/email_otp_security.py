@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import html
 import json
 import logging
 import math
@@ -224,17 +225,43 @@ def _send_email_sync(recipient: str, code: str, recipient_name: str | None = Non
     if not _valid_recipient(recipient):
         raise ValueError("invalid email OTP recipient")
 
+    normalized_name = " ".join(str(recipient_name or "").split())[:80]
+    greeting = f"مرحبًا {normalized_name}،" if normalized_name else "مرحبًا،"
+    ttl_minutes = max(1, math.ceil(_challenge_seconds() / 60))
+
     message = EmailMessage()
     message["Subject"] = "رمز التحقق لتسجيل الدخول إلى نظام أماسي"
     message["From"] = f"{settings.from_name} <{settings.from_email}>"
     message["To"] = recipient
     message.set_content(
-        (f"مرحبًا {' '.join(str(recipient_name).split())[:80]}،\n\n" if str(recipient_name or "").strip() else "مرحبًا،\n\n")
+        f"{greeting}\n\n"
         + f"رمز التحقق الخاص بك لتسجيل الدخول إلى نظام أماسي هو: {code}\n\n"
-        f"الرمز صالح لمدة {max(1, math.ceil(_challenge_seconds() / 60))} دقائق، "
+        f"الرمز صالح لمدة {ttl_minutes} دقائق، "
         "ويعمل مرة واحدة فقط.\n"
         "إذا لم تحاول تسجيل الدخول إلى نظام أماسي فتجاهل هذه الرسالة ولا تشارك الرمز مع أي شخص.\n\n"
         "AMASI"
+    )
+    message.add_alternative(
+        f"""<!doctype html>
+<html lang="ar" dir="rtl">
+  <body dir="rtl" style="margin:0; padding:24px; background-color:#ffffff; direction:rtl; text-align:right; font-family:Arial, Tahoma, sans-serif; color:#111827;">
+    <table role="presentation" width="100%" dir="rtl" cellspacing="0" cellpadding="0" border="0" style="width:100%; direction:rtl; text-align:right;">
+      <tr>
+        <td dir="rtl" align="right" style="direction:rtl; text-align:right; font-size:16px; line-height:1.8;">
+          <p dir="rtl" style="margin:0 0 16px; direction:rtl; text-align:right;">{html.escape(greeting)}</p>
+          <p dir="rtl" style="margin:0 0 16px; direction:rtl; text-align:right;">
+            رمز التحقق الخاص بك لتسجيل الدخول إلى نظام أماسي هو:
+            <strong dir="ltr" style="display:inline-block; direction:ltr; unicode-bidi:isolate;">{html.escape(code)}</strong>
+          </p>
+          <p dir="rtl" style="margin:0 0 8px; direction:rtl; text-align:right;">الرمز صالح لمدة {ttl_minutes} دقائق، ويعمل مرة واحدة فقط.</p>
+          <p dir="rtl" style="margin:0 0 24px; direction:rtl; text-align:right;">إذا لم تحاول تسجيل الدخول إلى نظام أماسي فتجاهل هذه الرسالة ولا تشارك الرمز مع أي شخص.</p>
+          <p dir="ltr" style="margin:0; direction:ltr; text-align:right;">AMASI</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>""",
+        subtype="html",
     )
 
     if settings.use_ssl:

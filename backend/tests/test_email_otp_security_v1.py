@@ -207,9 +207,19 @@ def test_email_message_uses_amasi_brand_and_recipient_name(monkeypatch):
 
     assert len(sent) == 1
     message = sent[0]
+    assert message.get_content_type() == "multipart/alternative"
     assert message["Subject"] == "رمز التحقق لتسجيل الدخول إلى نظام أماسي"
     assert message["From"] == "AMASI <no-reply@example.com>"
-    body = message.get_content()
-    assert "مرحبًا عرفات،" in body
-    assert "نظام أماسي" in body
-    assert "MEZAN" not in body
+    plain_body = message.get_body(preferencelist=("plain",)).get_content()
+    html_body = message.get_body(preferencelist=("html",)).get_content()
+    assert "مرحبًا عرفات،" in plain_body
+    assert "نظام أماسي" in plain_body
+    assert "MEZAN" not in plain_body
+    assert '<html lang="ar" dir="rtl">' in html_body
+    assert 'align="right"' in html_body
+    assert "direction:rtl" in html_body
+    assert "text-align:right" in html_body
+    assert '<strong dir="ltr"' in html_body
+    assert "مرحبًا عرفات،" in html_body
+    assert "123456" in html_body
+    assert "MEZAN" not in html_body
