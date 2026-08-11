@@ -17,11 +17,19 @@ DEFAULT_SENSITIVE_ROLES = {"admin", "accountant"}
 DEFAULT_SENSITIVE_PERMISSIONS = {
     "products.publish",
     "products.cost.write",
+    "products.media.delete",
+    "products.media.publish",
+    "products.ai.execute_high_risk",
     "employees.manage",
     "roles.manage",
+    "fulfillment.stop.manage",
+    "fulfillment.experiment.reset",
+    "supplier_receiving.product_price.edit",
+    "supplier_receiving.service_price.edit",
+    "supplier_receiving.service.add",
     "suppliers.manage",
+    "inventory.salla_sync.manage_mappings",
     "inventory.salla_sync.publish",
-    "products.ai.execute_high_risk",
 }
 
 
