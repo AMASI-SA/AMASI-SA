@@ -114,21 +114,11 @@ PILOT_SELECTION_PROJECTION: dict[str, Any] = {
 }
 
 APPLY_CONFIRMATION = "اعتماد تصنيفات Google عالية الثقة في ميزان"
-CREDIT_EXHAUSTED_ERROR_CODES = {
-    "credit_balance_exhausted",
-    "insufficient_quota",
-    "billing_hard_limit_reached",
-    "billing_not_active",
-}
-CREDIT_EXHAUSTED_MESSAGE = (
-    "توقف التصنيف لأن رصيد OpenAI API غير كافٍ. "
-    "بعد إضافة الرصيد شغّل الدفعة التالية لاستكمال المنتجات المتبقية فقط."
-)
 
 
 class PilotStartIn(BaseModel):
     limit: int = Field(default=DEFAULT_PILOT_LIMIT, ge=MIN_PILOT_LIMIT, le=MAX_PILOT_LIMIT)
-    selection_mode: Literal["sample", "next_unseen"] = "sample"
+    selection_mode: Literal["sample", "next_unseen", "retry_review"] = "sample"
 
 
 class PilotApplyIn(BaseModel):
@@ -161,14 +151,6 @@ def _selected_lookup_values(selected_ids: list[str]) -> list[Any]:
     values: list[Any] = list(selected_ids)
     values.extend(int(value) for value in selected_ids if value.isdigit())
     return values
-
-
-def _successfully_seen_filter(user_id: str) -> dict[str, Any]:
-    """Keep old AI failures eligible for a later recovery batch."""
-    return {
-        "user_id": user_id,
-        "decision_status": {"$ne": "ai_failed"},
-    }
 
 
 def _text(value: Any) -> str:
@@ -214,6 +196,14 @@ def _tokens(value: Any) -> set[str]:
 _ALIAS_TERMS = {
     "عبايه": ["ملابس تقليديه", "ملابس الاحتفالات"],
     "عبايات": ["ملابس تقليديه", "ملابس الاحتفالات"],
+    "فروه": ["المعاطف والسترات"],
+    "معطف": ["المعاطف والسترات"],
+    "جاكيت": ["المعاطف والسترات"],
+    "جاكت": ["المعاطف والسترات"],
+    "بشت": ["ملابس الاحتفالات والملابس التقليديه"],
+    "دقله": ["ملابس الاحتفالات والملابس التقليديه"],
+    "ثوب": ["ملابس الاحتفالات والملابس التقليديه"],
+    "سديري": ["ملابس الاحتفالات والملابس التقليديه"],
     "سلسال": ["قلادات"],
     "سلاسل": ["قلادات"],
     "قلاده": ["قلادات"],
@@ -227,9 +217,47 @@ _ALIAS_TERMS = {
     "حلق": ["اقراط"],
     "اقراط": ["اقراط"],
     "بروش": ["دبابيس زينه", "حلي"],
-    "تيشيرت": ["قمصان", "تي شيرت"],
-    "قميص": ["قمصان"],
+    "طوق": ["اكسسوارات الشعر", "اطقم مجوهرات"],
+    "فواحه": ["معطرات هواء للمركبات"],
+    "شنطه": ["حقائب ظهر"],
+    "كبك": ["ازرار الاكمام"],
+    "هودي": ["قمصان وبلوزات"],
+    "سويتر": ["قمصان وبلوزات"],
+    "بلوفر": ["قمصان وبلوزات"],
+    "تيشيرت": ["قمصان وبلوزات"],
+    "تيشبرت": ["قمصان وبلوزات"],
+    "تیشیرت": ["قمصان وبلوزات"],
+    "قميص": ["قمصان وبلوزات"],
+    "وشاح": ["الاوشحه والشالات"],
+    "شال": ["الاوشحه والشالات"],
+    "قلم": ["اقلام حبر"],
+    "ساعه": ["ساعات يد"],
+    "كاسيو": ["ساعات يد"],
+    "سواتش": ["ساعات يد"],
+    "بجامه": ["البيجامات"],
+    "بيجامه": ["البيجامات"],
+    "افرول": ["ملابس الرضع والاطفال الصغار"],
+    "كوب": ["الاكواب"],
+    "لابوبو": ["حيوانات محشوه"],
+    "مجسم": ["دمي وشخصيات ومجموعات لعب"],
     "مريول": ["ملابس", "فساتين"],
+}
+
+_PHRASE_ALIAS_TERMS = {
+    "طقم بناتي بالاسم": ["اطقم مجوهرات"],
+    "طوق الورد وسلسال": ["اطقم مجوهرات", "اكسسوارات الشعر", "قلادات"],
+    "طقم اطفال رمضاني": ["اطقم ملابس"],
+    "وشاح تخرج": ["الاوشحه والشالات"],
+    "تعليقه سياره": ["ديكور المركبات"],
+    "افرول رمضان مواليد": ["ملابس الرضع والاطفال الصغار"],
+    "كوب شعار": ["الاكواب"],
+    "مجسم لابوبو": ["حيوانات محشوه", "دمي وشخصيات ومجموعات لعب"],
+}
+
+RETRYABLE_DECISION_STATUSES = {
+    "review_required",
+    "review_required_existing_category",
+    "low_confidence",
 }
 
 
@@ -330,10 +358,23 @@ def _evidence_limited(evidence: dict[str, Any]) -> bool:
 
 def _fallback_search_terms(evidence: dict[str, Any]) -> list[str]:
     terms: list[str] = []
-    for value in [evidence.get("name"), *(evidence.get("salla_categories") or [])]:
+    primary_values = [evidence.get("name"), *(evidence.get("salla_categories") or [])]
+    primary_text = " ".join(_normalize_ar(value) for value in primary_values if value)
+    for phrase, aliases in _PHRASE_ALIAS_TERMS.items():
+        if phrase in primary_text:
+            terms.extend(aliases)
+    for value in primary_values:
         normalized = _normalize_ar(value)
         if normalized:
             terms.append(normalized[:160])
+        for token in normalized.split():
+            for alias in _ALIAS_TERMS.get(token, []):
+                terms.append(alias)
+    # Descriptions rescue placeholder names such as ".", "0", and "D1".
+    # Only known aliases are emitted from free text so long marketing copy
+    # cannot swamp the official-taxonomy candidate set.
+    for value in [evidence.get("short_description"), evidence.get("description")]:
+        normalized = _normalize_ar(value)
         for token in normalized.split():
             for alias in _ALIAS_TERMS.get(token, []):
                 terms.append(alias)
@@ -344,7 +385,29 @@ def _fallback_search_terms(evidence: dict[str, Any]) -> list[str]:
         if key and key not in seen:
             seen.add(key)
             result.append(term)
-    return result[:12]
+    return result[:24]
+
+
+def _retryable_product_ids(
+    records: list[dict[str, Any]],
+    limit: int,
+) -> list[str]:
+    """Return a stable, unique retry set without touching approved results."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        if record.get("decision_status") not in RETRYABLE_DECISION_STATUSES:
+            continue
+        if record.get("apply_status") == "applied":
+            continue
+        product_id = str(record.get("mezan_product_id") or "")
+        if not product_id or product_id in seen:
+            continue
+        seen.add(product_id)
+        result.append(product_id)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _taxonomy_maps(items: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
@@ -548,18 +611,12 @@ def _openai_error_code(exc: Exception) -> str:
     return _text(getattr(exc, "code", None))
 
 
-def _is_credit_exhausted_openai_error(exc: Exception) -> bool:
-    code = _openai_error_code(exc).casefold()
-    if code in CREDIT_EXHAUSTED_ERROR_CODES:
-        return True
-    # Some SDK/proxy versions omit ``code`` but preserve it in the error body
-    # or message. Keep this bounded to the known provider billing markers.
-    haystack = f"{getattr(exc, 'body', '')} {exc}".casefold()
-    return any(marker in haystack for marker in CREDIT_EXHAUSTED_ERROR_CODES)
-
-
 def _is_retryable_openai_error(exc: Exception) -> bool:
-    if _is_credit_exhausted_openai_error(exc):
+    if _openai_error_code(exc) in {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    }:
         return False
     if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
         return True
@@ -568,34 +625,6 @@ def _is_retryable_openai_error(exc: Exception) -> bool:
     except (TypeError, ValueError):
         status_code = 0
     return status_code == 429 or 500 <= status_code < 600
-
-
-def _run_error_fields(exc: Exception, *, now: datetime) -> dict[str, Any]:
-    if _is_credit_exhausted_openai_error(exc):
-        return {
-            "status": "credit_exhausted",
-            "finished_at": now,
-            "heartbeat_at": now,
-            "provider_error_code": (
-                _openai_error_code(exc) or "credit_balance_exhausted"
-            ),
-            "action_required": "top_up_openai_credit",
-            "error": CREDIT_EXHAUSTED_MESSAGE,
-            "progress.phase": "provider_credit_exhausted",
-            "progress.updated_at": now,
-        }
-    retryable_provider_error = _is_retryable_openai_error(exc)
-    return {
-        "status": "queued" if retryable_provider_error else "failed",
-        "finished_at": None if retryable_provider_error else now,
-        "heartbeat_at": now,
-        "provider_error_code": _openai_error_code(exc) or None,
-        "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-        "progress.phase": (
-            "provider_rate_limited" if retryable_provider_error else "failed"
-        ),
-        "progress.updated_at": now,
-    }
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
@@ -1015,7 +1044,7 @@ async def _execute_pilot(
             if selection_mode == "next_unseen":
                 seen_values = await db[CLASSIFICATIONS].distinct(
                     "mezan_product_id",
-                    _successfully_seen_filter(user_id),
+                    {"user_id": user_id, "decision_status": {"$ne": "ai_failed"}},
                 )
                 seen_ids = {str(value) for value in seen_values if value not in (None, "")}
                 active_ids = {
@@ -1201,11 +1230,11 @@ async def _execute_pilot(
 
         async def generate_search_terms(
             evidence_chunk: list[dict[str, Any]],
-        ) -> tuple[dict[str, list[str]], Exception | None]:
+        ) -> tuple[dict[str, list[str]], str | None]:
             try:
                 return await _ai_search_terms(client, evidence_chunk), None
             except Exception as exc:  # per-chunk fallback keeps the rollout progressing
-                return {}, exc
+                return {}, type(exc).__name__
 
         async def classify_chunk(
             chunk: list[dict[str, Any]],
@@ -1229,12 +1258,7 @@ async def _execute_pilot(
                 evidence_wave
             )
             if term_error:
-                term_generation_errors.append(type(term_error).__name__)
-                if (
-                    _is_credit_exhausted_openai_error(term_error)
-                    or _is_retryable_openai_error(term_error)
-                ):
-                    raise term_error
+                term_generation_errors.append(term_error)
 
             classification_inputs: list[dict[str, Any]] = []
             metadata_by_product: dict[str, dict[str, Any]] = {}
@@ -1293,10 +1317,7 @@ async def _execute_pilot(
                     # Do not checkpoint a transient provider throttle as a
                     # durable product failure. Requeue the same run so its
                     # saved waves remain intact and the unsaved wave resumes.
-                    if (
-                        _is_credit_exhausted_openai_error(chunk_error)
-                        or _is_retryable_openai_error(chunk_error)
-                    ):
+                    if _is_retryable_openai_error(chunk_error):
                         raise chunk_error
                     for item in chunk:
                         product_id = item["product_id"]
@@ -1438,8 +1459,19 @@ async def _execute_pilot(
         )
         raise
     except Exception as exc:
+        retryable_provider_error = _is_retryable_openai_error(exc)
         now = _now()
-        set_fields = _run_error_fields(exc, now=now)
+        set_fields: dict[str, Any] = {
+            "status": "queued" if retryable_provider_error else "failed",
+            "finished_at": None if retryable_provider_error else now,
+            "heartbeat_at": now,
+            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+            "progress.phase": (
+                "provider_rate_limited"
+                if retryable_provider_error
+                else "failed"
+            ),
+        }
         await db[RUNS].update_one(
             {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
             {
@@ -1624,8 +1656,54 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 )
                 return {**(await _run_payload(db, user_id, active)), "reused": True}
 
+        retry_source_run_id: str | None = None
+        selected_product_ids: list[str] = []
+        if payload.selection_mode == "retry_review":
+            source_run = await db[RUNS].find_one(
+                {
+                    "user_id": user_id,
+                    "status": {"$in": ["completed", "completed_with_errors"]},
+                },
+                {"_id": 0, "run_id": 1},
+                sort=[("created_at", -1)],
+            )
+            if not source_run:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "taxonomy_retry_source_not_found"},
+                )
+            retry_source_run_id = str(source_run.get("run_id") or "")
+            retry_records = await db[CLASSIFICATIONS].find(
+                {
+                    "user_id": user_id,
+                    "run_id": retry_source_run_id,
+                    "decision_status": {"$in": list(RETRYABLE_DECISION_STATUSES)},
+                },
+                {
+                    "_id": 0,
+                    "mezan_product_id": 1,
+                    "decision_status": 1,
+                    "apply_status": 1,
+                    "classified_at": 1,
+                },
+            ).sort([("classified_at", 1)]).to_list(length=MAX_PILOT_LIMIT)
+            selected_product_ids = _retryable_product_ids(
+                retry_records,
+                payload.limit,
+            )
+            if not selected_product_ids:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "taxonomy_retry_queue_empty"},
+                )
+
         run_id = uuid.uuid4().hex
         now = _now()
+        mode = {
+            "sample": "proposal_only_pilot",
+            "next_unseen": "proposal_only_next_unseen",
+            "retry_review": "proposal_only_retry_review",
+        }[payload.selection_mode]
         run = {
             "run_id": run_id,
             "user_id": user_id,
@@ -1639,7 +1717,8 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "lease_expires_at": None,
             "attempt_count": 0,
             "resume_count": 0,
-            "selected_product_ids": [],
+            "selected_product_ids": selected_product_ids,
+            "retry_source_run_id": retry_source_run_id,
             "model": _model(),
             "taxonomy_version": None,
             "counters": {
@@ -1648,9 +1727,14 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 "missing_data": 0, "visual_checked": 0, "visual_failed": 0,
                 "applied": 0,
             },
-            "mode": "proposal_only_pilot" if payload.selection_mode == "sample" else "proposal_only_next_unseen",
+            "mode": mode,
             "selection_mode": payload.selection_mode,
-            "progress": {"phase": "queued", "saved": 0, "remaining": payload.limit, "updated_at": now},
+            "progress": {
+                "phase": "queued",
+                "saved": 0,
+                "remaining": len(selected_product_ids) or payload.limit,
+                "updated_at": now,
+            },
             "writes_to_salla": False,
             "error": None,
         }
