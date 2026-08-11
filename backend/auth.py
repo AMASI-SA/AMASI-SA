@@ -131,6 +131,19 @@ async def get_current_user_from_db(request: Request, db) -> dict:
         if role in PRIVILEGED_MFA_ROLES and payload.get("mfa") is not True:
             raise HTTPException(status_code=401, detail="يلزم التحقق بخطوتين لإكمال تسجيل الدخول")
 
+        # When email OTP is enabled, the same rule also applies immediately to
+        # sensitive Employee OS accounts. This database-backed policy check
+        # prevents an older password-only employee session from remaining valid
+        # after its role gains a high-impact permission.
+        if payload.get("mfa") is not True:
+            from email_otp_policy import requires_email_otp
+
+            if await requires_email_otp(db, user):
+                raise HTTPException(
+                    status_code=401,
+                    detail="يلزم رمز التحقق المرسل إلى البريد لإكمال تسجيل الدخول",
+                )
+
         user.pop("password_hash", None)
         user.pop("_id", None)
         return user
@@ -141,7 +154,7 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
 
 async def _install_login_security_for_loaded_app(db) -> None:
-    """Attach progressive abuse protection, passkeys, and privileged MFA."""
+    """Attach progressive abuse protection, passkeys, Owner MFA, and email OTP."""
     app = None
     for module_name in ("server", "backend.server"):
         module = sys.modules.get(module_name)
@@ -164,16 +177,20 @@ async def _install_login_security_for_loaded_app(db) -> None:
     from login_security import install_login_security
     from passkey_security import install_passkey_security
     from mfa_security import install_mfa_security
+    from email_otp_security import install_email_otp_security
 
     # Order matters. Starlette appends each later guard inside the earlier one:
     # progressive_login_security remains outermost and owns the exact
     # account+device escalation ladder; login_security keeps device/IP spray
     # controls and signed identity; passkey can replace Owner TOTP only for an
-    # exact trusted device; MFA remains the innermost password/TOTP authority.
+    # exact trusted device; MFA remains the Owner TOTP authority. Email OTP is
+    # deliberately innermost so Admin/sensitive accounts return its 202 email
+    # challenge to the outer MFA layer, while Owner still reaches MFA/TOTP.
     await install_progressive_login_security(app, db)
     await install_login_security(app, db)
     await install_passkey_security(app, db)
     await install_mfa_security(app, db)
+    await install_email_otp_security(app, db)
 
 
 def _initial_owner_password() -> str:
