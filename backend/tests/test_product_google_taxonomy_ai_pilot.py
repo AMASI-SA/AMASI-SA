@@ -7,6 +7,7 @@ import product_google_taxonomy_ai_pilot as pilot_module
 from product_google_taxonomy_ai_pilot import (
     CLASSIFICATION_CONCURRENCY,
     CLASSIFICATION_WAVE_SIZE,
+    CANDIDATE_RETRIEVER_VERSION,
     OPENAI_REQUEST_SPACING_SECONDS,
     OPENAI_RETRY_BASE_SECONDS,
     PILOT_PRODUCT_PROJECTION,
@@ -23,13 +24,13 @@ from product_google_taxonomy_ai_pilot import (
     _is_retryable_openai_error,
     _persist_records,
     _product_evidence,
-    _retryable_product_ids,
     _run_needs_resume,
     _run_error_fields,
     _run_counters,
     _schedule_pilot_task,
     _selected_lookup_values,
     _select_pilot_products,
+    _select_retryable_uncertain_products,
     _select_unseen_products,
     _successfully_seen_filter,
 )
@@ -127,6 +128,45 @@ def test_sparse_catalog_products_receive_relevant_official_candidates(
     assert expected_id in candidate_ids
 
 
+@pytest.mark.parametrize(
+    ("name", "expected_term"),
+    [
+        ("شنطة مدرسيه بالاسم", "حقائب مدرسيه"),
+        ("ساعة كاسيو LTP بيج", "ساعات يد"),
+        ("هودي أسود كاجوال", "سويت شيرت"),
+        ("قلم رجالي انيق بالاسم", "اقلام حبر"),
+        ("كبك اطفال بالاسم", "ازرار اكمام"),
+    ],
+)
+def test_observed_low_confidence_products_get_domain_aliases(name, expected_term):
+    terms = _fallback_search_terms(_evidence(name))
+    assert expected_term in terms
+
+
+def test_exact_parent_label_beats_unrelated_deeper_descendant():
+    taxonomy = [
+        {
+            "id": "5388",
+            "name": "ملابس الاحتفالات والملابس التقليدية",
+            "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية",
+            "depth": 2,
+        },
+        {
+            "id": "8149",
+            "name": "أزياء للتعميد والمناولة",
+            "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية > ملابس الاحتفالات الدينية > أزياء للتعميد والمناولة",
+            "depth": 4,
+        },
+    ]
+    rows = _candidate_rows(
+        _evidence("كشخة اولادك بدقلة العيد"),
+        ["ملابس الاحتفالات والملابس التقليدية"],
+        taxonomy,
+        None,
+    )
+    assert rows[0]["id"] == "5388"
+
+
 def test_existing_category_never_batch_overwritten_when_ai_disagrees():
     assert _decision_status(current_id="5388", chosen_id="2271", confidence=99) == "review_required_existing_category"
     assert _decision_status(current_id="5388", chosen_id="5388", confidence=95) == "no_change"
@@ -196,19 +236,28 @@ def test_full_rollout_accepts_200_products_in_next_unseen_mode():
     assert payload.selection_mode == "next_unseen"
 
 
-def test_retry_review_mode_is_explicit_and_never_retries_approved_rows():
+def test_retry_review_mode_is_explicit_and_bounded():
     payload = PilotStartIn(limit=200, selection_mode="retry_review")
+    assert payload.limit == 200
     assert payload.selection_mode == "retry_review"
-    assert _retryable_product_ids(
-        [
-            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
-            {"mezan_product_id": "low", "decision_status": "low_confidence", "apply_status": "pending"},
-            {"mezan_product_id": "approved", "decision_status": "high_confidence", "apply_status": "applied"},
-            {"mezan_product_id": "already-applied", "decision_status": "review_required", "apply_status": "applied"},
-            {"mezan_product_id": "review", "decision_status": "review_required", "apply_status": "pending"},
-        ],
-        200,
-    ) == ["review", "low"]
+
+
+def test_retry_review_selects_only_latest_old_retriever_results():
+    products = [
+        {"mezan_product_id": "old-low", "name": "ساعة"},
+        {"mezan_product_id": "old-review", "name": "عباية"},
+        {"mezan_product_id": "already-fixed", "name": "شنطة"},
+        {"mezan_product_id": "current-low", "name": "غامض"},
+    ]
+    newest_first = [
+        {"mezan_product_id": "already-fixed", "decision_status": "high_confidence", "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION},
+        {"mezan_product_id": "already-fixed", "decision_status": "low_confidence"},
+        {"mezan_product_id": "current-low", "decision_status": "low_confidence", "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION},
+        {"mezan_product_id": "old-low", "decision_status": "low_confidence", "candidate_retriever_version": "legacy"},
+        {"mezan_product_id": "old-review", "decision_status": "review_required", "candidate_retriever_version": 1},
+    ]
+    selected = _select_retryable_uncertain_products(products, newest_first, 200)
+    assert {row["mezan_product_id"] for row in selected} == {"old-low", "old-review"}
 
 
 def test_rollout_catalog_scan_is_lightweight_and_work_waves_are_bounded():

@@ -96,6 +96,55 @@ def test_phone_case_and_doll_add_ambiguity_resolving_terms():
     assert any("دمى" in term for term in doll_terms)
 
 
+def test_live_uncertain_products_receive_official_taxonomy_search_terms():
+    cases = {
+        "ساعة كاسيو LTP بيج": "ساعات يد",
+        "شنطة مدرسيه بالاسم": "حقائب ظهر",
+        "كبك اطفال بالاسم من أماسي": "أزرار الأكمام",
+        "قلم رجالي انيق بالاسم": "أقلام",
+        "وشاح تخرج تطريز حسب الطلب": "وشاحات",
+        "هودي أسود كاجوال": "قمصان وبلوزات",
+        "تيشبرت اليوم الوطني": "قمصان وبلوزات",
+        "عباية شتوية مع شال": "ملابس الاحتفالات والملابس التقليدية",
+    }
+    for name, expected in cases.items():
+        terms = calibration.contextual_search_terms(_evidence(name))
+        assert any(expected in term for term in terms), (name, terms)
+
+
+def test_watch_candidate_prefers_watch_and_filters_watch_accessories():
+    evidence = _evidence("ساعة سواتش X AP")
+    taxonomy = [
+        {"id": "201", "name": "ساعات يد", "path": "ملابس وإكسسوارات > حُلي > ساعات يد", "depth": 2},
+        {"id": "7471", "name": "شارات وملصقات ساعة اليد", "path": "ملابس وإكسسوارات > حُلي > إكسسوارت ساعات اليد > شارات وملصقات ساعة اليد", "depth": 3},
+    ]
+    rows = calibration.calibrated_candidate_rows(evidence, [], taxonomy, None)
+    assert [row["id"] for row in rows] == ["201"]
+
+
+def test_local_traditional_candidate_keeps_parent_and_filters_foreign_children():
+    evidence = _evidence("كشخة اولادك بدقلة العيد")
+    taxonomy = [
+        {"id": "5388", "name": "ملابس الاحتفالات والملابس التقليدية", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية", "depth": 2},
+        {"id": "8149", "name": "أزياء للتعميد والمناولة", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية > ملابس الاحتفالات الدينية > أزياء للتعميد والمناولة", "depth": 4},
+        {"id": "5343", "name": "كيمونو", "path": "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية > كيمونو", "depth": 3},
+    ]
+    rows = calibration.calibrated_candidate_rows(evidence, [], taxonomy, None)
+    assert [row["id"] for row in rows] == ["5388"]
+
+
+def test_generic_title_can_recover_a_traditional_clothing_candidate_from_description():
+    evidence = {
+        "name": ".",
+        "description": "عباية شتوية نسائية مخمل مبطن",
+        "short_description": "",
+        "salla_categories": [],
+        "options": [],
+    }
+    terms = calibration.contextual_search_terms(evidence)
+    assert "ملابس الاحتفالات والملابس التقليدية" in terms
+
+
 def test_school_pinafore_rejects_infant_and_toddler_dress_branch():
     evidence = _evidence("المريول المدرسي البناتي")
     terms = calibration.contextual_search_terms(evidence)

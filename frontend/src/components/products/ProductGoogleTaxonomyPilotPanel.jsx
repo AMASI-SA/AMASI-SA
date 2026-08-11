@@ -13,6 +13,7 @@ import {
 
 const TERMINAL = new Set(["completed", "completed_with_errors", "failed", "credit_exhausted"]);
 const COMPLETE = new Set(["completed", "completed_with_errors"]);
+const CANDIDATE_RETRIEVER_VERSION = 2;
 
 const STATUS_LABELS = {
     high_confidence: "جاهز للاعتماد ≥90%",
@@ -59,6 +60,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         () => items.filter((row) => (
             row.apply_status !== "applied"
             && ["review_required", "review_required_existing_category", "low_confidence"].includes(row.decision_status)
+            && Number(row.candidate_retriever_version || 1) < CANDIDATE_RETRIEVER_VERSION
         )).length,
         [items],
     );
@@ -149,7 +151,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 bg-violet-50 px-4 py-3 sm:px-5">
             <div className="min-w-0">
                 <h2 className="flex items-center gap-2 font-black text-slate-900"><Robot className="text-violet-700" /> AI Product Manager — Google Category Pilot</h2>
-                <p className="mt-1 text-xs text-slate-500">Pilot محكوم لـ20–50 منتجًا، أو دفعة 200 من المنتجات غير المحللة سابقًا. لا توجد أي كتابة إلى Salla.</p>
+                <p className="mt-1 text-xs text-slate-500">Pilot محكوم لـ20–50 منتجًا، أو دفعة 200، أو إعادة محاولة النتائج غير المحسومة بمحرك مرشحات أحدث. لا توجد أي كتابة إلى Salla.</p>
             </div>
             <div className="flex items-center gap-2">
                 <select value={limit} onChange={(event) => setLimit(Number(event.target.value))} disabled={starting || (run && !TERMINAL.has(run.status))} className="rounded-xl border bg-white px-3 py-2 text-sm font-bold">
@@ -200,6 +202,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
                 {run.coverage && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">
                     <div>تغطية الكتالوج: <b className="num">{Number(run.coverage.seen_after || 0).toLocaleString("en-US")}</b> من <b className="num">{Number(run.coverage.total_products || 0).toLocaleString("en-US")}</b> منتج</div>
                     <div>المتبقي بعد هذه الدفعة: <b className="num">{Number(run.coverage.remaining_after || 0).toLocaleString("en-US")}</b></div>
+                </div>}
+
+                {run.retry_queue && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <div>إعادة محاولة غير المحسومة: <b className="num">{Number(run.retry_queue.selected_now || 0).toLocaleString("en-US")}</b> منتج</div>
+                    <div>إصدار محرك المرشحات: <b className="num">{Number(run.retry_queue.candidate_retriever_version || 0).toLocaleString("en-US")}</b></div>
                 </div>}
 
                 {run.error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><WarningCircle className="ml-1 inline" />{run.error}</div>}

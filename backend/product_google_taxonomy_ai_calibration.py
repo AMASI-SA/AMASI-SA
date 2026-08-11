@@ -55,6 +55,28 @@ INFANT_DRESS_CUES = {
     "رضيع", "رضيعه", "رضيعة", "رضع", "الرضع", "مولود", "مواليد",
     "بيبي", "baby", "toddler", "حديثي", "حديثه", "حديثة", "ولاده", "ولادة",
 }
+LOCAL_TRADITIONAL_WORDS = {
+    "عبايه", "عباية", "عبايات", "دقله", "دقلة", "بشت", "ثوب", "سديري",
+}
+WATCH_WORDS = {"ساعه", "ساعة", "ساعات", "كاسيو", "سواتش", "casio", "swatch"}
+WATCH_ACCESSORY_WORDS = {"حزام", "احزمه", "أحزمة", "استكر", "ملصق", "ملصقات", "لفاف"}
+SCHOOL_BAG_WORDS = {"شنطه", "شنطة", "حقيبه", "حقيبة"}
+PEN_WORDS = {"قلم", "اقلام", "أقلام"}
+CUP_WORDS = {"كوب", "اكواب", "أكواب", "مج"}
+CUFFLINK_WORDS = {"كبك", "كبكات"}
+SCARF_WORDS = {"شال", "وشاح", "وشاحات"}
+GRADUATION_WORDS = {"تخرج", "التخرج"}
+HOODIE_WORDS = {"هودي", "سويتر", "بلوفر", "سويتشيرت", "سويت", "شيرت"}
+TSHIRT_WORDS = {"تيشيرت", "تيشرت", "تيشبرت", "تیشیرت", "قميص"}
+OUTERWEAR_WORDS = {"جاكيت", "جاكت", "معطف", "معاطف", "فروه", "فروة"}
+PYJAMA_WORDS = {"بجامه", "بجامة", "بيجامه", "بيجامة", "بيجامات"}
+BABY_ONESIE_WORDS = {"افرول", "أفرول", "رومبر", "سالوبيت"}
+GIFT_WRAP_WORDS = {"تغليف", "تغليفات"}
+CAR_SCENT_WORDS = {"فواحه", "فواحة", "معطر", "معطره", "معطرة"}
+KEYCHAIN_WORDS = {"ميداليه", "ميدالية", "مفاتيح", "لابوبو", "labubu"}
+JEWELRY_SET_WORDS = {
+    "سلسال", "قلاده", "قلادة", "اسواره", "اساوره", "سوار", "حلق", "طوق",
+}
 
 VISION_CONFIDENCE_TRIGGER = 69
 VISION_MAX_OUTPUT_TOKENS = 700
@@ -76,8 +98,29 @@ def _name_tokens(evidence: dict[str, Any]) -> set[str]:
     return set(pilot._normalize_ar(evidence.get("name")).split())
 
 
+def _retrieval_tokens(evidence: dict[str, Any]) -> set[str]:
+    values = [
+        evidence.get("name"),
+        evidence.get("description"),
+        evidence.get("short_description"),
+        *(evidence.get("salla_categories") or []),
+    ]
+    return set(pilot._normalize_ar(" ".join(str(value or "") for value in values)).split())
+
+
 def _has_any(tokens: set[str], words: set[str]) -> bool:
-    return bool(tokens.intersection({pilot._normalize_ar(word) for word in words}))
+    expanded = set(tokens)
+    frontier = set(tokens)
+    for _ in range(2):
+        next_frontier: set[str] = set()
+        for token in frontier:
+            for prefix in ("ال", "لل", "و", "ف", "ب", "ك", "ل"):
+                if token.startswith(prefix) and len(token) - len(prefix) >= 3:
+                    next_frontier.add(token[len(prefix):])
+        next_frontier -= expanded
+        expanded.update(next_frontier)
+        frontier = next_frontier
+    return bool(expanded.intersection({pilot._normalize_ar(word) for word in words}))
 
 
 def _is_car_hanging(evidence: dict[str, Any]) -> bool:
@@ -97,6 +140,15 @@ def _is_hair_brooch(evidence: dict[str, Any]) -> bool:
 
 def _is_daqla(evidence: dict[str, Any]) -> bool:
     return _has_any(_name_tokens(evidence), DAQLA_WORDS)
+
+
+def _is_local_traditional(evidence: dict[str, Any]) -> bool:
+    return _has_any(_retrieval_tokens(evidence), LOCAL_TRADITIONAL_WORDS)
+
+
+def _is_wrist_watch(evidence: dict[str, Any]) -> bool:
+    tokens = _retrieval_tokens(evidence)
+    return _has_any(tokens, WATCH_WORDS) and not _has_any(tokens, WATCH_ACCESSORY_WORDS)
 
 
 def _is_jewelry_bracelet(evidence: dict[str, Any]) -> bool:
@@ -192,9 +244,10 @@ def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
     terms: list[str] = []
     if _is_car_hanging(evidence):
         terms.extend([
-            "اكسسوارات داخلية للسيارات",
-            "زينة سيارات",
-            "تعليقات وزينة داخل السيارة",
+            "ديكور المركبات",
+            "اكسسوارات لمرآة الرؤية الخلفية بالمركبات",
+            "ملحقات تزيين المركبات",
+            "تعليقات زينة السيارات",
         ])
     if _is_full_necklace(evidence):
         terms.extend(["قلادات", "سلاسل رقبة", "قلادة كاملة"])
@@ -216,6 +269,42 @@ def contextual_search_terms(evidence: dict[str, Any]) -> list[str]:
         terms.extend(["لوحات جدارية", "أعمال فنية ومطبوعات", "ديكور جداري"])
     if _is_non_infant_dress(evidence):
         terms.extend(["فساتين", "ملابس وفساتين"])
+    tokens = _retrieval_tokens(evidence)
+    name_tokens = _name_tokens(evidence)
+    if _is_local_traditional(evidence):
+        terms.extend(["ملابس الاحتفالات والملابس التقليدية", "أطقم ملابس"])
+    if _is_wrist_watch(evidence):
+        terms.append("ساعات يد")
+    if _has_any(tokens, SCHOOL_BAG_WORDS) and _has_any(tokens, SCHOOL_WORDS):
+        terms.extend(["حقائب ظهر", "أمتعة وحقائب حقائب ظهر"])
+    if _has_any(tokens, PEN_WORDS):
+        terms.extend(["أقلام الرصاص والحبر الجاف", "أقلام حبر"])
+    if _has_any(tokens, CUP_WORDS):
+        terms.extend(["أكواب", "فناجين القهوة والشاي"])
+    if _has_any(tokens, CUFFLINK_WORDS):
+        terms.append("أزرار الأكمام")
+    if _has_any(tokens, SCARF_WORDS):
+        terms.append("وشاحات")
+    if _has_any(tokens, SCARF_WORDS) and _has_any(tokens, GRADUATION_WORDS):
+        terms.extend(["وشاحات", "إكسسوارات الملابس"])
+    if _has_any(tokens, HOODIE_WORDS) or _has_any(tokens, TSHIRT_WORDS):
+        terms.append("قمصان وبلوزات")
+    if _has_any(tokens, OUTERWEAR_WORDS) and not _is_local_traditional(evidence):
+        terms.extend(["ملابس خارجية", "المعاطف والسترات"])
+    if _has_any(tokens, PYJAMA_WORDS):
+        terms.extend(["البيجامات", "ملابس نوم وملابس مريحة"])
+    if _has_any(tokens, BABY_ONESIE_WORDS):
+        terms.extend(["ملابس القطعة الواحدة للرُضع", "أطقم الرُضَّع والأطفال"])
+    if _has_any(tokens, GIFT_WRAP_WORDS):
+        terms.append("تغليف الهدايا")
+    if _has_any(tokens, CAR_SCENT_WORDS) and _has_any(tokens, CAR_WORDS):
+        terms.append("معطرات هواء للمركبات")
+    if _has_any(tokens, KEYCHAIN_WORDS):
+        terms.extend(["ميداليات مفاتيح", "دمى محشوة"])
+    if "طقم" in name_tokens and _has_any(tokens, JEWELRY_SET_WORDS):
+        terms.append("أطقم مجوهرات")
+    if "طقم" in name_tokens and not _has_any(tokens, JEWELRY_SET_WORDS):
+        terms.append("أطقم ملابس")
     return terms
 
 
@@ -234,6 +323,15 @@ def _path_incompatible(evidence: dict[str, Any], path: Any) -> bool:
             return True
     if _is_daqla(evidence):
         if "التعميد" in normalized or "المناوله" in normalized:
+            return True
+    if _is_local_traditional(evidence):
+        parent = pilot._normalize_ar(
+            "ملابس وإكسسوارات > ملابس > ملابس الاحتفالات والملابس التقليدية"
+        )
+        if normalized.startswith(parent) and normalized != parent:
+            return True
+    if _is_wrist_watch(evidence):
+        if "اكسسوارت ساعات اليد" in normalized or "اكسسوارات ساعات اليد" in normalized:
             return True
     if _is_jewelry_bracelet(evidence):
         if "اساور المعصم" in normalized or (
@@ -269,7 +367,8 @@ def calibrated_candidate_rows(
 ) -> list[dict[str, Any]]:
     """Run the normal retriever, then remove contextually impossible branches."""
     contextual = contextual_search_terms(evidence)
-    rows = pilot._candidate_rows_original(
+    base_retriever = getattr(pilot, "_candidate_rows_original", pilot._candidate_rows)
+    rows = base_retriever(
         evidence,
         [*contextual, *ai_terms],
         taxonomy,
@@ -302,6 +401,10 @@ def confidence_cap(evidence: dict[str, Any], chosen_path: Any) -> tuple[int | No
             return 69, "ذكر الشعر يجعل تصنيف بروشات الملابس غير آمن للاعتماد التلقائي."
         if _is_daqla(evidence):
             return 49, "الدقلة المحلية لا تدعم تصنيف أزياء التعميد/المناولة."
+        if _is_local_traditional(evidence):
+            return 49, "العباية/الدقلة/البشت المحلي يصنّف كملابس تقليدية عامة، لا كفرع أجنبي أو ديني فرعي."
+        if _is_wrist_watch(evidence):
+            return 49, "المنتج ساعة يد فعلية وليس حزامًا أو ملصقًا أو ملفافًا للساعة."
         if _is_jewelry_bracelet(evidence):
             return 49, "اسم المنتج يدل على حُلي/سوار زينة وليس Wristband من إكسسوارات الملابس."
         if _is_school_pinafore(evidence):

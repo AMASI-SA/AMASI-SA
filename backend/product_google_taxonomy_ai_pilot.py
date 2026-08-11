@@ -53,6 +53,13 @@ OPENAI_REQUEST_SPACING_SECONDS = 1.0
 MAX_DESCRIPTION_CHARS = 900
 MAX_REASON_CHARS = 500
 MAX_EVIDENCE_ITEMS = 5
+CANDIDATE_RETRIEVER_VERSION = 2
+MAX_CLASSIFICATIONS_SCANNED = 10000
+RETRYABLE_UNCERTAIN_STATUSES = (
+    "low_confidence",
+    "review_required",
+    "review_required_existing_category",
+)
 
 # The Products V2 documents can contain large raw Salla payloads. Loading 5,000
 # complete documents can exceed the production container's memory before the
@@ -237,28 +244,30 @@ _ALIAS_TERMS = {
     "بروش": ["دبابيس زينه", "حلي"],
     "طوق": ["اكسسوارات الشعر", "اطقم مجوهرات"],
     "فواحه": ["معطرات هواء للمركبات"],
-    "شنطه": ["حقائب ظهر"],
-    "كبك": ["ازرار الاكمام"],
-    "هودي": ["قمصان وبلوزات"],
-    "سويتر": ["قمصان وبلوزات"],
-    "بلوفر": ["قمصان وبلوزات"],
-    "تيشيرت": ["قمصان وبلوزات"],
-    "تيشبرت": ["قمصان وبلوزات"],
-    "تیشیرت": ["قمصان وبلوزات"],
-    "قميص": ["قمصان وبلوزات"],
-    "وشاح": ["الاوشحه والشالات"],
-    "شال": ["الاوشحه والشالات"],
-    "قلم": ["اقلام حبر"],
+    "مريول": ["ملابس", "فساتين"],
+    "شنطه": ["حقائب ظهر", "حقائب"],
+    "مدرسيه": ["حقائب مدرسيه", "حقائب ظهر"],
     "ساعه": ["ساعات يد"],
     "كاسيو": ["ساعات يد"],
     "سواتش": ["ساعات يد"],
-    "بجامه": ["البيجامات"],
-    "بيجامه": ["البيجامات"],
-    "افرول": ["ملابس الرضع والاطفال الصغار"],
-    "كوب": ["الاكواب"],
+    "قلم": ["اقلام حبر", "اقلام"],
+    "كبك": ["ازرار الاكمام", "ازرار اكمام"],
+    "شال": ["الاوشحه والشالات", "اوشحه وشالات"],
+    "وشاح": ["الاوشحه والشالات", "اوشحه وشالات"],
+    "تيشيرت": ["قمصان وبلوزات", "تي شيرت"],
+    "تيشبرت": ["قمصان وبلوزات", "تي شيرت"],
+    "تیشیرت": ["قمصان وبلوزات", "تي شيرت"],
+    "هودي": ["قمصان وبلوزات", "سويت شيرت", "بلوفرات"],
+    "سويتر": ["قمصان وبلوزات", "بلوفرات", "سويت شيرت"],
+    "بلوفر": ["قمصان وبلوزات", "بلوفرات", "سويت شيرت"],
+    "قميص": ["قمصان وبلوزات", "قمصان"],
+    "كوب": ["الاكواب", "اكواب"],
+    "دمية": ["دمى", "العاب محشوه"],
     "لابوبو": ["حيوانات محشوه"],
-    "مجسم": ["دمي وشخصيات ومجموعات لعب"],
-    "مريول": ["ملابس", "فساتين"],
+    "مجسم": ["دمي وشخصيات ومجموعات لعب", "مجسمات", "دمى"],
+    "بجامه": ["البيجامات", "ملابس نوم"],
+    "بيجامه": ["البيجامات", "ملابس نوم"],
+    "افرول": ["ملابس الرضع والاطفال الصغار", "ملابس مواليد", "افرولات"],
 }
 
 _PHRASE_ALIAS_TERMS = {
@@ -271,13 +280,6 @@ _PHRASE_ALIAS_TERMS = {
     "كوب شعار": ["الاكواب"],
     "مجسم لابوبو": ["حيوانات محشوه", "دمي وشخصيات ومجموعات لعب"],
 }
-
-RETRYABLE_DECISION_STATUSES = {
-    "review_required",
-    "review_required_existing_category",
-    "low_confidence",
-}
-
 
 def _product_raw(product: dict[str, Any]) -> dict[str, Any]:
     for key in ("raw_salla_details", "raw_salla"):
@@ -406,28 +408,6 @@ def _fallback_search_terms(evidence: dict[str, Any]) -> list[str]:
     return result[:24]
 
 
-def _retryable_product_ids(
-    records: list[dict[str, Any]],
-    limit: int,
-) -> list[str]:
-    """Return a stable, unique retry set without touching approved results."""
-    result: list[str] = []
-    seen: set[str] = set()
-    for record in records:
-        if record.get("decision_status") not in RETRYABLE_DECISION_STATUSES:
-            continue
-        if record.get("apply_status") == "applied":
-            continue
-        product_id = str(record.get("mezan_product_id") or "")
-        if not product_id or product_id in seen:
-            continue
-        seen.add(product_id)
-        result.append(product_id)
-        if len(result) >= limit:
-            break
-    return result
-
-
 def _taxonomy_maps(items: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     by_id = {str(row.get("id")): row for row in items if row.get("id") is not None}
     by_path = {_normalize_ar(row.get("path")): str(row.get("id")) for row in items if row.get("path")}
@@ -454,11 +434,22 @@ def _candidate_rows(
     scored: list[tuple[float, dict[str, Any]]] = []
     for row in taxonomy:
         path = _normalize_ar(row.get("path"))
+        name = _normalize_ar(row.get("name"))
         path_tokens = _tokens(path)
+        name_tokens = _tokens(name)
         score = 0.0
         for phrase, phrase_tokens in term_rows:
             if not phrase:
                 continue
+            # An exact taxonomy label is stronger evidence than merely finding
+            # the same ancestor phrase somewhere in a deep descendant path.
+            # Without this, generic Arabic terms such as "ملابس تقليدية" can
+            # push unrelated descendants (for example baptism clothing) above
+            # the correct parent category solely because they are deeper.
+            if phrase == name:
+                score += 36.0
+            elif phrase in name:
+                score += 20.0
             if phrase in path:
                 score += 12.0 + min(6.0, len(phrase_tokens) * 1.5)
             overlap = len(phrase_tokens.intersection(path_tokens))
@@ -466,9 +457,14 @@ def _candidate_rows(
                 score += overlap * 3.0
                 if phrase_tokens and overlap == len(phrase_tokens):
                     score += 4.0
+            name_overlap = len(phrase_tokens.intersection(name_tokens))
+            if name_overlap:
+                score += name_overlap * 4.0
         if score > 0:
-            # Prefer more precise descendants when semantic score is equal.
-            score += min(float(row.get("depth") or 0), 6.0) * 0.15
+            # Prefer precision only when the category label itself has lexical
+            # support; do not reward arbitrary descendants of a matched parent.
+            if name_tokens.intersection(set().union(*(tokens for _, tokens in term_rows))):
+                score += min(float(row.get("depth") or 0), 6.0) * 0.15
             scored.append((score, row))
     scored.sort(key=lambda item: (-item[0], str(item[1].get("path") or "")))
 
@@ -551,6 +547,37 @@ def _select_unseen_products(
         if str(row.get("mezan_product_id") or row.get("id") or "") not in seen_product_ids
     ]
     return _round_robin(unseen, limit)
+
+
+def _select_retryable_uncertain_products(
+    products: list[dict[str, Any]],
+    newest_classifications: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Retry the newest uncertain result once after a retriever upgrade."""
+    def retriever_version(row: dict[str, Any]) -> int:
+        try:
+            return int(row.get("candidate_retriever_version") or 1)
+        except (TypeError, ValueError):
+            return 1
+
+    latest_by_product: dict[str, dict[str, Any]] = {}
+    for row in newest_classifications:
+        product_id = str(row.get("mezan_product_id") or "")
+        if product_id and product_id not in latest_by_product:
+            latest_by_product[product_id] = row
+
+    eligible_ids = {
+        product_id
+        for product_id, row in latest_by_product.items()
+        if row.get("decision_status") in RETRYABLE_UNCERTAIN_STATUSES
+        and retriever_version(row) < CANDIDATE_RETRIEVER_VERSION
+    }
+    eligible_products = [
+        row for row in products
+        if str(row.get("mezan_product_id") or row.get("id") or "") in eligible_ids
+    ]
+    return _round_robin(eligible_products, limit)
 
 
 def _openai_client() -> AsyncOpenAI:
@@ -1085,6 +1112,9 @@ async def _execute_pilot(
         coverage: dict[str, int] | None = (
             dict(run.get("coverage")) if isinstance(run.get("coverage"), dict) else None
         )
+        retry_queue: dict[str, int] | None = (
+            dict(run.get("retry_queue")) if isinstance(run.get("retry_queue"), dict) else None
+        )
         selection_by_id: dict[str, dict[str, Any]] = {}
         if not selected_ids:
             catalog_rows = await db[PRODUCTS].find(
@@ -1115,6 +1145,29 @@ async def _execute_pilot(
                     "seen_after": seen_before,
                     "remaining_after": max(0, len(catalog_rows) - seen_before),
                 }
+            elif selection_mode == "retry_review":
+                newest_classifications = await db[CLASSIFICATIONS].find(
+                    {"user_id": user_id},
+                    {
+                        "_id": 0,
+                        "mezan_product_id": 1,
+                        "decision_status": 1,
+                        "candidate_retriever_version": 1,
+                        "classified_at": 1,
+                    },
+                ).sort([("classified_at", -1)]).limit(
+                    MAX_CLASSIFICATIONS_SCANNED
+                ).to_list(length=MAX_CLASSIFICATIONS_SCANNED)
+                selected_summaries = _select_retryable_uncertain_products(
+                    catalog_rows,
+                    newest_classifications,
+                    limit,
+                )
+                retry_queue = {
+                    "eligible_before": len(selected_summaries),
+                    "selected_now": len(selected_summaries),
+                    "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION,
+                }
             else:
                 selected_summaries = _select_pilot_products(catalog_rows, limit)
             selected_ids = [
@@ -1138,6 +1191,7 @@ async def _execute_pilot(
                     "selection_saved_at": _now(),
                     "taxonomy_version": taxonomy_version,
                     "coverage": coverage,
+                    "retry_queue": retry_queue,
                     "counters.selected": len(selected_ids),
                 }},
             )
@@ -1168,7 +1222,7 @@ async def _execute_pilot(
         ]
 
         if not selected:
-            if selection_mode == "next_unseen":
+            if selection_mode in {"next_unseen", "retry_review"}:
                 await db[RUNS].update_one(
                     {
                         "user_id": user_id,
@@ -1183,6 +1237,7 @@ async def _execute_pilot(
                             "taxonomy_version": taxonomy_version,
                             "counters": _run_counters([], 0),
                             "coverage": coverage,
+                            "retry_queue": retry_queue,
                             "progress": {"phase": "completed", "saved": 0, "remaining": 0, "updated_at": _now()},
                             "error": None,
                         },
@@ -1218,6 +1273,7 @@ async def _execute_pilot(
                     "main_image": product.get("main_image"),
                     "classification_input_revision": _input_revision(evidence),
                     "classification_source": "openai_pilot",
+                    "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION,
                     "classified_at": _now(),
                     "decision_status": "missing_data",
                     "apply_status": "not_eligible",
@@ -1393,6 +1449,7 @@ async def _execute_pilot(
                             "main_image": product_by_id.get(product_id, {}).get("main_image"),
                             "classification_input_revision": meta["input_revision"],
                             "classification_source": "openai_pilot",
+                            "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION,
                             "classified_at": _now(),
                             "decision_status": "ai_failed",
                             "apply_status": "not_eligible",
@@ -1436,6 +1493,7 @@ async def _execute_pilot(
                         "main_image": product_by_id.get(product_id, {}).get("main_image"),
                         "classification_input_revision": meta["input_revision"],
                         "classification_source": "openai_pilot",
+                        "candidate_retriever_version": CANDIDATE_RETRIEVER_VERSION,
                         "classified_at": _now(),
                         "decision_status": status,
                         "apply_status": "not_needed" if status == "no_change" else ("pending" if status == "high_confidence" else "not_eligible"),
@@ -1705,47 +1763,6 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
                 )
                 return {**(await _run_payload(db, user_id, active)), "reused": True}
 
-        retry_source_run_id: str | None = None
-        selected_product_ids: list[str] = []
-        if payload.selection_mode == "retry_review":
-            source_run = await db[RUNS].find_one(
-                {
-                    "user_id": user_id,
-                    "status": {"$in": ["completed", "completed_with_errors"]},
-                },
-                {"_id": 0, "run_id": 1},
-                sort=[("created_at", -1)],
-            )
-            if not source_run:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "taxonomy_retry_source_not_found"},
-                )
-            retry_source_run_id = str(source_run.get("run_id") or "")
-            retry_records = await db[CLASSIFICATIONS].find(
-                {
-                    "user_id": user_id,
-                    "run_id": retry_source_run_id,
-                    "decision_status": {"$in": list(RETRYABLE_DECISION_STATUSES)},
-                },
-                {
-                    "_id": 0,
-                    "mezan_product_id": 1,
-                    "decision_status": 1,
-                    "apply_status": 1,
-                    "classified_at": 1,
-                },
-            ).sort([("classified_at", 1)]).to_list(length=MAX_PILOT_LIMIT)
-            selected_product_ids = _retryable_product_ids(
-                retry_records,
-                payload.limit,
-            )
-            if not selected_product_ids:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "taxonomy_retry_queue_empty"},
-                )
-
         run_id = uuid.uuid4().hex
         now = _now()
         mode = {
@@ -1766,8 +1783,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "lease_expires_at": None,
             "attempt_count": 0,
             "resume_count": 0,
-            "selected_product_ids": selected_product_ids,
-            "retry_source_run_id": retry_source_run_id,
+            "selected_product_ids": [],
             "model": _model(),
             "taxonomy_version": None,
             "counters": {
@@ -1781,7 +1797,7 @@ def make_product_google_taxonomy_ai_pilot_router(db: Any, current_user: Callable
             "progress": {
                 "phase": "queued",
                 "saved": 0,
-                "remaining": len(selected_product_ids) or payload.limit,
+                "remaining": payload.limit,
                 "updated_at": now,
             },
             "writes_to_salla": False,
