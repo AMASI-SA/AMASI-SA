@@ -11,7 +11,8 @@ import {
     startGoogleTaxonomyPilot,
 } from "../../services/aiStoreOperations";
 
-const TERMINAL = new Set(["completed", "completed_with_errors", "failed"]);
+const TERMINAL = new Set(["completed", "completed_with_errors", "failed", "credit_exhausted"]);
+const COMPLETE = new Set(["completed", "completed_with_errors"]);
 
 const STATUS_LABELS = {
     high_confidence: "جاهز للاعتماد ≥90%",
@@ -144,7 +145,7 @@ export default function ProductGoogleTaxonomyPilotPanel() {
 
             {loading ? <div className="p-8 text-center text-slate-400"><SpinnerGap className="inline animate-spin" /> جاري تحميل آخر Pilot…</div> : !run ? <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">لم يتم تشغيل Pilot بعد.</div> : <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
+                    <div className="text-sm"><b>الحالة:</b> {run.status === "running" || run.status === "queued" ? <span className="text-violet-700"><SpinnerGap className="ml-1 inline animate-spin" /> جاري التحليل</span> : run.status === "credit_exhausted" ? <span className="text-amber-700">متوقف — رصيد OpenAI غير كافٍ</span> : run.status === "failed" ? <span className="text-rose-700">فشل</span> : run.status === "completed_with_errors" ? <span className="text-amber-700">مكتمل مع نتائج تحتاج مراجعة</span> : <span className="text-emerald-700">مكتمل</span>}</div>
                     <div className="text-xs text-slate-500">Run: <span className="font-mono">{String(run.run_id || "").slice(0, 10)}</span> · Model: {run.model || "—"} · Taxonomy: {run.taxonomy_version || "—"}</div>
                 </div>
 
@@ -176,7 +177,11 @@ export default function ProductGoogleTaxonomyPilotPanel() {
 
                 {run.error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><WarningCircle className="ml-1 inline" />{run.error}</div>}
 
-                {TERMINAL.has(run.status) && pendingHighConfidence > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                {run.status === "credit_exhausted" && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+                    لم تُسجل المنتجات غير المكتملة كفشل. بعد شحن رصيد OpenAI اختر «200 منتج — الدفعة التالية» ثم اضغط «تشغيل الدفعة التالية»؛ سيكمل ميزان المنتجات المتبقية فقط.
+                </div>}
+
+                {COMPLETE.has(run.status) && pendingHighConfidence > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                     <div className="text-sm text-emerald-900"><CheckCircle className="ml-1 inline" />يوجد <b>{pendingHighConfidence}</b> اقتراحًا ≥90% لمنتجات بلا تصنيف Google حالي.</div>
                     <button disabled={applying} onClick={applyHighConfidence} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{applying ? "جارٍ الاعتماد…" : "اعتماد عالي الثقة في ميزان"}</button>
                 </div>}

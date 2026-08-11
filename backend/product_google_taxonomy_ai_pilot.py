@@ -114,6 +114,16 @@ PILOT_SELECTION_PROJECTION: dict[str, Any] = {
 }
 
 APPLY_CONFIRMATION = "اعتماد تصنيفات Google عالية الثقة في ميزان"
+CREDIT_EXHAUSTED_ERROR_CODES = {
+    "credit_balance_exhausted",
+    "insufficient_quota",
+    "billing_hard_limit_reached",
+    "billing_not_active",
+}
+CREDIT_EXHAUSTED_MESSAGE = (
+    "توقف التصنيف لأن رصيد OpenAI API غير كافٍ. "
+    "بعد إضافة الرصيد شغّل الدفعة التالية لاستكمال المنتجات المتبقية فقط."
+)
 
 
 class PilotStartIn(BaseModel):
@@ -151,6 +161,14 @@ def _selected_lookup_values(selected_ids: list[str]) -> list[Any]:
     values: list[Any] = list(selected_ids)
     values.extend(int(value) for value in selected_ids if value.isdigit())
     return values
+
+
+def _successfully_seen_filter(user_id: str) -> dict[str, Any]:
+    """Keep old AI failures eligible for a later recovery batch."""
+    return {
+        "user_id": user_id,
+        "decision_status": {"$ne": "ai_failed"},
+    }
 
 
 def _text(value: Any) -> str:
@@ -530,12 +548,18 @@ def _openai_error_code(exc: Exception) -> str:
     return _text(getattr(exc, "code", None))
 
 
+def _is_credit_exhausted_openai_error(exc: Exception) -> bool:
+    code = _openai_error_code(exc).casefold()
+    if code in CREDIT_EXHAUSTED_ERROR_CODES:
+        return True
+    # Some SDK/proxy versions omit ``code`` but preserve it in the error body
+    # or message. Keep this bounded to the known provider billing markers.
+    haystack = f"{getattr(exc, 'body', '')} {exc}".casefold()
+    return any(marker in haystack for marker in CREDIT_EXHAUSTED_ERROR_CODES)
+
+
 def _is_retryable_openai_error(exc: Exception) -> bool:
-    if _openai_error_code(exc) in {
-        "insufficient_quota",
-        "billing_hard_limit_reached",
-        "billing_not_active",
-    }:
+    if _is_credit_exhausted_openai_error(exc):
         return False
     if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
         return True
@@ -544,6 +568,34 @@ def _is_retryable_openai_error(exc: Exception) -> bool:
     except (TypeError, ValueError):
         status_code = 0
     return status_code == 429 or 500 <= status_code < 600
+
+
+def _run_error_fields(exc: Exception, *, now: datetime) -> dict[str, Any]:
+    if _is_credit_exhausted_openai_error(exc):
+        return {
+            "status": "credit_exhausted",
+            "finished_at": now,
+            "heartbeat_at": now,
+            "provider_error_code": (
+                _openai_error_code(exc) or "credit_balance_exhausted"
+            ),
+            "action_required": "top_up_openai_credit",
+            "error": CREDIT_EXHAUSTED_MESSAGE,
+            "progress.phase": "provider_credit_exhausted",
+            "progress.updated_at": now,
+        }
+    retryable_provider_error = _is_retryable_openai_error(exc)
+    return {
+        "status": "queued" if retryable_provider_error else "failed",
+        "finished_at": None if retryable_provider_error else now,
+        "heartbeat_at": now,
+        "provider_error_code": _openai_error_code(exc) or None,
+        "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+        "progress.phase": (
+            "provider_rate_limited" if retryable_provider_error else "failed"
+        ),
+        "progress.updated_at": now,
+    }
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
@@ -963,7 +1015,7 @@ async def _execute_pilot(
             if selection_mode == "next_unseen":
                 seen_values = await db[CLASSIFICATIONS].distinct(
                     "mezan_product_id",
-                    {"user_id": user_id, "decision_status": {"$ne": "ai_failed"}},
+                    _successfully_seen_filter(user_id),
                 )
                 seen_ids = {str(value) for value in seen_values if value not in (None, "")}
                 active_ids = {
@@ -1149,11 +1201,11 @@ async def _execute_pilot(
 
         async def generate_search_terms(
             evidence_chunk: list[dict[str, Any]],
-        ) -> tuple[dict[str, list[str]], str | None]:
+        ) -> tuple[dict[str, list[str]], Exception | None]:
             try:
                 return await _ai_search_terms(client, evidence_chunk), None
             except Exception as exc:  # per-chunk fallback keeps the rollout progressing
-                return {}, type(exc).__name__
+                return {}, exc
 
         async def classify_chunk(
             chunk: list[dict[str, Any]],
@@ -1177,7 +1229,12 @@ async def _execute_pilot(
                 evidence_wave
             )
             if term_error:
-                term_generation_errors.append(term_error)
+                term_generation_errors.append(type(term_error).__name__)
+                if (
+                    _is_credit_exhausted_openai_error(term_error)
+                    or _is_retryable_openai_error(term_error)
+                ):
+                    raise term_error
 
             classification_inputs: list[dict[str, Any]] = []
             metadata_by_product: dict[str, dict[str, Any]] = {}
@@ -1236,7 +1293,10 @@ async def _execute_pilot(
                     # Do not checkpoint a transient provider throttle as a
                     # durable product failure. Requeue the same run so its
                     # saved waves remain intact and the unsaved wave resumes.
-                    if _is_retryable_openai_error(chunk_error):
+                    if (
+                        _is_credit_exhausted_openai_error(chunk_error)
+                        or _is_retryable_openai_error(chunk_error)
+                    ):
                         raise chunk_error
                     for item in chunk:
                         product_id = item["product_id"]
@@ -1378,19 +1438,8 @@ async def _execute_pilot(
         )
         raise
     except Exception as exc:
-        retryable_provider_error = _is_retryable_openai_error(exc)
         now = _now()
-        set_fields: dict[str, Any] = {
-            "status": "queued" if retryable_provider_error else "failed",
-            "finished_at": None if retryable_provider_error else now,
-            "heartbeat_at": now,
-            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
-            "progress.phase": (
-                "provider_rate_limited"
-                if retryable_provider_error
-                else "failed"
-            ),
-        }
+        set_fields = _run_error_fields(exc, now=now)
         await db[RUNS].update_one(
             {"user_id": user_id, "run_id": run_id, "lease_owner": lease_owner},
             {
