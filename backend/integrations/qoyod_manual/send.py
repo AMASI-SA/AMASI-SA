@@ -1960,8 +1960,12 @@ async def manual_send_one(
     HTTP 500 — the caller records them.
     """
     # ── 0) Load inbox row (representative — newest for this order) ──
+    inbox_owner_ids = list(dict.fromkeys(
+        value for value in (str(user_id), str(orders_user_id or "").strip())
+        if value
+    ))
     row = await db.integration_inbox.find_one(
-        {"user_id": user_id,
+        {"user_id": {"$in": inbox_owner_ids},
          "salla_order_number": str(order_number)},
         sort=[("received_at", -1)],
     )
