@@ -243,6 +243,16 @@ async def ensure_customer_intelligence_foundation_indexes(db: Any) -> None:
         ],
         name="mezan_customer_conversations_queue",
     )
+    await conversations.create_index(
+        [
+            ("user_id", 1),
+            ("merchant_id", 1),
+            ("channel_id", 1),
+            ("last_message_at", -1),
+            ("conversation_id", 1),
+        ],
+        name="mezan_customer_conversations_live_inbox",
+    )
 
     messages = getattr(db, CONVERSATION_MESSAGES_COLLECTION)
     await messages.create_index(

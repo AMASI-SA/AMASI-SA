@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     ChartLineUp,
     ChatCircleDots,
@@ -15,6 +16,8 @@ import {
     UsersThree,
     WarningCircle,
 } from "@phosphor-icons/react";
+
+import { formatRiyadhDateTime } from "../../lib/tzUtils";
 
 import {
     Confidence,
@@ -43,91 +46,66 @@ function percent(value) {
     return `${Math.round(numeric * 100)}%`;
 }
 
-function MessagePreview({ message }) {
-    if (message.type === "audio") {
-        return (
-            <article
-                className="rounded-xl border border-blue-200 bg-blue-50 p-4"
-                data-testid="customer-intelligence-audio-message"
-            >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 font-extrabold text-blue-950">
-                        <ChatCircleDots size={21} weight="duotone" />
-                        رسالة صوتية تجريبية
-                    </div>
-                    <span className="rounded-full bg-white px-2.5 py-1 font-mono text-xs font-bold text-blue-700">
-                        {message.duration_seconds || 0} ثانية
-                    </span>
-                </div>
-                <div className="my-3 flex h-8 items-center gap-1 overflow-hidden rounded-lg bg-white/70 px-3" aria-hidden="true">
-                    {[14, 22, 10, 26, 18, 30, 12, 24, 16, 28, 13, 21, 9, 18].map((height, index) => (
-                        <span
-                            key={`${height}-${index}`}
-                            className="w-1 rounded-full bg-blue-400"
-                            style={{ height }}
-                        />
-                    ))}
-                </div>
-                <div className="rounded-lg bg-white p-3">
-                    <div className="text-[11px] font-extrabold text-blue-600">تفريغ تجريبي للصوت</div>
-                    <p className="mt-1 text-sm leading-6 text-slate-800">{message.transcript || "لا يوجد تفريغ."}</p>
-                </div>
-                {message.analysis && (
-                    <p className="mt-3 text-xs font-semibold leading-5 text-blue-800">
-                        نتيجة التحليل التجريبية: {message.analysis}
-                    </p>
-                )}
-            </article>
-        );
-    }
+function liveMessageLabel(message) {
+    const labels = {
+        text: "رسالة نصية واردة",
+        image: "صورة واردة",
+        audio: "رسالة صوتية واردة",
+        document: "مستند وارد",
+        interactive: "تفاعل وارد",
+    };
+    return labels[message.kind] || "رسالة واردة";
+}
 
-    if (message.type === "image") {
-        return (
-            <article
-                className="grid gap-4 rounded-xl border border-violet-200 bg-violet-50 p-4 sm:grid-cols-[150px_minmax(0,1fr)]"
-                data-testid="customer-intelligence-image-message"
-            >
-                <div
-                    className="flex min-h-36 items-center justify-center rounded-xl border border-violet-200 bg-gradient-to-br from-slate-900 via-blue-950 to-violet-900 text-white"
-                    role="img"
-                    aria-label="صورة منتج تجريبية غير حقيقية"
-                >
-                    <div className="text-center">
-                        <ImageSquare size={38} weight="duotone" className="mx-auto" />
-                        <div className="mt-2 text-[11px] font-extrabold">صورة تجريبية</div>
-                    </div>
-                </div>
-                <div className="min-w-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-extrabold text-violet-950">
-                            {message.caption || "صورة أرسلها العميل"}
-                        </div>
-                        <StatusPill status="preview_only" />
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-violet-950">
-                        {message.analysis || "لا توجد نتيجة تحليل."}
-                    </p>
-                    <div className="mt-4">
-                        <Confidence value={message.confidence} label="ثقة المطابقة التجريبية" />
-                    </div>
-                    <p className="mt-3 text-[11px] font-bold text-violet-700">
-                        لا تُستخدم النتيجة كإثبات تطابق، ولا ينشأ منها منتج.
-                    </p>
-                </div>
-            </article>
-        );
-    }
+function liveMessageBody(message) {
+    if (!message.content_available) return "تعذر عرض محتوى الرسالة المشفّر.";
+    if (message.body) return message.body;
+    if (message.caption) return message.caption;
+    if (message.kind === "document" && message.filename) return message.filename;
+    const placeholders = {
+        image: "تم حفظ مرجع الصورة بأمان، والمعاينة غير متاحة في هذه المرحلة.",
+        audio: "تم حفظ مرجع الرسالة الصوتية بأمان، والتشغيل غير متاح في هذه المرحلة.",
+        document: "تم حفظ مرجع المستند بأمان، والتنزيل غير متاح في هذه المرحلة.",
+        interactive: "تم استلام تفاعل من واتساب.",
+        text: "لا يوجد نص قابل للعرض.",
+    };
+    return placeholders[message.kind] || "لا يوجد محتوى قابل للعرض.";
+}
 
+function LiveInboxMessage({ message }) {
+    const isMedia = ["image", "audio", "document"].includes(message.kind);
     return (
         <article
             className="max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-            data-testid="customer-intelligence-text-message"
+            data-testid="customer-intelligence-live-message"
+            data-message-kind={message.kind}
         >
-            <div className="mb-2 flex items-center gap-2 text-xs font-extrabold text-emerald-700">
-                <ChatCircleDots size={18} weight="duotone" />
-                رسالة نصية تجريبية واردة
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-800">
+                    {message.kind === "image"
+                        ? <ImageSquare size={18} weight="duotone" />
+                        : <ChatCircleDots size={18} weight="duotone" />}
+                    {liveMessageLabel(message)}
+                </div>
+                <StatusPill status="open" label="مستلمة" />
             </div>
-            <p className="text-sm leading-7 text-emerald-950">{message.body || "—"}</p>
+            <p
+                className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-emerald-950"
+                dir="auto"
+            >
+                {liveMessageBody(message)}
+            </p>
+            {isMedia && message.mime_type && (
+                <div className="mt-2 font-mono text-[11px] text-emerald-700" dir="ltr">
+                    {message.mime_type}
+                </div>
+            )}
+            <time
+                className="num mt-3 block text-[11px] font-bold text-emerald-700"
+                dateTime={message.occurred_at || undefined}
+            >
+                {formatRiyadhDateTime(message.occurred_at)}
+            </time>
         </article>
     );
 }
@@ -220,88 +198,158 @@ export function OverviewPanel({ model, writesLocked, policyKeys }) {
     );
 }
 
-export function ConversationsPanel({ model }) {
-    const conversations = model.conversations || [];
-    if (!conversations.length) {
-        return <EmptyState title="لا توجد محادثات في المعاينة" />;
-    }
-    const conversation = conversations[0];
-    const allMessages = conversations.flatMap((row) => row.messages || []);
-    const showcaseMessages = ["text", "audio", "image"]
-        .map((type) => allMessages.find((message) => message.type === type))
-        .filter(Boolean);
+export function ConversationsPanel({ inbox, error = "" }) {
+    const conversations = inbox?.conversations || [];
+    const [selectedId, setSelectedId] = useState("");
+    const selectedConversation = conversations.find((row) => row.id === selectedId)
+        || conversations[0]
+        || null;
+    const connected = inbox?.connection?.status === "connected";
+
     return (
-        <div className="grid gap-5 xl:grid-cols-[minmax(280px,.7fr)_minmax(0,1.3fr)]" data-testid="customer-intelligence-panel-conversations">
-            <div className="space-y-4">
-                <PreviewModeBanner compact />
-                <Panel
-                    title={conversation.customer_name || "عميل تجريبي"}
-                    subtitle="واتساب وهمي · لا اتصال خارجي"
-                    Icon={UsersThree}
-                    testid="customer-intelligence-conversation-summary"
-                >
-                    <div className="flex flex-wrap gap-2">
-                        <StatusPill status={conversation.status} />
-                        <StatusPill status="mock_provider" label="WhatsApp وهمي" />
-                    </div>
-                    <dl className="mt-4 space-y-3 text-sm">
-                        <div>
-                            <dt className="text-xs font-bold text-slate-500">النية</dt>
-                            <dd className="mt-1 font-extrabold text-slate-900">{conversation.intent || "—"}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-xs font-bold text-slate-500">الاعتراض</dt>
-                            <dd className="mt-1 font-extrabold text-slate-900">{conversation.objection || "—"}</dd>
-                        </div>
-                    </dl>
-                    <div className="mt-4">
-                        <Confidence value={conversation.confidence} />
-                    </div>
-                </Panel>
-
-                <Panel
-                    title="ملخص الذكاء"
-                    subtitle="استنتاج تجريبي، وليس حقيقة مؤكدة."
-                    Icon={ChartLineUp}
-                    testid="customer-intelligence-ai-summary"
-                >
-                    <p className="text-sm leading-7 text-slate-700">{conversation.ai_summary || "—"}</p>
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-[11px] font-extrabold text-amber-700">الخطوة المقترحة</div>
-                        <p className="mt-1 text-sm font-bold leading-6 text-amber-950">
-                            {conversation.next_best_action || "تحتاج مراجعة الموظف."}
-                        </p>
-                    </div>
-                </Panel>
-            </div>
-
-            <Panel
-                title="سياق المحادثة التجريبي"
-                subtitle="أمثلة نص وصوت وصورة لإثبات جاهزية الواجهة متعددة الوسائط."
-                Icon={ChatCircleDots}
-                testid="customer-intelligence-message-stream"
+        <div className="space-y-5" data-testid="customer-intelligence-panel-conversations" data-live-inbox="true">
+            <section
+                className={`rounded-xl border p-4 ${
+                    connected
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                        : "border-amber-200 bg-amber-50 text-amber-950"
+                }`}
+                data-testid="customer-intelligence-live-connection"
             >
-                <div className="space-y-4">
-                    {showcaseMessages.map((message) => (
-                        <MessagePreview key={message.id} message={message} />
-                    ))}
-                </div>
-                <div
-                    className="mt-5 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50 p-4"
-                    data-testid="customer-intelligence-suggested-reply"
-                >
-                    <div className="flex items-center gap-2 text-sm font-extrabold text-emerald-800">
-                        <Eye size={19} weight="duotone" />
-                        معاينة رد مقترح — غير قابل للإرسال
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        {connected
+                            ? <CheckCircle size={24} weight="duotone" className="mt-0.5 shrink-0 text-emerald-700" />
+                            : <WarningCircle size={24} weight="duotone" className="mt-0.5 shrink-0 text-amber-700" />}
+                        <div>
+                            <div className="font-extrabold">
+                                {connected ? "واتساب متصل ويستقبل الرسائل" : "واتساب غير متصل للاستقبال"}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 opacity-80">
+                                صندوق وارد حقيقي للقراءة فقط. الإرسال والرد التلقائي وكل إجراءات التجارة مغلقة.
+                            </p>
+                        </div>
                     </div>
-                    <p className="mt-2 text-sm leading-7 text-emerald-950">
-                        {conversation.suggested_reply || "لا يوجد رد مقترح."}
-                    </p>
-                    <div className="mt-3 text-[11px] font-bold text-emerald-700">
-                        لا يوجد زر إرسال في هذه المرحلة.
+                    <div className="flex flex-wrap gap-2 text-xs font-bold">
+                        <span className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5">
+                            <span className="num">{inbox?.conversation_count || 0}</span> محادثة
+                        </span>
+                        <span className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5">
+                            <span className="num">{inbox?.message_count || 0}</span> رسالة
+                        </span>
                     </div>
                 </div>
-            </Panel>
+                {(inbox?.content_unavailable_count || 0) > 0 && (
+                    <div
+                        className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-bold leading-5 text-amber-950"
+                        data-testid="customer-intelligence-content-unavailable-warning"
+                    >
+                        تعذر عرض محتوى <span className="num">{inbox.content_unavailable_count}</span> رسالة
+                        محفوظة. الربط ما زال يستقبل، ويجب مراجعة إعداد تشفير العملاء في Backend.
+                    </div>
+                )}
+            </section>
+
+            {error ? (
+                <EmptyState
+                    title="تعذر عرض رسائل واتساب"
+                    detail="أعد التحديث بعد التحقق من اتصال Backend. لم تُعرض بيانات بديلة."
+                />
+            ) : !connected ? (
+                <EmptyState
+                    title="قناة واتساب غير جاهزة للاستقبال"
+                    detail="عند اكتمال الربط ستظهر الرسائل الواردة هنا تلقائيًا."
+                />
+            ) : !conversations.length ? (
+                <EmptyState
+                    title="لا توجد رسائل واردة حتى الآن"
+                    detail="الربط متصل، وستظهر أول محادثة بعد وصول رسالة جديدة."
+                />
+            ) : (
+                <div className="grid gap-5 xl:grid-cols-[minmax(300px,.75fr)_minmax(0,1.25fr)]">
+                    <Panel
+                        title="محادثات واتساب"
+                        subtitle="الأحدث أولًا · اختر محادثة لعرض الرسائل المحفوظة المتاحة"
+                        Icon={UsersThree}
+                        testid="customer-intelligence-live-conversation-list"
+                    >
+                        <div className="space-y-2" role="list" aria-label="محادثات واتساب الواردة">
+                            {conversations.map((conversation) => {
+                                const active = conversation.id === selectedConversation?.id;
+                                return (
+                                    <div key={conversation.id} role="listitem">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedId(conversation.id)}
+                                            className={`w-full rounded-xl border p-3 text-right transition ${
+                                                active
+                                                    ? "border-emerald-500 bg-emerald-50 shadow-sm"
+                                                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40"
+                                            }`}
+                                            aria-pressed={active}
+                                            data-testid="customer-intelligence-live-conversation"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate font-extrabold text-slate-950">
+                                                        {conversation.customer_name || "عميل واتساب"}
+                                                    </div>
+                                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600" dir="auto">
+                                                        {conversation.last_message || "لا توجد رسالة قابلة للعرض"}
+                                                    </p>
+                                                </div>
+                                                <StatusPill status={conversation.status} />
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-500">
+                                                <time className="num" dateTime={conversation.last_message_at || undefined}>
+                                                    {formatRiyadhDateTime(conversation.last_message_at)}
+                                                </time>
+                                                <span><span className="num">{conversation.message_count}</span> رسالة</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {inbox?.has_more && (
+                            <p className="mt-3 text-center text-xs font-bold text-slate-500">
+                                توجد محادثات أقدم غير معروضة في هذه الصفحة.
+                            </p>
+                        )}
+                    </Panel>
+
+                    <Panel
+                        title={selectedConversation?.customer_name || "محادثة واتساب"}
+                        subtitle="رسائل واردة محفوظة في ميزان · بتوقيت الرياض"
+                        Icon={ChatCircleDots}
+                        testid="customer-intelligence-live-message-stream"
+                        actions={<StatusPill status={selectedConversation?.status} />}
+                    >
+                        {selectedConversation?.messages?.length ? (
+                            <>
+                                {selectedConversation.message_count > selectedConversation.messages.length && (
+                                    <p
+                                        className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
+                                        data-testid="customer-intelligence-message-window-notice"
+                                    >
+                                        يعرض أحدث <span className="num">{selectedConversation.messages.length}</span> من <span className="num">{selectedConversation.message_count}</span> رسالة واردة.
+                                    </p>
+                                )}
+                                <div className="space-y-3" aria-label="سجل الرسائل الواردة">
+                                    {selectedConversation.messages.map((message) => (
+                                        <LiveInboxMessage key={message.id} message={message} />
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <EmptyState title="لا توجد رسالة قابلة للعرض في هذه المحادثة" />
+                        )}
+                        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold leading-6 text-slate-600">
+                            هذه الشاشة للقراءة والتحقق فقط؛ لا تحتوي نموذج رد أو إجراءً يغيّر واتساب أو بيانات المتجر.
+                        </div>
+                    </Panel>
+                </div>
+            )}
         </div>
     );
 }

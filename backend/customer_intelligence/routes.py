@@ -4,17 +4,28 @@ from __future__ import annotations
 import os
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from .inbox import CustomerIntelligenceInboxService, LiveInboxResponse
 from .models import CustomerIntelligenceWorkspaceResponse
 from .service import CustomerIntelligencePreviewService
 
 
 FEATURE_FLAG_ENV = "MEZAN_CUSTOMER_INTELLIGENCE_PHASE1_ENABLED"
+LIVE_INBOX_FEATURE_FLAG_ENV = "MEZAN_CUSTOMER_INTELLIGENCE_LIVE_INBOX_ENABLED"
 
 
 def _feature_enabled() -> bool:
     return os.getenv(FEATURE_FLAG_ENV, "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _live_inbox_enabled() -> bool:
+    return os.getenv(LIVE_INBOX_FEATURE_FLAG_ENV, "true").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -54,7 +65,9 @@ def _require_owner(user: Any) -> dict:
 def make_customer_intelligence_router(
     current_user: Callable,
     *,
+    db: Any | None = None,
     service: CustomerIntelligencePreviewService | None = None,
+    inbox_service: CustomerIntelligenceInboxService | None = None,
 ) -> APIRouter:
     router = APIRouter(
         prefix="/customer-intelligence/v1",
@@ -73,16 +86,40 @@ def make_customer_intelligence_router(
                 },
             )
 
-        return router
+    else:
+        preview_service = service or CustomerIntelligencePreviewService()
 
-    preview_service = service or CustomerIntelligencePreviewService()
+        @router.get(
+            "/workspace",
+            response_model=CustomerIntelligenceWorkspaceResponse,
+        )
+        async def workspace(user: dict = Depends(current_user)) -> dict:
+            _require_owner(user)
+            return preview_service.workspace()
 
-    @router.get(
-        "/workspace",
-        response_model=CustomerIntelligenceWorkspaceResponse,
+    live_service = inbox_service or (
+        CustomerIntelligenceInboxService(db) if db is not None else None
     )
-    async def workspace(user: dict = Depends(current_user)) -> dict:
-        _require_owner(user)
-        return preview_service.workspace()
+    if live_service is not None and _live_inbox_enabled():
+
+        @router.get(
+            "/inbox",
+            response_model=LiveInboxResponse,
+        )
+        async def inbox(
+            response: Response,
+            limit: int = Query(default=20, ge=1, le=20),
+            messages_limit: int = Query(default=30, ge=1, le=50),
+            offset: int = Query(default=0, ge=0, le=10_000),
+            user: dict = Depends(current_user),
+        ) -> LiveInboxResponse:
+            owner = _require_owner(user)
+            response.headers["Cache-Control"] = "no-store, private"
+            return await live_service.inbox(
+                owner_user_id=str(owner["id"]),
+                limit=limit,
+                messages_limit=messages_limit,
+                offset=offset,
+            )
 
     return router

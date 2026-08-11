@@ -34,6 +34,10 @@ const STATUS_STYLES = {
     preview_only: "border-violet-200 bg-violet-50 text-violet-800",
     preview_not_contactable: "border-rose-200 bg-rose-50 text-rose-800",
     needs_human_review: "border-amber-200 bg-amber-50 text-amber-800",
+    open: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    needs_human: "border-amber-200 bg-amber-50 text-amber-800",
+    follow_up_due: "border-blue-200 bg-blue-50 text-blue-800",
+    closed: "border-slate-200 bg-slate-50 text-slate-700",
 };
 
 const STATUS_LABELS = {
@@ -64,6 +68,10 @@ const STATUS_LABELS = {
     preview_only: "بيانات معاينة",
     preview_not_contactable: "غير قابل للتواصل",
     needs_human_review: "تحتاج مراجعة بشرية",
+    open: "مفتوحة",
+    needs_human: "تحتاج موظفًا",
+    follow_up_due: "متابعة مستحقة",
+    closed: "مغلقة",
 };
 
 const METRIC_TONES = {

@@ -35,7 +35,9 @@ import {
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
     customerIntelligenceWritesLocked,
+    getCustomerIntelligenceInbox,
     getCustomerIntelligenceWorkspace,
+    normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
 } from "../services/customerIntelligence";
 
@@ -72,11 +74,11 @@ function LoadingPanel() {
     );
 }
 
-function renderActivePanel({ activeTab, model, writesLocked }) {
+function renderActivePanel({ activeTab, model, writesLocked, inbox, inboxError }) {
     const common = { model };
     switch (activeTab) {
         case "conversations":
-            return <ConversationsPanel {...common} />;
+            return <ConversationsPanel inbox={inbox} error={inboxError} />;
         case "customers":
             return <CustomersPanel {...common} />;
         case "followups":
@@ -119,35 +121,46 @@ function renderActivePanel({ activeTab, model, writesLocked }) {
 
 export function CustomerIntelligenceCenterView({
     model,
+    inbox,
     activeTab = "overview",
     onTabChange = () => {},
     onRefresh = () => {},
     loading = false,
     refreshing = false,
     error = "",
+    inboxError = "",
 }) {
     const normalized = normalizeCustomerIntelligenceWorkspace(model);
+    const normalizedInbox = normalizeCustomerIntelligenceInbox(inbox);
     const selectedTab = tabIsSupported(activeTab) ? activeTab : "overview";
     const writesLocked = customerIntelligenceWritesLocked(normalized.safety_policy);
+    const liveInbox = selectedTab === "conversations";
     const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
     const titleEn = normalized.workspace.title_en || "Customer Intelligence & Sales Center";
-    const description = normalized.workspace.description_ar
-        || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
+    const description = liveInbox
+        ? "صندوق واتساب الحقيقي الوارد إلى ميزان للقراءة والتحقق، مع بقاء الرد والتنفيذ مغلقين."
+        : normalized.workspace.description_ar
+            || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
+    const inboxConnected = normalizedInbox.connection.status === "connected";
 
     return (
         <div
             className="space-y-5"
             dir="rtl"
             data-testid="customer-intelligence-center"
-            data-preview-only="true"
+            data-preview-only={liveInbox ? "false" : "true"}
             data-write-mode="observe_only"
         >
             <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
                 <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-300/40 bg-violet-400/10 px-3 py-1 text-xs font-extrabold text-violet-100">
-                            <Eye size={16} weight="fill" />
-                            معاينة المالك · Owner Preview
+                            {liveInbox
+                                ? <ChatCircleDots size={16} weight="fill" />
+                                : <Eye size={16} weight="fill" />}
+                            {liveInbox
+                                ? `واتساب حي · ${inboxConnected ? "متصل" : "قراءة فقط"}`
+                                : "معاينة المالك · Owner Preview"}
                         </div>
                         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{titleAr}</h1>
                         <div className="mt-1 text-xs font-bold tracking-wide text-emerald-300">{titleEn}</div>
@@ -155,9 +168,15 @@ export function CustomerIntelligenceCenterView({
                     </div>
                     <div className="flex flex-col gap-3">
                         <div className="rounded-xl border border-emerald-700 bg-emerald-900 p-3 text-xs font-bold leading-5 text-emerald-100">
-                            <div>المستوى {normalized.workspace.operating_level || 1}</div>
+                            <div>
+                                {liveInbox
+                                    ? "وضع التشغيل"
+                                    : `المستوى ${normalized.workspace.operating_level || 1}`}
+                            </div>
                             <div className="mt-1 text-white">
-                                {normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
+                                {liveInbox
+                                    ? "استقبال حقيقي · قراءة فقط"
+                                    : normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
                             </div>
                         </div>
                         <button
@@ -168,25 +187,38 @@ export function CustomerIntelligenceCenterView({
                             data-testid="customer-intelligence-refresh"
                         >
                             <ArrowClockwise size={18} weight="bold" className={refreshing ? "animate-spin" : ""} />
-                            {refreshing ? "جارٍ تحديث المعاينة…" : "تحديث المعاينة"}
+                            {refreshing
+                                ? liveInbox ? "جارٍ تحديث الرسائل…" : "جارٍ تحديث المعاينة…"
+                                : liveInbox ? "تحديث الرسائل" : "تحديث المعاينة"}
                         </button>
                     </div>
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-6 text-emerald-100 sm:px-7">
-                    البيانات مصطنعة من Backend ومخصّصة لإثبات البنية فقط. لا اتصال واتساب،
-                    ولا طلب أو خصم أو رابط دفع حقيقي، ولا تعديل منتج أو حملة.
+                    {liveInbox ? (
+                        <>
+                            المعروض في هذا التبويب رسائل واتساب حقيقية واردة ومحفوظة في ميزان.
+                            الإرسال والرد التلقائي وإنشاء الطلبات وأي تعديل خارجي مغلق.
+                        </>
+                    ) : (
+                        <>
+                            البيانات مصطنعة من Backend ومخصّصة لإثبات البنية فقط. لا اتصال واتساب،
+                            ولا طلب أو خصم أو رابط دفع حقيقي، ولا تعديل منتج أو حملة.
+                        </>
+                    )}
                 </div>
             </header>
 
-            {error && (
+            {(liveInbox ? inboxError : error) && (
                 <div
                     className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900"
                     data-testid="customer-intelligence-error"
                 >
                     <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
                     <div>
-                        <div className="font-extrabold">تعذر تحميل مساحة المعاينة</div>
-                        <p className="mt-1 text-xs leading-5">{error}</p>
+                        <div className="font-extrabold">
+                            {liveInbox ? "تعذر تحميل رسائل واتساب" : "تعذر تحميل مساحة المعاينة"}
+                        </div>
+                        <p className="mt-1 text-xs leading-5">{liveInbox ? inboxError : error}</p>
                         <p className="mt-1 text-xs font-bold">
                             لم تُستخدم بيانات محلية بديلة. أعد التحديث بعد التحقق من Backend.
                         </p>
@@ -223,16 +255,18 @@ export function CustomerIntelligenceCenterView({
                 activeTab: selectedTab,
                 model: normalized,
                 writesLocked,
+                inbox: normalizedInbox,
+                inboxError,
             })}
         </div>
     );
 }
 
-function errorMessage(error) {
+function errorMessage(error, fallback) {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) return detail;
     if (typeof detail?.message === "string" && detail.message.trim()) return detail.message;
-    return "تعذر الاتصال بمساحة ذكاء العملاء التجريبية.";
+    return fallback;
 }
 
 export default function CustomerIntelligenceCenter() {
@@ -240,9 +274,13 @@ export default function CustomerIntelligenceCenter() {
     const requestedTab = searchParams.get("tab") || "overview";
     const activeTab = tabIsSupported(requestedTab) ? requestedTab : "overview";
     const [model, setModel] = useState(() => normalizeCustomerIntelligenceWorkspace({}));
+    const [inbox, setInbox] = useState(() => normalizeCustomerIntelligenceInbox({}));
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [inboxLoading, setInboxLoading] = useState(activeTab === "conversations");
+    const [inboxRefreshing, setInboxRefreshing] = useState(false);
+    const [inboxError, setInboxError] = useState("");
 
     const load = useCallback(async ({ refresh = false } = {}) => {
         if (refresh) setRefreshing(true);
@@ -252,10 +290,31 @@ export default function CustomerIntelligenceCenter() {
             setModel(await getCustomerIntelligenceWorkspace());
         } catch (requestError) {
             setModel(normalizeCustomerIntelligenceWorkspace({}));
-            setError(errorMessage(requestError));
+            setError(errorMessage(
+                requestError,
+                "تعذر الاتصال بمساحة ذكاء العملاء التجريبية.",
+            ));
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    }, []);
+
+    const loadInbox = useCallback(async ({ refresh = false } = {}) => {
+        if (refresh) setInboxRefreshing(true);
+        else setInboxLoading(true);
+        setInboxError("");
+        try {
+            setInbox(await getCustomerIntelligenceInbox());
+        } catch (requestError) {
+            setInbox(normalizeCustomerIntelligenceInbox({}));
+            setInboxError(errorMessage(
+                requestError,
+                "تعذر تحميل رسائل واتساب الواردة.",
+            ));
+        } finally {
+            setInboxLoading(false);
+            setInboxRefreshing(false);
         }
     }, []);
 
@@ -263,21 +322,47 @@ export default function CustomerIntelligenceCenter() {
         load();
     }, [load]);
 
+    useEffect(() => {
+        if (activeTab === "conversations") loadInbox();
+    }, [activeTab, loadInbox]);
+
     const selectTab = useCallback((tab) => {
+        if (tab === "conversations" && activeTab !== "conversations") {
+            setInboxLoading(true);
+        }
         const next = new URLSearchParams(searchParams);
         next.set("tab", tab);
         setSearchParams(next, { replace: true });
-    }, [searchParams, setSearchParams]);
+    }, [activeTab, searchParams, setSearchParams]);
 
     const viewProps = useMemo(() => ({
         model,
+        inbox,
         activeTab,
         onTabChange: selectTab,
-        onRefresh: () => load({ refresh: true }),
-        loading,
-        refreshing,
+        onRefresh: () => (
+            activeTab === "conversations"
+                ? loadInbox({ refresh: true })
+                : load({ refresh: true })
+        ),
+        loading: activeTab === "conversations" ? inboxLoading : loading,
+        refreshing: activeTab === "conversations" ? inboxRefreshing : refreshing,
         error,
-    }), [activeTab, error, load, loading, model, refreshing, selectTab]);
+        inboxError,
+    }), [
+        activeTab,
+        error,
+        inbox,
+        inboxError,
+        inboxLoading,
+        inboxRefreshing,
+        load,
+        loadInbox,
+        loading,
+        model,
+        refreshing,
+        selectTab,
+    ]);
 
     return <CustomerIntelligenceCenterView {...viewProps} />;
 }

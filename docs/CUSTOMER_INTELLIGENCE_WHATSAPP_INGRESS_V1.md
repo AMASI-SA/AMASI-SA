@@ -37,6 +37,27 @@ POST /api/customer-intelligence/v1/channels/whatsapp/webhook
 - Payload غير الموقع لا يدخل البوابة ولا يكتب أي سجل.
 - إشعارات الحالة التي لا تحتوي رسالة عميل تقبل بلا إنشاء رسالة وهمية.
 
+## صندوق الوارد الحقيقي — قراءة فقط
+
+```text
+GET /api/customer-intelligence/v1/inbox?limit=20&messages_limit=30&offset=0
+```
+
+- المسار محمي بجلسة ميزان ومتاح للمالك فقط.
+- نطاق المتجر والقناة يُستخرج من جلسة المالك وسجل القناة؛ لا يقبل `user_id`
+  أو `merchant_id` من الطلب.
+- يفك الخادم تشفير اسم العميل ومحتوى الرسالة في الذاكرة فقط، ويرجع الحقول
+  اللازمة للعرض دون رقم الجوال أو ciphertext أو معرفات Meta أو مفاتيح HMAC.
+- الاستجابة ترسل `Cache-Control: no-store, private`، وتثبت صراحةً أن الإرسال
+  والرد الآلي والتعديلات التجارية كلها مغلقة.
+- تدعم القائمة تصفحًا محدودًا عبر `offset` و`next_offset`، وتعيد أعداد
+  المحادثات والرسائل الإجمالية بدل عدّ السجلات المعروضة فقط.
+- مفتاح `MEZAN_CUSTOMER_INTELLIGENCE_LIVE_INBOX_ENABLED` مستقل عن معاينة
+  التحليلات، ويوقف API القراءة الحي وحده عند الحاجة.
+- تعرض الوسائط كنوع وتعليق/اسم ملف آمن فقط؛ تنزيل ملف Meta غير مفعّل في V1.
+- الواجهة تعرض المحادثات الحقيقية في تبويب «المحادثات»، بينما تبقى تحليلات
+  الذكاء في التبويبات الأخرى بيانات معاينة حتى بناء مرحلة التحليل التالية.
+
 مرجع التنفيذ هو توثيق Meta الرسمي لـ[إنشاء WhatsApp Webhook](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/)
 و[عقد messages webhook](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages).
 
@@ -50,6 +71,7 @@ MEZAN_WHATSAPP_WEBHOOK_VERIFY_TOKEN=<random callback verification token>
 MEZAN_WHATSAPP_APP_SECRET=<Meta app secret>
 MEZAN_CHANNEL_BINDING_HMAC_KEY=<dedicated HMAC secret>
 MEZAN_CUSTOMER_PII_ENC_KEY=<Fernet encryption key>
+MEZAN_CUSTOMER_INTELLIGENCE_LIVE_INBOX_ENABLED=true
 ```
 
 الافتراضي هو أن `MEZAN_WHATSAPP_INGRESS_ENABLED` مغلق. إذا فُعّل المفتاح من
@@ -92,7 +114,7 @@ ai_auto_reply_allowed=false
 2. إنشاء سجل القناة بقيم الإرسال والرد الآلي مغلقة.
 3. نجاح تحدي Meta على Endpoint المنشور.
 4. نجاح رسالة اختبار موقعة وظهور سجل واحد مشفر في ميزان.
-5. إظهار الرسالة للمالك/الموظف من API قراءة منفصل لاحقًا.
+5. إظهار الرسالة للمالك من API القراءة الحي، من دون أي زر إرسال.
 6. تشغيل GPT لاحقًا كمقترح مستقل يحمل `execution_allowed=false`.
 
 لا يرفع نجاح الاستقبال صلاحية الإرسال تلقائيًا.
