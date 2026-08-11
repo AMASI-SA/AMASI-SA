@@ -2,6 +2,7 @@ import asyncio
 
 from product_google_taxonomy_salla_publish import (
     PROVIDER_FIELD,
+    _eligible_filter,
     publish_google_taxonomy_batch,
 )
 
@@ -52,6 +53,13 @@ def _product():
     }
 
 
+def test_eligible_filter_uses_taxonomy_specific_sync_state():
+    query = _eligible_filter("user-1")
+
+    assert query["google_taxonomy_salla_sync_status"] == {"$ne": "synced"}
+    assert "salla_sync_status" not in query
+
+
 def test_publish_writes_isolated_field_then_verifies_readback():
     calls = []
 
@@ -81,7 +89,7 @@ def test_publish_writes_isolated_field_then_verifies_readback():
     assert result["synced"] == 1
     assert result["failed"] == 0
     update = db["mezan_products_v2"].updates[-1][1]["$set"]
-    assert update["salla_sync_status"] == "synced"
+    assert update["google_taxonomy_salla_sync_status"] == "synced"
     assert update["google_taxonomy_authority"] == "salla"
 
 
@@ -107,8 +115,8 @@ def test_publish_stops_after_first_readback_mismatch():
     assert result["stopped_early"] is True
     assert all(call[1] == "/products/123" for call in calls)
     update = db["mezan_products_v2"].updates[-1][1]["$set"]
-    assert update["salla_sync_status"] == "failed"
-    assert update["salla_sync_error"] == "google_taxonomy_readback_mismatch"
+    assert update["google_taxonomy_salla_sync_status"] == "failed"
+    assert update["google_taxonomy_salla_sync_error"] == "google_taxonomy_readback_mismatch"
 
 
 def test_publish_skips_write_when_salla_already_matches():
@@ -131,4 +139,3 @@ def test_publish_skips_write_when_salla_already_matches():
     assert calls == [("GET", "/products/123", None)]
     assert result["already_matched"] == 1
     assert result["synced"] == 1
-

@@ -46,7 +46,10 @@ def _eligible_filter(user_id: str) -> dict[str, Any]:
         "salla_product_id": {"$nin": [None, ""]},
         "google_category": {"$nin": [None, ""]},
         "classification_source": {"$in": list(APPROVED_SOURCES)},
-        "salla_sync_status": {"$ne": "synced"},
+        # Do not reuse the product-wide Salla sync status here. A product may
+        # already be synced for title/price/inventory while its Google taxonomy
+        # has never been published.
+        "google_taxonomy_salla_sync_status": {"$ne": "synced"},
     }
 
 
@@ -69,12 +72,12 @@ async def _record_result(
     await db[PRODUCTS].update_one(
         {"user_id": user_id, "salla_product_id": salla_id},
         {"$set": {
-            "salla_sync_status": status,
-            "salla_synced_at": now if verified else None,
-            "last_verified_at": now,
+            "google_taxonomy_salla_sync_status": status,
+            "google_taxonomy_salla_synced_at": now if verified else None,
+            "google_taxonomy_salla_last_verified_at": now,
             "salla_google_taxonomy": actual,
-            "salla_sync_error": error,
-            "salla_sync_reason": None if verified else "google_taxonomy_readback_mismatch",
+            "google_taxonomy_salla_sync_error": error,
+            "google_taxonomy_salla_sync_reason": None if verified else "google_taxonomy_readback_mismatch",
             "google_taxonomy_authority": "salla" if verified else "mezan",
             "updated_at": now,
         }},
