@@ -66,6 +66,13 @@ def test_sensitive_employee_os_permissions_trigger_email_otp(monkeypatch):
             "denied_permissions": [],
         },
         {
+            "user_id": "customer-service",
+            "role_key": "customer_service",
+            "enabled": True,
+            "extra_permissions": [],
+            "denied_permissions": [],
+        },
+        {
             "user_id": "warehouse",
             "role_key": "warehouse_operator",
             "enabled": True,
@@ -77,10 +84,17 @@ def test_sensitive_employee_os_permissions_trigger_email_otp(monkeypatch):
             "role_key": "product_manager",
             "enabled": True,
             "extra_permissions": [],
-            "denied_permissions": ["products.publish"],
+            # Deny every high-impact permission inherited by product_manager;
+            # the shared effective-permission resolver must respect all three.
+            "denied_permissions": [
+                "products.publish",
+                "products.media.publish",
+                "products.media.delete",
+            ],
         },
     ])
     assert _requires(db, {"id": "product-manager", "role": "viewer"}) is True
+    assert _requires(db, {"id": "customer-service", "role": "viewer"}) is True
     assert _requires(db, {"id": "warehouse", "role": "viewer"}) is False
     assert _requires(db, {"id": "product-manager-denied", "role": "viewer"}) is False
 
@@ -91,7 +105,7 @@ def test_disabled_feature_preserves_existing_auth_behavior(monkeypatch):
 
 
 def test_otp_is_six_digits_and_digest_never_stores_plaintext(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret")
+    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret-that-is-long-enough")
     code = generate_otp()
     assert len(code) == 6
     assert code.isdigit()
@@ -102,7 +116,7 @@ def test_otp_is_six_digits_and_digest_never_stores_plaintext(monkeypatch):
 
 
 def test_challenge_token_is_signed_typed_and_short_lived(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret")
+    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret-that-is-long-enough")
     token = _challenge_token(
         user_id="user-1",
         jti="jti-1",
@@ -130,7 +144,7 @@ def test_runtime_is_fail_closed_only_when_feature_enabled(monkeypatch):
         "EMAIL_OTP_FROM_EMAIL",
     ):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret")
+    monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret-that-is-long-enough")
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "0")
     validate_email_otp_runtime()
 
