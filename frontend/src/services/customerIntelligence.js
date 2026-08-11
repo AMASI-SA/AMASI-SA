@@ -12,6 +12,49 @@ const READ_ONLY_KEYS = [
     "ai_execution_allowed",
 ];
 
+const LIVE_INBOX_MESSAGE_KINDS = new Set([
+    "text",
+    "image",
+    "audio",
+    "document",
+    "interactive",
+]);
+
+const LIVE_INBOX_CONVERSATION_STATUSES = new Set([
+    "open",
+    "needs_human",
+    "follow_up_due",
+    "resolved",
+    "closed",
+]);
+
+const EMPTY_LIVE_INBOX = {
+    schema_version: null,
+    generated_at: null,
+    mode: null,
+    data_origin: null,
+    connection: {
+        provider: "whatsapp",
+        status: "not_connected",
+        connected_channels: 0,
+        receiving_channels: 0,
+    },
+    conversation_count: 0,
+    message_count: 0,
+    content_unavailable_count: 0,
+    has_more: false,
+    next_offset: null,
+    conversations: [],
+    safety_policy: {
+        mode: "observe_only",
+        receive_only: true,
+        writes_allowed: false,
+        whatsapp_send_allowed: false,
+        ai_auto_reply_allowed: false,
+        commerce_mutation_allowed: false,
+    },
+};
+
 const EMPTY_SAFE_WORKSPACE = {
     schema_version: null,
     generated_at: null,
@@ -124,6 +167,67 @@ function text(value) {
 function finite(value) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
+}
+
+function nonNegativeInteger(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : 0;
+}
+
+function optionalNonNegativeInteger(value) {
+    if (value == null || value === "") return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : null;
+}
+
+function timestamp(value) {
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+function normalizeLiveInboxMessage(message, index) {
+    const source = object(message);
+    const kind = text(source.kind);
+    return {
+        id: text(source.message_id || source.id) || `live-message-${index + 1}`,
+        // The live endpoint is receive-only. Do not let an unexpected payload
+        // turn this rendering model into an outbound surface.
+        direction: "inbound",
+        sender: "customer",
+        kind: LIVE_INBOX_MESSAGE_KINDS.has(kind) ? kind : "interactive",
+        body: text(source.body),
+        caption: text(source.caption),
+        filename: text(source.filename),
+        mime_type: text(source.mime_type),
+        occurred_at: timestamp(source.occurred_at),
+        delivery_state: "received",
+        content_available: source.content_available === true,
+    };
+}
+
+function normalizeLiveInboxConversation(conversation, index) {
+    const source = object(conversation);
+    const status = text(source.status);
+    const messages = array(source.messages)
+        .filter((message) => {
+            const row = object(message);
+            return row.direction === "inbound"
+                && row.sender === "customer"
+                && row.delivery_state === "received";
+        })
+        .map(normalizeLiveInboxMessage);
+    return {
+        id: text(source.conversation_id || source.id) || `live-conversation-${index + 1}`,
+        customer_name: text(source.customer_name) || "عميل واتساب",
+        channel: "whatsapp",
+        status: LIVE_INBOX_CONVERSATION_STATUSES.has(status) ? status : "open",
+        last_message: text(source.last_message),
+        last_message_at: timestamp(source.last_message_at),
+        message_count: nonNegativeInteger(source.message_count),
+        content_unavailable_count: nonNegativeInteger(
+            source.content_unavailable_count,
+        ),
+        messages,
+    };
 }
 
 function normalizeMessage(message, index) {
@@ -557,6 +661,56 @@ export function customerIntelligenceWritesLocked(policy = {}) {
 export async function getCustomerIntelligenceWorkspace() {
     const response = await api.get("/customer-intelligence/v1/workspace");
     return normalizeCustomerIntelligenceWorkspace(response.data);
+}
+
+export function normalizeCustomerIntelligenceInbox(payload = {}) {
+    const source = object(payload);
+    const connection = object(source.connection);
+    const conversations = array(source.conversations)
+        .filter((conversation) => object(conversation).channel === "whatsapp")
+        .map(normalizeLiveInboxConversation);
+    const connectedChannels = nonNegativeInteger(connection.connected_channels);
+    const receivingChannels = nonNegativeInteger(connection.receiving_channels);
+    const liveContract = Number(source.schema_version) === 1
+        && source.mode === "live_receive_only"
+        && source.data_origin === "whatsapp_webhook"
+        && connection.provider === "whatsapp";
+
+    return {
+        ...EMPTY_LIVE_INBOX,
+        connection: {
+            ...EMPTY_LIVE_INBOX.connection,
+            status: liveContract
+                && connection.status === "connected"
+                && receivingChannels > 0
+                ? "connected"
+                : "not_connected",
+            connected_channels: connectedChannels,
+            receiving_channels: receivingChannels,
+        },
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        generated_at: timestamp(source.generated_at),
+        mode: liveContract ? "live_receive_only" : null,
+        data_origin: liveContract ? "whatsapp_webhook" : null,
+        conversation_count: liveContract ? nonNegativeInteger(source.conversation_count) : 0,
+        message_count: liveContract ? nonNegativeInteger(source.message_count) : 0,
+        content_unavailable_count: liveContract
+            ? nonNegativeInteger(source.content_unavailable_count)
+            : 0,
+        has_more: liveContract && source.has_more === true,
+        next_offset: liveContract && source.has_more === true
+            ? optionalNonNegativeInteger(source.next_offset)
+            : null,
+        conversations: liveContract ? conversations : [],
+        // These values are intentionally client-enforced, like the preview
+        // policy above. A malformed response cannot enable a write control.
+        safety_policy: { ...EMPTY_LIVE_INBOX.safety_policy },
+    };
+}
+
+export async function getCustomerIntelligenceInbox() {
+    const response = await api.get("/customer-intelligence/v1/inbox");
+    return normalizeCustomerIntelligenceInbox(response.data);
 }
 
 export const CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS = [...READ_ONLY_KEYS];

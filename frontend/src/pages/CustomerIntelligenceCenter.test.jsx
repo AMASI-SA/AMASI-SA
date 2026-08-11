@@ -243,11 +243,90 @@ const previewPayload = {
     },
 };
 
-function renderTab(activeTab) {
+const liveInboxPayload = {
+    schema_version: 1,
+    generated_at: "2026-08-12T00:30:00Z",
+    mode: "live_receive_only",
+    data_origin: "whatsapp_webhook",
+    connection: {
+        provider: "whatsapp",
+        status: "connected",
+        connected_channels: 1,
+        receiving_channels: 1,
+    },
+    conversation_count: 2,
+    message_count: 3,
+    content_unavailable_count: 1,
+    has_more: false,
+    next_offset: null,
+    conversations: [{
+        conversation_id: "conversation-live-1",
+        customer_id: "customer-live-1",
+        customer_name: "عميل واتساب",
+        channel: "whatsapp",
+        status: "open",
+        last_message: "اختبار ربط ميزان 2",
+        last_message_at: "2026-08-12T00:29:00Z",
+        message_count: 2,
+        content_unavailable_count: 0,
+        messages: [{
+            message_id: "message-live-text",
+            direction: "inbound",
+            sender: "customer",
+            kind: "text",
+            body: "اختبار ربط ميزان 2",
+            occurred_at: "2026-08-12T00:28:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }, {
+            message_id: "message-live-image",
+            direction: "inbound",
+            sender: "customer",
+            kind: "image",
+            caption: "صورة المنتج",
+            mime_type: "image/jpeg",
+            occurred_at: "2026-08-12T00:29:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }],
+    }, {
+        conversation_id: "conversation-live-2",
+        customer_id: "customer-live-2",
+        customer_name: "عميل واتساب 2",
+        channel: "whatsapp",
+        status: "needs_human",
+        last_message: "أحتاج مساعدة",
+        last_message_at: "2026-08-11T22:00:00Z",
+        message_count: 1,
+        content_unavailable_count: 1,
+        messages: [{
+            message_id: "message-live-audio",
+            direction: "inbound",
+            sender: "customer",
+            kind: "audio",
+            mime_type: "audio/ogg",
+            occurred_at: "2026-08-11T22:00:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }],
+    }],
+    safety_policy: {
+        mode: "observe_only",
+        receive_only: true,
+        writes_allowed: false,
+        whatsapp_send_allowed: false,
+        ai_auto_reply_allowed: false,
+        commerce_mutation_allowed: false,
+    },
+};
+
+function renderTab(activeTab, props = {}) {
     return renderToStaticMarkup(
         <CustomerIntelligenceCenterView
             model={previewPayload}
+            inbox={liveInboxPayload}
             activeTab={activeTab}
+            {...props}
         />,
     );
 }
@@ -267,16 +346,41 @@ test("renders the owner preview shell with exactly thirteen governed tabs", () =
     });
 });
 
-test("shows synthetic text, audio, and image messages without a send control", () => {
+test("shows the real receive-only WhatsApp inbox without preview or reply controls", () => {
     const markup = renderTab("conversations");
 
-    expect(markup).toContain('data-testid="customer-intelligence-text-message"');
-    expect(markup).toContain('data-testid="customer-intelligence-audio-message"');
-    expect(markup).toContain('data-testid="customer-intelligence-image-message"');
-    expect(markup).toContain("تفريغ تجريبي للصوت");
-    expect(markup).toContain("صورة تجريبية");
-    expect(markup).toContain("معاينة رد مقترح — غير قابل للإرسال");
+    expect(markup).toContain('data-preview-only="false"');
+    expect(markup).toContain('data-live-inbox="true"');
+    expect(markup).toContain('data-testid="customer-intelligence-live-conversation-list"');
+    expect(markup).toContain('data-testid="customer-intelligence-live-message-stream"');
+    expect(markup.match(/data-testid="customer-intelligence-live-message"/g) || []).toHaveLength(2);
+    expect(markup).toContain("اختبار ربط ميزان 2");
+    expect(markup).toContain("صورة المنتج");
+    expect(markup).toContain("واتساب متصل ويستقبل الرسائل");
+    expect(markup).toContain('data-testid="customer-intelligence-content-unavailable-warning"');
+    expect(markup).toContain("تعذر عرض محتوى");
+    expect(markup).not.toContain("WhatsApp وهمي");
+    expect(markup).not.toContain("بيانات مصطنعة");
+    expect(markup).not.toContain("معاينة رد مقترح");
     expect(markup).not.toContain('data-testid="customer-intelligence-send"');
+    expect(markup).not.toContain("<textarea");
+    expect(markup).not.toContain("<form");
+});
+
+test("makes a truncated live message window explicit", () => {
+    const truncatedInbox = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            message_count: 45,
+        }],
+    };
+
+    const markup = renderTab("conversations", { inbox: truncatedInbox });
+
+    expect(markup).toContain('data-testid="customer-intelligence-message-window-notice"');
+    expect(markup).toContain("يعرض أحدث");
+    expect(markup).toContain("45");
 });
 
 test("renders a conversation cart and a visibly fake non-clickable payment URL", () => {
@@ -304,13 +408,63 @@ test("shows an error without substituting local business fixtures", () => {
     const markup = renderToStaticMarkup(
         <CustomerIntelligenceCenterView
             model={{}}
-            activeTab="conversations"
+            activeTab="overview"
             error="Backend unavailable"
         />,
     );
 
     expect(markup).toContain('data-testid="customer-intelligence-error"');
     expect(markup).toContain("لم تُستخدم بيانات محلية بديلة");
-    expect(markup).toContain("لا توجد محادثات في المعاينة");
+    expect(markup).not.toContain("عميلة تجريبية");
+});
+
+test("escapes live customer text and exposes no send or provider-secret fields", () => {
+    const unsafeInbox = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            customer_name: "<script>name</script>",
+            messages: [{
+                ...liveInboxPayload.conversations[0].messages[0],
+                body: "<script>alert('x')</script>",
+                provider_media_id: "provider-secret-1",
+                content_ciphertext: "ciphertext-secret-1",
+            }],
+        }],
+    };
+    const markup = renderTab("conversations", { inbox: unsafeInbox });
+
+    expect(markup).toContain("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;");
+    expect(markup).not.toContain("<script>");
+    expect(markup).not.toContain("provider-secret-1");
+    expect(markup).not.toContain("ciphertext-secret-1");
+    expect(markup).not.toContain("<textarea");
+    expect(markup).not.toContain("<form");
+});
+
+test("shows a connected empty state without synthetic conversation fallback", () => {
+    const markup = renderTab("conversations", {
+        inbox: {
+            ...liveInboxPayload,
+            conversation_count: 0,
+            message_count: 0,
+            content_unavailable_count: 0,
+            conversations: [],
+        },
+    });
+
+    expect(markup).toContain("لا توجد رسائل واردة حتى الآن");
+    expect(markup).not.toContain("عميلة تجريبية");
+});
+
+test("shows a live inbox error without falling back to preview conversations", () => {
+    const markup = renderTab("conversations", {
+        inbox: {},
+        inboxError: "Inbox unavailable",
+    });
+
+    expect(markup).toContain('data-testid="customer-intelligence-error"');
+    expect(markup).toContain("تعذر تحميل رسائل واتساب");
+    expect(markup).toContain("لم تُعرض بيانات بديلة");
     expect(markup).not.toContain("عميلة تجريبية");
 });

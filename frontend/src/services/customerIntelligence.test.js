@@ -2,7 +2,9 @@ import api from "../lib/api";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
     customerIntelligenceWritesLocked,
+    getCustomerIntelligenceInbox,
     getCustomerIntelligenceWorkspace,
+    normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
 } from "./customerIntelligence";
 
@@ -12,6 +14,10 @@ jest.mock("../lib/api", () => ({
         get: jest.fn(),
     },
 }));
+
+beforeEach(() => {
+    jest.clearAllMocks();
+});
 
 const backendPayload = {
     schema_version: 1,
@@ -280,4 +286,168 @@ test("loads only the canonical owner preview endpoint", async () => {
 
     expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/workspace");
     expect(model.schema_version).toBe(1);
+});
+
+const liveInboxPayload = {
+    schema_version: 1,
+    generated_at: "2026-08-12T00:30:00Z",
+    mode: "live_receive_only",
+    data_origin: "whatsapp_webhook",
+    connection: {
+        provider: "whatsapp",
+        status: "connected",
+        connected_channels: 1,
+        receiving_channels: 1,
+        access_token: "must-never-render",
+    },
+    conversation_count: 1,
+    message_count: 2,
+    content_unavailable_count: 1,
+    has_more: true,
+    next_offset: 20,
+    conversations: [{
+        conversation_id: "conv-safe-1",
+        customer_id: "cust-safe-1",
+        customer_name: "عميل واتساب",
+        customer_mobile: "+966500000000",
+        external_conversation_key: "hidden-hmac",
+        channel: "whatsapp",
+        status: "open",
+        last_message: "اختبار ربط ميزان 2",
+        last_message_at: "2026-08-12T00:29:00Z",
+        message_count: 2,
+        content_unavailable_count: 1,
+        messages: [{
+            message_id: "msg-safe-1",
+            direction: "inbound",
+            sender: "customer",
+            kind: "text",
+            body: "اختبار ربط ميزان 2",
+            occurred_at: "2026-08-12T00:28:00Z",
+            delivery_state: "received",
+            content_available: true,
+            content_ciphertext: "hidden-ciphertext",
+        }, {
+            message_id: "msg-safe-2",
+            direction: "inbound",
+            sender: "customer",
+            kind: "image",
+            caption: "صورة المنتج",
+            mime_type: "image/jpeg",
+            occurred_at: "2026-08-12T00:29:00Z",
+            delivery_state: "received",
+            content_available: true,
+            provider_media_id: "hidden-provider-id",
+        }],
+    }],
+    safety_policy: {
+        mode: "manage",
+        receive_only: false,
+        writes_allowed: true,
+        whatsapp_send_allowed: true,
+        ai_auto_reply_allowed: true,
+        commerce_mutation_allowed: true,
+    },
+};
+
+test("normalizes the live receive-only inbox and drops unapproved sensitive fields", () => {
+    const inbox = normalizeCustomerIntelligenceInbox(liveInboxPayload);
+
+    expect(inbox).toMatchObject({
+        mode: "live_receive_only",
+        data_origin: "whatsapp_webhook",
+        conversation_count: 1,
+        message_count: 2,
+        content_unavailable_count: 1,
+        has_more: true,
+        next_offset: 20,
+        connection: {
+            status: "connected",
+            connected_channels: 1,
+            receiving_channels: 1,
+        },
+        safety_policy: {
+            mode: "observe_only",
+            receive_only: true,
+            writes_allowed: false,
+            whatsapp_send_allowed: false,
+            ai_auto_reply_allowed: false,
+            commerce_mutation_allowed: false,
+        },
+    });
+    expect(inbox.conversations[0]).toMatchObject({
+        id: "conv-safe-1",
+        customer_name: "عميل واتساب",
+        channel: "whatsapp",
+        status: "open",
+        content_unavailable_count: 1,
+    });
+    expect(inbox.conversations[0].messages[1]).toMatchObject({
+        id: "msg-safe-2",
+        kind: "image",
+        caption: "صورة المنتج",
+    });
+
+    const serialized = JSON.stringify(inbox);
+    expect(serialized).not.toContain("+966500000000");
+    expect(serialized).not.toContain("hidden-hmac");
+    expect(serialized).not.toContain("hidden-ciphertext");
+    expect(serialized).not.toContain("hidden-provider-id");
+    expect(serialized).not.toContain("must-never-render");
+});
+
+test("rejects conversations unless the response declares the live webhook contract", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        mode: "preview_fixture",
+    });
+
+    expect(inbox.mode).toBeNull();
+    expect(inbox.connection.status).toBe("not_connected");
+    expect(inbox.content_unavailable_count).toBe(0);
+    expect(inbox.next_offset).toBeNull();
+    expect(inbox.conversations).toEqual([]);
+});
+
+test("drops any message or conversation outside the inbound WhatsApp contract", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        conversations: [
+            {
+                ...liveInboxPayload.conversations[0],
+                messages: [
+                    ...liveInboxPayload.conversations[0].messages,
+                    {
+                        message_id: "unexpected-outbound",
+                        direction: "outbound",
+                        sender: "employee",
+                        kind: "text",
+                        body: "must not render",
+                        occurred_at: "2026-08-12T00:30:00Z",
+                        delivery_state: "delivered",
+                        content_available: true,
+                    },
+                ],
+            },
+            {
+                ...liveInboxPayload.conversations[0],
+                conversation_id: "unexpected-channel",
+                channel: "instagram",
+            },
+        ],
+    });
+
+    expect(inbox.conversations).toHaveLength(1);
+    expect(inbox.conversations[0].messages).toHaveLength(2);
+    expect(JSON.stringify(inbox)).not.toContain("must not render");
+    expect(JSON.stringify(inbox)).not.toContain("unexpected-channel");
+});
+
+test("loads the live inbox from its single read-only endpoint", async () => {
+    api.get.mockResolvedValueOnce({ data: liveInboxPayload });
+
+    const inbox = await getCustomerIntelligenceInbox();
+
+    expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
+    expect(inbox.conversations[0].messages).toHaveLength(2);
 });

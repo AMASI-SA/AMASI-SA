@@ -249,3 +249,17 @@ async def test_all_foundation_indexes_are_tenant_and_merchant_scoped():
     )
     assert options["unique"] is True
     assert ("external_conversation_key", 1) in keys
+
+    keys, options = _index(
+        db,
+        CONVERSATIONS_COLLECTION,
+        "mezan_customer_conversations_live_inbox",
+    )
+    assert options.get("unique") is not True
+    assert keys == [
+        ("user_id", 1),
+        ("merchant_id", 1),
+        ("channel_id", 1),
+        ("last_message_at", -1),
+        ("conversation_id", 1),
+    ]
