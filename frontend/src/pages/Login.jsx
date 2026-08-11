@@ -104,14 +104,17 @@ export default function Login() {
     const [showRegisterLink, setShowRegisterLink] = useState(false);
 
     // Privileged auth flow:
-    // bootstrap → setup → recovery is first TOTP enrollment.
-    // Returning Owner may use a trusted-device passkey instead of TOTP.
-    // After a fresh Owner TOTP, trust offers a 30-day platform passkey.
+    // Owner: bootstrap → setup → recovery on first TOTP enrollment, then TOTP
+    // or a trusted-device passkey. Admin/sensitive employees can instead
+    // receive a six-digit email OTP when that deployment feature is enabled.
     const [mfaMode, setMfaMode] = useState(null); // null | bootstrap | setup | verify | recovery | passkey | trust
     const [bootstrapCode, setBootstrapCode] = useState("");
     const [challengeToken, setChallengeToken] = useState("");
     const [setupSecret, setSetupSecret] = useState("");
     const [mfaCode, setMfaCode] = useState("");
+    const [mfaChannel, setMfaChannel] = useState("totp");
+    const [maskedEmail, setMaskedEmail] = useState("");
+    const [resendSeconds, setResendSeconds] = useState(0);
     const [recoveryCodes, setRecoveryCodes] = useState([]);
     const [verifiedRole, setVerifiedRole] = useState("");
     const [passkeyChallengeId, setPasskeyChallengeId] = useState("");
@@ -129,6 +132,14 @@ export default function Login() {
         })();
         return () => { cancelled = true; };
     }, []);
+
+    useEffect(() => {
+        if (mfaMode !== "verify" || mfaChannel !== "email" || resendSeconds <= 0) return undefined;
+        const timer = window.setTimeout(() => {
+            setResendSeconds((seconds) => Math.max(0, seconds - 1));
+        }, 1000);
+        return () => window.clearTimeout(timer);
+    }, [mfaMode, mfaChannel, resendSeconds]);
 
     const finishLogin = () => {
         const to = location.state?.from?.pathname || "/";
@@ -153,6 +164,9 @@ export default function Login() {
         setChallengeToken("");
         setSetupSecret("");
         setMfaCode("");
+        setMfaChannel("totp");
+        setMaskedEmail("");
+        setResendSeconds(0);
         setRecoveryCodes([]);
         setVerifiedRole("");
         setPasskeyChallengeId("");
@@ -167,12 +181,14 @@ export default function Login() {
             return true;
         }
         if (result?.mfa_bootstrap_required) {
+            setMfaChannel("totp");
             setBootstrapCode("");
             setMfaMode("bootstrap");
             toast.info("يلزم رمز التفعيل الأولي لربط تطبيق المصادقة لأول مرة");
             return true;
         }
         if (result?.mfa_setup_required) {
+            setMfaChannel("totp");
             setChallengeToken(result.challenge_token || "");
             setSetupSecret(result.setup_secret || "");
             setMfaCode("");
@@ -181,9 +197,16 @@ export default function Login() {
             return true;
         }
         if (result?.mfa_required) {
+            const channel = result?.mfa_channel === "email" ? "email" : "totp";
+            setMfaChannel(channel);
             setChallengeToken(result.challenge_token || "");
+            setMaskedEmail(result.masked_email || "");
+            setResendSeconds(Math.max(0, Number(result.resend_after_seconds || 0)));
             setMfaCode("");
             setMfaMode("verify");
+            if (channel === "email") {
+                toast.info("تم إرسال رمز التحقق إلى بريد حسابك");
+            }
             return true;
         }
         return false;
@@ -221,6 +244,15 @@ export default function Login() {
         if (!mfaCode.trim()) return;
         setBusy(true);
         try {
+            if (mfaMode === "verify" && mfaChannel === "email") {
+                await api.post("/auth/email-otp/verify", {
+                    challenge_token: challengeToken,
+                    code: mfaCode.trim(),
+                });
+                await hydrateAndFinish();
+                return;
+            }
+
             const result = await verifyMfa(
                 challengeToken,
                 mfaCode.trim(),
@@ -244,6 +276,31 @@ export default function Login() {
             await hydrateAndFinish();
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر التحقق من الرمز");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const resendEmailOtp = async () => {
+        if (busy || mfaChannel !== "email" || resendSeconds > 0 || !challengeToken) return;
+        setBusy(true);
+        try {
+            const { data } = await api.post("/auth/email-otp/resend", {
+                challenge_token: challengeToken,
+            });
+            setChallengeToken(data?.challenge_token || challengeToken);
+            setMaskedEmail(data?.masked_email || maskedEmail);
+            setResendSeconds(Math.max(0, Number(data?.resend_after_seconds || 60)));
+            setMfaCode("");
+            toast.success("تم إرسال رمز تحقق جديد إلى بريدك");
+        } catch (err) {
+            const retryAfter = Number(
+                err.response?.data?.retry_after_seconds
+                || err.response?.headers?.["retry-after"]
+                || 0,
+            );
+            if (retryAfter > 0) setResendSeconds(Math.ceil(retryAfter));
+            toast.error(formatApiErrorDetail(err.response?.data?.detail) || "تعذر إعادة إرسال الرمز");
         } finally {
             setBusy(false);
         }
@@ -504,18 +561,21 @@ export default function Login() {
 
     const renderMfaForm = () => {
         const isSetup = mfaMode === "setup";
+        const isEmailOtp = !isSetup && mfaChannel === "email";
         return (
-            <div data-testid={isSetup ? "mfa-setup-step" : "mfa-verify-step"}>
+            <div data-testid={isSetup ? "mfa-setup-step" : isEmailOtp ? "email-otp-verify-step" : "mfa-verify-step"}>
                 <div className="w-14 h-14 rounded-2xl bg-accent text-brand flex items-center justify-center mb-6">
-                    <ShieldCheck size={30} weight="duotone" />
+                    {isEmailOtp ? <EnvelopeSimple size={30} weight="duotone" /> : <ShieldCheck size={30} weight="duotone" />}
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground mb-3" style={{ fontFamily: "Tajawal" }}>
-                    {isSetup ? "تفعيل التحقق بخطوتين" : "رمز التحقق"}
+                    {isSetup ? "تفعيل التحقق بخطوتين" : isEmailOtp ? "رمز البريد الإلكتروني" : "رمز التحقق"}
                 </h1>
                 <p className="text-muted-foreground mb-6 text-sm leading-7">
                     {isSetup
-                        ? "حسابات Owner وAdmin في ميزان تتطلب تطبيق مصادقة. افتح Google Authenticator أو Microsoft Authenticator وأضف حساباً جديداً بالمفتاح التالي."
-                        : "أدخل الرمز الحالي من تطبيق المصادقة. ويمكنك استخدام أحد رموز الاسترداد المحفوظة إذا لم يكن هاتفك متاحاً."}
+                        ? "حساب المالك في ميزان يتطلب تطبيق مصادقة. افتح Google Authenticator أو Microsoft Authenticator وأضف حساباً جديداً بالمفتاح التالي."
+                        : isEmailOtp
+                            ? <>أرسلنا رمزًا من 6 أرقام إلى بريد الحساب <strong dir="ltr">{maskedEmail || "المسجل"}</strong>. الرمز صالح لمدة قصيرة ويعمل مرة واحدة فقط.</>
+                            : "أدخل الرمز الحالي من تطبيق المصادقة. ويمكنك استخدام أحد رموز الاسترداد المحفوظة إذا لم يكن هاتفك متاحاً."}
                 </p>
 
                 {isSetup && (
@@ -544,34 +604,49 @@ export default function Login() {
                 <form onSubmit={submitMfa} className="space-y-5">
                     <div>
                         <label className="block text-sm font-semibold text-foreground mb-2">
-                            {isSetup ? "الرمز المكوّن من 6 أرقام" : "رمز المصادقة أو رمز الاسترداد"}
+                            {isSetup ? "الرمز المكوّن من 6 أرقام" : isEmailOtp ? "رمز البريد الإلكتروني" : "رمز المصادقة أو رمز الاسترداد"}
                         </label>
                         <div className="relative">
-                            <ShieldCheck size={20} className="absolute top-3.5 right-3 text-muted-foreground" />
+                            {isEmailOtp ? <EnvelopeSimple size={20} className="absolute top-3.5 right-3 text-muted-foreground" /> : <ShieldCheck size={20} className="absolute top-3.5 right-3 text-muted-foreground" />}
                             <input
                                 value={mfaCode}
-                                onChange={(e) => setMfaCode(e.target.value)}
-                                placeholder={isSetup ? "000000" : "000000 أو XXXX-XXXX-XXXX"}
+                                onChange={(e) => {
+                                    const value = isEmailOtp ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value;
+                                    setMfaCode(value);
+                                }}
+                                placeholder={isSetup || isEmailOtp ? "000000" : "000000 أو XXXX-XXXX-XXXX"}
                                 className="w-full ps-3 pe-10 py-3 text-base border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-shadow num"
                                 autoComplete="one-time-code"
-                                inputMode={isSetup ? "numeric" : "text"}
+                                inputMode={isSetup || isEmailOtp ? "numeric" : "text"}
                                 autoFocus
                                 required
-                                data-testid="mfa-code-input"
+                                data-testid={isEmailOtp ? "email-otp-code-input" : "mfa-code-input"}
                                 dir="ltr"
-                                style={{ textAlign: "center", letterSpacing: isSetup ? "0.25em" : undefined }}
+                                style={{ textAlign: "center", letterSpacing: isSetup || isEmailOtp ? "0.25em" : undefined }}
                             />
                         </div>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={busy || !mfaCode.trim()}
+                        disabled={busy || !mfaCode.trim() || (isEmailOtp && mfaCode.length !== 6)}
                         className="w-full py-3.5 px-4 bg-brand text-white font-semibold rounded-lg bg-brand-hover transition-colors disabled:opacity-60"
-                        data-testid="mfa-submit-btn"
+                        data-testid={isEmailOtp ? "email-otp-submit-btn" : "mfa-submit-btn"}
                     >
                         {busy ? "جاري التحقق…" : isSetup ? "تفعيل والمتابعة" : "تحقق وتسجيل الدخول"}
                     </button>
+
+                    {isEmailOtp && (
+                        <button
+                            type="button"
+                            onClick={resendEmailOtp}
+                            disabled={busy || resendSeconds > 0}
+                            className="w-full py-3 px-4 border border-border bg-white text-brand font-semibold rounded-lg hover:bg-accent disabled:opacity-50"
+                            data-testid="email-otp-resend-btn"
+                        >
+                            {resendSeconds > 0 ? `إعادة الإرسال خلال ${resendSeconds}ث` : "إعادة إرسال رمز جديد"}
+                        </button>
+                    )}
 
                     <button
                         type="button"
