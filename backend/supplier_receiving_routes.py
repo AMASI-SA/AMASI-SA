@@ -118,7 +118,6 @@ class SupplierReceivingInvoiceLineRequest(BaseModel):
     piece_ids: list[str] = Field(min_length=1, max_length=5000)
     product_unit_price_halalas: int = Field(ge=0, le=100_000_000_000)
     services: list[SupplierReceivingInvoiceServiceRequest] = Field(
-        min_length=1,
         max_length=200,
     )
 

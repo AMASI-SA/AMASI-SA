@@ -373,6 +373,36 @@ def test_invoice_draft_separates_product_and_service_prices():
     assert invoice["liability_created"] is False
 
 
+def test_invoice_draft_allows_normally_priced_product_without_services():
+    invoice = build_supplier_receiving_invoice(
+        session={
+            "reference": "SR-20260811-NORMAL",
+            "supplier_snapshot": {"service_links": []},
+        },
+        scans=[{
+            "piece_id": "piece-normal-1",
+            "product_id": "product-normal-1",
+            "product_name": "منتج عادي",
+            "sku": "NORMAL-1",
+            "services": [],
+            "invoice_services": [],
+            "reference_product_unit_price_halalas": 1500,
+        }],
+        requested_lines=[SupplierReceivingInvoiceLineRequest(
+            piece_ids=["piece-normal-1"],
+            product_unit_price_halalas=1500,
+            services=[],
+        )],
+        saved_at=datetime(2026, 8, 11, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert invoice["piece_count"] == 1
+    assert invoice["lines"][0]["product_total_halalas"] == 1500
+    assert invoice["lines"][0]["services_total_halalas"] == 0
+    assert invoice["lines"][0]["services"] == []
+    assert invoice["total_halalas"] == 1500
+
+
 def test_second_supplier_invoice_rejects_product_price_and_charges_service_only():
     scan = {
         "piece_id": "piece-1",
