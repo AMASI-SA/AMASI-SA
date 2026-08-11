@@ -1951,7 +1951,6 @@ async def _retry_payment_only(
 async def manual_send_one(
     db, *, user_id: str, order_number: str,
     orders_user_id: Optional[str] = None, actor: str = "manual-ui",
-    allow_missing_salla_order_date: bool = False,
 ) -> dict:
     """Push a single Salla order to Qoyod using the 4-step manual path.
 
@@ -1976,13 +1975,10 @@ async def manual_send_one(
             f"لم يتم العثور على طلب برقم {order_number} في الاستلام")
 
     # ── Floor date (Salla-source-only) + status filters ────────────
-    # No fallback to received_at/updated_at/webhook time.  The automatic
-    # worker refuses an order when Salla does not expose its creation date.
-    # A deliberately confirmed, bounded recovery batch may proceed without
-    # that optional historical field: its invoice and receipt use send-date,
-    # while the route has already rechecked the live native Salla status.
+    # No fallback to received_at/updated_at/webhook time — if Salla
+    # doesn't tell us the creation date, we REFUSE to send.
     odate = _salla_order_created_date(row)
-    if odate is None and not allow_missing_salla_order_date:
+    if odate is None:
         raise ManualSendRefused(
             "no_salla_order_date",
             "لا يوجد تاريخ إنشاء للطلب في بيانات سلة — يتعذّر التحقق من "
