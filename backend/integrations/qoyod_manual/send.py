@@ -1979,6 +1979,21 @@ async def manual_send_one(
     # doesn't tell us the creation date, we REFUSE to send.
     odate = _salla_order_created_date(row)
     if odate is None:
+        # A direct Salla refresh creates the newest owner row for the live
+        # status/payment facts, but some Order Details responses omit the
+        # historical creation timestamp. Keep the live row for the outgoing
+        # document and recover only that timestamp from an older Salla inbox
+        # snapshot of the same order. This preserves the existing floor-date
+        # safeguard and never changes Qoyod's send-date policy.
+        historical_rows = db.integration_inbox.find(
+            {"user_id": {"$in": inbox_owner_ids},
+             "salla_order_number": str(order_number)},
+        ).sort("received_at", -1).limit(25)
+        async for historical_row in historical_rows:
+            odate = _salla_order_created_date(historical_row)
+            if odate is not None:
+                break
+    if odate is None:
         raise ManualSendRefused(
             "no_salla_order_date",
             "لا يوجد تاريخ إنشاء للطلب في بيانات سلة — يتعذّر التحقق من "
