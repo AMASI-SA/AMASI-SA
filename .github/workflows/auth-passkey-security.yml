@@ -31,7 +31,8 @@ jobs:
           python -m pip install \
             "pytest==9.0.3" \
             "openpyxl==3.1.5" \
-            "webauthn==3.0.0" \
+            "webauthn==2.7.1" \
+            "cryptography==48.0.0" \
             "pymongo==4.5.0" \
             "fastapi==0.110.1" \
             "starlette==0.37.2" \
