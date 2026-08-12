@@ -38,6 +38,11 @@ from integrations.qoyod.payment_methods import (
     is_cod_family,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.normalizer import (
+    NormalizationError,
+    normalize as normalize_salla_qoyod,
+    validate as validate_salla_qoyod,
+)
 from integrations.qoyod_manual.client import (
     ManualQoyodClient, ManualQoyodError,
 )
@@ -847,24 +852,60 @@ async def _prepare_sar_invoice_canon_from_inbox(
     tax percent.  Foreign orders stay blocked unless one stored trace proves
     every required accounting fact; no configured or live-market rate is used.
     """
-    try:
-        return _prepare_sar_invoice_canon(
-            canon=canon, row=representative_row)
-    except ManualSendRefused as first_error:
-        currency = _currency_code(
-            (canon or {}).get("currency")
-            or (canon or {}).get("currency_code")
+    accounting_owner_id = str(
+        orders_user_id
+        or representative_row.get("user_id")
+        or user_id
+        or ""
+    ).strip()
+    representative_owner_id = str(
+        representative_row.get("user_id") or ""
+    ).strip()
+    currency = _currency_code(
+        (canon or {}).get("currency")
+        or (canon or {}).get("currency_code")
+    )
+    representative_is_accounting_owner = (
+        not orders_user_id
+        or not representative_owner_id
+        or representative_owner_id == accounting_owner_id
+    )
+
+    if (
+        currency in _SUPPORTED_GCC_FOREIGN_CURRENCIES
+        and not representative_is_accounting_owner
+    ):
+        # The newest Qoyod inbox row can belong to the legacy ``main``
+        # owner while Orders V2 belongs to the merchant owner.  Never accept
+        # immutable FX facts from that other tenant, even if the payload is
+        # otherwise complete.
+        first_error = ManualSendRefused(
+            "foreign_currency_accounting_facts_missing",
+            "تعذّر إثبات سعر الصرف من بيانات سلة الخاصة بمالك الطلب",
+            {
+                "currency": currency,
+                "accounting_owner_scope": "orders_user_id",
+                "qoyod_write_performed": False,
+            },
         )
+    else:
+        try:
+            return _prepare_sar_invoice_canon(
+                canon=canon, row=representative_row)
+        except ManualSendRefused as error:
+            first_error = error
+
+    try:
         if (
             currency not in _SUPPORTED_GCC_FOREIGN_CURRENCIES
             or first_error.code not in _FOREIGN_ACCOUNTING_FACT_ERRORS
         ):
-            raise
+            raise first_error
 
         try:
             cursor = db.integration_inbox.find(
                 {
-                    "user_id": user_id,
+                    "user_id": accounting_owner_id,
                     "salla_order_number": str(order_number),
                 },
                 {
@@ -877,7 +918,8 @@ async def _prepare_sar_invoice_canon_from_inbox(
             ).sort([("received_at", -1)]).limit(100)
             async for candidate in cursor:
                 if (
-                    representative_row.get("id")
+                    representative_is_accounting_owner
+                    and representative_row.get("id")
                     and candidate.get("id") == representative_row.get("id")
                 ):
                     continue
@@ -896,15 +938,10 @@ async def _prepare_sar_invoice_canon_from_inbox(
             # integration_inbox rows were intentionally compacted and no
             # longer contain exchange_rate, so use that durable Salla snapshot
             # before refusing the send.  No live/market/manual rate is used.
-            tenant_ids: list[str] = []
-            for value in (orders_user_id, user_id, "main"):
-                normalized = str(value or "").strip()
-                if normalized and normalized not in tenant_ids:
-                    tenant_ids.append(normalized)
-            for tenant_id in tenant_ids:
+            if accounting_owner_id:
                 unified = await db.unified_orders.find_one(
                     {
-                        "user_id": tenant_id,
+                        "user_id": accounting_owner_id,
                         "order_number": str(order_number),
                         "raw_by_source.salla_direct": {"$exists": True},
                     },
@@ -917,26 +954,25 @@ async def _prepare_sar_invoice_canon_from_inbox(
                     (unified or {}).get("raw_by_source") or {}
                 )
                 salla_direct = raw_by_source.get("salla_direct")
-                if not isinstance(salla_direct, dict):
-                    continue
-                try:
-                    prepared = _prepare_sar_invoice_canon(
-                        canon=canon,
-                        row={"raw_payload": salla_direct},
-                    )
-                    prepared_fx = prepared.get("_qoyod_fx")
-                    if isinstance(prepared_fx, dict):
-                        prepared_fx["source"] = (
-                            "unified_orders.raw_by_source.salla_direct."
-                            "exchange_rate"
+                if isinstance(salla_direct, dict):
+                    try:
+                        prepared = _prepare_sar_invoice_canon(
+                            canon=canon,
+                            row={"raw_payload": salla_direct},
                         )
-                    return prepared
-                except ManualSendRefused as candidate_error:
-                    if (
-                        candidate_error.code
-                        not in _FOREIGN_ACCOUNTING_FACT_ERRORS
-                    ):
-                        raise
+                        prepared_fx = prepared.get("_qoyod_fx")
+                        if isinstance(prepared_fx, dict):
+                            prepared_fx["source"] = (
+                                "unified_orders.raw_by_source.salla_direct."
+                                "exchange_rate"
+                            )
+                        return prepared
+                    except ManualSendRefused as candidate_error:
+                        if (
+                            candidate_error.code
+                            not in _FOREIGN_ACCOUNTING_FACT_ERRORS
+                        ):
+                            raise
         except ManualSendRefused:
             raise
         except Exception:
@@ -944,8 +980,9 @@ async def _prepare_sar_invoice_canon_from_inbox(
                 "failed to scan historical Salla traces for order=%s",
                 order_number,
             )
-
         raise first_error
+    except ManualSendRefused:
+        raise
 
 def _to_int(v: Any) -> Optional[int]:
     """Coerce a Qoyod id to a positive int. Returns None if the value
@@ -1948,31 +1985,509 @@ async def _retry_payment_only(
 
 
 # ─── Main entrypoint ─────────────────────────────────────────────────
+_RECOVERED_MONEY_FIELDS = (
+    "total_amount",
+    "subtotal",
+    "shipping_amount",
+    "tax_amount",
+    "discount_amount",
+    "cod_fee_amount",
+)
+
+def _money_currencies(value: Any) -> set[str]:
+    """Return every explicit currency carried by a nested money node."""
+    node = value
+    currencies: set[str] = set()
+    for _ in range(4):
+        if not isinstance(node, dict):
+            break
+        currency = _currency_code(
+            node.get("currency") or node.get("currency_code")
+            or node.get("code"),
+            default="",
+        )
+        if currency:
+            currencies.add(currency)
+        node = node.get("amount")
+    return currencies
+
+
+def _recovery_currencies(canon: dict) -> set[str]:
+    """Return every explicit currency carried by accounting facts."""
+    currencies: set[str] = set()
+    for value in (
+        (canon or {}).get("currency"),
+        (canon or {}).get("currency_code"),
+    ):
+        currency = _currency_code(value, default="")
+        if currency:
+            currencies.add(currency)
+    for key in _RECOVERED_MONEY_FIELDS:
+        currencies.update(_money_currencies((canon or {}).get(key)))
+    for item in (canon or {}).get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        for key in ("unit_price", "tax_amount", "discount_amount", "total"):
+            currencies.update(_money_currencies(item.get(key)))
+    return currencies
+
+
+def _explicit_recovery_currency(canon: dict) -> Optional[str]:
+    """Return one unambiguous explicit currency, otherwise fail closed."""
+    currencies = _recovery_currencies(canon)
+    if len(currencies) != 1:
+        return None
+    return next(iter(currencies))
+
+
+def _canonical_matches_order(canon: dict, order_number: str) -> bool:
+    reference = (canon or {}).get("order_number")
+    if reference in (None, ""):
+        reference = (canon or {}).get("order_id")
+    return reference not in (None, "") and str(reference) == str(order_number)
+
+
+def _normalized_recovery_items(value: Any) -> Optional[list[dict]]:
+    """Validate and flatten stored canonical money nodes for invoice use."""
+    if not isinstance(value, list) or not value:
+        return None
+    result: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return None
+        copied = dict(item)
+        sku = str(copied.get("sku") or "").strip()
+        quantity = _money_decimal(copied.get("quantity"))
+        unit_price = _money_decimal(copied.get("unit_price"))
+        total = _money_decimal(copied.get("total"))
+        if (
+            not sku
+            or quantity is None
+            or quantity <= 0
+            or unit_price is None
+            or unit_price < 0
+            or total is None
+            or total < 0
+        ):
+            return None
+        copied["sku"] = sku
+        copied["quantity"] = float(quantity)
+        copied["unit_price"] = _q2(unit_price)
+        copied["total"] = _q2(total)
+        for key in ("tax_amount", "discount_amount"):
+            if key not in copied:
+                continue
+            amount = _money_decimal(copied.get(key))
+            if amount is None or amount < 0:
+                return None
+            copied[key] = _q2(amount)
+        result.append(copied)
+    return result
+
+
+def _merge_recovered_accounting(
+    live_canon: dict, recovered: dict,
+) -> Optional[dict]:
+    """Fill only missing accounting facts; never replace current facts.
+
+    A status refresh can omit either the total or the items.  A current
+    positive total and current valid items remain authoritative.  Historical
+    recovery may fill the missing half, but a different recovered total is a
+    hard conflict rather than permission to overwrite the live value.
+    """
+    result = dict(live_canon or {})
+    live_total = _money_decimal(result.get("total_amount"))
+    recovered_total = _money_decimal(recovered.get("total_amount"))
+    live_has_total = live_total is not None and live_total > 0
+    if (
+        live_has_total
+        and recovered_total is not None
+        and recovered_total > 0
+        and _q2(live_total) != _q2(recovered_total)
+    ):
+        return None
+
+    live_items = _normalized_recovery_items(result.get("items"))
+    live_has_items = live_items is not None
+
+    # A positive current total means its document-level amounts are current
+    # too. Fill only keys absent from that view. If the total is missing, the
+    # recovered document-level facts may replace the stripped zero defaults.
+    for key in _RECOVERED_MONEY_FIELDS:
+        if key not in recovered:
+            continue
+        if key == "total_amount" and live_has_total:
+            result[key] = _q2(live_total)
+        elif live_has_total and result.get(key) not in (None, ""):
+            continue
+        else:
+            result[key] = recovered.get(key)
+
+    if live_has_items:
+        result["items"] = live_items
+    elif "items" in recovered:
+        result["items"] = recovered.get("items")
+
+    live_has_accounting = live_has_total or live_has_items
+    for key in ("currency", "currency_code"):
+        if not live_has_accounting and key in recovered:
+            result[key] = recovered.get(key)
+        elif result.get(key) in (None, "") and key in recovered:
+            result[key] = recovered.get(key)
+
+    for key in (
+        "cod_fee_source_path", "cod_fee_source_type", "extra_charges",
+    ):
+        if result.get(key) in (None, "", {}, []) and key in recovered:
+            result[key] = recovered.get(key)
+    for key in ("order_number", "order_id", "order_date", "created_at",
+                "customer"):
+        if result.get(key) in (None, "", {}, []):
+            value = recovered.get(key)
+            if value not in (None, "", {}, []):
+                result[key] = value
+    provenance = recovered.get("_qoyod_historical_recovery")
+    if isinstance(provenance, dict):
+        result["_qoyod_historical_recovery"] = dict(provenance)
+    return result
+
+
+def _explicit_salla_node_currency(order_node: dict) -> Optional[str]:
+    amounts = (order_node or {}).get("amounts") or {}
+    currencies: set[str] = set()
+    for value in (
+        (order_node or {}).get("currency"),
+        amounts.get("currency") if isinstance(amounts, dict) else None,
+    ):
+        currency = _currency_code(value, default="")
+        if currency:
+            currencies.add(currency)
+    if isinstance(amounts, dict):
+        for key in (
+            "total", "sub_total", "subtotal", "shipping_cost", "shipping",
+            "tax", "discount", "discounts", "cash_on_delivery", "cod_fee",
+            "payment_fee",
+        ):
+            currencies.update(_money_currencies(amounts.get(key)))
+    for item in (order_node or {}).get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        item_amounts = item.get("amounts") or {}
+        for value in (
+            item.get("unit_price"), item.get("price"), item.get("tax_amount"),
+            item.get("discount_amount"), item.get("total"),
+        ):
+            currencies.update(_money_currencies(value))
+        if isinstance(item_amounts, dict):
+            for key in (
+                "price_without_tax", "price", "total_discount", "discount",
+                "tax", "total",
+            ):
+                currencies.update(_money_currencies(item_amounts.get(key)))
+    if len(currencies) != 1:
+        return None
+    return next(iter(currencies))
+
+
+async def _find_unified_salla_accounting_canon(
+    db, *, unified_owner_id: str, order_number: str,
+) -> Optional[dict]:
+    """Normalize the exact owner's durable Salla Order Details snapshot."""
+    owner_id = str(unified_owner_id or "").strip()
+    if not owner_id:
+        return None
+    unified = await db.unified_orders.find_one(
+        {
+            "user_id": owner_id,
+            "order_number": str(order_number),
+            "raw_by_source.salla_direct": {"$exists": True},
+        },
+        {
+            "_id": 0,
+            "user_id": 1,
+            "order_number": 1,
+            "raw_by_source.salla_direct": 1,
+        },
+    )
+    raw_by_source = (unified or {}).get("raw_by_source") or {}
+    salla_direct = raw_by_source.get("salla_direct")
+    if not isinstance(salla_direct, dict):
+        return None
+
+    order_node = _find_salla_accounting_node(
+        {"raw_payload": salla_direct}, str(order_number))
+    if not isinstance(order_node, dict):
+        return None
+    source_reference = (
+        order_node.get("reference_id")
+        or order_node.get("order_number")
+        or order_node.get("id")
+    )
+    if str(source_reference or "") != str(order_number):
+        return None
+    source_currency = _explicit_salla_node_currency(order_node)
+    if not source_currency:
+        return None
+
+    wrapped = {"data": order_node}
+    valid, _validation_error = validate_salla_qoyod(wrapped)
+    if not valid:
+        return None
+    try:
+        recovered = normalize_salla_qoyod(wrapped).model_dump(mode="json")
+    except (NormalizationError, ValueError, TypeError):
+        return None
+    if not _canonical_matches_order(recovered, str(order_number)):
+        return None
+
+    normalized_currency = _explicit_recovery_currency(recovered)
+    if normalized_currency != source_currency:
+        return None
+    total = _money_decimal(recovered.get("total_amount"))
+    if total is None or total <= 0:
+        return None
+
+    raw_items = order_node.get("items") or []
+    normalized_items = recovered.get("items") or []
+    if (
+        not isinstance(raw_items, list)
+        or not isinstance(normalized_items, list)
+        or len(raw_items) != len(normalized_items)
+    ):
+        return None
+    for index, item in enumerate(normalized_items):
+        if not isinstance(item, dict) or not isinstance(raw_items[index], dict):
+            return None
+        if str(item.get("sku") or "").strip():
+            continue
+        raw_item = raw_items[index]
+        variant = raw_item.get("variant") or {}
+        product = raw_item.get("product") or {}
+        item["sku"] = str(
+            (variant.get("sku") if isinstance(variant, dict) else None)
+            or (product.get("sku") if isinstance(product, dict) else None)
+            or raw_item.get("sku")
+            or ""
+        ).strip()
+    items = _normalized_recovery_items(normalized_items)
+    if items is None:
+        return None
+
+    recovered["total_amount"] = _q2(total)
+    recovered["items"] = items
+    recovered["currency"] = source_currency
+    recovered["currency_code"] = source_currency
+    amounts = order_node.get("amounts") or {}
+    if isinstance(amounts, dict):
+        shipping_node = (
+            amounts.get("shipping_cost")
+            if "shipping_cost" in amounts else amounts.get("shipping")
+        )
+        shipping = _money_decimal(shipping_node)
+        if shipping is not None and shipping >= 0:
+            recovered["shipping_amount"] = _q2(shipping)
+    recovered["_qoyod_historical_recovery"] = {
+        "strategy": "unified_salla_direct_normalized",
+        "owner_id": owner_id,
+        "source": "unified_orders.raw_by_source.salla_direct",
+    }
+    return recovered
+
+
 async def _find_historical_positive_canon(
     db, *, owner_ids: list[str], order_number: str,
+    live_canon: Optional[dict] = None,
+    unified_owner_id: Optional[str] = None,
+    preferred_inbox_owner_id: Optional[str] = None,
 ) -> Optional[dict]:
-    """Return the newest complete positive inbox payload for recovery.
+    """Resolve verified accounting facts for the bounded manual recovery.
 
-    A status-authoritative Salla refresh can be accounting-empty. This helper
-    never invents an amount: it accepts only a stored canonical payload for the
-    same owner/order with both a positive total and at least one item.
+    The current row remains authoritative for status, payment and customer.
+    Financial facts first come from the exact owner's durable Salla Order
+    Details snapshot.  If that snapshot is incomplete, a positive total and
+    items may come from separate inbox traces only when order, owner, amount
+    and explicit currency evidence agree.  No automatic-send path opts in.
     """
+    current = dict(live_canon or {})
+    current_total = _money_decimal(current.get("total_amount"))
+    current_items = _normalized_recovery_items(current.get("items"))
+    current_currencies = _recovery_currencies(current)
+    if len(current_currencies) > 1:
+        return None
+    # A stripped status refresh is commonly normalised with the DTO's SAR
+    # default even though it carries no financial currency evidence. Do not
+    # let that placeholder overrule an explicit currency in the durable Salla
+    # snapshot. A non-empty live accounting view remains a conflict guard.
+    live_currency = (
+        _explicit_recovery_currency(current)
+        if current and (
+            (current_total is not None and current_total > 0)
+            or current_items is not None
+        ) else None
+    )
+
+    unified_recovered = await _find_unified_salla_accounting_canon(
+        db,
+        unified_owner_id=str(unified_owner_id or ""),
+        order_number=str(order_number),
+    )
+    if unified_recovered is not None:
+        recovered_currency = _explicit_recovery_currency(unified_recovered)
+        if not live_currency or live_currency == recovered_currency:
+            return _merge_recovered_accounting(current, unified_recovered)
+
+    normalized_owner_ids = list(dict.fromkeys(
+        str(value).strip() for value in owner_ids if str(value).strip()
+    ))
+    if not normalized_owner_ids:
+        return None
     historical = db.integration_inbox.find(
         {
-            "user_id": {"$in": owner_ids},
+            "user_id": {"$in": normalized_owner_ids},
             "salla_order_number": str(order_number),
         },
     ).sort("received_at", -1).limit(100)
-    async for candidate in historical:
-        candidate_canon = candidate.get("canonical_payload") or {}
-        candidate_items = candidate_canon.get("items") or []
-        if (
-            _q2(candidate_canon.get("total_amount")) > 0
-            and isinstance(candidate_items, list)
-            and candidate_items
+    rows: list[dict] = [candidate async for candidate in historical]
+
+    rows_by_owner: dict[str, list[dict]] = {}
+    for candidate in rows:
+        candidate_owner = str(candidate.get("user_id") or "").strip()
+        if candidate_owner in normalized_owner_ids:
+            rows_by_owner.setdefault(candidate_owner, []).append(candidate)
+    owner_sequence = list(dict.fromkeys(
+        value for value in (
+            str(preferred_inbox_owner_id or "").strip(),
+            *normalized_owner_ids,
+        ) if value
+    ))
+
+    recovered_candidates: list[tuple[str, dict]] = []
+    for candidate_owner in owner_sequence:
+        owner_rows = rows_by_owner.get(candidate_owner) or []
+        positive_donors: list[tuple[dict, dict, Decimal, str]] = []
+        for candidate in owner_rows:
+            candidate_canon = candidate.get("canonical_payload") or {}
+            if not _canonical_matches_order(
+                candidate_canon, str(order_number)
+            ):
+                continue
+            amount = _money_decimal(candidate_canon.get("total_amount"))
+            currency = _explicit_recovery_currency(candidate_canon)
+            if amount is not None and amount > 0 and currency:
+                positive_donors.append(
+                    (candidate, candidate_canon, amount, currency))
+        if not positive_donors:
+            continue
+
+        distinct_totals = {_q2(entry[2]) for entry in positive_donors}
+        distinct_currencies = {entry[3] for entry in positive_donors}
+        if len(distinct_totals) != 1 or len(distinct_currencies) != 1:
+            continue
+        total_row, total_canon, total_amount, total_currency = (
+            positive_donors[0]
+        )
+        if live_currency and live_currency != total_currency:
+            continue
+
+        items_row: Optional[dict] = None
+        items_canon: Optional[dict] = None
+        normalized_items: Optional[list[dict]] = None
+        for candidate in owner_rows:
+            candidate_canon = candidate.get("canonical_payload") or {}
+            if not _canonical_matches_order(
+                candidate_canon, str(order_number)
+            ):
+                continue
+            items_currency = _explicit_recovery_currency(candidate_canon)
+            if items_currency != total_currency:
+                continue
+            candidate_items = _normalized_recovery_items(
+                candidate_canon.get("items"))
+            if candidate_items is None:
+                continue
+            items_row = candidate
+            items_canon = candidate_canon
+            normalized_items = candidate_items
+            break
+        if items_canon is None or normalized_items is None:
+            continue
+
+        recovered: dict = {
+            "total_amount": _q2(total_amount),
+            "currency": total_currency,
+            "currency_code": total_currency,
+            "items": normalized_items,
+        }
+        for key in _RECOVERED_MONEY_FIELDS:
+            if key == "total_amount":
+                continue
+            source = total_canon if key in total_canon else items_canon
+            if key not in source:
+                continue
+            amount = _money_decimal(source.get(key))
+            if amount is not None and amount >= 0:
+                recovered[key] = _q2(amount)
+        for key in (
+            "cod_fee_source_path", "cod_fee_source_type", "extra_charges",
+            "order_number", "order_id", "order_date", "created_at",
+            "customer",
         ):
-            return candidate_canon
-    return None
+            value = total_canon.get(key)
+            if value in (None, "", {}, []):
+                value = items_canon.get(key)
+            if value not in (None, "", {}, []):
+                recovered[key] = value
+        recovered["_qoyod_historical_recovery"] = {
+            "strategy": "split_verified_salla_traces",
+            "owner_id": candidate_owner,
+            "total_row_id": total_row.get("id"),
+            "total_connector": total_row.get("connector_key"),
+            "items_row_id": (items_row or {}).get("id"),
+            "items_connector": (items_row or {}).get("connector_key"),
+        }
+        recovered_candidates.append((candidate_owner, recovered))
+
+    if not recovered_candidates:
+        return None
+
+    preferred_owner = str(preferred_inbox_owner_id or "").strip()
+    preferred_candidate = next(
+        (
+            value for owner, value in recovered_candidates
+            if owner == preferred_owner
+        ),
+        None,
+    )
+    if preferred_candidate is not None:
+        return _merge_recovered_accounting(current, preferred_candidate)
+
+    def accounting_signature(value: dict) -> tuple:
+        items_signature = tuple(
+            (
+                str(item.get("sku") or ""),
+                str(item.get("quantity") or ""),
+                str(item.get("unit_price") or ""),
+                str(item.get("total") or ""),
+            )
+            for item in value.get("items") or []
+            if isinstance(item, dict)
+        )
+        return (
+            _explicit_recovery_currency(value),
+            *(
+                _q2(_money_decimal(value.get(key)))
+                if _money_decimal(value.get(key)) is not None else None
+                for key in _RECOVERED_MONEY_FIELDS
+            ),
+            items_signature,
+        )
+
+    signatures = {
+        accounting_signature(value) for _owner, value in recovered_candidates
+    }
+    if len(signatures) != 1:
+        return None
+    return _merge_recovered_accounting(current, recovered_candidates[0][1])
 
 
 async def manual_send_one(
@@ -2097,17 +2612,36 @@ async def manual_send_one(
     #   2. `client.find_invoice_by_reference` (Qoyod-side check
     #      below — the only real source of truth).
 
-    canon = row.get("canonical_payload") or {}
+    canon = dict(row.get("canonical_payload") or {})
+    live_currencies = _recovery_currencies(canon)
+    if len(live_currencies) > 1:
+        raise ManualSendRefused(
+            "accounting_currency_conflict",
+            "بيانات الطلب الحالية تحمل أكثر من عملة — تم إيقاف الإرسال",
+            {
+                "currencies": sorted(live_currencies),
+                "qoyod_write_performed": False,
+            },
+        )
+    live_total = _money_decimal(canon.get("total_amount"))
+    if live_total is not None:
+        canon["total_amount"] = _q2(live_total)
+    live_items = _normalized_recovery_items(canon.get("items"))
+    if live_items is not None:
+        canon["items"] = live_items
     # Only the operator-confirmed bounded recovery route may reuse stored
-    # positive accounting facts when the live status refresh is stripped to
-    # 0.00. The automatic worker never opts in and remains blocked by G0.
-    if allow_historical_positive_total and _q2(
-        canon.get("total_amount")
-    ) <= 0:
+    # accounting facts when the live status refresh is stripped to 0.00 or
+    # omits its items. The automatic worker never opts in and remains blocked.
+    if allow_historical_positive_total and (
+        live_total is None or live_total <= 0 or live_items is None
+    ):
         historical_canon = await _find_historical_positive_canon(
             db,
             owner_ids=inbox_owner_ids,
             order_number=str(order_number),
+            live_canon=canon,
+            unified_owner_id=str(orders_user_id or user_id),
+            preferred_inbox_owner_id=str(row.get("user_id") or ""),
         )
         if historical_canon is not None:
             canon = historical_canon
@@ -2129,7 +2663,8 @@ async def manual_send_one(
         orders_user_id=orders_user_id,
     )
     _assert_sar_currency(canon)
-    salla_total = _q2(canon.get("total_amount"))
+    resolved_total = _money_decimal(canon.get("total_amount"))
+    salla_total = _q2(resolved_total) if resolved_total is not None else 0.0
     # The inbox snapshot may carry the generic/old payment alias.  Orders V2
     # is authoritative for the current payment method.
     is_cod = is_cod_family(payment_method)
@@ -2153,26 +2688,17 @@ async def manual_send_one(
         best_other = None
         best_amt = 0.0
         async for other in db.integration_inbox.find(
-            {"salla_order_number": str(order_number)},
+            {
+                "user_id": {"$in": inbox_owner_ids},
+                "salla_order_number": str(order_number),
+            },
             {"_id": 0, "canonical_payload.total_amount": 1,
              "connector_key": 1},
         ):
             node = ((other.get("canonical_payload") or {})
                     .get("total_amount"))
-            if node is None:
-                continue
-            if isinstance(node, (int, float)):
-                v = float(node)
-            elif isinstance(node, dict):
-                try:
-                    v = float(node.get("amount") or 0)
-                except (TypeError, ValueError):
-                    v = 0.0
-            else:
-                try:
-                    v = float(node)
-                except (TypeError, ValueError):
-                    v = 0.0
+            amount = _money_decimal(node)
+            v = float(amount) if amount is not None else 0.0
             if v > best_amt:
                 best_amt = v
                 best_other = other
