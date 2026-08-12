@@ -7,6 +7,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from component_edit_policy import component_cost_metadata
+from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, ensure_indexes
 from product_v2_routes import _number, _text
@@ -153,6 +154,7 @@ def make_component_edit_router(db: Any, current_user: Callable[..., Any]) -> API
         metadata = component_cost_metadata(track_inventory=bool(before.get("track_inventory")), amount=amount)
         now = _now()
         await db[RESOURCES].update_one({"user_id": user_id, "id": resource_id}, {"$set": {**metadata, "updated_at": now}})
+        await bump_product_cost_revision(db, user_id)
         impacted = (
             await db[BINDINGS].count_documents(
                 {"user_id": user_id, "resource_id": resource_id}

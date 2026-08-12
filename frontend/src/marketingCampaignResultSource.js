@@ -9,7 +9,6 @@ const STORAGE_PREFIX = "mezan-marketing-results-source-v1:";
 const SNAPCHAT_ACCOUNT_STORAGE = "mezan-snapchat-manager-account-v1";
 const SNAPCHAT_ACCOUNTS_STORAGE = "mezan-snapchat-manager-accounts-v1";
 const SNAPCHAT_RETURN_RANGE_STORAGE = "mezan-snapchat-manager-return-range-v1";
-const SNAPCHAT_RETURN_RANGE_MAX_AGE_MS = 30 * 60 * 1000;
 const snapshots = new Map();
 let forceAccountToday = true;
 let manualRangeSelected = false;
@@ -96,10 +95,6 @@ function readStoredReturnRange() {
     );
     const normalized = normalizeReturnRange(parsed);
     if (!normalized) {
-      clearStoredReturnRange();
-      return null;
-    }
-    if (Date.now() - normalized.saved_at > SNAPCHAT_RETURN_RANGE_MAX_AGE_MS) {
       clearStoredReturnRange();
       return null;
     }
@@ -317,10 +312,18 @@ export function prepareSnapchatAccountPage() {
   manualRangeSelected = false;
 }
 
-export function markSnapchatManualRange() {
-  clearSnapchatRestoredReturnRange();
+export function markSnapchatManualRange(range = null) {
+  const normalized = normalizeReturnRange(range || {});
+  if (normalized) {
+    return rememberSnapchatAdsManagerReturnRange({
+      dateFrom: normalized.date_from,
+      dateTo: normalized.date_to,
+      accountId: snapchatSelectedAccountId(),
+    });
+  }
   manualRangeSelected = true;
   forceAccountToday = false;
+  return null;
 }
 
 export function snapchatManualRangeIsSelected() {

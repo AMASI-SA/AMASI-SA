@@ -17,6 +17,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_v2_routes import PRODUCTS, _number, _text
 
@@ -187,6 +188,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             if "duplicate" in str(exc).lower():
                 raise HTTPException(status_code=409, detail={"code": "component_code_exists"}) from exc
             raise
+        await bump_product_cost_revision(db, user_id)
         return {"ok": True, "resource": _serialize(row)}
 
     @router.put("/components-v2/{resource_id}/cost")
@@ -203,6 +205,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             {"user_id": user_id, "id": resource_id},
             {"$set": {"unit_cost": amount, "updated_at": now}},
         )
+        await bump_product_cost_revision(db, user_id)
         impacted = await db[BINDINGS].count_documents({"user_id": user_id, "resource_id": resource_id})
         await db[AUDIT].insert_one({
             "id": uuid.uuid4().hex,
@@ -307,6 +310,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             {"$set": patch, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}},
             upsert=True,
         )
+        await bump_product_cost_revision(db, user_id)
         saved = await db[BINDINGS].find_one(selector, {"_id": 0})
         return {"ok": True, "binding": await _binding_view(db, saved or patch)}
 
@@ -320,6 +324,8 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "option_id": str(option_id),
             "value_id": str(value_id),
         })
+        if result.deleted_count:
+            await bump_product_cost_revision(db, user_id)
         return {"ok": True, "deleted": result.deleted_count}
 
     @router.post("/products-v2/{product_id}/calculate-cost")

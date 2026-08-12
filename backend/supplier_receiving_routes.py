@@ -40,6 +40,7 @@ from preparation_supplier_dispatch import (
     DISPATCH_STATUS_RECEIVED,
     supplier_receiving_dispatch_blocker,
 )
+from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
@@ -3642,6 +3643,14 @@ def make_supplier_receiving_router(
             if audit_events:
                 await db[RECEIVING_EVENTS].insert_many(
                     audit_events,
+                    session=mongo_session,
+                )
+            if not is_experiment and (
+                invoice.get("price_changes") or added_pairs
+            ):
+                await bump_product_cost_revision(
+                    db,
+                    merchant_id,
                     session=mongo_session,
                 )
             return {

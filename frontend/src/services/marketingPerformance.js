@@ -131,7 +131,7 @@ function normalizeHourly(value = {}) {
 function normalizeCampaign(value = {}) {
     const campaignId = nullableText(value.campaign_id);
     if (!campaignId) return null;
-    return {
+    const campaign = {
         account_id: nullableText(value.account_id),
         account_name: text(value.account_name, value.account_id || "حساب غير معروف"),
         campaign_id: campaignId,
@@ -149,6 +149,13 @@ function normalizeCampaign(value = {}) {
         },
         ...normalizeTotals(value),
     };
+    if (value.salla_results && typeof value.salla_results === "object") {
+        campaign.salla_results = value.salla_results;
+    }
+    if (value.profitability && typeof value.profitability === "object") {
+        campaign.profitability = value.profitability;
+    }
+    return campaign;
 }
 
 function normalizeAccount(value = {}) {
@@ -215,7 +222,12 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             timezone: text(value.business_timezone, "Asia/Riyadh"),
         },
         connection: connectionFromIntegration(integration),
-        totals: normalizeTotals(value.totals),
+        totals: {
+            ...normalizeTotals(value.totals),
+            ...(value.totals?.profitability && typeof value.totals.profitability === "object"
+                ? { profitability: value.totals.profitability }
+                : {}),
+        },
         daily: Array.isArray(value.daily)
             ? value.daily
                 .filter((row) => ISO_DATE_RE.test(row?.date || ""))

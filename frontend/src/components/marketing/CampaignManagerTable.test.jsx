@@ -48,6 +48,8 @@ const campaigns = [
             products: [
                 {
                     identity: "product-1",
+                    mezan_product_id: "mezan-product-1",
+                    salla_product_id: "salla-product-1",
                     name: "منتج رابح",
                     sku: "SKU-1",
                     units: 3,
@@ -56,17 +58,21 @@ const campaigns = [
                     allocated_ad_spend_sar: 90,
                     contribution_profit_sar: 80,
                     profit_margin_pct: 29.63,
+                    cost_status: "complete",
                 },
                 {
                     identity: "product-2",
+                    mezan_product_id: "mezan-product-2",
+                    salla_product_id: "salla-product-2",
                     name: "منتج ناقص التكلفة",
                     sku: "SKU-2",
                     units: 1,
                     sales_sar: 50,
-                    product_cost_sar: null,
+                    product_cost_sar: 20,
                     allocated_ad_spend_sar: 10,
                     contribution_profit_sar: null,
                     profit_margin_pct: null,
+                    cost_status: "salla_fallback",
                 },
             ],
         },
@@ -264,9 +270,11 @@ test("opens product profitability details with official product cost links", asy
     const links = [...dialog.querySelectorAll('[data-testid="campaign-profitability-product-link"]')];
     expect(links).toHaveLength(2);
     expect(links[0].textContent).toBe("فتح المنتج");
-    expect(links[0].getAttribute("href")).toContain("lookup_sku=SKU-1");
+    expect(links[0].getAttribute("href")).toContain("product=mezan-product-1");
+    expect(links[0].getAttribute("href")).not.toContain("lookup_sku");
     expect(links[1].textContent).toBe("فتح المنتج وإضافة التكلفة");
-    expect(links[1].getAttribute("href")).toContain("lookup_sku=SKU-2");
+    expect(links[1].getAttribute("href")).toContain("product=mezan-product-2");
+    expect(dialog.textContent).toContain("التكلفة الحالية من سلة؛ أضف تكلفة ميزان");
 
     const close = document.querySelector('button[aria-label="إغلاق تفاصيل الربحية"]');
     await act(async () => close.click());

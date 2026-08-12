@@ -166,6 +166,115 @@ describe("campaign result source transport", () => {
     });
   });
 
+  test("persists the applied range with the selected account and source across refresh and product navigation", async () => {
+    setSnapchatSelectedAccount("us-account");
+    setCampaignResultsSource("platform", "snapchat");
+    expect(markSnapchatManualRange({
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-09",
+    })).toMatchObject({
+      date_from: "2026-08-01",
+      date_to: "2026-08-09",
+      account_id: "us-account",
+    });
+
+    const persisted = JSON.parse(window.sessionStorage.getItem(
+      "mezan-snapchat-manager-return-range-v1",
+    ));
+    expect(persisted).toMatchObject({
+      date_from: "2026-08-01",
+      date_to: "2026-08-09",
+      account_id: "us-account",
+    });
+    expect(campaignResultsSource("snapchat")).toBe("platform");
+
+    window.history.replaceState({}, "", "/products-v2?product=product-1&focus=cost");
+    expect(snapchatRestoredReturnRange()).toBeNull();
+    window.history.replaceState({}, "", "/ads-manager?provider=snapchat");
+    prepareSnapchatAccountPage();
+
+    api.defaults.adapter = async (config) => ({
+      data: {
+        result_source: config.params.result_source,
+        selected_account_id: config.params.account_id,
+        date_from: config.params.from_date,
+        date_to: config.params.to_date,
+        campaigns: [],
+      },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    });
+
+    const response = await api.get("/integrations-v2/snapchat_ads/campaign-report", {
+      params: {
+        from_date: "2026-08-12",
+        to_date: "2026-08-12",
+        result_source: "salla",
+        page: 1,
+      },
+    });
+
+    expect(response.config.params).toMatchObject({
+      account_id: "us-account",
+      from_date: "2026-08-01",
+      to_date: "2026-08-09",
+      result_source: "platform",
+    });
+    expect(snapchatRestoredReturnRange()).toMatchObject({
+      date_from: "2026-08-01",
+      date_to: "2026-08-09",
+      account_id: "us-account",
+    });
+  });
+
+  test("restores the persisted range from storage before a hard-refresh request", async () => {
+    clearSnapchatRestoredReturnRange();
+    window.localStorage.setItem("mezan-snapchat-manager-account-v1", "us-account");
+    window.localStorage.setItem("mezan-marketing-results-source-v1:snapchat", "platform");
+    window.sessionStorage.setItem(
+      "mezan-snapchat-manager-return-range-v1",
+      JSON.stringify({
+        date_from: "2026-08-01",
+        date_to: "2026-08-09",
+        account_id: "us-account",
+        saved_at: Date.now(),
+      }),
+    );
+    prepareSnapchatAccountPage();
+
+    api.defaults.adapter = async (config) => ({
+      data: {
+        result_source: config.params.result_source,
+        selected_account_id: config.params.account_id,
+        date_from: config.params.from_date,
+        date_to: config.params.to_date,
+        campaigns: [],
+      },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    });
+
+    const response = await api.get("/integrations-v2/snapchat_ads/campaign-report", {
+      params: {
+        from_date: "2026-08-12",
+        to_date: "2026-08-12",
+        result_source: "salla",
+        page: 1,
+      },
+    });
+
+    expect(response.config.params).toMatchObject({
+      account_id: "us-account",
+      from_date: "2026-08-01",
+      to_date: "2026-08-09",
+      result_source: "platform",
+    });
+  });
+
   test("delivery block never changes the configured active campaign switch", () => {
     const payload = {
       campaigns: [{

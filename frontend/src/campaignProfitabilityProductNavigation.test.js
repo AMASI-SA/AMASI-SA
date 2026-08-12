@@ -24,6 +24,18 @@ test("builds the Product V2 cost-focus deep link", () => {
   expect(href).toContain("lookup_sku=AMS13039");
 });
 
+test("prefers the exact product id over ambiguous SKU and name lookup", () => {
+  const href = buildProfitabilityProductCostHref({
+    productId: "mezan-123",
+    sku: "AMS13039",
+    name: "مشط رجالي",
+  });
+  expect(href).toContain("product=mezan-123");
+  expect(href).toContain("focus=cost");
+  expect(href).not.toContain("lookup_sku");
+  expect(href).not.toContain("lookup_name");
+});
+
 test("captures the selected Snapchat date range without DOM row enhancement", () => {
   document.body.innerHTML = `
     <main data-testid="marketing-platform-workspace" data-snapchat-selected-account="account-1">

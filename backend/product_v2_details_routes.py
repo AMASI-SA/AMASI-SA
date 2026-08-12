@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlsplit
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from product_cost_revision import bump_product_cost_revision
 from product_v2_routes import PRODUCTS, _now, _number, _text, normalize_salla_product
 from salla_integration.service import SallaError, call_salla
 
@@ -315,6 +316,7 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
         now = _now()
         salla_id = str(product["salla_product_id"])
         await db[COST_PROFILES].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {"user_id": user_id, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "notes": _text(payload.get("notes")), "updated_at": now}, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}}, upsert=True)
+        await bump_product_cost_revision(db, user_id)
         return {"ok": True, "salla_product_id": salla_id, "base_cost": base_cost, "variant_costs": variant_costs, "updated_at": now.isoformat()}
 
     @router.get("/{product_id}/image-profile")

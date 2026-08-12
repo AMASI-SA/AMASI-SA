@@ -434,12 +434,16 @@ function cellValue(campaign, columnId, onOpenProfit, onOpenAdSquads) {
 }
 
 function productNavigation(product) {
+    const productId = product.mezan_product_id || product.salla_product_id || "";
     return {
         href: buildProfitabilityProductCostHref({
+            productId,
             sku: product.sku || "",
             name: product.name || "",
         }),
-        missingCost: finiteNumber(product.product_cost_sar) === null,
+        missingCost: product.cost_status
+            ? product.cost_status !== "complete"
+            : finiteNumber(product.product_cost_sar) === null,
     };
 }
 
@@ -510,6 +514,16 @@ function ProfitabilityDialog({ campaign, onClose }) {
                                                     <div>
                                                         <div className="max-w-[230px] truncate font-black text-slate-900">{product.name}</div>
                                                         <div className="mt-1 font-mono text-[10px] text-slate-400">{product.sku || product.salla_product_id || product.identity}</div>
+                                                        {product.cost_status === "salla_fallback" && (
+                                                            <div className="mt-1 text-[10px] font-black text-amber-700" data-testid="campaign-product-cost-source">
+                                                                التكلفة الحالية من سلة؛ أضف تكلفة ميزان
+                                                            </div>
+                                                        )}
+                                                        {product.cost_status === "missing" && (
+                                                            <div className="mt-1 text-[10px] font-black text-rose-700" data-testid="campaign-product-cost-source">
+                                                                لا توجد تكلفة منتج محسومة
+                                                            </div>
+                                                        )}
                                                         <a
                                                             href={navigation.href}
                                                             onClick={() => rememberSnapchatRangeBeforeProductNavigation()}

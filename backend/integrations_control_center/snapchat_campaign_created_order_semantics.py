@@ -21,6 +21,7 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
 )
+from product_cost_revision import get_product_cost_revision
 
 from . import snapchat_account_timezone_manager as manager
 
@@ -32,7 +33,15 @@ _FINANCIAL_MATCHED: ContextVar[
 ] = ContextVar("snapchat_financial_matched_orders", default={})
 
 _PROFIT_CACHE: dict[
-    tuple[str, str, str, str],
+    tuple[
+        str,
+        str,
+        str,
+        str,
+        int,
+        tuple[tuple[str, str, float], ...],
+        float,
+    ],
     tuple[datetime, dict[tuple[str, str], dict[str, Any]], dict[str, Any]],
 ] = {}
 
@@ -58,6 +67,16 @@ def _float(value: Any) -> float:
     except (TypeError, ValueError, OverflowError):
         return 0.0
     return parsed if parsed == parsed and abs(parsed) != float("inf") else 0.0
+
+
+def _first_int(*values: Any) -> int:
+    for value in values:
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError, OverflowError):
+                continue
+    return 0
 
 
 def _matches_any(value: str, allowed: list[str]) -> bool:
@@ -284,10 +303,33 @@ async def calculate_financial_profitability(
     date_to: str,
     financial_matched: dict[tuple[str, str], list[dict[str, Any]]],
     campaign_spend: dict[tuple[str, str], float],
+    total_spend_sar: float | None = None,
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
     from . import snapchat_campaign_profitability as profitability
 
-    cache_key = (user_id, account_id, date_from, date_to)
+    cost_revision = await get_product_cost_revision(db, user_id)
+    spend_signature = tuple(sorted(
+        (
+            _text(key[0]),
+            _text(key[1]),
+            round(_float(value), 6),
+        )
+        for key, value in campaign_spend.items()
+    ))
+    report_total_spend = (
+        round(_float(total_spend_sar), 2)
+        if total_spend_sar is not None
+        else profitability._total_campaign_spend(campaign_spend)
+    )
+    cache_key = (
+        user_id,
+        account_id,
+        date_from,
+        date_to,
+        cost_revision,
+        spend_signature,
+        report_total_spend,
+    )
     now = datetime.now(timezone.utc)
     cached = _PROFIT_CACHE.get(cache_key)
     if cached and now - cached[0] < timedelta(seconds=PROFIT_CACHE_TTL_SECONDS):
@@ -317,7 +359,7 @@ async def calculate_financial_profitability(
     total_known_cost = round(
         sum(_float(row.get("known_product_cost_sar")) for row in by_campaign.values()), 2
     )
-    total_spend = profitability._total_campaign_spend(campaign_spend)
+    total_spend = report_total_spend
     total_profit = (
         round(total_sales - total_known_cost - total_spend, 2)
         if all_complete else None
@@ -398,10 +440,6 @@ def install_fixed_created_order_semantics() -> None:
             financial_matched = _FINANCIAL_MATCHED.get()
             campaigns = result.get("campaigns") or []
 
-            created_total = 0
-            financial_total = 0
-            cancelled_total = 0
-            excluded_total = 0
             for campaign in campaigns:
                 salla = campaign.get("salla_results")
                 salla = salla if isinstance(salla, dict) else {}
@@ -425,12 +463,30 @@ def install_fixed_created_order_semantics() -> None:
                     round(float(spend) / created, 6)
                     if spend is not None and created > 0 else None
                 )
-                created_total += created
-                financial_total += financial
-                cancelled_total += cancelled
-                excluded_total += excluded
-
             totals = result.setdefault("totals", {})
+            source = result.setdefault("source", {})
+            attribution = source.setdefault("salla_attribution", {})
+            # Campaign rows have already been filtered and paginated by the
+            # account-local report. Never derive report-wide cards from those
+            # rows: retain the exact, pre-pagination Salla coverage instead.
+            created_total = _first_int(
+                attribution.get("created_orders_matched"),
+                totals.get("created_orders"),
+                totals.get("orders"),
+            )
+            financial_total = _first_int(
+                attribution.get("financial_orders_matched"),
+                totals.get("financial_orders"),
+            )
+            cancelled_total = _first_int(
+                attribution.get("cancelled_orders_matched"),
+                totals.get("cancelled_orders"),
+            )
+            excluded_total = _first_int(
+                attribution.get("excluded_orders_matched"),
+                totals.get("excluded_orders"),
+                max(created_total - financial_total, 0),
+            )
             totals.update({
                 "orders": created_total,
                 "created_orders": created_total,
@@ -468,6 +524,7 @@ def install_fixed_created_order_semantics() -> None:
                     date_to=date_to,
                     financial_matched=financial_matched,
                     campaign_spend=campaign_spend,
+                    total_spend_sar=spend_total,
                 )
                 for campaign in campaigns:
                     key = (
@@ -478,8 +535,6 @@ def install_fixed_created_order_semantics() -> None:
                         campaign["profitability"] = by_campaign[key]
                 totals["profitability"] = profit_totals
 
-            source = result.setdefault("source", {})
-            attribution = source.setdefault("salla_attribution", {})
             attribution.update({
                 "source_mode": SOURCE_MODE,
                 "created_orders_matched": created_total,

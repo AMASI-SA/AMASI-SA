@@ -47,6 +47,8 @@ export function resolveInitialSelectedProduct(search = "", storedProduct = "") {
     const params = new URLSearchParams(search);
     const fromUrl = params.get("product");
     if (fromUrl) return fromUrl;
+    const resolvingCampaignProduct = params.has("lookup_sku") || params.has("lookup_name");
+    if (resolvingCampaignProduct) return "";
     const soldMissingList = params.get("missing_mezan_cost") === "1"
         && params.get("sold_only") === "1";
     if (params.get("view") === "list" || soldMissingList) return "";
