@@ -25,6 +25,10 @@ function object(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function objectList(value) {
+    return Array.isArray(value) ? value.map(object).filter((item) => Object.keys(item).length) : [];
+}
+
 export function managementError(error, fallback = "تعذّر تنفيذ طلب إدارة Snapchat.") {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) return detail;
@@ -79,6 +83,13 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         target_id: text(value.target_id) || null,
         parent_id: text(value.parent_id) || null,
         reason: text(value.reason),
+        expected_outcome: value.expected_outcome === null
+            || value.expected_outcome === undefined
+            ? null
+            : object(value.expected_outcome),
+        supporting_evidence: objectList(value.supporting_evidence),
+        products: objectList(value.products),
+        trend_override_reason: text(value.trend_override_reason) || null,
         preview: object(value.preview),
         creates_paused: value.creates_paused === true,
         activates_delivery: value.activates_delivery === true,
@@ -127,6 +138,13 @@ export async function createSnapchatManagementProposal(input = {}) {
         reason: text(input.reason),
         idempotency_key: text(input.idempotency_key),
         activation_acknowledged: input.activation_acknowledged === true,
+        expected_outcome: input.expected_outcome === null
+            || input.expected_outcome === undefined
+            ? null
+            : object(input.expected_outcome),
+        supporting_evidence: objectList(input.supporting_evidence),
+        products: objectList(input.products),
+        trend_override_reason: text(input.trend_override_reason) || null,
     });
     return normalizeSnapchatManagementProposal(response.data);
 }

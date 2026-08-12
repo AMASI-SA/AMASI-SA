@@ -454,9 +454,24 @@ async def test_refresh_hydrates_exact_ad_identity_before_recent_skip(
 
 @pytest.mark.asyncio
 async def test_ad_identity_sync_reads_deleted_ads_without_sort():
+    class MarkerCollection:
+        async def find_one(self, query, projection=None):
+            return None
+
+        async def update_one(self, query, update):
+            return None
+
+    class MarkerDB:
+        def __getitem__(self, name):
+            return MarkerCollection()
+
     class Context:
-        db = object()
+        db = MarkerDB()
         user_id = "owner-1"
+
+        @staticmethod
+        def now_iso():
+            return "2026-08-12T12:00:00+00:00"
 
         async def get_json(self, client, url, *, headers, params):
             self.url = url

@@ -1,11 +1,65 @@
 from __future__ import annotations
 
+import asyncio
+from copy import deepcopy
 from datetime import datetime, timezone
 import inspect
 
 from fastapi import APIRouter
 
 from integrations_control_center import ads_auto_sync_scheduler as scheduler
+
+
+def _matches(row, query):
+    for key, expected in query.items():
+        actual = row.get(key)
+        if isinstance(expected, dict) and "$in" in expected:
+            if actual not in expected["$in"]:
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self.rows = deepcopy(rows)
+
+    def sort(self, key, direction):
+        self.rows.sort(
+            key=lambda row: row.get(key) or "",
+            reverse=direction < 0,
+        )
+        return self
+
+    def limit(self, count):
+        self.rows = self.rows[:count]
+        return self
+
+    async def to_list(self, length):
+        return deepcopy(self.rows[:length])
+
+
+class _Collection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def find_one(self, query, projection=None):
+        return next(
+            (deepcopy(row) for row in self.rows if _matches(row, query)),
+            None,
+        )
+
+    def find(self, query, projection=None):
+        return _Cursor([row for row in self.rows if _matches(row, query)])
+
+
+class _DB:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def __getitem__(self, name):
+        return _Collection(self.rows.setdefault(name, []))
 
 
 def test_defaults_to_enabled_five_minutes_and_two_days(monkeypatch):
@@ -104,6 +158,11 @@ def test_safe_summary_preserves_per_account_provider_calls():
     summary = scheduler._safe_summary({
         "provider_calls": 263,
         "provider_call_budget_scope": "per_selected_account",
+        "campaign_rows_saved": 48,
+        "campaign_facts_source_mode": (
+            scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+        ),
+        "campaign_facts_schema_version": 4,
         "account_provider_calls": [
             {"ad_account_id": "account-usd", "provider_calls": 132},
             {"ad_account_id": "account-sar", "provider_calls": 131},
@@ -116,3 +175,89 @@ def test_safe_summary_preserves_per_account_provider_calls():
         {"ad_account_id": "account-usd", "provider_calls": 132},
         {"ad_account_id": "account-sar", "provider_calls": 131},
     ]
+    assert summary["campaign_rows_saved"] == 48
+    assert summary["campaign_facts_source_mode"] == (
+        scheduler.snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+    )
+    assert summary["campaign_facts_schema_version"] == 4
+
+
+def test_status_never_exposes_global_results_from_another_tenant():
+    db = _DB(
+        {
+            scheduler.SCHEDULER_COLLECTION: [
+                {
+                    "_id": scheduler.SCHEDULER_ID,
+                    "status": "complete",
+                    "last_started_at": "2026-08-12T12:00:00+00:00",
+                    "last_finished_at": "2026-08-12T12:01:00+00:00",
+                    "next_due_at": "2026-08-12T12:05:00+00:00",
+                    "last_result": {
+                        "status": "complete",
+                        "started_at": "2026-08-12T12:00:00+00:00",
+                        "finished_at": "2026-08-12T12:01:00+00:00",
+                        "results": [
+                            {
+                                "run_id": "foreign-run-b",
+                                "account_provider_calls": [
+                                    {
+                                        "ad_account_id": "foreign-account-b",
+                                        "provider_calls": 7,
+                                    }
+                                ],
+                                "error_samples": [
+                                    {"error_id": "foreign-error-b"}
+                                ],
+                            }
+                        ],
+                    },
+                    "last_error": {
+                        "code": "ads_auto_sync_cycle_failed",
+                        "message": "foreign-account-b failed",
+                        "retryable": True,
+                    },
+                }
+            ],
+            scheduler.RUNS_COLLECTION: [
+                {
+                    "user_id": "tenant-a",
+                    "trigger": scheduler.TRIGGER,
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "run_id": "tenant-a-run",
+                    "started_at": "2026-08-12T12:00:00+00:00",
+                },
+                {
+                    "user_id": "tenant-b",
+                    "trigger": scheduler.TRIGGER,
+                    "provider": scheduler.SNAPCHAT_PROVIDER_ID,
+                    "run_id": "foreign-run-b",
+                    "started_at": "2026-08-12T12:00:00+00:00",
+                    "summary": {
+                        "account_provider_calls": [
+                            {"ad_account_id": "foreign-account-b"}
+                        ]
+                    },
+                    "error": {"error_id": "foreign-error-b"},
+                },
+            ],
+        }
+    )
+
+    result = asyncio.run(scheduler.auto_sync_status(db, "tenant-a"))
+
+    assert result["providers"][scheduler.SNAPCHAT_PROVIDER_ID]["run_id"] == (
+        "tenant-a-run"
+    )
+    assert result["scheduler"]["last_result"] == {
+        "status": "complete",
+        "started_at": "2026-08-12T12:00:00+00:00",
+        "finished_at": "2026-08-12T12:01:00+00:00",
+    }
+    assert result["scheduler"]["last_error"] == {
+        "code": "ads_auto_sync_cycle_failed",
+        "retryable": True,
+    }
+    serialized = repr(result)
+    assert "foreign-run-b" not in serialized
+    assert "foreign-account-b" not in serialized
+    assert "foreign-error-b" not in serialized

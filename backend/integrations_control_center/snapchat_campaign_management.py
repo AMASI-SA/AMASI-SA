@@ -5,8 +5,10 @@ control plane with a strict proposal -> preview -> approval -> execution ->
 verification -> audit -> rollback lifecycle.  New delivery entities are always
 created PAUSED; activation has an independent runtime kill switch.
 """
+
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -32,8 +34,10 @@ from .snapchat_native_entities_sync import _safe_provider_value, _upsert_entity
 
 PROPOSAL_COLLECTION = "mezan_snapchat_campaign_proposals_v1"
 AUDIT_COLLECTION = "mezan_snapchat_campaign_audit_v1"
+ENTITY_LEASE_COLLECTION = "mezan_snapchat_campaign_entity_leases_v1"
 SOURCE_MODE = "snapchat_campaign_management_v1"
 PROPOSAL_TTL = timedelta(minutes=30)
+ENTITY_LEASE_DURATION = timedelta(minutes=5)
 MUTATIONS_ENABLED_ENV = "MEZAN_SNAPCHAT_CAMPAIGN_MUTATIONS_ENABLED"
 ACTIVATION_ENABLED_ENV = "MEZAN_SNAPCHAT_CAMPAIGN_ACTIVATION_ENABLED"
 MAX_DAILY_BUDGET_ENV = "MEZAN_SNAPCHAT_MAX_DAILY_BUDGET_MICRO"
@@ -48,6 +52,7 @@ Action = Literal[
     "ad.update",
     "creative.create",
 ]
+EvidenceVerification = Literal["verified", "inferred", "user_suggestion"]
 
 DELIVERY_CREATE_ACTIONS = {
     "campaign.create",
@@ -62,33 +67,71 @@ UPDATE_ACTIONS = {
 CREATIVE_ACTIONS = {"creative.create"}
 
 CAMPAIGN_CREATE_FIELDS = {
-    "name", "start_time", "end_time", "daily_budget_micro",
-    "lifetime_spend_cap_micro", "objective", "objective_v2_properties",
-    "measurement_spec", "regulations", "buy_model", "pacing_level",
-    "shared_properties", "product_properties",
+    "name",
+    "start_time",
+    "end_time",
+    "daily_budget_micro",
+    "lifetime_spend_cap_micro",
+    "objective",
+    "objective_v2_properties",
+    "measurement_spec",
+    "regulations",
+    "buy_model",
+    "pacing_level",
+    "shared_properties",
+    "product_properties",
 }
 CAMPAIGN_UPDATE_FIELDS = CAMPAIGN_CREATE_FIELDS | {"status"}
 AD_SQUAD_CREATE_FIELDS = {
-    "name", "type", "targeting", "placement_v2", "billing_event",
-    "bid_micro", "bid_strategy", "daily_budget_micro",
-    "lifetime_budget_micro", "optimization_goal", "conversion_window",
-    "pixel_id", "start_time", "end_time", "pacing_type",
-    "brand_safety_config", "cap_and_exclusion_config",
-    "ad_scheduling_config", "campaign_budget_optimization_properties",
-    "child_ad_type", "forced_view_setting", "event_sources",
+    "name",
+    "type",
+    "targeting",
+    "placement_v2",
+    "billing_event",
+    "bid_micro",
+    "bid_strategy",
+    "daily_budget_micro",
+    "lifetime_budget_micro",
+    "optimization_goal",
+    "conversion_window",
+    "pixel_id",
+    "start_time",
+    "end_time",
+    "pacing_type",
+    "brand_safety_config",
+    "cap_and_exclusion_config",
+    "ad_scheduling_config",
+    "campaign_budget_optimization_properties",
+    "child_ad_type",
+    "forced_view_setting",
+    "event_sources",
 }
 AD_SQUAD_UPDATE_FIELDS = AD_SQUAD_CREATE_FIELDS | {"status"}
 AD_CREATE_FIELDS = {"name", "creative_id", "type"}
 AD_UPDATE_FIELDS = {
-    "name", "status", "third_party_on_swipe_tracking_urls",
+    "name",
+    "status",
+    "third_party_on_swipe_tracking_urls",
     "third_party_paid_impression_tracking_urls",
 }
 CREATIVE_CREATE_FIELDS = {
-    "name", "type", "headline", "call_to_action", "top_snap_media_id",
-    "top_snap_crop_position", "web_view_properties", "profile_properties",
-    "shareable", "forced_view_eligibility", "ad_product",
-    "cta_color_display_mode", "preview_properties", "collection_properties",
-    "app_install_properties", "deep_link_properties", "render_type",
+    "name",
+    "type",
+    "headline",
+    "call_to_action",
+    "top_snap_media_id",
+    "top_snap_crop_position",
+    "web_view_properties",
+    "profile_properties",
+    "shareable",
+    "forced_view_eligibility",
+    "ad_product",
+    "cta_color_display_mode",
+    "preview_properties",
+    "collection_properties",
+    "app_install_properties",
+    "deep_link_properties",
+    "render_type",
 }
 
 # Snapchat's ad endpoint uses an ad type that can differ from the attached
@@ -120,7 +163,11 @@ def _expired(value: Any) -> bool:
 
 def _enabled(name: str, default: str = "false") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in {
-        "1", "true", "yes", "on", "enabled",
+        "1",
+        "true",
+        "yes",
+        "on",
+        "enabled",
     }
 
 
@@ -134,10 +181,15 @@ def snapchat_campaign_activation_enabled() -> bool:
 
 def _max_daily_budget_micro() -> int:
     try:
-        return max(5_000_000, int(os.environ.get(
-            MAX_DAILY_BUDGET_ENV,
-            str(DEFAULT_MAX_DAILY_BUDGET_MICRO),
-        )))
+        return max(
+            5_000_000,
+            int(
+                os.environ.get(
+                    MAX_DAILY_BUDGET_ENV,
+                    str(DEFAULT_MAX_DAILY_BUDGET_MICRO),
+                )
+            ),
+        )
     except (TypeError, ValueError):
         return DEFAULT_MAX_DAILY_BUDGET_MICRO
 
@@ -155,25 +207,102 @@ def _identifier(value: Any, *, field: str) -> str:
     normalized = str(value or "").strip()
     if not normalized or len(normalized) > 160:
         raise ValueError(f"{field} is invalid")
-    if any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in normalized):
+    if any(
+        char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        for char in normalized
+    ):
         raise ValueError(f"{field} is invalid")
     return normalized
 
 
 def _bounded_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    encoded = json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":"), default=str
+    )
     if len(encoded.encode("utf-8")) > 64_000:
         raise ValueError("payload is too large")
     lowered = encoded.lower()
-    if any(fragment in lowered for fragment in (
-        "access_token", "refresh_token", "authorization", "client_secret",
-        "password", "credential", "ciphertext",
-    )):
+    if any(
+        fragment in lowered
+        for fragment in (
+            "access_token",
+            "refresh_token",
+            "authorization",
+            "client_secret",
+            "password",
+            "credential",
+            "ciphertext",
+        )
+    ):
         raise ValueError("payload contains a forbidden sensitive field")
     safe = _safe_provider_value(payload)
     if not isinstance(safe, dict):
         raise ValueError("payload is invalid")
     return safe
+
+
+class SnapchatDecisionEvidenceInput(BaseModel):
+    """One bounded claim; only verified claims may affect a write decision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(min_length=2, max_length=80)
+    value: Any = None
+    source: str = Field(min_length=2, max_length=500)
+    observed_at: str | None = Field(default=None, max_length=80)
+    verification_status: EvidenceVerification = "user_suggestion"
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    used_in_decision: bool = False
+    weight: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @field_validator("kind", "source")
+    @classmethod
+    def normalize_text(cls, value: str, info: Any) -> str:
+        return _text(value, field=info.field_name, maximum=500)
+
+    @field_validator("value")
+    @classmethod
+    def normalize_value(cls, value: Any) -> Any:
+        return _safe_provider_value(value)
+
+    @model_validator(mode="after")
+    def prevent_unverified_decision_basis(self) -> "SnapchatDecisionEvidenceInput":
+        # Proposal callers (including the UI/user) are not an authority that
+        # can promote a claim to verified.  Verified evidence is produced by
+        # Mezan's internal collectors and stored in the immutable baseline.
+        if self.verification_status == "verified":
+            raise ValueError(
+                "verified evidence may only be produced by Mezan collectors"
+            )
+        if self.verification_status != "verified" and self.used_in_decision:
+            raise ValueError("only verified evidence may be used in the decision")
+        if not self.used_in_decision and self.weight != 0:
+            raise ValueError("unused evidence must have weight 0")
+        return self
+
+
+class SnapchatManagedProductInput(BaseModel):
+    """A product the advertising entity is intended to promote."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: str = Field(min_length=1, max_length=160)
+    product_variant_id: str | None = Field(default=None, max_length=160)
+    product_name: str | None = Field(default=None, max_length=300)
+
+    @field_validator("product_id", "product_variant_id")
+    @classmethod
+    def normalize_product_identifiers(cls, value: str | None, info: Any) -> str | None:
+        if value is None:
+            return None
+        return _identifier(value, field=info.field_name)
+
+    @field_validator("product_name")
+    @classmethod
+    def normalize_product_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _text(value, field="product_name", maximum=300)
 
 
 class SnapchatManagementProposalInput(BaseModel):
@@ -187,6 +316,14 @@ class SnapchatManagementProposalInput(BaseModel):
     reason: str = Field(min_length=5, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=128)
     activation_acknowledged: bool = False
+    expected_outcome: dict[str, Any] | None = None
+    supporting_evidence: list[SnapchatDecisionEvidenceInput] = Field(
+        default_factory=list, max_length=30
+    )
+    products: list[SnapchatManagedProductInput] = Field(
+        default_factory=list, max_length=20
+    )
+    trend_override_reason: str | None = Field(default=None, max_length=500)
 
     @field_validator("account_id", "target_id", "parent_id")
     @classmethod
@@ -200,6 +337,13 @@ class SnapchatManagementProposalInput(BaseModel):
     def normalize_reason(cls, value: str) -> str:
         return _text(value, field="reason", maximum=500)
 
+    @field_validator("trend_override_reason")
+    @classmethod
+    def normalize_trend_override_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _text(value, field="trend_override_reason", maximum=500)
+
     @field_validator("idempotency_key")
     @classmethod
     def normalize_idempotency_key(cls, value: str) -> str:
@@ -210,15 +354,34 @@ class SnapchatManagementProposalInput(BaseModel):
     def normalize_payload(cls, value: dict[str, Any]) -> dict[str, Any]:
         return _bounded_payload(value)
 
+    @field_validator("expected_outcome")
+    @classmethod
+    def normalize_expected_outcome(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        return _bounded_payload(value)
+
     @model_validator(mode="after")
     def validate_relationships(self) -> "SnapchatManagementProposalInput":
         if self.action in UPDATE_ACTIONS and not self.target_id:
             raise ValueError("target_id is required for update actions")
-        if self.action in {"ad_squad.create", "ad_squad.update", "ad.create", "ad.update"} and not self.parent_id:
+        if (
+            self.action
+            in {"ad_squad.create", "ad_squad.update", "ad.create", "ad.update"}
+            and not self.parent_id
+        ):
             raise ValueError("parent_id is required for this action")
-        if self.action in DELIVERY_CREATE_ACTIONS and str(self.payload.get("status") or "PAUSED").upper() == "ACTIVE":
+        if (
+            self.action in DELIVERY_CREATE_ACTIONS
+            and str(self.payload.get("status") or "PAUSED").upper() == "ACTIVE"
+        ):
             raise ValueError("new delivery entities must be created PAUSED")
-        if str(self.payload.get("status") or "").upper() == "ACTIVE" and not self.activation_acknowledged:
+        if (
+            str(self.payload.get("status") or "").upper() == "ACTIVE"
+            and not self.activation_acknowledged
+        ):
             raise ValueError("activation_acknowledged is required for ACTIVE status")
         return self
 
@@ -273,7 +436,9 @@ def _budget_guard(entity: dict[str, Any]) -> None:
         entity[key] = value
 
 
-def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[str, Any]:
+def build_snapchat_operation(
+    payload: SnapchatManagementProposalInput,
+) -> dict[str, Any]:
     """Build one fixed provider request without accepting a caller URL/method."""
     action = payload.action
     entity = dict(payload.payload)
@@ -283,11 +448,11 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
     operation: dict[str, Any]
 
     if action == "campaign.create":
-        entity = _allow_only(
-            entity, CAMPAIGN_CREATE_FIELDS, allow_forced_status=True
-        )
+        entity = _allow_only(entity, CAMPAIGN_CREATE_FIELDS, allow_forced_status=True)
         entity["name"] = _text(entity.get("name"), field="name")
-        entity["start_time"] = _text(entity.get("start_time"), field="start_time", maximum=80)
+        entity["start_time"] = _text(
+            entity.get("start_time"), field="start_time", maximum=80
+        )
         entity["ad_account_id"] = account_id
         entity["status"] = "PAUSED"
         entity.setdefault("buy_model", "AUCTION")
@@ -306,18 +471,27 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
         entity = _allow_only(entity, CAMPAIGN_UPDATE_FIELDS)
         operation = _patch_operation(
             path=f"/adaccounts/{account_id}/campaigns/{target_id}",
-            plural="campaigns", singular="campaign", entity_type="campaign",
+            plural="campaigns",
+            singular="campaign",
+            entity_type="campaign",
             changes=entity,
         )
     elif action == "ad_squad.create":
-        entity = _allow_only(
-            entity, AD_SQUAD_CREATE_FIELDS, allow_forced_status=True
-        )
+        entity = _allow_only(entity, AD_SQUAD_CREATE_FIELDS, allow_forced_status=True)
         entity["name"] = _text(entity.get("name"), field="name")
-        for required in ("type", "targeting", "placement_v2", "billing_event", "bid_strategy", "optimization_goal"):
+        for required in (
+            "type",
+            "targeting",
+            "placement_v2",
+            "billing_event",
+            "bid_strategy",
+            "optimization_goal",
+        ):
             if entity.get(required) in (None, "", {}, []):
                 raise ValueError(f"{required} is required")
-        if not any(key in entity for key in ("daily_budget_micro", "lifetime_budget_micro")):
+        if not any(
+            key in entity for key in ("daily_budget_micro", "lifetime_budget_micro")
+        ):
             raise ValueError("daily_budget_micro or lifetime_budget_micro is required")
         entity["campaign_id"] = parent_id
         entity["status"] = "PAUSED"
@@ -333,29 +507,36 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
         entity = _allow_only(entity, AD_SQUAD_UPDATE_FIELDS)
         operation = _patch_operation(
             path=f"/campaigns/{parent_id}/adsquads/{target_id}",
-            plural="adsquads", singular="adsquad", entity_type="ad_squad",
+            plural="adsquads",
+            singular="adsquad",
+            entity_type="ad_squad",
             changes=entity,
         )
     elif action == "ad.create":
-        entity = _allow_only(
-            entity, AD_CREATE_FIELDS, allow_forced_status=True
-        )
+        entity = _allow_only(entity, AD_CREATE_FIELDS, allow_forced_status=True)
         entity["name"] = _text(entity.get("name"), field="name")
-        entity["creative_id"] = _identifier(entity.get("creative_id"), field="creative_id")
+        entity["creative_id"] = _identifier(
+            entity.get("creative_id"), field="creative_id"
+        )
         entity["type"] = _text(entity.get("type"), field="type", maximum=80).upper()
         entity["ad_squad_id"] = parent_id
         entity["status"] = "PAUSED"
         operation = {
             "method": "POST",
             "path": f"/adsquads/{parent_id}/ads",
-            "plural": "ads", "singular": "ad", "entity_type": "ad",
+            "plural": "ads",
+            "singular": "ad",
+            "entity_type": "ad",
             "body": {"ads": [entity]},
         }
     elif action == "ad.update":
         entity = _allow_only(entity, AD_UPDATE_FIELDS)
         operation = _patch_operation(
             path=f"/adsquads/{parent_id}/ads/{target_id}",
-            plural="ads", singular="ad", entity_type="ad", changes=entity,
+            plural="ads",
+            singular="ad",
+            entity_type="ad",
+            changes=entity,
         )
     elif action == "creative.create":
         entity = _allow_only(entity, CREATIVE_CREATE_FIELDS)
@@ -364,18 +545,14 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
                 raise ValueError(f"{required} is required")
         entity["name"] = _text(entity["name"], field="name")
         entity["headline"] = _text(entity["headline"], field="headline", maximum=34)
-        entity["type"] = _text(
-            entity["type"], field="type", maximum=80
-        ).upper()
+        entity["type"] = _text(entity["type"], field="type", maximum=80).upper()
         entity["top_snap_media_id"] = _identifier(
             entity["top_snap_media_id"], field="top_snap_media_id"
         )
         profile = entity.get("profile_properties")
         if not isinstance(profile, dict) or not profile.get("profile_id"):
             raise ValueError("profile_properties.profile_id is required")
-        profile["profile_id"] = _identifier(
-            profile["profile_id"], field="profile_id"
-        )
+        profile["profile_id"] = _identifier(profile["profile_id"], field="profile_id")
         if entity["type"] == "WEB_VIEW":
             if not entity.get("call_to_action"):
                 raise ValueError("call_to_action is required for WEB_VIEW")
@@ -388,8 +565,10 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
         operation = {
             "method": "POST",
             "path": f"/adaccounts/{account_id}/creatives",
-            "plural": "creatives", "singular": "creative",
-            "entity_type": "creative", "body": {"creatives": [entity]},
+            "plural": "creatives",
+            "singular": "creative",
+            "entity_type": "creative",
+            "body": {"creatives": [entity]},
         }
     else:  # pragma: no cover - Literal and Pydantic reject this first
         raise ValueError("unsupported action")
@@ -399,13 +578,16 @@ def build_snapchat_operation(payload: SnapchatManagementProposalInput) -> dict[s
     operation["action"] = action
     operation["target_id"] = target_id
     operation["parent_id"] = parent_id
-    operation["activates_delivery"] = str(entity.get("status") or "").upper() == "ACTIVE"
+    operation["activates_delivery"] = (
+        str(entity.get("status") or "").upper() == "ACTIVE"
+    )
     operation["summary"] = _operation_summary(action, entity, target_id)
     return operation
 
 
-def _patch_operation(*, path: str, plural: str, singular: str,
-                     entity_type: str, changes: dict[str, Any]) -> dict[str, Any]:
+def _patch_operation(
+    *, path: str, plural: str, singular: str, entity_type: str, changes: dict[str, Any]
+) -> dict[str, Any]:
     if not changes:
         raise ValueError("at least one change is required")
     _budget_guard(changes)
@@ -419,13 +601,19 @@ def _patch_operation(*, path: str, plural: str, singular: str,
         for key, value in sorted(changes.items())
     ]
     return {
-        "method": "PATCH", "path": path, "plural": plural,
-        "singular": singular, "entity_type": entity_type,
-        "body": patches, "changes": changes,
+        "method": "PATCH",
+        "path": path,
+        "plural": plural,
+        "singular": singular,
+        "entity_type": entity_type,
+        "body": patches,
+        "changes": changes,
     }
 
 
-def _operation_summary(action: str, entity: dict[str, Any], target_id: str | None) -> dict[str, Any]:
+def _operation_summary(
+    action: str, entity: dict[str, Any], target_id: str | None
+) -> dict[str, Any]:
     return {
         "action": action,
         "target_id": target_id,
@@ -450,19 +638,57 @@ def _assert_stored_operation_integrity(
     if action in {"ad_squad.create", "ad_squad.update", "ad.create", "ad.update"}:
         parent_id = _identifier(parent_id, field="parent_id")
     expected = {
-        "campaign.create": ("POST", f"/adaccounts/{account_id}/campaigns", "campaign", "campaigns", "campaign"),
-        "campaign.update": ("PATCH", f"/adaccounts/{account_id}/campaigns/{target_id}", "campaign", "campaigns", "campaign"),
-        "ad_squad.create": ("POST", f"/campaigns/{parent_id}/adsquads", "ad_squad", "adsquads", "adsquad"),
-        "ad_squad.update": ("PATCH", f"/campaigns/{parent_id}/adsquads/{target_id}", "ad_squad", "adsquads", "adsquad"),
+        "campaign.create": (
+            "POST",
+            f"/adaccounts/{account_id}/campaigns",
+            "campaign",
+            "campaigns",
+            "campaign",
+        ),
+        "campaign.update": (
+            "PATCH",
+            f"/adaccounts/{account_id}/campaigns/{target_id}",
+            "campaign",
+            "campaigns",
+            "campaign",
+        ),
+        "ad_squad.create": (
+            "POST",
+            f"/campaigns/{parent_id}/adsquads",
+            "ad_squad",
+            "adsquads",
+            "adsquad",
+        ),
+        "ad_squad.update": (
+            "PATCH",
+            f"/campaigns/{parent_id}/adsquads/{target_id}",
+            "ad_squad",
+            "adsquads",
+            "adsquad",
+        ),
         "ad.create": ("POST", f"/adsquads/{parent_id}/ads", "ad", "ads", "ad"),
-        "ad.update": ("PATCH", f"/adsquads/{parent_id}/ads/{target_id}", "ad", "ads", "ad"),
-        "creative.create": ("POST", f"/adaccounts/{account_id}/creatives", "creative", "creatives", "creative"),
+        "ad.update": (
+            "PATCH",
+            f"/adsquads/{parent_id}/ads/{target_id}",
+            "ad",
+            "ads",
+            "ad",
+        ),
+        "creative.create": (
+            "POST",
+            f"/adaccounts/{account_id}/creatives",
+            "creative",
+            "creatives",
+            "creative",
+        ),
     }.get(action)
     if not expected:
         raise ValueError("stored action is invalid")
     actual = (
-        operation.get("method"), operation.get("path"),
-        operation.get("entity_type"), operation.get("plural"),
+        operation.get("method"),
+        operation.get("path"),
+        operation.get("entity_type"),
+        operation.get("plural"),
         operation.get("singular"),
     )
     if actual != expected:
@@ -483,24 +709,30 @@ def _assert_stored_operation_integrity(
         entity = changes
     else:
         rows = body.get(expected[3]) if isinstance(body, dict) else None
-        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        if (
+            not isinstance(rows, list)
+            or len(rows) != 1
+            or not isinstance(rows[0], dict)
+        ):
             raise ValueError("stored create operation is invalid")
         entity = rows[0]
-        if action in DELIVERY_CREATE_ACTIONS and str(
-            entity.get("status") or ""
-        ).upper() != "PAUSED":
+        if (
+            action in DELIVERY_CREATE_ACTIONS
+            and str(entity.get("status") or "").upper() != "PAUSED"
+        ):
             raise ValueError("stored create operation is not PAUSED")
-        if action in {"campaign.create", "creative.create"} and str(
-            entity.get("ad_account_id") or ""
-        ) != account_id:
+        if (
+            action in {"campaign.create", "creative.create"}
+            and str(entity.get("ad_account_id") or "") != account_id
+        ):
             raise ValueError("stored entity account does not match the proposal")
-        if action == "ad_squad.create" and str(
-            entity.get("campaign_id") or ""
-        ) != str(parent_id or ""):
+        if action == "ad_squad.create" and str(entity.get("campaign_id") or "") != str(
+            parent_id or ""
+        ):
             raise ValueError("stored entity parent does not match the proposal")
-        if action == "ad.create" and str(
-            entity.get("ad_squad_id") or ""
-        ) != str(parent_id or ""):
+        if action == "ad.create" and str(entity.get("ad_squad_id") or "") != str(
+            parent_id or ""
+        ):
             raise ValueError("stored entity parent does not match the proposal")
     _budget_guard(entity)
     activates_delivery = str(entity.get("status") or "").upper() == "ACTIVE"
@@ -516,7 +748,13 @@ def _safe_nested_provider_error_detail(payload: Any) -> dict[str, str]:
     best_score = -1
     cursor = 0
     generic_statuses = {
-        "SUCCESS", "OK", "FAILURE", "FAILED", "FAIL", "ERROR", "UNKNOWN",
+        "SUCCESS",
+        "OK",
+        "FAILURE",
+        "FAILED",
+        "FAIL",
+        "ERROR",
+        "UNKNOWN",
     }
     while cursor < len(queue) and cursor < 32:
         value, depth = queue[cursor]
@@ -558,8 +796,14 @@ class SnapchatManagementProvider:
         self.context = SnapchatSyncContext(db=db, user_id=user_id)
         self._management_roles_cache: dict[str, tuple[set[str], set[str]]] = {}
 
-    async def _request(self, method: str, path: str, *, body: Any = None,
-                       content_type: str = "application/json") -> dict[str, Any]:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Any = None,
+        content_type: str = "application/json",
+    ) -> dict[str, Any]:
         token = await self.context.access_token()
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if body is not None:
@@ -575,7 +819,10 @@ class SnapchatManagementProvider:
         except httpx.HTTPError as exc:
             raise HTTPException(
                 status_code=502,
-                detail={"code": "snapchat_management_network_error", "message": "تعذر الاتصال بـ Snapchat أثناء تنفيذ العملية."},
+                detail={
+                    "code": "snapchat_management_network_error",
+                    "message": "تعذر الاتصال بـ Snapchat أثناء تنفيذ العملية.",
+                },
             ) from exc
         if response.status_code >= 400:
             try:
@@ -605,11 +852,18 @@ class SnapchatManagementProvider:
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=502,
-                detail={"code": "snapchat_management_invalid_json", "message": "أعاد Snapchat استجابة غير صالحة."},
+                detail={
+                    "code": "snapchat_management_invalid_json",
+                    "message": "أعاد Snapchat استجابة غير صالحة.",
+                },
             ) from exc
         if not isinstance(payload, dict):
-            raise HTTPException(status_code=502, detail={"code": "snapchat_management_invalid_payload"})
-        request_status = str(payload.get("request_status") or payload.get("status") or "SUCCESS").upper()
+            raise HTTPException(
+                status_code=502, detail={"code": "snapchat_management_invalid_payload"}
+            )
+        request_status = str(
+            payload.get("request_status") or payload.get("status") or "SUCCESS"
+        ).upper()
         if "FAIL" in request_status or "ERROR" in request_status:
             raise HTTPException(
                 status_code=502,
@@ -622,19 +876,34 @@ class SnapchatManagementProvider:
         return payload
 
     async def read_entity(self, entity_type: str, entity_id: str) -> dict[str, Any]:
-        path_kind = {"campaign": "campaigns", "ad_squad": "adsquads", "ad": "ads", "creative": "creatives"}[entity_type]
+        path_kind = {
+            "campaign": "campaigns",
+            "ad_squad": "adsquads",
+            "ad": "ads",
+            "creative": "creatives",
+        }[entity_type]
         payload = await self._request("GET", f"/{path_kind}/{entity_id}")
-        return _extract_entity(payload, path_kind, "adsquad" if entity_type == "ad_squad" else entity_type)
+        return _extract_entity(
+            payload, path_kind, "adsquad" if entity_type == "ad_squad" else entity_type
+        )
 
     async def execute(self, operation: dict[str, Any]) -> dict[str, Any]:
-        content_type = "application/json-patch+json" if operation["method"] == "PATCH" else "application/json"
+        content_type = (
+            "application/json-patch+json"
+            if operation["method"] == "PATCH"
+            else "application/json"
+        )
         payload = await self._request(
-            operation["method"], operation["path"],
-            body=operation["body"], content_type=content_type,
+            operation["method"],
+            operation["path"],
+            body=operation["body"],
+            content_type=content_type,
         )
         return _extract_entity(payload, operation["plural"], operation["singular"])
 
-    async def management_role(self, account: dict[str, Any], action: str) -> dict[str, Any]:
+    async def management_role(
+        self, account: dict[str, Any], action: str
+    ) -> dict[str, Any]:
         organization_id = str(account.get("organization_id") or "").strip()
         account_id = str(account.get("ad_account_id") or "").strip()
         cached = self._management_roles_cache.get(account_id)
@@ -644,12 +913,20 @@ class SnapchatManagementProvider:
             )
             member_id = ""
             for wrapped in organizations.get("organizations") or []:
-                org = wrapped.get("organization", wrapped) if isinstance(wrapped, dict) else {}
+                org = (
+                    wrapped.get("organization", wrapped)
+                    if isinstance(wrapped, dict)
+                    else {}
+                )
                 if str(org.get("id") or "") == organization_id:
                     member_id = str(org.get("my_member_id") or "").strip()
                     break
             if not member_id:
-                return {"allowed": False, "role": None, "reason": "member_identity_missing"}
+                return {
+                    "allowed": False,
+                    "role": None,
+                    "reason": "member_identity_missing",
+                }
             roles_payload = await self._request(
                 "GET", f"/members/{member_id}/roles?limit=200"
             )
@@ -663,7 +940,8 @@ class SnapchatManagementProvider:
                 if str(role.get("organization_id") or "") == organization_id:
                     organization_roles.add(role_type)
             self._management_roles_cache[account_id] = (
-                account_roles, organization_roles
+                account_roles,
+                organization_roles,
             )
         else:
             account_roles, organization_roles = cached
@@ -671,7 +949,9 @@ class SnapchatManagementProvider:
         if action in CREATIVE_ACTIONS:
             allowed_roles.add("creative")
         allowed = bool(account_roles & allowed_roles or "admin" in organization_roles)
-        visible_role = sorted(account_roles & allowed_roles or organization_roles & {"admin"})
+        visible_role = sorted(
+            account_roles & allowed_roles or organization_roles & {"admin"}
+        )
         return {
             "allowed": allowed,
             "role": visible_role[0] if visible_role else None,
@@ -679,12 +959,22 @@ class SnapchatManagementProvider:
         }
 
 
-def _extract_entity(payload: dict[str, Any], plural: str, singular: str) -> dict[str, Any]:
+def _extract_entity(
+    payload: dict[str, Any], plural: str, singular: str
+) -> dict[str, Any]:
     rows = payload.get(plural) or []
     if not isinstance(rows, list) or not rows:
-        raise HTTPException(status_code=502, detail={"code": "snapchat_management_entity_missing", "message": "لم يعد Snapchat الكيان المتوقع."})
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "snapchat_management_entity_missing",
+                "message": "لم يعد Snapchat الكيان المتوقع.",
+            },
+        )
     wrapper = rows[0] if isinstance(rows[0], dict) else {}
-    sub_status = str(wrapper.get("sub_request_status") or wrapper.get("status") or "SUCCESS").upper()
+    sub_status = str(
+        wrapper.get("sub_request_status") or wrapper.get("status") or "SUCCESS"
+    ).upper()
     if "FAIL" in sub_status or "ERROR" in sub_status:
         raise HTTPException(
             status_code=502,
@@ -696,7 +986,9 @@ def _extract_entity(payload: dict[str, Any], plural: str, singular: str) -> dict
         )
     entity = wrapper.get(singular, wrapper)
     if not isinstance(entity, dict) or not entity.get("id"):
-        raise HTTPException(status_code=502, detail={"code": "snapchat_management_entity_invalid"})
+        raise HTTPException(
+            status_code=502, detail={"code": "snapchat_management_entity_invalid"}
+        )
     safe = _safe_provider_value(entity)
     return safe if isinstance(safe, dict) else {}
 
@@ -704,10 +996,40 @@ def _extract_entity(payload: dict[str, Any], plural: str, singular: str) -> dict
 async def ensure_snapchat_management_indexes(db: Any) -> None:
     proposals = _collection(db, PROPOSAL_COLLECTION)
     audit = _collection(db, AUDIT_COLLECTION)
-    await proposals.create_index([("user_id", 1), ("proposal_id", 1)], unique=True, name="snap_management_proposal_unique")
-    await proposals.create_index([("user_id", 1), ("idempotency_key", 1)], unique=True, name="snap_management_idempotency_unique")
-    await proposals.create_index([("user_id", 1), ("status", 1), ("created_at", -1)], name="snap_management_status_latest")
-    await audit.create_index([("user_id", 1), ("proposal_id", 1), ("occurred_at", 1)], name="snap_management_audit_timeline")
+    leases = _collection(db, ENTITY_LEASE_COLLECTION)
+    await proposals.create_index(
+        [("user_id", 1), ("proposal_id", 1)],
+        unique=True,
+        name="snap_management_proposal_unique",
+    )
+    await proposals.create_index(
+        [("user_id", 1), ("idempotency_key", 1)],
+        unique=True,
+        name="snap_management_idempotency_unique",
+    )
+    await proposals.create_index(
+        [("user_id", 1), ("status", 1), ("created_at", -1)],
+        name="snap_management_status_latest",
+    )
+    await audit.create_index(
+        [("user_id", 1), ("proposal_id", 1), ("occurred_at", 1)],
+        name="snap_management_audit_timeline",
+    )
+    await leases.create_index(
+        [
+            ("user_id", 1),
+            ("account_id", 1),
+            ("entity_type", 1),
+            ("entity_id", 1),
+        ],
+        unique=True,
+        partialFilterExpression={"active": True},
+        name="snap_management_active_entity_lease_unique",
+    )
+    await leases.create_index(
+        [("user_id", 1), ("proposal_id", 1), ("acquired_at", -1)],
+        name="snap_management_entity_lease_owner",
+    )
 
 
 async def _selected_account(db: Any, user_id: str, account_id: str) -> dict[str, Any]:
@@ -715,57 +1037,412 @@ async def _selected_account(db: Any, user_id: str, account_id: str) -> dict[str,
     for account in accounts:
         if str(account.get("ad_account_id") or "") == account_id:
             return account
-    raise HTTPException(status_code=409, detail={"code": "snapchat_management_account_not_selected", "message": "اختر حساب Snapchat داخل ميزان قبل إدارته."})
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "snapchat_management_account_not_selected",
+            "message": "اختر حساب Snapchat داخل ميزان قبل إدارته.",
+        },
+    )
 
 
-async def _audit(db: Any, *, user_id: str, proposal_id: str, event: str,
-                 actor_id: str, detail: dict[str, Any] | None = None) -> None:
-    await _collection(db, AUDIT_COLLECTION).insert_one({
-        "audit_id": str(uuid.uuid4()), "user_id": user_id,
-        "proposal_id": proposal_id, "event": event, "actor_id": actor_id,
-        "detail": _safe_provider_value(detail or {}), "occurred_at": _iso(),
-        "source_mode": SOURCE_MODE,
-    })
+async def _audit(
+    db: Any,
+    *,
+    user_id: str,
+    proposal_id: str,
+    event: str,
+    actor_id: str,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    await _collection(db, AUDIT_COLLECTION).insert_one(
+        {
+            "audit_id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "event": event,
+            "actor_id": actor_id,
+            "detail": _safe_provider_value(detail or {}),
+            "occurred_at": _iso(),
+            "source_mode": SOURCE_MODE,
+        }
+    )
 
 
-def _public_proposal(row: dict[str, Any], *, confirm_token: str | None = None) -> dict[str, Any]:
+def _public_proposal(
+    row: dict[str, Any], *, confirm_token: str | None = None
+) -> dict[str, Any]:
     operation = dict(row.get("operation") or {})
     output = {
-        "proposal_id": row.get("proposal_id"), "status": row.get("status"),
-        "revision": int(row.get("revision") or 1), "action": row.get("action"),
-        "account_id": row.get("account_id"), "target_id": row.get("target_id"),
-        "parent_id": row.get("parent_id"), "reason": row.get("reason"),
+        "proposal_id": row.get("proposal_id"),
+        "status": row.get("status"),
+        "revision": int(row.get("revision") or 1),
+        "action": row.get("action"),
+        "account_id": row.get("account_id"),
+        "target_id": row.get("target_id"),
+        "parent_id": row.get("parent_id"),
+        "reason": row.get("reason"),
         "preview": operation.get("summary") or {},
         "creates_paused": row.get("action") in DELIVERY_CREATE_ACTIONS,
         "activates_delivery": operation.get("activates_delivery") is True,
-        "expires_at": row.get("expires_at"), "created_at": row.get("created_at"),
-        "approved_at": row.get("approved_at"), "executed_at": row.get("executed_at"),
+        "expires_at": row.get("expires_at"),
+        "created_at": row.get("created_at"),
+        "approved_at": row.get("approved_at"),
+        "executed_at": row.get("executed_at"),
         "failed_at": row.get("failed_at"),
-        "verification": row.get("verification"), "rollback": row.get("rollback"),
+        "verification": row.get("verification"),
+        "rollback": row.get("rollback"),
         "failure": _safe_provider_value(row.get("failure") or {}),
         "confirmation_phrase": f"تراجع {str(row.get('proposal_id') or '')[:8]}",
         "provider_write_reached": row.get("provider_write_reached") is True,
         "provider_write_state": row.get("provider_write_state") or "not_attempted",
         "provider_write_uncertain": row.get("provider_write_uncertain") is True,
         "provider_entity_id": row.get("provider_entity_id"),
-        "accounting_write_reached": False, "qoyod_write_reached": False,
+        "execution_retryable": row.get("execution_retryable") is True,
+        "automatic_retry_allowed": row.get("automatic_retry_allowed") is True,
+        "recovery_action": row.get("recovery_action"),
+        "rollback_write_state": row.get("rollback_write_state") or "not_attempted",
+        "rollback_write_uncertain": row.get("rollback_write_uncertain") is True,
+        "rollback_recovery_action": row.get("rollback_recovery_action"),
+        "expected_outcome": _safe_provider_value(row.get("expected")),
+        "baseline": _safe_provider_value(row.get("baseline")),
+        "supporting_evidence": _safe_provider_value(row.get("decision_evidence") or []),
+        "products": _safe_provider_value(row.get("products") or []),
+        "product_link_state": row.get("product_link_state") or "not_supplied",
+        "trend_review": _safe_provider_value(row.get("trend_review") or {}),
+        "trend_override_reason": row.get("trend_override_reason"),
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
     }
     if confirm_token:
         output["confirm_token"] = confirm_token
     return output
 
 
-async def create_snapchat_management_proposal(db: Any, user_id: str,
-                                              actor_id: str,
-                                              payload: SnapchatManagementProposalInput,
-                                              *, provider: SnapchatManagementProvider | None = None) -> dict[str, Any]:
+def _is_delivery_increase(
+    operation: dict[str, Any], original: dict[str, Any] | None
+) -> bool:
+    changes = operation.get("changes")
+    if not isinstance(changes, dict):
+        return False
+    if str(changes.get("status") or "").upper() == "ACTIVE":
+        return True
+    for field in (
+        "daily_budget_micro",
+        "lifetime_budget_micro",
+        "lifetime_spend_cap_micro",
+    ):
+        if field not in changes:
+            continue
+        old_value = (original or {}).get(field)
+        try:
+            new_value = int(changes[field])
+            if (old_value is None and new_value > 0) or (
+                old_value is not None and new_value > int(old_value)
+            ):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _is_pause_or_budget_decrease(
+    operation: dict[str, Any], original: dict[str, Any] | None
+) -> bool:
+    changes = operation.get("changes")
+    if not isinstance(changes, dict):
+        return False
+    if str(changes.get("status") or "").upper() == "PAUSED":
+        return True
+    if "daily_budget_micro" not in changes:
+        return False
+    old_value = (original or {}).get("daily_budget_micro")
+    try:
+        return old_value is not None and int(changes["daily_budget_micro"]) < int(
+            old_value
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+async def _capture_proposal_baseline(
+    db: Any,
+    user_id: str,
+    *,
+    account: dict[str, Any],
+    account_id: str,
+    campaign_id: str | None,
+    ad_squad_id: str | None = None,
+    ad_id: str | None = None,
+    products: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from .snapchat_decision_metrics import (
+        capture_decision_baseline,
+        unavailable_decision_baseline,
+    )
+
+    try:
+        return await capture_decision_baseline(
+            db,
+            user_id,
+            account_id=account_id,
+            campaign_id=campaign_id,
+            ad_squad_id=ad_squad_id,
+            ad_id=ad_id,
+            product_ids=[
+                str(item.get("product_id") or "")
+                for item in products
+                if str(item.get("product_id") or "").strip()
+            ],
+            product_refs=products,
+            account_timezone=str(
+                account.get("timezone")
+                or account.get("account_timezone")
+                or "Asia/Riyadh"
+            ),
+        )
+    except Exception as exc:
+        # The exception itself may contain provider/customer data.  Persist only
+        # its type while keeping the absence explicit in the immutable record.
+        return unavailable_decision_baseline(
+            account_id=account_id,
+            campaign_id=campaign_id,
+            reason=f"capture_failed:{type(exc).__name__}",
+        )
+
+
+async def _record_management_decision_deferred_safe(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    row: dict[str, Any],
+) -> None:
+    """Journal the terminal state without changing the provider-write result."""
+    try:
+        from .snapchat_decision_ledger import record_management_decision
+
+        await record_management_decision(db, user_id, row)
+    except Exception as exc:
+        # Reconciliation can recover the complete proposal later.  Never turn a
+        # verified provider success into a false failed status because the
+        # internal journal was temporarily unavailable.
+        try:
+            await _audit(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                event="decision_ledger_record_deferred",
+                actor_id=actor_id,
+                detail={"error_type": type(exc).__name__},
+            )
+        except Exception:
+            # The provider outcome is already durable in the proposal row;
+            # both append-only stores can be repaired by reconciliation.
+            return
+
+
+async def _ensure_proposal_product_links(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    row: dict[str, Any],
+) -> bool:
+    products = [item for item in (row.get("products") or []) if isinstance(item, dict)]
+    if not products:
+        return True
+    proposal_id = str(row.get("proposal_id") or "")
+    try:
+        from .campaign_product_associations import (
+            attach_products_to_management_proposal,
+        )
+
+        links = await attach_products_to_management_proposal(
+            db,
+            user_id,
+            proposal_id=proposal_id,
+            provider=SNAPCHAT_PROVIDER_ID,
+            account_id=str(row.get("account_id") or ""),
+            products=products,
+            actor_id=actor_id,
+            observed_at=row.get("created_at") or _iso(),
+            idempotency_prefix=f"proposal-product:{proposal_id}",
+        )
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": proposal_id},
+            {
+                "$set": {
+                    "product_link_state": "confirmed",
+                    "product_link_count": len(links),
+                    "product_links_recorded_at": _iso(),
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": proposal_id},
+            {
+                "$set": {
+                    "product_link_state": "deferred",
+                    "product_link_error_type": type(exc).__name__,
+                }
+            },
+        )
+        try:
+            await _audit(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                event="campaign_product_link_deferred",
+                actor_id=actor_id,
+                detail={"error_type": type(exc).__name__},
+            )
+        except Exception:
+            pass
+        return False
+
+
+async def _adopt_proposal_products_deferred_safe(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    row: dict[str, Any],
+) -> None:
+    products = [item for item in (row.get("products") or []) if isinstance(item, dict)]
+    if not products:
+        return
+    proposal_id = str(row.get("proposal_id") or "")
+    action = str(row.get("action") or "")
+    entity_type = action.split(".", 1)[0]
+    provider_entity_id = str(row.get("provider_entity_id") or "")
+    baseline = row.get("baseline") if isinstance(row.get("baseline"), dict) else {}
+    campaign_id = str(baseline.get("campaign_id") or "")
+    ad_squad_id: str | None = None
+    ad_id: str | None = None
+    if entity_type == "campaign":
+        campaign_id = provider_entity_id
+    elif entity_type == "ad_squad":
+        campaign_id = str(row.get("parent_id") or campaign_id)
+        ad_squad_id = provider_entity_id
+    elif entity_type == "ad":
+        ad_squad_id = str(row.get("parent_id") or "") or None
+        ad_id = provider_entity_id
+    if not campaign_id:
+        return
+    try:
+        from .campaign_product_associations import (
+            adopt_management_proposal_products,
+        )
+
+        links = await adopt_management_proposal_products(
+            db,
+            user_id,
+            proposal_id=proposal_id,
+            provider=SNAPCHAT_PROVIDER_ID,
+            account_id=str(row.get("account_id") or ""),
+            campaign_id=campaign_id,
+            ad_squad_id=ad_squad_id,
+            ad_id=ad_id,
+            actor_id=actor_id,
+            provider_verified_at=(
+                (row.get("verification") or {}).get("verified_at") or _iso()
+            ),
+            provider_entity_verified=True,
+            idempotency_prefix=f"provider-product:{proposal_id}",
+        )
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": proposal_id},
+            {
+                "$set": {
+                    "product_link_state": "adopted",
+                    "provider_product_link_count": len(links),
+                    "provider_products_adopted_at": _iso(),
+                }
+            },
+        )
+    except Exception as exc:
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": proposal_id},
+            {
+                "$set": {
+                    "product_link_state": "adoption_deferred",
+                    "product_link_error_type": type(exc).__name__,
+                }
+            },
+        )
+
+
+async def _retry_terminal_product_adoption(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    """Retry only the local product adoption for a verified terminal write."""
+    if (
+        row.get("status") != "completed"
+        or row.get("provider_write_uncertain") is True
+        or not row.get("products")
+        or row.get("product_link_state") not in {"confirmed", "adoption_deferred"}
+    ):
+        return row
+    await _adopt_proposal_products_deferred_safe(db, user_id, actor_id, row)
+    updated = (
+        await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {
+                "user_id": user_id,
+                "proposal_id": str(row.get("proposal_id") or ""),
+            },
+            {"_id": 0},
+        )
+        or row
+    )
+    if updated.get("product_link_state") == "adopted":
+        await _record_management_decision_deferred_safe(
+            db,
+            user_id,
+            actor_id,
+            str(row.get("proposal_id") or ""),
+            updated,
+        )
+    return updated
+
+
+async def create_snapchat_management_proposal(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    payload: SnapchatManagementProposalInput,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
     await ensure_snapchat_management_indexes(db)
+    request_fingerprint = hashlib.sha256(
+        json.dumps(
+            payload.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
     existing = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "idempotency_key": payload.idempotency_key},
         {"_id": 0},
     )
     if existing:
+        existing_fingerprint = existing.get("request_fingerprint")
+        if existing_fingerprint != request_fingerprint:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_idempotency_conflict",
+                    "message": ("مفتاح التكرار مستخدم لطلب مختلف؛ أنشئ مفتاحًا جديدًا."),
+                },
+            )
         if existing.get("status") == "previewed":
+            await _ensure_proposal_product_links(db, user_id, actor_id, existing)
             replacement_token = secrets.token_urlsafe(32)
             await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
@@ -787,15 +1464,26 @@ async def create_snapchat_management_proposal(db: Any, user_id: str,
     client = provider or SnapchatManagementProvider(db, user_id)
     role = await client.management_role(account, payload.action)
     if not role.get("allowed"):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_role_missing", "message": "الحساب يحتاج دور general أو admin لإدارة الحملات، ودور creative أو admin للإبداع."})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_role_missing",
+                "message": "الحساب يحتاج دور general أو admin لإدارة الحملات، ودور creative أو admin للإبداع.",
+            },
+        )
     try:
         operation = build_snapchat_operation(payload)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"code": "snapchat_management_payload_invalid", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "snapchat_management_payload_invalid", "message": str(exc)},
+        ) from exc
 
     original: dict[str, Any] | None = None
     if payload.action in UPDATE_ACTIONS:
-        original = await client.read_entity(operation["entity_type"], payload.target_id or "")
+        original = await client.read_entity(
+            operation["entity_type"], payload.target_id or ""
+        )
         if payload.action == "campaign.update":
             if str(original.get("ad_account_id") or "") != payload.account_id:
                 raise HTTPException(
@@ -832,12 +1520,20 @@ async def create_snapchat_management_proposal(db: Any, user_id: str,
     elif payload.action == "ad_squad.create":
         parent = await client.read_entity("campaign", payload.parent_id or "")
         if str(parent.get("ad_account_id") or "") != payload.account_id:
-            raise HTTPException(status_code=409, detail={"code": "snapchat_management_parent_account_mismatch"})
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_parent_account_mismatch"},
+            )
     elif payload.action == "ad.create":
         parent = await client.read_entity("ad_squad", payload.parent_id or "")
-        campaign = await client.read_entity("campaign", str(parent.get("campaign_id") or ""))
+        campaign = await client.read_entity(
+            "campaign", str(parent.get("campaign_id") or "")
+        )
         if str(campaign.get("ad_account_id") or "") != payload.account_id:
-            raise HTTPException(status_code=409, detail={"code": "snapchat_management_parent_account_mismatch"})
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_parent_account_mismatch"},
+            )
         ad_entity = operation["body"]["ads"][0]
         creative = await client.read_entity(
             "creative", str(ad_entity.get("creative_id") or "")
@@ -868,82 +1564,733 @@ async def create_snapchat_management_proposal(db: Any, user_id: str,
                 },
             )
 
+    from .snapchat_decision_metrics import resolve_decision_campaign_id
+
+    campaign_id = await resolve_decision_campaign_id(
+        db,
+        user_id,
+        account_id=payload.account_id,
+        entity_type=str(operation.get("entity_type") or ""),
+        entity_id=payload.target_id,
+        parent_id=payload.parent_id,
+    )
+    baseline_ad_squad_id = (
+        payload.target_id
+        if operation.get("entity_type") == "ad_squad"
+        else payload.parent_id if operation.get("entity_type") == "ad" else None
+    )
+    baseline_ad_id = payload.target_id if operation.get("entity_type") == "ad" else None
+    product_rows = [item.model_dump(mode="json") for item in payload.products]
+    baseline = await _capture_proposal_baseline(
+        db,
+        user_id,
+        account=account,
+        account_id=payload.account_id,
+        campaign_id=campaign_id,
+        ad_squad_id=baseline_ad_squad_id,
+        ad_id=baseline_ad_id,
+        products=product_rows,
+    )
+    if (
+        operation.get("entity_type") in {"campaign", "ad_squad", "ad"}
+        and not baseline.get("windows")
+        and provider is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_decision_baseline_unavailable",
+                "message": (
+                    "تعذر أخذ لقطة نتائج سلة وSnapchat وقت القرار؛ لم يُنشأ "
+                    "التعديل حتى تعود البيانات مكتملة."
+                ),
+                "coverage": baseline.get("coverage") or {},
+            },
+        )
+    recent_improving = bool(
+        ((baseline.get("recent_trend") or {}).get("recent_improving"))
+    )
+    trend_review = {
+        "recent_improvement_observed": recent_improving,
+        "delivery_decrease_or_pause": _is_pause_or_budget_decrease(operation, original),
+        "separate_explanation_recorded": bool(payload.trend_override_reason),
+        "policy": ("supporting_observation_only; never_a_fixed_rule_or_primary_basis"),
+    }
+    if (
+        _is_delivery_increase(operation, original)
+        and baseline.get("inventory_delivery_blocked") is True
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_inventory_blocks_delivery_increase",
+                "message": (
+                    "المخزون الموثق للمنتج المرتبط لا يسمح بتشغيل أو زيادة الإنفاق."
+                ),
+                "inventory": baseline.get("inventory") or [],
+            },
+        )
+
     proposal_id = str(uuid.uuid4())
     token = secrets.token_urlsafe(32)
     now = _utcnow()
     row = {
-        "proposal_id": proposal_id, "user_id": user_id,
-        "actor_id": actor_id, "action": payload.action,
-        "account_id": payload.account_id, "target_id": payload.target_id,
-        "parent_id": payload.parent_id, "reason": payload.reason,
-        "idempotency_key": payload.idempotency_key, "status": "previewed",
-        "revision": 1, "operation": operation, "original_snapshot": original,
-        "role": role.get("role"), "confirm_token_hash": hashlib.sha256(token.encode()).hexdigest(),
-        "created_at": _iso(now), "expires_at": _iso(now + PROPOSAL_TTL),
+        "proposal_id": proposal_id,
+        "user_id": user_id,
+        "actor_id": actor_id,
+        "action": payload.action,
+        "account_id": payload.account_id,
+        "target_id": payload.target_id,
+        "parent_id": payload.parent_id,
+        "reason": payload.reason,
+        "idempotency_key": payload.idempotency_key,
+        "request_fingerprint": request_fingerprint,
+        "status": "previewed",
+        "revision": 1,
+        "operation": operation,
+        "original_snapshot": original,
+        "baseline": baseline,
+        "expected": payload.expected_outcome,
+        "decision_evidence": [
+            item.model_dump(mode="json") for item in payload.supporting_evidence
+        ],
+        "products": product_rows,
+        "product_link_state": "pending" if product_rows else "not_supplied",
+        "trend_review": trend_review,
+        "trend_override_reason": payload.trend_override_reason,
+        "role": role.get("role"),
+        "confirm_token_hash": hashlib.sha256(token.encode()).hexdigest(),
+        "created_at": _iso(now),
+        "expires_at": _iso(now + PROPOSAL_TTL),
         "provider_write_reached": False,
         "provider_write_state": "not_attempted",
         "provider_write_uncertain": False,
         "accounting_write_reached": False,
-        "qoyod_write_reached": False, "source_mode": SOURCE_MODE,
+        "qoyod_write_reached": False,
+        "source_mode": SOURCE_MODE,
     }
     await _collection(db, PROPOSAL_COLLECTION).insert_one(row)
-    await _audit(db, user_id=user_id, proposal_id=proposal_id, event="previewed", actor_id=actor_id, detail={"action": payload.action, "role": role.get("role")})
+    product_links_ok = await _ensure_proposal_product_links(db, user_id, actor_id, row)
+    if product_rows:
+        row["product_link_state"] = "confirmed" if product_links_ok else "deferred"
+    await _audit(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+        event="previewed",
+        actor_id=actor_id,
+        detail={"action": payload.action, "role": role.get("role")},
+    )
     return _public_proposal(row, confirm_token=token)
 
 
-async def approve_snapchat_management_proposal(db: Any, user_id: str,
-                                               actor_id: str, proposal_id: str,
-                                               payload: SnapchatManagementApprovalInput) -> dict[str, Any]:
+async def approve_snapchat_management_proposal(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    payload: SnapchatManagementApprovalInput,
+) -> dict[str, Any]:
     row = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
     )
     if not row:
-        raise HTTPException(status_code=404, detail={"code": "snapchat_management_proposal_not_found"})
-    if row.get("status") != "previewed" or int(row.get("revision") or 0) != payload.expected_revision:
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_proposal_not_approvable"})
+        raise HTTPException(
+            status_code=404, detail={"code": "snapchat_management_proposal_not_found"}
+        )
+    if (
+        row.get("status") != "previewed"
+        or int(row.get("revision") or 0) != payload.expected_revision
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_proposal_not_approvable"},
+        )
     if _expired(row.get("expires_at")):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_proposal_expired"})
+        raise HTTPException(
+            status_code=409, detail={"code": "snapchat_management_proposal_expired"}
+        )
     token_hash = hashlib.sha256(payload.confirm_token.encode()).hexdigest()
     if not secrets.compare_digest(token_hash, str(row.get("confirm_token_hash") or "")):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_confirm_token_mismatch"})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_confirm_token_mismatch"},
+        )
     now_iso = _iso()
     result = await _collection(db, PROPOSAL_COLLECTION).update_one(
-        {"user_id": user_id, "proposal_id": proposal_id, "status": "previewed", "revision": payload.expected_revision},
-        {"$set": {"status": "approved", "approved_at": now_iso, "approved_by": actor_id, "confirm_token_hash": None}, "$inc": {"revision": 1}},
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "previewed",
+            "revision": payload.expected_revision,
+        },
+        {
+            "$set": {
+                "status": "approved",
+                "approved_at": now_iso,
+                "approved_by": actor_id,
+                "confirm_token_hash": None,
+            },
+            "$inc": {"revision": 1},
+        },
     )
     if not getattr(result, "matched_count", 1):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_approval_race"})
-    await _audit(db, user_id=user_id, proposal_id=proposal_id, event="approved", actor_id=actor_id)
-    updated = await _collection(db, PROPOSAL_COLLECTION).find_one({"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0})
+        raise HTTPException(
+            status_code=409, detail={"code": "snapchat_management_approval_race"}
+        )
+    await _audit(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+        event="approved",
+        actor_id=actor_id,
+    )
+    updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
     return _public_proposal(updated or row)
 
 
-def _changed_values_match(expected: dict[str, Any], actual: dict[str, Any]) -> tuple[bool, list[str]]:
+def _changed_values_match(
+    expected: dict[str, Any], actual: dict[str, Any]
+) -> tuple[bool, list[str]]:
     mismatches: list[str] = []
     for key, value in expected.items():
-        if actual.get(key) != value:
+        if _canonical_control_value(actual.get(key)) != _canonical_control_value(value):
             mismatches.append(key)
     return not mismatches, mismatches
 
 
-async def execute_snapchat_management_proposal(db: Any, user_id: str,
-                                               actor_id: str, proposal_id: str,
-                                               *, provider: SnapchatManagementProvider | None = None) -> dict[str, Any]:
-    if not snapchat_campaign_mutations_enabled():
-        raise HTTPException(status_code=409, detail={"code": "snapchat_campaign_mutations_disabled", "message": "تشغيل كتابة حملات Snapchat متوقف بمفتاح الأمان."})
-    row = await _collection(db, PROPOSAL_COLLECTION).find_one({"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0})
+def _canonical_control_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_control_value(nested)
+            for key, nested in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, list):
+        return [_canonical_control_value(item) for item in value]
+    return value
+
+
+def _operation_expected_values(operation: dict[str, Any]) -> dict[str, Any]:
+    changes = operation.get("changes")
+    if isinstance(changes, dict):
+        return dict(changes)
+    body = operation.get("body")
+    rows = body.get(operation.get("plural")) if isinstance(body, dict) else None
+    entity = rows[0] if isinstance(rows, list) and rows else {}
+    if not isinstance(entity, dict):
+        return {}
+    # POST bodies are constructed only from the entity's validated create
+    # allow-list plus provider relationship/status fields injected by Mezan.
+    # Every submitted control value must survive provider canonical readback;
+    # otherwise objective, targeting, placement, bidding, conversion-window,
+    # or creative-property drift could be mislabeled as a verified success.
+    return {
+        key: _canonical_control_value(value)
+        for key, value in entity.items()
+        if key != "id"
+    }
+
+
+async def _refresh_verified_entity_cache_deferred_safe(
+    db: Any,
+    *,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    account: dict[str, Any],
+    entity_type: str,
+    entity: dict[str, Any],
+    event: str,
+) -> None:
+    try:
+        await _upsert_entity(
+            SnapchatSyncContext(db=db, user_id=user_id),
+            account=account,
+            entity_type=entity_type,
+            entity=entity,
+        )
+    except Exception as exc:
+        # Provider readback is authoritative.  Local reporting-cache refresh is
+        # repairable and must never strand a verified execute/rollback state.
+        try:
+            await _audit(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                event=event,
+                actor_id=actor_id,
+                detail={"error_type": type(exc).__name__},
+            )
+        except Exception:
+            pass
+
+
+async def _reset_execution_claim(
+    db: Any,
+    *,
+    user_id: str,
+    proposal_id: str,
+    failure: dict[str, Any] | None = None,
+) -> None:
+    values: dict[str, Any] = {
+        "status": "approved",
+        "provider_write_reached": False,
+        "provider_write_state": "not_attempted",
+        "provider_write_uncertain": False,
+        "execution_started_at": None,
+    }
+    if failure:
+        values.update(
+            {
+                "failure": _safe_provider_value(failure),
+                "failed_at": _iso(),
+                "execution_retryable": True,
+            }
+        )
+    await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "executing",
+        },
+        {"$set": values},
+    )
+
+
+async def _complete_verified_execution(
+    db: Any,
+    *,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    row: dict[str, Any],
+    operation: dict[str, Any],
+    account: dict[str, Any],
+    provider_entity_id: str,
+    verified: dict[str, Any],
+    event: str,
+) -> dict[str, Any]:
+    verification = {
+        "verified": True,
+        "entity_id": provider_entity_id,
+        "status": verified.get("status"),
+        "verified_at": _iso(),
+        "provider_snapshot": verified,
+        "verification_source": (
+            "post_error_readback"
+            if event == "execution_reconciled_applied"
+            else "readback"
+        ),
+    }
+    now_iso = _iso()
+    await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
+        {
+            "$set": {
+                "status": "completed",
+                "executed_at": now_iso,
+                "executed_by": actor_id,
+                "provider_write_reached": True,
+                "provider_write_state": "confirmed",
+                "provider_write_uncertain": False,
+                "provider_entity_id": provider_entity_id,
+                "verification": verification,
+                "execution_retryable": False,
+                "automatic_retry_allowed": False,
+                "failure": {},
+            }
+        },
+    )
+    await _refresh_verified_entity_cache_deferred_safe(
+        db,
+        user_id=user_id,
+        actor_id=actor_id,
+        proposal_id=proposal_id,
+        account=account,
+        entity_type=operation["entity_type"],
+        entity=verified,
+        event="verified_entity_cache_refresh_deferred",
+    )
+    await _audit(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+        event=event,
+        actor_id=actor_id,
+        detail={"entity_id": provider_entity_id, "status": verified.get("status")},
+    )
+    completed_row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if completed_row:
+        await _adopt_proposal_products_deferred_safe(
+            db, user_id, actor_id, completed_row
+        )
+        completed_row = (
+            await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+            )
+            or completed_row
+        )
+        await _record_management_decision_deferred_safe(
+            db, user_id, actor_id, proposal_id, completed_row
+        )
+    updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    return _public_proposal(updated or row)
+
+
+def _provider_state_conflict_fields(
+    operation: dict[str, Any],
+    original_snapshot: dict[str, Any],
+    current_entity: dict[str, Any],
+) -> list[str]:
+    safety_fields_by_entity = {
+        "campaign": CAMPAIGN_UPDATE_FIELDS,
+        "ad_squad": AD_SQUAD_UPDATE_FIELDS,
+        "ad": AD_UPDATE_FIELDS,
+    }
+    controlled_fields = {
+        field
+        for field in safety_fields_by_entity.get(
+            str(operation.get("entity_type") or ""),
+            set(operation.get("changes") or {}),
+        )
+        if field in original_snapshot or field in current_entity
+    }
+    return sorted(
+        field
+        for field in controlled_fields
+        if current_entity.get(field) != original_snapshot.get(field)
+    )
+
+
+def _provider_state_conflict_detail(stale_fields: list[str]) -> dict[str, Any]:
+    return {
+        "code": "snapchat_management_provider_state_conflict",
+        "message": (
+            "تغيرت حالة Snapchat بعد المعاينة؛ أُوقف التنفيذ وأنشئ "
+            "معاينة جديدة من الحالة الحالية."
+        ),
+        "changed_fields": stale_fields,
+    }
+
+
+def _lease_entity_id(row: dict[str, Any], operation: dict[str, Any]) -> str:
+    return str(
+        row.get("provider_entity_id")
+        or row.get("target_id")
+        or f"pending:{row.get('proposal_id')}"
+    )
+
+
+async def _acquire_entity_lease(
+    db: Any,
+    *,
+    user_id: str,
+    row: dict[str, Any],
+    operation: dict[str, Any],
+    operation_kind: str,
+) -> str:
+    """Claim one provider entity without unsafe automatic lease takeover.
+
+    ``expires_at`` is operational evidence for manual recovery, not permission
+    for another worker to steal the lease.  A timed-out provider call can have
+    applied after the caller stopped waiting, so blind TTL takeover would
+    defeat the fence and could duplicate a financial/ad-delivery write.
+    """
+    await ensure_snapchat_management_indexes(db)
+    token = secrets.token_urlsafe(24)
+    now = _utcnow()
+    lease = {
+        "lease_id": str(uuid.uuid4()),
+        "lease_token": token,
+        "active": True,
+        "user_id": user_id,
+        "account_id": str(row.get("account_id") or ""),
+        "entity_type": str(operation.get("entity_type") or ""),
+        "entity_id": _lease_entity_id(row, operation),
+        "proposal_id": str(row.get("proposal_id") or ""),
+        "operation_kind": operation_kind,
+        "acquired_at": _iso(now),
+        "expires_at": _iso(now + ENTITY_LEASE_DURATION),
+        "source_mode": SOURCE_MODE,
+    }
+    try:
+        await _collection(db, ENTITY_LEASE_COLLECTION).insert_one(lease)
+    except Exception as exc:
+        # Motor raises DuplicateKeyError for the partial unique entity fence.
+        # Avoid exposing storage details and never steal an expired lease: its
+        # provider outcome must first be reconciled by an operator.
+        if type(exc).__name__ != "DuplicateKeyError":
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_entity_busy",
+                "message": (
+                    "يوجد تنفيذ أو تراجع قائم على نفس كيان Snapchat؛ "
+                    "انتظر اكتماله أو نفّذ مسار الاستعادة قبل المحاولة."
+                ),
+                "recovery_action": "reconcile_existing_entity_lease",
+            },
+        ) from exc
+    return token
+
+
+async def _release_entity_lease(
+    db: Any,
+    *,
+    user_id: str,
+    row: dict[str, Any],
+    operation: dict[str, Any],
+    lease_token: str,
+) -> None:
+    await _collection(db, ENTITY_LEASE_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "account_id": str(row.get("account_id") or ""),
+            "entity_type": str(operation.get("entity_type") or ""),
+            "entity_id": _lease_entity_id(row, operation),
+            "lease_token": lease_token,
+            "active": True,
+        },
+        {
+            "$set": {
+                "active": False,
+                "released_at": _iso(),
+            }
+        },
+    )
+
+
+async def _release_proposal_entity_lease(
+    db: Any,
+    *,
+    user_id: str,
+    row: dict[str, Any],
+) -> None:
+    lease = await _collection(db, ENTITY_LEASE_COLLECTION).find_one(
+        {
+            "user_id": user_id,
+            "proposal_id": str(row.get("proposal_id") or ""),
+            "active": True,
+        },
+        {"_id": 0},
+    )
+    if lease and lease.get("lease_token"):
+        await _collection(db, ENTITY_LEASE_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": str(row.get("proposal_id") or ""),
+                "lease_token": str(lease["lease_token"]),
+                "active": True,
+            },
+            {"$set": {"active": False, "released_at": _iso()}},
+        )
+
+
+async def _active_proposal_entity_lease(
+    db: Any, *, user_id: str, proposal_id: str
+) -> dict[str, Any] | None:
+    return await _collection(db, ENTITY_LEASE_COLLECTION).find_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "active": True,
+        },
+        {"_id": 0},
+    )
+
+
+async def execute_snapchat_management_proposal(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
     if not row:
-        raise HTTPException(status_code=404, detail={"code": "snapchat_management_proposal_not_found"})
+        raise HTTPException(
+            status_code=404, detail={"code": "snapchat_management_proposal_not_found"}
+        )
+    if row.get("status") == "completed":
+        row = await _retry_terminal_product_adoption(db, user_id, actor_id, row)
+        return _public_proposal(row)
+    operation = dict(row.get("operation") or {})
+    lease_token = await _acquire_entity_lease(
+        db,
+        user_id=user_id,
+        row=row,
+        operation=operation,
+        operation_kind="execute",
+    )
+    try:
+        result = await _execute_snapchat_management_proposal_under_lease(
+            db,
+            user_id,
+            actor_id,
+            proposal_id,
+            provider=provider,
+        )
+        return result
+    except asyncio.CancelledError:
+        # ``CancelledError`` is a BaseException on supported Python versions,
+        # so the provider-error handler below the lock cannot persist an
+        # uncertain outcome.  Stabilize the durable state before propagating
+        # cancellation; a later recovery remains strictly read-only.
+        await _stabilize_cancelled_execution(
+            db,
+            user_id=user_id,
+            actor_id=actor_id,
+            proposal_id=proposal_id,
+        )
+        raise
+    finally:
+        latest = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        # Preserve the entity fence when the provider outcome is unresolved.
+        # A later retry must not write blindly; recovery reconciles and then
+        # explicitly releases the durable fence.
+        if (latest or {}).get("status") != "executing" and not (latest or {}).get(
+            "provider_write_uncertain"
+        ):
+            await _release_entity_lease(
+                db,
+                user_id=user_id,
+                row=row,
+                operation=operation,
+                lease_token=lease_token,
+            )
+
+
+async def _stabilize_cancelled_execution(
+    db: Any,
+    *,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+) -> None:
+    """Fence a cancelled in-flight provider call before cancellation escapes."""
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if not row or row.get("status") != "executing":
+        return
+    write_state = str(row.get("provider_write_state") or "not_attempted")
+    if write_state not in {"attempting", "confirmed"}:
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_management_worker_cancelled_before_write"},
+        )
+        return
+    await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "executing",
+        },
+        {
+            "$set": {
+                "status": "failed",
+                "failed_at": _iso(),
+                "provider_write_state": "unknown_needs_reconciliation",
+                "provider_write_reached": (
+                    row.get("provider_write_reached") is True
+                    or write_state == "confirmed"
+                ),
+                "provider_write_uncertain": True,
+                "execution_retryable": False,
+                "automatic_retry_allowed": False,
+                "recovery_action": (
+                    "manual_reconcile_provider_entity_before_retry_or_rollback"
+                ),
+                "failure": {
+                    "code": "snapchat_management_worker_cancelled_during_execution",
+                    "recovery_action": (
+                        "manual_reconcile_provider_entity_before_retry_or_rollback"
+                    ),
+                },
+            }
+        },
+    )
+    try:
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="execution_cancelled_write_uncertain",
+            actor_id=actor_id,
+            detail={"provider_write_state_before_cancellation": write_state},
+        )
+    except Exception:
+        # The proposal row and entity fence are the safety boundary; audit
+        # repair must never weaken them or replace task cancellation.
+        return
+
+
+async def _execute_snapchat_management_proposal_under_lease(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
+    if not snapchat_campaign_mutations_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_campaign_mutations_disabled",
+                "message": "تشغيل كتابة حملات Snapchat متوقف بمفتاح الأمان.",
+            },
+        )
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if not row:
+        raise HTTPException(
+            status_code=404, detail={"code": "snapchat_management_proposal_not_found"}
+        )
     if row.get("status") == "completed":
         return _public_proposal(row)
     if row.get("status") != "approved":
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_proposal_not_executable"})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_proposal_not_executable"},
+        )
     if _expired(row.get("expires_at")):
         raise HTTPException(
             status_code=409,
             detail={"code": "snapchat_management_proposal_expired"},
         )
     operation = dict(row.get("operation") or {})
+    if row.get("products") and row.get("product_link_state") not in {
+        "confirmed",
+        "adopted",
+    }:
+        linked = await _ensure_proposal_product_links(db, user_id, actor_id, row)
+        if not linked:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_product_link_unavailable",
+                    "message": (
+                        "تعذر تثبيت ارتباط المنتج بالحملة؛ لم يصل أي تعديل "
+                        "إلى Snapchat ويمكن إعادة المحاولة بأمان."
+                    ),
+                },
+            )
     try:
         _assert_stored_operation_integrity(row, operation)
     except ValueError as exc:
@@ -951,25 +2298,191 @@ async def execute_snapchat_management_proposal(db: Any, user_id: str,
             status_code=409,
             detail={"code": "snapchat_management_operation_integrity_failed"},
         ) from exc
-    if operation.get("activates_delivery") and not snapchat_campaign_activation_enabled():
-        raise HTTPException(status_code=409, detail={"code": "snapchat_campaign_activation_disabled", "message": "تشغيل الحملات متوقف بمفتاح أمان مستقل؛ يمكن الإنشاء والتعديل والإيقاف فقط."})
+    if (
+        operation.get("activates_delivery")
+        and not snapchat_campaign_activation_enabled()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_campaign_activation_disabled",
+                "message": "تشغيل الحملات متوقف بمفتاح أمان مستقل؛ يمكن الإنشاء والتعديل والإيقاف فقط.",
+            },
+        )
     account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
     client = provider or SnapchatManagementProvider(db, user_id)
     role = await client.management_role(account, str(row.get("action") or ""))
     if not role.get("allowed"):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_role_missing"})
+        raise HTTPException(
+            status_code=409, detail={"code": "snapchat_management_role_missing"}
+        )
+    if str(row.get("action") or "") in UPDATE_ACTIONS:
+        preflight_entity = await client.read_entity(
+            str(operation.get("entity_type") or ""),
+            str(row.get("target_id") or ""),
+        )
+        preflight_stale_fields = _provider_state_conflict_fields(
+            operation,
+            dict(row.get("original_snapshot") or {}),
+            preflight_entity,
+        )
+        if preflight_stale_fields:
+            raise HTTPException(
+                status_code=409,
+                detail=_provider_state_conflict_detail(preflight_stale_fields),
+            )
+    if _is_delivery_increase(
+        operation, dict(row.get("original_snapshot") or {}) or None
+    ):
+        current_baseline = await _capture_proposal_baseline(
+            db,
+            user_id,
+            account=account,
+            account_id=str(row.get("account_id") or ""),
+            campaign_id=(row.get("baseline") or {}).get("campaign_id"),
+            ad_squad_id=(
+                str(row.get("target_id") or "")
+                if operation.get("entity_type") == "ad_squad"
+                else (
+                    str(row.get("parent_id") or "")
+                    if operation.get("entity_type") == "ad"
+                    else None
+                )
+            ),
+            ad_id=(
+                str(row.get("target_id") or "")
+                if operation.get("entity_type") == "ad"
+                else None
+            ),
+            products=list(row.get("products") or []),
+        )
+        if (
+            current_baseline.get("inventory_delivery_blocked") is True
+            or current_baseline.get("inventory_verification_status") != "verified"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_inventory_changed_before_execution",
+                    "message": (
+                        "تعذر التحقق من المخزون الحالي أو لم يعد يسمح بزيادة "
+                        "التسليم؛ لم يصل أي تعديل إلى Snapchat."
+                    ),
+                    "inventory_verification_status": current_baseline.get(
+                        "inventory_verification_status"
+                    ),
+                },
+            )
     locked = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {"user_id": user_id, "proposal_id": proposal_id, "status": "approved"},
-        {"$set": {
-            "status": "executing",
-            "execution_started_at": _iso(),
-            "provider_write_state": "attempting",
-        }},
+        {
+            "$set": {
+                "status": "executing",
+                "execution_started_at": _iso(),
+                "provider_write_state": "attempting",
+            }
+        },
     )
     if not getattr(locked, "matched_count", 1):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_execution_race"})
+        raise HTTPException(
+            status_code=409, detail={"code": "snapchat_management_execution_race"}
+        )
+    # Configuration can change while preflight checks are running.  Re-read
+    # both independent kill switches only after the proposal and entity locks
+    # have been acquired, immediately before any provider write.
+    if not snapchat_campaign_mutations_enabled():
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_campaign_mutations_disabled_after_lock"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_campaign_mutations_disabled"},
+        )
+    if (
+        operation.get("activates_delivery")
+        and not snapchat_campaign_activation_enabled()
+    ):
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_campaign_activation_disabled_after_lock"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_campaign_activation_disabled"},
+        )
+    # Final provider read happens after the proposal lock and immediately
+    # before the write.  If any delivery-sensitive field drifted since the
+    # immutable preview, fail closed and leave the provider untouched.
+    if str(row.get("action") or "") in UPDATE_ACTIONS:
+        try:
+            current_entity = await client.read_entity(
+                str(operation.get("entity_type") or ""),
+                str(row.get("target_id") or ""),
+            )
+        except Exception:
+            # No provider write has been attempted yet.  Release the local
+            # execution lock so a transient read failure cannot strand an
+            # otherwise valid proposal in ``executing`` forever.
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure={"code": "snapchat_management_final_read_failed"},
+            )
+            raise
+        stale_fields = _provider_state_conflict_fields(
+            operation,
+            dict(row.get("original_snapshot") or {}),
+            current_entity,
+        )
+        if stale_fields:
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure=_provider_state_conflict_detail(stale_fields),
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=_provider_state_conflict_detail(stale_fields),
+            )
+    if not snapchat_campaign_mutations_enabled():
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_campaign_mutations_disabled_after_final_read"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_campaign_mutations_disabled"},
+        )
+    if (
+        operation.get("activates_delivery")
+        and not snapchat_campaign_activation_enabled()
+    ):
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_campaign_activation_disabled_after_final_read"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_campaign_activation_disabled"},
+        )
     provider_write_confirmed = False
-    provider_entity_id = ""
+    provider_entity_id = (
+        str(row.get("target_id") or "")
+        if str(row.get("action") or "") in UPDATE_ACTIONS
+        else ""
+    )
+    expected = _operation_expected_values(operation)
     try:
         provider_entity = await client.execute(operation)
         provider_write_confirmed = True
@@ -978,88 +2491,757 @@ async def execute_snapchat_management_proposal(db: Any, user_id: str,
         )
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
-            {"$set": {
-                "provider_write_reached": True,
-                "provider_write_state": "confirmed",
-                "provider_write_uncertain": False,
-                "provider_entity_id": provider_entity_id,
-            }},
+            {
+                "$set": {
+                    "provider_write_reached": True,
+                    "provider_write_state": "confirmed",
+                    "provider_write_uncertain": False,
+                    "provider_entity_id": provider_entity_id,
+                    # Preserve the bounded response before starting a separate
+                    # verification request.  If that request fails, recovery
+                    # still knows exactly what Snapchat acknowledged.
+                    "provider_response_snapshot": _safe_provider_value(provider_entity),
+                }
+            },
         )
         verified = await client.read_entity(
             operation["entity_type"], provider_entity_id
         )
-        expected = (
-            operation.get("changes") or
-            {key: value for key, value in (operation.get("body", {}).get(operation["plural"], [{}])[0]).items() if key in {"name", "status", "daily_budget_micro", "lifetime_budget_micro", "creative_id", "type"}}
-        )
         verified_ok, mismatches = _changed_values_match(expected, verified)
         if not verified_ok:
-            raise HTTPException(status_code=502, detail={"code": "snapchat_management_verification_failed", "mismatched_fields": mismatches})
-        await _upsert_entity(
-            SnapchatSyncContext(db=db, user_id=user_id), account=account,
-            entity_type=operation["entity_type"], entity=verified,
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "snapchat_management_verification_failed",
+                    "mismatched_fields": mismatches,
+                },
+            )
+        return await _complete_verified_execution(
+            db,
+            user_id=user_id,
+            actor_id=actor_id,
+            proposal_id=proposal_id,
+            row=row,
+            operation=operation,
+            account=account,
+            provider_entity_id=provider_entity_id,
+            verified=verified,
+            event="executed_and_verified",
         )
-        verification = {
-            "verified": True, "entity_id": provider_entity_id,
-            "status": verified.get("status"), "verified_at": _iso(),
-            "provider_snapshot": verified,
-        }
-        now_iso = _iso()
-        await _collection(db, PROPOSAL_COLLECTION).update_one(
-            {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
-            {"$set": {"status": "completed", "executed_at": now_iso, "executed_by": actor_id, "provider_write_reached": True, "provider_write_state": "confirmed", "provider_write_uncertain": False, "provider_entity_id": provider_entity_id, "verification": verification}},
-        )
-        await _audit(db, user_id=user_id, proposal_id=proposal_id, event="executed_and_verified", actor_id=actor_id, detail={"entity_id": provider_entity_id, "status": verified.get("status")})
     except Exception as exc:
-        detail = exc.detail if isinstance(exc, HTTPException) else {"code": "snapchat_management_execution_failed"}
-        write_state = "confirmed" if provider_write_confirmed else "unknown_after_error"
+        detail = (
+            exc.detail
+            if isinstance(exc, HTTPException)
+            else {"code": "snapchat_management_execution_failed"}
+        )
+        readback: dict[str, Any] | None = None
+        if provider_entity_id:
+            try:
+                readback = await client.read_entity(
+                    operation["entity_type"], provider_entity_id
+                )
+            except Exception:
+                readback = None
+
+        if readback is not None:
+            planned_ok, _ = _changed_values_match(expected, readback)
+            if planned_ok:
+                return await _complete_verified_execution(
+                    db,
+                    user_id=user_id,
+                    actor_id=actor_id,
+                    proposal_id=proposal_id,
+                    row=row,
+                    operation=operation,
+                    account=account,
+                    provider_entity_id=provider_entity_id,
+                    verified=readback,
+                    event="execution_reconciled_applied",
+                )
+
+        original_ok = False
+        if readback is not None and str(row.get("action") or "") in UPDATE_ACTIONS:
+            original_ok = not _provider_state_conflict_fields(
+                operation,
+                dict(row.get("original_snapshot") or {}),
+                readback,
+            )
+
+        known_not_applied = original_ok
+        uncertain = not known_not_applied
+        write_state = (
+            "confirmed_not_applied"
+            if known_not_applied
+            else "unknown_needs_reconciliation"
+        )
+        recovery_action = (
+            "create_new_preview"
+            if known_not_applied
+            else "manual_reconcile_provider_entity_before_retry_or_rollback"
+        )
+        safe_detail = dict(detail) if isinstance(detail, dict) else {}
+        safe_detail.update(
+            {
+                "reconciliation": (
+                    "current_matches_original"
+                    if known_not_applied
+                    else "mixed_or_unavailable"
+                ),
+                "recovery_action": recovery_action,
+            }
+        )
         await _collection(db, PROPOSAL_COLLECTION).update_one(
             {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
-            {"$set": {
-                "status": "failed",
-                "failed_at": _iso(),
-                "failure": _safe_provider_value(detail),
-                "provider_write_reached": provider_write_confirmed,
-                "provider_write_state": write_state,
-                "provider_write_uncertain": not provider_write_confirmed,
-                **({"provider_entity_id": provider_entity_id} if provider_entity_id else {}),
-            }},
+            {
+                "$set": {
+                    "status": "failed",
+                    "failed_at": _iso(),
+                    "failure": _safe_provider_value(safe_detail),
+                    "provider_write_reached": (
+                        provider_write_confirmed or readback is not None
+                    )
+                    and not known_not_applied,
+                    "provider_write_state": write_state,
+                    "provider_write_uncertain": uncertain,
+                    "execution_retryable": False,
+                    "automatic_retry_allowed": False,
+                    "recovery_action": recovery_action,
+                    "reconciliation_snapshot": _safe_provider_value(readback or {}),
+                    **(
+                        {"provider_entity_id": provider_entity_id}
+                        if provider_entity_id
+                        else {}
+                    ),
+                }
+            },
         )
         await _audit(
-            db, user_id=user_id, proposal_id=proposal_id,
-            event="execution_failed", actor_id=actor_id,
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="execution_failed",
+            actor_id=actor_id,
             detail={
-                **(detail if isinstance(detail, dict) else {}),
+                **safe_detail,
                 "provider_write_state": write_state,
                 "provider_entity_id": provider_entity_id or None,
             },
         )
+        failed_row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        if failed_row:
+            await _record_management_decision_deferred_safe(
+                db, user_id, actor_id, proposal_id, failed_row
+            )
         raise
-    updated = await _collection(db, PROPOSAL_COLLECTION).find_one({"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0})
-    return _public_proposal(updated or row)
 
 
-async def rollback_snapchat_management_proposal(db: Any, user_id: str,
-                                                actor_id: str, proposal_id: str,
-                                                payload: SnapchatManagementRollbackInput,
-                                                *, provider: SnapchatManagementProvider | None = None) -> dict[str, Any]:
+async def reconcile_snapchat_management_proposal(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
+    """Read Snapchat and resolve an uncertain write without issuing a write."""
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "snapchat_management_proposal_not_found"},
+        )
+    row = await _retry_terminal_product_adoption(db, user_id, actor_id, row)
+    lease = await _active_proposal_entity_lease(
+        db, user_id=user_id, proposal_id=proposal_id
+    )
+    lease_expired = bool(lease and _expired(lease.get("expires_at")))
+    lease_kind = str((lease or {}).get("operation_kind") or "")
+    execution_state = str(row.get("provider_write_state") or "not_attempted")
+    rollback_state = str(row.get("rollback_write_state") or "not_attempted")
+
+    verified_execution_terminal = bool(
+        row.get("status") == "completed"
+        and isinstance(row.get("verification"), dict)
+        and (row.get("verification") or {}).get("verified") is True
+        and row.get("provider_write_uncertain") is not True
+    )
+    verified_rollback_terminal = bool(
+        row.get("status") == "rolled_back"
+        and isinstance(row.get("rollback"), dict)
+        and (row.get("rollback") or {}).get("status") in {"verified", "neutralized"}
+        and row.get("rollback_write_uncertain") is not True
+    )
+    known_execution_no_write = bool(
+        row.get("status") == "failed"
+        and execution_state == "confirmed_not_applied"
+        and row.get("provider_write_uncertain") is not True
+    )
+    known_rollback_no_write = bool(
+        rollback_state == "confirmed_not_applied"
+        and row.get("rollback_write_uncertain") is not True
+        and row.get("status") != "rolling_back"
+    )
+    if lease_expired and (
+        verified_execution_terminal
+        or verified_rollback_terminal
+        or known_execution_no_write
+        or known_rollback_no_write
+    ):
+        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="expired_terminal_entity_lease_released",
+            actor_id=actor_id,
+            detail={"status": row.get("status")},
+        )
+        updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        return _public_proposal(updated or row)
+
+    # A worker can stop after inserting the entity fence but before claiming
+    # the proposal.  Only this exact, expired, provably no-write state is safe
+    # to release without reading or writing Snapchat.
+    if (
+        lease_expired
+        and lease_kind == "execute"
+        and row.get("status") == "approved"
+        and execution_state == "not_attempted"
+        and row.get("provider_write_reached") is not True
+        and row.get("provider_write_uncertain") is not True
+    ):
+        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="expired_no_write_entity_lease_released",
+            actor_id=actor_id,
+            detail={"recovery_action": "retry_approved_proposal"},
+        )
+        updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        return _public_proposal(updated or row)
+
+    # Crash after the proposal claim may have happened during the provider
+    # call.  After the durable fence expires, promote it to explicit
+    # uncertainty and use the same read-only reconciliation as caught errors.
+    if (
+        lease_expired
+        and lease_kind == "execute"
+        and row.get("status") == "executing"
+        and execution_state in {"attempting", "confirmed"}
+        and row.get("provider_write_uncertain") is not True
+    ):
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "executing",
+                "provider_write_state": execution_state,
+            },
+            {
+                "$set": {
+                    "status": "failed",
+                    "failed_at": _iso(),
+                    "provider_write_state": "unknown_needs_reconciliation",
+                    "provider_write_reached": (
+                        row.get("provider_write_reached") is True
+                        or execution_state == "confirmed"
+                    ),
+                    "provider_write_uncertain": True,
+                    "automatic_retry_allowed": False,
+                    "recovery_action": (
+                        "manual_reconcile_provider_entity_before_retry_or_rollback"
+                    ),
+                    "failure": {
+                        "code": "snapchat_management_worker_lost_during_execution"
+                    },
+                }
+            },
+        )
+        row = (
+            await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+            )
+            or row
+        )
+
+    rollback_from_status = str(row.get("rollback_from_status") or "completed")
+    if (
+        lease_expired
+        and lease_kind == "rollback"
+        and row.get("status") == "rolling_back"
+        and rollback_state == "not_attempted"
+        and row.get("rollback_write_uncertain") is not True
+    ):
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "rolling_back",
+            },
+            {
+                "$set": {
+                    "status": rollback_from_status,
+                    "rollback_write_state": "not_attempted",
+                    "rollback_write_uncertain": False,
+                    "rollback_recovery_action": "retry_rollback_with_confirmation",
+                }
+            },
+        )
+        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="expired_no_write_rollback_lease_released",
+            actor_id=actor_id,
+            detail={"restored_status": rollback_from_status},
+        )
+        updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        return _public_proposal(updated or row)
+
+    if (
+        lease_expired
+        and lease_kind == "rollback"
+        and row.get("status") == "rolling_back"
+        and rollback_state == "attempting"
+        and row.get("rollback_write_uncertain") is not True
+    ):
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "rolling_back",
+                "rollback_write_state": "attempting",
+            },
+            {
+                "$set": {
+                    "rollback_write_state": "unknown_needs_reconciliation",
+                    "rollback_write_uncertain": True,
+                    "rollback_automatic_retry_allowed": False,
+                    "rollback_recovery_action": "reconcile_uncertain_proposal",
+                    "rollback_failure": {
+                        "code": "snapchat_management_worker_lost_during_rollback"
+                    },
+                }
+            },
+        )
+        row = (
+            await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+            )
+            or row
+        )
+
+    execution_uncertain = row.get("provider_write_uncertain") is True
+    rollback_uncertain = row.get("rollback_write_uncertain") is True
+    if not execution_uncertain and not rollback_uncertain:
+        return _public_proposal(row)
+    operation = dict(row.get("operation") or {})
+    entity_id = str(row.get("provider_entity_id") or row.get("target_id") or "")
+    if not entity_id:
+        # A timed-out create without an acknowledged provider ID cannot be
+        # identified safely by name or other mutable attributes.
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="reconciliation_requires_manual_provider_identity",
+            actor_id=actor_id,
+            detail={"recovery_action": "locate_provider_entity_id_manually"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_entity_unknown",
+                "recovery_action": "locate_provider_entity_id_manually",
+            },
+        )
+    account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
+    client = provider or SnapchatManagementProvider(db, user_id)
+    role = await client.management_role(account, str(row.get("action") or ""))
+    if not role.get("allowed"):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_role_missing"},
+        )
+    try:
+        current = await client.read_entity(operation["entity_type"], entity_id)
+    except Exception:
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="reconciliation_read_failed",
+            actor_id=actor_id,
+            detail={"recovery_action": "retry_read_only_reconciliation"},
+        )
+        raise
+
+    if execution_uncertain:
+        expected = _operation_expected_values(operation)
+        planned_ok, _ = _changed_values_match(expected, current)
+        if planned_ok:
+            claimed = await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "failed",
+                    "provider_write_uncertain": True,
+                },
+                {"$set": {"status": "executing"}},
+            )
+            if not getattr(claimed, "matched_count", 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_reconciliation_race"},
+                )
+            result = await _complete_verified_execution(
+                db,
+                user_id=user_id,
+                actor_id=actor_id,
+                proposal_id=proposal_id,
+                row=row,
+                operation=operation,
+                account=account,
+                provider_entity_id=entity_id,
+                verified=current,
+                event="execution_reconciled_applied",
+            )
+            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            return result
+        original_ok = str(
+            row.get("action") or ""
+        ) in UPDATE_ACTIONS and not _provider_state_conflict_fields(
+            operation,
+            dict(row.get("original_snapshot") or {}),
+            current,
+        )
+        if original_ok:
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "failed",
+                    "provider_write_uncertain": True,
+                },
+                {
+                    "$set": {
+                        "provider_write_reached": False,
+                        "provider_write_state": "confirmed_not_applied",
+                        "provider_write_uncertain": False,
+                        "execution_retryable": False,
+                        "automatic_retry_allowed": False,
+                        "recovery_action": "create_new_preview",
+                        "reconciliation_snapshot": _safe_provider_value(current),
+                    }
+                },
+            )
+            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            return _public_proposal(
+                await _collection(db, PROPOSAL_COLLECTION).find_one(
+                    {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+                )
+                or row
+            )
+
+    if rollback_uncertain:
+        changes = dict(operation.get("changes") or {})
+        original = dict(row.get("original_snapshot") or {})
+        if row.get("action") in UPDATE_ACTIONS:
+            restore = {key: original[key] for key in changes if key in original}
+            removed_fields = [key for key in changes if key not in original]
+        elif row.get("action") in DELIVERY_CREATE_ACTIONS:
+            restore = {"status": "PAUSED"}
+            removed_fields = []
+        else:
+            restore = {}
+            removed_fields = []
+        rolled_back, _ = _rollback_values_match(restore, removed_fields, current)
+        verified_after = dict(
+            (row.get("verification") or {}).get("provider_snapshot")
+            or row.get("provider_response_snapshot")
+            or {}
+        )
+        if rolled_back:
+            await _refresh_verified_entity_cache_deferred_safe(
+                db,
+                user_id=user_id,
+                actor_id=actor_id,
+                proposal_id=proposal_id,
+                account=account,
+                entity_type=operation["entity_type"],
+                entity=current,
+                event="rollback_entity_cache_refresh_deferred",
+            )
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "rollback_write_uncertain": True,
+                },
+                {
+                    "$set": {
+                        "status": "rolled_back",
+                        "rollback_write_state": "confirmed",
+                        "rollback_write_uncertain": False,
+                        "rollback": {
+                            "status": "verified",
+                            "before": _safe_provider_value(
+                                row.get("rollback_before_snapshot") or verified_after
+                            ),
+                            "after": _safe_provider_value(current),
+                            "rolled_back_at": _iso(),
+                            "reason": row.get("rollback_requested_reason"),
+                            "verification_source": "manual_read_only_reconciliation",
+                        },
+                    }
+                },
+            )
+            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+            )
+            if updated:
+                await _record_management_decision_deferred_safe(
+                    db, user_id, actor_id, proposal_id, updated
+                )
+            return _public_proposal(updated or row)
+        if verified_after and not _rollback_drift_fields(
+            operation, verified_after, current
+        ):
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "rollback_write_uncertain": True,
+                },
+                {
+                    "$set": {
+                        "status": str(row.get("rollback_from_status") or "completed"),
+                        "rollback_write_state": "confirmed_not_applied",
+                        "rollback_write_uncertain": False,
+                        "rollback_automatic_retry_allowed": False,
+                        "rollback_recovery_action": "create_new_rollback_request",
+                        "rollback_reconciliation_snapshot": _safe_provider_value(
+                            current
+                        ),
+                    }
+                },
+            )
+            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+            )
+            return _public_proposal(updated or row)
+
+    await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {"user_id": user_id, "proposal_id": proposal_id},
+        {
+            "$set": {
+                "reconciliation_snapshot": _safe_provider_value(current),
+                "recovery_action": "manual_review_provider_drift",
+            }
+        },
+    )
+    await _audit(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+        event="reconciliation_unresolved",
+        actor_id=actor_id,
+        detail={"recovery_action": "manual_review_provider_drift"},
+    )
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "snapchat_management_reconciliation_unresolved",
+            "recovery_action": "manual_review_provider_drift",
+        },
+    )
+
+
+async def rollback_snapchat_management_proposal(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    payload: SnapchatManagementRollbackInput,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if not row:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_rollback_not_available"},
+        )
+    operation = dict(row.get("operation") or {})
+    lease_token = await _acquire_entity_lease(
+        db,
+        user_id=user_id,
+        row=row,
+        operation=operation,
+        operation_kind="rollback",
+    )
+    try:
+        return await _rollback_snapchat_management_proposal_under_lease(
+            db,
+            user_id,
+            actor_id,
+            proposal_id,
+            payload,
+            provider=provider,
+        )
+    except asyncio.CancelledError:
+        await _stabilize_cancelled_rollback(
+            db,
+            user_id=user_id,
+            actor_id=actor_id,
+            proposal_id=proposal_id,
+        )
+        raise
+    finally:
+        latest = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        if (latest or {}).get("status") != "rolling_back" and not (latest or {}).get(
+            "rollback_write_uncertain"
+        ):
+            await _release_entity_lease(
+                db,
+                user_id=user_id,
+                row=row,
+                operation=operation,
+                lease_token=lease_token,
+            )
+
+
+async def _stabilize_cancelled_rollback(
+    db: Any,
+    *,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+) -> None:
+    """Restore a known no-write rollback or fence a possibly written one."""
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if not row or row.get("status") != "rolling_back":
+        return
+    write_state = str(row.get("rollback_write_state") or "not_attempted")
+    rollback_from_status = str(row.get("rollback_from_status") or "completed")
+    if write_state == "not_attempted":
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "rolling_back",
+            },
+            {
+                "$set": {
+                    "status": rollback_from_status,
+                    "rollback_write_state": "not_attempted",
+                    "rollback_write_uncertain": False,
+                    "rollback_failure": {
+                        "code": "snapchat_management_worker_cancelled_before_rollback_write"
+                    },
+                    "rollback_automatic_retry_allowed": False,
+                    "rollback_recovery_action": "retry_rollback_with_confirmation",
+                }
+            },
+        )
+        event = "rollback_cancelled_before_write"
+    else:
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "rolling_back",
+            },
+            {
+                "$set": {
+                    "rollback_write_state": "unknown_needs_reconciliation",
+                    "rollback_write_uncertain": True,
+                    "rollback_automatic_retry_allowed": False,
+                    "rollback_recovery_action": "reconcile_uncertain_proposal",
+                    "rollback_failure": {
+                        "code": "snapchat_management_worker_cancelled_during_rollback",
+                        "recovery_action": "reconcile_uncertain_proposal",
+                    },
+                }
+            },
+        )
+        event = "rollback_cancelled_write_uncertain"
+    try:
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event=event,
+            actor_id=actor_id,
+            detail={"rollback_write_state_before_cancellation": write_state},
+        )
+    except Exception:
+        return
+
+
+async def _rollback_snapchat_management_proposal_under_lease(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    proposal_id: str,
+    payload: SnapchatManagementRollbackInput,
+    *,
+    provider: SnapchatManagementProvider | None = None,
+) -> dict[str, Any]:
     if not snapchat_campaign_mutations_enabled():
-        raise HTTPException(status_code=409, detail={"code": "snapchat_campaign_mutations_disabled"})
-    row = await _collection(db, PROPOSAL_COLLECTION).find_one({"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0})
+        raise HTTPException(
+            status_code=409, detail={"code": "snapchat_campaign_mutations_disabled"}
+        )
+    row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
     rollback_from_status = str(row.get("status") or "") if row else ""
     recovery_after_failed_verification = (
-        rollback_from_status == "failed"
-        and row.get("provider_write_reached") is True
-        and bool(row.get("provider_entity_id"))
-    ) if row else False
+        (
+            rollback_from_status == "failed"
+            and row.get("provider_write_reached") is True
+            and bool(row.get("provider_entity_id"))
+        )
+        if row
+        else False
+    )
     if not row or (
-        rollback_from_status != "completed"
-        and not recovery_after_failed_verification
+        rollback_from_status != "completed" and not recovery_after_failed_verification
     ):
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_rollback_not_available"})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_rollback_not_available"},
+        )
     expected_phrase = f"تراجع {proposal_id[:8]}"
     if payload.confirmation_phrase.strip() != expected_phrase:
-        raise HTTPException(status_code=409, detail={"code": "snapchat_management_rollback_phrase_mismatch", "expected_phrase": expected_phrase})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_rollback_phrase_mismatch",
+                "expected_phrase": expected_phrase,
+            },
+        )
     operation = dict(row.get("operation") or {})
     try:
         _assert_stored_operation_integrity(row, operation)
@@ -1069,9 +3251,7 @@ async def rollback_snapchat_management_proposal(db: Any, user_id: str,
             detail={"code": "snapchat_management_operation_integrity_failed"},
         ) from exc
     client = provider or SnapchatManagementProvider(db, user_id)
-    account = await _selected_account(
-        db, user_id, str(row.get("account_id") or "")
-    )
+    account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
     role = await client.management_role(account, str(row.get("action") or ""))
     if not role.get("allowed"):
         raise HTTPException(
@@ -1084,109 +3264,415 @@ async def rollback_snapchat_management_proposal(db: Any, user_id: str,
             "proposal_id": proposal_id,
             "status": rollback_from_status,
         },
-        {"$set": {
-            "status": "rolling_back",
-            "rollback_started_at": _iso(),
-            "rollback_started_by": actor_id,
-        }},
+        {
+            "$set": {
+                "status": "rolling_back",
+                "rollback_started_at": _iso(),
+                "rollback_started_by": actor_id,
+                "rollback_from_status": rollback_from_status,
+                "rollback_write_state": "not_attempted",
+                "rollback_write_uncertain": False,
+                "rollback_requested_reason": payload.reason,
+            }
+        },
     )
     if not getattr(locked, "matched_count", 1):
         raise HTTPException(
             status_code=409,
             detail={"code": "snapchat_management_rollback_race"},
         )
+    rollback_baseline = await _capture_proposal_baseline(
+        db,
+        user_id,
+        account=account,
+        account_id=str(row.get("account_id") or ""),
+        campaign_id=(row.get("baseline") or {}).get("campaign_id"),
+        ad_squad_id=(
+            str(row.get("target_id") or "")
+            if operation.get("entity_type") == "ad_squad"
+            else (
+                str(row.get("parent_id") or "")
+                if operation.get("entity_type") == "ad"
+                else None
+            )
+        ),
+        ad_id=(
+            str(row.get("target_id") or "")
+            if operation.get("entity_type") == "ad"
+            else None
+        ),
+        products=list(row.get("products") or []),
+    )
+    await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "rolling_back",
+        },
+        {"$set": {"rollback_baseline": _safe_provider_value(rollback_baseline)}},
+    )
     entity_id = str(row.get("provider_entity_id") or row.get("target_id") or "")
+    removed_fields: list[str] = []
+    if row.get("action") in UPDATE_ACTIONS:
+        original = dict(row.get("original_snapshot") or {})
+        changes = dict(operation.get("changes") or {})
+        restore = {key: original[key] for key in changes if key in original}
+        removed_fields = [key for key in changes if key not in original]
+    elif row.get("action") in DELIVERY_CREATE_ACTIONS:
+        restore = {"status": "PAUSED"}
+    else:
+        restore = {}
+    verified_after = dict(
+        (row.get("verification") or {}).get("provider_snapshot")
+        or row.get("provider_response_snapshot")
+        or {}
+    )
+    rollback_write_attempted = False
+    rollback: dict[str, Any] | None = None
     try:
         current = await client.read_entity(operation["entity_type"], entity_id)
-        removed_fields: list[str] = []
-        if row.get("action") in UPDATE_ACTIONS:
-            original = dict(row.get("original_snapshot") or {})
-            changes = dict(operation.get("changes") or {})
-            restore = {key: original[key] for key in changes if key in original}
-            removed_fields = [key for key in changes if key not in original]
-        elif row.get("action") in DELIVERY_CREATE_ACTIONS:
-            restore = {"status": "PAUSED"}
-        else:
-            restore = {}
-        if str(restore.get("status") or "").upper() == "ACTIVE" and not snapchat_campaign_activation_enabled():
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "rolling_back",
+            },
+            {"$set": {"rollback_before_snapshot": _safe_provider_value(current)}},
+        )
+        if (restore or removed_fields) and not verified_after:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_rollback_verified_snapshot_missing",
+                    "message": (
+                        "لا توجد لقطة موثقة لحالة ما بعد التنفيذ؛ أُوقف التراجع "
+                        "حتى لا يمحو تعديلًا مباشرًا أحدث."
+                    ),
+                },
+            )
+        drift_fields = (
+            _rollback_drift_fields(operation, verified_after, current)
+            if verified_after
+            else []
+        )
+        if drift_fields:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_rollback_provider_drift",
+                    "message": (
+                        "تغير الكيان مباشرة في Snapchat بعد تنفيذ ميزان؛ "
+                        "أُوقف التراجع لحماية التعديل الأحدث."
+                    ),
+                    "changed_fields": drift_fields,
+                },
+            )
+        if not snapchat_campaign_mutations_enabled():
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_campaign_mutations_disabled"},
+            )
+        if (
+            str(restore.get("status") or "").upper() == "ACTIVE"
+            and not snapchat_campaign_activation_enabled()
+        ):
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_campaign_activation_disabled"},
             )
         if not restore and not removed_fields:
-            rollback = {"status": "neutralized", "detail": "Created creative remains unused and cannot spend independently.", "rolled_back_at": _iso()}
+            rollback = {
+                "status": "neutralized",
+                "detail": "Created creative remains unused and cannot spend independently.",
+                "rolled_back_at": _iso(),
+            }
         else:
             rollback_operation = _rollback_patch_operation(
                 path=_entity_patch_path(operation["entity_type"], row, entity_id),
-                plural=operation["plural"], singular=operation["singular"],
-                entity_type=operation["entity_type"], restore=restore,
+                plural=operation["plural"],
+                singular=operation["singular"],
+                entity_type=operation["entity_type"],
+                restore=restore,
                 removed_fields=removed_fields,
             )
-            rollback_operation.update({"action": f"{row.get('action')}.rollback", "account_id": row.get("account_id")})
-            await client.execute(rollback_operation)
-            verified = await client.read_entity(operation["entity_type"], entity_id)
-            ok, mismatches = _rollback_values_match(
-                restore, removed_fields, verified
+            rollback_operation.update(
+                {
+                    "action": f"{row.get('action')}.rollback",
+                    "account_id": row.get("account_id"),
+                }
             )
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "rolling_back",
+                },
+                {
+                    "$set": {
+                        "rollback_write_state": "attempting",
+                        "rollback_write_uncertain": False,
+                    }
+                },
+            )
+            if not snapchat_campaign_mutations_enabled():
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_campaign_mutations_disabled"},
+                )
+            if (
+                str(restore.get("status") or "").upper() == "ACTIVE"
+                and not snapchat_campaign_activation_enabled()
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_campaign_activation_disabled"},
+                )
+            rollback_write_attempted = True
+            provider_response = await client.execute(rollback_operation)
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "rolling_back",
+                },
+                {
+                    "$set": {
+                        "rollback_write_state": "confirmed",
+                        "rollback_provider_response_snapshot": _safe_provider_value(
+                            provider_response
+                        ),
+                    }
+                },
+            )
+            verified = await client.read_entity(operation["entity_type"], entity_id)
+            ok, mismatches = _rollback_values_match(restore, removed_fields, verified)
             if not ok:
-                raise HTTPException(status_code=502, detail={"code": "snapchat_management_rollback_verification_failed", "mismatched_fields": mismatches})
-            await _upsert_entity(SnapchatSyncContext(db=db, user_id=user_id), account=account, entity_type=operation["entity_type"], entity=verified)
-            rollback = {"status": "verified", "before": current, "after": verified, "rolled_back_at": _iso(), "reason": payload.reason}
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "code": "snapchat_management_rollback_verification_failed",
+                        "mismatched_fields": mismatches,
+                    },
+                )
+            await _refresh_verified_entity_cache_deferred_safe(
+                db,
+                user_id=user_id,
+                actor_id=actor_id,
+                proposal_id=proposal_id,
+                account=account,
+                entity_type=operation["entity_type"],
+                entity=verified,
+                event="rollback_entity_cache_refresh_deferred",
+            )
+            rollback = {
+                "status": "verified",
+                "before": current,
+                "after": verified,
+                "rolled_back_at": _iso(),
+                "reason": payload.reason,
+            }
     except Exception as exc:
-        failure = exc.detail if isinstance(exc, HTTPException) else {
-            "code": "snapchat_management_rollback_failed"
-        }
-        await _collection(db, PROPOSAL_COLLECTION).update_one(
-            {"user_id": user_id, "proposal_id": proposal_id, "status": "rolling_back"},
-            {"$set": {
-                "status": rollback_from_status,
-                "rollback_failure": _safe_provider_value(failure),
-                "rollback_failed_at": _iso(),
-            }},
+        failure = (
+            exc.detail
+            if isinstance(exc, HTTPException)
+            else {"code": "snapchat_management_rollback_failed"}
         )
-        await _audit(
-            db, user_id=user_id, proposal_id=proposal_id,
-            event="rollback_failed", actor_id=actor_id,
-            detail=failure if isinstance(failure, dict) else {},
-        )
-        raise
+        readback: dict[str, Any] | None = None
+        if rollback_write_attempted:
+            try:
+                readback = await client.read_entity(operation["entity_type"], entity_id)
+            except Exception:
+                readback = None
+        if readback is not None:
+            applied, _ = _rollback_values_match(restore, removed_fields, readback)
+            if applied:
+                await _refresh_verified_entity_cache_deferred_safe(
+                    db,
+                    user_id=user_id,
+                    actor_id=actor_id,
+                    proposal_id=proposal_id,
+                    account=account,
+                    entity_type=operation["entity_type"],
+                    entity=readback,
+                    event="rollback_entity_cache_refresh_deferred",
+                )
+                rollback = {
+                    "status": "verified",
+                    "before": current,
+                    "after": readback,
+                    "rolled_back_at": _iso(),
+                    "reason": payload.reason,
+                    "verification_source": "post_error_readback",
+                }
+
+        if rollback is not None:
+            await _audit(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                event="rollback_reconciled_applied",
+                actor_id=actor_id,
+                detail={"entity_id": entity_id},
+            )
+        else:
+            known_not_applied = bool(
+                rollback_write_attempted
+                and readback is not None
+                and verified_after
+                and not _rollback_drift_fields(operation, verified_after, readback)
+            )
+            uncertain = rollback_write_attempted and not known_not_applied
+            recovery_action = (
+                "create_new_rollback_request"
+                if known_not_applied
+                else (
+                    "reconcile_uncertain_proposal"
+                    if uncertain
+                    else "review_and_retry_rollback"
+                )
+            )
+            safe_failure = dict(failure) if isinstance(failure, dict) else {}
+            safe_failure.update(
+                {
+                    "recovery_action": recovery_action,
+                    "reconciliation": (
+                        "current_matches_verified_after"
+                        if known_not_applied
+                        else "mixed_or_unavailable" if uncertain else "not_attempted"
+                    ),
+                }
+            )
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "rolling_back",
+                },
+                {
+                    "$set": {
+                        "status": rollback_from_status,
+                        "rollback_failure": _safe_provider_value(safe_failure),
+                        "rollback_failed_at": _iso(),
+                        "rollback_write_state": (
+                            "confirmed_not_applied"
+                            if known_not_applied
+                            else (
+                                "unknown_needs_reconciliation"
+                                if uncertain
+                                else "not_attempted"
+                            )
+                        ),
+                        "rollback_write_uncertain": uncertain,
+                        "rollback_automatic_retry_allowed": False,
+                        "rollback_recovery_action": recovery_action,
+                        "rollback_reconciliation_snapshot": _safe_provider_value(
+                            readback or {}
+                        ),
+                    }
+                },
+            )
+            await _audit(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                event="rollback_failed",
+                actor_id=actor_id,
+                detail=safe_failure,
+            )
+            raise
     await _collection(db, PROPOSAL_COLLECTION).update_one(
         {"user_id": user_id, "proposal_id": proposal_id, "status": "rolling_back"},
-        {"$set": {"status": "rolled_back", "rollback": _safe_provider_value(rollback), "rolled_back_by": actor_id}},
+        {
+            "$set": {
+                "status": "rolled_back",
+                "rollback": _safe_provider_value(rollback),
+                "rolled_back_by": actor_id,
+                "rollback_write_state": (
+                    "not_needed" if not restore and not removed_fields else "confirmed"
+                ),
+                "rollback_write_uncertain": False,
+            }
+        },
     )
-    await _audit(db, user_id=user_id, proposal_id=proposal_id, event="rolled_back", actor_id=actor_id, detail={"reason": payload.reason})
-    updated = await _collection(db, PROPOSAL_COLLECTION).find_one({"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0})
+    await _audit(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+        event="rolled_back",
+        actor_id=actor_id,
+        detail={"reason": payload.reason},
+    )
+    rolled_back_row = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
+    if rolled_back_row:
+        await _record_management_decision_deferred_safe(
+            db, user_id, actor_id, proposal_id, rolled_back_row
+        )
+    updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+    )
     return _public_proposal(updated or row)
 
 
-def _rollback_patch_operation(*, path: str, plural: str, singular: str,
-                              entity_type: str, restore: dict[str, Any],
-                              removed_fields: list[str]) -> dict[str, Any]:
+def _rollback_patch_operation(
+    *,
+    path: str,
+    plural: str,
+    singular: str,
+    entity_type: str,
+    restore: dict[str, Any],
+    removed_fields: list[str],
+) -> dict[str, Any]:
     _budget_guard(restore)
     patches = [
         {"op": "replace", "path": f"/{key}", "value": value}
         for key, value in sorted(restore.items())
     ]
     patches.extend(
-        {"op": "remove", "path": f"/{key}"}
-        for key in sorted(removed_fields)
+        {"op": "remove", "path": f"/{key}"} for key in sorted(removed_fields)
     )
     if not patches:
         raise ValueError("rollback patch is empty")
     return {
-        "method": "PATCH", "path": path, "plural": plural,
-        "singular": singular, "entity_type": entity_type,
-        "body": patches, "changes": restore,
+        "method": "PATCH",
+        "path": path,
+        "plural": plural,
+        "singular": singular,
+        "entity_type": entity_type,
+        "body": patches,
+        "changes": restore,
     }
 
 
-def _rollback_values_match(restore: dict[str, Any], removed_fields: list[str],
-                           actual: dict[str, Any]) -> tuple[bool, list[str]]:
+def _rollback_values_match(
+    restore: dict[str, Any], removed_fields: list[str], actual: dict[str, Any]
+) -> tuple[bool, list[str]]:
     ok, mismatches = _changed_values_match(restore, actual)
     for key in removed_fields:
         if key in actual and actual.get(key) is not None:
             mismatches.append(key)
     return ok and not mismatches, sorted(set(mismatches))
+
+
+def _rollback_drift_fields(
+    operation: dict[str, Any],
+    verified_after: dict[str, Any],
+    current: dict[str, Any],
+) -> list[str]:
+    entity_fields = {
+        "campaign": CAMPAIGN_UPDATE_FIELDS,
+        "ad_squad": AD_SQUAD_UPDATE_FIELDS,
+        "ad": AD_UPDATE_FIELDS,
+    }.get(str(operation.get("entity_type") or ""), set())
+    controlled = {
+        field for field in entity_fields if field in verified_after or field in current
+    }
+    controlled.update(_operation_expected_values(operation))
+    controlled.add("status")
+    return sorted(
+        field for field in controlled if verified_after.get(field) != current.get(field)
+    )
 
 
 def _entity_patch_path(entity_type: str, row: dict[str, Any], entity_id: str) -> str:
@@ -1196,27 +3682,34 @@ def _entity_patch_path(entity_type: str, row: dict[str, Any], entity_id: str) ->
         return f"/campaigns/{row.get('parent_id')}/adsquads/{entity_id}"
     if entity_type == "ad":
         return f"/adsquads/{row.get('parent_id')}/ads/{entity_id}"
-    raise HTTPException(status_code=409, detail={"code": "snapchat_management_rollback_neutralized"})
+    raise HTTPException(
+        status_code=409, detail={"code": "snapchat_management_rollback_neutralized"}
+    )
 
 
-async def snapchat_management_readiness(db: Any, user_id: str,
-                                        *, provider: SnapchatManagementProvider | None = None) -> dict[str, Any]:
+async def snapchat_management_readiness(
+    db: Any, user_id: str, *, provider: SnapchatManagementProvider | None = None
+) -> dict[str, Any]:
     accounts = await _load_selected_accounts(db, user_id)
     client = provider or SnapchatManagementProvider(db, user_id)
     output = []
     for account in accounts:
         role = await client.management_role(account, "campaign.update")
         creative_role = await client.management_role(account, "creative.create")
-        output.append({
-            "account_id": account.get("ad_account_id"),
-            "display_name": account.get("display_name"),
-            "currency": account.get("currency"), "timezone": account.get("timezone"),
-            "role": role.get("role"), "management_allowed": role.get("allowed") is True,
-            "reason": role.get("reason"),
-            "creative_role": creative_role.get("role"),
-            "creative_allowed": creative_role.get("allowed") is True,
-            "creative_reason": creative_role.get("reason"),
-        })
+        output.append(
+            {
+                "account_id": account.get("ad_account_id"),
+                "display_name": account.get("display_name"),
+                "currency": account.get("currency"),
+                "timezone": account.get("timezone"),
+                "role": role.get("role"),
+                "management_allowed": role.get("allowed") is True,
+                "reason": role.get("reason"),
+                "creative_role": creative_role.get("role"),
+                "creative_allowed": creative_role.get("allowed") is True,
+                "creative_reason": creative_role.get("reason"),
+            }
+        )
     return {
         "provider": SNAPCHAT_PROVIDER_ID,
         "proposal_enabled": True,
@@ -1224,36 +3717,84 @@ async def snapchat_management_readiness(db: Any, user_id: str,
         "activation_enabled": snapchat_campaign_activation_enabled(),
         "max_daily_budget_micro": _max_daily_budget_micro(),
         "accounts": output,
-        "required_lifecycle": ["proposal", "preview", "approval", "execution", "verification", "audit", "rollback"],
+        "required_lifecycle": [
+            "proposal",
+            "preview",
+            "approval",
+            "execution",
+            "verification",
+            "audit",
+            "rollback",
+        ],
         "new_entities_status": "PAUSED",
         "salla_permission_dependency": False,
     }
 
 
-def attach_snapchat_campaign_management_routes(router: APIRouter, db: Any,
-                                               current_user: Callable,
-                                               require_owner: Callable[[Any], dict]) -> None:
+def attach_snapchat_campaign_management_routes(
+    router: APIRouter,
+    db: Any,
+    current_user: Callable,
+    require_owner: Callable[[Any], dict],
+) -> None:
     @router.get(f"/{SNAPCHAT_PROVIDER_ID}/management/readiness")
     async def readiness(user: dict = Depends(current_user)) -> dict[str, Any]:
         owner = require_owner(user)
         return await snapchat_management_readiness(db, str(owner["id"]))
 
     @router.get(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals")
-    async def list_proposals(limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def list_proposals(
+        limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)
+    ) -> dict[str, Any]:
         owner = require_owner(user)
-        cursor = _collection(db, PROPOSAL_COLLECTION).find({"user_id": str(owner["id"])}, {"_id": 0, "confirm_token_hash": 0, "original_snapshot": 0, "operation.body": 0}).sort("created_at", -1).limit(limit)
+        cursor = (
+            _collection(db, PROPOSAL_COLLECTION)
+            .find(
+                {"user_id": str(owner["id"])},
+                {
+                    "_id": 0,
+                    "confirm_token_hash": 0,
+                    "original_snapshot": 0,
+                    "operation.body": 0,
+                },
+            )
+            .sort("created_at", -1)
+            .limit(limit)
+        )
         rows = await cursor.to_list(length=limit)
-        return {"provider": SNAPCHAT_PROVIDER_ID, "proposals": [_public_proposal(row) for row in rows]}
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "proposals": [_public_proposal(row) for row in rows],
+        }
 
-    @router.post(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals", status_code=status.HTTP_201_CREATED)
-    async def create_proposal(payload: SnapchatManagementProposalInput, user: dict = Depends(current_user)) -> dict[str, Any]:
+    @router.post(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/proposals",
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_proposal(
+        payload: SnapchatManagementProposalInput, user: dict = Depends(current_user)
+    ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await create_snapchat_management_proposal(db, str(owner["id"]), str(owner["id"]), payload)
+        return await create_snapchat_management_proposal(
+            db, str(owner["id"]), str(owner["id"]), payload
+        )
 
-    @router.post(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/approve")
-    async def approve_proposal(proposal_id: str, payload: SnapchatManagementApprovalInput, user: dict = Depends(current_user)) -> dict[str, Any]:
+    @router.post(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/approve"
+    )
+    async def approve_proposal(
+        proposal_id: str,
+        payload: SnapchatManagementApprovalInput,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await approve_snapchat_management_proposal(db, str(owner["id"]), str(owner["id"]), _identifier(proposal_id, field="proposal_id"), payload)
+        return await approve_snapchat_management_proposal(
+            db,
+            str(owner["id"]),
+            str(owner["id"]),
+            _identifier(proposal_id, field="proposal_id"),
+            payload,
+        )
 
     @router.post(
         f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/execute",
@@ -1266,6 +3807,43 @@ def attach_snapchat_campaign_management_routes(router: APIRouter, db: Any,
     ) -> dict[str, Any]:
         owner = require_owner(user)
         normalized_id = _identifier(proposal_id, field="proposal_id")
+        queued = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": str(owner["id"]), "proposal_id": normalized_id}, {"_id": 0}
+        )
+        if not queued:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "snapchat_management_proposal_not_found"},
+            )
+        if queued.get("status") == "completed":
+            return _public_proposal(queued)
+        if queued.get("status") != "approved":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_proposal_not_executable"},
+            )
+        if _expired(queued.get("expires_at")):
+            await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": str(owner["id"]),
+                    "proposal_id": normalized_id,
+                    "status": "approved",
+                },
+                {
+                    "$set": {
+                        "status": "failed",
+                        "failure": {"code": "snapchat_management_proposal_expired"},
+                        "failed_at": _iso(),
+                        "execution_retryable": False,
+                        "automatic_retry_allowed": False,
+                        "recovery_action": "create_new_preview",
+                    }
+                },
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_proposal_expired"},
+            )
 
         async def execute_in_background() -> None:
             try:
@@ -1275,10 +3853,51 @@ def attach_snapchat_campaign_management_routes(router: APIRouter, db: Any,
                     str(owner["id"]),
                     normalized_id,
                 )
-            except Exception:
-                # The execution function persists safe failure details whenever
-                # a provider attempt has started.  The client polls that record.
-                pass
+            except Exception as exc:
+                # Provider-attempt failures are persisted by the execution
+                # function.  Persist pre-lock/pre-attempt failures too so a 202
+                # response can never strand the UI at an unexplained state.
+                detail = (
+                    exc.detail
+                    if isinstance(exc, HTTPException)
+                    else {"code": "snapchat_management_background_execution_failed"}
+                )
+                safe_detail = (
+                    dict(detail)
+                    if isinstance(detail, dict)
+                    else {"code": "snapchat_management_background_execution_failed"}
+                )
+                code = str(safe_detail.get("code") or "")
+                requires_new_preview = code in {
+                    "snapchat_management_proposal_expired",
+                    "snapchat_management_operation_integrity_failed",
+                    "snapchat_management_provider_state_conflict",
+                    "snapchat_management_inventory_changed_before_execution",
+                }
+                await _collection(db, PROPOSAL_COLLECTION).update_one(
+                    {
+                        "user_id": str(owner["id"]),
+                        "proposal_id": normalized_id,
+                        "status": "approved",
+                    },
+                    {
+                        "$set": {
+                            "status": "failed" if requires_new_preview else "approved",
+                            "failure": _safe_provider_value(safe_detail),
+                            "background_failure_at": _iso(),
+                            "execution_retryable": not requires_new_preview,
+                            "automatic_retry_allowed": False,
+                            "recovery_action": (
+                                "create_new_preview"
+                                if requires_new_preview
+                                else "retry_execution_after_resolving_preflight"
+                            ),
+                            "provider_write_reached": False,
+                            "provider_write_state": "not_attempted",
+                            "provider_write_uncertain": False,
+                        }
+                    },
+                )
 
         background_tasks.add_task(execute_in_background)
         return {
@@ -1287,10 +3906,37 @@ def attach_snapchat_campaign_management_routes(router: APIRouter, db: Any,
             "status": "executing",
         }
 
-    @router.post(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/rollback")
-    async def rollback_proposal(proposal_id: str, payload: SnapchatManagementRollbackInput, user: dict = Depends(current_user)) -> dict[str, Any]:
+    @router.post(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/reconcile"
+    )
+    async def reconcile_proposal(
+        proposal_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await rollback_snapchat_management_proposal(db, str(owner["id"]), str(owner["id"]), _identifier(proposal_id, field="proposal_id"), payload)
+        return await reconcile_snapchat_management_proposal(
+            db,
+            str(owner["id"]),
+            str(owner["id"]),
+            _identifier(proposal_id, field="proposal_id"),
+        )
+
+    @router.post(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/rollback"
+    )
+    async def rollback_proposal(
+        proposal_id: str,
+        payload: SnapchatManagementRollbackInput,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = require_owner(user)
+        return await rollback_snapchat_management_proposal(
+            db,
+            str(owner["id"]),
+            str(owner["id"]),
+            _identifier(proposal_id, field="proposal_id"),
+            payload,
+        )
 
 
 __all__ = [
@@ -1302,6 +3948,7 @@ __all__ = [
     "build_snapchat_operation",
     "create_snapchat_management_proposal",
     "execute_snapchat_management_proposal",
+    "reconcile_snapchat_management_proposal",
     "rollback_snapchat_management_proposal",
     "snapchat_campaign_activation_enabled",
     "snapchat_campaign_mutations_enabled",

@@ -94,6 +94,58 @@ describe("snapchatCampaignManagement", () => {
         });
     });
 
+    test("passes product scope measurable expectations and non-authoritative context to preview", async () => {
+        api.post.mockResolvedValueOnce({
+            data: {
+                proposal_id: "proposal-context-1",
+                action: "campaign.create",
+                status: "previewed",
+            },
+        });
+        const products = [{
+            product_id: "710474094",
+            product_variant_id: "variant-1",
+            product_name: "المشط",
+        }];
+        const expectedOutcome = {
+            primary_goal: "grow_sales_while_protecting_contribution_profit",
+            sales_direction: "increase",
+            contribution_profit_direction: "stable",
+            evaluation_horizons_hours: [24, 72, 168],
+        };
+        const supportingEvidence = [{
+            kind: "user_context",
+            value: "قد تكون السيولة أعلى بعد نزول الرواتب",
+            source: "snapchat_management_panel:user",
+            verification_status: "user_suggestion",
+            confidence: 0,
+            used_in_decision: false,
+            weight: 0,
+        }];
+
+        await createSnapchatManagementProposal({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Safe", status: "PAUSED" },
+            reason: "قياس أثر إنشاء حملة جديدة",
+            idempotency_key: "context-preview-1",
+            products,
+            expected_outcome: expectedOutcome,
+            supporting_evidence: supportingEvidence,
+            trend_override_reason: "التحسن الحديث غير مكتمل الإسناد",
+        });
+
+        expect(api.post).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/proposals",
+            expect.objectContaining({
+                products,
+                expected_outcome: expectedOutcome,
+                supporting_evidence: supportingEvidence,
+                trend_override_reason: "التحسن الحديث غير مكتمل الإسناد",
+            }),
+        );
+    });
+
     test("converts native currency to Snapchat micro-currency exactly", () => {
         expect(nativeAmountToMicro(50)).toBe(50_000_000);
         expect(nativeAmountToMicro("12.25")).toBe(12_250_000);

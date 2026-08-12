@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from datetime import date, datetime, timezone
 
+from integrations_control_center import snapchat_account_hourly_refresh as hourly
 from integrations_control_center.snapchat_account_hourly_refresh import (
+    ACCOUNT_REFRESH_SOURCE_MODE,
+    CAMPAIGN_FACTS_SCHEMA_VERSION,
+    CAMPAIGN_FACTS_SOURCE_MODE,
     PROVIDER_BREAKDOWN,
     PROVIDER_GRANULARITY,
     _fetch_account_hours,
@@ -243,6 +248,187 @@ def test_provider_request_uses_hour_campaign_breakdown_and_native_window():
     assert params["end_time"] == "2026-08-02T14:00:00-07:00"
     assert len(rows) == 1
     assert errors == []
+
+
+class _PerformanceCollection:
+    def __init__(self):
+        self.updates = []
+
+    async def update_one(self, query, update, upsert=False):
+        self.updates.append(
+            {
+                "query": deepcopy(query),
+                "update": deepcopy(update),
+                "upsert": upsert,
+            }
+        )
+
+
+class _PerformanceDB:
+    def __init__(self):
+        self.performance = _PerformanceCollection()
+
+    def __getitem__(self, name):
+        assert name == "mezan_snapchat_performance_daily_v2"
+        return self.performance
+
+
+class _RefreshContext:
+    def __init__(self):
+        self.user_id = "tenant-1"
+        self.db = _PerformanceDB()
+        self.provider_calls = 1
+
+    def now_iso(self):
+        return "2026-08-03T12:00:00+00:00"
+
+    async def to_sar(self, value, currency):
+        return value
+
+
+def test_refresh_persists_two_campaign_days_and_exact_account_total(
+    monkeypatch,
+):
+    rows = [
+        {
+            "campaign_id": "campaign-1",
+            "start_time": "2026-08-01T14:00:00-07:00",
+            "end_time": "2026-08-01T15:00:00-07:00",
+            "metrics": _metrics(
+                spend=5_000_000,
+                purchases=2,
+                value=10_000_000,
+            ),
+        },
+        {
+            "campaign_id": "campaign-1",
+            "start_time": "2026-08-01T15:00:00-07:00",
+            "end_time": "2026-08-01T16:00:00-07:00",
+            "metrics": _metrics(
+                spend=2_000_000,
+                purchases=1,
+                value=4_000_000,
+            ),
+        },
+        {
+            "campaign_id": "campaign-2",
+            "start_time": "2026-08-01T14:00:00-07:00",
+            "end_time": "2026-08-01T15:00:00-07:00",
+            "metrics": _metrics(
+                spend=1_000_000,
+                purchases=1,
+                value=3_000_000,
+            ),
+        },
+    ]
+
+    async def fake_fetch(*args, **kwargs):
+        return rows, []
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    context = _RefreshContext()
+    result = asyncio.run(
+        hourly.refresh_snapchat_account_hours(
+            context,
+            object(),
+            "access-token",
+            {
+                "ad_account_id": "account-1",
+                "mezan_integration_account_id": "integration-account-1",
+                "timezone": "America/Los_Angeles",
+                "currency": "USD",
+            },
+            start_date=date(2026, 8, 2),
+            end_date=date(2026, 8, 2),
+            now=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["rows_saved"] == 3
+    assert result["campaign_rows_saved"] == 2
+    assert result["source_mode"] == ACCOUNT_REFRESH_SOURCE_MODE
+    assert result["campaign_facts_source_mode"] == CAMPAIGN_FACTS_SOURCE_MODE
+    assert result["campaign_facts_schema_version"] == (
+        CAMPAIGN_FACTS_SCHEMA_VERSION
+    )
+    assert CAMPAIGN_FACTS_SCHEMA_VERSION == 4
+    assert len(context.db.performance.updates) == 3
+
+    by_identity = {
+        (
+            item["query"]["entity_type"],
+            item["query"]["external_id"],
+        ): item
+        for item in context.db.performance.updates
+    }
+    assert set(by_identity) == {
+        ("campaign", "campaign-1"),
+        ("campaign", "campaign-2"),
+        ("ad_account", "account-1"),
+    }
+    for item in by_identity.values():
+        assert item["query"]["user_id"] == "tenant-1"
+        assert item["query"]["ad_account_id"] == "account-1"
+        assert item["query"]["date"] == "2026-08-02"
+        assert item["upsert"] is True
+        document = item["update"]["$set"]
+        expected_source = (
+            CAMPAIGN_FACTS_SOURCE_MODE
+            if item["query"]["entity_type"] == "campaign"
+            else ACCOUNT_REFRESH_SOURCE_MODE
+        )
+        assert document["source_mode"] == expected_source
+        assert document["provider_granularity"] == "HOUR"
+        assert document["provider_breakdown"] == "campaign"
+
+    campaign_one = by_identity[("campaign", "campaign-1")]["update"]["$set"]
+    assert campaign_one["metrics"]["spend"] == 7_000_000
+    assert campaign_one["metrics"]["conversion_purchases"] == 3
+    assert campaign_one["metrics"]["conversion_purchases_value"] == 14_000_000
+    assert campaign_one["provider_window_start"] == (
+        "2026-08-01T14:00:00-07:00"
+    )
+    assert campaign_one["provider_window_end"] == (
+        "2026-08-01T16:00:00-07:00"
+    )
+
+    account_total = by_identity[("ad_account", "account-1")]["update"]["$set"]
+    assert account_total["metrics"]["spend"] == 8_000_000
+    assert account_total["metrics"]["conversion_purchases"] == 4
+    assert account_total["metrics"]["conversion_purchases_value"] == 17_000_000
+
+
+def test_refresh_keeps_zero_day_account_row_without_campaign_rows(monkeypatch):
+    async def fake_fetch(*args, **kwargs):
+        return [], []
+
+    monkeypatch.setattr(hourly, "_fetch_account_hours", fake_fetch)
+    context = _RefreshContext()
+    result = asyncio.run(
+        hourly.refresh_snapchat_account_hours(
+            context,
+            object(),
+            "access-token",
+            {
+                "ad_account_id": "account-1",
+                "timezone": "Asia/Riyadh",
+                "currency": "SAR",
+            },
+            start_date=date(2026, 8, 2),
+            end_date=date(2026, 8, 2),
+            now=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert result["rows_saved"] == 1
+    assert result["campaign_rows_saved"] == 0
+    assert len(context.db.performance.updates) == 1
+    write = context.db.performance.updates[0]
+    assert write["query"]["entity_type"] == "ad_account"
+    assert all(
+        value == 0
+        for value in write["update"]["$set"]["metrics"].values()
+    )
 
 
 def test_current_riyadh_day_completed_window_does_not_cross_now():

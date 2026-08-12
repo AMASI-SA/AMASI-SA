@@ -25,6 +25,7 @@ import {
     pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
+import { listProductsV2 } from "../../services/mezanProductsV2";
 
 const ACTIONS = [
     ["campaign.create", "إنشاء حملة"],
@@ -47,6 +48,17 @@ const STATUS_LABELS = {
 };
 
 const ACTION_LABELS = Object.fromEntries(ACTIONS);
+const DELIVERY_CREATE_ACTIONS = new Set([
+    "campaign.create",
+    "ad_squad.create",
+    "ad.create",
+]);
+
+const MEASURABLE_DIRECTIONS = [
+    ["increase", "ارتفاع"],
+    ["stable", "ثبات"],
+    ["decrease", "انخفاض"],
+];
 
 function proposalFailureDetail(proposal) {
     return proposal?.failure?.provider_error_message
@@ -77,7 +89,7 @@ function initialForm({ action = "campaign.create", selectedCampaign, selectedAdS
         dailyBudget: action.endsWith(".update") ? "" : "50",
         objective: "SALES",
         country: "sa",
-        optimizationGoal: "SWIPES",
+        optimizationGoal: "PIXEL_PURCHASE",
         status: "",
         mediaId: "",
         profileId: "",
@@ -87,6 +99,13 @@ function initialForm({ action = "campaign.create", selectedCampaign, selectedAdS
         destinationUrl: "",
         creativeId: "",
         adType: "SNAP_AD",
+        productId: "",
+        productVariantId: "",
+        productName: "",
+        salesDirection: "increase",
+        contributionProfitDirection: "increase",
+        userContextNote: "",
+        trendOverrideReason: "",
         reason: "إدارة معتمدة من مالك الحساب عبر ميزان",
         advancedJson: "{}",
         activationAcknowledged: false,
@@ -97,7 +116,7 @@ function inputClass() {
     return "mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-amber-400";
 }
 
-function TextField({ label, value, onChange, type = "text", required = false, placeholder = "", dir = "rtl" }) {
+function TextField({ label, value, onChange, type = "text", required = false, placeholder = "", dir = "rtl", testId }) {
     return (
         <label className="block text-xs font-black text-slate-600">
             {label}
@@ -107,6 +126,7 @@ function TextField({ label, value, onChange, type = "text", required = false, pl
                 required={required}
                 placeholder={placeholder}
                 dir={dir}
+                data-testid={testId}
                 onChange={(event) => onChange(event.target.value)}
                 className={inputClass()}
             />
@@ -114,7 +134,7 @@ function TextField({ label, value, onChange, type = "text", required = false, pl
     );
 }
 
-function SelectField({ label, value, onChange, children, disabled = false }) {
+function SelectField({ label, value, onChange, children, disabled = false, required = false, testId }) {
     return (
         <label className="block text-xs font-black text-slate-600">
             {label}
@@ -122,6 +142,8 @@ function SelectField({ label, value, onChange, children, disabled = false }) {
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 disabled={disabled}
+                required={required}
+                data-testid={testId}
                 className={`${inputClass()} disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400`}
             >
                 {children}
@@ -138,7 +160,37 @@ function mergeAdvanced(payload, source) {
     return { ...payload, ...parsed };
 }
 
+function retainedDecisionContext(form) {
+    return {
+        productId: form.productId,
+        productVariantId: form.productVariantId,
+        productName: form.productName,
+        salesDirection: form.salesDirection,
+        contributionProfitDirection: form.contributionProfitDirection,
+        userContextNote: form.userContextNote,
+        trendOverrideReason: form.trendOverrideReason,
+    };
+}
+
+function productIdentity(product) {
+    return String(
+        product?.salla_product_id
+        || product?.mezan_product_id
+        || product?.id
+        || "",
+    ).trim();
+}
+
+function productLabel(product) {
+    const name = String(product?.name || "منتج بدون اسم").trim();
+    const sku = String(product?.sku || "").trim();
+    return sku ? `${name} · ${sku}` : name;
+}
+
 function buildProposal(form) {
+    if (DELIVERY_CREATE_ACTIONS.has(form.action) && !form.productId) {
+        throw new Error("اختر المنتج الذي سيعلن له قبل إنشاء كيان إعلاني جديد.");
+    }
     const common = {
         action: form.action,
         account_id: form.accountId,
@@ -147,6 +199,27 @@ function buildProposal(form) {
         reason: form.reason,
         idempotency_key: `snap-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         activation_acknowledged: form.activationAcknowledged,
+        products: form.productId ? [{
+            product_id: form.productId,
+            product_variant_id: form.productVariantId || null,
+            product_name: form.productName || null,
+        }] : [],
+        expected_outcome: {
+            primary_goal: "grow_sales_while_protecting_contribution_profit",
+            sales_direction: form.salesDirection,
+            contribution_profit_direction: form.contributionProfitDirection,
+            evaluation_horizons_hours: [24, 72, 168],
+        },
+        supporting_evidence: form.userContextNote.trim() ? [{
+            kind: "user_context",
+            value: form.userContextNote.trim(),
+            source: "snapchat_management_panel:user",
+            verification_status: "user_suggestion",
+            confidence: 0,
+            used_in_decision: false,
+            weight: 0,
+        }] : [],
+        trend_override_reason: form.trendOverrideReason.trim() || null,
     };
     let payload = {};
     if (form.action === "campaign.create") {
@@ -296,6 +369,12 @@ export default function SnapchatCampaignManagementPanel({
     const [readiness, setReadiness] = useState(null);
     const [proposals, setProposals] = useState([]);
     const [form, setForm] = useState(() => initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad }));
+    const [productQuery, setProductQuery] = useState("");
+    const [catalogProducts, setCatalogProducts] = useState([]);
+    const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null);
+    const [productsLoaded, setProductsLoaded] = useState(false);
+    const [productsLoading, setProductsLoading] = useState(false);
+    const [productError, setProductError] = useState("");
     const [activeProposal, setActiveProposal] = useState(null);
     const [loading, setLoading] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -327,15 +406,42 @@ export default function SnapchatCampaignManagementPanel({
         }
     }, [accountId]);
 
+    const loadProducts = useCallback(async (query = "") => {
+        setProductsLoading(true);
+        setProductError("");
+        try {
+            const result = await listProductsV2({
+                page: 1,
+                perPage: 30,
+                query,
+                status: "active",
+            });
+            setCatalogProducts(Array.isArray(result?.items) ? result.items : []);
+        } catch (loadError) {
+            setProductError(managementError(loadError, "تعذّر تحميل كتالوج المنتجات."));
+        } finally {
+            setProductsLoaded(true);
+            setProductsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (expanded && !readiness && !loading) load();
     }, [expanded, readiness, loading, load]);
 
     useEffect(() => {
+        if (expanded && !productsLoaded && !productsLoading) loadProducts("");
+    }, [expanded, productsLoaded, productsLoading, loadProducts]);
+
+    useEffect(() => {
         setForm((current) => {
             if (current.action !== preferredAction) return current;
             const next = initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad });
-            return { ...next, accountId: current.accountId || accountId || "" };
+            return {
+                ...next,
+                ...retainedDecisionContext(current),
+                accountId: current.accountId || accountId || "",
+            };
         });
     }, [preferredAction, selectedCampaign, selectedAdSquad, accountId]);
 
@@ -354,7 +460,20 @@ export default function SnapchatCampaignManagementPanel({
         setError("");
         setForm((current) => ({
             ...initialForm({ action, selectedCampaign, selectedAdSquad }),
+            ...retainedDecisionContext(current),
             accountId: current.accountId,
+        }));
+    }
+
+    function chooseProduct(value) {
+        const selected = catalogProducts.find((product) => productIdentity(product) === value)
+            || (productIdentity(selectedCatalogProduct) === value ? selectedCatalogProduct : null);
+        setSelectedCatalogProduct(selected);
+        setForm((current) => ({
+            ...current,
+            productId: value,
+            productName: String(selected?.name || "").trim().slice(0, 300),
+            productVariantId: "",
         }));
     }
 
@@ -446,6 +565,12 @@ export default function SnapchatCampaignManagementPanel({
     const showsParent = form.action.startsWith("ad_squad.") || form.action.startsWith("ad.");
     const showsStatus = isUpdate;
     const activeRequested = form.status === "ACTIVE";
+    const requiresProduct = DELIVERY_CREATE_ACTIONS.has(form.action);
+    const selectedVariants = Array.isArray(selectedCatalogProduct?.variants)
+        ? selectedCatalogProduct.variants
+        : [];
+    const selectedProductIsOutsideResults = form.productId
+        && !catalogProducts.some((product) => productIdentity(product) === form.productId);
     const actionAllowed = form.action === "creative.create"
         ? selectedAccount?.creative_allowed
         : selectedAccount?.management_allowed;
@@ -496,14 +621,102 @@ export default function SnapchatCampaignManagementPanel({
 
                             <form onSubmit={preview} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4" data-testid="snapchat-management-form">
                                 <div className="grid gap-3 md:grid-cols-2">
-                                    <SelectField label="الحساب الإعلاني" value={form.accountId} onChange={(value) => field("accountId", value)}>
+                                    <SelectField label="الحساب الإعلاني" value={form.accountId} onChange={(value) => field("accountId", value)} testId="snapchat-management-account-select">
                                         {!readiness?.accounts?.length && <option value="">لا يوجد حساب محدد</option>}
-                                        {(readiness?.accounts || []).map((account) => <option key={account.account_id} value={account.account_id}>{account.display_name} · {account.currency}</option>)}
+                                        {(readiness?.accounts || []).map((account) => <option key={account.account_id} value={account.account_id} label={`${account.display_name} · ${account.currency}`} />)}
                                     </SelectField>
-                                    <SelectField label="العملية" value={form.action} onChange={changeAction}>
-                                        {ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                    <SelectField label="العملية" value={form.action} onChange={changeAction} testId="snapchat-management-action-select">
+                                        {ACTIONS.map(([value, label]) => <option key={value} value={value} label={label} />)}
                                     </SelectField>
                                 </div>
+
+                                <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3" data-testid="snapchat-management-product-scope">
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-900">المنتج المعلن له</h3>
+                                        <p className="mt-1 text-[11px] font-bold text-slate-500">
+                                            {requiresProduct
+                                                ? "مطلوب للإنشاء حتى يقيس ميزان مبيعات المنتج ومخزونه قبل القرار وبعده."
+                                                : "اختياري في التعديل والإبداع، ويُحفظ إذا اخترته لربط القياس بالمنتج."}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <label className="min-w-0 flex-1 text-xs font-black text-slate-600">
+                                            ابحث بالاسم أو SKU أو رقم سلة
+                                            <input
+                                                type="search"
+                                                value={productQuery}
+                                                onChange={(event) => setProductQuery(event.target.value)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                        event.preventDefault();
+                                                        loadProducts(productQuery);
+                                                    }
+                                                }}
+                                                className={inputClass()}
+                                                data-testid="snapchat-management-product-search"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            disabled={productsLoading}
+                                            onClick={() => loadProducts(productQuery)}
+                                            className="mt-auto min-h-11 rounded-xl border border-emerald-300 bg-white px-4 text-xs font-black text-emerald-800 disabled:opacity-50"
+                                            data-testid="snapchat-management-product-search-button"
+                                        >
+                                            {productsLoading ? "جارٍ البحث…" : "بحث في الكتالوج"}
+                                        </button>
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <SelectField
+                                            label={requiresProduct ? "اختر المنتج · مطلوب" : "اختر المنتج · اختياري"}
+                                            value={form.productId}
+                                            onChange={chooseProduct}
+                                            required={requiresProduct}
+                                            disabled={productsLoading}
+                                            testId="snapchat-management-product-select"
+                                        >
+                                            <option value="" label={productsLoading ? "جارٍ تحميل المنتجات…" : "اختر من كتالوج المنتجات"} />
+                                            {selectedProductIsOutsideResults && (
+                                                <option value={form.productId} label={form.productName || form.productId} />
+                                            )}
+                                            {catalogProducts.map((product) => {
+                                                const identity = productIdentity(product);
+                                                return identity ? <option key={identity} value={identity} label={productLabel(product)} /> : null;
+                                            })}
+                                        </SelectField>
+                                        {selectedVariants.length > 0 && (
+                                            <SelectField
+                                                label="متغير المنتج · اختياري"
+                                                value={form.productVariantId}
+                                                onChange={(value) => field("productVariantId", value)}
+                                                testId="snapchat-management-product-variant-select"
+                                            >
+                                                <option value="">كل متغيرات المنتج</option>
+                                                {selectedVariants.map((variant) => {
+                                                    const identity = String(variant?.id || "").trim();
+                                                    const label = variant?.display_name || variant?.name || variant?.sku || identity;
+                                                    return identity ? <option key={identity} value={identity} label={label} /> : null;
+                                                })}
+                                            </SelectField>
+                                        )}
+                                    </div>
+                                    {productError && <p className="text-xs font-black text-rose-700">{productError} أعد البحث قبل إنشاء كيان جديد.</p>}
+                                </section>
+
+                                <section className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50/60 p-3" data-testid="snapchat-management-expected-outcome">
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-900">النتيجة المتوقعة للقياس</h3>
+                                        <p className="mt-1 text-[11px] font-bold text-slate-500">هذه أهداف تسجل للمقارنة بعد 24 و72 و168 ساعة، وليست قاعدة آلية لرفع الميزانية أو إيقافها.</p>
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <SelectField label="اتجاه المبيعات المتوقع" value={form.salesDirection} onChange={(value) => field("salesDirection", value)} testId="snapchat-management-sales-direction">
+                                            {MEASURABLE_DIRECTIONS.map(([value, label]) => <option key={value} value={value} label={label} />)}
+                                        </SelectField>
+                                        <SelectField label="اتجاه مكسب المساهمة المتوقع" value={form.contributionProfitDirection} onChange={(value) => field("contributionProfitDirection", value)} testId="snapchat-management-profit-direction">
+                                            {MEASURABLE_DIRECTIONS.map(([value, label]) => <option key={value} value={value} label={label} />)}
+                                        </SelectField>
+                                    </div>
+                                </section>
 
                                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                                     {isUpdate && <TextField label="معرّف الكيان المطلوب تعديله" value={form.targetId} onChange={(value) => field("targetId", value)} required dir="ltr" />}
@@ -514,7 +727,7 @@ export default function SnapchatCampaignManagementPanel({
                                     {form.action === "campaign.create" && <SelectField label="الهدف" value={form.objective} onChange={(value) => field("objective", value)}><option value="SALES">المبيعات</option><option value="TRAFFIC">الزيارات</option><option value="LEADS">العملاء المحتملون</option><option value="AWARENESS_AND_ENGAGEMENT">الوعي والتفاعل</option><option value="APP_PROMOTION">التطبيق</option></SelectField>}
                                     {showsBudget && <TextField label={`الميزانية اليومية (${selectedAccount?.currency || "عملة الحساب"})${isUpdate ? " · اتركها فارغة دون تغيير" : ""}`} value={form.dailyBudget} onChange={(value) => field("dailyBudget", value)} type="number" required={!isUpdate} dir="ltr" />}
                                     {form.action === "ad_squad.create" && <TextField label="رمز الدولة" value={form.country} onChange={(value) => field("country", value)} required dir="ltr" />}
-                                    {form.action === "ad_squad.create" && <SelectField label="هدف التحسين" value={form.optimizationGoal} onChange={(value) => field("optimizationGoal", value)}><option value="SWIPES">SWIPES</option><option value="PIXEL_PURCHASE">PIXEL_PURCHASE</option><option value="LANDING_PAGE_VIEW">LANDING_PAGE_VIEW</option><option value="IMPRESSIONS">IMPRESSIONS</option></SelectField>}
+                                    {form.action === "ad_squad.create" && <SelectField label="هدف التحسين" value={form.optimizationGoal} onChange={(value) => field("optimizationGoal", value)} testId="snapchat-management-optimization-goal"><option value="PIXEL_PURCHASE">الشراء · PIXEL_PURCHASE</option><option value="SWIPES">السحب/النقر · SWIPES</option><option value="LANDING_PAGE_VIEW">زيارة صفحة الهبوط · LANDING_PAGE_VIEW</option><option value="IMPRESSIONS">الظهور · IMPRESSIONS</option></SelectField>}
                                     {form.action === "creative.create" && <TextField label="Media ID" value={form.mediaId} onChange={(value) => field("mediaId", value)} required dir="ltr" />}
                                     {form.action === "creative.create" && <TextField label="Public Profile ID" value={form.profileId} onChange={(value) => field("profileId", value)} required dir="ltr" />}
                                     {form.action === "creative.create" && <TextField label="العنوان · 34 حرفًا" value={form.headline} onChange={(value) => field("headline", value)} required />}
@@ -534,6 +747,34 @@ export default function SnapchatCampaignManagementPanel({
                                 )}
 
                                 <div className="grid gap-3 md:grid-cols-2">
+                                    <label className="block text-xs font-black text-slate-600">
+                                        ملاحظة أو سياق من المستخدم (اختياري)
+                                        <textarea
+                                            value={form.userContextNote}
+                                            onChange={(event) => field("userContextNote", event.target.value)}
+                                            rows={3}
+                                            maxLength={500}
+                                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs outline-none focus:border-amber-400"
+                                            data-testid="snapchat-management-user-context"
+                                        />
+                                        <span className="mt-1 block text-[10px] font-bold text-slate-400">تُحفظ كاقتراح بشري غير متحقق، بثقة صفر، ولا يستخدمها ميزان أساسًا للقرار.</span>
+                                    </label>
+                                    <label className="block text-xs font-black text-slate-600">
+                                        سبب تجاوز اتجاه حديث (اختياري)
+                                        <textarea
+                                            value={form.trendOverrideReason}
+                                            onChange={(event) => field("trendOverrideReason", event.target.value)}
+                                            rows={3}
+                                            maxLength={500}
+                                            placeholder="مثال: لم أعتمد تحسن آخر يومين لأن البيانات غير مكتملة"
+                                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs outline-none focus:border-amber-400"
+                                            data-testid="snapchat-management-trend-override"
+                                        />
+                                        <span className="mt-1 block text-[10px] font-bold text-slate-400">شرح مستقل للتوثيق فقط؛ لا يحوّل الاتجاه القصير إلى قاعدة ثابتة.</span>
+                                    </label>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-2">
                                     <TextField label="سبب العملية" value={form.reason} onChange={(value) => field("reason", value)} required />
                                     <label className="block text-xs font-black text-slate-600">حقول Snapchat إضافية بصيغة JSON (اختياري)
                                         <textarea value={form.advancedJson} onChange={(event) => field("advancedJson", event.target.value)} dir="ltr" rows={3} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-mono text-xs outline-none focus:border-amber-400" />
@@ -542,7 +783,7 @@ export default function SnapchatCampaignManagementPanel({
 
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <p className="text-[11px] font-bold text-slate-500">الزر التالي ينشئ معاينة فقط؛ لا يكتب في Snapchat.</p>
-                                    <button type="submit" disabled={busy || !form.accountId || !actionAllowed} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
+                                    <button type="submit" disabled={busy || !form.accountId || !actionAllowed || (requiresProduct && !form.productId)} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
                                         إنشاء معاينة آمنة
                                     </button>
                                 </div>

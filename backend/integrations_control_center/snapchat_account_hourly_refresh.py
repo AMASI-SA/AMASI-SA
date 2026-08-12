@@ -36,6 +36,8 @@ from .snapchat_native_performance_sync import (
 ACCOUNT_REFRESH_SOURCE_MODE = (
     "snapchat_account_hourly_campaign_breakdown_riyadh_refresh_v3"
 )
+CAMPAIGN_FACTS_SOURCE_MODE = "snapchat_account_hourly_campaign_facts_riyadh_v4"
+CAMPAIGN_FACTS_SCHEMA_VERSION = 4
 # Provider contract: granularity="HOUR" with account campaign breakdown.
 PROVIDER_GRANULARITY = "HOUR"
 PROVIDER_BREAKDOWN = "campaign"
@@ -373,6 +375,46 @@ def aggregate_account_hours_by_riyadh_day(
     return daily
 
 
+def aggregate_campaign_hours_by_riyadh_day(
+    rows: list[dict[str, Any]],
+    *,
+    start_date: date,
+    end_date: date,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Fold the already-fetched HOUR rows into campaign/Riyadh-day facts.
+
+    This deliberately consumes the same rows used for the account total.  It
+    never makes another provider request, and rows without a campaign identity
+    remain eligible for the account aggregate while failing closed for a
+    campaign write.
+    """
+    business_tz = _timezone(BUSINESS_TIMEZONE)
+    daily: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        campaign_id = str(row.get("campaign_id") or "").strip()
+        point = _parse_datetime(row.get("start_time"))
+        if not campaign_id or point is None:
+            continue
+        report_date = point.astimezone(business_tz).date()
+        if report_date < start_date or report_date > end_date:
+            continue
+        metrics = {
+            key: _as_number((row.get("metrics") or {}).get(key))
+            for key in STAT_FIELDS
+        }
+        bucket = daily.setdefault(
+            (campaign_id, report_date.isoformat()),
+            _new_bucket(),
+        )
+        _add_to_bucket(
+            bucket,
+            metrics,
+            provider_start=row.get("start_time"),
+            provider_end=row.get("end_time"),
+        )
+    return daily
+
+
 def _day_provider_window(
     report_date: date,
     *,
@@ -426,6 +468,9 @@ async def refresh_snapchat_account_hours(
             "date_from": start_date.isoformat(),
             "date_to": end_date.isoformat(),
             "rows_saved": 0,
+            "campaign_rows_saved": 0,
+            "campaign_facts_source_mode": CAMPAIGN_FACTS_SOURCE_MODE,
+            "campaign_facts_schema_version": CAMPAIGN_FACTS_SCHEMA_VERSION,
             "errors_count": 0,
             "errors": [],
             "provider_calls": context.provider_calls,
@@ -481,8 +526,31 @@ async def refresh_snapchat_account_hours(
         start_date=start_date,
         end_date=end_date,
     )
+    campaign_daily = aggregate_campaign_hours_by_riyadh_day(
+        rows,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     saved = 0
+    campaign_rows_saved = 0
+    for (campaign_id, date_string), bucket in sorted(campaign_daily.items()):
+        await _upsert_performance(
+            context,
+            account=account,
+            entity_type="campaign",
+            external_id=campaign_id,
+            date_string=date_string,
+            metrics=_finalize_bucket(bucket),
+            provider_start=bucket.get("provider_start"),
+            provider_end=bucket.get("provider_end"),
+            source_mode=CAMPAIGN_FACTS_SOURCE_MODE,
+            provider_granularity=PROVIDER_GRANULARITY,
+            provider_breakdown=PROVIDER_BREAKDOWN,
+        )
+        saved += 1
+        campaign_rows_saved += 1
+
     cursor = start_date
     while cursor <= end_date:
         provider_window = _day_provider_window(
@@ -525,6 +593,9 @@ async def refresh_snapchat_account_hours(
         "date_from": start_date.isoformat(),
         "date_to": end_date.isoformat(),
         "rows_saved": saved,
+        "campaign_rows_saved": campaign_rows_saved,
+        "campaign_facts_source_mode": CAMPAIGN_FACTS_SOURCE_MODE,
+        "campaign_facts_schema_version": CAMPAIGN_FACTS_SCHEMA_VERSION,
         "errors_count": len(errors),
         "errors": errors,
         "provider_calls": context.provider_calls,
@@ -566,6 +637,8 @@ async def refresh_snapchat_account_hours(
 __all__ = [
     "ACCOUNT_REFRESH_SOURCE_MODE",
     "ACTION_REPORT_TIME",
+    "CAMPAIGN_FACTS_SCHEMA_VERSION",
+    "CAMPAIGN_FACTS_SOURCE_MODE",
     "CONVERSION_SOURCE_TYPES",
     "PROVIDER_BREAKDOWN",
     "PROVIDER_GRANULARITY",
@@ -573,6 +646,7 @@ __all__ = [
     "VIEW_ATTRIBUTION_WINDOW",
     "_fetch_account_hours",
     "aggregate_account_hours_by_riyadh_day",
+    "aggregate_campaign_hours_by_riyadh_day",
     "extract_account_hour_rows",
     "refresh_snapchat_account_hours",
     "snapchat_account_request_window",
