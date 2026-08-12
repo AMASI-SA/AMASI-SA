@@ -307,8 +307,12 @@ def test_aed_zero_tax_order_becomes_inclusive_fifteen_percent_without_total_chan
         for line in payload["invoice"]["line_items"]
     )
     assert breakdown["tax_percent"] == 15.0
-    assert "original=264.76 AED" in payload["invoice"]["notes"]
-    assert "converted=270.0 SAR" in payload["invoice"]["notes"]
+    assert payload["invoice"]["notes"] == "فاتورة للطلب رقم 275590587"
+    assert "Mezan" not in payload["invoice"]["notes"]
+    assert "Plan-B" not in payload["invoice"]["notes"]
+    assert "tax_policy" not in payload["invoice"]["notes"]
+    assert breakdown["currency_conversion"]["original_total"] == 264.76
+    assert breakdown["currency_conversion"]["converted_total"] == 270.0
 
 
 def test_foreign_order_preserves_explicit_fifteen_percent_tax():

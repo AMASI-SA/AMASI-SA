@@ -1742,24 +1742,8 @@ def _build_invoice_payload(*, canon: dict, contact_id: int,
             "currency_code": "SAR",
             "line_items":   lines,
             "notes":        (
-                f"Mezan Plan-B Manual · order "
-                f"{canon.get('order_number') or ''} · "
-                f"send_date={send_date_iso}"
-                + (
-                    f" · original={canon['_qoyod_fx']['original_total']} "
-                    f"{canon['_qoyod_fx']['original_currency']}"
-                    f" · salla_rate={canon['_qoyod_fx']['rate']}"
-                    f" · converted={canon['_qoyod_fx']['converted_total']} SAR"
-                    f" · tax={canon['_qoyod_fx']['tax_percent']}%"
-                    if canon.get("_qoyod_fx") else ""
-                )
-                + (
-                    " · tax_policy=total_inclusive_15%"
-                    if (
-                        canon.get("_qoyod_tax_policy")
-                        or canon.get("_qoyod_fx")
-                    ) else ""
-                )
+                "فاتورة للطلب رقم "
+                f"{canon.get('order_number') or canon.get('order_id') or ''}"
             ),
             "external_reference": canon.get("order_id"),
         }
