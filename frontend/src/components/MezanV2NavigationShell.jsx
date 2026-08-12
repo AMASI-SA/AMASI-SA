@@ -43,6 +43,8 @@ export const MEZAN_V2_NAV_SECTIONS = [
             { to: "/fulfillment-v2?workspace=my-products", label: "إدارة منتجاتي" },
             { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
             { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
+            { to: "/fulfillment-v2?stage=assembly", label: "الاستلام من التجهيز" },
+            { to: "/fulfillment-v2?stage=ready_to_ship", label: "التجميع والعنونة" },
         ],
     },
     {

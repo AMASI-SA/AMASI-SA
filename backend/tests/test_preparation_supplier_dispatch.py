@@ -130,6 +130,9 @@ def test_rejected_or_already_sent_piece_is_not_available_for_another_dispatch():
     assert piece_is_available_for_supplier_dispatch(
         _piece("partial", supplier_dispatch_status=DISPATCH_STATUS_PARTIAL)
     ) is True
+    assert piece_is_available_for_supplier_dispatch(
+        _piece("assembly", status="ready_for_assembly")
+    ) is False
 
 
 def test_file_enters_execution_only_after_every_active_piece_is_dispatched():

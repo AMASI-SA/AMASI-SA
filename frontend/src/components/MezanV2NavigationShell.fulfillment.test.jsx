@@ -20,6 +20,8 @@ test("fulfillment routes keep reviewed products available internally", () => {
         { to: "/fulfillment-v2?workspace=my-products", label: "إدارة منتجاتي" },
         { to: "/fulfillment-v2?stage=reviewed&view=products", label: "تم المراجعة" },
         { to: "/fulfillment-v2?stage=reviewed&view=files", label: "سجل ملفات التجهيز" },
+        { to: "/fulfillment-v2?stage=assembly", label: "الاستلام من التجهيز" },
+        { to: "/fulfillment-v2?stage=ready_to_ship", label: "التجميع والعنونة" },
     ]);
 });
 
@@ -30,6 +32,8 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
             <a href="/fulfillment-v2?workspace=my-products">إدارة منتجاتي</a>
             <a href="${REVIEWED_PRODUCTS_SECONDARY_TARGET}">تم المراجعة</a>
             <a href="/fulfillment-v2?stage=reviewed&view=files">سجل ملفات التجهيز</a>
+            <a href="/fulfillment-v2?stage=assembly">الاستلام من التجهيز</a>
+            <a href="/fulfillment-v2?stage=ready_to_ship">التجميع والعنونة</a>
         </nav>
     `;
 
@@ -38,6 +42,8 @@ test("duplicate reviewed products entry is removed from the upper submenu", () =
         "إدارة التجهيز",
         "إدارة منتجاتي",
         "سجل ملفات التجهيز",
+        "الاستلام من التجهيز",
+        "التجميع والعنونة",
     ]);
 });
 
@@ -51,6 +57,8 @@ test("only the reviewed products navigation item is active in products view", ()
     expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(true);
     expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[4])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[5])).toBe(false);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 
@@ -64,6 +72,8 @@ test("only the file registry navigation item is active in files view", () => {
     expect(isNavigationItemActive(location, fulfillment.items[1])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[2])).toBe(false);
     expect(isNavigationItemActive(location, fulfillment.items[3])).toBe(true);
+    expect(isNavigationItemActive(location, fulfillment.items[4])).toBe(false);
+    expect(isNavigationItemActive(location, fulfillment.items[5])).toBe(false);
     expect(activeNavigationSection(location)?.id).toBe("fulfillment");
 });
 

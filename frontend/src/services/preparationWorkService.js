@@ -12,6 +12,19 @@ function errorMessage(error, fallback) {
         preparation_file_pieces_missing: "لم تكتمل سجلات قطع الملف. حدّث الصفحة ثم أعد المحاولة.",
         preparation_file_start_requires_full_assignment: "لا يمكن بدء التنفيذ قبل إسناد جميع القطع المتبقية لطلبات هذا الملف.",
         required_due_at_required: "حدد تاريخًا ووقتًا للموعد الإجباري.",
+        preparation_receipt_permission_required: "تحتاج صلاحية الاستلام من التجهيز لفتح هذه الصفحة.",
+        preparation_piece_not_found: "لم نتعرف على هذا الباركود. تأكد أنه باركود قطعة من ميزان.",
+        preparation_receipt_order_not_found: "لم نجد طلب تجهيز بهذا الرقم.",
+        preparation_receipt_search_required: "اكتب رقم الطلب أو صوّر باركود القطعة.",
+        preparation_piece_already_received: "تم استلام هذه القطعة مسبقًا.",
+        preparation_piece_cancelled: "هذه القطعة ملغاة ولا يمكن استلامها.",
+        preparation_piece_stopped: "هذه القطعة متوقفة. عالج سبب التوقف أولًا.",
+        preparation_piece_employee_required: "يجب إسناد القطعة إلى موظف تجهيز أولًا.",
+        preparation_piece_supplier_receiving_in_progress: "القطعة داخل جلسة استلام من المورد الآن.",
+        preparation_piece_supplier_receipt_required: "استلم القطعة من المورد أولًا ثم استلمها من التجهيز.",
+        preparation_piece_not_started: "لم يبدأ موظف التجهيز هذه القطعة بعد.",
+        preparation_piece_not_ready_for_receipt: "حالة القطعة لا تسمح باستلامها الآن.",
+        preparation_piece_receipt_conflict: "تغيرت حالة القطعة. ابحث عن الطلب مرة أخرى.",
     };
     return messages[detail?.code] || error?.message || fallback;
 }
@@ -63,5 +76,33 @@ export async function updatePreparationFileSchedule(
         )).data;
     } catch (error) {
         throw new Error(errorMessage(error, "تعذّر تحديث موعد ملف التجهيز."));
+    }
+}
+
+export function newPreparationReceiptRequestId() {
+    if (globalThis.crypto?.randomUUID) {
+        return `preparation-receipt:${globalThis.crypto.randomUUID()}`;
+    }
+    return `preparation-receipt:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+export async function searchPreparationReceipt(query) {
+    try {
+        return (await api.get("/preparation-work-v1/receiving/search", {
+            params: { q: String(query || "").trim() },
+        })).data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر البحث عن طلب التجهيز."));
+    }
+}
+
+export async function receivePreparationPiece(pieceId, clientRequestId) {
+    try {
+        return (await api.post(
+            `/preparation-work-v1/receiving/pieces/${encodeURIComponent(pieceId)}/receive`,
+            { client_request_id: clientRequestId || newPreparationReceiptRequestId() },
+        )).data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر استلام المنتج من التجهيز."));
     }
 }

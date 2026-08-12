@@ -39,6 +39,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_BLOCKED,
     PIECE_STATUS_CANCELLED,
     PIECE_STATUS_IN_PROGRESS,
+    PIECE_STATUS_READY_FOR_ASSEMBLY,
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
 )
@@ -309,6 +310,7 @@ def piece_is_available_for_supplier_dispatch(piece: dict[str, Any]) -> bool:
         PIECE_STATUS_BLOCKED,
         PIECE_STATUS_CANCELLED,
         PIECE_STATUS_RECEIVED,
+        PIECE_STATUS_READY_FOR_ASSEMBLY,
     }:
         return False
     if _text(piece.get("supplier_receiving_session_id")):
