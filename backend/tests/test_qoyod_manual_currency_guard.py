@@ -209,6 +209,42 @@ async def test_foreign_order_recovers_fx_from_unified_order_details():
     assert prepared["_qoyod_tax_percent"] == 15.0
     assert prepared["_qoyod_fx"]["source"].startswith("unified_orders.")
 
+
+@pytest.mark.asyncio
+async def test_foreign_order_rejects_fx_from_representative_other_owner():
+    canon = {
+        "order_number": "275590587",
+        "currency": "AED",
+        "total_amount": 264.76,
+        "items": [{
+            "sku": "AMS13031",
+            "name": "عباية",
+            "quantity": 1,
+            "unit_price": 213.77,
+            "tax_amount": 0,
+            "discount_amount": 0,
+            "total": 213.77,
+        }],
+    }
+    representative = _foreign_row(
+        currency="AED", rate="1.01978901", tax_percent="0.00",
+        total=264.76, subtotal=213.77, shipping=50.99,
+    )
+    representative["user_id"] = "main"
+
+    with pytest.raises(ManualSendRefused) as exc_info:
+        await _prepare_sar_invoice_canon_from_inbox(
+            _FakeDb([]),
+            canon=canon,
+            representative_row=representative,
+            user_id="qoyod-tenant",
+            orders_user_id="orders-tenant",
+            order_number="275590587",
+        )
+
+    assert exc_info.value.code == "foreign_currency_accounting_facts_missing"
+    assert exc_info.value.extra["qoyod_write_performed"] is False
+
 def test_aed_zero_tax_order_becomes_inclusive_fifteen_percent_without_total_change(
 ):
     canon = {

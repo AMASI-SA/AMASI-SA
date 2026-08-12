@@ -251,6 +251,44 @@ def install(send_module) -> None:
             send_date_iso=send_date_iso,
         )
 
+        # The merchant policy is fixed: every Qoyod invoice line is 15% VAT
+        # inclusive, while the customer-paid Salla gross remains unchanged.
+        # LRM used to rebuild product lines from the persisted setting, which
+        # could be stale (for example 5%) even after the canonical invoice had
+        # correctly selected 15%.  Use the builder's effective policy and
+        # fail before any Qoyod write if either it or an outgoing line differs.
+        effective_tax_percent = send_module._q2(
+            breakdown.get("tax_percent"))
+
+        def assert_fixed_tax_policy() -> None:
+            invoice = payload.get("invoice") if isinstance(payload, dict) else None
+            lines = invoice.get("line_items") if isinstance(invoice, dict) else None
+            violations = []
+            for index, line in enumerate(lines or []):
+                actual = send_module._q2(
+                    line.get("tax_percent") if isinstance(line, dict) else None)
+                if actual != 15.0:
+                    violations.append({"line_index": index, "tax_percent": actual})
+            if (
+                effective_tax_percent != 15.0
+                or not isinstance(lines, list)
+                or not lines
+                or violations
+            ):
+                raise send_module.ManualSendRefused(
+                    "qoyod_tax_policy_violation",
+                    "ضريبة فاتورة قيود يجب أن تكون 15% على جميع البنود؛ "
+                    "أُوقف الإرسال قبل أي كتابة.",
+                    {
+                        "expected_tax_percent": 15.0,
+                        "effective_tax_percent": effective_tax_percent,
+                        "violations": violations,
+                        "qoyod_write_performed": False,
+                    },
+                )
+
+        assert_fixed_tax_policy()
+
         salla_total = send_module._q2(canon.get("total_amount"))
         expected_total = send_module._q2(expected_total)
         residual = send_module._q2(salla_total - expected_total)
@@ -300,10 +338,8 @@ def install(send_module) -> None:
             send_module,
             raw_items,
             line_resolutions,
-            float(1 + send_module._q2(
-                safe_settings.get("qoyod_tax_percent") or 15) / 100),
-            send_module._q2(
-                safe_settings.get("qoyod_tax_percent") or 15),
+            float(1 + effective_tax_percent / 100),
+            effective_tax_percent,
             residual,
         )
 
@@ -367,6 +403,7 @@ def install(send_module) -> None:
                             "after": len(invoice["line_items"]),
                         },
                     )
+                assert_fixed_tax_policy()
                 return payload, candidate_total, breakdown
 
             reason = "distribution_did_not_reach_exact_parity"

@@ -67,7 +67,11 @@ def test_order_270457540_reaches_exact_parity_without_adjustment_line():
     distribution = breakdown["rounding_distribution"]
     assert distribution["applied"] is True
     assert distribution["method"] == "item_line_lrm"
-    assert _q2(sum(row["shift"] for row in distribution["shifted_lines"])) == 0.04
+    # The unadjusted Qoyod document total is 1250.82, so exact parity needs
+    # five one-halalah shifts. The old 0.04 expectation predated document-
+    # level tax rounding and was already stale on the production base SHA.
+    assert distribution["qoyod_total_before"] == 1250.82
+    assert _q2(sum(row["shift"] for row in distribution["shifted_lines"])) == 0.05
 
     lines = payload["invoice"]["line_items"]
     assert len(lines) == len(canon["items"])
@@ -82,6 +86,47 @@ def test_order_270457540_reaches_exact_parity_without_adjustment_line():
     assert len(zero_rows) == 4
     assert all(_q2(row.get("shift_from_original")) == 0.0
                for row in zero_rows)
+
+
+def test_lrm_uses_effective_fixed_15_percent_not_stale_setting():
+    canon = _known_order_270457540()
+    canon["_qoyod_tax_percent"] = 15.0
+
+    payload, expected, breakdown = _build_invoice_payload(
+        canon=canon,
+        contact_id=99,
+        line_resolutions=_resolutions(canon["items"]),
+        settings={
+            # A stale tenant setting must never override the prepared 15%
+            # accounting policy while LRM rebuilds product lines.
+            "qoyod_tax_percent": 5,
+            "rounding_adjustment_product_id": 999,
+        },
+        send_date_iso="2026-08-12",
+    )
+
+    assert expected == 1250.87
+    assert breakdown["difference"] == 0.0
+    assert all(
+        line["tax_percent"] == 15.0
+        for line in payload["invoice"]["line_items"]
+    )
+
+
+def test_unprepared_non_15_percent_invoice_fails_closed():
+    canon = _known_order_270457540()
+
+    with pytest.raises(ManualSendRefused) as exc:
+        _build_invoice_payload(
+            canon=canon,
+            contact_id=99,
+            line_resolutions=_resolutions(canon["items"]),
+            settings={"qoyod_tax_percent": 5},
+            send_date_iso="2026-08-12",
+        )
+
+    assert exc.value.code == "qoyod_tax_policy_violation"
+    assert exc.value.extra["qoyod_write_performed"] is False
 
 
 def test_distributor_handles_positive_and_negative_four_cents():

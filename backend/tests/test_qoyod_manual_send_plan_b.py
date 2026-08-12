@@ -473,10 +473,8 @@ async def test_worker_respects_frozen_flag(db):
         "legacy_pipeline_frozen": True,
     })
     result = await _one_round(db, user_id=TENANT, batch_limit=10)
-    assert result["frozen"] is True
-    assert result["normalized"] == {"processed": 0, "outcomes": {}}
-    assert result["customer_resolved"] == {"processed": 0, "outcomes": {}}
-    assert result["backfill_gate"]["mode"] == "frozen"
+    assert result["status"] == "legacy_pipeline_frozen"
+    assert result["processed"] == 0
 
 
 @pytest.mark.asyncio
@@ -792,6 +790,473 @@ async def test_recovery_selects_complete_positive_historical_payload(db):
     assert selected["items"]
 
 
+@pytest.mark.asyncio
+async def test_recovery_composes_positive_total_and_items_from_split_traces(db):
+    order_number = "ORDER-SPLIT-ACCOUNTING"
+
+    amount_trace = _inbox_row(order_number=order_number, total=170.83)
+    amount_trace["id"] = "amount-trace"
+    amount_trace["canonical_payload"]["items"] = []
+    amount_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=2)
+    )
+    await db.integration_inbox.insert_one(amount_trace)
+
+    items_trace = _inbox_row(order_number=order_number, total=0.0)
+    items_trace["id"] = "items-trace"
+    items_trace["canonical_payload"]["subtotal"] = 170.83
+    items_trace["canonical_payload"]["items"][0]["unit_price"] = 170.83
+    items_trace["canonical_payload"]["items"][0]["total"] = 170.83
+    items_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    await db.integration_inbox.insert_one(items_trace)
+
+    stripped_live = _inbox_row(order_number=order_number, total=0.0)
+    stripped_live["id"] = "live-status-trace"
+    stripped_live["canonical_payload"]["items"] = []
+    stripped_live["received_at"] = datetime.now(timezone.utc)
+    await db.integration_inbox.insert_one(stripped_live)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["items"][0]["total"] == 170.83
+    assert selected["currency"] == "SAR"
+    assert selected["_qoyod_historical_recovery"] == {
+        "strategy": "split_verified_salla_traces",
+        "owner_id": TENANT,
+        "total_row_id": "amount-trace",
+        "total_connector": None,
+        "items_row_id": "items-trace",
+        "items_connector": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_recovery_refuses_to_mix_split_trace_currencies(db):
+    order_number = "ORDER-SPLIT-CURRENCY-MISMATCH"
+
+    amount_trace = _inbox_row(order_number=order_number, total=170.83)
+    amount_trace["canonical_payload"]["currency"] = "QAR"
+    amount_trace["canonical_payload"]["items"] = []
+    amount_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    await db.integration_inbox.insert_one(amount_trace)
+
+    items_trace = _inbox_row(order_number=order_number, total=0.0)
+    items_trace["canonical_payload"]["currency"] = "SAR"
+    items_trace["received_at"] = datetime.now(timezone.utc)
+    await db.integration_inbox.insert_one(items_trace)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_refuses_conflicting_live_positive_total(db):
+    order_number = "ORDER-LIVE-TOTAL-CONFLICT"
+    historical = _inbox_row(order_number=order_number, total=170.83)
+    await db.integration_inbox.insert_one(historical)
+    live = _inbox_row(order_number=order_number, total=200.0)[
+        "canonical_payload"
+    ]
+    live["items"] = []
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+        live_canon=live,
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_fills_total_without_replacing_live_items(db):
+    order_number = "ORDER-LIVE-ITEMS-STAY"
+    historical = _inbox_row(order_number=order_number, total=170.83)
+    historical["canonical_payload"]["items"][0]["sku"] = "HISTORICAL-SKU"
+    await db.integration_inbox.insert_one(historical)
+    live = _inbox_row(order_number=order_number, total=0.0)[
+        "canonical_payload"
+    ]
+    live["items"][0].update({
+        "sku": "LIVE-SKU",
+        "unit_price": 170.83,
+        "total": 170.83,
+    })
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+        live_canon=live,
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["items"][0]["sku"] == "LIVE-SKU"
+
+
+@pytest.mark.asyncio
+async def test_recovery_never_mixes_total_and_items_across_owners(db):
+    order_number = "ORDER-CROSS-OWNER"
+    amount_trace = _inbox_row(order_number=order_number, total=170.83)
+    amount_trace["user_id"] = "qoyod-owner"
+    amount_trace["canonical_payload"]["items"] = []
+    await db.integration_inbox.insert_one(amount_trace)
+    items_trace = _inbox_row(order_number=order_number, total=0.0)
+    items_trace["user_id"] = "orders-owner"
+    items_trace["canonical_payload"]["items"][0].update({
+        "unit_price": 170.83,
+        "total": 170.83,
+    })
+    await db.integration_inbox.insert_one(items_trace)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=["qoyod-owner", "orders-owner"],
+        order_number=order_number,
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_prefers_clean_current_owner_over_secondary_conflict(db):
+    order_number = "ORDER-PREFERRED-OWNER"
+    preferred = _inbox_row(order_number=order_number, total=170.83)
+    preferred["user_id"] = "orders-owner"
+    await db.integration_inbox.insert_one(preferred)
+
+    for total in (100.0, 200.0):
+        secondary = _inbox_row(order_number=order_number, total=total)
+        secondary["user_id"] = "main"
+        await db.integration_inbox.insert_one(secondary)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=["main", "orders-owner"],
+        order_number=order_number,
+        live_canon={
+            "order_number": order_number,
+            "currency": "SAR",
+            "total_amount": 0.0,
+            "items": [],
+        },
+        preferred_inbox_owner_id="orders-owner",
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["_qoyod_historical_recovery"]["owner_id"] == (
+        "orders-owner"
+    )
+
+
+@pytest.mark.asyncio
+async def test_recovery_refuses_outer_inner_money_currency_conflict(db):
+    order_number = "ORDER-NESTED-CURRENCY-CONFLICT"
+    row = _inbox_row(order_number=order_number, total=0.0)
+    row["canonical_payload"]["total_amount"] = {
+        "currency": "SAR",
+        "amount": {"amount": "170.83", "currency": "AED"},
+    }
+    await db.integration_inbox.insert_one(row)
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_reads_nested_money_and_keeps_live_operational_facts(db):
+    order_number = "ORDER-NESTED-MONEY"
+    amount_trace = _inbox_row(order_number=order_number, total=0.0)
+    amount_trace["canonical_payload"]["total_amount"] = {
+        "amount": {"amount": "170.83", "currency": "SAR"},
+        "currency": "SAR",
+    }
+    amount_trace["canonical_payload"]["items"] = []
+    amount_trace["canonical_payload"]["payment_method"] = "credit_card"
+    amount_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=2)
+    )
+    await db.integration_inbox.insert_one(amount_trace)
+
+    items_trace = _inbox_row(order_number=order_number, total=0.0)
+    items_trace["canonical_payload"]["items"][0].update({
+        "unit_price": {"amount": "170.83", "currency": "SAR"},
+        "total": {"amount": "170.83", "currency": "SAR"},
+    })
+    items_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    await db.integration_inbox.insert_one(items_trace)
+
+    live = _inbox_row(order_number=order_number, total=0.0)[
+        "canonical_payload"
+    ]
+    live["items"] = []
+    live["order_status"] = "delivered"
+    live["payment_method"] = "tamara"
+    live["customer"] = {"name": "العميل الحالي"}
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        order_number=order_number,
+        live_canon=live,
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["items"][0]["unit_price"] == 170.83
+    assert selected["items"][0]["total"] == 170.83
+    assert selected["order_status"] == "delivered"
+    assert selected["payment_method"] == "tamara"
+    assert selected["customer"] == {"name": "العميل الحالي"}
+
+
+@pytest.mark.asyncio
+async def test_recovery_prefers_exact_owner_unified_salla_snapshot(db):
+    order_number = "ORDER-UNIFIED-ACCOUNTING"
+    await db.unified_orders.insert_one({
+        "user_id": "orders-owner",
+        "order_number": order_number,
+        "raw_by_source": {
+            "salla_direct": {
+                "id": order_number,
+                "reference_id": order_number,
+                "date": "2026-08-09T10:00:00+03:00",
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+                "payment_method": "credit_card",
+                "customer": {"full_name": "عميل سلة"},
+                "amounts": {
+                    "total": {"amount": "170.83", "currency": "SAR"},
+                    "sub_total": {"amount": "150.83", "currency": "SAR"},
+                    "shipping_cost": {"amount": "20.00", "currency": "SAR"},
+                    "tax": {"amount": "0.00", "currency": "SAR"},
+                    "discount": {"amount": "0.00", "currency": "SAR"},
+                },
+                "items": [{
+                    "variant": {"sku": "VARIANT-SKU-1"},
+                    "product": {"id": "p1", "name": "منتج سلة"},
+                    "quantity": 1,
+                    "amounts": {
+                        "price_without_tax": {
+                            "amount": "131.16", "currency": "SAR",
+                        },
+                        "total": {
+                            "amount": "150.83", "currency": "SAR",
+                        },
+                        "tax": {"amount": "19.67", "currency": "SAR"},
+                    },
+                }],
+            },
+        },
+    })
+    live = _inbox_row(order_number=order_number, total=0.0)[
+        "canonical_payload"
+    ]
+    live["items"] = []
+    live["order_status"] = "delivered"
+    live["payment_method"] = "tamara"
+    live["customer"] = {"name": "العميل الحالي"}
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        unified_owner_id="orders-owner",
+        order_number=order_number,
+        live_canon=live,
+    )
+
+    assert selected["total_amount"] == 170.83
+    assert selected["shipping_amount"] == 20.0
+    assert selected["items"][0]["sku"] == "VARIANT-SKU-1"
+    assert selected["currency"] == "SAR"
+    assert selected["order_status"] == "delivered"
+    assert selected["payment_method"] == "tamara"
+    assert selected["customer"] == {"name": "العميل الحالي"}
+    assert selected["_qoyod_historical_recovery"]["strategy"] == (
+        "unified_salla_direct_normalized"
+    )
+
+
+@pytest.mark.asyncio
+async def test_recovery_refuses_mixed_currency_unified_salla_snapshot(db):
+    order_number = "ORDER-UNIFIED-MIXED-CURRENCY"
+    await db.unified_orders.insert_one({
+        "user_id": "orders-owner",
+        "order_number": order_number,
+        "raw_by_source": {
+            "salla_direct": {
+                "id": order_number,
+                "reference_id": order_number,
+                "date": "2026-08-09T10:00:00+03:00",
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+                "amounts": {
+                    "total": {"amount": "170.83", "currency": "SAR"},
+                    "sub_total": {"amount": "150.83", "currency": "SAR"},
+                    "shipping_cost": {"amount": "20.00", "currency": "AED"},
+                },
+                "items": [{
+                    "sku": "SKU-1",
+                    "name": "منتج",
+                    "quantity": 1,
+                    "amounts": {
+                        "price_without_tax": {
+                            "amount": "131.16", "currency": "SAR",
+                        },
+                        "total": {
+                            "amount": "150.83", "currency": "SAR",
+                        },
+                    },
+                }],
+            },
+        },
+    })
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        unified_owner_id="orders-owner",
+        order_number=order_number,
+        live_canon={
+            "order_number": order_number,
+            "total_amount": 0.0,
+            "items": [],
+        },
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_recovery_rejects_unified_snapshot_for_another_owner(db):
+    order_number = "ORDER-UNIFIED-OTHER-OWNER"
+    await db.unified_orders.insert_one({
+        "user_id": "different-owner",
+        "order_number": order_number,
+        "raw_by_source": {"salla_direct": {"reference_id": order_number}},
+    })
+
+    selected = await _find_historical_positive_canon(
+        db,
+        owner_ids=[TENANT],
+        unified_owner_id="orders-owner",
+        order_number=order_number,
+        live_canon={
+            "order_number": order_number,
+            "currency": "SAR",
+            "total_amount": 0.0,
+            "items": [],
+        },
+    )
+
+    assert selected is None
+
+
+@pytest.mark.asyncio
+async def test_default_path_stays_blocked_but_bounded_recovery_passes_zero_guard(
+    db,
+):
+    order_number = "ORDER-BOUNDED-ONLY"
+    await _seed_settings(db, payment_methods_mapped=False)
+
+    amount_trace = _inbox_row(
+        order_number=order_number,
+        total=170.83,
+        payment_method="tamara",
+    )
+    amount_trace["canonical_payload"]["items"] = []
+    amount_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=2)
+    )
+    await db.integration_inbox.insert_one(amount_trace)
+
+    items_trace = _inbox_row(
+        order_number=order_number,
+        total=0.0,
+        payment_method="tamara",
+    )
+    items_trace["canonical_payload"]["items"][0].update({
+        "unit_price": 170.83,
+        "total": 170.83,
+    })
+    items_trace["received_at"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    await db.integration_inbox.insert_one(items_trace)
+
+    live = _inbox_row(
+        order_number=order_number,
+        total=0.0,
+        payment_method="tamara",
+    )
+    live["canonical_payload"]["items"] = []
+    live["received_at"] = datetime.now(timezone.utc)
+    await db.integration_inbox.insert_one(live)
+
+    with pytest.raises(ManualSendRefused) as default_exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number=order_number,
+        )
+    assert default_exc.value.code == "zero_total_refused"
+
+    with pytest.raises(ManualSendRefused) as recovery_exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number=order_number,
+            allow_historical_positive_total=True,
+        )
+    # Reaching the payment-account guard proves 170.83 and the item survived
+    # recovery and invoice preconditions. No Qoyod credential/client/write is
+    # reached because the payment mapping deliberately remains absent.
+    assert recovery_exc.value.code == "payment_method_unmapped"
+    assert await db.qoyod_manual_send_locks.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_live_nested_currency_conflict_stops_before_any_qoyod_write(db):
+    order_number = "ORDER-LIVE-CURRENCY-CONFLICT"
+    row = _inbox_row(order_number=order_number, total=0.0)
+    row["canonical_payload"]["total_amount"] = {
+        "currency": "SAR",
+        "amount": {"amount": "170.83", "currency": "AED"},
+    }
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc_info:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number=order_number,
+            allow_historical_positive_total=True,
+        )
+
+    assert exc_info.value.code == "accounting_currency_conflict"
+    assert exc_info.value.extra["qoyod_write_performed"] is False
+    assert await db.qoyod_manual_send_locks.count_documents({}) == 0
+
+
 # ────────────────────────────────────────────────────────────────────
 # T15 — Freeze toggle round-trip: worker respects the flag AFTER
 #       flip, and the flag also short-circuits _one_round.
@@ -814,8 +1279,8 @@ async def test_freeze_toggle_stops_worker(db):
         upsert=True,
     )
     result = await _one_round(db, user_id=TENANT, batch_limit=5)
-    assert result["frozen"] is True
-    assert "legacy_pipeline_frozen=true" in result["reason"]
+    assert result["status"] == "legacy_pipeline_frozen"
+    assert result["processed"] == 0
 
     # Flip it back off.
     await db.qoyod_settings.update_one(
