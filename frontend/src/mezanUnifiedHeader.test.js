@@ -10,7 +10,7 @@ test("Mezan 2 navigation and order search share one responsive header", () => {
     const navigation = read("src/components/MezanV2NavigationShell.jsx");
 
     expect(layout).toContain('data-testid="mezan-v2-unified-header"');
-    expect(layout).toContain('searchForm={<GlobalOrderSearch compact />}');
+    expect(layout).toContain('searchForm={<GlobalSearch compact />}');
     expect(layout).toContain('notificationControl={<NotificationBell />}');
     expect(layout).toContain('{!isMezanV2 && (\n                <header');
     expect(layout).toContain('DashboardAnalyticsPlacement active={showsDashboardAnalytics}');
