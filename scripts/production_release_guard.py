@@ -163,11 +163,15 @@ def prepublish() -> dict[str, Any]:
 
 
 def _health_payload(base_url: str) -> dict[str, Any]:
-    url = base_url.rstrip("/") + "/health"
+    url = base_url.rstrip("/") + "/api/health"
     url += "?" + urllib.parse.urlencode({"release_check": int(time.time())})
     request = urllib.request.Request(
         url,
-        headers={"Cache-Control": "no-cache", "Accept": "application/json"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; MezanReleaseGuard/1.0)",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=20) as response:

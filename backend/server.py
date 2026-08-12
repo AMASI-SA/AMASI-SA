@@ -154,8 +154,10 @@ api = APIRouter(prefix="/api")
 
 
 @app.get("/health", include_in_schema=False)
-async def health_check():
+@api.get("/health", include_in_schema=False)
+async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return {
         "ok": True,
         "service": "backend",
