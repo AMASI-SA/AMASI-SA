@@ -314,7 +314,6 @@ async def ensure_campaign_product_association_indexes(db: Any) -> None:
     await collection.create_index(
         [("user_id", 1), ("idempotency_key", 1)],
         unique=True,
-        partialFilterExpression={"idempotency_key": {"$type": "string"}},
         name="mezan_campaign_product_links_v2_idempotency_unique",
     )
     await collection.create_index(
