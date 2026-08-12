@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 import inspect
 
 from fastapi import APIRouter
-import pytest
 
 from integrations_control_center import ads_auto_sync_scheduler as scheduler
 
@@ -182,8 +182,7 @@ def test_safe_summary_preserves_per_account_provider_calls():
     assert summary["campaign_facts_schema_version"] == 4
 
 
-@pytest.mark.asyncio
-async def test_status_never_exposes_global_results_from_another_tenant():
+def test_status_never_exposes_global_results_from_another_tenant():
     db = _DB(
         {
             scheduler.SCHEDULER_COLLECTION: [
@@ -244,7 +243,7 @@ async def test_status_never_exposes_global_results_from_another_tenant():
         }
     )
 
-    result = await scheduler.auto_sync_status(db, "tenant-a")
+    result = asyncio.run(scheduler.auto_sync_status(db, "tenant-a"))
 
     assert result["providers"][scheduler.SNAPCHAT_PROVIDER_ID]["run_id"] == (
         "tenant-a-run"
