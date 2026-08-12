@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .snapchat_account_selection import _load_selected_accounts
@@ -89,6 +89,14 @@ CREATIVE_CREATE_FIELDS = {
     "shareable", "forced_view_eligibility", "ad_product",
     "cta_color_display_mode", "preview_properties", "collection_properties",
     "app_install_properties", "deep_link_properties", "render_type",
+}
+
+# Snapchat's ad endpoint uses an ad type that can differ from the attached
+# creative type.  Keep this allow-list deliberately narrow: unknown creative
+# types continue to be handled by Snapchat, while documented mappings are
+# rejected locally before a provider write can be attempted.
+CREATIVE_TYPE_TO_AD_TYPES = {
+    "WEB_VIEW": ("REMOTE_WEBPAGE",),
 }
 
 
@@ -500,6 +508,49 @@ def _assert_stored_operation_integrity(
         raise ValueError("stored activation flag does not match the proposal")
 
 
+def _safe_nested_provider_error_detail(payload: Any) -> dict[str, str]:
+    """Find bounded, allow-listed error details inside bulk API responses."""
+    queue: list[tuple[Any, int]] = [(payload, 0)]
+    seen: set[int] = set()
+    best: dict[str, str] = {}
+    best_score = -1
+    cursor = 0
+    generic_statuses = {
+        "SUCCESS", "OK", "FAILURE", "FAILED", "FAIL", "ERROR", "UNKNOWN",
+    }
+    while cursor < len(queue) and cursor < 32:
+        value, depth = queue[cursor]
+        cursor += 1
+        if not isinstance(value, (dict, list)) or id(value) in seen:
+            continue
+        seen.add(id(value))
+        if isinstance(value, dict):
+            candidate = _safe_provider_error_detail(value)
+            code = str(candidate.get("provider_error_code") or "")
+            message = str(candidate.get("provider_error_message") or "")
+            if code.upper() in {"SUCCESS", "OK"} and not message:
+                candidate = {}
+                code = ""
+            score = (
+                (4 if message else 0)
+                + (2 if code and code.upper() not in generic_statuses else 0)
+                + (1 if code else 0)
+            )
+            if candidate and score > best_score:
+                best = candidate
+                best_score = score
+            children = value.values()
+        else:
+            children = value[:8]
+        if depth < 4:
+            queue.extend(
+                (nested, depth + 1)
+                for nested in children
+                if isinstance(nested, (dict, list))
+            )
+    return best
+
+
 class SnapchatManagementProvider:
     def __init__(self, db: Any, user_id: str) -> None:
         self.db = db
@@ -526,17 +577,21 @@ class SnapchatManagementProvider:
                 status_code=502,
                 detail={"code": "snapchat_management_network_error", "message": "تعذر الاتصال بـ Snapchat أثناء تنفيذ العملية."},
             ) from exc
-        if response.status_code in {401, 403}:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "snapchat_management_needs_reauth_or_role", "message": "يحتاج اتصال Snapchat إلى إعادة توثيق أو دور إدارة مناسب."},
-            )
         if response.status_code >= 400:
             try:
                 provider_payload = response.json() or {}
             except (TypeError, ValueError):
                 provider_payload = {}
-            safe_detail = _safe_provider_error_detail(provider_payload)
+            safe_detail = _safe_nested_provider_error_detail(provider_payload)
+            if response.status_code in {401, 403}:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "snapchat_management_needs_reauth_or_role",
+                        "message": "يحتاج اتصال Snapchat إلى إعادة توثيق أو دور إدارة مناسب.",
+                        **safe_detail,
+                    },
+                )
             raise HTTPException(
                 status_code=502,
                 detail={
@@ -556,7 +611,14 @@ class SnapchatManagementProvider:
             raise HTTPException(status_code=502, detail={"code": "snapchat_management_invalid_payload"})
         request_status = str(payload.get("request_status") or payload.get("status") or "SUCCESS").upper()
         if "FAIL" in request_status or "ERROR" in request_status:
-            raise HTTPException(status_code=502, detail={"code": "snapchat_management_request_failed", "message": "أبلغ Snapchat عن فشل العملية."})
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "snapchat_management_request_failed",
+                    "message": "أبلغ Snapchat عن فشل العملية.",
+                    **_safe_nested_provider_error_detail(payload),
+                },
+            )
         return payload
 
     async def read_entity(self, entity_type: str, entity_id: str) -> dict[str, Any]:
@@ -624,7 +686,14 @@ def _extract_entity(payload: dict[str, Any], plural: str, singular: str) -> dict
     wrapper = rows[0] if isinstance(rows[0], dict) else {}
     sub_status = str(wrapper.get("sub_request_status") or wrapper.get("status") or "SUCCESS").upper()
     if "FAIL" in sub_status or "ERROR" in sub_status:
-        raise HTTPException(status_code=502, detail={"code": "snapchat_management_subrequest_failed", "message": "رفض Snapchat الكيان داخل العملية."})
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "snapchat_management_subrequest_failed",
+                "message": "رفض Snapchat الكيان داخل العملية.",
+                **_safe_nested_provider_error_detail(wrapper),
+            },
+        )
     entity = wrapper.get(singular, wrapper)
     if not isinstance(entity, dict) or not entity.get("id"):
         raise HTTPException(status_code=502, detail={"code": "snapchat_management_entity_invalid"})
@@ -671,11 +740,14 @@ def _public_proposal(row: dict[str, Any], *, confirm_token: str | None = None) -
         "activates_delivery": operation.get("activates_delivery") is True,
         "expires_at": row.get("expires_at"), "created_at": row.get("created_at"),
         "approved_at": row.get("approved_at"), "executed_at": row.get("executed_at"),
+        "failed_at": row.get("failed_at"),
         "verification": row.get("verification"), "rollback": row.get("rollback"),
+        "failure": _safe_provider_value(row.get("failure") or {}),
         "confirmation_phrase": f"تراجع {str(row.get('proposal_id') or '')[:8]}",
         "provider_write_reached": row.get("provider_write_reached") is True,
         "provider_write_state": row.get("provider_write_state") or "not_attempted",
         "provider_write_uncertain": row.get("provider_write_uncertain") is True,
+        "provider_entity_id": row.get("provider_entity_id"),
         "accounting_write_reached": False, "qoyod_write_reached": False,
     }
     if confirm_token:
@@ -766,6 +838,35 @@ async def create_snapchat_management_proposal(db: Any, user_id: str,
         campaign = await client.read_entity("campaign", str(parent.get("campaign_id") or ""))
         if str(campaign.get("ad_account_id") or "") != payload.account_id:
             raise HTTPException(status_code=409, detail={"code": "snapchat_management_parent_account_mismatch"})
+        ad_entity = operation["body"]["ads"][0]
+        creative = await client.read_entity(
+            "creative", str(ad_entity.get("creative_id") or "")
+        )
+        if str(creative.get("ad_account_id") or "") != payload.account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_creative_account_mismatch",
+                    "message": "الإبداع المحدد لا ينتمي إلى حساب Snapchat المختار.",
+                },
+            )
+        creative_type = str(creative.get("type") or "").strip().upper()
+        requested_ad_type = str(ad_entity.get("type") or "").strip().upper()
+        allowed_ad_types = CREATIVE_TYPE_TO_AD_TYPES.get(creative_type)
+        if allowed_ad_types and requested_ad_type not in allowed_ad_types:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "snapchat_management_creative_ad_type_mismatch",
+                    "message": (
+                        f"نوع الإبداع {creative_type} يتطلب نوع إعلان "
+                        f"{allowed_ad_types[0]} في Snapchat."
+                    ),
+                    "creative_type": creative_type,
+                    "requested_ad_type": requested_ad_type,
+                    "allowed_ad_types": list(allowed_ad_types),
+                },
+            )
 
     proposal_id = str(uuid.uuid4())
     token = secrets.token_urlsafe(32)
@@ -1154,10 +1255,37 @@ def attach_snapchat_campaign_management_routes(router: APIRouter, db: Any,
         owner = require_owner(user)
         return await approve_snapchat_management_proposal(db, str(owner["id"]), str(owner["id"]), _identifier(proposal_id, field="proposal_id"), payload)
 
-    @router.post(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/execute")
-    async def execute_proposal(proposal_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    @router.post(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/execute",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    async def execute_proposal(
+        proposal_id: str,
+        background_tasks: BackgroundTasks,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await execute_snapchat_management_proposal(db, str(owner["id"]), str(owner["id"]), _identifier(proposal_id, field="proposal_id"))
+        normalized_id = _identifier(proposal_id, field="proposal_id")
+
+        async def execute_in_background() -> None:
+            try:
+                await execute_snapchat_management_proposal(
+                    db,
+                    str(owner["id"]),
+                    str(owner["id"]),
+                    normalized_id,
+                )
+            except Exception:
+                # The execution function persists safe failure details whenever
+                # a provider attempt has started.  The client polls that record.
+                pass
+
+        background_tasks.add_task(execute_in_background)
+        return {
+            "provider": SNAPCHAT_PROVIDER_ID,
+            "proposal_id": normalized_id,
+            "status": "executing",
+        }
 
     @router.post(f"/{SNAPCHAT_PROVIDER_ID}/management/proposals/{{proposal_id}}/rollback")
     async def rollback_proposal(proposal_id: str, payload: SnapchatManagementRollbackInput, user: dict = Depends(current_user)) -> dict[str, Any]:

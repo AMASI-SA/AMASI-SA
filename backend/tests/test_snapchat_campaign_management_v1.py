@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import ValidationError
 
 from integrations_control_center import snapchat_campaign_management as module
@@ -412,3 +412,194 @@ async def test_execution_rejects_tampered_provider_path(monkeypatch):
             db, "owner-1", "owner-1", proposal_id, provider=Provider(),
         )
     assert raised.value.detail["code"] == "snapchat_management_operation_integrity_failed"
+
+
+def test_nested_bulk_error_preserves_safe_provider_detail():
+    with pytest.raises(HTTPException) as raised:
+        module._extract_entity(
+            {
+                "request_status": "SUCCESS",
+                "ads": [{
+                    "sub_request_status": "ERROR",
+                    "errors": [{
+                        "error": {
+                            "error_code": "E_CREATIVE_AD_TYPE",
+                            "error_message": (
+                                "Creative type WEB_VIEW requires REMOTE_WEBPAGE"
+                            ),
+                        },
+                    }],
+                }],
+            },
+            "ads",
+            "ad",
+        )
+    assert raised.value.detail == {
+        "code": "snapchat_management_subrequest_failed",
+        "message": "رفض Snapchat الكيان داخل العملية.",
+        "provider_error_code": "E_CREATIVE_AD_TYPE",
+        "provider_error_message": (
+            "Creative type WEB_VIEW requires REMOTE_WEBPAGE"
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_ad_preview_rejects_web_view_with_snap_ad_before_write(monkeypatch):
+    db = DB()
+    provider = Provider()
+    provider.entities.update({
+        ("ad_squad", "squad-1"): {
+            "id": "squad-1", "campaign_id": "campaign-1",
+        },
+        ("campaign", "campaign-1"): {
+            "id": "campaign-1", "ad_account_id": "account-1",
+        },
+        ("creative", "creative-1"): {
+            "id": "creative-1",
+            "ad_account_id": "account-1",
+            "type": "WEB_VIEW",
+        },
+    })
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1"}
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    payload = module.SnapchatManagementProposalInput(
+        action="ad.create",
+        account_id="account-1",
+        parent_id="squad-1",
+        payload={
+            "name": "Safe paused ad",
+            "creative_id": "creative-1",
+            "type": "SNAP_AD",
+        },
+        reason="اختبار توافق نوع الإعلان مع الإبداع",
+        idempotency_key="web-view-snap-ad-mismatch",
+    )
+    with pytest.raises(HTTPException) as raised:
+        await module.create_snapchat_management_proposal(
+            db, "owner-1", "owner-1", payload, provider=provider,
+        )
+    assert raised.value.status_code == 422
+    assert raised.value.detail == {
+        "code": "snapchat_management_creative_ad_type_mismatch",
+        "message": (
+            "نوع الإبداع WEB_VIEW يتطلب نوع إعلان REMOTE_WEBPAGE في Snapchat."
+        ),
+        "creative_type": "WEB_VIEW",
+        "requested_ad_type": "SNAP_AD",
+        "allowed_ad_types": ["REMOTE_WEBPAGE"],
+    }
+    assert db[module.PROPOSAL_COLLECTION].rows == []
+    assert provider.executions == []
+
+
+@pytest.mark.asyncio
+async def test_ad_preview_accepts_web_view_with_remote_webpage(monkeypatch):
+    db = DB()
+    provider = Provider()
+    provider.entities.update({
+        ("ad_squad", "squad-1"): {
+            "id": "squad-1", "campaign_id": "campaign-1",
+        },
+        ("campaign", "campaign-1"): {
+            "id": "campaign-1", "ad_account_id": "account-1",
+        },
+        ("creative", "creative-1"): {
+            "id": "creative-1",
+            "ad_account_id": "account-1",
+            "type": "WEB_VIEW",
+        },
+    })
+
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1"}
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    preview = await module.create_snapchat_management_proposal(
+        db,
+        "owner-1",
+        "owner-1",
+        module.SnapchatManagementProposalInput(
+            action="ad.create",
+            account_id="account-1",
+            parent_id="squad-1",
+            payload={
+                "name": "Safe paused ad",
+                "creative_id": "creative-1",
+                "type": "REMOTE_WEBPAGE",
+            },
+            reason="اختبار نوع الإعلان الصحيح للإبداع",
+            idempotency_key="web-view-remote-webpage-valid",
+        ),
+        provider=provider,
+    )
+    stored = db[module.PROPOSAL_COLLECTION].rows[0]
+    entity = stored["operation"]["body"]["ads"][0]
+    assert preview["status"] == "previewed"
+    assert entity["type"] == "REMOTE_WEBPAGE"
+    assert entity["status"] == "PAUSED"
+    assert provider.executions == []
+
+
+def test_public_proposal_exposes_only_safe_failure_state():
+    proposal = module._public_proposal({
+        "proposal_id": "proposal-1",
+        "status": "failed",
+        "failed_at": "2026-08-11T19:57:54+00:00",
+        "failure": {
+            "code": "snapchat_management_request_failed",
+            "provider_error_message": "Creative type mismatch",
+        },
+        "provider_entity_id": "ad-1",
+    })
+    assert proposal["failed_at"] == "2026-08-11T19:57:54+00:00"
+    assert proposal["provider_entity_id"] == "ad-1"
+    assert proposal["failure"] == {
+        "code": "snapchat_management_request_failed",
+        "provider_error_message": "Creative type mismatch",
+    }
+
+
+@pytest.mark.asyncio
+async def test_execute_route_queues_exactly_one_background_attempt(monkeypatch):
+    router = APIRouter()
+    calls = []
+
+    async def current_user():
+        return {"id": "owner-1"}
+
+    async def fake_execute(db, user_id, actor_id, proposal_id):
+        calls.append((db, user_id, actor_id, proposal_id))
+
+    monkeypatch.setattr(module, "execute_snapchat_management_proposal", fake_execute)
+    db = DB()
+    module.attach_snapchat_campaign_management_routes(
+        router,
+        db,
+        current_user,
+        lambda user: user,
+    )
+    route = next(
+        item for item in router.routes
+        if item.path.endswith("/management/proposals/{proposal_id}/execute")
+    )
+    background_tasks = BackgroundTasks()
+    proposal_id = "51234567-0000-0000-0000-000000000000"
+    response = await route.endpoint(
+        proposal_id=proposal_id,
+        background_tasks=background_tasks,
+        user={"id": "owner-1"},
+    )
+    assert route.status_code == 202
+    assert response == {
+        "provider": module.SNAPCHAT_PROVIDER_ID,
+        "proposal_id": proposal_id,
+        "status": "executing",
+    }
+    assert calls == []
+    assert len(background_tasks.tasks) == 1
+    await background_tasks()
+    assert calls == [(db, "owner-1", "owner-1", proposal_id)]
