@@ -35,6 +35,8 @@ def _matches(row, query):
     for key, expected in query.items():
         actual = _value(row, key)
         if isinstance(expected, dict):
+            if "$in" in expected and actual not in expected["$in"]:
+                return False
             if "$gte" in expected and (
                 actual is None or actual < expected["$gte"]
             ):
@@ -79,8 +81,10 @@ class _Cursor:
 class _Collection:
     def __init__(self, rows):
         self.rows = list(rows)
+        self.find_queries = []
 
     def find(self, query, _projection=None):
+        self.find_queries.append(query)
         return _Cursor([
             dict(row) for row in self.rows if _matches(row, query)
         ])
@@ -96,11 +100,15 @@ def _run(awaitable):
     return asyncio.run(awaitable)
 
 
-def _order(owner, number, status, *, order_date="2026-08-10", total=100):
+def _order(
+    owner, number, status, *, order_date="2026-08-10", total=100,
+    order_date_inferred=False,
+):
     return {
         "user_id": owner,
         "order_number": number,
         "order_date": order_date,
+        "order_date_inferred": order_date_inferred,
         "order_status_slug": status,
         "order_status": status,
         "total_amount": total,
@@ -146,6 +154,9 @@ def _review_db():
             _order("merchant-1", "277000002", "in_delivery", total=200),
             _order("merchant-1", "277000003", "delivered", total=300),
             _order("merchant-1", "277000004", "processing", total=400),
+            _order("merchant-1", "277000005", "مكتمل", total=500),
+            _order("merchant-1", "277000006", "completed", total=600,
+                   order_date_inferred=True),
             _order("merchant-1", "276000000", "completed",
                    order_date="2026-06-30"),
             _order("merchant-2", "277000099", "completed"),
@@ -185,6 +196,10 @@ def test_list_counts_three_eligible_statuses_and_exact_reference_only():
     assert report["summary"] == {
         "eligible_salla_orders": 3,
         "qoyod_invoices": 4,
+        "qoyod_distinct_references": 4,
+        "eligible_with_qoyod_invoice": 2,
+        "eligible_without_qoyod_invoice": 1,
+        "qoyod_outside_eligible": 3,
         "exact_reference_matches": 3,
         "unmatched_qoyod_invoices": 1,
         "latest_sync_at": "2026-08-12T11:00:00+00:00",
@@ -218,8 +233,69 @@ def test_list_counts_three_eligible_statuses_and_exact_reference_only():
         if item["reference"] == "276000000"
     )
     assert historical["exact_reference_match"] is True
-    # Neither the processing nor pre-floor order inflates eligibility.
+    # Neither processing, a non-approved alias, an inferred date, nor the
+    # pre-floor order inflates eligibility.  The real invoice dated before
+    # this report window still proves that eligible order 277000003 was sent.
     assert report["summary"]["eligible_salla_orders"] == 3
+
+
+def test_comparable_counts_use_distinct_references_not_invoice_rows():
+    db = _DB(
+        orders=[_order("merchant-1", "277000001", "completed")],
+        invoices=[
+            _invoice("main", "1401", "277000001"),
+            _invoice("main", "1402", "277000001"),
+            _invoice("main", "1403", None),
+        ],
+    )
+    report = _run(build_invoice_review(
+        db,
+        orders_user_id="merchant-1",
+        markers_user_id="main",
+        from_date="2026-07-01",
+        to_date="2026-08-12",
+    ))
+
+    assert report["summary"] == {
+        "eligible_salla_orders": 1,
+        "qoyod_invoices": 3,
+        "qoyod_distinct_references": 1,
+        "eligible_with_qoyod_invoice": 1,
+        "eligible_without_qoyod_invoice": 0,
+        "qoyod_outside_eligible": 0,
+        "exact_reference_matches": 2,
+        "unmatched_qoyod_invoices": 1,
+        "latest_sync_at": "2026-08-12T11:00:00+00:00",
+    }
+
+
+def test_salla_queries_are_scoped_to_range_and_invoice_references():
+    db = _review_db()
+    _run(build_invoice_review(
+        db,
+        orders_user_id="merchant-1",
+        markers_user_id="main",
+        from_date="2026-07-01",
+        to_date="2026-08-12",
+    ))
+
+    assert db.unified_orders.find_queries == [
+        {
+            "user_id": "merchant-1",
+            "order_date": {
+                "$gte": "2026-07-01",
+                "$lte": "2026-08-12",
+            },
+        },
+        {
+            "user_id": "merchant-1",
+            "order_number": {
+                "$in": [
+                    "276000000", "277000004", "NO-SALLA-REFERENCE",
+                ],
+            },
+        },
+    ]
 
 
 @pytest.mark.parametrize(
@@ -310,6 +386,10 @@ def test_excel_is_rtl_and_contains_summary_due_date_and_currency():
     assert invoice_sheet.cell(3, 6).value == "2026-08-20"
     assert invoice_sheet.cell(3, 7).value == "SAR"
     assert workbook["الملخص"]["B7"].value == 4  # invoices in range
+    assert workbook["الملخص"]["B8"].value == 4  # distinct references
+    assert workbook["الملخص"]["B9"].value == 2  # eligible matched
+    assert workbook["الملخص"]["B10"].value == 1  # eligible missing
+    assert workbook["الملخص"]["B11"].value == 3  # outside eligible
 
 
 def test_excel_formula_injection_is_neutralised_without_touching_numbers_dates():

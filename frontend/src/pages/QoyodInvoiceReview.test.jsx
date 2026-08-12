@@ -23,7 +23,11 @@ const payload = {
   last_sync_at: "2026-08-12T12:09:47Z",
   summary: {
     eligible_salla_orders: 1373,
+    eligible_with_qoyod_invoice: 1090,
+    eligible_without_qoyod_invoice: 283,
     qoyod_invoices: 1160,
+    qoyod_distinct_references: 1159,
+    qoyod_outside_eligible: 69,
   },
   items: [{
     qoyod_invoice_id: "1363",
@@ -87,12 +91,41 @@ test("loads the local Qoyod mirror from 2026-07-01 and renders the requested rep
     );
     expect(container.textContent).toContain("طلبات سلة المؤهلة");
     expect(container.textContent).toContain("1373");
+    expect(container.textContent).toContain("الموجودة في قيود");
+    expect(container.querySelector('[data-testid="qoyod-summary-found-value"]').textContent).toBe("1090");
+    expect(container.textContent).toContain("غير الموجودة في قيود");
+    expect(container.querySelector('[data-testid="qoyod-summary-missing-value"]').textContent).toBe("283");
     expect(container.textContent).toContain("فواتير قيود");
     expect(container.textContent).toContain("1160");
+    expect(container.textContent).toContain("خارج النطاق المؤهل: 69");
+    expect(container.textContent).toContain("المراجع الفريدة: 1159");
+    expect(container.textContent).toContain("ناتج مطابقة فعلية، وليس طرح إجمالي الفواتير");
     expect(container.textContent).toContain("277274465");
     expect(container.textContent).toContain("170.83 SAR");
     expect(container.textContent).toContain("مطابق برقم الطلب");
     expect(container.textContent).toContain("لا تدخل ضمن شروط الإرسال");
+  } finally {
+    await cleanup(container, root);
+  }
+});
+
+test("does not invent comparable counts from legacy raw totals", async () => {
+  api.get.mockResolvedValueOnce({
+    data: {
+      ...payload,
+      summary: {
+        eligible_salla_orders: 1373,
+        qoyod_invoices: 1160,
+      },
+    },
+  });
+  const { container, root } = await renderPage();
+  try {
+    expect(container.querySelector('[data-testid="qoyod-summary-eligible-value"]').textContent).toBe("1373");
+    expect(container.querySelector('[data-testid="qoyod-summary-invoices-value"]').textContent).toBe("1160");
+    expect(container.querySelector('[data-testid="qoyod-summary-found-value"]').textContent).toBe("—");
+    expect(container.querySelector('[data-testid="qoyod-summary-missing-value"]').textContent).toBe("—");
+    expect(container.textContent).toContain("ليس طرح إجمالي الفواتير من إجمالي الطلبات");
   } finally {
     await cleanup(container, root);
   }

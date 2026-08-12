@@ -59,18 +59,25 @@ function errorMessage(error, fallback) {
   return detail?.message || error?.response?.data?.error || error?.message || fallback;
 }
 
-function SummaryCard({ label, value, hint, tone }) {
-  const color = tone === "emerald"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-    : "border-sky-200 bg-sky-50 text-sky-950";
+function SummaryCard({ label, value, hint, tone, testId }) {
+  const colors = {
+    sky: "border-sky-200 bg-sky-50 text-sky-950",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-950",
+    amber: "border-amber-200 bg-amber-50 text-amber-950",
+    slate: "border-slate-200 bg-slate-50 text-slate-950",
+  };
   return (
-    <div className={`rounded-2xl border p-4 ${color}`}>
+    <div className={`rounded-2xl border p-4 ${colors[tone] || colors.sky}`} data-testid={testId}>
       <div className="text-xs font-extrabold opacity-70">{label}</div>
-      <div className="mt-2 text-3xl font-black" dir="ltr">{value ?? "—"}</div>
+      <div className="mt-2 text-3xl font-black" dir="ltr" data-testid={`${testId}-value`}>{value ?? "—"}</div>
       <div className="mt-1 text-xs font-semibold opacity-70">{hint}</div>
     </div>
   );
 }
+
+const firstDefined = (...values) => values.find(
+  (value) => value !== null && value !== undefined && value !== "",
+);
 
 export default function QoyodInvoiceReview() {
   const [fromDate, setFromDate] = useState(SYNC_START_DATE);
@@ -193,6 +200,24 @@ export default function QoyodInvoiceReview() {
 
   const items = data?.items || [];
   const summary = data?.summary || {};
+  const eligibleFound = firstDefined(
+    summary.eligible_with_qoyod_invoice,
+    summary.eligible_qoyod_matches,
+    summary.matched_eligible_orders,
+  );
+  const eligibleMissing = firstDefined(
+    summary.eligible_without_qoyod_invoice,
+    summary.eligible_missing_qoyod_invoice,
+    summary.missing_eligible_orders,
+  );
+  const outsideEligible = firstDefined(
+    summary.qoyod_outside_eligible,
+    summary.qoyod_invoices_outside_eligible,
+  );
+  const distinctReferences = firstDefined(
+    summary.qoyod_distinct_references,
+    summary.distinct_qoyod_references,
+  );
   const total = Number(data?.total || 0);
   const pages = Math.max(1, Number(data?.pages || 1));
   const currentPage = Math.min(page, pages);
@@ -225,19 +250,42 @@ export default function QoyodInvoiceReview() {
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label="طلبات سلة المؤهلة"
           value={data ? summary.eligible_salla_orders : undefined}
           hint={`من ${filters.fromDate} إلى ${filters.toDate}`}
           tone="sky"
+          testId="qoyod-summary-eligible"
+        />
+        <SummaryCard
+          label="الموجودة في قيود"
+          value={data ? eligibleFound : undefined}
+          hint="مطابقة تامة بين مرجع الفاتورة ورقم الطلب المؤهل"
+          tone="emerald"
+          testId="qoyod-summary-found"
+        />
+        <SummaryCard
+          label="غير الموجودة في قيود"
+          value={data ? eligibleMissing : undefined}
+          hint="المتبقي الحقيقي بعد المطابقة الدقيقة"
+          tone="amber"
+          testId="qoyod-summary-missing"
         />
         <SummaryCard
           label="فواتير قيود"
           value={data ? summary.qoyod_invoices : undefined}
-          hint="فواتير حقيقية محفوظة في ميزان ضمن الفترة"
-          tone="emerald"
+          hint={outsideEligible === undefined
+            ? "فواتير حقيقية محفوظة في ميزان ضمن الفترة"
+            : `خارج النطاق المؤهل: ${outsideEligible}${distinctReferences === undefined ? "" : ` · المراجع الفريدة: ${distinctReferences}`}`}
+          tone="slate"
+          testId="qoyod-summary-invoices"
         />
+      </div>
+
+      <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-semibold leading-6 text-sky-950" data-testid="qoyod-summary-method">
+        تتم المقارنة بمطابقة مرجع فاتورة قيود تماماً مع رقم طلب سلة داخل نطاق التاريخ والحالات المؤهلة.
+        عدد «غير الموجودة في قيود» ناتج مطابقة فعلية، وليس طرح إجمالي الفواتير من إجمالي الطلبات.
       </div>
 
       <form
