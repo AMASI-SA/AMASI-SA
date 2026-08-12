@@ -190,6 +190,7 @@ def simplify_row(row: dict, *,
 
 async def list_unsent_orders(
     db, *, user_id: str, days: int = 30, limit: int = 500,
+    orders_user_id: str | None = None,
     status: str | None = None,
     salla_status: str | None = None,
     search: str | None = None,
@@ -208,6 +209,23 @@ async def list_unsent_orders(
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))
     excluded_pre_sync = 0
+
+    # Qoyod accounting markers historically live under the singleton
+    # ``main`` tenant, while the live Salla refresh stores its newest inbox
+    # trace under the merchant's Orders owner.  Manual Plan-B sends therefore
+    # may place the authoritative marker on either side.  Read only those two
+    # explicit owners and de-duplicate by order number below; never scan every
+    # tenant for a matching order number.
+    inbox_user_ids = list(dict.fromkeys(
+        value
+        for value in (
+            str(user_id or "").strip(),
+            str(orders_user_id or "").strip(),
+        )
+        if value
+    ))
+    if not inbox_user_ids:
+        inbox_user_ids = [str(user_id)]
 
     # ── Preload قيود reference set (user directive 2026-07-09) ──
     # STRICT rule: any inbox row whose salla_order_number matches a
@@ -238,7 +256,13 @@ async def list_unsent_orders(
     grouped: dict[str, dict] = {}
     order_keys: list[str] = []
 
-    query: dict = {"user_id": user_id, "received_at": {"$gte": cutoff}}
+    inbox_owner_query: str | dict = inbox_user_ids[0]
+    if len(inbox_user_ids) > 1:
+        inbox_owner_query = {"$in": inbox_user_ids}
+    query: dict = {
+        "user_id": inbox_owner_query,
+        "received_at": {"$gte": cutoff},
+    }
     if search and str(search).strip():
         import re as _re
         query["salla_order_number"] = {
@@ -263,7 +287,12 @@ async def list_unsent_orders(
          "canonical_payload.payment_method": 1,
          "canonical_payload.order_status": 1,
          "canonical_payload.order_status_native": 1},
-    ).sort("received_at", -1).limit(max(1, min(limit, 2000)))
+    )
+    # Preserve roughly the same per-owner scan budget when both the legacy
+    # accounting tenant and the Orders owner are present.  The result is still
+    # collapsed to one row per order below.
+    scan_limit = max(1, min(limit * len(inbox_user_ids), 5000))
+    cursor = cursor.sort("received_at", -1).limit(scan_limit)
 
     async for row in cursor:
         # ── Integration start date — hard scope boundary ─────────────
@@ -334,6 +363,14 @@ async def list_unsent_orders(
                 if prev.get(f) in (None, "") \
                         and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
+
+    # ``limit`` is the public result cap, not a per-owner cap.  We scan a
+    # larger two-owner window above so one tenant's status trace cannot evict
+    # the other's authoritative marker, then apply the documented cap after
+    # cross-owner de-duplication.
+    if len(order_keys) > limit:
+        order_keys = order_keys[:limit]
+        grouped = {key: grouped[key] for key in order_keys}
 
     # Daily operations must only call an order "لم يُرسل" when its
     # CURRENT Salla status is eligible for invoicing. Historical inbox

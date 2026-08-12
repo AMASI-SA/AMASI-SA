@@ -3238,6 +3238,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         return await list_unsent_orders(
             db,
             user_id=tenant,
+            orders_user_id=orders_owner_id(user),
             days=days,
             limit=limit,
             status=status,
