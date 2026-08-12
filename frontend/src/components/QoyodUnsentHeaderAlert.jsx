@@ -21,7 +21,7 @@ export default function QoyodUnsentHeaderAlert() {
             const { data } = await api.get(`${QOYOD_BASE}/unsent-orders`, {
                 params: {
                     days: 365,
-                    limit: 1000,
+                    limit: 5000,
                     status: "لم يُرسل",
                 },
             });
