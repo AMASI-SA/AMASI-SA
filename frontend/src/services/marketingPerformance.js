@@ -1,5 +1,6 @@
 import api from "../lib/api";
 import { getAdsManagerOverview } from "./adsManager";
+import { retryAdsRead } from "./adsReadRetry";
 import { getIntegrationsOverview } from "./integrationsV2";
 
 export const MARKETING_PLATFORMS = Object.freeze([
@@ -442,7 +443,7 @@ export async function getMarketingPerformance({
         // Snapchat validates report dates in each ad account's timezone. Resolve
         // the earliest local day first so Riyadh's next calendar day is never
         // sent to an account that is still on the previous day.
-        const integrations = await getIntegrationsOverview();
+        const integrations = await retryAdsRead(() => getIntegrationsOverview());
         const integration = integrations.providers.find(
             (row) => row.provider === "snapchat_ads",
         ) || {};
@@ -451,7 +452,7 @@ export async function getMarketingPerformance({
             { dateFrom, dateTo },
             accountLocalToday,
         );
-        const reportResponse = await api.get(
+        const reportResponse = await retryAdsRead(() => api.get(
             "/integrations-v2/snapchat_ads/campaign-report",
             {
                 params: {
@@ -473,7 +474,7 @@ export async function getMarketingPerformance({
                         : "conversion",
                 },
             },
-        );
+        ));
         const normalized = normalizeSnapchatMarketingWorkspace(
             reportResponse.data,
             integration,
