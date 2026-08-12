@@ -472,3 +472,59 @@ async def test_systemic_error_still_trips_breaker_and_stops_batch(monkeypatch):
     assert result["status"] == "stopped_on_error"
     assert result["sent_count"] == 0
     assert result["manual_review_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
+    monkeypatch,
+):
+    sent = []
+    breaker_calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        sent.append(order_number)
+        return {"invoice_id": 901, "payment_id": 902}
+
+    async def fake_trip(db, **kwargs):
+        breaker_calls.append(kwargs)
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("276776919"), _candidate("276565610")],
+        send_one=fake_send,
+        trip_breaker=fake_trip,
+    )
+
+    async def fake_refresh(db, *, orders_user_id, order_number):
+        if order_number == "276776919":
+            raise ManualSendRefused(
+                "salla_status_refresh_failed",
+                "تعذر التحقق من الحالة الحالية للطلب في سلة",
+                {
+                    "stage": "fetch_order_details",
+                    "needs_reauth": False,
+                },
+            )
+        return True, {
+            "ok": True,
+            "found": True,
+            "plan_b_status_snapshot": {"status_native": "تم التنفيذ"},
+        }
+
+    monkeypatch.setattr(
+        auto_send, "_refresh_and_verify_salla_status", fake_refresh
+    )
+
+    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+
+    assert breaker_calls == []
+    assert sent == ["276565610"]
+    assert result["ok"] is True
+    assert result["status"] == "succeeded"
+    assert result["sent_count"] == 1
+    assert result["retry_later_count"] == 1
+    assert result["results"][0]["outcome"] == "retry_later"
+    assert result["results"][0]["order_number"] == "276776919"
+    assert result["results"][1]["outcome"] == "sent"

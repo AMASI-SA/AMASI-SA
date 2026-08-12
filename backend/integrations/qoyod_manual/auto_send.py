@@ -63,6 +63,16 @@ _PER_ORDER_MANUAL_REVIEW_CODES = frozenset({
     "rounding_adjustment_product_missing",
 })
 
+# A Salla status refresh happens before any Qoyod mutation.  A transient
+# timeout or one temporarily unreadable order is therefore safe to defer:
+# no invoice can be created without the authoritative status check.  Keep
+# these failures out of the permanent quarantine so the next 15-second tick
+# retries them, and do not let one Salla read failure block healthy orders
+# later in the same batch.
+_PER_ORDER_RETRY_CODES = frozenset({
+    "salla_status_refresh_failed",
+})
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -511,6 +521,15 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         "code": exc.code,
                     })
                     continue
+                if exc.code in _PER_ORDER_RETRY_CODES:
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "retry_later",
+                        "code": exc.code,
+                        "message": exc.message,
+                        "detail": exc.extra,
+                    })
+                    continue
                 if exc.code in _PER_ORDER_MANUAL_REVIEW_CODES:
                     await _quarantine_order(
                         db,
@@ -565,6 +584,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         manual_review_count = sum(
             r["outcome"] == "manual_review" for r in results
         )
+        retry_later_count = sum(
+            r["outcome"] == "retry_later" for r in results
+        )
         result = {
             "ok": not stopped,
             "status": "stopped_on_error" if stopped else "succeeded",
@@ -572,6 +594,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
+            "retry_later_count": retry_later_count,
             "results": results,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
