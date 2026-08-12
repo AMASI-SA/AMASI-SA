@@ -59,6 +59,9 @@ PERMISSIONS = {
     "inventory.salla_sync.read",
     "inventory.salla_sync.manage_mappings",
     "inventory.salla_sync.publish",
+    "customer_intelligence.inbox.read",
+    "customer_intelligence.suggestions.review",
+    "customer_intelligence.escalate",
 }
 
 ROLE_CATALOG = {
@@ -81,6 +84,9 @@ ROLE_CATALOG = {
     }),
     "customer_service": sorted({
         "products.read", "fulfillment.stop.manage",
+        "customer_intelligence.inbox.read",
+        "customer_intelligence.suggestions.review",
+        "customer_intelligence.escalate",
     }),
     "cost_manager": sorted({
         "products.read", "products.cost.read", "products.cost.write", "audit.read",
@@ -184,6 +190,30 @@ def effective_permissions(assignment: dict[str, Any] | None) -> list[str]:
     return sorted(base)
 
 
+async def merged_session_permissions(
+    db: Any,
+    user: dict[str, Any],
+    legacy_permissions: set[str] | list[str],
+) -> list[str]:
+    """Merge Employee OS permissions into `/auth/me` without role leakage.
+
+    Only the account Owner automatically receives every operational
+    permission. Legacy Admin and other legacy roles receive Customer
+    Intelligence capabilities only through an enabled V2 role assignment.
+    """
+    merged = {str(value) for value in legacy_permissions if str(value)}
+    role = str(user.get("role") or "").strip().casefold()
+    if role == "owner" or user.get("is_owner") is True:
+        merged |= PERMISSIONS
+    else:
+        assignment = await db[ROLE_ASSIGNMENTS].find_one(
+            {"user_id": str(user.get("id") or "")},
+            {"_id": 0},
+        )
+        merged |= set(effective_permissions(assignment))
+    return sorted(merged)
+
+
 __all__ = [
     "AI_ACTION_LOG",
     "PERMISSIONS",
@@ -192,5 +222,6 @@ __all__ = [
     "ROLE_CATALOG",
     "ROLE_LABELS",
     "effective_permissions",
+    "merged_session_permissions",
     "validate_assignment",
 ]

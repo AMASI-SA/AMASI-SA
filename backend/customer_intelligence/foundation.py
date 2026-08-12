@@ -148,7 +148,7 @@ class ConversationMessageRecord(FoundationRecord):
     analysis_status: Literal["pending", "ready", "failed", "not_requested"] = (
         "pending"
     )
-    delivery_state: Literal["received", "sent", "delivered", "failed"]
+    delivery_state: Literal["received", "sent", "delivered", "read", "failed"]
     created_at: datetime
     plaintext_content_stored: Literal[False] = False
 
@@ -166,6 +166,11 @@ async def ensure_customer_intelligence_foundation_indexes(db: Any) -> None:
     # The identity vault and its unified-order memory indexes are part of this
     # logical foundation and must exist before channel records are accepted.
     await ensure_customer_identity_indexes(db)
+    # Kept as a lazy import so the channel foundation stays usable in
+    # receive-only deployments where the optional OpenAI SDK is absent.
+    from .reply_suggestions import ensure_reply_suggestion_indexes
+
+    await ensure_reply_suggestion_indexes(db)
 
     customers = getattr(db, CUSTOMERS_COLLECTION)
     await customers.create_index(

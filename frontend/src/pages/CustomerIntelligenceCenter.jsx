@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import {
     ArrowClockwise,
     ChartLineUp,
@@ -34,11 +35,13 @@ import {
 } from "../components/customerIntelligence/CustomerIntelligencePanels";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    createCustomerIntelligenceReplySuggestion,
     customerIntelligenceWritesLocked,
     getCustomerIntelligenceInbox,
     getCustomerIntelligenceWorkspace,
     normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
+    reviewCustomerIntelligenceReplySuggestion,
 } from "../services/customerIntelligence";
 
 export const CUSTOMER_INTELLIGENCE_TABS = [
@@ -74,11 +77,30 @@ function LoadingPanel() {
     );
 }
 
-function renderActivePanel({ activeTab, model, writesLocked, inbox, inboxError }) {
+function renderActivePanel({
+    activeTab,
+    model,
+    writesLocked,
+    inbox,
+    inboxError,
+    onCreateSuggestion,
+    onReviewSuggestion,
+    onRejectSuggestion,
+    onEscalateSuggestion,
+}) {
     const common = { model };
     switch (activeTab) {
         case "conversations":
-            return <ConversationsPanel inbox={inbox} error={inboxError} />;
+            return (
+                <ConversationsPanel
+                    inbox={inbox}
+                    error={inboxError}
+                    onCreateSuggestion={onCreateSuggestion}
+                    onReviewSuggestion={onReviewSuggestion}
+                    onRejectSuggestion={onRejectSuggestion}
+                    onEscalateSuggestion={onEscalateSuggestion}
+                />
+            );
         case "customers":
             return <CustomersPanel {...common} />;
         case "followups":
@@ -129,10 +151,20 @@ export function CustomerIntelligenceCenterView({
     refreshing = false,
     error = "",
     inboxError = "",
+    onCreateSuggestion = null,
+    onReviewSuggestion = null,
+    onRejectSuggestion = null,
+    onEscalateSuggestion = null,
+    isOwner = true,
 }) {
     const normalized = normalizeCustomerIntelligenceWorkspace(model);
     const normalizedInbox = normalizeCustomerIntelligenceInbox(inbox);
-    const selectedTab = tabIsSupported(activeTab) ? activeTab : "overview";
+    const selectedTab = isOwner && tabIsSupported(activeTab)
+        ? activeTab
+        : "conversations";
+    const visibleTabs = isOwner
+        ? CUSTOMER_INTELLIGENCE_TABS
+        : CUSTOMER_INTELLIGENCE_TABS.filter((tab) => tab.id === "conversations");
     const writesLocked = customerIntelligenceWritesLocked(normalized.safety_policy);
     const liveInbox = selectedTab === "conversations";
     const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
@@ -220,7 +252,7 @@ export function CustomerIntelligenceCenterView({
                         </div>
                         <p className="mt-1 text-xs leading-5">{liveInbox ? inboxError : error}</p>
                         <p className="mt-1 text-xs font-bold">
-                            لم تُستخدم بيانات محلية بديلة. أعد التحديث بعد التحقق من Backend.
+                            لم تُعرض بيانات بديلة. أعد التحديث بعد التحقق من Backend.
                         </p>
                     </div>
                 </div>
@@ -228,7 +260,7 @@ export function CustomerIntelligenceCenterView({
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 [scrollbar-width:thin]">
                 <nav className="flex min-w-max gap-2" aria-label="أقسام مركز ذكاء العملاء">
-                    {CUSTOMER_INTELLIGENCE_TABS.map(({ id, label, Icon }) => {
+                    {visibleTabs.map(({ id, label, Icon }) => {
                         const active = selectedTab === id;
                         return (
                             <button
@@ -257,6 +289,10 @@ export function CustomerIntelligenceCenterView({
                 writesLocked,
                 inbox: normalizedInbox,
                 inboxError,
+                onCreateSuggestion,
+                onReviewSuggestion,
+                onRejectSuggestion,
+                onEscalateSuggestion,
             })}
         </div>
     );
@@ -270,9 +306,13 @@ function errorMessage(error, fallback) {
 }
 
 export default function CustomerIntelligenceCenter() {
+    const { user } = useAuth();
+    const isOwner = user?.is_owner === true;
     const [searchParams, setSearchParams] = useSearchParams();
     const requestedTab = searchParams.get("tab") || "overview";
-    const activeTab = tabIsSupported(requestedTab) ? requestedTab : "overview";
+    const activeTab = isOwner && tabIsSupported(requestedTab)
+        ? requestedTab
+        : "conversations";
     const [model, setModel] = useState(() => normalizeCustomerIntelligenceWorkspace({}));
     const [inbox, setInbox] = useState(() => normalizeCustomerIntelligenceInbox({}));
     const [loading, setLoading] = useState(true);
@@ -318,22 +358,57 @@ export default function CustomerIntelligenceCenter() {
         }
     }, []);
 
+    const createSuggestion = useCallback(async (conversationId) => {
+        await createCustomerIntelligenceReplySuggestion(conversationId);
+        await loadInbox({ refresh: true });
+    }, [loadInbox]);
+
+    const reviewSuggestion = useCallback(async (
+        decision,
+        conversationId,
+        suggestionId,
+        review,
+    ) => {
+        await reviewCustomerIntelligenceReplySuggestion({
+            conversationId,
+            suggestionId,
+            decision,
+            text: review?.text,
+            version: review?.version,
+        });
+        await loadInbox({ refresh: true });
+    }, [loadInbox]);
+
     useEffect(() => {
-        load();
-    }, [load]);
+        if (isOwner) {
+            load();
+            return;
+        }
+        setModel(normalizeCustomerIntelligenceWorkspace({}));
+        setError("");
+        setLoading(false);
+    }, [isOwner, load]);
 
     useEffect(() => {
         if (activeTab === "conversations") loadInbox();
     }, [activeTab, loadInbox]);
 
+    useEffect(() => {
+        if (isOwner || requestedTab === "conversations") return;
+        const next = new URLSearchParams(searchParams);
+        next.set("tab", "conversations");
+        setSearchParams(next, { replace: true });
+    }, [isOwner, requestedTab, searchParams, setSearchParams]);
+
     const selectTab = useCallback((tab) => {
+        if (!isOwner && tab !== "conversations") return;
         if (tab === "conversations" && activeTab !== "conversations") {
             setInboxLoading(true);
         }
         const next = new URLSearchParams(searchParams);
         next.set("tab", tab);
         setSearchParams(next, { replace: true });
-    }, [activeTab, searchParams, setSearchParams]);
+    }, [activeTab, isOwner, searchParams, setSearchParams]);
 
     const viewProps = useMemo(() => ({
         model,
@@ -349,6 +424,17 @@ export default function CustomerIntelligenceCenter() {
         refreshing: activeTab === "conversations" ? inboxRefreshing : refreshing,
         error,
         inboxError,
+        isOwner,
+        onCreateSuggestion: createSuggestion,
+        onReviewSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("approve", conversationId, suggestionId, review)
+        ),
+        onRejectSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("reject", conversationId, suggestionId, review)
+        ),
+        onEscalateSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("escalate", conversationId, suggestionId, review)
+        ),
     }), [
         activeTab,
         error,
@@ -356,12 +442,15 @@ export default function CustomerIntelligenceCenter() {
         inboxError,
         inboxLoading,
         inboxRefreshing,
+        isOwner,
         load,
         loadInbox,
         loading,
         model,
         refreshing,
+        reviewSuggestion,
         selectTab,
+        createSuggestion,
     ]);
 
     return <CustomerIntelligenceCenterView {...viewProps} />;

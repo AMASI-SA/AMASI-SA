@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 import customer_identity
+from ai_store_access_contract import ROLE_ASSIGNMENTS
 from customer_intelligence.foundation import (
     CHANNELS_COLLECTION,
     CONVERSATIONS_COLLECTION,
@@ -32,14 +33,21 @@ CONVERSATION_ID = "conv_live_1"
 
 
 def _matches(document, selector):
+    if "$and" in selector and not all(
+        _matches(document, option) for option in selector["$and"]
+    ):
+        return False
     if "$or" in selector and not any(
         _matches(document, option) for option in selector["$or"]
     ):
         return False
     for key, expected in selector.items():
-        if key == "$or":
+        if key in {"$or", "$and"}:
             continue
-        if document.get(key) != expected:
+        if isinstance(expected, dict) and "$exists" in expected:
+            if (key in document) is not bool(expected["$exists"]):
+                return False
+        elif document.get(key) != expected:
             return False
     return True
 
@@ -311,6 +319,111 @@ async def test_live_inbox_marks_corrupt_ciphertext_without_leaking_it():
 
 
 @pytest.mark.asyncio
+async def test_live_inbox_shows_employee_echo_as_history_not_as_ai_suggestion():
+    db = _db()
+    outbound = ConversationMessageRecord(
+        user_id=OWNER["id"],
+        merchant_id=MERCHANT_ID,
+        message_id="msg_employee_echo_1",
+        conversation_id=CONVERSATION_ID,
+        channel_id=CHANNEL_ID,
+        customer_id=CUSTOMER_ID,
+        external_message_key="external:v1:hidden-echo",
+        direction="outbound",
+        sender_type="employee",
+        content_type="text",
+        content_ciphertext=customer_identity.encrypt_private_payload(
+            {"content_type": "text", "payload": {"text": "أهلًا، تم الرد من واتساب."}}
+        ),
+        content_fields=["text"],
+        source_event="360dialog.smb_message_echo",
+        occurred_at=NOW + timedelta(seconds=1),
+        received_at=NOW + timedelta(seconds=1),
+        analysis_status="not_requested",
+        delivery_state="read",
+        created_at=NOW + timedelta(seconds=1),
+    ).model_dump()
+    db.collections[CONVERSATION_MESSAGES_COLLECTION].documents.append(outbound)
+
+    payload = await CustomerIntelligenceInboxService(
+        db,
+        now=lambda: NOW + timedelta(seconds=2),
+    ).inbox(owner_user_id=OWNER["id"])
+
+    conversation = payload.conversations[0]
+    assert conversation.message_count == 2
+    assert conversation.messages[-1].direction == "outbound"
+    assert conversation.messages[-1].sender == "employee"
+    assert conversation.messages[-1].delivery_state == "read"
+    assert conversation.reply_suggestion is None
+
+
+@pytest.mark.asyncio
+async def test_customer_service_inbox_only_contains_assigned_conversations():
+    db = _db()
+    assigned = db.collections[CONVERSATIONS_COLLECTION].documents[0]
+    assigned["assigned_employee_id"] = "employee-live"
+    unassigned = deepcopy(assigned)
+    unassigned.update(
+        {
+            "conversation_id": "conv_unassigned",
+            "customer_id": "cust_unassigned",
+            "assigned_employee_id": None,
+            "external_conversation_key": "external:v1:unassigned",
+            "last_message_at": NOW - timedelta(minutes=1),
+        }
+    )
+    assigned_to_other = deepcopy(assigned)
+    assigned_to_other.update(
+        {
+            "conversation_id": "conv_not_assigned",
+            "customer_id": "cust_not_assigned",
+            "assigned_employee_id": "another-employee",
+            "external_conversation_key": "external:v1:not-assigned",
+            "last_message_at": NOW - timedelta(minutes=2),
+        }
+    )
+    db.collections[CONVERSATIONS_COLLECTION].documents.extend(
+        [unassigned, assigned_to_other]
+    )
+    db.collections[ROLE_ASSIGNMENTS] = FakeCollection(
+        [
+            {
+                "user_id": "employee-live",
+                "role_key": "customer_service",
+                "enabled": True,
+            }
+        ]
+    )
+
+    async def current_user():
+        return {
+            "id": "employee-live",
+            "role": "employee",
+            "created_by": OWNER["id"],
+        }
+
+    app = FastAPI()
+    app.include_router(
+        make_customer_intelligence_router(current_user, db=db),
+        prefix="/api",
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/customer-intelligence/v1/inbox")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["conversation_count"] == 2
+    assert [row["conversation_id"] for row in payload["conversations"]] == [
+        CONVERSATION_ID,
+        "conv_unassigned",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_owner_inbox_route_is_get_only_and_disables_browser_caching():
     async def current_user():
         return deepcopy(OWNER)
@@ -347,13 +460,19 @@ async def test_live_inbox_is_owner_only_before_database_read():
             raise AssertionError("unauthorized user reached live inbox")
 
     async def current_user():
-        return {"id": "employee-live", "role": "employee"}
+        return {
+            "id": "employee-live",
+            "role": "employee",
+            "created_by": OWNER["id"],
+        }
 
     service = SpyService()
     app = FastAPI()
+    db = _db()
     app.include_router(
         make_customer_intelligence_router(
             current_user,
+            db=db,
             inbox_service=service,
         ),
         prefix="/api",
@@ -365,7 +484,8 @@ async def test_live_inbox_is_owner_only_before_database_read():
         response = await client.get("/api/customer-intelligence/v1/inbox")
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "owner_only"
+    assert response.json()["detail"]["code"] == "customer_intelligence_permission_required"
+    assert response.json()["detail"]["permission"] == "customer_intelligence.inbox.read"
     assert service.calls == 0
 
 

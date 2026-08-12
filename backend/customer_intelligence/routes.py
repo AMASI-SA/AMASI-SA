@@ -1,13 +1,28 @@
-"""Owner-only, GET-only routes for Customer Intelligence Phase 1."""
+"""Tenant-scoped Customer Intelligence preview, inbox and draft-review routes."""
 from __future__ import annotations
 
 import os
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+
+from ai_store_access_contract import PERMISSIONS, ROLE_ASSIGNMENTS, effective_permissions
 
 from .inbox import CustomerIntelligenceInboxService, LiveInboxResponse
 from .models import CustomerIntelligenceWorkspaceResponse
+from .reply_suggestions import (
+    ESCALATE_PERMISSION,
+    INBOX_READ_PERMISSION,
+    SUGGESTION_REVIEW_PERMISSION,
+    ConversationNotFound,
+    CustomerIntelligenceActor,
+    ReplySuggestionConflict,
+    ReplySuggestionNotFound,
+    ReplySuggestionProviderError,
+    ReplySuggestionPublic,
+    ReplySuggestionReviewIn,
+    ReplySuggestionService,
+)
 from .service import CustomerIntelligencePreviewService
 
 
@@ -62,12 +77,82 @@ def _require_owner(user: Any) -> dict:
     return user
 
 
+async def _actor_context(db: Any, user: Any) -> CustomerIntelligenceActor:
+    if not isinstance(user, dict) or not str(user.get("id") or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "authenticated_user_missing_id"},
+        )
+    actor_id = str(user["id"]).strip()
+    role = str(user.get("role") or "").strip().casefold()
+    if role == "owner" or user.get("is_owner") is True:
+        return CustomerIntelligenceActor(
+            actor_id=actor_id,
+            owner_user_id=actor_id,
+            permissions=frozenset(PERMISSIONS),
+            is_owner=True,
+        )
+    owner_user_id = str(user.get("created_by") or "").strip()
+    if not owner_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "employee_store_not_linked"},
+        )
+    assignment = await getattr(db, ROLE_ASSIGNMENTS).find_one(
+        {"user_id": actor_id},
+        {"_id": 0},
+    )
+    return CustomerIntelligenceActor(
+        actor_id=actor_id,
+        owner_user_id=owner_user_id,
+        permissions=frozenset(effective_permissions(assignment)),
+        is_owner=False,
+    )
+
+
+def _require_actor_permission(
+    actor: CustomerIntelligenceActor,
+    permission: str,
+) -> None:
+    if permission not in actor.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "customer_intelligence_permission_required",
+                "permission": permission,
+            },
+        )
+
+
+def _reply_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, (ConversationNotFound, ReplySuggestionNotFound)):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code},
+        )
+    if isinstance(exc, ReplySuggestionProviderError):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": exc.code},
+        )
+    if isinstance(exc, ReplySuggestionConflict):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code},
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={"code": "reply_suggestion_failed"},
+    )
+
+
 def make_customer_intelligence_router(
     current_user: Callable,
     *,
     db: Any | None = None,
     service: CustomerIntelligencePreviewService | None = None,
     inbox_service: CustomerIntelligenceInboxService | None = None,
+    reply_suggestion_service: ReplySuggestionService | None = None,
 ) -> APIRouter:
     router = APIRouter(
         prefix="/customer-intelligence/v1",
@@ -113,13 +198,101 @@ def make_customer_intelligence_router(
             offset: int = Query(default=0, ge=0, le=10_000),
             user: dict = Depends(current_user),
         ) -> LiveInboxResponse:
-            owner = _require_owner(user)
+            actor = await _actor_context(db, user)
+            _require_actor_permission(actor, INBOX_READ_PERMISSION)
             response.headers["Cache-Control"] = "no-store, private"
             return await live_service.inbox(
-                owner_user_id=str(owner["id"]),
+                owner_user_id=actor.owner_user_id,
+                actor_id=actor.actor_id,
+                is_owner=actor.is_owner,
                 limit=limit,
                 messages_limit=messages_limit,
                 offset=offset,
             )
+
+    suggestions = reply_suggestion_service or (
+        ReplySuggestionService(db) if db is not None else None
+    )
+    if suggestions is not None and _live_inbox_enabled():
+
+        @router.post(
+            "/conversations/{conversation_id}/reply-suggestion",
+            response_model=ReplySuggestionPublic,
+            status_code=status.HTTP_201_CREATED,
+        )
+        async def create_reply_suggestion(
+            conversation_id: str,
+            response: Response,
+            user: dict = Depends(current_user),
+        ) -> ReplySuggestionPublic:
+            actor = await _actor_context(db, user)
+            _require_actor_permission(actor, INBOX_READ_PERMISSION)
+            _require_actor_permission(actor, SUGGESTION_REVIEW_PERMISSION)
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await suggestions.create(
+                    actor=actor,
+                    conversation_id=conversation_id,
+                )
+            except (
+                ConversationNotFound,
+                ReplySuggestionConflict,
+                ReplySuggestionProviderError,
+            ) as exc:
+                raise _reply_error(exc) from exc
+
+        @router.get(
+            "/conversations/{conversation_id}/reply-suggestion",
+            response_model=ReplySuggestionPublic | None,
+        )
+        async def get_reply_suggestion(
+            conversation_id: str,
+            response: Response,
+            user: dict = Depends(current_user),
+        ) -> ReplySuggestionPublic | None:
+            actor = await _actor_context(db, user)
+            _require_actor_permission(actor, INBOX_READ_PERMISSION)
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await suggestions.latest(
+                    actor=actor,
+                    conversation_id=conversation_id,
+                )
+            except (ConversationNotFound, ReplySuggestionConflict) as exc:
+                raise _reply_error(exc) from exc
+
+        @router.post(
+            "/conversations/{conversation_id}/reply-suggestion/{suggestion_id}/review",
+            response_model=ReplySuggestionPublic,
+        )
+        async def review_reply_suggestion(
+            conversation_id: str,
+            suggestion_id: str,
+            response: Response,
+            review: ReplySuggestionReviewIn = Body(...),
+            user: dict = Depends(current_user),
+        ) -> ReplySuggestionPublic:
+            actor = await _actor_context(db, user)
+            _require_actor_permission(actor, INBOX_READ_PERMISSION)
+            permission = (
+                ESCALATE_PERMISSION
+                if review.decision == "escalate"
+                else SUGGESTION_REVIEW_PERMISSION
+            )
+            _require_actor_permission(actor, permission)
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await suggestions.review(
+                    actor=actor,
+                    conversation_id=conversation_id,
+                    suggestion_id=suggestion_id,
+                    review=review,
+                )
+            except (
+                ConversationNotFound,
+                ReplySuggestionNotFound,
+                ReplySuggestionConflict,
+            ) as exc:
+                raise _reply_error(exc) from exc
 
     return router

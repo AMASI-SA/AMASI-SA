@@ -28,6 +28,13 @@ const LIVE_INBOX_CONVERSATION_STATUSES = new Set([
     "closed",
 ]);
 
+const LIVE_INBOX_EMPLOYEE_DELIVERY_STATES = new Set([
+    "sent",
+    "delivered",
+    "read",
+    "failed",
+]);
+
 const EMPTY_LIVE_INBOX = {
     schema_version: null,
     generated_at: null,
@@ -187,20 +194,58 @@ function timestamp(value) {
 function normalizeLiveInboxMessage(message, index) {
     const source = object(message);
     const kind = text(source.kind);
+    const employeeEcho = source.direction === "outbound" && source.sender === "employee";
     return {
         id: text(source.message_id || source.id) || `live-message-${index + 1}`,
-        // The live endpoint is receive-only. Do not let an unexpected payload
-        // turn this rendering model into an outbound surface.
-        direction: "inbound",
-        sender: "customer",
+        // An outbound employee echo is history received from WhatsApp, not a
+        // UI send capability and never a substitute for reply_suggestion.
+        direction: employeeEcho ? "outbound" : "inbound",
+        sender: employeeEcho ? "employee" : "customer",
         kind: LIVE_INBOX_MESSAGE_KINDS.has(kind) ? kind : "interactive",
         body: text(source.body),
         caption: text(source.caption),
         filename: text(source.filename),
         mime_type: text(source.mime_type),
         occurred_at: timestamp(source.occurred_at),
-        delivery_state: "received",
+        delivery_state: employeeEcho ? text(source.delivery_state) : "received",
         content_available: source.content_available === true,
+    };
+}
+
+function normalizePendingReplySuggestion(value, conversationId) {
+    if (!isObject(value)) return null;
+    const source = object(value);
+    const rawSuggestionId = source.suggestion_id ?? source.id;
+    const suggestionId = typeof rawSuggestionId === "string"
+        ? rawSuggestionId.trim()
+        : "";
+    const suggestionText = typeof source.text === "string" ? source.text.trim() : "";
+    const version = Number.isInteger(source.version) && source.version >= 1
+        ? source.version
+        : 0;
+
+    // A reply suggestion is a separate, explicit approval object. Never infer
+    // one from an outbound/employee message echo or from arbitrary text fields.
+    if (
+        source.status !== "pending_approval"
+        || source.requires_human_approval !== true
+        || source.send_allowed !== false
+        || !suggestionId
+        || !suggestionText
+        || version < 1
+    ) {
+        return null;
+    }
+
+    return {
+        id: suggestionId,
+        conversation_id: conversationId,
+        status: "pending_approval",
+        text: suggestionText,
+        version,
+        requires_human_approval: true,
+        send_allowed: false,
+        created_at: timestamp(source.created_at),
     };
 }
 
@@ -210,13 +255,18 @@ function normalizeLiveInboxConversation(conversation, index) {
     const messages = array(source.messages)
         .filter((message) => {
             const row = object(message);
-            return row.direction === "inbound"
+            const inboundCustomer = row.direction === "inbound"
                 && row.sender === "customer"
                 && row.delivery_state === "received";
+            const outboundEmployee = row.direction === "outbound"
+                && row.sender === "employee"
+                && LIVE_INBOX_EMPLOYEE_DELIVERY_STATES.has(row.delivery_state);
+            return inboundCustomer || outboundEmployee;
         })
         .map(normalizeLiveInboxMessage);
+    const id = text(source.conversation_id || source.id) || `live-conversation-${index + 1}`;
     return {
-        id: text(source.conversation_id || source.id) || `live-conversation-${index + 1}`,
+        id,
         customer_name: text(source.customer_name) || "عميل واتساب",
         channel: "whatsapp",
         status: LIVE_INBOX_CONVERSATION_STATUSES.has(status) ? status : "open",
@@ -227,6 +277,7 @@ function normalizeLiveInboxConversation(conversation, index) {
             source.content_unavailable_count,
         ),
         messages,
+        reply_suggestion: normalizePendingReplySuggestion(source.reply_suggestion, id),
     };
 }
 
@@ -255,11 +306,14 @@ function normalizeMessage(message, index) {
 function normalizeConversation(conversation, index) {
     const source = object(conversation);
     const messages = array(source.messages).map(normalizeMessage);
-    const suggestedReply = messages.find(
-        (message) => message.direction === "outbound" && message.body,
-    )?.body || "";
+    const conversationId = text(source.conversation_id || source.id)
+        || `conversation-${index + 1}`;
+    const replySuggestion = normalizePendingReplySuggestion(
+        source.reply_suggestion,
+        conversationId,
+    );
     return {
-        id: text(source.conversation_id || source.id) || `conversation-${index + 1}`,
+        id: conversationId,
         customer_id: text(source.customer_id),
         customer_name: text(source.customer_label || source.customer_name),
         channel: text(source.channel),
@@ -273,7 +327,8 @@ function normalizeConversation(conversation, index) {
         ai_summary: text(source.ai_summary || source.last_message),
         next_best_action: text(source.next_best_action)
             || (source.assigned_to ? `مراجعة بواسطة: ${text(source.assigned_to)}` : ""),
-        suggested_reply: text(source.suggested_reply) || suggestedReply,
+        suggested_reply: replySuggestion?.text || "",
+        reply_suggestion: replySuggestion,
         last_message_at: source.last_message_at || null,
         messages,
     };
@@ -711,6 +766,46 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
 export async function getCustomerIntelligenceInbox() {
     const response = await api.get("/customer-intelligence/v1/inbox");
     return normalizeCustomerIntelligenceInbox(response.data);
+}
+
+function replySuggestionPath(conversationId) {
+    const id = text(conversationId);
+    if (!id) throw new Error("conversation_id is required");
+    return `/customer-intelligence/v1/conversations/${encodeURIComponent(id)}/reply-suggestion`;
+}
+
+export async function createCustomerIntelligenceReplySuggestion(conversationId) {
+    const response = await api.post(replySuggestionPath(conversationId), {});
+    return response.data;
+}
+
+export async function reviewCustomerIntelligenceReplySuggestion({
+    conversationId,
+    suggestionId,
+    decision,
+    text: reviewedText = "",
+    version,
+    note = "",
+}) {
+    const id = text(suggestionId);
+    const allowedDecision = ["approve", "reject", "escalate"].includes(decision);
+    if (!id) throw new Error("suggestion_id is required");
+    if (!allowedDecision) throw new Error("unsupported reply suggestion decision");
+    const normalizedVersion = nonNegativeInteger(version);
+    if (normalizedVersion < 1) throw new Error("suggestion version is required");
+
+    const response = await api.post(
+        `${replySuggestionPath(conversationId)}/${encodeURIComponent(id)}/review`,
+        {
+            decision,
+            version: normalizedVersion,
+            ...(decision === "approve" && text(reviewedText)
+                ? { text: text(reviewedText) }
+                : {}),
+            ...(text(note) ? { note: text(note) } : {}),
+        },
+    );
+    return response.data;
 }
 
 export const CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS = [...READ_ONLY_KEYS];

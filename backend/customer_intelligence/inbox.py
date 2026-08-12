@@ -1,4 +1,4 @@
-"""Owner-only, receive-only view of persisted customer conversations.
+"""Permission-scoped, no-egress view of persisted customer conversations.
 
 The WhatsApp webhook stores customer identity and message content encrypted at
 rest.  This module is the only read boundary for the live inbox: it scopes every
@@ -23,6 +23,11 @@ from .foundation import (
     CONVERSATIONS_COLLECTION,
     CONVERSATION_MESSAGES_COLLECTION,
 )
+from .reply_suggestions import (
+    CustomerIntelligenceActor,
+    ReplySuggestionPublic,
+    ReplySuggestionService,
+)
 
 
 class InboxResponseModel(BaseModel):
@@ -34,15 +39,15 @@ class InboxResponseModel(BaseModel):
 
 class LiveInboxMessage(InboxResponseModel):
     message_id: str
-    direction: Literal["inbound"] = "inbound"
-    sender: Literal["customer"] = "customer"
+    direction: Literal["inbound", "outbound"]
+    sender: Literal["customer", "employee"]
     kind: Literal["text", "image", "audio", "document", "interactive"]
     body: str | None = None
     caption: str | None = None
     filename: str | None = None
     mime_type: str | None = None
     occurred_at: datetime
-    delivery_state: Literal["received"] = "received"
+    delivery_state: Literal["received", "sent", "delivered", "read", "failed"]
     content_available: bool = True
 
 
@@ -57,6 +62,7 @@ class LiveInboxConversation(InboxResponseModel):
     message_count: int = Field(ge=0)
     content_unavailable_count: int = Field(default=0, ge=0)
     messages: list[LiveInboxMessage]
+    reply_suggestion: ReplySuggestionPublic | None = None
 
 
 class LiveInboxConnection(InboxResponseModel):
@@ -158,12 +164,24 @@ def _message_view(document: dict[str, Any], *, fallback: datetime) -> LiveInboxM
     mime_type = _text(payload.get("mime_type"))
     return LiveInboxMessage(
         message_id=str(document.get("message_id") or "message"),
+        direction=(
+            "outbound" if document.get("direction") == "outbound" else "inbound"
+        ),
+        sender=(
+            "employee" if document.get("sender_type") == "employee" else "customer"
+        ),
         kind=kind,
         body=body,
         caption=caption,
         filename=filename,
         mime_type=mime_type,
         occurred_at=_datetime(document.get("occurred_at"), fallback=fallback),
+        delivery_state=(
+            document.get("delivery_state")
+            if document.get("delivery_state")
+            in {"received", "sent", "delivered", "read", "failed"}
+            else ("sent" if document.get("direction") == "outbound" else "received")
+        ),
         content_available=available,
     )
 
@@ -176,10 +194,10 @@ def _message_summary(message: LiveInboxMessage) -> str:
     if message.caption:
         return message.caption
     labels = {
-        "image": "صورة واردة",
-        "audio": "رسالة صوتية واردة",
-        "document": message.filename or "مستند وارد",
-        "interactive": "تفاعل وارد",
+        "image": "صورة",
+        "audio": "رسالة صوتية",
+        "document": message.filename or "مستند",
+        "interactive": "تفاعل واتساب",
     }
     return labels.get(message.kind, "رسالة واردة")
 
@@ -195,12 +213,15 @@ class CustomerIntelligenceInboxService:
         self,
         *,
         owner_user_id: str,
+        actor_id: str | None = None,
+        is_owner: bool = True,
         limit: int = 20,
         messages_limit: int = 30,
         offset: int = 0,
     ) -> LiveInboxResponse:
         generated_at = self._now()
         owner_id = str(owner_user_id).strip()
+        resolved_actor_id = str(actor_id or owner_id).strip()
         channel_documents = await _find_many(
             getattr(self._db, CHANNELS_COLLECTION),
             {"user_id": owner_id, "provider": "whatsapp"},
@@ -269,7 +290,20 @@ class CustomerIntelligenceInboxService:
             )
 
         conversation_collection = getattr(self._db, CONVERSATIONS_COLLECTION)
-        conversation_query = {"$or": scopes}
+        conversation_query: dict[str, Any] = {"$or": scopes}
+        if not is_owner:
+            # Customer Service can work the shared unassigned queue and its
+            # own threads, but cannot see conversations assigned to another
+            # employee. New gateway conversations are intentionally unassigned.
+            conversation_query["$and"] = [
+                {
+                    "$or": [
+                        {"assigned_employee_id": resolved_actor_id},
+                        {"assigned_employee_id": None},
+                        {"assigned_employee_id": {"$exists": False}},
+                    ]
+                }
+            ]
         conversation_count = await conversation_collection.count_documents(
             conversation_query
         )
@@ -284,6 +318,7 @@ class CustomerIntelligenceInboxService:
                 "channel_id": 1,
                 "customer_id": 1,
                 "status": 1,
+                "assigned_employee_id": 1,
                 "last_message_at": 1,
             },
             sort=[("last_message_at", -1), ("conversation_id", 1)],
@@ -293,12 +328,27 @@ class CustomerIntelligenceInboxService:
         has_more = offset + len(conversation_documents) < conversation_count
 
         message_collection = getattr(self._db, CONVERSATION_MESSAGES_COLLECTION)
-        total_message_query = {
-            "$or": scopes,
-            "direction": "inbound",
-            "sender_type": "customer",
-            "delivery_state": "received",
-        }
+        total_message_query = {"$or": scopes}
+        # Employees must never infer traffic volumes outside their assigned
+        # conversations. Count only the fully scoped visible IDs.
+        if not is_owner:
+            visible_message_scopes = [
+                {
+                    "user_id": owner_id,
+                    "merchant_id": str(row.get("merchant_id") or ""),
+                    "channel_id": str(row.get("channel_id") or ""),
+                    "conversation_id": str(row.get("conversation_id") or ""),
+                }
+                for row in conversation_documents
+                if row.get("merchant_id")
+                and row.get("channel_id")
+                and row.get("conversation_id")
+            ]
+            total_message_query = (
+                {"$or": visible_message_scopes}
+                if visible_message_scopes
+                else {"conversation_id": "__none__"}
+            )
         total_message_count = await message_collection.count_documents(
             total_message_query
         )
@@ -311,9 +361,6 @@ class CustomerIntelligenceInboxService:
                 "merchant_id": str(conversation.get("merchant_id") or ""),
                 "channel_id": str(conversation.get("channel_id") or ""),
                 "conversation_id": str(conversation.get("conversation_id") or ""),
-                "direction": "inbound",
-                "sender_type": "customer",
-                "delivery_state": "received",
             }
             conversation_message_count = await message_collection.count_documents(scope)
             message_documents = await _find_many(
@@ -380,6 +427,20 @@ class CustomerIntelligenceInboxService:
                     ),
                     messages=messages,
                 )
+            )
+
+        suggestion_actor = CustomerIntelligenceActor(
+            actor_id=resolved_actor_id,
+            owner_user_id=owner_id,
+            permissions=frozenset(),
+            is_owner=is_owner,
+        )
+        suggestion_service = ReplySuggestionService(self._db)
+        for conversation in conversations:
+            conversation.reply_suggestion = await suggestion_service.latest(
+                actor=suggestion_actor,
+                conversation_id=conversation.conversation_id,
+                pending_only=True,
             )
 
         return LiveInboxResponse(

@@ -18,6 +18,7 @@ from customer_intelligence.channel_gateway import (
 )
 from customer_intelligence.foundation import CHANNELS_COLLECTION, ChannelRecord
 from customer_intelligence.whatsapp import (
+    MAX_WHATSAPP_WEBHOOK_BYTES,
     WhatsAppInboundAdapter,
     make_whatsapp_inbound_router,
 )
@@ -58,6 +59,7 @@ class FakeDB:
 class SpyGateway:
     def __init__(self):
         self.calls = []
+        self.status_calls = []
 
     async def ingest_inbound(self, *, context, message):
         self.calls.append((context, message))
@@ -68,6 +70,18 @@ class SpyGateway:
             conversation_id="conv-1",
             message_id="msg-1",
         )
+
+    async def record_outbound_status(
+        self,
+        *,
+        context,
+        external_message_id,
+        delivery_state,
+    ):
+        self.status_calls.append(
+            (context, external_message_id, delivery_state)
+        )
+        return True
 
 
 @pytest.fixture(autouse=True)
@@ -140,6 +154,45 @@ def _payload(*, message_type="text"):
     }
 
 
+def _coexistence_payload():
+    payload = _payload()
+    metadata = deepcopy(
+        payload["entry"][0]["changes"][0]["value"]["metadata"]
+    )
+    payload["entry"][0]["changes"] = [
+        {
+            "field": "smb_message_echoes",
+            "value": {
+                "messaging_product": "whatsapp",
+                "metadata": metadata,
+                "message_echoes": [
+                    {
+                        "to": "966500000000",
+                        "id": "wamid.employee-echo-1",
+                        "timestamp": "1786456801",
+                        "type": "text",
+                        "text": {"body": "أهلًا، نعم المنتج متوفر."},
+                    }
+                ],
+            },
+        },
+        {
+            "field": "messages",
+            "value": {
+                "messaging_product": "whatsapp",
+                "metadata": metadata,
+                "statuses": [
+                    {
+                        "id": "wamid.employee-echo-1",
+                        "status": "delivered",
+                    }
+                ],
+            },
+        },
+    ]
+    return payload
+
+
 def _body(payload=None):
     return json.dumps(
         payload or _payload(),
@@ -193,6 +246,9 @@ async def test_adapter_verifies_raw_body_signature_and_normalizes_meta_payload()
         1786456800,
         tz=timezone.utc,
     )
+    assert events.inbound_count == 1
+    assert events.echo_count == 0
+    assert events.statuses == []
 
 
 @pytest.mark.asyncio
@@ -256,8 +312,13 @@ async def test_webhook_routes_verify_challenge_and_ingest_only():
     assert received.json() == {
         "accepted": True,
         "messages_seen": 1,
+        "inbound_messages_seen": 1,
+        "employee_echoes_seen": 0,
         "messages_created": 1,
         "duplicates": 0,
+        "statuses_seen": 0,
+        "statuses_updated": 0,
+        "unsupported_events": 0,
         "message_send_allowed": False,
         "ai_execution_allowed": False,
         "commerce_mutation_allowed": False,
@@ -303,6 +364,35 @@ async def test_invalid_challenge_or_signature_never_reaches_gateway():
 
 
 @pytest.mark.asyncio
+async def test_oversized_meta_webhook_is_rejected_before_gateway():
+    db = FakeDB(_channel())
+    gateway = SpyGateway()
+    app = FastAPI()
+    app.include_router(
+        make_whatsapp_inbound_router(
+            db,
+            adapter=_adapter(db),
+            gateway=gateway,
+        ),
+        prefix="/api",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        received = await client.post(
+            "/api/customer-intelligence/v1/channels/whatsapp/webhook",
+            content=b"x" * (MAX_WHATSAPP_WEBHOOK_BYTES + 1),
+            headers={"x-hub-signature-256": "sha256=unused"},
+        )
+
+    assert received.status_code == 413
+    assert received.json()["detail"]["code"] == "whatsapp_webhook_too_large"
+    assert gateway.calls == []
+
+
+@pytest.mark.asyncio
 async def test_status_only_webhook_is_acknowledged_without_creating_a_message():
     db = FakeDB(_channel())
     payload = _payload()
@@ -317,7 +407,66 @@ async def test_status_only_webhook_is_acknowledged_without_creating_a_message():
         body=body,
     )
 
-    assert events == []
+    assert len(events) == 0
+    assert events.inbound_count == 0
+    assert events.echo_count == 0
+    assert len(events.statuses) == 1
+    context, status_event = events.statuses[0]
+    assert context.channel_id == "channel-whatsapp-1"
+    assert status_event.external_message_id == "wamid.outbound"
+    assert status_event.delivery_state == "delivered"
+
+
+@pytest.mark.asyncio
+async def test_direct_meta_coexistence_echo_and_status_reach_shared_gateway():
+    db = FakeDB(_channel())
+    gateway = SpyGateway()
+    app = FastAPI()
+    app.include_router(
+        make_whatsapp_inbound_router(
+            db,
+            adapter=_adapter(db),
+            gateway=gateway,
+        ),
+        prefix="/api",
+    )
+    body = _body(_coexistence_payload())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        received = await client.post(
+            "/api/customer-intelligence/v1/channels/whatsapp/webhook",
+            content=body,
+            headers={"x-hub-signature-256": _signature(body)},
+        )
+
+    assert received.status_code == 200
+    assert received.json() == {
+        "accepted": True,
+        "messages_seen": 1,
+        "inbound_messages_seen": 0,
+        "employee_echoes_seen": 1,
+        "messages_created": 1,
+        "duplicates": 0,
+        "statuses_seen": 1,
+        "statuses_updated": 1,
+        "unsupported_events": 0,
+        "message_send_allowed": False,
+        "ai_execution_allowed": False,
+        "commerce_mutation_allowed": False,
+    }
+    assert len(gateway.calls) == 1
+    _context, echo = gateway.calls[0]
+    assert echo.direction == "outbound"
+    assert echo.sender_type == "employee"
+    assert echo.external_conversation_id.get_secret_value() == "966500000000"
+    assert echo.content_payload == {"text": "أهلًا، نعم المنتج متوفر."}
+    assert len(gateway.status_calls) == 1
+    _status_context, external_message_id, state = gateway.status_calls[0]
+    assert external_message_id == "wamid.employee-echo-1"
+    assert state == "delivered"
 
 
 def test_router_exposes_webhook_get_and_post_but_no_send_operation():

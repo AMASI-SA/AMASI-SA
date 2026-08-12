@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+    ArrowRight,
     ChartLineUp,
     ChatCircleDots,
     CheckCircle,
@@ -47,6 +48,9 @@ function percent(value) {
 }
 
 function liveMessageLabel(message) {
+    if (message.direction === "outbound" && message.sender === "employee") {
+        return "رد الموظف من واتساب";
+    }
     const labels = {
         text: "رسالة نصية واردة",
         image: "صورة واردة",
@@ -55,6 +59,17 @@ function liveMessageLabel(message) {
         interactive: "تفاعل وارد",
     };
     return labels[message.kind] || "رسالة واردة";
+}
+
+function liveMessageDeliveryLabel(message) {
+    if (message.direction !== "outbound") return "مستلمة";
+    const labels = {
+        sent: "أُرسل",
+        delivered: "تم التسليم",
+        read: "تمت القراءة",
+        failed: "تعذر الإرسال",
+    };
+    return labels[message.delivery_state] || "رد موظف";
 }
 
 function liveMessageBody(message) {
@@ -74,39 +89,231 @@ function liveMessageBody(message) {
 
 function LiveInboxMessage({ message }) {
     const isMedia = ["image", "audio", "document"].includes(message.kind);
+    const employeeEcho = message.direction === "outbound" && message.sender === "employee";
     return (
         <article
-            className="max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+            className={`max-w-[88%] rounded-xl border p-4 sm:max-w-3xl ${
+                employeeEcho
+                    ? "mr-auto border-violet-200 bg-violet-50"
+                    : "ml-auto border-emerald-200 bg-emerald-50"
+            }`}
             data-testid="customer-intelligence-live-message"
             data-message-kind={message.kind}
+            data-message-direction={message.direction}
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-800">
+                <div className={`flex items-center gap-2 text-xs font-extrabold ${
+                    employeeEcho ? "text-violet-800" : "text-emerald-800"
+                }`}>
                     {message.kind === "image"
                         ? <ImageSquare size={18} weight="duotone" />
                         : <ChatCircleDots size={18} weight="duotone" />}
                     {liveMessageLabel(message)}
                 </div>
-                <StatusPill status="open" label="مستلمة" />
+                <StatusPill
+                    status={message.delivery_state === "failed" ? "blocked" : "open"}
+                    label={liveMessageDeliveryLabel(message)}
+                />
             </div>
             <p
-                className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-emerald-950"
+                className={`mt-3 whitespace-pre-wrap break-words text-sm leading-7 ${
+                    employeeEcho ? "text-violet-950" : "text-emerald-950"
+                }`}
                 dir="auto"
             >
                 {liveMessageBody(message)}
             </p>
             {isMedia && message.mime_type && (
-                <div className="mt-2 font-mono text-[11px] text-emerald-700" dir="ltr">
+                <div className={`mt-2 font-mono text-[11px] ${
+                    employeeEcho ? "text-violet-700" : "text-emerald-700"
+                }`} dir="ltr">
                     {message.mime_type}
                 </div>
             )}
             <time
-                className="num mt-3 block text-[11px] font-bold text-emerald-700"
+                className={`num mt-3 block text-[11px] font-bold ${
+                    employeeEcho ? "text-violet-700" : "text-emerald-700"
+                }`}
                 dateTime={message.occurred_at || undefined}
             >
                 {formatRiyadhDateTime(message.occurred_at)}
             </time>
         </article>
+    );
+}
+
+function PendingReplySuggestion({
+    suggestion,
+    onReview = null,
+    onReject = null,
+    onEscalate = null,
+}) {
+    const [draft, setDraft] = useState(suggestion.text);
+    const [busyAction, setBusyAction] = useState("");
+    const [feedback, setFeedback] = useState("");
+    const actionLock = useRef(false);
+
+    const runAction = async (action, callback) => {
+        if (typeof callback !== "function" || actionLock.current) return;
+        actionLock.current = true;
+        setBusyAction(action);
+        setFeedback("");
+        try {
+            await callback(suggestion.conversation_id, suggestion.id, {
+                text: draft.trim(),
+                version: suggestion.version,
+            });
+            setFeedback(action === "review"
+                ? "تم حفظ مراجعة الموظف دون إرسال الرسالة."
+                : action === "reject"
+                    ? "تم رفض الاقتراح دون إرسال الرسالة."
+                    : "تم تصعيد المحادثة لمراجعة بشرية دون إرسال الرسالة.");
+        } catch (_error) {
+            setFeedback("تعذر حفظ الإجراء. لم تُرسل أي رسالة إلى واتساب.");
+        } finally {
+            actionLock.current = false;
+            setBusyAction("");
+        }
+    };
+
+    return (
+        <section
+            className="mt-5 rounded-xl border-2 border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-pending-reply-suggestion"
+            data-suggestion-status="pending_approval"
+        >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div className="font-black text-violet-950">اقتراح رد من ذكاء ميزان</div>
+                    <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
+                        يحتاج اعتماد موظف. راجع النص وعدّله قبل أي اعتماد مستقبلي.
+                    </p>
+                </div>
+                <StatusPill status="needs_review" label="بانتظار اعتماد الموظف" />
+            </div>
+
+            <label
+                className="mt-4 block text-xs font-extrabold text-slate-700"
+                htmlFor={`reply-suggestion-${suggestion.id}`}
+            >
+                نص الرد المقترح
+            </label>
+            <textarea
+                id={`reply-suggestion-${suggestion.id}`}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={5}
+                className="mt-2 w-full resize-y rounded-xl border border-violet-200 bg-white p-3 text-sm leading-7 text-slate-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                dir="auto"
+                data-testid="customer-intelligence-reply-suggestion-editor"
+            />
+            <p className="mt-2 text-[11px] font-bold leading-5 text-slate-500">
+                تعديل النص لا يرسله، وضغط Enter يضيف سطرًا فقط.
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <button
+                    type="button"
+                    onClick={() => runAction("review", onReview)}
+                    disabled={busyAction !== "" || !draft.trim() || typeof onReview !== "function"}
+                    className="min-h-11 rounded-lg border border-emerald-300 bg-white px-3 text-sm font-extrabold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-review-suggestion"
+                >
+                    {busyAction === "review" ? "جارٍ الحفظ…" : "حفظ المراجعة"}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => runAction("reject", onReject)}
+                    disabled={busyAction !== "" || typeof onReject !== "function"}
+                    className="min-h-11 rounded-lg border border-rose-300 bg-white px-3 text-sm font-extrabold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-reject-suggestion"
+                >
+                    {busyAction === "reject" ? "جارٍ الرفض…" : "رفض الاقتراح"}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => runAction("escalate", onEscalate)}
+                    disabled={busyAction !== "" || typeof onEscalate !== "function"}
+                    className="min-h-11 rounded-lg border border-amber-300 bg-white px-3 text-sm font-extrabold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-escalate-suggestion"
+                >
+                    {busyAction === "escalate" ? "جارٍ التصعيد…" : "تصعيد لموظف"}
+                </button>
+            </div>
+
+            <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="الإرسال مقفل حاليًا في سياسة الأمان"
+                className="mt-3 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-slate-300 px-4 text-sm font-black text-slate-600 opacity-80"
+                data-testid="customer-intelligence-approve-and-send"
+            >
+                <LockKey size={18} weight="duotone" />
+                اعتماد وإرسال — الإرسال مقفل حاليًا
+            </button>
+            {feedback && (
+                <p
+                    className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-700"
+                    role="status"
+                    data-testid="customer-intelligence-suggestion-feedback"
+                >
+                    {feedback}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function CreateReplySuggestion({ conversationId, onCreate = null }) {
+    const [creating, setCreating] = useState(false);
+    const [error, setError] = useState("");
+    const createLock = useRef(false);
+
+    const create = async () => {
+        if (createLock.current || typeof onCreate !== "function") return;
+        createLock.current = true;
+        setCreating(true);
+        setError("");
+        try {
+            await onCreate(conversationId);
+        } catch (_requestError) {
+            setError("تعذر إنشاء الاقتراح. لم تُرسل أي رسالة إلى واتساب.");
+        } finally {
+            createLock.current = false;
+            setCreating(false);
+        }
+    };
+
+    return (
+        <section
+            className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-create-suggestion-panel"
+        >
+            <div className="font-black text-violet-950">لا يوجد اقتراح جاهز للمراجعة</div>
+            <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
+                يمكنك طلب اقتراح من الذكاء لهذه المحادثة. لن يؤدي ذلك إلى إرسال أي رد للعميل.
+            </p>
+            <button
+                type="button"
+                onClick={create}
+                disabled={creating || typeof onCreate !== "function"}
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-violet-700 px-4 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                data-testid="customer-intelligence-create-suggestion"
+            >
+                <ChatCircleDots size={18} weight="duotone" />
+                {creating ? "جارٍ إنشاء الاقتراح…" : "إنشاء اقتراح بالذكاء"}
+            </button>
+            {error && (
+                <p
+                    className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-900"
+                    role="alert"
+                    data-testid="customer-intelligence-create-suggestion-error"
+                >
+                    {error}
+                </p>
+            )}
+        </section>
     );
 }
 
@@ -198,13 +405,25 @@ export function OverviewPanel({ model, writesLocked, policyKeys }) {
     );
 }
 
-export function ConversationsPanel({ inbox, error = "" }) {
+export function ConversationsPanel({
+    inbox,
+    error = "",
+    onCreateSuggestion = null,
+    onReviewSuggestion = null,
+    onRejectSuggestion = null,
+    onEscalateSuggestion = null,
+}) {
     const conversations = inbox?.conversations || [];
     const [selectedId, setSelectedId] = useState("");
+    const explicitlySelected = conversations.some((row) => row.id === selectedId);
     const selectedConversation = conversations.find((row) => row.id === selectedId)
         || conversations[0]
         || null;
     const connected = inbox?.connection?.status === "connected";
+
+    // The parent renders the single canonical inbox error banner. Avoid a
+    // second empty/error state here for the same failed request.
+    if (error) return null;
 
     return (
         <div className="space-y-5" data-testid="customer-intelligence-panel-conversations" data-live-inbox="true">
@@ -250,12 +469,7 @@ export function ConversationsPanel({ inbox, error = "" }) {
                 )}
             </section>
 
-            {error ? (
-                <EmptyState
-                    title="تعذر عرض رسائل واتساب"
-                    detail="أعد التحديث بعد التحقق من اتصال Backend. لم تُعرض بيانات بديلة."
-                />
-            ) : !connected ? (
+            {!connected ? (
                 <EmptyState
                     title="قناة واتساب غير جاهزة للاستقبال"
                     detail="عند اكتمال الربط ستظهر الرسائل الواردة هنا تلقائيًا."
@@ -266,13 +480,17 @@ export function ConversationsPanel({ inbox, error = "" }) {
                     detail="الربط متصل، وستظهر أول محادثة بعد وصول رسالة جديدة."
                 />
             ) : (
-                <div className="grid gap-5 xl:grid-cols-[minmax(300px,.75fr)_minmax(0,1.25fr)]">
-                    <Panel
-                        title="محادثات واتساب"
-                        subtitle="الأحدث أولًا · اختر محادثة لعرض الرسائل المحفوظة المتاحة"
-                        Icon={UsersThree}
-                        testid="customer-intelligence-live-conversation-list"
-                    >
+                <div
+                    className="grid gap-5 lg:grid-cols-[minmax(300px,.75fr)_minmax(0,1.25fr)]"
+                    data-testid="customer-intelligence-responsive-inbox"
+                >
+                    <div className={explicitlySelected ? "hidden lg:block" : "block"}>
+                        <Panel
+                            title="محادثات واتساب"
+                            subtitle="الأحدث أولًا · اختر محادثة لعرض الرسائل المحفوظة المتاحة"
+                            Icon={UsersThree}
+                            testid="customer-intelligence-live-conversation-list"
+                        >
                         <div className="space-y-2" role="list" aria-label="محادثات واتساب الواردة">
                             {conversations.map((conversation) => {
                                 const active = conversation.id === selectedConversation?.id;
@@ -316,15 +534,26 @@ export function ConversationsPanel({ inbox, error = "" }) {
                                 توجد محادثات أقدم غير معروضة في هذه الصفحة.
                             </p>
                         )}
-                    </Panel>
+                        </Panel>
+                    </div>
 
-                    <Panel
-                        title={selectedConversation?.customer_name || "محادثة واتساب"}
-                        subtitle="رسائل واردة محفوظة في ميزان · بتوقيت الرياض"
-                        Icon={ChatCircleDots}
-                        testid="customer-intelligence-live-message-stream"
-                        actions={<StatusPill status={selectedConversation?.status} />}
-                    >
+                    <div className={explicitlySelected ? "block" : "hidden lg:block"}>
+                        <button
+                            type="button"
+                            onClick={() => setSelectedId("")}
+                            className="mb-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 lg:hidden"
+                            data-testid="customer-intelligence-back-to-conversations"
+                        >
+                            <ArrowRight size={18} weight="bold" />
+                            رجوع إلى المحادثات
+                        </button>
+                        <Panel
+                            title={selectedConversation?.customer_name || "محادثة واتساب"}
+                            subtitle="رسائل العميل وردود الموظف المحفوظة في ميزان · بتوقيت الرياض"
+                            Icon={ChatCircleDots}
+                            testid="customer-intelligence-live-message-stream"
+                            actions={<StatusPill status={selectedConversation?.status} />}
+                        >
                         {selectedConversation?.messages?.length ? (
                             <>
                                 {selectedConversation.message_count > selectedConversation.messages.length && (
@@ -332,10 +561,10 @@ export function ConversationsPanel({ inbox, error = "" }) {
                                         className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
                                         data-testid="customer-intelligence-message-window-notice"
                                     >
-                                        يعرض أحدث <span className="num">{selectedConversation.messages.length}</span> من <span className="num">{selectedConversation.message_count}</span> رسالة واردة.
+                                        يعرض أحدث <span className="num">{selectedConversation.messages.length}</span> من <span className="num">{selectedConversation.message_count}</span> رسالة.
                                     </p>
                                 )}
-                                <div className="space-y-3" aria-label="سجل الرسائل الواردة">
+                                <div className="space-y-3" aria-label="سجل رسائل العميل وردود الموظف">
                                     {selectedConversation.messages.map((message) => (
                                         <LiveInboxMessage key={message.id} message={message} />
                                     ))}
@@ -344,10 +573,26 @@ export function ConversationsPanel({ inbox, error = "" }) {
                         ) : (
                             <EmptyState title="لا توجد رسالة قابلة للعرض في هذه المحادثة" />
                         )}
-                        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold leading-6 text-slate-600">
-                            هذه الشاشة للقراءة والتحقق فقط؛ لا تحتوي نموذج رد أو إجراءً يغيّر واتساب أو بيانات المتجر.
-                        </div>
-                    </Panel>
+                            {selectedConversation?.reply_suggestion && (
+                                <PendingReplySuggestion
+                                    key={selectedConversation.reply_suggestion.id}
+                                    suggestion={selectedConversation.reply_suggestion}
+                                    onReview={onReviewSuggestion}
+                                    onReject={onRejectSuggestion}
+                                    onEscalate={onEscalateSuggestion}
+                                />
+                            )}
+                            {!selectedConversation?.reply_suggestion && (
+                                <CreateReplySuggestion
+                                    conversationId={selectedConversation?.id}
+                                    onCreate={onCreateSuggestion}
+                                />
+                            )}
+                            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold leading-6 text-slate-600">
+                                لا يتم إرسال أي رد عند فتح الشاشة أو تعديل النص أو ضغط Enter.
+                            </div>
+                        </Panel>
+                    </div>
                 </div>
             )}
         </div>

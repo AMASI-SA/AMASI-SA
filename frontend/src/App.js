@@ -52,6 +52,7 @@ import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
 import MezanSuppliersV2 from "./pages/MezanSuppliersV2";
 import EmployeesV2 from "./pages/EmployeesV2";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
+import PermissionRoute from "./components/PermissionRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
 import Reconciliation from "./pages/Reconciliation";
@@ -314,9 +315,9 @@ function AppRoutes() {
                 path="/customer-intelligence"
                 element={
                     <ProtectedRoute>
-                        <OwnerOnlyRoute>
+                        <PermissionRoute permission="customer_intelligence.inbox.read">
                             <Layout><CustomerIntelligenceCenter /></Layout>
-                        </OwnerOnlyRoute>
+                        </PermissionRoute>
                     </ProtectedRoute>
                 }
             />

@@ -11,8 +11,9 @@ import hashlib
 import hmac
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
@@ -49,6 +50,77 @@ class WhatsAppSignatureError(WhatsAppWebhookError):
 
 class WhatsAppPayloadError(WhatsAppWebhookError):
     pass
+
+
+class WhatsAppBodyTooLargeError(WhatsAppPayloadError):
+    pass
+
+
+@dataclass(frozen=True)
+class WhatsAppStatusEvent:
+    external_message_id: str
+    delivery_state: Literal["sent", "delivered", "read", "failed"]
+
+
+@dataclass
+class WhatsAppWebhookBatch:
+    """Verified Meta callbacks with provider-neutral message/status evidence.
+
+    Sequence methods preserve the original receive-only adapter contract for
+    callers that iterate over normalized messages, while the explicit status
+    collection lets direct Meta and 360dialog provide equivalent Coexistence
+    behavior.
+    """
+
+    messages: list[tuple[TrustedChannelContext, NormalizedInboundMessage]]
+    statuses: list[tuple[TrustedChannelContext, WhatsAppStatusEvent]]
+    inbound_count: int = 0
+    echo_count: int = 0
+    unsupported_count: int = 0
+
+    def __iter__(self):
+        return iter(self.messages)
+
+    def __len__(self) -> int:
+        return len(self.messages)
+
+    def __getitem__(self, index):
+        return self.messages[index]
+
+
+async def read_bounded_webhook_body(
+    request: Request,
+    *,
+    max_bytes: int = MAX_WHATSAPP_WEBHOOK_BYTES,
+) -> bytes:
+    """Read a webhook incrementally and stop before unbounded buffering.
+
+    ``Request.body()`` materializes the complete request before an adapter can
+    enforce its limit.  Both WhatsApp transports use this reader so an
+    oversized callback is rejected while it is still being streamed.
+    """
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise WhatsAppBodyTooLargeError(
+                    "WhatsApp webhook exceeds the size limit"
+                )
+        except ValueError:
+            # A malformed Content-Length is not trusted.  The streaming limit
+            # below remains authoritative.
+            pass
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        if len(body) + len(chunk) > max_bytes:
+            raise WhatsAppBodyTooLargeError(
+                "WhatsApp webhook exceeds the size limit"
+            )
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _enabled(value: str | None) -> bool:
@@ -157,12 +229,119 @@ class WhatsAppInboundAdapter:
         if not hmac.compare_digest(supplied, expected):
             raise WhatsAppSignatureError("WhatsApp signature is invalid")
 
+    async def _trusted_context(self, phone_number_id: str) -> TrustedChannelContext:
+        binding_key = build_channel_account_key("whatsapp", phone_number_id)
+        channel = await getattr(self._db, CHANNELS_COLLECTION).find_one(
+            {
+                "provider": "whatsapp",
+                "external_account_key": binding_key,
+            },
+            {
+                "_id": 0,
+                "user_id": 1,
+                "merchant_id": 1,
+                "channel_id": 1,
+                "provider": 1,
+            },
+        )
+        if not channel:
+            raise ChannelNotReadyError(
+                "signed WhatsApp account has no Mezan channel binding"
+            )
+        return TrustedChannelContext(
+            user_id=str(channel["user_id"]),
+            merchant_id=str(channel["merchant_id"]),
+            channel_id=str(channel["channel_id"]),
+            provider="whatsapp",
+        )
+
+    @staticmethod
+    def _inbound_message(
+        raw_message: Any,
+        contacts: dict[str | None, dict[str, Any]],
+    ) -> NormalizedInboundMessage | None:
+        if not isinstance(raw_message, dict):
+            return None
+        message_id = _text(raw_message.get("id"))
+        sender = _text(raw_message.get("from"))
+        content = _content(raw_message)
+        if not message_id or not sender or content is None:
+            return None
+        contact = contacts.get(sender) or {}
+        profile = contact.get("profile") or {}
+        customer_profile = {}
+        if isinstance(profile, dict) and _text(profile.get("name")):
+            customer_profile["name"] = _text(profile.get("name"))
+        content_type, content_payload = content
+        return NormalizedInboundMessage(
+            provider="whatsapp",
+            external_conversation_id=sender,
+            external_message_id=message_id,
+            external_customer_id=_text(contact.get("wa_id")) or sender,
+            customer_mobile=sender,
+            customer_profile=customer_profile,
+            preferred_language=None,
+            content_type=content_type,
+            content_payload=content_payload,
+            occurred_at=_occurred_at(raw_message.get("timestamp")),
+            source_event=(
+                f"whatsapp.messages.{_text(raw_message.get('type')) or 'unknown'}"
+            ),
+        )
+
+    @staticmethod
+    def _echo_message(raw_echo: Any) -> NormalizedInboundMessage | None:
+        if not isinstance(raw_echo, dict):
+            return None
+        message_id = _text(raw_echo.get("id"))
+        recipient = _text(raw_echo.get("to"))
+        content = _content(raw_echo)
+        if not message_id or not recipient or content is None:
+            return None
+        content_type, content_payload = content
+        return NormalizedInboundMessage(
+            provider="whatsapp",
+            external_conversation_id=recipient,
+            external_message_id=message_id,
+            external_customer_id=recipient,
+            customer_mobile=recipient,
+            content_type=content_type,
+            content_payload=content_payload,
+            occurred_at=_occurred_at(raw_echo.get("timestamp")),
+            source_event=(
+                "whatsapp.smb_message_echoes."
+                f"{_text(raw_echo.get('type')) or 'unknown'}"
+            ),
+            direction="outbound",
+            sender_type="employee",
+            analysis_status="not_requested",
+            delivery_state="sent",
+        )
+
+    @staticmethod
+    def _status_event(raw_status: Any) -> WhatsAppStatusEvent | None:
+        if not isinstance(raw_status, dict):
+            return None
+        message_id = _text(raw_status.get("id"))
+        state = {
+            "sent": "sent",
+            "delivered": "delivered",
+            "read": "read",
+            "failed": "failed",
+        }.get(str(_text(raw_status.get("status")) or "").casefold())
+        if not message_id or state is None:
+            return None
+        return WhatsAppStatusEvent(
+            external_message_id=message_id,
+            delivery_state=state,
+        )
+
     async def verify_and_normalize(
         self,
         *,
         headers: dict[str, str],
         body: bytes,
-    ) -> list[tuple[TrustedChannelContext, NormalizedInboundMessage]]:
+    ) -> WhatsAppWebhookBatch:
         if len(body) > MAX_WHATSAPP_WEBHOOK_BYTES:
             raise WhatsAppPayloadError("WhatsApp webhook exceeds the size limit")
         self.verify_signature(headers=headers, body=body)
@@ -173,85 +352,56 @@ class WhatsAppInboundAdapter:
         if not isinstance(payload, dict) or payload.get("object") != "whatsapp_business_account":
             raise WhatsAppPayloadError("Webhook object is not WhatsApp Business")
 
-        normalized: list[tuple[TrustedChannelContext, NormalizedInboundMessage]] = []
+        batch = WhatsAppWebhookBatch(messages=[], statuses=[])
         for entry in payload.get("entry") or []:
             if not isinstance(entry, dict):
+                batch.unsupported_count += 1
                 continue
             for change in entry.get("changes") or []:
-                if not isinstance(change, dict) or change.get("field") != "messages":
+                if not isinstance(change, dict):
+                    batch.unsupported_count += 1
                     continue
+                field = _text(change.get("field"))
                 value = change.get("value")
-                if not isinstance(value, dict):
+                if field not in {"messages", "smb_message_echoes"} or not isinstance(
+                    value, dict
+                ):
+                    batch.unsupported_count += 1
                     continue
                 metadata = value.get("metadata") or {}
                 phone_number_id = _text(metadata.get("phone_number_id"))
                 if not phone_number_id:
+                    batch.unsupported_count += 1
                     continue
-                binding_key = build_channel_account_key(
-                    "whatsapp",
-                    phone_number_id,
-                )
-                channel = await getattr(self._db, CHANNELS_COLLECTION).find_one(
-                    {
-                        "provider": "whatsapp",
-                        "external_account_key": binding_key,
-                    },
-                    {
-                        "_id": 0,
-                        "user_id": 1,
-                        "merchant_id": 1,
-                        "channel_id": 1,
-                        "provider": 1,
-                    },
-                )
-                if not channel:
-                    raise ChannelNotReadyError(
-                        "signed WhatsApp account has no Mezan channel binding"
-                    )
-                context = TrustedChannelContext(
-                    user_id=str(channel["user_id"]),
-                    merchant_id=str(channel["merchant_id"]),
-                    channel_id=str(channel["channel_id"]),
-                    provider="whatsapp",
-                )
+                context = await self._trusted_context(phone_number_id)
                 contacts = {
                     _text(contact.get("wa_id")): contact
                     for contact in value.get("contacts") or []
                     if isinstance(contact, dict) and _text(contact.get("wa_id"))
                 }
-                for raw_message in value.get("messages") or []:
-                    if not isinstance(raw_message, dict):
-                        continue
-                    message_id = _text(raw_message.get("id"))
-                    sender = _text(raw_message.get("from"))
-                    content = _content(raw_message)
-                    if not message_id or not sender or content is None:
-                        continue
-                    contact = contacts.get(sender) or {}
-                    profile = contact.get("profile") or {}
-                    customer_profile = {}
-                    if isinstance(profile, dict) and _text(profile.get("name")):
-                        customer_profile["name"] = _text(profile.get("name"))
-                    content_type, content_payload = content
-                    normalized.append(
-                        (
-                            context,
-                            NormalizedInboundMessage(
-                                provider="whatsapp",
-                                external_conversation_id=sender,
-                                external_message_id=message_id,
-                                external_customer_id=_text(contact.get("wa_id")) or sender,
-                                customer_mobile=sender,
-                                customer_profile=customer_profile,
-                                preferred_language=None,
-                                content_type=content_type,
-                                content_payload=content_payload,
-                                occurred_at=_occurred_at(raw_message.get("timestamp")),
-                                source_event=f"whatsapp.messages.{_text(raw_message.get('type')) or 'unknown'}",
-                            ),
-                        )
-                    )
-        return normalized
+                if field == "messages":
+                    for raw_message in value.get("messages") or []:
+                        message = self._inbound_message(raw_message, contacts)
+                        if message is None:
+                            batch.unsupported_count += 1
+                            continue
+                        batch.messages.append((context, message))
+                        batch.inbound_count += 1
+                    for raw_status in value.get("statuses") or []:
+                        status_event = self._status_event(raw_status)
+                        if status_event is None:
+                            batch.unsupported_count += 1
+                            continue
+                        batch.statuses.append((context, status_event))
+                else:
+                    for raw_echo in value.get("message_echoes") or []:
+                        message = self._echo_message(raw_echo)
+                        if message is None:
+                            batch.unsupported_count += 1
+                            continue
+                        batch.messages.append((context, message))
+                        batch.echo_count += 1
+        return batch
 
 
 def _configured_adapter(db: Any) -> WhatsAppInboundAdapter:
@@ -310,9 +460,9 @@ def make_whatsapp_inbound_router(
 
     @router.post("/webhook")
     async def receive_webhook(request: Request) -> dict[str, Any]:
-        body = await request.body()
         try:
-            events = await current_adapter().verify_and_normalize(
+            body = await read_bounded_webhook_body(request)
+            batch = await current_adapter().verify_and_normalize(
                 headers=dict(request.headers),
                 body=body,
             )
@@ -321,8 +471,22 @@ def make_whatsapp_inbound_router(
                     context=context,
                     message=message,
                 )
-                for context, message in events
+                for context, message in batch.messages
             ]
+            statuses_updated = 0
+            for context, event in batch.statuses:
+                statuses_updated += bool(
+                    await inbound_gateway.record_outbound_status(
+                        context=context,
+                        external_message_id=event.external_message_id,
+                        delivery_state=event.delivery_state,
+                    )
+                )
+        except WhatsAppBodyTooLargeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={"code": "whatsapp_webhook_too_large"},
+            ) from exc
         except WhatsAppSignatureError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -346,9 +510,14 @@ def make_whatsapp_inbound_router(
 
         return {
             "accepted": True,
-            "messages_seen": len(events),
+            "messages_seen": len(batch.messages),
+            "inbound_messages_seen": batch.inbound_count,
+            "employee_echoes_seen": batch.echo_count,
             "messages_created": sum(not result.duplicate for result in results),
             "duplicates": sum(result.duplicate for result in results),
+            "statuses_seen": len(batch.statuses),
+            "statuses_updated": statuses_updated,
+            "unsupported_events": batch.unsupported_count,
             "message_send_allowed": False,
             "ai_execution_allowed": False,
             "commerce_mutation_allowed": False,
@@ -362,9 +531,13 @@ __all__ = [
     "WHATSAPP_APP_SECRET_ENV",
     "WHATSAPP_INGRESS_FLAG",
     "WHATSAPP_VERIFY_TOKEN_ENV",
+    "WhatsAppBodyTooLargeError",
     "WhatsAppChallengeError",
     "WhatsAppInboundAdapter",
     "WhatsAppPayloadError",
     "WhatsAppSignatureError",
+    "WhatsAppStatusEvent",
+    "WhatsAppWebhookBatch",
     "make_whatsapp_inbound_router",
+    "read_bounded_webhook_body",
 ]
