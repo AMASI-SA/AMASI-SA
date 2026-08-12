@@ -1,7 +1,6 @@
 import {
   CAMPAIGN_ACCOUNT_EVENT,
   CAMPAIGN_REPORT_UPDATED_EVENT,
-  clearSnapchatRestoredReturnRange,
   getCampaignReportSnapshot,
   markSnapchatManualRange,
   prepareSnapchatAccountPage,
@@ -188,12 +187,6 @@ function syncRestoredReturnRange(workspace) {
   const [fromInput, toInput] = reportDateInputs(workspace);
   if (!fromInput || !toInput) return true;
   syncDateInputs(workspace, restored.date_from, restored.date_to, { submit: false });
-  if (
-    fromInput.value === restored.date_from
-    && toInput.value === restored.date_to
-  ) {
-    clearSnapchatRestoredReturnRange();
-  }
   return true;
 }
 

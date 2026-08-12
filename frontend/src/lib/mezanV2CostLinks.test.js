@@ -98,6 +98,13 @@ test("sold-missing list ignores the previously stored product", () => {
     expect(resolveInitialProductsView(search, "old-product")).toBe("list");
 });
 
+test("campaign lookup ignores the previously stored product until resolution finishes", () => {
+    const search = "?focus=cost&lookup_sku=TARGET-SKU&lookup_name=Target";
+
+    expect(resolveInitialSelectedProduct(search, "old-product")).toBe("");
+    expect(resolveInitialProductsView(search, "old-product")).toBe("list");
+});
+
 
 test("a direct cost link still opens the requested product details", () => {
     const search = "?product=m-7&focus=cost";

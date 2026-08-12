@@ -17,6 +17,7 @@ from component_workspace_cost_compat_routes import (
     COMPONENT_CATEGORIES,
     COMPONENT_GROUPS,
 )
+from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES, _now, ensure_indexes
 from product_v2_routes import _number, _text
@@ -281,6 +282,7 @@ def make_component_category_required_router(
             "updated_at": now,
         }
         await db[RESOURCES].update_one(selector, {"$set": patch})
+        await bump_product_cost_revision(db, user_id)
         option_impacted = await db[BINDINGS].count_documents(
             {"user_id": user_id, "resource_id": resource_id}
         )

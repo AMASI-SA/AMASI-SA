@@ -20,6 +20,7 @@ from component_workspace_cost_compat_routes import (
     COMPONENT_GROUPS,
     generated_group_name,
 )
+from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_routes import (
     ProductResourceLinkRequest,
     _operations_view as _base_operations_view,
@@ -316,6 +317,7 @@ def make_product_group_link_router(
             "quantity": float(payload.quantity),
             "created_at": now,
         })
+        await bump_product_cost_revision(db, user_id)
         return {
             "ok": True,
             **(
@@ -373,6 +375,7 @@ def make_product_group_link_router(
             "preserved_by_groups": group_ids,
             "created_at": _now(),
         })
+        await bump_product_cost_revision(db, user_id)
         return {
             "ok": True,
             **(
@@ -495,6 +498,7 @@ def make_product_group_link_router(
             "resource_ids": resource_ids,
             "created_at": now,
         })
+        await bump_product_cost_revision(db, user_id)
         return {
             "ok": True,
             **(
@@ -565,6 +569,7 @@ def make_product_group_link_router(
             "group_id": group_id,
             "created_at": _now(),
         })
+        await bump_product_cost_revision(db, user_id)
         return {
             "ok": True,
             **(

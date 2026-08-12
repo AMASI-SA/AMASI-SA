@@ -169,6 +169,9 @@ async def test_account_timezone_controls_the_created_order_day(monkeypatch):
 async def test_profitability_uses_financial_orders_only(monkeypatch):
     module._PROFIT_CACHE.clear()
 
+    async def cost_revision(db, user_id):
+        return 0
+
     async def cost_context(db, user_id):
         return {"loaded": True}
 
@@ -187,6 +190,7 @@ async def test_profitability_uses_financial_orders_only(monkeypatch):
 
     monkeypatch.setattr(profitability, "_load_cost_context", cost_context)
     monkeypatch.setattr(profitability, "_order_cost_and_products", order_cost)
+    monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
 
     by_campaign, totals = await module.calculate_financial_profitability(
         object(),

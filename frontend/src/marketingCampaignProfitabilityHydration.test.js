@@ -2,6 +2,8 @@ import {
   CAMPAIGN_PROFITABILITY_HYDRATION_POLICY,
   hydrateCampaignProfitability,
 } from "./marketingCampaignProfitabilityHydration";
+import { mergePaginatedRows } from "./components/marketing/infiniteScrollPagination";
+import { normalizeSnapchatMarketingWorkspace } from "./services/marketingPerformance";
 
 describe("Campaign profitability hydration", () => {
   test("joins profitability and stable created orders by exact identity", () => {
@@ -98,6 +100,90 @@ describe("Campaign profitability hydration", () => {
     expect(hydrated.campaigns).toEqual(campaigns);
     expect(hydrated.totals).toBe(totals);
     expect(hydrated.hydrated_campaigns).toBe(0);
+  });
+
+  test("keeps Salla results, profitability, and report totals across two infinite-scroll pages", () => {
+    const pageOneProfitability = {
+      orders: 2,
+      product_cost_sar: 80,
+      contribution_profit_sar: 70,
+    };
+    const pageTwoProfitability = {
+      orders: 1,
+      product_cost_sar: 40,
+      contribution_profit_sar: 35,
+    };
+    const totalsProfitability = {
+      orders: 3,
+      product_cost_sar: 120,
+      contribution_profit_sar: 105,
+    };
+    const pageOne = normalizeSnapchatMarketingWorkspace({
+      result_source: "salla",
+      campaigns: [{
+        account_id: "account-1",
+        campaign_id: "campaign-1",
+        orders: 2,
+        sales_sar: 200,
+        salla_results: { created_orders: 2, sales_sar: 200 },
+        profitability: pageOneProfitability,
+      }],
+      campaign_pagination: { page: 1, limit: 25, total: 2, pages: 2 },
+      totals: {
+        orders: 3,
+        sales_sar: 300,
+        profitability: totalsProfitability,
+      },
+    });
+    const pageTwoRaw = {
+      result_source: "salla",
+      campaigns: [{
+        account_id: "account-1",
+        campaign_id: "campaign-2",
+        orders: 1,
+        sales_sar: 100,
+        salla_results: { created_orders: 1, sales_sar: 100 },
+        profitability: pageTwoProfitability,
+      }],
+      campaign_pagination: { page: 2, limit: 25, total: 2, pages: 2 },
+      totals: {
+        orders: 3,
+        sales_sar: 300,
+        profitability: totalsProfitability,
+      },
+    };
+    const pageTwo = normalizeSnapchatMarketingWorkspace(pageTwoRaw);
+    const merged = mergePaginatedRows(
+      pageOne.campaigns,
+      pageTwo.campaigns,
+      (campaign) => `${campaign.account_id}:${campaign.campaign_id}`,
+    );
+
+    // The raw transport snapshot contains only the latest page. Page one must
+    // therefore remain self-sufficient after normalization and page merging.
+    const hydrated = hydrateCampaignProfitability(
+      merged,
+      pageTwo.totals,
+      pageTwoRaw,
+    );
+
+    expect(hydrated.campaigns).toHaveLength(2);
+    expect(hydrated.campaigns[0]).toMatchObject({
+      campaign_id: "campaign-1",
+      salla_results: { created_orders: 2, sales_sar: 200 },
+      profitability: pageOneProfitability,
+    });
+    expect(hydrated.campaigns[1]).toMatchObject({
+      campaign_id: "campaign-2",
+      salla_results: { created_orders: 1, sales_sar: 100 },
+      profitability: pageTwoProfitability,
+    });
+    expect(hydrated.totals).toMatchObject({
+      orders: 3,
+      sales_sar: 300,
+      profitability: totalsProfitability,
+    });
+    expect(hydrated.hydrated_campaigns).toBe(2);
   });
 
   test("never overwrites platform metrics with Salla orders or profitability", () => {

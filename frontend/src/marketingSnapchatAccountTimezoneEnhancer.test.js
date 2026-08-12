@@ -132,7 +132,7 @@ describe("Snapchat account-timezone campaign interface", () => {
     expect(form.requestSubmit).toHaveBeenCalledTimes(1);
   });
 
-  test("restores the saved range after returning from Products V2 without submitting today", async () => {
+  test("restores and retains the saved range after returning from Products V2", async () => {
     window.localStorage.setItem("mezan-snapchat-manager-account-v1", "us-account");
     rememberSnapchatAdsManagerReturnRange({
       dateFrom: "2026-07-28",
@@ -154,7 +154,16 @@ describe("Snapchat account-timezone campaign interface", () => {
     const dates = [...document.querySelectorAll('input[type="date"]')].map((input) => input.value);
     expect(dates).toEqual(["2026-07-28", "2026-08-04"]);
     expect(form.requestSubmit).not.toHaveBeenCalled();
-    expect(snapchatRestoredReturnRange()).toBeNull();
+    expect(snapchatRestoredReturnRange()).toMatchObject({
+      date_from: "2026-07-28",
+      date_to: "2026-08-04",
+      account_id: "us-account",
+    });
+
+    expect(enhanceSnapchatAccountTimezone(document)).toBe(true);
+    expect([...document.querySelectorAll('input[type="date"]')].map((input) => input.value))
+      .toEqual(["2026-07-28", "2026-08-04"]);
+    expect(form.requestSubmit).not.toHaveBeenCalled();
   });
 
   test("does not claim there are no campaigns when account totals exist", async () => {

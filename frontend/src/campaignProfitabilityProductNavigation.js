@@ -16,10 +16,18 @@ function normalized(value) {
   return clean(value).toLowerCase();
 }
 
-export function buildProfitabilityProductCostHref({ sku = "", name = "" } = {}) {
+export function buildProfitabilityProductCostHref({
+  productId = "",
+  sku = "",
+  name = "",
+} = {}) {
   const params = new URLSearchParams({ focus: "cost" });
-  if (clean(sku)) params.set(LOOKUP_SKU_PARAM, clean(sku));
-  if (clean(name)) params.set(LOOKUP_NAME_PARAM, clean(name));
+  if (clean(productId)) {
+    params.set("product", clean(productId));
+  } else {
+    if (clean(sku)) params.set(LOOKUP_SKU_PARAM, clean(sku));
+    if (clean(name)) params.set(LOOKUP_NAME_PARAM, clean(name));
+  }
   return `/products-v2?${params.toString()}`;
 }
 
@@ -81,15 +89,18 @@ function productWorkspaceId(product = {}) {
 }
 
 async function searchProduct(lookup) {
-  const query = lookup.sku || lookup.name;
-  if (!query) return null;
-  const result = await listWorkspaceProducts({
-    page: 1,
-    perPage: 30,
-    query,
-    sort: "newest",
-  });
-  return resolveProductFromWorkspace(result?.items, lookup);
+  const queries = [...new Set([lookup.sku, lookup.name].map(clean).filter(Boolean))];
+  for (const query of queries) {
+    const result = await listWorkspaceProducts({
+      page: 1,
+      perPage: 30,
+      query,
+      sort: "newest",
+    });
+    const product = resolveProductFromWorkspace(result?.items, lookup);
+    if (product) return product;
+  }
+  return null;
 }
 
 export async function resolveProductCostDeepLink(locationLike = window.location) {
