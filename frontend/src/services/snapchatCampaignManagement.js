@@ -10,6 +10,8 @@ const ACTIONS = new Set([
     "ad.update",
     "creative.create",
 ]);
+const TRANSIENT_PREVIEW_TRANSPORT_STATUSES = new Set([502, 503, 504, 520]);
+const MAX_PREVIEW_START_ATTEMPTS = 3;
 
 function text(value, fallback = "") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -48,6 +50,13 @@ function proposalRequest(input = {}) {
         products: objectList(input.products),
         trend_override_reason: text(input.trend_override_reason) || null,
     };
+}
+
+function isTransientPreviewTransportError(error) {
+    if (!error?.response) return true;
+    return TRANSIENT_PREVIEW_TRANSPORT_STATUSES.has(
+        Number(error.response.status),
+    );
 }
 
 export function managementError(error, fallback = "تعذّر تنفيذ طلب إدارة Snapchat.") {
@@ -167,9 +176,36 @@ export async function listSnapchatManagementProposals({ limit = 20 } = {}) {
         : [];
 }
 
-export async function startSnapchatManagementPreviewJob(input = {}) {
-    const response = await api.post(`${BASE}/preview-jobs`, proposalRequest(input));
-    return normalizeSnapchatManagementPreviewJob(response.data);
+export async function startSnapchatManagementPreviewJob(
+    input = {},
+    {
+        attempts = MAX_PREVIEW_START_ATTEMPTS,
+        intervalMs = 250,
+        wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    } = {},
+) {
+    // Build once so every transport retry carries the exact same bounded body
+    // and idempotency key.  A lost 202 can therefore only recover the durable
+    // Mongo job; it cannot start a logically new preview.
+    const request = proposalRequest(input);
+    const maxAttempts = Math.min(
+        MAX_PREVIEW_START_ATTEMPTS,
+        Math.max(1, Math.trunc(Number(attempts) || MAX_PREVIEW_START_ATTEMPTS)),
+    );
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        let response;
+        try {
+            response = await api.post(`${BASE}/preview-jobs`, request);
+        } catch (error) {
+            const canRetry = isTransientPreviewTransportError(error)
+                && attempt < maxAttempts - 1;
+            if (!canRetry) throw error;
+            await wait(intervalMs);
+            continue;
+        }
+        return normalizeSnapchatManagementPreviewJob(response.data);
+    }
+    throw new Error("تعذّر بدء تجهيز معاينة Snapchat.");
 }
 
 export async function getSnapchatManagementPreviewJob(previewJobId) {
@@ -189,8 +225,13 @@ export async function pollSnapchatManagementPreviewJob({
     const normalizedId = text(previewJobId);
     const maxAttempts = Math.max(1, Math.trunc(Number(attempts) || 180));
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        const job = await load(normalizedId);
-        if (["ready", "failed"].includes(job.status)) return job;
+        let job;
+        try {
+            job = await load(normalizedId);
+        } catch (error) {
+            if (!isTransientPreviewTransportError(error)) throw error;
+        }
+        if (job && ["ready", "failed"].includes(job.status)) return job;
         if (attempt < maxAttempts - 1) await wait(intervalMs);
     }
     const error = new Error(

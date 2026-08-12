@@ -1,8 +1,10 @@
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 
 from integrations_control_center import snapchat_campaign_preview_async as preview
 
@@ -26,8 +28,10 @@ def _matches(row, query):
 class Collection:
     def __init__(self):
         self.rows = []
+        self.create_index_calls = []
 
     async def create_index(self, *args, **kwargs):
+        self.create_index_calls.append((args, kwargs))
         return kwargs.get("name")
 
     async def insert_one(self, row):
@@ -80,28 +84,118 @@ def campaign_create(*, idempotency_key="async-preview-001", name="Safe"):
 
 
 @pytest.mark.asyncio
-async def test_start_route_accepts_before_read_only_worker_runs():
+async def test_start_route_returns_202_before_worker_completion_and_replay_is_single(
+    monkeypatch,
+):
     db = DB()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    executions = []
+
+    async def blocked_worker(db_arg, user_id, actor_id, preview_job_id):
+        executions.append((user_id, actor_id, preview_job_id))
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(
+        preview, "execute_snapchat_management_preview_job", blocked_worker
+    )
+    router = APIRouter()
+
+    async def current_user():
+        return {"id": "owner-1"}
+
+    preview.attach_snapchat_campaign_preview_async_routes(
+        router, db, current_user, lambda user: user
+    )
+    app = FastAPI()
+    app.include_router(router)
+    transport = httpx.ASGITransport(app=app)
+    payload = campaign_create().model_dump(mode="json")
+    try:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            first = await asyncio.wait_for(
+                client.post("/snapchat_ads/management/preview-jobs", json=payload),
+                timeout=1,
+            )
+            await asyncio.wait_for(started.wait(), timeout=1)
+
+            assert first.status_code == 202
+            assert first.json()["status"] == "queued"
+            assert first.json()["provider_write_reached"] is False
+            assert release.is_set() is False
+            assert len(preview._PREVIEW_WORKER_TASKS) == 1
+
+            # A retry after a lost 202 uses the same durable job.  It may ask
+            # the scheduler to recover a queued job, but cannot create a
+            # second local worker or a second database row.
+            replay = await asyncio.wait_for(
+                client.post("/snapchat_ads/management/preview-jobs", json=payload),
+                timeout=1,
+            )
+            assert replay.status_code == 202
+            assert replay.json()["preview_job_id"] == first.json()["preview_job_id"]
+            assert len(preview._PREVIEW_WORKER_TASKS) == 1
+            assert len(executions) == 1
+            assert len(db[preview.PREVIEW_JOB_COLLECTION].rows) == 1
+            assert all(
+                collection.create_index_calls == []
+                for collection in db.collections.values()
+            )
+    finally:
+        release.set()
+        tasks = list(preview._PREVIEW_WORKER_TASKS.values())
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.sleep(0)
+
+    assert preview._PREVIEW_WORKER_TASKS == {}
+
+
+@pytest.mark.asyncio
+async def test_replay_reschedules_an_orphan_queued_job_without_a_second_row(
+    monkeypatch,
+):
+    db = DB()
+    payload = campaign_create(idempotency_key="orphan-queued-preview-1")
+    orphan, created = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", payload
+    )
+    assert created is True
+    assert preview._PREVIEW_WORKER_TASKS == {}
+
+    executed = asyncio.Event()
+    calls = []
+
+    async def recovered_worker(db_arg, user_id, actor_id, preview_job_id):
+        calls.append((user_id, actor_id, preview_job_id))
+        executed.set()
+
+    monkeypatch.setattr(
+        preview, "execute_snapchat_management_preview_job", recovered_worker
+    )
     router = APIRouter()
     preview.attach_snapchat_campaign_preview_async_routes(
         router, db, lambda: {"id": "owner-1"}, lambda user: user
     )
     route = next(
-        item
-        for item in router.routes
-        if item.path.endswith("/management/preview-jobs")
+        item for item in router.routes if item.path.endswith("/management/preview-jobs")
     )
-    background_tasks = BackgroundTasks()
-    result = await route.endpoint(
-        payload=campaign_create(),
-        background_tasks=background_tasks,
-        user={"id": "owner-1"},
-    )
-    assert route.status_code == 202
-    assert result["status"] == "queued"
-    assert result["provider_write_reached"] is False
-    assert len(background_tasks.tasks) == 1
-    assert db[preview.PREVIEW_JOB_COLLECTION].rows[0]["status"] == "queued"
+    replay = await route.endpoint(payload=payload, user={"id": "owner-1"})
+    await asyncio.wait_for(executed.wait(), timeout=1)
+    tasks = list(preview._PREVIEW_WORKER_TASKS.values())
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    assert replay["preview_job_id"] == orphan["preview_job_id"]
+    assert calls == [
+        ("owner-1", "owner-1", orphan["preview_job_id"]),
+    ]
+    assert len(db[preview.PREVIEW_JOB_COLLECTION].rows) == 1
+    assert preview._PREVIEW_WORKER_TASKS == {}
 
 
 @pytest.mark.asyncio

@@ -10,11 +10,12 @@ The existing proposal lifecycle remains the sole approval/execution path.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from .snapchat_campaign_management import (
@@ -33,6 +34,13 @@ PREVIEW_JOB_COLLECTION = "mezan_snapchat_campaign_preview_jobs_v1"
 PREVIEW_JOB_SOURCE_MODE = "snapchat_campaign_preview_async_v1"
 PREVIEW_JOB_STALE_AFTER = timedelta(minutes=15)
 ACTIVE_PREVIEW_JOB_STATUSES = {"queued", "running"}
+LOGGER = logging.getLogger(__name__)
+
+# asyncio only keeps weak references to scheduled tasks.  Keep a process-local,
+# strongly referenced registry until each worker finishes, while Mongo remains
+# the durable source of truth and the atomic queued -> running claim remains the
+# cross-process duplicate-work guard.
+_PREVIEW_WORKER_TASKS: dict[tuple[int, str, str], asyncio.Task[None]] = {}
 
 
 def _utcnow() -> datetime:
@@ -167,8 +175,7 @@ async def queue_snapchat_management_preview_job(
     *,
     now: Callable[[], datetime] = _utcnow,
 ) -> tuple[dict[str, Any], bool]:
-    """Persist one bounded job; return whether a new worker must be scheduled."""
-    await ensure_snapchat_preview_job_indexes(db)
+    """Persist one bounded job; return whether its durable row was inserted."""
     fingerprint = snapchat_management_request_fingerprint(payload)
     jobs = _collection(db, PREVIEW_JOB_COLLECTION)
     existing = await jobs.find_one(
@@ -314,6 +321,58 @@ async def execute_snapchat_management_preview_job(
         await _mark_job_failed(db, row, _safe_failure(exc))
 
 
+def _consume_preview_worker_result(
+    key: tuple[int, str, str],
+    task: asyncio.Task[None],
+) -> None:
+    """Release the strong reference and retrieve every terminal exception."""
+    if _PREVIEW_WORKER_TASKS.get(key) is task:
+        _PREVIEW_WORKER_TASKS.pop(key, None)
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        return
+    except BaseException as exc:  # pragma: no cover - worker bounds normal errors
+        # Do not log the exception message: an unexpected dependency failure
+        # can contain provider or database details.  Retrieving it here avoids
+        # an unhandled-task warning while the durable job's stale guard remains
+        # the recovery source of truth if the worker could not mark it failed.
+        LOGGER.error(
+            "Detached Snapchat preview worker ended unexpectedly (%s)",
+            type(exc).__name__,
+        )
+
+
+def schedule_snapchat_management_preview_job(
+    db: Any,
+    user_id: str,
+    actor_id: str,
+    preview_job_id: str,
+) -> asyncio.Task[None]:
+    """Schedule one truly detached worker and retain it until completion."""
+    key = (id(db), user_id, preview_job_id)
+    existing = _PREVIEW_WORKER_TASKS.get(key)
+    if existing is not None and not existing.done():
+        return existing
+
+    task = asyncio.create_task(
+        execute_snapchat_management_preview_job(
+            db,
+            user_id,
+            actor_id,
+            preview_job_id,
+        ),
+        name=f"snapchat-preview-{preview_job_id}",
+    )
+    _PREVIEW_WORKER_TASKS[key] = task
+    task.add_done_callback(
+        lambda completed, task_key=key: _consume_preview_worker_result(
+            task_key, completed
+        )
+    )
+    return task
+
+
 async def get_snapchat_management_preview_job(
     db: Any,
     user_id: str,
@@ -363,17 +422,19 @@ def attach_snapchat_campaign_preview_async_routes(
     )
     async def start_preview_job(
         payload: SnapchatManagementProposalInput,
-        background_tasks: BackgroundTasks,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
         user_id = str(owner["id"])
-        job, created = await queue_snapchat_management_preview_job(
+        job, _created = await queue_snapchat_management_preview_job(
             db, user_id, user_id, payload
         )
-        if created:
-            background_tasks.add_task(
-                execute_snapchat_management_preview_job,
+        # A replay may be recovering an insertion whose original process died
+        # before scheduling.  Always schedule a still-queued durable job; the
+        # registry de-duplicates locally and Mongo's queued -> running claim
+        # de-duplicates across replicas.
+        if job.get("status") == "queued":
+            schedule_snapchat_management_preview_job(
                 db,
                 user_id,
                 user_id,
@@ -401,4 +462,5 @@ __all__ = [
     "execute_snapchat_management_preview_job",
     "get_snapchat_management_preview_job",
     "queue_snapchat_management_preview_job",
+    "schedule_snapchat_management_preview_job",
 ]

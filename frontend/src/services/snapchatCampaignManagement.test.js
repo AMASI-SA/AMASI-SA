@@ -13,6 +13,7 @@ import {
     pollSnapchatManagementPreviewJob,
     pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
+    startSnapchatManagementPreviewJob,
 } from "./snapchatCampaignManagement";
 
 jest.mock("../lib/api", () => ({
@@ -207,6 +208,109 @@ describe("snapchatCampaignManagement", () => {
         })).resolves.toMatchObject({ status: "ready", proposal_id: "proposal-1" });
         expect(load).toHaveBeenCalledTimes(2);
         expect(wait).toHaveBeenCalledTimes(1);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("retries preview start transport failures with the exact same request", async () => {
+        const networkError = new Error("Network Error");
+        const wait = jest.fn().mockResolvedValue(undefined);
+        api.post
+            .mockRejectedValueOnce(networkError)
+            .mockRejectedValueOnce({ response: { status: 520 } })
+            .mockResolvedValueOnce({
+                data: { preview_job_id: "job-recovered", status: "queued" },
+            });
+
+        await expect(startSnapchatManagementPreviewJob({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Safe" },
+            reason: "safe transport retry",
+            idempotency_key: "same-preview-request-1",
+        }, {
+            attempts: 3,
+            intervalMs: 1,
+            wait,
+        })).resolves.toMatchObject({
+            preview_job_id: "job-recovered",
+            status: "queued",
+        });
+
+        expect(api.post).toHaveBeenCalledTimes(3);
+        expect(api.post.mock.calls[0][1]).toBe(api.post.mock.calls[1][1]);
+        expect(api.post.mock.calls[1][1]).toBe(api.post.mock.calls[2][1]);
+        expect(api.post.mock.calls[2][1].idempotency_key).toBe(
+            "same-preview-request-1",
+        );
+        expect(wait).toHaveBeenCalledTimes(2);
+    });
+
+    test("preview start retry is capped and excludes non-transient responses", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const transient = { response: { status: 503 } };
+        api.post.mockRejectedValue(transient);
+        await expect(startSnapchatManagementPreviewJob({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Safe" },
+            reason: "bounded preview transport retry",
+            idempotency_key: "bounded-preview-request-1",
+        }, {
+            attempts: 99,
+            intervalMs: 1,
+            wait,
+        })).rejects.toBe(transient);
+        expect(api.post).toHaveBeenCalledTimes(3);
+        expect(wait).toHaveBeenCalledTimes(2);
+
+        api.post.mockReset();
+        wait.mockClear();
+        const badRequest = { response: { status: 400 } };
+        api.post.mockRejectedValue(badRequest);
+        await expect(startSnapchatManagementPreviewJob({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Safe" },
+            reason: "do not retry validation",
+            idempotency_key: "non-transient-preview-1",
+        }, { wait })).rejects.toBe(badRequest);
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(wait).not.toHaveBeenCalled();
+    });
+
+    test("preview polling absorbs transient GET failures without another POST", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn()
+            .mockRejectedValueOnce({ response: { status: 504 } })
+            .mockRejectedValueOnce(new Error("Network Error"))
+            .mockResolvedValueOnce({
+                preview_job_id: "job-1", status: "ready", proposal_id: "proposal-1",
+            });
+        await expect(pollSnapchatManagementPreviewJob({
+            previewJobId: "job-1",
+            attempts: 3,
+            intervalMs: 1,
+            wait,
+            load,
+        })).resolves.toMatchObject({ status: "ready", proposal_id: "proposal-1" });
+        expect(load).toHaveBeenCalledTimes(3);
+        expect(wait).toHaveBeenCalledTimes(2);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("preview polling rejects a non-transient GET failure immediately", async () => {
+        const unauthorized = { response: { status: 401 } };
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn().mockRejectedValue(unauthorized);
+        await expect(pollSnapchatManagementPreviewJob({
+            previewJobId: "job-1",
+            attempts: 180,
+            intervalMs: 1,
+            wait,
+            load,
+        })).rejects.toBe(unauthorized);
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(wait).not.toHaveBeenCalled();
         expect(api.post).not.toHaveBeenCalled();
     });
 
