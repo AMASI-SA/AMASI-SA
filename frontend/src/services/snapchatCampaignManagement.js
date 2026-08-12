@@ -88,11 +88,14 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         expires_at: text(value.expires_at) || null,
         approved_at: text(value.approved_at) || null,
         executed_at: text(value.executed_at) || null,
+        failed_at: text(value.failed_at) || null,
         verification: object(value.verification),
         rollback: object(value.rollback),
+        failure: object(value.failure),
         provider_write_reached: value.provider_write_reached === true,
         provider_write_state: text(value.provider_write_state, "not_attempted"),
         provider_write_uncertain: value.provider_write_uncertain === true,
+        provider_entity_id: text(value.provider_entity_id) || null,
         accounting_write_reached: value.accounting_write_reached === true,
         qoyod_write_reached: value.qoyod_write_reached === true,
     };
@@ -148,6 +151,30 @@ export async function executeSnapchatManagementProposal(proposalId) {
         `${BASE}/proposals/${encodeURIComponent(text(proposalId))}/execute`,
     );
     return normalizeSnapchatManagementProposal(response.data);
+}
+
+export async function pollSnapchatManagementProposal({
+    proposalId,
+    attempts = 30,
+    intervalMs = 1000,
+    wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    load = listSnapchatManagementProposals,
+} = {}) {
+    const normalizedId = text(proposalId);
+    const maxAttempts = Math.max(1, Math.trunc(Number(attempts) || 30));
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const proposals = await load({ limit: 100 });
+        const proposal = proposals.find((row) => row.proposal_id === normalizedId);
+        if (proposal && ["completed", "failed"].includes(proposal.status)) {
+            return { proposal, proposals };
+        }
+        if (attempt < maxAttempts - 1) await wait(intervalMs);
+    }
+    const error = new Error(
+        "لم تظهر النتيجة النهائية بعد. لا تضغط تنفيذ مرة أخرى؛ حدّث السجل لاحقًا.",
+    );
+    error.code = "snapchat_management_execution_poll_timeout";
+    throw error;
 }
 
 export async function rollbackSnapchatManagementProposal(proposal, reason) {
