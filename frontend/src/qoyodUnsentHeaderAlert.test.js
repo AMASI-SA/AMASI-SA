@@ -14,7 +14,7 @@ test("the store header warns about eligible Qoyod orders that were not sent", ()
 
     expect(alert).toContain('payload?.counts?.["لم يُرسل"]');
     expect(alert).toContain("days: 365");
-    expect(alert).toContain("limit: 1000");
+    expect(alert).toContain("limit: 5000");
     expect(alert).toContain('status: "لم يُرسل"');
     expect(alert).toContain("15_000");
     expect(alert).toContain('data-testid="qoyod-unsent-header-alert-count"');
