@@ -22,6 +22,7 @@ import {
     managementError,
     microToNativeAmount,
     nativeAmountToMicro,
+    pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 
@@ -46,6 +47,13 @@ const STATUS_LABELS = {
 };
 
 const ACTION_LABELS = Object.fromEntries(ACTIONS);
+
+function proposalFailureDetail(proposal) {
+    return proposal?.failure?.provider_error_message
+        || proposal?.failure?.message
+        || proposal?.failure?.code
+        || "";
+}
 
 function localStartTime() {
     const value = new Date(Date.now() + 15 * 60 * 1000);
@@ -246,6 +254,11 @@ function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRo
                     <WarningCircle size={20} weight="fill" /> نتيجة وصول الكتابة غير محسومة؛ يلزم فحص Snapchat قبل إعادة المحاولة.
                 </div>
             )}
+            {proposal.status === "failed" && proposalFailureDetail(proposal) && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100 p-3 text-xs font-black text-rose-900">
+                    <WarningCircle size={20} weight="fill" /> {proposalFailureDetail(proposal)}
+                </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
                 {canApprove && (
                     <button type="button" disabled={busy} onClick={onApprove} className="min-h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:opacity-50" data-testid="snapchat-management-approve">
@@ -377,27 +390,33 @@ export default function SnapchatCampaignManagementPanel({
     }
 
     async function execute() {
+        const proposalId = activeProposal.proposal_id;
         setBusy(true);
         setError("");
+        setNotice("");
         try {
-            const proposal = await executeSnapchatManagementProposal(activeProposal.proposal_id);
-            setActiveProposal(proposal);
-            setNotice("نُفذت العملية وتحقق ميزان من النتيجة عبر قراءة Snapchat بعد الكتابة.");
-            await load();
-            onChanged?.();
-        } catch (requestError) {
-            setError(managementError(requestError, "تعذّر تنفيذ العملية أو التحقق منها."));
-            try {
-                const latest = await listSnapchatManagementProposals({ limit: 12 });
-                setProposals(latest);
-                const current = latest.find(
-                    (row) => row.proposal_id === activeProposal.proposal_id,
-                );
-                if (current) setActiveProposal(current);
-            } catch {
-                // Keep the original provider error visible. The user can refresh
-                // the audit list manually if this secondary read also fails.
+            const accepted = await executeSnapchatManagementProposal(proposalId);
+            setActiveProposal((current) => (
+                current?.proposal_id === proposalId
+                    ? { ...current, status: accepted.status || "executing" }
+                    : current
+            ));
+            setNotice("بدأ التنفيذ والتحقق في الخلفية. لا تضغط تنفيذ مرة أخرى؛ يتابع ميزان النتيجة تلقائيًا.");
+            const result = await pollSnapchatManagementProposal({ proposalId });
+            setProposals(result.proposals);
+            setActiveProposal(result.proposal);
+            if (result.proposal.status === "completed") {
+                setNotice("نُفذت العملية وتحقق ميزان من النتيجة عبر قراءة Snapchat بعد الكتابة.");
+                onChanged?.();
+            } else {
+                const detail = proposalFailureDetail(result.proposal)
+                    || "أبلغ Snapchat عن فشل العملية.";
+                setNotice("");
+                setError(`فشل التنفيذ: ${detail} لا تُعد التنفيذ قبل معالجة السبب.`);
             }
+        } catch (requestError) {
+            setNotice("");
+            setError(`${managementError(requestError, "تعذّر تأكيد الحالة النهائية.")} لا تضغط تنفيذ مرة أخرى؛ حدّث السجل لاحقًا.`);
         } finally {
             setBusy(false);
         }
