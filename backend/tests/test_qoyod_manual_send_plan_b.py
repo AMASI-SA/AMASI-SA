@@ -169,6 +169,25 @@ async def test_manual_sender_accepts_shipping_as_in_delivery_until_next_guard(db
 
 
 @pytest.mark.asyncio
+async def test_manual_sender_accepts_delivering_as_in_delivery_until_next_guard(db):
+    row = _inbox_row(
+        order_number="DELIVERING-ELIGIBLE",
+        status="delivering",
+    )
+    row["canonical_payload"]["order_status_native"] = "جاري التوصيل"
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="DELIVERING-ELIGIBLE",
+        )
+
+    assert exc.value.code == "payment_method_unmapped"
+
+
+@pytest.mark.asyncio
 async def test_manual_sender_rejects_shipped_outside_three_status_policy(db):
     row = _inbox_row(
         order_number="SHIPPED-BLOCKED",

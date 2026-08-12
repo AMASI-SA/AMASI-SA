@@ -90,6 +90,7 @@ async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
         ("completed", "تم التنفيذ"),
         ("in_delivery", "جاري التوصيل"),
         ("shipping", "جاري التوصيل"),
+        ("delivering", "جاري التوصيل"),
         ("delivered", "تم التوصيل"),
         # Store custom label: safe only with the trusted completed slug.
         ("completed", "تم التجهيز"),
@@ -115,6 +116,7 @@ def test_live_status_gate_accepts_only_the_three_eligible_states(slug, native):
     ("slug", "native"),
     [
         ("processing", "تم التجهيز"),
+        ("delivering", "ملغي"),
         # `shipped` is deliberately outside the three-status policy.
         ("shipped", "تم الشحن"),
         ("", "تم التجهيز"),

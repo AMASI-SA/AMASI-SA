@@ -56,7 +56,7 @@ def _status_key_from_unified(row: dict) -> Optional[str]:
             return "completed"
         if s in ("delivered", "تم التوصيل"):
             return "delivered"
-        if s in ("in_delivery", "in delivery", "shipping",
+        if s in ("in_delivery", "in delivery", "shipping", "delivering",
                  "جاري التوصيل", "جارٍ التوصيل"):
             return "in_delivery"
     return None

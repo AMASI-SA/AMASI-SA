@@ -220,6 +220,7 @@ _LIVE_STATUS_SLUG_ALIASES = {
     "in_delivery": "in_delivery",
     "in delivery": "in_delivery",
     "shipping": "in_delivery",
+    "delivering": "in_delivery",
     "جاري_التوصيل": "in_delivery",
     "جاري التوصيل": "in_delivery",
     "delivered": "delivered",
