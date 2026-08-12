@@ -220,6 +220,86 @@ def test_reconciliation_accepts_marker_from_current_orders_owner():
     assert result["rows"][0]["match"] == MATCHED
 
 
+def test_reconciliation_bulk_loads_markers_once_with_exact_id_and_tenant_scope():
+    order_numbers = [str(277400000 + index) for index in range(24)]
+    invoice_ids = [str(2000 + index) for index in range(24)]
+
+    orders = [{
+        "user_id": "merchant-1",
+        "order_number": order_number,
+        "order_date": "2026-08-10",
+        "order_status": "completed",
+        "payment_method": "cash" if index == 1 else "mada",
+        "total_amount": 100.0 + index,
+        "customer_name": f"Customer {index}",
+    } for index, order_number in enumerate(order_numbers)]
+    orders.append({
+        "user_id": "merchant-1",
+        "order_number": "277499999",
+        "order_date": "2026-08-10",
+        "order_date_inferred": True,
+        "order_status": "completed",
+        "total_amount": 999.0,
+        "customer_name": "Inferred date must be excluded",
+    })
+    invoices = [{
+        "user_id": "main",
+        "qoyod_invoice_id": invoice_ids[index],
+        "invoice_number": invoice_ids[index],
+        "reference": order_number,
+        "issue_date": "2026-08-12",
+        "total": 100.0 + index,
+        "paid_amount": 100.0 + index,
+        "remaining": 0.0,
+        "status": "paid",
+    } for index, order_number in enumerate(order_numbers)]
+
+    inbox = []
+    for index, order_number in enumerate(order_numbers):
+        marker = invoice_ids[index]
+        if index == 0:
+            # A stale manual marker must not hide the matching canonical id.
+            row = _inbox("merchant-1", order_number, marker="999999")
+            row["qoyod_invoice_id"] = marker
+            inbox.append(row)
+        elif index == 1:
+            # COD is valid with an invoice marker and no payment marker.
+            inbox.append(_inbox("merchant-1", order_number, marker=marker))
+        elif index == 2:
+            # An allowed owner has a stale marker while an unrelated tenant
+            # has the expected one.  This order must still need repair.
+            inbox.append(_inbox(
+                "merchant-1", order_number, marker="999998"))
+            inbox.append(_inbox("merchant-2", order_number, marker=marker))
+        else:
+            inbox.append(_inbox("main", order_number, marker=marker))
+
+    db = _DB(inbox=inbox, invoices=invoices, orders=orders)
+
+    result = _run(run_reconciliation_v2(
+        db,
+        orders_user_id="merchant-1",
+        markers_user_id="main",
+    ))
+
+    assert result["counts"][MATCHED] == 23
+    assert result["counts"][NEEDS_REPAIR_MARKER] == 1
+    by_order = {row["order_number"]: row for row in result["rows"]}
+    assert by_order[order_numbers[0]]["match"] == MATCHED
+    assert by_order[order_numbers[0]]["debug"]["invoice_id"] == invoice_ids[0]
+    assert by_order[order_numbers[1]]["match"] == MATCHED
+    assert by_order[order_numbers[1]]["debug"]["payment_id"] is None
+    assert by_order[order_numbers[2]]["match"] == NEEDS_REPAIR_MARKER
+
+    # Regression guard: this used to be one integration_inbox query per
+    # matched invoice, which timed out behind Cloudflare at production scale.
+    assert len(db.integration_inbox.queries) == 1
+    inbox_query = db.integration_inbox.queries[0]
+    assert set(inbox_query["user_id"]["$in"]) == {"main", "merchant-1"}
+    assert "merchant-2" not in inbox_query["user_id"]["$in"]
+    assert set(inbox_query["salla_order_number"]["$in"]) == set(order_numbers)
+
+
 def test_marker_lookup_does_not_cross_into_an_unrelated_owner():
     db = _DB(inbox=[
         _inbox("merchant-2", "277274465", marker="9999"),

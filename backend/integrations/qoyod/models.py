@@ -480,6 +480,11 @@ async def ensure_qoyod_indexes(db) -> None:
         [("salla_order_id", pymongo.ASCENDING)],
         name="integration_inbox_order_lookup", sparse=True,
     )
+    await db.integration_inbox.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("salla_order_number", pymongo.ASCENDING)],
+        name="integration_inbox_owner_order_number", sparse=True,
+    )
 
     # --- qoyod_invoices ---
     await db.qoyod_invoices.create_index(

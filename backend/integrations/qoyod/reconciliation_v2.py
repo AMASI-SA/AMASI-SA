@@ -107,7 +107,7 @@ async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
     projection = {
         "_id": 0, "order_number": 1, "order_id": 1,
         "order_status": 1, "order_status_slug": 1,
-        "order_date": 1, "created_at": 1,
+        "order_date": 1, "order_date_inferred": 1, "created_at": 1,
         "payment_method": 1, "total_amount": 1, "currency": 1,
         "customer_name": 1, "customer_mobile": 1,
     }
@@ -116,6 +116,8 @@ async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
     async for u in cursor:
         on = str(u.get("order_number") or "").strip()
         if not on:
+            continue
+        if u.get("order_date_inferred"):
             continue
         d = _unified_salla_date(u)
         if d is None or d < _FLOOR_DATE:
@@ -168,44 +170,80 @@ async def _load_local_qoyod_invoices(
     return out
 
 
-async def _has_marker_in_inbox(
-    db, *, marker_user_ids: list[str], order_number: str,
-    expected_invoice_id: Any = None,
-) -> tuple[bool, Optional[str], Optional[str]]:
-    """Helper signal ONLY. Is there ANY inbox trace for this order
-    that carries a real Plan-B / legacy marker?
-
-    Returns (has_marker, invoice_marker_id, payment_marker_id).
-    """
+def _normalize_marker_user_ids(marker_user_ids: list[str]) -> list[str]:
+    """Return unique, non-empty inbox owner ids without changing order."""
     normalized_user_ids = list(dict.fromkeys(
         str(value).strip() for value in marker_user_ids
         if str(value).strip()
     ))
-    if not normalized_user_ids:
-        return False, None, None
+    return normalized_user_ids
+
+
+def _marker_owner_query(normalized_user_ids: list[str]) -> str | dict:
+    """Build the tenant-isolated owner part of the inbox query."""
     owner_query: str | dict = normalized_user_ids[0]
     if len(normalized_user_ids) > 1:
         owner_query = {"$in": normalized_user_ids}
+    return owner_query
+
+
+async def _load_inbox_marker_rows(
+    db, *, marker_user_ids: list[str], order_numbers: list[str],
+) -> dict[str, list[dict]]:
+    """Bulk-load helper marker rows for exact Salla order numbers.
+
+    Reconciliation can contain thousands of eligible orders.  Loading the
+    inbox once keeps this helper signal O(1) database round-trips instead of
+    issuing one query per matched invoice.  The query remains strictly scoped
+    to the authenticated Qoyod/settings owner and current Salla orders owner.
+    """
+    normalized_user_ids = _normalize_marker_user_ids(marker_user_ids)
+    normalized_order_numbers = list(dict.fromkeys(
+        str(value).strip() for value in order_numbers
+        if str(value).strip()
+    ))
+    if not normalized_user_ids or not normalized_order_numbers:
+        return {}
+
     cursor = db.integration_inbox.find(
         {
-            "user_id": owner_query,
-            "salla_order_number": order_number,
+            "user_id": _marker_owner_query(normalized_user_ids),
+            "salla_order_number": {"$in": normalized_order_numbers},
             "$or": [
-                {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
-                {"manual_qoyod_payment_id": {"$nin": [None, ""]}},
-                {"qoyod_invoice_id":        {"$nin": [None, ""]}},
+                {"manual_qoyod_invoice_id": {
+                    "$exists": True, "$nin": [None, ""]}},
+                {"manual_qoyod_payment_id": {
+                    "$exists": True, "$nin": [None, ""]}},
+                {"qoyod_invoice_id": {
+                    "$exists": True, "$nin": [None, ""]}},
             ],
         },
-        {"_id": 0, "manual_qoyod_invoice_id": 1,
+        {"_id": 0, "salla_order_number": 1,
+         "manual_qoyod_invoice_id": 1,
          "manual_qoyod_payment_id": 1, "qoyod_invoice_id": 1},
     )
+
+    rows_by_order: dict[str, list[dict]] = {}
+    allowed_order_numbers = set(normalized_order_numbers)
+    async for row in cursor:
+        order_number = str(row.get("salla_order_number") or "").strip()
+        if order_number not in allowed_order_numbers:
+            continue
+        rows_by_order.setdefault(order_number, []).append(row)
+    return rows_by_order
+
+
+def _resolve_inbox_marker_rows(
+    rows: list[dict], *, expected_invoice_id: Any = None,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Resolve one order's preloaded rows using exact invoice-id semantics."""
     inv_marker: Optional[str] = None
     pay_marker: Optional[str] = None
     expected_id = (
         str(expected_invoice_id).strip()
         if expected_invoice_id not in (None, "") else None
     )
-    async for r in cursor:
+    for r in rows:
         row_invoice_ids = [
             str(value)
             for value in (
@@ -232,6 +270,28 @@ async def _has_marker_in_inbox(
     return (inv_marker is not None), inv_marker, pay_marker
 
 
+async def _has_marker_in_inbox(
+    db, *, marker_user_ids: list[str], order_number: str,
+    expected_invoice_id: Any = None,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Helper signal ONLY. Is there ANY real marker for this order?
+
+    Kept as a single-order compatibility helper for focused diagnostics and
+    tests.  The reconciliation report itself uses `_load_inbox_marker_rows`
+    once for all matched orders.
+    """
+    order_number = str(order_number or "").strip()
+    rows_by_order = await _load_inbox_marker_rows(
+        db,
+        marker_user_ids=marker_user_ids,
+        order_numbers=[order_number],
+    )
+    return _resolve_inbox_marker_rows(
+        rows_by_order.get(order_number, []),
+        expected_invoice_id=expected_invoice_id,
+    )
+
+
 def _fmt(v):
     return None if v is None else round(float(v), 2)
 
@@ -254,6 +314,19 @@ async def run_reconciliation_v2(
     unified = await _load_eligible_unified(db, user_id=orders_user_id)
     local_inv = await _load_local_qoyod_invoices(
         db, markers_user_id=markers_user_id)
+
+    # Marker rows are only relevant when both sides already have an exact
+    # order-number match.  Fetch all of them in one tenant-isolated query;
+    # never perform an inbox query from inside the reconciliation loop.
+    matched_order_numbers = [
+        order_number for order_number in unified
+        if order_number in local_inv
+    ]
+    inbox_marker_rows = await _load_inbox_marker_rows(
+        db,
+        marker_user_ids=marker_user_ids,
+        order_numbers=matched_order_numbers,
+    )
 
     counts: dict[str, int] = {k: 0 for k in _ALL_STATUSES}
     rows: list[dict] = []
@@ -311,10 +384,8 @@ async def run_reconciliation_v2(
 
         # Marker check — helper signal only. If invoice exists in
         # قيود but NO marker in inbox → Mezan needs a Repair Marker.
-        has_marker, inv_marker, pay_marker = await _has_marker_in_inbox(
-            db,
-            marker_user_ids=marker_user_ids,
-            order_number=on,
+        has_marker, inv_marker, pay_marker = _resolve_inbox_marker_rows(
+            inbox_marker_rows.get(on, []),
             expected_invoice_id=qoyod_invoice_id,
         )
 

@@ -43,7 +43,7 @@ def _eligible_salla_status(row: dict) -> bool:
     for value in (row.get("order_status_slug"), row.get("order_status")):
         status = _normalize_status(value)
         if status in {
-            "completed", "تم التنفيذ", "منتهي", "مكتمل",
+            "completed", "تم التنفيذ",
             "delivered", "تم التوصيل",
             "in delivery", "shipping",
             "جاري التوصيل", "جارٍ التوصيل",
@@ -105,36 +105,43 @@ def _search_matches(row: dict, search: Optional[str]) -> bool:
     return any(needle in str(value or "").casefold() for value in fields)
 
 
-async def _load_salla_orders(
+_SALLA_ORDER_PROJECTION = {
+    "_id": 0,
+    "order_number": 1,
+    "order_status": 1,
+    "order_status_slug": 1,
+    "order_date": 1,
+    "order_date_inferred": 1,
+    "total_amount": 1,
+    "customer_name": 1,
+}
+
+
+async def _load_eligible_salla_orders(
     db,
     *,
     orders_user_id: str,
     start: date,
     end: date,
-) -> tuple[dict[str, dict], int]:
-    """Return every owner order for joins plus the eligible-range count.
+) -> dict[str, dict]:
+    """Return the comparable Salla universe keyed by order number.
 
-    The exact-reference join is intentionally *not* restricted by Salla date
-    or status: an in-range Qoyod invoice can legitimately point to an older or
-    currently-ineligible Salla order and must still show that the order exists.
-    Only the summary count is restricted to the selected creation-date window
-    and the three approved states (completed / in_delivery / delivered).
+    ``order_date`` is the Salla creation date and is stored as an ISO date
+    string in ``unified_orders``.  Scoping the query to the selected window
+    avoids loading the merchant's entire order history merely to build the
+    invoice-review summary.  Status is still validated in Python so all
+    approved Arabic and English variants share the canonical eligibility
+    rules used by this report.
     """
     query = {
         "user_id": orders_user_id,
-    }
-    projection = {
-        "_id": 0,
-        "order_number": 1,
-        "order_status": 1,
-        "order_status_slug": 1,
-        "order_date": 1,
-        "total_amount": 1,
-        "customer_name": 1,
+        "order_date": {
+            "$gte": start.isoformat(),
+            "$lte": end.isoformat(),
+        },
     }
     orders: dict[str, dict] = {}
-    eligible_order_numbers: set[str] = set()
-    cursor = db.unified_orders.find(query, projection).sort(
+    cursor = db.unified_orders.find(query, _SALLA_ORDER_PROJECTION).sort(
         "order_date", -1
     )
     async for row in cursor:
@@ -144,14 +151,42 @@ async def _load_salla_orders(
         created = _parse_iso_date(row.get("order_date"))
         if not order_number:
             continue
-        orders.setdefault(order_number, row)
         if (
-            created is not None
+            not row.get("order_date_inferred")
+            and created is not None
             and start <= created <= end
             and _eligible_salla_status(row)
         ):
-            eligible_order_numbers.add(order_number)
-    return orders, len(eligible_order_numbers)
+            orders.setdefault(order_number, row)
+    return orders
+
+
+async def _load_salla_orders_for_references(
+    db,
+    *,
+    orders_user_id: str,
+    references: set[str],
+) -> dict[str, dict]:
+    """Load only Salla rows referenced by the visible Qoyod invoice set.
+
+    These rows are intentionally not date/status restricted: the invoice
+    table must still show an exact Salla join for an older or currently
+    ineligible order.  The comparable counters, however, use only the
+    eligible set returned by :func:`_load_eligible_salla_orders`.
+    """
+    if not references:
+        return {}
+    query = {
+        "user_id": orders_user_id,
+        "order_number": {"$in": sorted(references)},
+    }
+    orders: dict[str, dict] = {}
+    cursor = db.unified_orders.find(query, _SALLA_ORDER_PROJECTION)
+    async for row in cursor:
+        order_number = str(row.get("order_number") or "").strip()
+        if order_number:
+            orders.setdefault(order_number, row)
+    return orders
 
 
 async def _load_local_invoices(
@@ -160,8 +195,16 @@ async def _load_local_invoices(
     markers_user_id: str,
     start: date,
     end: date,
-) -> list[dict]:
-    """Load real invoices in range from the Qoyod tenant's local mirror."""
+) -> tuple[list[dict], set[str]]:
+    """Load the visible invoice rows and every real invoice reference.
+
+    The table and raw Qoyod total follow the selected invoice issue-date
+    range.  Eligibility reconciliation is an existence check: an eligible
+    Salla order is already sent whenever a real Qoyod invoice with the exact
+    reference exists, even if that invoice was issued outside a historical
+    report window.  Returning both views prevents a later-issued invoice from
+    being mislabeled as missing when the operator reviews an older period.
+    """
     query = {
         "user_id": markers_user_id,
     }
@@ -183,16 +226,20 @@ async def _load_local_invoices(
         "raw_response.currency": 1,
     }
     invoices: list[dict] = []
+    all_real_references: set[str] = set()
     cursor = db.qoyod_invoices.find(query, projection).sort(
         [("issue_date", -1), ("qoyod_invoice_id", -1)]
     )
     async for row in cursor:
         if not _real_local_invoice(row):
             continue
+        reference = _reference(row)
+        if reference:
+            all_real_references.add(reference)
         if not _invoice_in_range(row, start, end):
             continue
         invoices.append(row)
-    return invoices
+    return invoices, all_real_references
 
 
 def _safe_money(value: Any) -> Optional[float]:
@@ -280,18 +327,38 @@ async def build_invoice_review(
     page = max(1, int(page))
     page_size = max(1, min(int(page_size), MAX_PAGE_SIZE))
 
-    all_salla_orders, eligible_count = await _load_salla_orders(
+    eligible_salla_orders = await _load_eligible_salla_orders(
         db,
         orders_user_id=orders_user_id,
         start=start,
         end=end,
     )
-    invoices = await _load_local_invoices(
+    invoices, all_real_invoice_references = await _load_local_invoices(
         db,
         markers_user_id=markers_user_id,
         start=start,
         end=end,
     )
+    invoice_references = {
+        reference
+        for invoice in invoices
+        if (reference := _reference(invoice))
+    }
+    eligible_order_numbers = set(eligible_salla_orders)
+    all_salla_orders = dict(eligible_salla_orders)
+    all_salla_orders.update(await _load_salla_orders_for_references(
+        db,
+        orders_user_id=orders_user_id,
+        references=invoice_references - eligible_order_numbers,
+    ))
+
+    eligible_with_qoyod = (
+        eligible_order_numbers & all_real_invoice_references
+    )
+    eligible_without_qoyod = (
+        eligible_order_numbers - all_real_invoice_references
+    )
+    qoyod_outside_eligible = invoice_references - eligible_order_numbers
 
     items: list[dict] = []
     exact_matches = 0
@@ -330,8 +397,12 @@ async def build_invoice_review(
         "total": total,
         "pages": max(1, math.ceil(total / page_size)),
         "summary": {
-            "eligible_salla_orders": eligible_count,
+            "eligible_salla_orders": len(eligible_order_numbers),
             "qoyod_invoices": len(invoices),
+            "qoyod_distinct_references": len(invoice_references),
+            "eligible_with_qoyod_invoice": len(eligible_with_qoyod),
+            "eligible_without_qoyod_invoice": len(eligible_without_qoyod),
+            "qoyod_outside_eligible": len(qoyod_outside_eligible),
             "exact_reference_matches": exact_matches,
             "unmatched_qoyod_invoices": len(invoices) - exact_matches,
             "latest_sync_at": latest_sync,
@@ -492,6 +563,22 @@ def build_invoice_review_workbook(report: dict) -> bytes:
             report["summary"]["eligible_salla_orders"],
         ),
         ("فواتير قيود", report["summary"]["qoyod_invoices"]),
+        (
+            "مراجع قيود الفريدة",
+            report["summary"]["qoyod_distinct_references"],
+        ),
+        (
+            "طلبات سلة المؤهلة الموجودة في قيود",
+            report["summary"]["eligible_with_qoyod_invoice"],
+        ),
+        (
+            "طلبات سلة المؤهلة غير الموجودة في قيود",
+            report["summary"]["eligible_without_qoyod_invoice"],
+        ),
+        (
+            "مراجع قيود خارج نطاق سلة المؤهل",
+            report["summary"]["qoyod_outside_eligible"],
+        ),
         (
             "مراجع مطابقة تمامًا",
             report["summary"]["exact_reference_matches"],
