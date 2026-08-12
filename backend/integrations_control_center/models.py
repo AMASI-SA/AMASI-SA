@@ -90,11 +90,6 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
         name="mezan_integration_errors_v2_provider_latest",
     )
     await db.mezan_campaign_product_links_v2.create_index(
-        [("user_id", 1), ("idempotency_key", 1)],
-        unique=True,
-        name="mezan_campaign_product_links_v2_idempotency_unique",
-    )
-    await db.mezan_campaign_product_links_v2.create_index(
         [("user_id", 1), ("provider", 1), ("product_id", 1)],
         name="mezan_campaign_product_links_v2_product",
     )

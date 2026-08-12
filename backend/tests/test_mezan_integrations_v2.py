@@ -188,8 +188,18 @@ class FakeCollection:
         return object()
 
     async def create_index(self, keys, **kwargs):
-        self.db.indexes.append((self.name, deepcopy(keys), deepcopy(kwargs)))
-        return kwargs.get("name")
+        safe_keys = deepcopy(keys)
+        safe_options = deepcopy(kwargs)
+        name = safe_options.get("name")
+        identity = (self.name, name)
+        existing = self.db.index_catalog.get(identity)
+        definition = (safe_keys, safe_options)
+        if existing is not None and existing != definition:
+            raise RuntimeError(f"IndexOptionsConflict: {self.name}.{name}")
+        if existing is None:
+            self.db.index_catalog[identity] = definition
+            self.db.indexes.append((self.name, safe_keys, safe_options))
+        return name
 
 
 class FakeDB:
@@ -198,6 +208,7 @@ class FakeDB:
         self.reads: list[tuple] = []
         self.writes: list[tuple] = []
         self.indexes: list[tuple] = []
+        self.index_catalog: dict[tuple[str, str | None], tuple] = {}
 
     def __getitem__(self, name: str):
         return FakeCollection(name, self)
@@ -508,6 +519,26 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_campaign_product_links_v2_event_unique",
         "mezan_campaign_product_links_v2_linear_history",
     }
+    # Define the deployed idempotency index exactly once. MongoDB rejects a
+    # repeated index name when a later installer changes any option.
+    idempotency_definitions = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if (
+            collection == "mezan_campaign_product_links_v2"
+            and options.get("name")
+            == "mezan_campaign_product_links_v2_idempotency_unique"
+        )
+    ]
+    assert idempotency_definitions == [
+        (
+            [("user_id", 1), ("idempotency_key", 1)],
+            {
+                "unique": True,
+                "name": "mezan_campaign_product_links_v2_idempotency_unique",
+            },
+        ),
+    ]
     running_lock_indexes = [
         (keys, options)
         for collection, keys, options in db.indexes
@@ -530,6 +561,34 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_fake_mongo_rejects_same_index_name_with_different_options():
+    db = FakeDB()
+    collection = db.mezan_campaign_product_links_v2
+    keys = [("user_id", 1), ("idempotency_key", 1)]
+    name = "mezan_campaign_product_links_v2_idempotency_unique"
+
+    await collection.create_index(keys, unique=True, name=name)
+    with pytest.raises(RuntimeError, match="IndexOptionsConflict"):
+        await collection.create_index(
+            keys,
+            unique=True,
+            partialFilterExpression={"idempotency_key": {"$type": "string"}},
+            name=name,
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_installation_is_idempotent_across_repeated_startup():
+    db = FakeDB()
+    await ensure_integrations_control_center_indexes(db)
+    first_install = deepcopy(db.indexes)
+
+    await ensure_integrations_control_center_indexes(db)
+
+    assert db.indexes == first_install
 
 
 @pytest.mark.asyncio

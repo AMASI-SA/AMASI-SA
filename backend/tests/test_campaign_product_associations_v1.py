@@ -458,6 +458,4 @@ async def test_indexes_cover_event_identity_linear_history_and_hierarchy():
     } <= set(indexes)
     idempotency = indexes["mezan_campaign_product_links_v2_idempotency_unique"]
     assert idempotency["unique"] is True
-    assert idempotency["partialFilterExpression"] == {
-        "idempotency_key": {"$type": "string"}
-    }
+    assert "partialFilterExpression" not in idempotency
