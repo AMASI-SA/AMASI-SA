@@ -69,10 +69,10 @@ export const MEZAN_V2_NAV_SECTIONS = [
     },
     {
         id: "suppliers",
-        label: "الموردون",
+        label: "الموردون والفواتير",
         Icon: Buildings,
         items: [
-            { to: "/suppliers-v2", label: "الموردون", exactSearch: true },
+            { to: "/suppliers-v2", label: "الموردون والفواتير", exactSearch: true },
         ],
     },
     {

@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
     Buildings,
     CheckCircle,
+    ClockCounterClockwise,
+    CurrencyCircleDollar,
+    DownloadSimple,
+    FileText,
     MagnifyingGlass,
     NotePencil,
     Plus,
+    Receipt,
     SpinnerGap,
     Storefront,
+    Wallet,
     WarningCircle,
     Wrench,
     X,
@@ -15,9 +21,11 @@ import {
 
 import {
     createMezanSupplier,
+    loadMezanSupplierFinancials,
     loadMezanSuppliersWorkspace,
     updateMezanSupplier,
 } from "../services/mezanSuppliersV2";
+import { downloadSupplierReceivingInvoicePdf } from "../services/supplierReceiving";
 
 
 const EMPTY_FORM = {
@@ -32,6 +40,24 @@ const EMPTY_FORM = {
 
 function normalized(value) {
     return String(value || "").trim().toLowerCase();
+}
+
+export function formatSupplierHalalas(value) {
+    return new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number(value || 0) / 100);
+}
+
+function formatSupplierDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("ar-SA", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Riyadh",
+    }).format(date);
 }
 
 export function supplierMatchesQuery(supplier, query) {
@@ -70,6 +96,73 @@ function SummaryCard({ value, label, tone = "slate" }) {
         <div className={`rounded-2xl border p-4 ${colors[tone]}`}>
             <div className="text-3xl font-black tabular-nums">{Number(value || 0)}</div>
             <div className="mt-1 text-xs font-extrabold">{label}</div>
+        </div>
+    );
+}
+
+function MoneySummaryCard({ value, label, tone = "slate", Icon = Wallet }) {
+    const colors = {
+        emerald: "border-emerald-200 bg-emerald-50 text-emerald-950",
+        amber: "border-amber-200 bg-amber-50 text-amber-950",
+        violet: "border-violet-200 bg-violet-50 text-violet-950",
+        slate: "border-slate-200 bg-slate-50 text-slate-950",
+    };
+    return (
+        <div className={`rounded-2xl border p-4 ${colors[tone]}`}>
+            <div className="flex items-center justify-between gap-2"><Icon size={24} weight="duotone" /><span className="text-[11px] font-black">ر.س</span></div>
+            <div className="mt-2 text-2xl font-black tabular-nums sm:text-3xl">{formatSupplierHalalas(value)}</div>
+            <div className="mt-1 text-xs font-extrabold">{label}</div>
+        </div>
+    );
+}
+
+export function SupplierFinancialDetail({ supplier, invoices, timeline, downloadBusy, onDownload, onClose }) {
+    if (!supplier) return null;
+    const financial = supplier.financial || {};
+    const realInvoices = invoices.filter((invoice) => !invoice.experiment_mode);
+    const experimentInvoices = invoices.filter((invoice) => invoice.experiment_mode);
+    return (
+        <div className="fixed inset-0 z-[115] overflow-y-auto bg-slate-950/65 p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={`حساب المورد ${supplier.company_name}`} data-testid="mezan-supplier-financial-overlay">
+            <section className="mx-auto min-h-full max-w-6xl bg-slate-50 shadow-2xl sm:min-h-0 sm:rounded-3xl" dir="rtl" data-testid="mezan-supplier-financial-detail">
+                <header className="sticky top-0 z-20 flex items-start justify-between gap-3 border-b border-emerald-800 bg-gradient-to-l from-slate-950 to-emerald-900 p-5 text-white sm:rounded-t-3xl sm:p-6">
+                    <div><div className="text-xs font-black text-emerald-200">ما بعد الاستلام · الحساب المالي</div><h2 className="mt-1 text-2xl font-black">{supplier.company_name}</h2><p className="mt-1 text-xs font-bold text-emerald-100">الفواتير والرصيد والسداد من دفتر الأستاذ، مع فصل التجارب عن المديونية.</p></div>
+                    <button type="button" onClick={onClose} className="rounded-xl border border-white/20 bg-white/10 p-2.5" aria-label="إغلاق حساب المورد"><X size={22} /></button>
+                </header>
+
+                <div className="space-y-5 p-4 sm:p-6">
+                    <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <MoneySummaryCard value={financial.outstanding_halalas} label="الرصيد المستحق الآن" tone="amber" Icon={Wallet} />
+                        <MoneySummaryCard value={financial.invoiced_halalas} label="إجمالي الفواتير المرحلة" tone="violet" Icon={Receipt} />
+                        <MoneySummaryCard value={financial.paid_halalas} label="إجمالي السداد المسجل" tone="emerald" Icon={CurrencyCircleDollar} />
+                        <SummaryCard value={financial.real_invoice_count} label={`فاتورة حقيقية · ${Number(financial.experiment_invoice_count || 0)} تجريبية`} tone="slate" />
+                    </section>
+
+                    <div className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-6 text-sky-950"><CheckCircle size={21} className="mt-0.5 shrink-0" weight="fill" /><div><div className="font-black">الرصيد من دفتر الأستاذ العام</div><div>الفواتير التجريبية ظاهرة للمراجعة فقط ولا تدخل في الدين أو السداد. لا توجد كتابة إلى قيود أو سلة من هذه الشاشة.</div></div></div>
+
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3"><div><h3 className="text-lg font-black text-slate-950">فواتير المورد الحقيقية</h3><p className="mt-1 text-xs font-bold text-slate-500">تنشأ تلقائيًا بعد اعتماد استلام المنتجات من المورد.</p></div><span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-black text-emerald-800">{realInvoices.length} ظاهرة</span></div>
+                        {!realInvoices.length ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-7 text-center text-sm font-bold text-slate-500">لا توجد فواتير حقيقية لهذا المورد بعد.</div> : realInvoices.map((invoice) => (
+                            <details key={invoice.id} className="group rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="mezan-supplier-real-invoice">
+                                <summary className="cursor-pointer list-none p-4 sm:p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-mono text-sm font-black text-emerald-800">{invoice.invoice_number}</div><div className="mt-1 text-xs font-bold text-slate-500">{formatSupplierDate(invoice.approved_at)} · {invoice.piece_count} قطعة · أصدرها {invoice.approved_by_name || "—"}</div></div><div className="flex items-center gap-2"><span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-900">مديونية مسجلة</span><span className="text-lg font-black tabular-nums text-slate-950">{formatSupplierHalalas(invoice.total_halalas)} ر.س</span></div></div></summary>
+                                <div className="border-t border-slate-100 p-4 sm:p-5">
+                                    <div className="space-y-2">{invoice.lines.map((line) => <div key={`${invoice.id}:${line.line_number}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><div className="flex items-start justify-between gap-3"><div><div className="font-black text-slate-900">{line.product_name}</div><div className="mt-1 text-[11px] font-bold text-slate-500">{line.sku || "بدون SKU"} · {line.quantity} قطعة</div></div><div className="font-black tabular-nums">{formatSupplierHalalas(line.total_halalas)} ر.س</div></div>{line.services?.length > 0 && <div className="mt-2 space-y-1 border-t border-slate-200 pt-2">{line.services.map((service) => <div key={`${line.line_number}:${service.service_id}`} className="flex justify-between gap-3 text-xs font-bold text-violet-800"><span>{service.service_name}</span><span>{formatSupplierHalalas(service.total_halalas)} ر.س</span></div>)}</div>}</div>)}</div>
+                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><span className={`rounded-full px-3 py-1.5 text-xs font-black ${invoice.share_confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{invoice.share_confirmed ? "تمت مشاركة الفاتورة مع المورد" : "تحتاج تأكيد المشاركة"}</span><button type="button" onClick={() => onDownload(invoice)} disabled={downloadBusy === invoice.id} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:opacity-50">{downloadBusy === invoice.id ? <SpinnerGap className="animate-spin" /> : <DownloadSimple size={18} />}تحميل PDF</button></div>
+                                </div>
+                            </details>
+                        ))}
+                    </section>
+
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3"><div><h3 className="text-lg font-black text-slate-950">الفواتير التجريبية</h3><p className="mt-1 text-xs font-bold text-slate-500">تبقى كسجل تحقق ولا تزيد دين المورد.</p></div><span className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-black text-violet-800">{experimentInvoices.length} ظاهرة</span></div>
+                        {!experimentInvoices.length ? <div className="rounded-2xl border border-dashed border-violet-200 bg-white p-6 text-center text-sm font-bold text-slate-500">لا توجد تجارب لهذا المورد.</div> : <div className="grid gap-3 lg:grid-cols-2">{experimentInvoices.map((invoice) => <article key={invoice.id} className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4" data-testid="mezan-supplier-experiment-invoice"><div className="flex items-start justify-between gap-3"><div><div className="font-mono text-sm font-black text-violet-900">{invoice.invoice_number}</div><div className="mt-1 text-xs font-bold text-violet-700">{formatSupplierDate(invoice.approved_at)} · {invoice.piece_count} قطعة</div></div><span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-violet-800">بلا مديونية</span></div><div className="mt-3 text-2xl font-black tabular-nums text-violet-950">{formatSupplierHalalas(invoice.total_halalas)} ر.س</div></article>)}</div>}
+                    </section>
+
+                    <section className="space-y-3 pb-4">
+                        <div><h3 className="text-lg font-black text-slate-950">حركة الدين والسداد</h3><p className="mt-1 text-xs font-bold text-slate-500">كل زيادة أو سداد ظاهر من قيد المورد نفسه.</p></div>
+                        {!timeline.length ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500">لا توجد حركة مالية حقيقية.</div> : <div className="space-y-2">{timeline.map((entry) => <article key={entry.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-start gap-3"><span className={`rounded-xl p-2 ${entry.kind === "invoice" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{entry.kind === "invoice" ? <FileText size={20} /> : <CurrencyCircleDollar size={20} />}</span><div><div className="font-black text-slate-900">{entry.kind === "invoice" ? "زيادة مديونية — فاتورة مورد" : "سداد للمورد"}</div><div className="mt-1 text-[11px] font-bold text-slate-500">{formatSupplierDate(entry.created_at)}{entry.notes ? ` · ${entry.notes}` : ""}</div></div></div><div className={`font-black tabular-nums ${entry.kind === "invoice" ? "text-amber-800" : "text-emerald-800"}`}>{entry.kind === "invoice" ? "+" : "−"}{formatSupplierHalalas(entry.amount_halalas)} ر.س</div></article>)}</div>}
+                    </section>
+                </div>
+            </section>
         </div>
     );
 }
@@ -200,24 +293,33 @@ function SupplierEditor({ supplier, services, busy, onClose, onSaved }) {
 }
 
 export default function MezanSuppliersV2() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedSupplierId = searchParams.get("supplier") || "";
     const [data, setData] = useState({ suppliers: [], services: [], summary: {} });
+    const [financialData, setFinancialData] = useState({ suppliers: [], invoices: [], timeline: [], summary: {} });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
+    const [financialError, setFinancialError] = useState("");
     const [query, setQuery] = useState("");
     const [status, setStatus] = useState("active");
     const [editorSupplier, setEditorSupplier] = useState(undefined);
+    const [selectedSupplierId, setSelectedSupplierId] = useState(requestedSupplierId);
+    const [downloadBusy, setDownloadBusy] = useState("");
 
     const load = useCallback(async ({ quiet = false } = {}) => {
         if (!quiet) setLoading(true);
         setError("");
-        try {
-            setData(await loadMezanSuppliersWorkspace());
-        } catch (loadError) {
-            setError(loadError.message || "تعذّر تحميل الموردين.");
-        } finally {
-            if (!quiet) setLoading(false);
-        }
+        setFinancialError("");
+        const [workspaceResult, financialResult] = await Promise.allSettled([
+            loadMezanSuppliersWorkspace(),
+            loadMezanSupplierFinancials(),
+        ]);
+        if (workspaceResult.status === "fulfilled") setData(workspaceResult.value);
+        else setError(workspaceResult.reason?.message || "تعذّر تحميل الموردين.");
+        if (financialResult.status === "fulfilled") setFinancialData(financialResult.value);
+        else setFinancialError(financialResult.reason?.message || "تعذّر تحميل الفواتير والمديونيات.");
+        if (!quiet) setLoading(false);
     }, []);
 
     useEffect(() => { load(); }, [load]);
@@ -226,6 +328,55 @@ export default function MezanSuppliersV2() {
         (status === "all" || supplier.status === status)
         && supplierMatchesQuery(supplier, query)
     )), [data.suppliers, query, status]);
+    const financialBySupplier = useMemo(() => Object.fromEntries(
+        (financialData.suppliers || []).map((supplier) => [supplier.id, supplier]),
+    ), [financialData.suppliers]);
+    const selectedSupplier = financialBySupplier[selectedSupplierId] || null;
+    const selectedInvoices = useMemo(() => (financialData.invoices || []).filter(
+        (invoice) => invoice.supplier_id === selectedSupplierId,
+    ), [financialData.invoices, selectedSupplierId]);
+    const selectedTimeline = useMemo(() => (financialData.timeline || []).filter(
+        (entry) => entry.supplier_id === selectedSupplierId,
+    ), [financialData.timeline, selectedSupplierId]);
+
+    useEffect(() => {
+        if (requestedSupplierId && financialBySupplier[requestedSupplierId]) {
+            setSelectedSupplierId(requestedSupplierId);
+        }
+    }, [financialBySupplier, requestedSupplierId]);
+
+    function openFinancialDetail(supplierId) {
+        const next = new URLSearchParams(searchParams);
+        next.set("supplier", supplierId);
+        setSelectedSupplierId(supplierId);
+        setSearchParams(next, { replace: true });
+    }
+
+    function closeFinancialDetail() {
+        const next = new URLSearchParams(searchParams);
+        next.delete("supplier");
+        setSelectedSupplierId("");
+        setSearchParams(next, { replace: true });
+    }
+
+    async function downloadInvoice(invoice) {
+        if (!invoice?.id || downloadBusy) return;
+        setDownloadBusy(invoice.id);
+        setFinancialError("");
+        try {
+            const blob = await downloadSupplierReceivingInvoicePdf(invoice.id);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${invoice.invoice_number || "supplier-invoice"}.pdf`;
+            link.click();
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (downloadError) {
+            setFinancialError(downloadError.message || "تعذّر تحميل فاتورة المورد.");
+        } finally {
+            setDownloadBusy("");
+        }
+    }
 
     async function saved() {
         setSaving(true);
@@ -240,21 +391,28 @@ export default function MezanSuppliersV2() {
         <main className="space-y-5" dir="rtl" data-testid="mezan-suppliers-v2-page">
             <header className="overflow-hidden rounded-2xl border border-emerald-900 bg-gradient-to-l from-slate-950 via-emerald-950 to-emerald-800 p-5 text-white shadow-lg sm:p-7">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div><div className="text-xs font-black text-emerald-200">Mezan 2 · Supplier Directory</div><h1 className="mt-1 text-3xl font-black">الموردون</h1><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-emerald-100">إضافة موردي التشغيل وربط كل مورد بالخدمات التي يقدمها، ليستخدمهم الاستلام بالباركود دون الاعتماد على بيانات ميزان القديم.</p></div>
+                    <div><div className="text-xs font-black text-emerald-200">Mezan 2 · Supplier Accounts</div><h1 className="mt-1 text-3xl font-black">الموردون والفواتير</h1><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-emerald-100">مكان واحد لإدارة المورد، مراجعة فواتيره، ومعرفة الدين الحالي بعد كل استلام.</p></div>
                     <button type="button" onClick={() => setEditorSupplier(null)} disabled={!data?.permissions?.can_manage || !(data.services || []).length} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-emerald-950 disabled:opacity-50" data-testid="mezan-supplier-add-button"><Plus size={20} weight="bold" /> إضافة مورد</button>
                 </div>
             </header>
 
-            <div className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold leading-6 text-sky-950"><Storefront size={22} className="mt-0.5 shrink-0" weight="duotone" /><div><div className="font-black">سجل جديد مستقل لميزان 2</div><div>لا يتم استيراد أو قراءة أو ربط أي مورد أو رصيد من ميزان القديم، ولا تنشأ فواتير أو مديونيات من هذه الصفحة.</div></div></div>
+            <div className="flex items-start gap-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold leading-6 text-sky-950"><Storefront size={22} className="mt-0.5 shrink-0" weight="duotone" /><div><div className="font-black">موردون وفواتير ومديونيات ميزان 2 فقط</div><div>لا يتم استيراد أو قراءة أو ربط أي مورد أو رصيد من ميزان القديم. الفواتير والمديونيات أدناه تأتي فقط من اعتماد الاستلام داخل ميزان 2، ولا تُنشئ هذه الصفحة قيدًا ماليًا جديدًا.</div></div></div>
+
+            <section className="grid gap-2 rounded-2xl border border-emerald-200 bg-white p-3 sm:grid-cols-3" data-testid="mezan-supplier-financial-flow">
+                <div className="rounded-xl bg-violet-50 p-3"><div className="text-xs font-black text-violet-700">1 · الاستلام</div><div className="mt-1 text-sm font-black text-slate-950">مسح المنتجات من المورد</div></div>
+                <div className="rounded-xl bg-sky-50 p-3"><div className="text-xs font-black text-sky-700">2 · الفاتورة</div><div className="mt-1 text-sm font-black text-slate-950">مراجعة الأسعار ثم الحفظ</div></div>
+                <div className="rounded-xl bg-emerald-50 p-3"><div className="text-xs font-black text-emerald-700">3 · حساب المورد</div><div className="mt-1 text-sm font-black text-slate-950">يظهر الدين والفاتورة مباشرة</div></div>
+            </section>
 
             <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <SummaryCard value={data.summary?.total} label="إجمالي الموردين" tone="slate" />
-                <SummaryCard value={data.summary?.active} label="مورد نشط" tone="emerald" />
-                <SummaryCard value={data.summary?.inactive} label="مورد موقوف" tone="amber" />
-                <SummaryCard value={data.summary?.services} label="خدمة متاحة للربط" tone="violet" />
+                <MoneySummaryCard value={financialData.summary?.outstanding_halalas} label="إجمالي ديون الموردين" tone="amber" Icon={Wallet} />
+                <MoneySummaryCard value={financialData.summary?.invoiced_halalas} label="إجمالي الفواتير الحقيقية" tone="violet" Icon={Receipt} />
+                <MoneySummaryCard value={financialData.summary?.paid_halalas} label="إجمالي ما سُدد للموردين" tone="emerald" Icon={CurrencyCircleDollar} />
+                <SummaryCard value={financialData.summary?.real_invoice_count} label={`فاتورة حقيقية · ${Number(financialData.summary?.experiment_invoice_count || 0)} تجريبية`} tone="slate" />
             </section>
 
             {error && <div className="flex items-start gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-black text-rose-950"><WarningCircle size={21} className="mt-0.5 shrink-0" />{error}</div>}
+            {financialError && <div className="flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-black text-amber-950"><WarningCircle size={21} className="mt-0.5 shrink-0" />{financialError}</div>}
 
             {!loading && !(data.services || []).length && (
                 <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950" data-testid="mezan-suppliers-no-services"><div className="flex items-start gap-3"><Wrench size={25} className="mt-0.5 shrink-0" /><div><h2 className="font-black">أضف خدمات التجهيز أولًا</h2><p className="mt-1 text-sm font-bold leading-6">لا يمكن إنشاء مورد بلا خدمات. أنشئ خدمات مثل الطباعة أو الحفر أو الخياطة داخل مكونات المنتجات، ثم ارجع لربطها بالمورد.</p><Link to="/components-v2" className="mt-3 inline-flex rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white">فتح مكونات المنتجات</Link></div></div></section>
@@ -277,6 +435,12 @@ export default function MezanSuppliersV2() {
                             <article key={supplier.id} className="rounded-2xl border border-slate-200 p-4" data-testid={`mezan-supplier-row-${supplier.id}`}>
                                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black text-slate-950">{supplier.company_name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${supplier.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{supplier.status === "active" ? "نشط" : "موقوف"}</span></div><div className="mt-1 text-xs font-bold text-slate-500">{supplier.contact_person || "بدون شخص تواصل"}{supplier.phone ? ` · ${supplier.phone}` : ""}</div></div><button type="button" onClick={() => setEditorSupplier(supplier)} disabled={!data?.permissions?.can_manage} className="shrink-0 rounded-xl border border-slate-200 p-2.5 text-emerald-800 disabled:opacity-40" aria-label={`تعديل ${supplier.company_name}`}><NotePencil size={20} /></button></div>
                                 <div className="mt-4 border-t border-slate-100 pt-3"><div className="mb-2 flex items-center gap-2 text-xs font-black text-slate-700"><Wrench className="text-violet-700" />الخدمات التي يقدمها ({supplier.service_count || 0})</div><ServiceBadges links={supplier.service_links} /></div>
+                                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3">
+                                    <div className="rounded-xl bg-amber-50 p-2.5"><div className="text-[10px] font-black text-amber-700">الدين الحالي</div><div className="mt-1 text-sm font-black tabular-nums text-amber-950">{formatSupplierHalalas(financialBySupplier[supplier.id]?.financial?.outstanding_halalas)} ر.س</div></div>
+                                    <div className="rounded-xl bg-emerald-50 p-2.5"><div className="text-[10px] font-black text-emerald-700">فواتير حقيقية</div><div className="mt-1 text-lg font-black tabular-nums text-emerald-950">{Number(financialBySupplier[supplier.id]?.financial?.real_invoice_count || 0)}</div></div>
+                                    <div className="rounded-xl bg-violet-50 p-2.5"><div className="text-[10px] font-black text-violet-700">تجارب بلا دين</div><div className="mt-1 text-lg font-black tabular-nums text-violet-950">{Number(financialBySupplier[supplier.id]?.financial?.experiment_invoice_count || 0)}</div></div>
+                                </div>
+                                <button type="button" onClick={() => openFinancialDetail(supplier.id)} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white" data-testid={`mezan-supplier-financial-open-${supplier.id}`}><ClockCounterClockwise size={20} />فتح الحساب والفواتير</button>
                             </article>
                         ))}
                     </div>
@@ -285,6 +449,16 @@ export default function MezanSuppliersV2() {
 
             {editorSupplier !== undefined && (
                 <SupplierEditor supplier={editorSupplier} services={data.services || []} busy={saving} onClose={() => setEditorSupplier(undefined)} onSaved={saved} />
+            )}
+            {selectedSupplier && (
+                <SupplierFinancialDetail
+                    supplier={selectedSupplier}
+                    invoices={selectedInvoices}
+                    timeline={selectedTimeline}
+                    downloadBusy={downloadBusy}
+                    onDownload={downloadInvoice}
+                    onClose={closeFinancialDetail}
+                />
             )}
         </main>
     );

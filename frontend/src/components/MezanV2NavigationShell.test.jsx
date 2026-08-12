@@ -128,8 +128,9 @@ test("inventory receiving belongs to products rather than orders", () => {
 
 test("Mezan 2 exposes an independent suppliers section", () => {
     const suppliers = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "suppliers");
+    expect(suppliers.label).toBe("الموردون والفواتير");
     expect(suppliers.items).toEqual([
-        { to: "/suppliers-v2", label: "الموردون", exactSearch: true },
+        { to: "/suppliers-v2", label: "الموردون والفواتير", exactSearch: true },
     ]);
     expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
 });

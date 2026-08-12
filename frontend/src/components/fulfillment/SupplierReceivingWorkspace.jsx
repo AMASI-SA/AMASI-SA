@@ -64,6 +64,13 @@ export function formatSupplierMoney(halalas) {
     }).format(Number(halalas || 0) / 100);
 }
 
+export function supplierAccountPath(invoice) {
+    const supplierId = invoice?.supplier_id || invoice?.supplier_snapshot?.id;
+    return supplierId
+        ? `/suppliers-v2?supplier=${encodeURIComponent(String(supplierId))}`
+        : "/suppliers-v2";
+}
+
 function supplierInvoiceFilename(invoice) {
     const supplier = String(invoice?.supplier_snapshot?.company_name || "مورد").trim() || "مورد";
     const number = String(invoice?.invoice_number || invoice?.id || "فاتورة").trim() || "فاتورة";
@@ -262,7 +269,7 @@ function SupplierQuantitySelection({ request, busy, onSelect, onDismiss }) {
     );
 }
 
-function SupplierInvoiceSharePanel({
+export function SupplierInvoiceSharePanel({
     invoice,
     busy,
     error,
@@ -284,6 +291,7 @@ function SupplierInvoiceSharePanel({
                     <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-black"><div className="rounded-xl bg-white p-3">القيد المالي: 0</div><div className="rounded-xl bg-white p-3">مديونية المورد: 0</div></div>
                 </div>
                 {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">{error}</div>}
+                <Link to={supplierAccountPath(invoice)} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white" data-testid="supplier-experiment-open-account"><Buildings size={21} />عرض التجربة في حساب المورد — بلا مديونية</Link>
                 <button type="button" onClick={onDone} className="min-h-12 w-full rounded-xl bg-violet-700 text-sm font-black text-white">العودة إلى جلسات الموردين</button>
             </section>
         );
@@ -329,7 +337,8 @@ function SupplierInvoiceSharePanel({
                 <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-center">
                     <CheckCircle size={34} weight="fill" className="mx-auto text-emerald-700" />
                     <div className="mt-2 font-black text-emerald-900">اكتملت المشاركة وحُفظ الإثبات في سجل الموظف</div>
-                    <button type="button" onClick={onDone} className="mt-3 min-h-11 w-full rounded-xl bg-emerald-700 text-sm font-black text-white">العودة إلى فواتير الموردين</button>
+                    <Link to={supplierAccountPath(invoice)} className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white" data-testid="supplier-invoice-open-account"><Buildings size={21} />فتح حساب المورد والفاتورة</Link>
+                    <button type="button" onClick={onDone} className="mt-2 min-h-11 w-full rounded-xl bg-emerald-700 text-sm font-black text-white">استلام فاتورة أخرى</button>
                 </div>
             )}
             {!confirmed && <p className="text-center text-xs font-bold text-amber-700">يمكن الخروج، لكن ستبقى الفاتورة بحالة «تحتاج تأكيد المشاركة» في سجل الموظف.</p>}

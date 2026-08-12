@@ -34,6 +34,16 @@ export async function loadMezanSuppliersWorkspace() {
     }
 }
 
+export async function loadMezanSupplierFinancials({ supplierId = null } = {}) {
+    try {
+        return (await api.get("/suppliers-v2/financials", {
+            params: supplierId ? { supplier_id: supplierId } : {},
+        })).data;
+    } catch (error) {
+        throw supplierError(error, "تعذّر تحميل فواتير الموردين ومديونياتهم.");
+    }
+}
+
 export async function createMezanSupplier(payload) {
     try {
         return (await api.post("/suppliers-v2", payload)).data;

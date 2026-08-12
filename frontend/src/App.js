@@ -296,9 +296,7 @@ function AppRoutes() {
                 path="/suppliers-v2"
                 element={
                     <ProtectedRoute>
-                        <OwnerOnlyRoute>
-                            <Layout><MezanSuppliersV2 /></Layout>
-                        </OwnerOnlyRoute>
+                        <Layout><MezanSuppliersV2 /></Layout>
                     </ProtectedRoute>
                 }
             />

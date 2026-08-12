@@ -20,3 +20,14 @@ test("legacy dashboard remains reachable only through its explicit legacy route"
     expect(sidebar).toContain('{ to: "/legacy-dashboard", label: "لوحة التحكم القديمة", icon: House, testid: "nav-dashboard" }');
     expect(sidebar).not.toContain('{ to: "/", label: "لوحة التحكم", icon: House, testid: "nav-dashboard" }');
 });
+
+test("Mezan 2 supplier accounts use backend permissions instead of an owner-only page gate", () => {
+    const app = read("src/App.js");
+    const supplierStart = app.indexOf('path="/suppliers-v2"');
+    const integrationStart = app.indexOf('path="/integrations-v2"', supplierStart);
+    const supplierRoute = app.slice(supplierStart, integrationStart);
+
+    expect(supplierStart).toBeGreaterThan(-1);
+    expect(supplierRoute).toContain("<Layout><MezanSuppliersV2 /></Layout>");
+    expect(supplierRoute).not.toContain("<OwnerOnlyRoute>");
+});

@@ -13,7 +13,7 @@ jest.mock("@zxing/browser", () => ({
 }));
 
 jest.mock("react-router-dom", () => ({
-    Link: ({ to, children }) => <a href={to}>{children}</a>,
+    Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a>,
 }));
 
 jest.mock("../../services/supplierReceiving", () => ({
@@ -32,7 +32,9 @@ jest.mock("../../services/supplierReceiving", () => ({
 import SupplierReceivingWorkspace, {
     buildSupplierInvoiceLines,
     formatReceivingDate,
+    SupplierInvoiceSharePanel,
     SupplierPieceCameraScanner,
+    supplierAccountPath,
     supplierInvoiceLineKey,
     supplierDisplayName,
 } from "./SupplierReceivingWorkspace";
@@ -63,6 +65,34 @@ test("supplier session helpers keep supplier and Riyadh display stable", () => {
     expect(supplierDisplayName(null)).toBe("مورد غير محدد");
     expect(formatReceivingDate("invalid")).toBe("—");
     expect(formatReceivingDate("2026-08-04T10:00:00Z")).not.toBe("—");
+    expect(supplierAccountPath({ supplier_id: "supplier 2" })).toBe("/suppliers-v2?supplier=supplier%202");
+    expect(supplierAccountPath({})).toBe("/suppliers-v2");
+});
+
+test("completed supplier invoice offers one direct next step to the supplier account", () => {
+    const markup = renderToStaticMarkup(
+        <SupplierInvoiceSharePanel
+            invoice={{
+                id: "invoice-v2-1",
+                supplier_id: "supplier-v2-1",
+                invoice_number: "SI-001",
+                total_halalas: 11_000,
+                share_confirmed: true,
+                supplier_snapshot: { company_name: "مورد ميزان 2" },
+            }}
+            busy=""
+            error=""
+            onShare={() => {}}
+            onEvidence={() => {}}
+            onConfirm={() => {}}
+            onDone={() => {}}
+        />,
+    );
+
+    expect(markup).toContain("اكتملت المشاركة");
+    expect(markup).toContain("فتح حساب المورد والفاتورة");
+    expect(markup).toContain('href="/suppliers-v2?supplier=supplier-v2-1"');
+    expect(markup).toContain('data-testid="supplier-invoice-open-account"');
 });
 
 test("supplier camera keeps scan separate from review draft", () => {
