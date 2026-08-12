@@ -22,6 +22,7 @@ import { Toaster } from "../components/ui/sonner";
 import { LogoIcon } from "./MezanLogo";
 import NotificationBell from "./NotificationBell";
 import GlobalIntegrationAlert from "./GlobalIntegrationAlert";
+import QoyodUnsentHeaderAlert from "./QoyodUnsentHeaderAlert";
 import OrderUiEnhancements from "./OrderUiEnhancements";
 import DashboardAnalyticsPlacement from "./DashboardAnalyticsPlacement";
 import DashboardSnapchatAccountsPlacement from "./DashboardSnapchatAccountsPlacement";
@@ -237,6 +238,7 @@ export default function Layout({ children }) {
             )}
 
             <GlobalIntegrationAlert />
+            <QoyodUnsentHeaderAlert />
 
             <main
                 className="min-h-screen"
