@@ -29,6 +29,24 @@ class FakeCollection:
             target.update(deepcopy(update.get("$set") or {}))
         return object()
 
+    async def find_one(self, query, projection=None):
+        for row in self.rows:
+            matches = all(
+                row.get(key) == value
+                for key, value in query.items()
+                if key != "$or"
+            )
+            alternatives = query.get("$or")
+            if matches and (
+                not alternatives
+                or any(
+                    all(row.get(key) == value for key, value in choice.items())
+                    for choice in alternatives
+                )
+            ):
+                return deepcopy(row)
+        return None
+
 
 class FakeDB:
     def __init__(self):

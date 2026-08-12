@@ -13,7 +13,9 @@ test("Snapchat attribution UI defaults to conversion-time semantics", () => {
   expect(source).toContain("وقت التحويل · موصى به");
   expect(source).toContain("وقت الظهور · مقارنة");
   expect(source).toContain("28 يومًا للنقر · 7 أيام للمشاهدة");
-  expect(source).toContain("قرارات الذكاء الاصطناعي تعتمد وقت التحويل فقط");
+  expect(source).toContain("نتائج سلة للمبيعات والمكسب هي أساس القرار");
+  expect(source).toContain("وقت التحويل وإشارات المنصة والسياق أدلة مساندة");
+  expect(source).not.toContain("قرارات الذكاء الاصطناعي تعتمد وقت التحويل فقط");
 });
 
 test("AI tab forces Snapchat conversion-time attribution", () => {

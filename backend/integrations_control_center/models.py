@@ -1,4 +1,5 @@
 """Response and persistence models for Apps & Integrations V2."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -101,6 +102,17 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
         [("user_id", 1), ("provider", 1), ("campaign_id", 1)],
         name="mezan_campaign_product_links_v2_campaign",
     )
+    # Keep the governed Snapchat write journal durable before either the
+    # scheduler or a user action can append its first event.
+    from .snapchat_campaign_management import ensure_snapchat_management_indexes
+    from .snapchat_decision_ledger import ensure_ad_decision_indexes
+    from .campaign_product_associations import (
+        ensure_campaign_product_association_indexes,
+    )
+
+    await ensure_snapchat_management_indexes(db)
+    await ensure_ad_decision_indexes(db)
+    await ensure_campaign_product_association_indexes(db)
 
 
 class ConnectionStatus(str, Enum):

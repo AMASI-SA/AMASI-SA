@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 
 import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
+import AdAccountDecisionHistory from "../components/marketing/AdAccountDecisionHistory";
 import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
 import { mergePaginatedRows } from "../components/marketing/infiniteScrollPagination";
@@ -61,6 +62,22 @@ const CONNECTION_LABELS = {
     error: "خطأ",
     unknown: "غير محسوم",
 };
+
+const TAB_IDS = new Set(TABS.map((tab) => tab.id));
+
+function workspaceUrlState() {
+    if (typeof window === "undefined") {
+        return { tab: "overview", accountId: null, historyPage: 1 };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const tab = TAB_IDS.has(params.get("tab")) ? params.get("tab") : "overview";
+    const historyPage = Math.max(1, Math.trunc(Number(params.get("history_page")) || 1));
+    return {
+        tab,
+        accountId: params.get("account")?.trim() || null,
+        historyPage,
+    };
+}
 
 function money(value) {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) {
@@ -149,11 +166,32 @@ function InsightPanel({ insights = [] }) {
     );
 }
 
-function AccountSummaries({ accounts = [] }) {
+function AccountSummaries({
+    accounts = [],
+    decisionSummaries = [],
+    selectedAccountId,
+    onSelect,
+    decisionHistoryEnabled = false,
+}) {
+    const summaries = new Map(decisionSummaries.map((summary) => [summary.account_id, summary]));
     return (
         <section className="grid gap-4 lg:grid-cols-2" data-testid="marketing-account-summaries">
-            {accounts.map((account) => (
-                <article key={account.account_id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            {accounts.map((account) => {
+                const decisionSummary = summaries.get(account.account_id);
+                const selected = decisionHistoryEnabled
+                    && selectedAccountId === account.account_id;
+                const Card = decisionHistoryEnabled ? "button" : "article";
+                return (
+                <Card
+                    key={account.account_id}
+                    {...(decisionHistoryEnabled ? {
+                        type: "button",
+                        onClick: () => onSelect?.(account),
+                        "aria-pressed": selected,
+                    } : {})}
+                    className={`rounded-2xl border bg-white p-5 text-right shadow-sm ${decisionHistoryEnabled ? "transition hover:-translate-y-0.5 hover:shadow-md" : ""} ${selected ? "border-violet-400 ring-2 ring-violet-100" : "border-slate-200"}`}
+                    data-testid={`marketing-account-${account.account_id}`}
+                >
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h2 className="font-black text-slate-900">{account.account_name}</h2>
@@ -181,8 +219,17 @@ function AccountSummaries({ accounts = [] }) {
                             <div className="mt-1 font-mono font-black">{ratio(account.roas, "×")}</div>
                         </div>
                     </div>
-                </article>
-            ))}
+                    {decisionHistoryEnabled && (
+                        <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs font-bold">
+                            <span className="text-violet-700">عرض آخر 5 تعديلات ونتائجها</span>
+                            <span className="font-mono text-slate-400">
+                                آخر {(decisionSummary?.recent_decisions?.length || 0).toLocaleString("en-US")} موثق
+                            </span>
+                        </div>
+                    )}
+                </Card>
+                );
+            })}
             {!accounts.length && (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center font-bold text-slate-500 lg:col-span-2">
                     لا توجد بيانات أداء موزعة على الحسابات.
@@ -207,7 +254,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
-    const [activeTab, setActiveTab] = useState("overview");
+    const initialUrlState = useRef(workspaceUrlState());
+    const [activeTab, setActiveTab] = useState(initialUrlState.current.tab);
+    const [selectedHistoryAccountId, setSelectedHistoryAccountId] = useState(initialUrlState.current.accountId);
+    const [historyPage, setHistoryPage] = useState(initialUrlState.current.historyPage);
+    const [decisionAccountSummaries, setDecisionAccountSummaries] = useState([]);
     const [entityLevel, setEntityLevel] = useState("campaigns");
     const [activeCampaignsOnly, setActiveCampaignsOnly] = useState(true);
     const [actionReportTime, setActionReportTime] = useState("conversion");
@@ -224,6 +275,21 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [selectedAdSquad, setSelectedAdSquad] = useState(null);
     const loadSequenceRef = useRef(0);
     const adSquadLoadSequenceRef = useRef(0);
+
+    const writeWorkspaceUrl = useCallback((next) => {
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        if (next.tab) params.set("tab", next.tab);
+        else params.delete("tab");
+        if (next.accountId) params.set("account", next.accountId);
+        else params.delete("account");
+        if (next.accountId && Number(next.historyPage) > 1) {
+            params.set("history_page", String(Math.trunc(Number(next.historyPage))));
+        } else {
+            params.delete("history_page");
+        }
+        navigate({ pathname: window.location.pathname, search: `?${params.toString()}` }, { replace: true });
+    }, [navigate]);
 
     const load = useCallback(async ({ silent = false } = {}) => {
         const requestId = ++loadSequenceRef.current;
@@ -297,16 +363,16 @@ export default function MarketingPlatformWorkspace({ provider }) {
         }
     }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform, resultSource, resultSourceRevision]);
 
-    const selectedAccountId = data?.accounts?.[0]?.account_id || null;
+    const reportAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
-        if (platform !== "snapchat" || !selectedAccountId) return;
+        if (platform !== "snapchat" || !reportAccountId) return;
         const requestId = ++adSquadLoadSequenceRef.current;
         const requestPage = adSquadPage;
         setAdSquadLoading(true);
         setAdSquadError("");
         try {
             const result = await getSnapchatAdSquadPerformance({
-                accountId: selectedAccountId,
+                accountId: reportAccountId,
                 dateFrom: appliedRange.dateFrom,
                 dateTo: appliedRange.dateTo,
                 query: appliedQuery,
@@ -354,7 +420,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
         appliedQuery,
         appliedRange,
         platform,
-        selectedAccountId,
+        reportAccountId,
         selectedCampaign?.campaign_id,
     ]);
 
@@ -367,7 +433,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setAdSquadPage(1);
         setAppliedQuery("");
         setQuery("");
-        setActiveTab("overview");
+        const urlState = workspaceUrlState();
+        setActiveTab(urlState.tab);
+        setSelectedHistoryAccountId(urlState.accountId);
+        setHistoryPage(urlState.historyPage);
+        setDecisionAccountSummaries([]);
         setEntityLevel("campaigns");
         setActiveCampaignsOnly(true);
         setActionReportTime("conversion");
@@ -488,6 +558,28 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setAdSquadPage(1);
         setEntityLevel("campaigns");
     }
+
+    const selectHistoryAccount = useCallback((account) => {
+        if (!account?.account_id) return;
+        setActiveTab("accounts");
+        setSelectedHistoryAccountId(account.account_id);
+        setHistoryPage(1);
+        writeWorkspaceUrl({ tab: "accounts", accountId: account.account_id, historyPage: 1 });
+    }, [writeWorkspaceUrl]);
+
+    const changeHistoryPage = useCallback((nextPage) => {
+        const normalizedPage = Math.max(1, Math.trunc(Number(nextPage) || 1));
+        setHistoryPage(normalizedPage);
+        writeWorkspaceUrl({
+            tab: "accounts",
+            accountId: selectedHistoryAccountId,
+            historyPage: normalizedPage,
+        });
+    }, [selectedHistoryAccountId, writeWorkspaceUrl]);
+
+    const selectedHistoryAccount = (data?.accounts || []).find(
+        (account) => account.account_id === selectedHistoryAccountId,
+    );
 
     if (loading && !data) return <LoadingState />;
 
@@ -653,6 +745,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                                 setActionReportTime("conversion");
                             }
                             setActiveTab(id);
+                            writeWorkspaceUrl({
+                                tab: id,
+                                accountId: id === "accounts" ? selectedHistoryAccountId : null,
+                                historyPage: id === "accounts" ? historyPage : 1,
+                            });
                         }}
                         className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-extrabold transition ${activeTab === id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}
                         aria-pressed={activeTab === id}
@@ -715,7 +812,26 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 />
             )}
 
-            {activeTab === "accounts" && <AccountSummaries accounts={data?.accounts || []} />}
+            {activeTab === "accounts" && (
+                <div className="space-y-4">
+                    <AccountSummaries
+                        accounts={data?.accounts || []}
+                        decisionSummaries={decisionAccountSummaries}
+                        selectedAccountId={selectedHistoryAccountId}
+                        onSelect={selectHistoryAccount}
+                        decisionHistoryEnabled={platform === "snapchat"}
+                    />
+                    {platform === "snapchat" && (
+                        <AdAccountDecisionHistory
+                            accountId={selectedHistoryAccountId}
+                            accountName={selectedHistoryAccount?.account_name || selectedHistoryAccount?.display_name}
+                            page={historyPage}
+                            onPageChange={changeHistoryPage}
+                            onSummariesLoaded={setDecisionAccountSummaries}
+                        />
+                    )}
+                </div>
+            )}
 
             {activeTab === "ai" && (
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -726,7 +842,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             </span>
                             <div>
                                 <h2 className="text-xl font-black text-slate-900">جاهزية ذكاء ميزان</h2>
-                                <p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط. قرارات الذكاء الاصطناعي تعتمد وقت التحويل فقط.</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-500">تتحقق الجاهزية من الدليل الفعلي، لا من مجرد وجود الربط. نتائج سلة للمبيعات والمكسب هي أساس القرار، ووقت التحويل وإشارات المنصة والسياق أدلة مساندة للتحقق والمقارنة.</p>
                             </div>
                         </div>
                         <div className="mt-5 grid gap-3 sm:grid-cols-2">

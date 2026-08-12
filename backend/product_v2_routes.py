@@ -142,6 +142,7 @@ def normalize_salla_product(raw: dict[str, Any], *, user_id: str, synced_at: dat
         "categories": categories,
         "options_count": len(raw.get("options") or []) if isinstance(raw.get("options"), list) else 0,
         "variants_count": len(raw.get("variants") or raw.get("skus") or []) if isinstance(raw.get("variants") or raw.get("skus") or [], list) else 0,
+        "variants": (raw.get("variants") or raw.get("skus") or raw.get("product_variants") or []) if isinstance(raw.get("variants") or raw.get("skus") or raw.get("product_variants") or [], list) else [],
         "source": "salla",
         "source_revision": source_revision,
         "source_updated_at": raw.get("updated_at") or raw.get("date_updated"),
@@ -218,8 +219,21 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                     seen_ids.add(doc["salla_product_id"])
                     existing = await db[PRODUCTS].find_one(
                         {"user_id": str(user_id), "salla_product_id": doc["salla_product_id"]},
-                        {"_id": 0, "source_revision": 1, "mezan_product_id": 1},
+                        {
+                            "_id": 0,
+                            "source_revision": 1,
+                            "mezan_product_id": 1,
+                            "variants": 1,
+                            "variants_count": 1,
+                            "details_synced_at": 1,
+                        },
                     )
+                    if not doc.get("variants") and (existing or {}).get("variants"):
+                        doc["variants"] = existing["variants"]
+                        doc["variants_count"] = int(
+                            (existing or {}).get("variants_count")
+                            or len(existing["variants"])
+                        )
                     if existing and existing.get("source_revision") == doc["source_revision"]:
                         unchanged += 1
                         await db[PRODUCTS].update_one(

@@ -470,7 +470,7 @@ def test_owner_gate_accepts_owner_and_rejects_other_roles():
 
 
 @pytest.mark.asyncio
-async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
+async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
     db = FakeDB()
     await ensure_integrations_control_center_indexes(db)
     indexed_collections = {name for name, _, _ in db.indexes}
@@ -482,6 +482,10 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
         "mezan_integration_sync_runs_v2",
         "mezan_integration_errors_v2",
         "mezan_campaign_product_links_v2",
+        "mezan_snapchat_campaign_proposals_v1",
+        "mezan_snapchat_campaign_audit_v1",
+        "mezan_snapchat_campaign_entity_leases_v1",
+        "mezan_ad_decision_ledger_v1",
     }
     unique_names = {
         options["name"]
@@ -496,6 +500,13 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
         "mezan_integration_sync_runs_v2_one_running",
         "mezan_integration_errors_v2_error_unique",
         "mezan_campaign_product_links_v2_idempotency_unique",
+        "snap_management_proposal_unique",
+        "snap_management_idempotency_unique",
+        "snap_management_active_entity_lease_unique",
+        "ad_decision_ledger_entry_unique",
+        "ad_decision_source_event_unique",
+        "mezan_campaign_product_links_v2_event_unique",
+        "mezan_campaign_product_links_v2_linear_history",
     }
     running_lock_indexes = [
         (keys, options)
@@ -1034,7 +1045,7 @@ async def test_safe_settings_and_reconnect_deep_links_never_enable_disconnect():
     expected = {
         "salla": "/settings/salla",
         "meta_ads": "/settings",
-        "qoyod": "/integrations/qoyod/settings",
+        "qoyod": "/integrations-v2/qoyod",
     }
     for provider, href in expected.items():
         assert by_provider[provider]["actions"]["settings"] == {

@@ -323,6 +323,13 @@ def _safe_summary(result: dict[str, Any]) -> dict[str, Any]:
         "provider_calls": int(result.get("provider_calls") or 0),
         "provider_call_budget_scope": result.get("provider_call_budget_scope"),
         "account_provider_calls": account_provider_calls,
+        "campaign_rows_saved": int(result.get("campaign_rows_saved") or 0),
+        "campaign_facts_source_mode": result.get("campaign_facts_source_mode"),
+        "campaign_facts_schema_version": (
+            int(result.get("campaign_facts_schema_version"))
+            if result.get("campaign_facts_schema_version") is not None
+            else None
+        ),
         "error_samples": error_samples,
         "source_only": True,
         "provider_write_reached": False,
@@ -353,6 +360,42 @@ async def _finish_run(
             }
         },
     )
+
+
+async def _evaluate_snapchat_outcomes_after_sync(
+    db: Any,
+    user_id: str,
+    *,
+    now: datetime,
+    limit: int = 5,
+    timeout_seconds: float = 20.0,
+) -> dict[str, Any]:
+    """Run a bounded learning batch only after the provider sync lock is released."""
+    try:
+        from .snapchat_decision_outcomes import evaluate_due_ad_decisions
+
+        result = await asyncio.wait_for(
+            evaluate_due_ad_decisions(db, user_id, now=now, limit=limit),
+            timeout=timeout_seconds,
+        )
+        return {
+            "status": "complete",
+            "scanned": int(result.get("scanned") or 0),
+            "eligible_due": int(result.get("eligible_due") or 0),
+            "deferred_due": int(result.get("deferred_due") or 0),
+            "evaluated": int(result.get("evaluated") or 0),
+            "already_recorded": int(result.get("already_recorded") or 0),
+            "pending": int(result.get("pending") or 0),
+        }
+    except asyncio.TimeoutError:
+        return {"status": "deferred_timeout", "retryable": True}
+    except Exception as exc:
+        logger.exception("Snapchat decision outcome evaluation failed")
+        return {
+            "status": "deferred",
+            "retryable": True,
+            "error_type": type(exc).__name__,
+        }
 
 
 async def _record_error(
@@ -691,8 +734,35 @@ async def _refresh_snapchat(
                         "provider_calls": int(account_context.provider_calls),
                     })
         rows_saved = sum(int(item.get("rows_saved") or 0) for item in items)
+        campaign_rows_saved = sum(
+            int(item.get("campaign_rows_saved") or 0) for item in items
+        )
         complete = sum(int(item.get("errors_count") or 0) == 0 for item in items)
         status = "complete" if not errors and complete == len(accounts) else "partial"
+        campaign_facts_complete = bool(accounts) and len(items) == len(accounts) and all(
+            int(item.get("errors_count") or 0) == 0
+            and item.get("campaign_facts_source_mode")
+            == snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+            and int(item.get("campaign_facts_schema_version") or 0)
+            == snapchat_hourly.CAMPAIGN_FACTS_SCHEMA_VERSION
+            for item in items
+        )
+        # Outcome evaluation is deliberately not part of this provider-sync
+        # critical section.  Historical Salla/profit reconstruction can be
+        # expensive as the journal grows and must not hold the five-minute sync
+        # lock or make fresh reporting appear stuck.  Owner-triggered reads and
+        # the bounded outcome worker perform this learning step separately.
+        decision_outcomes = {
+            "status": (
+                "queued_outside_sync"
+                if status == "complete"
+                else "deferred_partial_refresh"
+            ),
+            "scanned": 0,
+            "evaluated": 0,
+            "already_recorded": 0,
+            "pending": 0,
+        }
         result = {
             "provider": SNAPCHAT_PROVIDER_ID,
             "status": status,
@@ -701,11 +771,23 @@ async def _refresh_snapchat(
             "accounts_attempted": len(accounts),
             "accounts_complete": complete,
             "rows_saved": rows_saved,
+            "campaign_rows_saved": campaign_rows_saved,
+            "campaign_facts_source_mode": (
+                snapchat_hourly.CAMPAIGN_FACTS_SOURCE_MODE
+                if campaign_facts_complete
+                else None
+            ),
+            "campaign_facts_schema_version": (
+                snapchat_hourly.CAMPAIGN_FACTS_SCHEMA_VERSION
+                if campaign_facts_complete
+                else None
+            ),
             "errors_count": len(errors),
             "provider_calls": provider_calls_total,
             "provider_call_budget_scope": "per_selected_account",
             "account_provider_calls": account_provider_calls,
             "error_samples": errors[:10],
+            "decision_outcomes": decision_outcomes,
         }
         await _collection(db, "mezan_integrations_v2").update_one(
             {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
@@ -727,6 +809,16 @@ async def _refresh_snapchat(
         await _finish_run(
             db, user_id=user_id, run_id=run_id, status=status, result=result
         )
+        if status == "complete":
+            # `_finish_run` above releases the durable sync lock first.  This
+            # bounded read-only batch can therefore never make the five-minute
+            # provider refresh appear stuck or block the next refresh cycle.
+            decision_outcomes = await _evaluate_snapchat_outcomes_after_sync(
+                db,
+                user_id,
+                now=now,
+            )
+            result["decision_outcomes"] = decision_outcomes
         return {"run_id": run_id, **result}
     except SnapchatNativeSyncError as exc:
         error_id = await _record_error(
@@ -983,6 +1075,14 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
         provider = str(run.get("provider") or "")
         if provider and provider not in latest:
             latest[provider] = run
+    global_last_result = scheduler.get("last_result")
+    global_last_result = (
+        global_last_result if isinstance(global_last_result, dict) else {}
+    )
+    global_last_error = scheduler.get("last_error")
+    global_last_error = (
+        global_last_error if isinstance(global_last_error, dict) else None
+    )
     return {
         "enabled": auto_sync_enabled(),
         "interval_seconds": interval_seconds(),
@@ -994,8 +1094,28 @@ async def auto_sync_status(db: Any, user_id: str) -> dict[str, Any]:
             "last_started_at": scheduler.get("last_started_at"),
             "last_finished_at": scheduler.get("last_finished_at"),
             "next_due_at": scheduler.get("next_due_at"),
-            "last_result": scheduler.get("last_result"),
-            "last_error": scheduler.get("last_error"),
+            # The scheduler lease is global across every tenant.  Its persisted
+            # result contains one row per tenant/provider, including run and ad
+            # account identifiers.  Only expose infrastructure-level cycle
+            # health here; tenant details come exclusively from `providers`,
+            # whose query above is scoped by `user_id`.
+            "last_result": (
+                {
+                    "status": global_last_result.get("status"),
+                    "started_at": global_last_result.get("started_at"),
+                    "finished_at": global_last_result.get("finished_at"),
+                }
+                if global_last_result
+                else None
+            ),
+            "last_error": (
+                {
+                    "code": "ads_auto_sync_cycle_failed",
+                    "retryable": bool(global_last_error.get("retryable", True)),
+                }
+                if global_last_error
+                else None
+            ),
         },
         "providers": latest,
         "tiktok": _tiktok_scheduler_state(),
