@@ -7,7 +7,9 @@ import {
     listSnapchatManagementProposals,
     microToNativeAmount,
     nativeAmountToMicro,
+    normalizeSnapchatManagementProposal,
     normalizeSnapchatManagementReadiness,
+    pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
 } from "./snapchatCampaignManagement";
 
@@ -96,5 +98,91 @@ describe("snapchatCampaignManagement", () => {
         expect(nativeAmountToMicro(50)).toBe(50_000_000);
         expect(nativeAmountToMicro("12.25")).toBe(12_250_000);
         expect(microToNativeAmount(12_250_000)).toBe(12.25);
+    });
+
+    test("preserves safe provider failure details", () => {
+        expect(normalizeSnapchatManagementProposal({
+            proposal_id: "proposal-1",
+            action: "ad.create",
+            status: "failed",
+            failed_at: "2026-08-11T19:57:54+00:00",
+            provider_entity_id: "ad-1",
+            failure: {
+                code: "snapchat_management_request_failed",
+                provider_error_message: (
+                    "Creative type WEB_VIEW requires REMOTE_WEBPAGE"
+                ),
+            },
+        })).toMatchObject({
+            failed_at: "2026-08-11T19:57:54+00:00",
+            provider_entity_id: "ad-1",
+            failure: {
+                code: "snapchat_management_request_failed",
+                provider_error_message: (
+                    "Creative type WEB_VIEW requires REMOTE_WEBPAGE"
+                ),
+            },
+        });
+    });
+
+    test("polls read-only until the background execution completes", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn()
+            .mockResolvedValueOnce([{
+                proposal_id: "proposal-1", status: "executing",
+            }])
+            .mockResolvedValueOnce([{
+                proposal_id: "proposal-1", status: "completed",
+            }]);
+        await expect(pollSnapchatManagementProposal({
+            proposalId: "proposal-1",
+            attempts: 3,
+            intervalMs: 1,
+            wait,
+            load,
+        })).resolves.toMatchObject({
+            proposal: { proposal_id: "proposal-1", status: "completed" },
+        });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(wait).toHaveBeenCalledTimes(1);
+    });
+
+    test("returns a failed background execution with its provider detail", async () => {
+        const load = jest.fn().mockResolvedValue([{
+            proposal_id: "proposal-1",
+            status: "failed",
+            failure: { provider_error_message: "Creative type mismatch" },
+        }]);
+        await expect(pollSnapchatManagementProposal({
+            proposalId: "proposal-1",
+            attempts: 2,
+            wait: jest.fn(),
+            load,
+        })).resolves.toMatchObject({
+            proposal: {
+                status: "failed",
+                failure: { provider_error_message: "Creative type mismatch" },
+            },
+        });
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    test("poll timeout never triggers another provider write", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn().mockResolvedValue([{
+            proposal_id: "proposal-1", status: "executing",
+        }]);
+        await expect(pollSnapchatManagementProposal({
+            proposalId: "proposal-1",
+            attempts: 2,
+            intervalMs: 1,
+            wait,
+            load,
+        })).rejects.toMatchObject({
+            code: "snapchat_management_execution_poll_timeout",
+        });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(wait).toHaveBeenCalledTimes(1);
+        expect(api.post).not.toHaveBeenCalled();
     });
 });
