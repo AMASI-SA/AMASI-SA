@@ -481,13 +481,14 @@ export default function SnapchatCampaignManagementPanel({
         event.preventDefault();
         setBusy(true);
         setError("");
-        setNotice("");
+        setNotice("بدأ تجهيز المعاينة في الخلفية. لا تغلق الصفحة ولا تنشئ معاينة أخرى.");
         try {
             const proposal = await createSnapchatManagementProposal(buildProposal(form));
             setActiveProposal(proposal);
             setNotice("تم إنشاء معاينة فقط. راجعها ثم اعتمدها قبل التنفيذ.");
             setProposals((current) => [proposal, ...current.filter((row) => row.proposal_id !== proposal.proposal_id)].slice(0, 12));
         } catch (requestError) {
+            setNotice("");
             setError(managementError(requestError, "تعذّر إنشاء معاينة العملية."));
         } finally {
             setBusy(false);

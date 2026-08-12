@@ -87,6 +87,14 @@ class Provider:
         return deepcopy(current)
 
 
+class FailingAccessTokenContext:
+    def __init__(self, error):
+        self.error = error
+
+    async def access_token(self):
+        raise self.error
+
+
 def campaign_create(**overrides):
     values = {
         "action": "campaign.create",
@@ -102,6 +110,58 @@ def campaign_create(**overrides):
     }
     values.update(overrides)
     return module.SnapchatManagementProposalInput(**values)
+
+
+@pytest.mark.asyncio
+async def test_management_provider_converts_reauth_token_error_to_bounded_json():
+    provider = module.SnapchatManagementProvider(DB(), "owner-1")
+    provider.context = FailingAccessTokenContext(
+        module.SnapchatNativeSyncError(
+            "snapchat_needs_reauth",
+            "Snapchat authorization must be renewed.",
+            status_code=409,
+            result={
+                "needs_reauth": True,
+                "access_token": "must-not-leak",
+                "provider_payload": {"secret": "must-not-leak"},
+            },
+        )
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await provider._request("GET", "/me/organizations")
+
+    assert raised.value.status_code == 409
+    assert raised.value.detail == {
+        "code": "snapchat_needs_reauth",
+        "message": "Snapchat authorization must be renewed.",
+        "retryable": False,
+        "needs_reauth": True,
+    }
+    assert "must-not-leak" not in str(raised.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_management_provider_preserves_retryable_token_failure_contract():
+    provider = module.SnapchatManagementProvider(DB(), "owner-1")
+    provider.context = FailingAccessTokenContext(
+        module.SnapchatNativeSyncError(
+            "snapchat_token_refresh_failed",
+            "Snapchat token refresh failed.",
+            status_code=502,
+            retryable=True,
+        )
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        await provider._request("POST", "/adaccounts/account-1/campaigns", body={})
+
+    assert raised.value.status_code == 502
+    assert raised.value.detail == {
+        "code": "snapchat_token_refresh_failed",
+        "message": "Snapchat token refresh failed.",
+        "retryable": True,
+    }
 
 
 def test_campaign_creation_is_forced_paused_and_uses_fixed_snap_path():
