@@ -1,13 +1,15 @@
 """Hermetic receive-only tests for the unified Channel Gateway."""
+
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
+from pymongo.errors import DuplicateKeyError
 
 import customer_identity
 from customer_intelligence.channel_gateway import (
@@ -24,7 +26,7 @@ from customer_intelligence.foundation import (
     CUSTOMERS_COLLECTION,
     ChannelRecord,
 )
-
+from customer_intelligence.reply_suggestions import REPLY_SUGGESTIONS_COLLECTION
 
 NOW = datetime(2026, 8, 11, 13, 0, tzinfo=timezone.utc)
 
@@ -106,6 +108,28 @@ class FakeCollection:
 
     async def create_index(self, *args, **kwargs):
         return kwargs.get("name")
+
+    async def update_many(self, selector, update):
+        modified = 0
+        for document in self.documents:
+            if not _matches(document, selector):
+                continue
+            for key, value in update.get("$set", {}).items():
+                document[key] = deepcopy(value)
+            for key, value in update.get("$inc", {}).items():
+                document[key] = document.get(key, 0) + value
+            modified += 1
+        return SimpleNamespace(modified_count=modified)
+
+
+class RacingMessageCollection(FakeCollection):
+    """Simulate another worker winning between find_one and upsert."""
+
+    async def update_one(self, selector, update, upsert=False):
+        if upsert and "$setOnInsert" in update and not self.documents:
+            self.documents.append(deepcopy(update["$setOnInsert"]))
+            raise DuplicateKeyError("simulated concurrent delivery")
+        return await super().update_one(selector, update, upsert=upsert)
 
 
 class FakeDB:
@@ -206,6 +230,11 @@ async def test_gateway_encrypts_customer_and_message_content_and_is_idempotent()
     incoming = _message()
 
     first = await gateway.ingest_inbound(context=context, message=incoming)
+    db.collections[CONVERSATIONS_COLLECTION].documents[0]["status"] = "closed"
+    state_after_first = {
+        name: deepcopy(collection.documents)
+        for name, collection in db.collections.items()
+    }
     second = await gateway.ingest_inbound(context=context, message=incoming)
 
     assert first.duplicate is False
@@ -222,6 +251,9 @@ async def test_gateway_encrypts_customer_and_message_content_and_is_idempotent()
     assert len(db.collections[CUSTOMERS_COLLECTION].documents) == 1
     assert len(db.collections[CONVERSATIONS_COLLECTION].documents) == 1
     assert len(message_rows) == 1
+    assert {
+        name: collection.documents for name, collection in db.collections.items()
+    } == state_after_first
 
     serialized = repr(db.collections)
     for private_value in (
@@ -255,6 +287,242 @@ async def test_gateway_encrypts_customer_and_message_content_and_is_idempotent()
 
 
 @pytest.mark.asyncio
+async def test_same_provider_ids_on_two_phone_channels_do_not_collide():
+    first_context = _context()
+    second_context = TrustedChannelContext(
+        user_id=first_context.user_id,
+        merchant_id=first_context.merchant_id,
+        channel_id="channel-whatsapp-2",
+        provider="whatsapp",
+    )
+    db = FakeDB(_channel(first_context))
+    db.collections[CHANNELS_COLLECTION].documents.append(_channel(second_context))
+
+    first = await ChannelGateway(db).ingest_inbound(
+        context=first_context,
+        message=_message(),
+    )
+    second = await ChannelGateway(db).ingest_inbound(
+        context=second_context,
+        message=_message(),
+    )
+
+    assert first.duplicate is False
+    assert second.duplicate is False
+    assert first.conversation_id != second.conversation_id
+    assert first.message_id != second.message_id
+    assert len(db.collections[CONVERSATIONS_COLLECTION].documents) == 2
+    assert len(db.collections[CONVERSATION_MESSAGES_COLLECTION].documents) == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_key_is_acknowledged_without_second_message():
+    context = _context()
+    db = FakeDB(_channel(context))
+    db.collections[CONVERSATION_MESSAGES_COLLECTION] = RacingMessageCollection()
+
+    result = await ChannelGateway(db).ingest_inbound(
+        context=context,
+        message=_message(),
+    )
+
+    assert result.duplicate is True
+    assert len(db.collections[CONVERSATION_MESSAGES_COLLECTION].documents) == 1
+
+
+@pytest.mark.asyncio
+async def test_pre_channel_scope_message_key_remains_duplicate_compatible():
+    context = _context()
+    db = FakeDB(_channel(context))
+    legacy_message_key = customer_identity.build_identity_keys(
+        user_id=context.user_id,
+        merchant_id=context.merchant_id,
+        source_system="whatsapp:message",
+        external_customer_id="raw-message-provider-1",
+    )[0]
+    db.collections[CONVERSATION_MESSAGES_COLLECTION].documents.append(
+        {
+            "user_id": context.user_id,
+            "merchant_id": context.merchant_id,
+            "channel_id": context.channel_id,
+            "external_message_key": legacy_message_key,
+            "customer_id": "legacy-customer",
+            "conversation_id": "legacy-conversation",
+            "message_id": "legacy-message",
+        }
+    )
+    before = {
+        name: deepcopy(collection.documents)
+        for name, collection in db.collections.items()
+    }
+
+    result = await ChannelGateway(db).ingest_inbound(
+        context=context,
+        message=_message(),
+    )
+
+    assert result.duplicate is True
+    assert result.conversation_id == "legacy-conversation"
+    assert {
+        name: collection.documents for name, collection in db.collections.items()
+    } == before
+
+
+@pytest.mark.asyncio
+async def test_older_inbound_event_does_not_reopen_resolved_conversation():
+    context = _context()
+    db = FakeDB(_channel(context))
+    gateway = ChannelGateway(db)
+    await gateway.ingest_inbound(context=context, message=_message())
+    conversation = db.collections[CONVERSATIONS_COLLECTION].documents[0]
+    conversation["status"] = "resolved"
+    conversation["last_message_at"] = NOW
+    older_data = _message().model_dump()
+    older_data.update(
+        {
+            "external_message_id": "older-provider-message",
+            "occurred_at": NOW - timedelta(hours=1),
+        }
+    )
+    older = NormalizedInboundMessage(**older_data)
+
+    await gateway.ingest_inbound(context=context, message=older)
+
+    assert conversation["status"] == "resolved"
+    assert conversation["last_message_at"] == NOW
+
+
+@pytest.mark.asyncio
+async def test_employee_echo_first_creates_human_takeover_conversation():
+    context = _context()
+    db = FakeDB(_channel(context))
+    echo_data = _message().model_dump()
+    echo_data.update(
+        {
+            "direction": "outbound",
+            "sender_type": "employee",
+            "analysis_status": "not_requested",
+            "delivery_state": "sent",
+            "source_event": "360dialog.smb_message_echoes.text",
+        }
+    )
+    echo = NormalizedInboundMessage(**echo_data)
+
+    result = await ChannelGateway(db).ingest_inbound(
+        context=context,
+        message=echo,
+    )
+
+    assert result.duplicate is False
+    conversation = db.collections[CONVERSATIONS_COLLECTION].documents[0]
+    message = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    assert conversation["status"] == "needs_human"
+    assert conversation["human_takeover_at"] == NOW
+    assert message["direction"] == "outbound"
+    assert message["sender_type"] == "employee"
+    assert message["analysis_status"] == "not_requested"
+
+
+@pytest.mark.asyncio
+async def test_older_employee_echo_does_not_reopen_or_stale_newer_work():
+    context = _context()
+    db = FakeDB(_channel(context))
+    gateway = ChannelGateway(db)
+    first = await gateway.ingest_inbound(context=context, message=_message())
+    conversation = db.collections[CONVERSATIONS_COLLECTION].documents[0]
+    conversation["status"] = "resolved"
+    conversation["last_message_at"] = NOW
+    suggestion = {
+        "user_id": context.user_id,
+        "merchant_id": context.merchant_id,
+        "conversation_id": first.conversation_id,
+        "status": "pending_approval",
+        "generation_status": "ready",
+        "version": 1,
+    }
+    db.collections[REPLY_SUGGESTIONS_COLLECTION] = FakeCollection([suggestion])
+    echo_data = _message().model_dump()
+    echo_data.update(
+        {
+            "external_message_id": "older-employee-echo",
+            "occurred_at": NOW - timedelta(hours=1),
+            "direction": "outbound",
+            "sender_type": "employee",
+            "analysis_status": "not_requested",
+            "delivery_state": "sent",
+            "source_event": "360dialog.smb_message_echoes.text",
+        }
+    )
+
+    await gateway.ingest_inbound(
+        context=context,
+        message=NormalizedInboundMessage(**echo_data),
+    )
+
+    assert conversation["status"] == "resolved"
+    assert conversation["last_message_at"] == NOW
+    assert "human_takeover_at" not in conversation
+    stored_suggestion = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert stored_suggestion["status"] == "pending_approval"
+    assert stored_suggestion["version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_new_inbound_and_employee_echo_stale_pending_suggestions_once():
+    context = _context()
+    db = FakeDB(_channel(context))
+    conversation_key = customer_identity.build_identity_keys(
+        user_id=context.user_id,
+        merchant_id=context.merchant_id,
+        source_system=f"whatsapp:{context.channel_id}:conversation",
+        external_customer_id="raw-conversation-0500000000",
+    )[0]
+    conversation_id = f"conv_{conversation_key.rsplit(':', 1)[-1][:32]}"
+    suggestion = {
+        "user_id": context.user_id,
+        "merchant_id": context.merchant_id,
+        "conversation_id": conversation_id,
+        "status": "pending_approval",
+        "generation_status": "ready",
+        "version": 1,
+    }
+    db.collections[REPLY_SUGGESTIONS_COLLECTION] = FakeCollection([suggestion])
+    gateway = ChannelGateway(db)
+
+    first = await gateway.ingest_inbound(context=context, message=_message())
+    await gateway.ingest_inbound(context=context, message=_message())
+
+    stored = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert first.conversation_id == conversation_id
+    assert stored["status"] == "stale"
+    assert stored["stale_reason"] == "customer_message"
+    assert stored["version"] == 2
+
+    stored.update(
+        {"status": "pending_approval", "generation_status": "ready", "version": 3}
+    )
+    echo_data = _message().model_dump()
+    echo_data.update(
+        {
+            "external_message_id": "echo-after-suggestion",
+            "direction": "outbound",
+            "sender_type": "employee",
+            "analysis_status": "not_requested",
+            "delivery_state": "sent",
+            "source_event": "360dialog.smb_message_echoes.text",
+        }
+    )
+    await gateway.ingest_inbound(
+        context=context,
+        message=NormalizedInboundMessage(**echo_data),
+    )
+
+    assert stored["status"] == "stale"
+    assert stored["stale_reason"] == "smb_message_echo"
+    assert stored["version"] == 4
+
+
+@pytest.mark.asyncio
 async def test_gateway_rejects_disabled_or_policy_unsafe_channel_before_writes():
     context = _context()
     disabled_db = FakeDB(_channel(context, ingress_enabled=False))
@@ -278,9 +546,10 @@ async def test_gateway_rejects_disabled_or_policy_unsafe_channel_before_writes()
         assert db.collections[CUSTOMERS_COLLECTION].documents == []
         assert db.collections[CONVERSATIONS_COLLECTION].documents == []
         assert db.collections[CONVERSATION_MESSAGES_COLLECTION].documents == []
-        assert db.collections[
-            customer_identity.CUSTOMER_IDENTITY_COLLECTION
-        ].documents == []
+        assert (
+            db.collections[customer_identity.CUSTOMER_IDENTITY_COLLECTION].documents
+            == []
+        )
 
 
 @pytest.mark.asyncio
@@ -310,7 +579,6 @@ def test_normalizer_rejects_provider_credentials_and_gateway_has_no_send_api():
             source_event="messages",
         )
 
-    public_methods = {
-        name for name in dir(ChannelGateway) if not name.startswith("_")
-    }
-    assert public_methods == {"ingest_inbound"}
+    public_methods = {name for name in dir(ChannelGateway) if not name.startswith("_")}
+    assert public_methods == {"ingest_inbound", "record_outbound_status"}
+    assert "send" not in public_methods

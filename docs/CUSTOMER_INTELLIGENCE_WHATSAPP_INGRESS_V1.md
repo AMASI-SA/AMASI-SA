@@ -1,19 +1,23 @@
-# WhatsApp Ingress V1 — استقبال فقط إلى ميزان
+# WhatsApp Ingress V1 — Meta مباشر أو 360dialog Coexistence
 
 ## الحالة
 
-- القناة الأولى: WhatsApp Cloud API.
-- الاتجاه المسموح: **Inbound فقط**.
+- النقل المتاح: **Meta Cloud API مباشر** أو **360dialog Coexistence**.
+- اختيار 360dialog لا يحذف مسار Meta المباشر؛ لكل نقل Endpoint وإعداد مستقل.
+- الاتجاه التنفيذي المسموح من ميزان: **استقبال فقط**؛ لا يوجد عميل إرسال في هذه النسخة.
+- في Coexistence، رد الموظف من تطبيق WhatsApp Business يدخل ميزان كدليل
+  `outbound/employee` عبر `smb_message_echoes`، وليس كإرسال صادر من ميزان.
 - مصدر الحقيقة: ميزان.
 - الإرسال إلى العميل: **مغلق**.
-- استدعاء GPT: **غير موجود في Webhook**.
+- استدعاء OpenAI: **غير موجود في Webhook**؛ يحدث فقط بطلب موظف صريح لإنشاء
+  مسودة، وتبقى المسودة مشفرة وبانتظار المراجعة.
 - إنشاء طلب أو خصم أو رابط دفع أو تعديل منتج: **غير موجود**.
 
 ## المسار
 
 ```text
-Meta signed webhook
-→ WhatsAppInboundAdapter
+Meta signed webhook أو 360dialog authenticated webhook
+→ WhatsAppInboundAdapter أو D360InboundAdapter
 → ChannelGateway
 → customer identity vault
 → customers / conversations / conversation_messages
@@ -23,11 +27,12 @@ Meta signed webhook
 البوابة هي التي تربط العميل وتشفّر المحتوى وتحفظه. لا يعرف WhatsApp شيئًا عن
 GPT، ولا يعرف GPT لاحقًا شيئًا عن تفاصيل Webhook الخاصة بـMeta.
 
-## Endpoint
+## Endpoints النقل
 
 ```text
 GET  /api/customer-intelligence/v1/channels/whatsapp/webhook
 POST /api/customer-intelligence/v1/channels/whatsapp/webhook
+POST /api/customer-intelligence/v1/channels/whatsapp/360dialog/webhook
 ```
 
 - `GET` مخصص لتحدي Meta ويتحقق من `hub.verify_token` قبل إعادة
@@ -36,6 +41,12 @@ POST /api/customer-intelligence/v1/channels/whatsapp/webhook
   الطلب الأصلي قبل تحليل JSON.
 - Payload غير الموقع لا يدخل البوابة ولا يكتب أي سجل.
 - إشعارات الحالة التي لا تحتوي رسالة عميل تقبل بلا إنشاء رسالة وهمية.
+- Endpoint الخاص بـ360dialog يستخدم Basic Auth خاصًا بكل قناة، ثم يطابق
+  `phone_number_id` مع الربط المخزن في الخادم قبل أي كتابة.
+- بيانات اعتماد قناة لا تستطيع توجيه حدث إلى قناة أخرى، ولا يُستخدم
+  `D360-API-KEY` ككلمة مرور للـWebhook.
+- النقلان يفرضان حد جسم مقداره 1 MiB أثناء القراءة، ويعيدان `413` عند تجاوزه.
+- لا يوجد Endpoint باسم `send` في أي من مساري النقل.
 
 ## صندوق الوارد الحقيقي — قراءة فقط
 
@@ -43,7 +54,10 @@ POST /api/customer-intelligence/v1/channels/whatsapp/webhook
 GET /api/customer-intelligence/v1/inbox?limit=20&messages_limit=30&offset=0
 ```
 
-- المسار محمي بجلسة ميزان ومتاح للمالك فقط.
+- المسار محمي بجلسة ميزان. يراه المالك، أو موظف يحمل صلاحية
+  `customer_intelligence.inbox.read`.
+- الموظف يرى الطابور غير المسند والمحادثات المسندة إليه فقط؛ ولا يرى محادثات
+  مسندة لموظف آخر. تبقى تبويبات المعاينة الإدارية للمالك فقط.
 - نطاق المتجر والقناة يُستخرج من جلسة المالك وسجل القناة؛ لا يقبل `user_id`
   أو `merchant_id` من الطلب.
 - يفك الخادم تشفير اسم العميل ومحتوى الرسالة في الذاكرة فقط، ويرجع الحقول
@@ -55,11 +69,15 @@ GET /api/customer-intelligence/v1/inbox?limit=20&messages_limit=30&offset=0
 - مفتاح `MEZAN_CUSTOMER_INTELLIGENCE_LIVE_INBOX_ENABLED` مستقل عن معاينة
   التحليلات، ويوقف API القراءة الحي وحده عند الحاجة.
 - تعرض الوسائط كنوع وتعليق/اسم ملف آمن فقط؛ تنزيل ملف Meta غير مفعّل في V1.
-- الواجهة تعرض المحادثات الحقيقية في تبويب «المحادثات»، بينما تبقى تحليلات
-  الذكاء في التبويبات الأخرى بيانات معاينة حتى بناء مرحلة التحليل التالية.
+- الواجهة تعرض رسائل العميل وردود الموظف الحقيقية في تبويب «المحادثات».
+- اقتراح الرد كيان صريح مستقل؛ لا يُستنتج من أول رسالة صادرة أو من Echo
+  الموظف. يستطيع الموظف إنشاءه يدويًا وتعديله ومراجعته أو رفضه أو تصعيده،
+  لكن زر «اعتماد وإرسال» يبقى مقفلًا ولا يرسل شيئًا في هذه النسخة.
 
 مرجع التنفيذ هو توثيق Meta الرسمي لـ[إنشاء WhatsApp Webhook](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/)
-و[عقد messages webhook](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages).
+و[عقد messages webhook](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages)،
+وتوثيق 360dialog الرسمي لـ[Webhook](https://docs.360dialog.com/docs/messaging/webhook)
+و[Coexistence](https://docs.360dialog.com/docs/resources/phone-numbers/coexistence).
 
 ## إعداد بيئة النشر
 
@@ -76,6 +94,35 @@ MEZAN_CUSTOMER_INTELLIGENCE_LIVE_INBOX_ENABLED=true
 
 الافتراضي هو أن `MEZAN_WHATSAPP_INGRESS_ENABLED` مغلق. إذا فُعّل المفتاح من
 دون App Secret أو Verify Token يرجع Endpoint حالة `503` ولا يقبل الرسائل.
+
+### إعداد 360dialog الاختياري
+
+```text
+MEZAN_360DIALOG_INGRESS_ENABLED=true
+MEZAN_360DIALOG_WEBHOOK_BINDINGS_JSON=[{"username":"<unique>","password":"<random>","phone_number_id":"<meta phone id>","channel_id":"<mezan channel id>"}]
+```
+
+- المتغيران Backend-only، و360dialog مغلق افتراضيًا.
+- لا تُحفظ القيم الحقيقية في Git أو React أو السجلات.
+- يجب أن يكون اسم المستخدم فريدًا لكل رقم، وكلمة المرور عشوائية مستقلة، وأن
+  يطابق `channel_id` سجل القناة الموثوق في ميزان.
+- يستخدم إنشاء اقتراح الرد اتصال OpenAI الموجود أصلًا في بيئة ميزان عبر
+  `OPENAI_API_KEY`. يمكن اختيار نموذج مستقل عبر
+  `MEZAN_OPENAI_CUSTOMER_REPLY_MODEL`، وإلا يستخدم إعداد نموذج ميزان الحالي.
+
+### الرجوع إلى Meta المباشر
+
+1. أوقف `MEZAN_360DIALOG_INGRESS_ENABLED`.
+2. افصل Business Platform/مزود 360dialog من إعداد حساب WhatsApp Business عند
+   إنهاء الخدمة حسب إجراءات Meta و360dialog.
+3. أعد إعداد Meta App والـWebhook المباشر، ثم فعّل
+   `MEZAN_WHATSAPP_INGRESS_ENABLED` مع Verify Token وApp Secret الصحيحين.
+4. أبقِ سجل القناة نفسه وسياسات `send_allowed=false` و
+   `ai_auto_reply_allowed=false`؛ النقل قابل للاستبدال ونواة المحادثات لا
+   تعتمد على 360dialog.
+
+لا تُفعّل النقلين لنفس الرقم في التشغيل الطبيعي. حماية التكرار موجودة، لكنها
+ليست بديلًا عن اختيار Webhook فعّال واحد للرقم.
 
 ## ربط رقم WhatsApp بمتجر ميزان
 
@@ -115,6 +162,11 @@ ai_auto_reply_allowed=false
 3. نجاح تحدي Meta على Endpoint المنشور.
 4. نجاح رسالة اختبار موقعة وظهور سجل واحد مشفر في ميزان.
 5. إظهار الرسالة للمالك من API القراءة الحي، من دون أي زر إرسال.
-6. تشغيل GPT لاحقًا كمقترح مستقل يحمل `execution_allowed=false`.
+6. إنشاء اقتراح يدوي في ميزان والتأكد أنه `pending_approval` وأن فتح الشاشة
+   أو تعديل النص أو ضغط Enter لا يستدعي أي إرسال.
+7. في Coexistence، أرسل ردًا من تطبيق WhatsApp Business وتأكد أنه يظهر كـ
+   «رد الموظف من واتساب» ويلغي أي اقتراح قديم دون تشغيل الذكاء.
+8. اختبر إيقاف علم 360dialog وتأكد أن Endpoint يعيد `404` وأن مسار Meta
+   المباشر ما زال موجودًا ومستقلًا.
 
 لا يرفع نجاح الاستقبال صلاحية الإرسال تلقائيًا.

@@ -567,12 +567,23 @@ async def logout(response: Response, user: dict = Depends(current_user)):
 
 @api.get("/auth/me")
 async def me(user: dict = Depends(current_user)):
+    # Employee OS V2 is the authority for operational roles.  Merge its
+    # effective permissions into the session payload so the UI and the API
+    # make the same Customer Intelligence decision.  Legacy Admin does not
+    # inherit these capabilities merely from its broad legacy role.
+    from ai_store_access_contract import merged_session_permissions
+
+    permissions = await merged_session_permissions(
+        db,
+        user,
+        _effective_perms(user),
+    )
     return {
         "id": user["id"], "name": user.get("name"), "email": user["email"],
         "role": user.get("role", "user"),
         # iter-51 — surface effective permissions + Salla owner flag so the
         # frontend can drive RBAC navigation without an extra round-trip.
-        "permissions": sorted(_effective_perms(user)),
+        "permissions": permissions,
         "is_owner": _is_owner(user),
         "has_security_question": bool(user.get("security_question")),
     }
@@ -4069,8 +4080,10 @@ from customer_intelligence.foundation import (
     ensure_customer_intelligence_foundation_indexes,
 )
 from customer_intelligence.whatsapp import make_whatsapp_inbound_router
+from customer_intelligence.whatsapp_360dialog import make_360dialog_inbound_router
 api.include_router(make_customer_intelligence_router(current_user, db=db))
 api.include_router(make_whatsapp_inbound_router(db))
+api.include_router(make_360dialog_inbound_router(db))
 
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we

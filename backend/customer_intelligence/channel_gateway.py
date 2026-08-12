@@ -8,6 +8,7 @@ The gateway owns identity resolution and encrypted persistence inside Mezan.
 It deliberately has no provider client, GPT client, send method, order service,
 discount service, payment service or product mutation capability.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -18,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Protocol
 
 from pydantic import Field, SecretStr, field_validator, model_validator
+from pymongo.errors import DuplicateKeyError
 
 from customer_identity import (
     build_identity_keys,
@@ -35,7 +37,7 @@ from .foundation import (
     CustomerRecord,
     FoundationRecord,
 )
-
+from .reply_suggestions import mark_pending_suggestions_stale
 
 ProviderName = Literal["whatsapp", "instagram", "tiktok"]
 MAX_NORMALIZED_PRIVATE_PAYLOAD_BYTES = 256 * 1024
@@ -90,6 +92,12 @@ class NormalizedInboundMessage(FoundationRecord):
     content_payload: dict[str, Any] = Field(repr=False)
     occurred_at: datetime
     source_event: str = Field(min_length=1, max_length=120)
+    direction: Literal["inbound", "outbound"] = "inbound"
+    sender_type: Literal["customer", "employee"] = "customer"
+    analysis_status: Literal["pending", "not_requested"] = "pending"
+    delivery_state: Literal["received", "sent", "delivered", "read", "failed"] = (
+        "received"
+    )
 
     @field_validator("external_conversation_id", "external_message_id")
     @classmethod
@@ -124,6 +132,17 @@ class NormalizedInboundMessage(FoundationRecord):
         ).encode("utf-8")
         if len(rendered) > MAX_NORMALIZED_PRIVATE_PAYLOAD_BYTES:
             raise ValueError("normalized private payload exceeds the gateway limit")
+        if self.direction == "inbound":
+            if self.sender_type != "customer" or self.delivery_state != "received":
+                raise ValueError("inbound events must be received customer messages")
+        elif (
+            self.sender_type != "employee"
+            or self.delivery_state == "received"
+            or self.analysis_status != "not_requested"
+        ):
+            raise ValueError(
+                "outbound echoes must be employee messages excluded from analysis"
+            )
         return self
 
 
@@ -200,10 +219,30 @@ def _reference_key(
     keys = build_identity_keys(
         user_id=context.user_id,
         merchant_id=context.merchant_id,
-        source_system=f"{context.provider}:{namespace}",
+        # Provider message/conversation IDs are not guaranteed to be unique
+        # across two phone numbers owned by the same tenant.
+        source_system=f"{context.provider}:{context.channel_id}:{namespace}",
         external_customer_id=external_reference,
     )
     if not keys:  # defensive; required SecretStr validators normally prevent it
+        raise ChannelPolicyError("provider reference could not be normalized")
+    return keys[0]
+
+
+def _legacy_reference_key(
+    *,
+    context: TrustedChannelContext,
+    namespace: str,
+    external_reference: str,
+) -> str:
+    """Read compatibility for rows created before channel-scoped keys."""
+    keys = build_identity_keys(
+        user_id=context.user_id,
+        merchant_id=context.merchant_id,
+        source_system=f"{context.provider}:{namespace}",
+        external_customer_id=external_reference,
+    )
+    if not keys:
         raise ChannelPolicyError("provider reference could not be normalized")
     return keys[0]
 
@@ -250,6 +289,95 @@ class ChannelGateway:
         ):
             raise ChannelPolicyError("channel violates the receive-only policy")
 
+        conversation_key = _reference_key(
+            context=context,
+            namespace="conversation",
+            external_reference=message.external_conversation_id.get_secret_value(),
+        )
+        message_key = _reference_key(
+            context=context,
+            namespace="message",
+            external_reference=message.external_message_id.get_secret_value(),
+        )
+        legacy_message_key = _legacy_reference_key(
+            context=context,
+            namespace="message",
+            external_reference=message.external_message_id.get_secret_value(),
+        )
+        message_collection = getattr(self._db, CONVERSATION_MESSAGES_COLLECTION)
+        duplicate_projection = {
+            "_id": 0,
+            "customer_id": 1,
+            "conversation_id": 1,
+            "message_id": 1,
+        }
+        duplicate_scope = {
+            "user_id": context.user_id,
+            "merchant_id": context.merchant_id,
+            "channel_id": context.channel_id,
+        }
+        duplicate = await message_collection.find_one(
+            {**duplicate_scope, "external_message_key": message_key},
+            duplicate_projection,
+        )
+        if not duplicate:
+            duplicate = await message_collection.find_one(
+                {**duplicate_scope, "external_message_key": legacy_message_key},
+                duplicate_projection,
+            )
+        if duplicate:
+            # A retry is an acknowledgement only.  In particular it must not
+            # refresh identity/customer timestamps or reopen a closed thread.
+            return InboundIngestResult(
+                duplicate=True,
+                provider=context.provider,
+                customer_id=str(duplicate["customer_id"]),
+                conversation_id=str(duplicate["conversation_id"]),
+                message_id=str(duplicate["message_id"]),
+            )
+
+        conversation_collection = getattr(self._db, CONVERSATIONS_COLLECTION)
+        legacy_conversation_key = _legacy_reference_key(
+            context=context,
+            namespace="conversation",
+            external_reference=message.external_conversation_id.get_secret_value(),
+        )
+        conversation_scope = {
+            "user_id": context.user_id,
+            "merchant_id": context.merchant_id,
+            "channel_id": context.channel_id,
+        }
+        conversation_projection = {"_id": 0, "status": 1, "last_message_at": 1}
+        existing_conversation = await conversation_collection.find_one(
+            {**conversation_scope, "external_conversation_key": conversation_key},
+            conversation_projection,
+        )
+        if not existing_conversation:
+            legacy_conversation = await conversation_collection.find_one(
+                {
+                    **conversation_scope,
+                    "external_conversation_key": legacy_conversation_key,
+                },
+                conversation_projection,
+            )
+            if legacy_conversation:
+                conversation_key = legacy_conversation_key
+                existing_conversation = legacy_conversation
+
+        existing_last_message_at = (
+            existing_conversation.get("last_message_at")
+            if existing_conversation
+            else None
+        )
+        event_is_strictly_older = bool(
+            isinstance(existing_last_message_at, datetime)
+            and message.occurred_at < existing_last_message_at
+        )
+        event_is_not_newer = bool(
+            isinstance(existing_last_message_at, datetime)
+            and message.occurred_at <= existing_last_message_at
+        )
+
         content_ciphertext = encrypt_private_payload(
             {
                 "content_type": message.content_type,
@@ -258,6 +386,23 @@ class ChannelGateway:
         )
         if not content_ciphertext:
             raise ChannelPolicyError("normalized message content cannot be empty")
+
+        # Invalidate a draft before later persistence steps.  This ordering is
+        # intentionally conservative: if a later write fails, a potentially
+        # obsolete draft is hidden and the provider retry can safely resume.
+        # The duplicate pre-check above keeps normal retries side-effect free.
+        if not event_is_strictly_older:
+            await mark_pending_suggestions_stale(
+                self._db,
+                user_id=context.user_id,
+                merchant_id=context.merchant_id,
+                conversation_id=_stable_id("conv", conversation_key),
+                reason=(
+                    "smb_message_echo"
+                    if message.direction == "outbound"
+                    else "customer_message"
+                ),
+            )
 
         private_profile = dict(message.customer_profile)
         mobile = _secret(message.customer_mobile)
@@ -284,16 +429,6 @@ class ChannelGateway:
             )
 
         customer_id = str(identity["customer_identity_id"])
-        conversation_key = _reference_key(
-            context=context,
-            namespace="conversation",
-            external_reference=message.external_conversation_id.get_secret_value(),
-        )
-        message_key = _reference_key(
-            context=context,
-            namespace="message",
-            external_reference=message.external_message_id.get_secret_value(),
-        )
         conversation_id = _stable_id("conv", conversation_key)
         message_id = _stable_id("msg", message_key)
         now = datetime.now(timezone.utc)
@@ -348,13 +483,33 @@ class ChannelGateway:
             channel_id=context.channel_id,
             customer_id=customer_id,
             external_conversation_key=conversation_key,
-            status="open",
+            status=("open" if message.direction == "inbound" else "needs_human"),
             started_at=message.occurred_at,
             last_message_at=message.occurred_at,
             created_at=now,
             updated_at=now,
         ).model_dump()
-        await getattr(self._db, CONVERSATIONS_COLLECTION).update_one(
+        conversation_set = {
+            "schema_version": conversation["schema_version"],
+            "customer_id": customer_id,
+            "plaintext_pii_stored": False,
+            "updated_at": now,
+        }
+        if message.direction == "outbound" and not event_is_not_newer:
+            conversation_set.update(
+                {
+                    "status": "needs_human",
+                    "human_takeover_at": message.occurred_at,
+                }
+            )
+        elif message.direction == "inbound" and not (
+            event_is_not_newer
+            and existing_conversation
+            and existing_conversation.get("status") in {"resolved", "closed"}
+        ):
+            conversation_set["status"] = "open"
+
+        await conversation_collection.update_one(
             {
                 "user_id": context.user_id,
                 "merchant_id": context.merchant_id,
@@ -375,13 +530,7 @@ class ChannelGateway:
                         "plaintext_pii_stored",
                     }
                 },
-                "$set": {
-                    "schema_version": conversation["schema_version"],
-                    "customer_id": customer_id,
-                    "status": "open",
-                    "plaintext_pii_stored": False,
-                    "updated_at": now,
-                },
+                "$set": conversation_set,
                 "$max": {"last_message_at": message.occurred_at},
             },
             upsert=True,
@@ -395,36 +544,115 @@ class ChannelGateway:
             channel_id=context.channel_id,
             customer_id=customer_id,
             external_message_key=message_key,
-            direction="inbound",
-            sender_type="customer",
+            direction=message.direction,
+            sender_type=message.sender_type,
             content_type=message.content_type,
             content_ciphertext=content_ciphertext,
             content_fields=sorted(str(key) for key in message.content_payload),
             source_event=message.source_event,
             occurred_at=message.occurred_at,
             received_at=now,
-            analysis_status="pending",
-            delivery_state="received",
+            analysis_status=message.analysis_status,
+            delivery_state=message.delivery_state,
             created_at=now,
         ).model_dump()
-        result = await getattr(self._db, CONVERSATION_MESSAGES_COLLECTION).update_one(
-            {
-                "user_id": context.user_id,
-                "merchant_id": context.merchant_id,
-                "channel_id": context.channel_id,
-                "external_message_key": message_key,
-            },
-            {"$setOnInsert": message_record},
-            upsert=True,
-        )
+        try:
+            result = await message_collection.update_one(
+                {
+                    "user_id": context.user_id,
+                    "merchant_id": context.merchant_id,
+                    "channel_id": context.channel_id,
+                    "external_message_key": message_key,
+                },
+                {"$setOnInsert": message_record},
+                upsert=True,
+            )
+        except DuplicateKeyError:
+            # Another worker won the unique-key race.  Treat the callback as a
+            # duplicate rather than surfacing a retry-inducing 500 response.
+            result = None
 
+        is_duplicate = result is None or getattr(result, "upserted_id", None) is None
         return InboundIngestResult(
-            duplicate=getattr(result, "upserted_id", None) is None,
+            duplicate=is_duplicate,
             provider=context.provider,
             customer_id=customer_id,
             conversation_id=conversation_id,
             message_id=message_id,
         )
+
+    async def record_outbound_status(
+        self,
+        *,
+        context: TrustedChannelContext,
+        external_message_id: str,
+        delivery_state: Literal["sent", "delivered", "read", "failed"],
+    ) -> bool:
+        """Apply a channel-scoped status to an already observed outbound echo."""
+        channel = await getattr(self._db, CHANNELS_COLLECTION).find_one(
+            {
+                "user_id": context.user_id,
+                "merchant_id": context.merchant_id,
+                "channel_id": context.channel_id,
+                "provider": context.provider,
+            },
+            {"_id": 0},
+        )
+        if not channel or channel.get("status") != "connected":
+            raise ChannelNotReadyError("channel is not connected in Mezan")
+        if channel.get("ingress_enabled") is not True:
+            raise ChannelNotReadyError("channel ingress is disabled in Mezan")
+        if (
+            channel.get("egress_mode") != "disabled"
+            or channel.get("send_allowed") is not False
+            or channel.get("ai_auto_reply_allowed") is not False
+        ):
+            raise ChannelPolicyError("channel violates the receive-only policy")
+
+        message_key = _reference_key(
+            context=context,
+            namespace="message",
+            external_reference=str(external_message_id),
+        )
+        legacy_message_key = _legacy_reference_key(
+            context=context,
+            namespace="message",
+            external_reference=str(external_message_id),
+        )
+        collection = getattr(self._db, CONVERSATION_MESSAGES_COLLECTION)
+        status_scope = {
+            "user_id": context.user_id,
+            "merchant_id": context.merchant_id,
+            "channel_id": context.channel_id,
+            "direction": "outbound",
+            "sender_type": "employee",
+        }
+        existing = await collection.find_one(
+            {**status_scope, "external_message_key": message_key},
+            {"_id": 0, "delivery_state": 1},
+        )
+        if not existing:
+            existing = await collection.find_one(
+                {**status_scope, "external_message_key": legacy_message_key},
+                {"_id": 0, "delivery_state": 1},
+            )
+            if existing:
+                message_key = legacy_message_key
+        if not existing:
+            return False
+        current = str(existing.get("delivery_state") or "sent")
+        rank = {"sent": 1, "delivered": 2, "read": 3}
+        if delivery_state != "failed" and rank.get(delivery_state, 0) <= rank.get(
+            current, 0
+        ):
+            return False
+        if delivery_state == "failed" and current in {"delivered", "read"}:
+            return False
+        await collection.update_one(
+            {**status_scope, "external_message_key": message_key},
+            {"$set": {"delivery_state": delivery_state}},
+        )
+        return True
 
 
 __all__ = [

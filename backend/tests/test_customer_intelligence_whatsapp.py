@@ -18,6 +18,7 @@ from customer_intelligence.channel_gateway import (
 )
 from customer_intelligence.foundation import CHANNELS_COLLECTION, ChannelRecord
 from customer_intelligence.whatsapp import (
+    MAX_WHATSAPP_WEBHOOK_BYTES,
     WhatsAppInboundAdapter,
     make_whatsapp_inbound_router,
 )
@@ -299,6 +300,35 @@ async def test_invalid_challenge_or_signature_never_reaches_gateway():
 
     assert challenge.status_code == 403
     assert received.status_code == 401
+    assert gateway.calls == []
+
+
+@pytest.mark.asyncio
+async def test_oversized_meta_webhook_is_rejected_before_gateway():
+    db = FakeDB(_channel())
+    gateway = SpyGateway()
+    app = FastAPI()
+    app.include_router(
+        make_whatsapp_inbound_router(
+            db,
+            adapter=_adapter(db),
+            gateway=gateway,
+        ),
+        prefix="/api",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        received = await client.post(
+            "/api/customer-intelligence/v1/channels/whatsapp/webhook",
+            content=b"x" * (MAX_WHATSAPP_WEBHOOK_BYTES + 1),
+            headers={"x-hub-signature-256": "sha256=unused"},
+        )
+
+    assert received.status_code == 413
+    assert received.json()["detail"]["code"] == "whatsapp_webhook_too_large"
     assert gateway.calls == []
 
 

@@ -1,17 +1,20 @@
 import api from "../lib/api";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    createCustomerIntelligenceReplySuggestion,
     customerIntelligenceWritesLocked,
     getCustomerIntelligenceInbox,
     getCustomerIntelligenceWorkspace,
     normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
+    reviewCustomerIntelligenceReplySuggestion,
 } from "./customerIntelligence";
 
 jest.mock("../lib/api", () => ({
     __esModule: true,
     default: {
         get: jest.fn(),
+        post: jest.fn(),
     },
 }));
 
@@ -339,6 +342,16 @@ const liveInboxPayload = {
             content_available: true,
             provider_media_id: "hidden-provider-id",
         }],
+        reply_suggestion: {
+            suggestion_id: "suggestion-safe-1",
+            status: "pending_approval",
+            text: "أهلًا بك، اللون متوفر.",
+            version: 2,
+            requires_human_approval: true,
+            send_allowed: false,
+            created_at: "2026-08-12T00:29:30Z",
+            provider_token: "hidden-suggestion-secret",
+        },
     }],
     safety_policy: {
         mode: "manage",
@@ -381,6 +394,15 @@ test("normalizes the live receive-only inbox and drops unapproved sensitive fiel
         channel: "whatsapp",
         status: "open",
         content_unavailable_count: 1,
+        reply_suggestion: {
+            id: "suggestion-safe-1",
+            conversation_id: "conv-safe-1",
+            status: "pending_approval",
+            text: "أهلًا بك، اللون متوفر.",
+            version: 2,
+            requires_human_approval: true,
+            send_allowed: false,
+        },
     });
     expect(inbox.conversations[0].messages[1]).toMatchObject({
         id: "msg-safe-2",
@@ -394,6 +416,78 @@ test("normalizes the live receive-only inbox and drops unapproved sensitive fiel
     expect(serialized).not.toContain("hidden-ciphertext");
     expect(serialized).not.toContain("hidden-provider-id");
     expect(serialized).not.toContain("must-never-render");
+    expect(serialized).not.toContain("hidden-suggestion-secret");
+});
+
+test("live inbox normalization is idempotent so the container cannot drop a suggestion", () => {
+    const first = normalizeCustomerIntelligenceInbox(liveInboxPayload);
+    const second = normalizeCustomerIntelligenceInbox(first);
+
+    expect(second.conversations[0].reply_suggestion).toEqual(
+        first.conversations[0].reply_suggestion,
+    );
+    expect(second.conversations[0].messages).toEqual(first.conversations[0].messages);
+});
+
+test("only exposes an explicit pending human-approval reply suggestion", () => {
+    const baseConversation = liveInboxPayload.conversations[0];
+    const invalidSuggestions = [
+        null,
+        { ...baseConversation.reply_suggestion, status: "approved_locked" },
+        { ...baseConversation.reply_suggestion, requires_human_approval: false },
+        { ...baseConversation.reply_suggestion, send_allowed: true },
+        { ...baseConversation.reply_suggestion, text: "" },
+        { ...baseConversation.reply_suggestion, text: 123 },
+        { ...baseConversation.reply_suggestion, version: "2" },
+        [baseConversation.reply_suggestion],
+    ];
+
+    invalidSuggestions.forEach((replySuggestion) => {
+        const inbox = normalizeCustomerIntelligenceInbox({
+            ...liveInboxPayload,
+            conversations: [{
+                ...baseConversation,
+                reply_suggestion: replySuggestion,
+                suggested_reply: "must not become a suggestion",
+            }],
+        });
+        expect(inbox.conversations[0].reply_suggestion).toBeNull();
+        expect(JSON.stringify(inbox)).not.toContain("must not become a suggestion");
+    });
+});
+
+test("never converts an outbound employee echo into an AI reply suggestion", () => {
+    const sourceConversation = liveInboxPayload.conversations[0];
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        conversations: [{
+            ...sourceConversation,
+            reply_suggestion: undefined,
+            messages: [
+                ...sourceConversation.messages,
+                {
+                    message_id: "employee-echo-1",
+                    direction: "outbound",
+                    sender: "employee",
+                    kind: "text",
+                    body: "هذا رد موظف في واتساب وليس اقتراح ذكاء",
+                    occurred_at: "2026-08-12T00:30:00Z",
+                    delivery_state: "delivered",
+                    content_available: true,
+                },
+            ],
+        }],
+    });
+
+    expect(inbox.conversations[0].reply_suggestion).toBeNull();
+    expect(inbox.conversations[0].messages).toHaveLength(3);
+    expect(inbox.conversations[0].messages[2]).toMatchObject({
+        id: "employee-echo-1",
+        direction: "outbound",
+        sender: "employee",
+        delivery_state: "delivered",
+        body: "هذا رد موظف في واتساب وليس اقتراح ذكاء",
+    });
 });
 
 test("rejects conversations unless the response declares the live webhook contract", () => {
@@ -409,7 +503,7 @@ test("rejects conversations unless the response declares the live webhook contra
     expect(inbox.conversations).toEqual([]);
 });
 
-test("drops any message or conversation outside the inbound WhatsApp contract", () => {
+test("accepts governed employee echoes and drops every other outbound shape", () => {
     const inbox = normalizeCustomerIntelligenceInbox({
         ...liveInboxPayload,
         conversations: [
@@ -418,13 +512,33 @@ test("drops any message or conversation outside the inbound WhatsApp contract", 
                 messages: [
                     ...liveInboxPayload.conversations[0].messages,
                     {
-                        message_id: "unexpected-outbound",
+                        message_id: "employee-echo-valid",
                         direction: "outbound",
                         sender: "employee",
                         kind: "text",
-                        body: "must not render",
+                        body: "رد موظف يجب عرضه",
                         occurred_at: "2026-08-12T00:30:00Z",
                         delivery_state: "delivered",
+                        content_available: true,
+                    },
+                    {
+                        message_id: "unexpected-outbound-sender",
+                        direction: "outbound",
+                        sender: "assistant",
+                        kind: "text",
+                        body: "must not render sender",
+                        occurred_at: "2026-08-12T00:31:00Z",
+                        delivery_state: "delivered",
+                        content_available: true,
+                    },
+                    {
+                        message_id: "unexpected-outbound-state",
+                        direction: "outbound",
+                        sender: "employee",
+                        kind: "text",
+                        body: "must not render state",
+                        occurred_at: "2026-08-12T00:32:00Z",
+                        delivery_state: "received",
                         content_available: true,
                     },
                 ],
@@ -438,8 +552,10 @@ test("drops any message or conversation outside the inbound WhatsApp contract", 
     });
 
     expect(inbox.conversations).toHaveLength(1);
-    expect(inbox.conversations[0].messages).toHaveLength(2);
-    expect(JSON.stringify(inbox)).not.toContain("must not render");
+    expect(inbox.conversations[0].messages).toHaveLength(3);
+    expect(JSON.stringify(inbox)).toContain("رد موظف يجب عرضه");
+    expect(JSON.stringify(inbox)).not.toContain("must not render sender");
+    expect(JSON.stringify(inbox)).not.toContain("must not render state");
     expect(JSON.stringify(inbox)).not.toContain("unexpected-channel");
 });
 
@@ -450,4 +566,35 @@ test("loads the live inbox from its single read-only endpoint", async () => {
 
     expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
     expect(inbox.conversations[0].messages).toHaveLength(2);
+});
+
+test("uses explicit suggestion lifecycle endpoints and never calls a send route", async () => {
+    api.post
+        .mockResolvedValueOnce({ data: { status: "pending_approval" } })
+        .mockResolvedValueOnce({ data: { status: "approved_locked" } });
+
+    await createCustomerIntelligenceReplySuggestion("conversation/1");
+    await reviewCustomerIntelligenceReplySuggestion({
+        conversationId: "conversation/1",
+        suggestionId: "suggestion/1",
+        decision: "approve",
+        text: "النص بعد مراجعة الموظف",
+        version: 3,
+    });
+
+    expect(api.post).toHaveBeenNthCalledWith(
+        1,
+        "/customer-intelligence/v1/conversations/conversation%2F1/reply-suggestion",
+        {},
+    );
+    expect(api.post).toHaveBeenNthCalledWith(
+        2,
+        "/customer-intelligence/v1/conversations/conversation%2F1/reply-suggestion/suggestion%2F1/review",
+        {
+            decision: "approve",
+            version: 3,
+            text: "النص بعد مراجعة الموظف",
+        },
+    );
+    expect(api.post.mock.calls.flat().join(" ")).not.toContain("/send");
 });

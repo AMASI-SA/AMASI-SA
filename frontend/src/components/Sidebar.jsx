@@ -36,6 +36,20 @@ function normalizeAr(s) {
 // is removed.
 const SECTIONS = [
     {
+        id: "customer_service",
+        label: "خدمة العملاء",
+        icon: ChatsCircle,
+        requiredPermission: "customer_intelligence.inbox.read",
+        items: [
+            {
+                to: "/customer-intelligence?tab=conversations",
+                label: "ذكاء العملاء والمبيعات",
+                icon: ChatsCircle,
+                testid: "nav-mezan-os-customer-intelligence",
+            },
+        ],
+    },
+    {
         id: "finance",
         label: "العمليات المالية",
         icon: CurrencyDollar,
@@ -201,12 +215,6 @@ const SECTIONS = [
                 testid: "nav-mezan-os-qoyod",
             },
             {
-                to: "/customer-intelligence",
-                label: "ذكاء العملاء والمبيعات",
-                icon: ChatsCircle,
-                testid: "nav-mezan-os-customer-intelligence",
-            },
-            {
                 to: "/ads-manager",
                 label: "مدير الإعلانات",
                 icon: ChartLineUp,
@@ -256,6 +264,34 @@ const SECTIONS = [
 
 const OPEN_SECTION_STORAGE_KEY = "hesab.sidebar.openSection";
 
+export function sidebarSectionsForUser(user) {
+    const visibleSections = SECTIONS.filter(
+        (section) => (
+            (!section.ownerOnly || user?.is_owner)
+            && (!section.requiredPermission
+                || user?.is_owner
+                || user?.permissions?.includes(section.requiredPermission))
+        ),
+    );
+
+    if (!user?.is_owner) return visibleSections;
+
+    return visibleSections.map((section) => {
+        if (section.id !== "operations") return section;
+
+        const items = section.items.filter((item) => item.to !== "/order-review");
+        const settingsIdx = items.findIndex((item) => item.to === "/settings");
+        const teamLink = {
+            to: "/team",
+            label: "إدارة الفريق",
+            icon: UsersThree,
+            testid: "nav-team",
+        };
+        items.splice(settingsIdx >= 0 ? settingsIdx : items.length, 0, teamLink);
+        return { ...section, items };
+    });
+}
+
 
 // Flatten any section into a flat list of items, walking subgroups when
 // present. Used by path-matching, search filtering, and the visibility
@@ -274,7 +310,8 @@ function flattenSectionItems(section) {
 function findSectionFor(pathname) {
     for (const sec of SECTIONS) {
         for (const item of flattenSectionItems(sec)) {
-            if (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)) {
+            const itemPath = String(item.to || "").split("?")[0];
+            if (itemPath === "/" ? pathname === "/" : pathname.startsWith(itemPath)) {
                 return sec.id;
             }
         }
@@ -289,38 +326,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
 
     // Owner-only workspaces are hidden completely from non-owner users.
     // The team-management link remains inside إدارة التشغيل.
-    const sections = useMemo(() => {
-        const visibleSections = SECTIONS.filter(
-            (section) => !section.ownerOnly || user?.is_owner
-        );
-
-        if (!user?.is_owner) return visibleSections;
-
-        return visibleSections.map((section) => {
-            if (section.id !== "operations") return section;
-
-            const items = section.items.filter((item) => item.to !== "/order-review");
-            const settingsIdx = items.findIndex(
-                (item) => item.to === "/settings"
-            );
-            const teamLink = {
-                to: "/team",
-                label: "إدارة الفريق",
-                icon: UsersThree,
-                testid: "nav-team",
-            };
-
-            const insertAt =
-                settingsIdx >= 0 ? settingsIdx : items.length;
-
-            items.splice(insertAt, 0, teamLink);
-
-            return {
-                ...section,
-                items,
-            };
-        });
-    }, [user?.is_owner]);
+    const sections = useMemo(
+        () => sidebarSectionsForUser(user),
+        [user],
+    );
 
     // ── Iter-124 → Iter-141 — User-hidden pages (now cross-device) ──
     const [hiddenSet, setHiddenSet] = useState(() => loadHiddenPages());
@@ -532,7 +541,12 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             ? section.subgroups.flatMap((g) => g.items)
                             : (section.items || []);
                         const containsActive = sectionItems.some(
-                            (i) => i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to),
+                            (i) => {
+                                const itemPath = String(i.to || "").split("?")[0];
+                                return itemPath === "/"
+                                    ? location.pathname === "/"
+                                    : location.pathname.startsWith(itemPath);
+                            },
                         );
                         const renderItem = ({ to, label, icon: Icon, testid }) => {
                             return (

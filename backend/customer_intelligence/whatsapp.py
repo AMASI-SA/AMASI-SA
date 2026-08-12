@@ -51,6 +51,45 @@ class WhatsAppPayloadError(WhatsAppWebhookError):
     pass
 
 
+class WhatsAppBodyTooLargeError(WhatsAppPayloadError):
+    pass
+
+
+async def read_bounded_webhook_body(
+    request: Request,
+    *,
+    max_bytes: int = MAX_WHATSAPP_WEBHOOK_BYTES,
+) -> bytes:
+    """Read a webhook incrementally and stop before unbounded buffering.
+
+    ``Request.body()`` materializes the complete request before an adapter can
+    enforce its limit.  Both WhatsApp transports use this reader so an
+    oversized callback is rejected while it is still being streamed.
+    """
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise WhatsAppBodyTooLargeError(
+                    "WhatsApp webhook exceeds the size limit"
+                )
+        except ValueError:
+            # A malformed Content-Length is not trusted.  The streaming limit
+            # below remains authoritative.
+            pass
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        if len(body) + len(chunk) > max_bytes:
+            raise WhatsAppBodyTooLargeError(
+                "WhatsApp webhook exceeds the size limit"
+            )
+        body.extend(chunk)
+    return bytes(body)
+
+
 def _enabled(value: str | None) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
 
@@ -310,8 +349,8 @@ def make_whatsapp_inbound_router(
 
     @router.post("/webhook")
     async def receive_webhook(request: Request) -> dict[str, Any]:
-        body = await request.body()
         try:
+            body = await read_bounded_webhook_body(request)
             events = await current_adapter().verify_and_normalize(
                 headers=dict(request.headers),
                 body=body,
@@ -323,6 +362,11 @@ def make_whatsapp_inbound_router(
                 )
                 for context, message in events
             ]
+        except WhatsAppBodyTooLargeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={"code": "whatsapp_webhook_too_large"},
+            ) from exc
         except WhatsAppSignatureError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -362,9 +406,11 @@ __all__ = [
     "WHATSAPP_APP_SECRET_ENV",
     "WHATSAPP_INGRESS_FLAG",
     "WHATSAPP_VERIFY_TOKEN_ENV",
+    "WhatsAppBodyTooLargeError",
     "WhatsAppChallengeError",
     "WhatsAppInboundAdapter",
     "WhatsAppPayloadError",
     "WhatsAppSignatureError",
     "make_whatsapp_inbound_router",
+    "read_bounded_webhook_body",
 ]
