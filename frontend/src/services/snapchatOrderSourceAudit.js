@@ -1,11 +1,12 @@
 import api from "../lib/api";
+import { retryAdsRead } from "./adsReadRetry";
 
 export async function getSnapchatOrderSourceAudit({
     accountId,
     dateFrom,
     dateTo,
 } = {}) {
-    const response = await api.get(
+    const response = await retryAdsRead(() => api.get(
         "/integrations-v2/snapchat_ads/order-source-audit",
         {
             params: {
@@ -14,7 +15,7 @@ export async function getSnapchatOrderSourceAudit({
                 to_date: dateTo || undefined,
             },
         },
-    );
+    ));
     return response.data;
 }
 
