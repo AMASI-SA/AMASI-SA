@@ -8,13 +8,19 @@ from fastapi import HTTPException
 from preparation_piece_operations import (
     DEFAULT_ESTIMATED_DURATION_MINUTES,
     PIECE_STATUS_ASSIGNED,
+    PIECE_STATUS_IN_PROGRESS,
+    PIECE_STATUS_READY_FOR_ASSEMBLY,
     FileSchedulePatchRequest,
     _can_start_assigned_file,
+    _piece_has_completed_preparation_receipt,
+    _preparation_receipt_order_number,
+    _preparation_receipt_piece_public,
     _piece_upsert_update,
     build_duration_history,
     build_piece_documents,
     inherit_required_services,
     make_preparation_piece_operations_router,
+    preparation_receipt_blocker,
     validate_materialized_piece_count,
 )
 
@@ -265,7 +271,7 @@ def test_schedule_contract_supports_automatic_and_required_modes():
     assert required.mode == "required"
 
 
-def test_router_registers_my_work_manager_start_and_schedule_routes():
+def test_router_registers_work_receiving_manager_start_and_schedule_routes():
     router = make_preparation_piece_operations_router(
         SimpleNamespace(),
         lambda: {"id": "owner-1", "role": "owner"},
@@ -277,6 +283,11 @@ def test_router_registers_my_work_manager_start_and_schedule_routes():
     }
 
     assert ("/preparation-work-v1/my-work", "GET") in routes
+    assert ("/preparation-work-v1/receiving/search", "GET") in routes
+    assert (
+        "/preparation-work-v1/receiving/pieces/{piece_id}/receive",
+        "POST",
+    ) in routes
     assert ("/preparation-work-v1/manager/summary", "GET") in routes
     assert ("/preparation-work-v1/files/{file_number}/start", "POST") in routes
     assert ("/preparation-work-v1/files/{file_number}/schedule", "PUT") in routes
@@ -290,3 +301,63 @@ def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
     assert source.index('"responsible_employee_id": employee_id') < source.index(
         '"batch_id": {"$in": batch_ids}'
     )
+    assert "PIECE_STATUS_READY_FOR_ASSEMBLY" in source
+
+
+def test_preparation_receipt_card_merges_customer_specs_and_marks_search_match():
+    card = _preparation_receipt_piece_public(
+        {
+            "piece_id": "piece-1",
+            "order_number": "10452",
+            "product_name": "ميدالية باسم",
+            "responsible_employee_id": "employee-1",
+            "responsible_employee_name": "عرفات",
+            "status": PIECE_STATUS_IN_PROGRESS,
+            "specifications_snapshot": [
+                {"name": "الاسم", "value": "سارة"},
+                {"name": "اللون", "value": "ذهبي"},
+            ],
+            "product_options_snapshot": {
+                "اللون": "ذهبي",
+                "المقاس": "وسط",
+            },
+        },
+        matched_piece_id="piece-1",
+    )
+
+    assert card["search_match"] is True
+    assert card["can_receive"] is True
+    assert card["responsible_employee_name"] == "عرفات"
+    assert card["specifications"] == [
+        {"name": "الاسم", "value": "سارة"},
+        {"name": "اللون", "value": "ذهبي"},
+        {"name": "المقاس", "value": "وسط"},
+    ]
+
+
+def test_preparation_receipt_blocks_supplier_piece_until_supplier_receipt_finishes():
+    base = {
+        "piece_id": "piece-1",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "responsible_employee_id": "employee-1",
+    }
+    assert preparation_receipt_blocker({
+        **base,
+        "supplier_dispatch_status": "sent",
+    }) == "preparation_piece_supplier_receipt_required"
+    assert preparation_receipt_blocker({
+        **base,
+        "supplier_dispatch_status": "partial_received",
+    }) == "preparation_piece_supplier_receipt_required"
+    assert preparation_receipt_blocker({
+        **base,
+        "supplier_dispatch_status": "received",
+        "status": "received",
+    }) is None
+
+
+def test_preparation_receipt_is_final_and_order_search_accepts_arabic_prefix():
+    assert _piece_has_completed_preparation_receipt({
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+    }) is True
+    assert _preparation_receipt_order_number("طلب #10452") == "10452"

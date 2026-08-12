@@ -97,7 +97,7 @@ export default function ReadyToShipOrders() {
         setBusy(`pack:${batch.id}`);
         try {
             await confirmFulfillmentBatchPacked(batch.id);
-            toast.success("تم تأكيد التغليف");
+            toast.success("تم تأكيد التجميع والتغليف إن وُجد");
             await load();
         } catch (error) {
             toast.error(error.message);
@@ -126,10 +126,10 @@ export default function ReadyToShipOrders() {
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-emerald-950"><Package className="ml-1 inline" /> الطلبات الجاهزة للشحن</h2>
-                        <p className="mt-1 text-sm leading-6 text-emerald-800">وصلت تلقائيًا بعد تحقق نوع المنتج والدفع والعنوان ومخزون ميزان. لم تُرفع في ملف تجهيز المورد.</p>
+                        <h2 className="text-xl font-black text-emerald-950"><Package className="ml-1 inline" /> التجميع والعنونة</h2>
+                        <p className="mt-1 text-sm leading-6 text-emerald-800">تظهر الطلبات بعد اكتمال استلام كل منتجاتها من التجهيز. التغليف — إن وُجد — يتم داخل هذه المرحلة.</p>
                     </div>
-                    <button type="button" disabled={!permissions.can_claim || !selected.length || busy === "claim"} onClick={claim} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy === "claim" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <ClipboardText className="ml-1 inline" />} استلام وإنشاء دفعة ({selected.length})</button>
+                    <button type="button" disabled={!permissions.can_claim || !selected.length || busy === "claim"} onClick={claim} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy === "claim" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <ClipboardText className="ml-1 inline" />} بدء التجميع ({selected.length})</button>
                 </div>
             </section>
 
@@ -168,7 +168,7 @@ export default function ReadyToShipOrders() {
                                 <div className="flex flex-wrap items-center gap-2">
                                     {printed && <input value={reprintReasons[batch.id] || ""} onChange={(event) => setReprintReasons((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={!canReprint} placeholder="سبب إعادة الطباعة" className="rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100" />}
                                     <button type="button" disabled={!permissions.can_print || (printed && !canReprint) || busy === `print:${batch.id}`} onClick={() => print(batch)} className={`rounded-xl px-4 py-2 text-sm font-black ${printed ? "border border-amber-300 bg-amber-50 text-amber-900" : "bg-violet-700 text-white"} disabled:opacity-50`}><Printer className="ml-1 inline" />{printed ? `إعادة طباعة (${batch.print_count})` : "طباعة الملف"}</button>
-                                    {printed && batch.status !== "packed" && batch.status !== "handed_off" && <button type="button" disabled={!permissions.can_pack || busy === `pack:${batch.id}`} onClick={() => pack(batch)} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><Package className="ml-1 inline" /> تأكيد التغليف</button>}
+                                    {printed && batch.status !== "packed" && batch.status !== "handed_off" && <button type="button" disabled={!permissions.can_pack || busy === `pack:${batch.id}`} onClick={() => pack(batch)} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><Package className="ml-1 inline" /> تأكيد التجميع والتغليف إن وُجد</button>}
                                     {batch.status === "packed" && <button type="button" disabled={!permissions.can_handoff || busy === `handoff:${batch.id}`} onClick={() => handoff(batch)} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><Truck className="ml-1 inline" /> تسليم للناقل</button>}
                                     {batch.status === "handed_off" && <span className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800"><CheckCircle className="ml-1 inline" /> تم التسليم</span>}
                                 </div>

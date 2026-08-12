@@ -19,6 +19,10 @@ jest.mock("../components/fulfillment/PreparationFilesRegistry", () => function P
     return <div data-testid="preparation-files-registry-window">سجل ملفات التجهيز المستقل</div>;
 });
 
+jest.mock("../components/fulfillment/PreparationEmployeeReceivingWorkspace", () => function PreparationEmployeeReceivingFixture() {
+    return <div data-testid="preparation-employee-receiving-workspace">بحث برقم الطلب · فتح الكاميرا · استلام المنتج جاهز</div>;
+});
+
 jest.mock("../components/fulfillment/PreparationWorkDashboard", () => function PreparationWorkDashboardFixture({ initialView, standalone }) {
     return <div data-testid="preparation-work-dashboard">{standalone && initialView === "my-products" ? "إدارة منتجاتي المستقلة" : "تفاصيل قيد التنفيذ وإدارة الموظفين"}</div>;
 });
@@ -56,10 +60,10 @@ test("fulfillment workspace keeps the governed stage order", () => {
     expect(FULFILLMENT_STAGES.map((stage) => stage.label)).toEqual([
         "بانتظار المراجعة",
         "تم المراجعة",
-        "قيد التنفيذ",
-        "التجهيز",
-        "الاستلام والتجميع",
-        "جاهز للشحن",
+        "قيد التجهيز",
+        "استلام المورد",
+        "الاستلام من التجهيز",
+        "التجميع والعنونة",
         "تم التنفيذ",
         "جاري التوصيل",
         "تم التوصيل",
@@ -157,4 +161,15 @@ test("preparation stage exposes warehouse supplier manufacturing and shortage tr
     expect(markup).toContain("استلام منتجات المورد بالباركود");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
     expect(markup).not.toContain("قائمة انتظار المراجعة");
+});
+
+test("assembly stage opens the simple employee receiving workspace", () => {
+    mockSearchParams = new URLSearchParams("stage=assembly");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="preparation-employee-receiving-workspace"');
+    expect(markup).toContain("بحث برقم الطلب");
+    expect(markup).toContain("فتح الكاميرا");
+    expect(markup).toContain("استلام المنتج جاهز");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });

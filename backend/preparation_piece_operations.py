@@ -39,7 +39,10 @@ from reviewed_products_catalog import (
 )
 from reviewed_preparation_batches import BATCHES
 from preparation_file_registry import REGISTRY
-from preparation_piece_barcode import preparation_piece_id
+from preparation_piece_barcode import (
+    parse_preparation_piece_barcode,
+    preparation_piece_id,
+)
 from tz_utils import riyadh_now_aware
 
 
@@ -52,8 +55,10 @@ PIECE_STATUS_ASSIGNED = "assigned"
 PIECE_STATUS_IN_PROGRESS = "in_progress"
 PIECE_STATUS_READY_FOR_RECEIPT = "ready_for_employee_receipt"
 PIECE_STATUS_RECEIVED = "received"
+PIECE_STATUS_READY_FOR_ASSEMBLY = "ready_for_assembly"
 PIECE_STATUS_BLOCKED = "blocked"
 PIECE_STATUS_CANCELLED = "cancelled"
+PREPARATION_RECEIPT_PERMISSION = "inventory.preparation.receive"
 
 _INSTALLED = False
 _ORIGINAL_FINALIZE = None
@@ -71,6 +76,12 @@ class StartPreparationFileRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str | None = Field(default=None, max_length=1000)
+
+
+class ReceivePreparationPieceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str = Field(min_length=8, max_length=160)
 
 
 def _now() -> datetime:
@@ -893,6 +904,448 @@ def _piece_public(row: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key not in {"_id", "user_id", "image_b64"}}
 
 
+def _can_receive_from_preparation(
+    user: dict[str, Any],
+    context: dict[str, Any],
+) -> bool:
+    return bool(
+        context.get("is_owner")
+        or PREPARATION_RECEIPT_PERMISSION in set(context.get("permissions") or [])
+        or user_can_manage_preparation(user)
+    )
+
+
+def preparation_receipt_blocker(piece: dict[str, Any]) -> str | None:
+    """Return why a piece cannot be handed from preparation to assembly."""
+    status = _text(piece.get("status"))
+    receipt_status = _text(piece.get("preparation_receipt_status"))
+    supplier_dispatch_status = _text(piece.get("supplier_dispatch_status"))
+    if (
+        receipt_status == "received"
+        or status == PIECE_STATUS_READY_FOR_ASSEMBLY
+    ):
+        return "preparation_piece_already_received"
+    if status == PIECE_STATUS_CANCELLED:
+        return "preparation_piece_cancelled"
+    if piece.get("active_hold_id") or status == PIECE_STATUS_BLOCKED:
+        return "preparation_piece_stopped"
+    if (
+        _text(piece.get("assignment_status")) == "unassigned"
+        or not _text(piece.get("responsible_employee_id"))
+    ):
+        return "preparation_piece_employee_required"
+    if _text(piece.get("supplier_receiving_session_id")):
+        return "preparation_piece_supplier_receiving_in_progress"
+    if supplier_dispatch_status and supplier_dispatch_status != "received":
+        return "preparation_piece_supplier_receipt_required"
+    if status == PIECE_STATUS_ASSIGNED:
+        return "preparation_piece_not_started"
+    if status not in {
+        PIECE_STATUS_IN_PROGRESS,
+        PIECE_STATUS_READY_FOR_RECEIPT,
+        PIECE_STATUS_RECEIVED,
+    }:
+        return "preparation_piece_not_ready_for_receipt"
+    return None
+
+
+def _preparation_receipt_specs(piece: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(name: Any, value: Any) -> None:
+        label = _text(name)
+        display_value = _text(value)
+        key = (_normalized(label), _normalized(display_value))
+        if not label or not display_value or key in seen:
+            return
+        seen.add(key)
+        rows.append({"name": label, "value": display_value})
+
+    for row in piece.get("specifications_snapshot") or []:
+        if isinstance(row, dict):
+            add(
+                row.get("name") or row.get("label") or row.get("title"),
+                row.get("value") or row.get("answer") or row.get("text"),
+            )
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        add(name, value)
+    return rows
+
+
+def _preparation_receipt_piece_public(
+    piece: dict[str, Any],
+    *,
+    matched_piece_id: str = "",
+) -> dict[str, Any]:
+    blocker = preparation_receipt_blocker(piece)
+    status = _text(piece.get("status"))
+    status_labels = {
+        PIECE_STATUS_ASSIGNED: "لم يبدأ التجهيز",
+        PIECE_STATUS_IN_PROGRESS: "قيد التجهيز",
+        PIECE_STATUS_READY_FOR_RECEIPT: "بانتظار استلام المورد",
+        PIECE_STATUS_RECEIVED: "تم استلام المورد",
+        PIECE_STATUS_READY_FOR_ASSEMBLY: "جاهز للتجميع والعنونة",
+        PIECE_STATUS_BLOCKED: "متوقف",
+        PIECE_STATUS_CANCELLED: "ملغى",
+    }
+    image_url = (
+        _text(piece.get("selected_image_url"))
+        or _text(piece.get("resolved_image_url"))
+        or _text(piece.get("image_url"))
+        or None
+    )
+    piece_id = _text(piece.get("piece_id") or piece.get("id"))
+    return {
+        "piece_id": piece_id,
+        "order_number": _text(piece.get("order_number")),
+        "order_item_id": _text(piece.get("order_item_id")) or None,
+        "unit_index": piece.get("unit_index"),
+        "product_id": _text(piece.get("product_id")) or None,
+        "product_name": _text(piece.get("product_name")) or "منتج",
+        "sku": _text(piece.get("sku")) or None,
+        "image_url": image_url,
+        "specifications": _preparation_receipt_specs(piece),
+        "responsible_employee_id": _text(piece.get("responsible_employee_id")) or None,
+        "responsible_employee_name": _text(piece.get("responsible_employee_name")) or "—",
+        "status": status,
+        "status_label": status_labels.get(status, status or "غير معروف"),
+        "can_receive": blocker is None,
+        "blocker_code": blocker,
+        "search_match": bool(matched_piece_id and piece_id == matched_piece_id),
+        "preparation_received_at": piece.get("preparation_received_at"),
+        "preparation_received_by_name": _text(
+            piece.get("preparation_received_by_name")
+        ) or None,
+    }
+
+
+def _preparation_receipt_order_number(value: Any) -> str:
+    raw = _text(value).removeprefix("#").strip()
+    if raw.casefold().startswith("طلب"):
+        raw = raw[3:].strip().removeprefix("#").strip()
+    return raw
+
+
+async def _preparation_receipt_search(
+    db: Any,
+    *,
+    user_id: str,
+    query: str,
+) -> dict[str, Any]:
+    matched_piece_id = parse_preparation_piece_barcode(query) or ""
+    order_number = ""
+    if matched_piece_id:
+        matched_piece = await db[PIECES].find_one(
+            {"user_id": user_id, "piece_id": matched_piece_id},
+            {"_id": 0, "image_b64": 0},
+        )
+        if not matched_piece:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "preparation_piece_not_found"},
+            )
+        order_number = _text(matched_piece.get("order_number"))
+    else:
+        order_number = _preparation_receipt_order_number(query)
+    if not order_number:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "preparation_receipt_search_required"},
+        )
+
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "image_b64": 0},
+    ).to_list(1000)
+    if not pieces:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "preparation_receipt_order_not_found"},
+        )
+
+    rows = [
+        _preparation_receipt_piece_public(
+            piece,
+            matched_piece_id=matched_piece_id,
+        )
+        for piece in pieces
+        if _text(piece.get("status")) != PIECE_STATUS_CANCELLED
+    ]
+    rows.sort(key=lambda row: (
+        0 if row["search_match"] else 1,
+        0 if row["can_receive"] else 1,
+        int(row.get("unit_index") or 0),
+        _text(row.get("piece_id")),
+    ))
+    return {
+        "order_number": order_number,
+        "matched_piece_id": matched_piece_id or None,
+        "pieces": rows,
+        "summary": {
+            "total": len(rows),
+            "ready_to_receive": sum(1 for row in rows if row["can_receive"]),
+            "received": sum(
+                1
+                for row in rows
+                if row["status"] == PIECE_STATUS_READY_FOR_ASSEMBLY
+            ),
+        },
+    }
+
+
+def _piece_has_completed_preparation_receipt(piece: dict[str, Any]) -> bool:
+    return bool(
+        _text(piece.get("preparation_receipt_status")) == "received"
+        or _text(piece.get("status")) == PIECE_STATUS_READY_FOR_ASSEMBLY
+    )
+
+
+async def _refresh_preparation_receipt_progress(
+    db: Any,
+    *,
+    user_id: str,
+    piece: dict[str, Any],
+    actor_id: str,
+    actor_name: str,
+    now: datetime,
+) -> dict[str, Any]:
+    order_number = _text(piece.get("order_number"))
+    order_pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0},
+    ).to_list(10000)
+    received_count = sum(
+        1 for row in order_pieces if _piece_has_completed_preparation_receipt(row)
+    )
+    total_count = len(order_pieces)
+    completed = bool(total_count and received_count == total_count)
+    workflow_patch: dict[str, Any] = {
+        "preparation_receipt_status": "completed" if completed else "partial",
+        "preparation_received_piece_count": received_count,
+        "preparation_piece_count": total_count,
+        "preparation_receipt_updated_at": now,
+        "updated_at": now,
+        "updated_by": actor_id,
+    }
+    if completed:
+        workflow_patch.update({
+            "stage": "ready_to_ship",
+            "ready_to_ship_at": now,
+            "ready_to_ship_source": "preparation_receipt",
+            "preparation_completed_at": now,
+            "preparation_completed_by": actor_id,
+            "preparation_completed_by_name": actor_name,
+        })
+    await db[WORKFLOWS].update_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "stage": {"$nin": ["completed", "delivering", "delivered"]},
+        },
+        {"$set": workflow_patch, "$inc": {"revision": 1}},
+    )
+
+    batch_id = _text(piece.get("batch_id"))
+    file_number = _text(piece.get("file_number"))
+    file_identity: dict[str, Any] = {"user_id": user_id}
+    if batch_id:
+        file_identity["batch_id"] = batch_id
+    elif file_number:
+        file_identity["file_number"] = file_number
+    else:
+        return {
+            "order_number": order_number,
+            "received_count": received_count,
+            "total_count": total_count,
+            "order_ready_for_assembly": completed,
+            "file_completed": False,
+        }
+    file_pieces = await db[PIECES].find(
+        {
+            **file_identity,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+        },
+        {"_id": 0, "status": 1, "preparation_receipt_status": 1},
+    ).to_list(10000)
+    file_received_count = sum(
+        1 for row in file_pieces if _piece_has_completed_preparation_receipt(row)
+    )
+    file_completed = bool(
+        file_pieces and file_received_count == len(file_pieces)
+    )
+    file_patch: dict[str, Any] = {
+        "preparation_received_count": file_received_count,
+        "preparation_receipt_updated_at": now,
+        "updated_at": now,
+    }
+    if file_completed:
+        file_patch.update({
+            "execution_status": "completed",
+            "completed_at": now,
+            "completed_by": actor_id,
+            "completed_by_name": actor_name,
+        })
+    registry_identity: dict[str, Any] = {"user_id": user_id}
+    if batch_id:
+        registry_identity["batch_id"] = batch_id
+    else:
+        registry_identity["file_number"] = file_number
+    await db[REGISTRY].update_one(registry_identity, {"$set": file_patch})
+    return {
+        "order_number": order_number,
+        "received_count": received_count,
+        "total_count": total_count,
+        "order_ready_for_assembly": completed,
+        "file_completed": file_completed,
+    }
+
+
+async def _receive_preparation_piece(
+    db: Any,
+    *,
+    user_id: str,
+    piece_id: str,
+    client_request_id: str,
+    actor_id: str,
+    actor_name: str,
+) -> dict[str, Any]:
+    normalized_piece_id = _text(piece_id).lower()
+    piece = await db[PIECES].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"piece_id": normalized_piece_id},
+                {"id": normalized_piece_id},
+            ],
+        },
+        {"_id": 0},
+    )
+    if not piece:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "preparation_piece_not_found"},
+        )
+
+    if _piece_has_completed_preparation_receipt(piece):
+        progress = await _refresh_preparation_receipt_progress(
+            db,
+            user_id=user_id,
+            piece=piece,
+            actor_id=actor_id,
+            actor_name=actor_name,
+            now=_now(),
+        )
+        return {
+            "ok": True,
+            "idempotent": True,
+            "piece": _preparation_receipt_piece_public(piece),
+            "progress": progress,
+        }
+
+    blocker = preparation_receipt_blocker(piece)
+    if blocker:
+        raise HTTPException(status_code=409, detail={"code": blocker})
+
+    now = _now()
+    update_result = await db[PIECES].update_one(
+        {
+            "user_id": user_id,
+            "piece_id": normalized_piece_id,
+            "status": _text(piece.get("status")),
+            "preparation_receipt_status": {"$ne": "received"},
+        },
+        {"$set": {
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "execution_status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "preparation_receipt_status": "received",
+            "preparation_receipt_client_request_id": client_request_id,
+            "preparation_received_at": now,
+            "preparation_received_by": actor_id,
+            "preparation_received_by_name": actor_name,
+            "completed_at": now,
+            "updated_at": now,
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }},
+    )
+    if not update_result.modified_count:
+        latest = await db[PIECES].find_one(
+            {"user_id": user_id, "piece_id": normalized_piece_id},
+            {"_id": 0},
+        )
+        if latest and _piece_has_completed_preparation_receipt(latest):
+            progress = await _refresh_preparation_receipt_progress(
+                db,
+                user_id=user_id,
+                piece=latest,
+                actor_id=actor_id,
+                actor_name=actor_name,
+                now=now,
+            )
+            return {
+                "ok": True,
+                "idempotent": True,
+                "piece": _preparation_receipt_piece_public(latest),
+                "progress": progress,
+            }
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "preparation_piece_receipt_conflict"},
+        )
+
+    updated = await db[PIECES].find_one(
+        {"user_id": user_id, "piece_id": normalized_piece_id},
+        {"_id": 0},
+    ) or {**piece, "status": PIECE_STATUS_READY_FOR_ASSEMBLY}
+    await db[PIECE_EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "piece_id": normalized_piece_id,
+        "batch_id": _text(piece.get("batch_id")) or None,
+        "file_number": _text(piece.get("file_number")) or None,
+        "order_number": _text(piece.get("order_number")),
+        "event_type": "preparation_piece_received_for_assembly",
+        "client_request_id": client_request_id,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "occurred_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+    progress = await _refresh_preparation_receipt_progress(
+        db,
+        user_id=user_id,
+        piece=updated,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        now=now,
+    )
+    return {
+        "ok": True,
+        "idempotent": False,
+        "piece": _preparation_receipt_piece_public(updated),
+        "progress": progress,
+    }
+
+
 def _file_public(row: dict[str, Any], counts: dict[str, int]) -> dict[str, Any]:
     return {
         "file_number": _text(row.get("file_number")),
@@ -916,6 +1369,7 @@ def _file_public(row: dict[str, Any], counts: dict[str, int]) -> dict[str, Any]:
         "in_progress_count": counts.get(PIECE_STATUS_IN_PROGRESS, 0),
         "ready_count": counts.get(PIECE_STATUS_READY_FOR_RECEIPT, 0),
         "received_count": counts.get(PIECE_STATUS_RECEIVED, 0),
+        "assembly_ready_count": counts.get(PIECE_STATUS_READY_FOR_ASSEMBLY, 0),
         "blocked_count": counts.get(PIECE_STATUS_BLOCKED, 0),
         "remaining_count": (
             counts.get(PIECE_STATUS_ASSIGNED, 0)
@@ -939,7 +1393,10 @@ async def _my_work_view(db: Any, *, user_id: str, employee_id: str, limit: int) 
                     {"experiment_archived_at": None},
                 ]},
                 {"$or": [
-                    {"status": {"$ne": PIECE_STATUS_CANCELLED}},
+                    {"status": {"$nin": [
+                        PIECE_STATUS_CANCELLED,
+                        PIECE_STATUS_READY_FOR_ASSEMBLY,
+                    ]}},
                     {
                         "active_hold_id": {"$exists": True, "$nin": [None, ""]},
                         "status": PIECE_STATUS_CANCELLED,
@@ -1080,6 +1537,46 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             limit=limit,
         )
 
+    @router.get("/receiving/search")
+    async def search_preparation_receipt(
+        q: str = Query(min_length=1, max_length=160),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        if not _can_receive_from_preparation(user, context):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "preparation_receipt_permission_required"},
+            )
+        await ensure_piece_operation_indexes(db)
+        return await _preparation_receipt_search(
+            db,
+            user_id=context["merchant_id"],
+            query=q,
+        )
+
+    @router.post("/receiving/pieces/{piece_id}/receive")
+    async def receive_preparation_piece(
+        piece_id: str,
+        payload: ReceivePreparationPieceRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        if not _can_receive_from_preparation(user, context):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "preparation_receipt_permission_required"},
+            )
+        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        return await _receive_preparation_piece(
+            db,
+            user_id=context["merchant_id"],
+            piece_id=piece_id,
+            client_request_id=payload.client_request_id,
+            actor_id=context["actor_id"],
+            actor_name=actor_name,
+        )
+
     @router.get("/manager/summary")
     async def manager_summary(
         date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
@@ -1214,6 +1711,7 @@ __all__ = [
     "PIECES",
     "PIECE_EVENTS",
     "FileSchedulePatchRequest",
+    "ReceivePreparationPieceRequest",
     "StartPreparationFileRequest",
     "build_duration_history",
     "build_piece_documents",

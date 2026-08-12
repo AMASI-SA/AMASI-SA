@@ -17,6 +17,7 @@ import {
 import OrderReview from "./OrderReview";
 import ReviewedOrders from "./ReviewedOrders";
 import PreparationFilesRegistry from "../components/fulfillment/PreparationFilesRegistry";
+import PreparationEmployeeReceivingWorkspace from "../components/fulfillment/PreparationEmployeeReceivingWorkspace";
 import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
@@ -38,31 +39,31 @@ export const FULFILLMENT_STAGES = [
     },
     {
         key: "in_progress",
-        label: "قيد التنفيذ",
-        shortLabel: "قيد التنفيذ",
+        label: "قيد التجهيز",
+        shortLabel: "قيد التجهيز",
         Icon: Gear,
         description: "متابعة الملفات والقطع المسندة، الموظف المسؤول، الخدمات والموعد المتوقع.",
     },
     {
         key: "preparation",
-        label: "التجهيز",
-        shortLabel: "التجهيز",
+        label: "استلام المورد",
+        shortLabel: "استلام المورد",
         Icon: Queue,
         description: "إدارة مسارات المستودع والمورد والتصنيع الداخلي وملفات التجهيز.",
     },
     {
         key: "assembly",
-        label: "الاستلام والتجميع",
-        shortLabel: "الاستلام والتجميع",
+        label: "الاستلام من التجهيز",
+        shortLabel: "الاستلام من التجهيز",
         Icon: Cube,
-        description: "استلام القطع بالباركود وتجميع مكونات الطلب ومنع التكرار.",
+        description: "البحث برقم الطلب أو تصوير المنتج، ثم استلامه جاهزًا من موظف التجهيز.",
     },
     {
         key: "ready_to_ship",
-        label: "جاهز للشحن",
-        shortLabel: "جاهز للشحن",
+        label: "التجميع والعنونة",
+        shortLabel: "التجميع والعنونة",
         Icon: Package,
-        description: "لا يظهر الطلب هنا إلا بعد اكتمال جميع المنتجات النشطة في الطلب.",
+        description: "تجميع الطلب وعنونته، والتغليف داخله فقط عندما يكون مطلوبًا.",
     },
     {
         key: "completed",
@@ -169,6 +170,8 @@ export default function FulfillmentV2() {
         <PreparationWorkDashboard initialView="my-work" />
     ) : activeStage.key === "preparation" ? (
         <SupplierReceivingWorkspace />
+    ) : activeStage.key === "assembly" ? (
+        <PreparationEmployeeReceivingWorkspace />
     ) : activeStage.key === "ready_to_ship" ? (
         <ReadyToShipOrders />
     ) : (

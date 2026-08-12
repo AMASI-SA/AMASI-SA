@@ -68,6 +68,8 @@ test("orders and fulfillment are independent top-level sections", () => {
         "/fulfillment-v2?workspace=my-products",
         "/fulfillment-v2?stage=reviewed&view=products",
         "/fulfillment-v2?stage=reviewed&view=files",
+        "/fulfillment-v2?stage=assembly",
+        "/fulfillment-v2?stage=ready_to_ship",
     ]);
     expect(orders.items.some((item) => item.to.startsWith("/fulfillment-v2"))).toBe(false);
     expect(orders.items.some((item) => item.to === "/inventory-receiving-v2")).toBe(false);
