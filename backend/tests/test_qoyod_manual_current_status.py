@@ -2,6 +2,9 @@
 import asyncio
 
 from qoyod_manual_current_status import filter_pending_by_current_status
+from integrations.qoyod_manual.missing_diagnostics import (
+    _status_key_from_unified,
+)
 
 
 class _Cursor:
@@ -117,7 +120,7 @@ def test_current_status_lookup_is_batched_for_all_orders():
     assert db.unified_orders.find_calls == 1
 
 
-def test_shipping_slug_is_the_canonical_in_delivery_alias():
+def test_shipping_and_delivering_slugs_are_in_delivery_aliases():
     db = _DB({
         ("owner-1", "275957683"): {
             "order_status": "جاري التوصيل",
@@ -127,6 +130,10 @@ def test_shipping_slug_is_the_canonical_in_delivery_alias():
             "order_status": "تم الشحن",
             "order_status_slug": "shipped",
         },
+        ("owner-1", "275957685"): {
+            "order_status": "جاري التوصيل",
+            "order_status_slug": "delivering",
+        },
     })
     result = asyncio.run(filter_pending_by_current_status(
         db,
@@ -134,11 +141,21 @@ def test_shipping_slug_is_the_canonical_in_delivery_alias():
             "orders": [
                 {"order_number": "275957683"},
                 {"order_number": "275957684"},
+                {"order_number": "275957685"},
             ],
-            "counts": {"returned": 2},
+            "counts": {"returned": 3},
         },
         user_id="main",
         orders_user_id="owner-1",
         status="in_delivery",
     ))
-    assert [row["order_number"] for row in result["orders"]] == ["275957683"]
+    assert [row["order_number"] for row in result["orders"]] == [
+        "275957683", "275957685",
+    ]
+
+
+def test_diagnostic_classifier_maps_delivering_to_in_delivery():
+    assert _status_key_from_unified({
+        "order_status_slug": "delivering",
+        "order_status": "جاري التوصيل",
+    }) == "in_delivery"
