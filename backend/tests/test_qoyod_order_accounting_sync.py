@@ -52,8 +52,8 @@ class _IntegrationInbox:
     def __init__(self):
         self.calls = []
 
-    async def update_many(self, query, update):
-        self.calls.append((query, update))
+    async def update_many(self, query, update, upsert=False):
+        self.calls.append((query, update, upsert))
         return _Result(modified_count=1)
 
 
@@ -147,4 +147,6 @@ def test_repair_ignores_dry_markers_and_projects_real_invoice():
     assert len(db.unified_orders.calls) == 1
     query, _ = db.unified_orders.calls[0]
     assert query["order_number"] == "275957683"
-
+    inbox_query, _, upsert = db.integration_inbox.calls[0]
+    assert set(inbox_query["user_id"]["$in"]) == {"main", "owner-1"}
+    assert upsert is False

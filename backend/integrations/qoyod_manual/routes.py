@@ -622,11 +622,21 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         skipped_already_unified = 0
         affected: list[str] = []
 
+        repair_owner_ids = list(dict.fromkeys(
+            value for value in (
+                _TENANT,
+                str(orders_owner_id(user) or "").strip(),
+            ) if value
+        ))
+        repair_owner_query: str | dict = repair_owner_ids[0]
+        if len(repair_owner_ids) > 1:
+            repair_owner_query = {"$in": repair_owner_ids}
         cursor = db.integration_inbox.find(
-            {"user_id": _TENANT,
+            {"user_id": repair_owner_query,
              "manual_qoyod_invoice_id":
                 {"$exists": True, "$nin": [None, ""]}},
-            {"_id": 0, "id": 1, "salla_order_number": 1,
+            {"_id": 0, "id": 1, "user_id": 1,
+             "salla_order_number": 1,
              "manual_qoyod_invoice_id": 1,
              "manual_qoyod_invoice_number": 1,
              "qoyod_invoice_id": 1},
@@ -654,7 +664,10 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             if num:
                 patch["qoyod_invoice_number"] = str(num)
             await db.integration_inbox.update_one(
-                {"id": row.get("id")}, {"$set": patch})
+                {"id": row.get("id"), "user_id": row.get("user_id")},
+                {"$set": patch},
+                upsert=False,
+            )
             updated += 1
             on = str(row.get("salla_order_number") or "")
             if on and len(affected) < 200:

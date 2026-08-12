@@ -169,16 +169,26 @@ async def _load_local_qoyod_invoices(
 
 
 async def _has_marker_in_inbox(
-    db, *, markers_user_id: str, order_number: str,
+    db, *, marker_user_ids: list[str], order_number: str,
+    expected_invoice_id: Any = None,
 ) -> tuple[bool, Optional[str], Optional[str]]:
     """Helper signal ONLY. Is there ANY inbox trace for this order
     that carries a real Plan-B / legacy marker?
 
     Returns (has_marker, invoice_marker_id, payment_marker_id).
     """
+    normalized_user_ids = list(dict.fromkeys(
+        str(value).strip() for value in marker_user_ids
+        if str(value).strip()
+    ))
+    if not normalized_user_ids:
+        return False, None, None
+    owner_query: str | dict = normalized_user_ids[0]
+    if len(normalized_user_ids) > 1:
+        owner_query = {"$in": normalized_user_ids}
     cursor = db.integration_inbox.find(
         {
-            "user_id": markers_user_id,
+            "user_id": owner_query,
             "salla_order_number": order_number,
             "$or": [
                 {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
@@ -191,20 +201,33 @@ async def _has_marker_in_inbox(
     )
     inv_marker: Optional[str] = None
     pay_marker: Optional[str] = None
+    expected_id = (
+        str(expected_invoice_id).strip()
+        if expected_invoice_id not in (None, "") else None
+    )
     async for r in cursor:
-        if inv_marker is None:
-            mid = r.get("manual_qoyod_invoice_id")
-            if mid and _is_real(mid):
-                inv_marker = str(mid)
-            else:
-                lid = r.get("qoyod_invoice_id")
-                if lid and _is_real(lid):
-                    inv_marker = str(lid)
-        if pay_marker is None:
-            pid = r.get("manual_qoyod_payment_id")
-            if pid and _is_real(pid):
-                pay_marker = str(pid)
-        if inv_marker and pay_marker:
+        row_invoice_ids = [
+            str(value)
+            for value in (
+                r.get("manual_qoyod_invoice_id"),
+                r.get("qoyod_invoice_id"),
+            )
+            if value and _is_real(value)
+        ]
+        row_invoice_id: Optional[str] = None
+        if expected_id is not None and expected_id in row_invoice_ids:
+            row_invoice_id = expected_id
+        elif expected_id is None and row_invoice_ids:
+            row_invoice_id = row_invoice_ids[0]
+        # A stale marker for another Qoyod invoice must not satisfy the
+        # reconciliation row merely because it shares an order number.
+        if row_invoice_id is None:
+            continue
+        inv_marker = row_invoice_id
+        pid = r.get("manual_qoyod_payment_id")
+        if pay_marker is None and pid and _is_real(pid):
+            pay_marker = str(pid)
+        if inv_marker and (pay_marker or expected_id is not None):
             break
     return (inv_marker is not None), inv_marker, pay_marker
 
@@ -221,6 +244,12 @@ async def run_reconciliation_v2(
     """The reconciliation report itself. Read-only."""
     if markers_user_id is None:
         markers_user_id = orders_user_id
+    marker_user_ids = list(dict.fromkeys(
+        value for value in (
+            str(markers_user_id or "").strip(),
+            str(orders_user_id or "").strip(),
+        ) if value
+    ))
 
     unified = await _load_eligible_unified(db, user_id=orders_user_id)
     local_inv = await _load_local_qoyod_invoices(
@@ -283,7 +312,11 @@ async def run_reconciliation_v2(
         # Marker check — helper signal only. If invoice exists in
         # قيود but NO marker in inbox → Mezan needs a Repair Marker.
         has_marker, inv_marker, pay_marker = await _has_marker_in_inbox(
-            db, markers_user_id=markers_user_id, order_number=on)
+            db,
+            marker_user_ids=marker_user_ids,
+            order_number=on,
+            expected_invoice_id=qoyod_invoice_id,
+        )
 
         # Debug bag (user directive 2026-07-09): STRICT match by
         # `order_number == reference` — proves the match without
@@ -402,4 +435,3 @@ async def run_reconciliation_v2(
         "rows":                  rows,
         "outcome_labels":        list(_ALL_STATUSES),
     }
-
