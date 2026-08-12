@@ -4081,9 +4081,13 @@ from customer_intelligence.foundation import (
 )
 from customer_intelligence.whatsapp import make_whatsapp_inbound_router
 from customer_intelligence.whatsapp_360dialog import make_360dialog_inbound_router
+from customer_intelligence.temporary_whatsapp_provisioning import (
+    make_temporary_whatsapp_provisioning_router,
+)
 api.include_router(make_customer_intelligence_router(current_user, db=db))
 api.include_router(make_whatsapp_inbound_router(db))
 api.include_router(make_360dialog_inbound_router(db))
+api.include_router(make_temporary_whatsapp_provisioning_router(db, current_user))
 
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
