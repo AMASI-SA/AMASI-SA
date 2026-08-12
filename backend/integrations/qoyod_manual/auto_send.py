@@ -6,7 +6,9 @@ Qoyod pipeline.  The existing Qoyod settings switches are the control plane:
 
 * ``enabled`` and ``auto_send`` must be true;
 * ``dry_run_mode`` must be false;
-* only the canonical ``completed`` (تم التنفيذ) trigger is accepted;
+* only the canonical ``completed`` trigger arms new automatic work;
+* the final live Salla check also accepts an order that has advanced to
+  ``in_delivery`` or ``delivered`` before the worker reaches it;
 * the legacy pipeline must remain frozen;
 * a successful closed canary must exist before the settings can arm it.
 
@@ -94,7 +96,11 @@ def activation_issues(
     if not settings.get("legacy_pipeline_frozen"):
         add("legacy_pipeline_not_frozen", "يجب إبقاء مسار قيود القديم مجمداً")
     if list(settings.get("invoice_trigger_statuses") or []) != ["completed"]:
-        add("completed_only_required", "الإرسال التلقائي يقبل حالة تم التنفيذ فقط")
+        add(
+            "completed_trigger_required",
+            "يجب أن يبدأ العامل التلقائي من مصنف completed؛ ويتحقق قبل "
+            "الإرسال من الحالات الثلاث المسموحة",
+        )
     if settings.get("trigger_once_only") is not True:
         add("trigger_once_required", "يجب تفعيل إنشاء الفاتورة مرة واحدة فقط")
     if settings.get("auto_receipt") is not True:
@@ -200,14 +206,67 @@ async def _release_lease(db, owner: Optional[str]) -> None:
         logger.exception("Plan-B auto-send lease release failed")
 
 
-async def _still_exactly_completed(
+_LIVE_STATUS_NATIVE_BY_SLUG = {
+    "completed": frozenset({"", "completed", "تم التنفيذ", "تم التجهيز"}),
+    "in_delivery": frozenset({
+        "", "in_delivery", "in delivery", "shipping",
+        "جاري التوصيل", "جارٍ التوصيل",
+    }),
+    "delivered": frozenset({"", "delivered", "تم التوصيل"}),
+}
+_LIVE_STATUS_SLUG_ALIASES = {
+    "completed": "completed",
+    "تم التنفيذ": "completed",
+    "in_delivery": "in_delivery",
+    "in delivery": "in_delivery",
+    "shipping": "in_delivery",
+    "جاري_التوصيل": "in_delivery",
+    "جاري التوصيل": "in_delivery",
+    "delivered": "delivered",
+    "تم التوصيل": "delivered",
+}
+
+
+def _live_salla_status_is_eligible(canonical: dict[str, Any]) -> bool:
+    """Return whether the authoritative Salla status is Qoyod-eligible.
+
+    A non-empty canonical slug is authoritative.  ``تم التجهيز`` is a custom
+    native label that is accepted only when Salla classifies it as
+    ``completed``; the same label without that trusted slug stays blocked.
+    This explicit pair mapping also prevents a cancelled/refunded native state
+    from being accepted because of a stale or conflicting slug.
+    """
+    slug = str(canonical.get("order_status") or "").strip().lower()
+    native = str(canonical.get("order_status_native") or "").strip()
+    native_normalized = native.lower()
+
+    if slug:
+        canonical_slug = _LIVE_STATUS_SLUG_ALIASES.get(slug)
+        allowed_native = _LIVE_STATUS_NATIVE_BY_SLUG.get(canonical_slug or "")
+        return bool(
+            allowed_native is not None
+            and native_normalized in allowed_native
+        )
+
+    # Older snapshots can legitimately lack a canonical slug.  Keep this
+    # fallback closed to the three exact statuses; notably, تم التجهيز is not
+    # present here and therefore still requires a trusted completed slug.
+    return native_normalized in {
+        "completed", "تم التنفيذ",
+        "in_delivery", "in delivery", "shipping",
+        "جاري التوصيل", "جارٍ التوصيل",
+        "delivered", "تم التوصيل",
+    }
+
+
+async def _still_qoyod_eligible(
     db, order_number: str, *, orders_user_id: str,
 ) -> bool:
     """Re-read the newest trace immediately before the external mutation.
 
-    Arabic aliases such as ``مكتمل`` are intentionally not accepted for the
-    automatic path.  The native value must be ``تم التنفيذ``.  Older rows
-    without a native value may use the canonical ``completed`` slug.
+    Only the three approved Qoyod statuses are accepted.  This function is
+    shared by the manual route and automatic worker through
+    :func:`_refresh_and_verify_salla_status` so their final gate cannot drift.
     """
     # Direct Salla resync snapshots are written under the authenticated
     # Orders owner id, while historical webhook traces use the MVP tenant.
@@ -225,22 +284,18 @@ async def _still_exactly_completed(
     if not row:
         return False
     canonical = row.get("canonical_payload") or {}
-    native = str(canonical.get("order_status_native") or "").strip()
-    slug = str(canonical.get("order_status") or "").strip().lower()
-    if native:
-        return native == "تم التنفيذ"
-    return slug == "completed"
+    return _live_salla_status_is_eligible(canonical)
 
 
 async def _refresh_and_verify_salla_status(
     db, *, orders_user_id: str, order_number: str,
 ) -> tuple[bool, dict[str, Any]]:
-    """Refresh the order from Salla, then apply the exact status gate.
+    """Refresh the order from Salla, then apply the shared status gate.
 
     Automatic accounting must never rely only on a cached row: an operator
-    may move the order away from ``تم التنفيذ`` in Salla between two worker
-    scans.  A failed authoritative refresh is a real preflight error and the
-    caller trips the circuit breaker before any Qoyod mutation.
+    may move the order to a cancelled/refunded state in Salla between two
+    worker scans.  A failed authoritative refresh is a real preflight error
+    and the caller trips the circuit breaker before any Qoyod mutation.
     """
     refresh = await resync_single_order(
         db,
@@ -258,7 +313,7 @@ async def _refresh_and_verify_salla_status(
                 "needs_reauth": bool(refresh.get("needs_reauth")),
             },
         )
-    return await _still_exactly_completed(
+    return await _still_qoyod_eligible(
         db,
         order_number,
         orders_user_id=orders_user_id,
@@ -370,10 +425,13 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             limit=max(25, batch_limit * 5),
             status="completed",
         )
+        # The completed-tab query is the trusted canonical classification.
+        # Include the store's custom ``تم التجهيز`` label only from this tab;
+        # the live gate below still re-fetches Salla before any Qoyod write.
         eligible_candidates = [
             row for row in (pending.get("orders") or [])
-            if str(row.get("salla_status") or "").strip()
-            in {"تم التنفيذ", "completed"}
+            if str(row.get("salla_status") or "").strip().lower()
+            in {"تم التنفيذ", "completed", "تم التجهيز"}
         ]
         quarantined = await _open_quarantined_order_numbers(
             db,
@@ -409,12 +467,12 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         for row in candidates:
             order_number = str(row["order_number"])
             try:
-                still_completed, refresh = await _refresh_and_verify_salla_status(
+                still_eligible, refresh = await _refresh_and_verify_salla_status(
                     db,
                     orders_user_id=orders_user_id,
                     order_number=order_number,
                 )
-                if not still_completed:
+                if not still_eligible:
                     snapshot = refresh.get("plan_b_status_snapshot") or {}
                     results.append({
                         "order_number": order_number,

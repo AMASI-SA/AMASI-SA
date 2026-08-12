@@ -1472,8 +1472,9 @@ export default function QoyodSettings() {
           checked={settings.auto_send}
           onChange={(v) => patch(v ? {
             auto_send: true,
-            // The live automatic path is deliberately narrower than the
-            // manual fallback: exact Salla "تم التنفيذ", once only.
+            // The configured trigger stays canonical completed. The final
+            // live Salla gate may also accept an order that has advanced to
+            // in_delivery/delivered before the worker reaches it.
             invoice_trigger_statuses: ["completed"],
             trigger_once_only: true,
             auto_receipt: true,
@@ -1503,9 +1504,11 @@ export default function QoyodSettings() {
                    data-testid="plan-b-auto-send-armed">
                 <div className="font-bold text-sm">✅ الإرسال التلقائي الجديد يعمل</div>
                 <div className="text-xs mt-1">
-                  يفحص الحالة الحالية مباشرة من سلة ثم يرسل طلبات «تم التنفيذ»
-                  فقط كل 15 ثانية مع منع التكرار. الدفع عند الاستلام يُنشئ
-                  فاتورة بلا سند، وأول خطأ حقيقي يوقف التشغيل تلقائياً.
+                  يفحص الحالة الحالية مباشرة من سلة، ولا يقبل إلا «تم التنفيذ»
+                  أو «جاري التوصيل» أو «تم التوصيل»، كل 15 ثانية مع منع
+                  التكرار. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة completed.
+                  الدفع عند الاستلام يُنشئ فاتورة بلا سند، وأول خطأ حقيقي
+                  يوقف التشغيل تلقائياً.
                 </div>
               </div>
             );

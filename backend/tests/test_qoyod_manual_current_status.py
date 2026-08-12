@@ -116,3 +116,29 @@ def test_current_status_lookup_is_batched_for_all_orders():
     assert len(result["orders"]) == 2
     assert db.unified_orders.find_calls == 1
 
+
+def test_shipping_slug_is_the_canonical_in_delivery_alias():
+    db = _DB({
+        ("owner-1", "275957683"): {
+            "order_status": "جاري التوصيل",
+            "order_status_slug": "shipping",
+        },
+        ("owner-1", "275957684"): {
+            "order_status": "تم الشحن",
+            "order_status_slug": "shipped",
+        },
+    })
+    result = asyncio.run(filter_pending_by_current_status(
+        db,
+        {
+            "orders": [
+                {"order_number": "275957683"},
+                {"order_number": "275957684"},
+            ],
+            "counts": {"returned": 2},
+        },
+        user_id="main",
+        orders_user_id="owner-1",
+        status="in_delivery",
+    ))
+    assert [row["order_number"] for row in result["orders"]] == ["275957683"]

@@ -105,7 +105,9 @@ _STATUS_MATCHERS: dict[str, tuple[frozenset, frozenset]] = {
         frozenset({"تم التوصيل"}),
     ),
     "in_delivery": (
-        frozenset({"in_delivery", "جاري_التوصيل", "جاري التوصيل"}),
+        frozenset({
+            "in_delivery", "shipping", "جاري_التوصيل", "جاري التوصيل",
+        }),
         frozenset({"جاري التوصيل", "جارٍ التوصيل"}),
     ),
 }
