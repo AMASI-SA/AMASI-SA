@@ -573,6 +573,24 @@ class ChannelGateway:
             result = None
 
         is_duplicate = result is None or getattr(result, "upserted_id", None) is None
+        # A suggestion can be leased after the conservative pre-write stale
+        # pass above but before this message becomes visible in the timeline.
+        # Repeat invalidation only for the worker that actually inserted the
+        # new evidence so that in-flight generation cannot publish an obsolete
+        # draft from that narrow window. Ordinary retries remain side-effect
+        # free because they return at the duplicate pre-check.
+        if not is_duplicate and not event_is_strictly_older:
+            await mark_pending_suggestions_stale(
+                self._db,
+                user_id=context.user_id,
+                merchant_id=context.merchant_id,
+                conversation_id=conversation_id,
+                reason=(
+                    "smb_message_echo"
+                    if message.direction == "outbound"
+                    else "customer_message"
+                ),
+            )
         return InboundIngestResult(
             duplicate=is_duplicate,
             provider=context.provider,

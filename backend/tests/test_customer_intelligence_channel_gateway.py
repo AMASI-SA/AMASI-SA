@@ -523,6 +523,52 @@ async def test_new_inbound_and_employee_echo_stale_pending_suggestions_once():
 
 
 @pytest.mark.asyncio
+async def test_message_persistence_closes_post_invalidation_suggestion_race():
+    context = _context()
+    db = FakeDB(_channel(context))
+    conversation_key = customer_identity.build_identity_keys(
+        user_id=context.user_id,
+        merchant_id=context.merchant_id,
+        source_system=f"whatsapp:{context.channel_id}:conversation",
+        external_customer_id="raw-conversation-0500000000",
+    )[0]
+    conversation_id = f"conv_{conversation_key.rsplit(':', 1)[-1][:32]}"
+    message_collection = db.collections[CONVERSATION_MESSAGES_COLLECTION]
+    original_update = message_collection.update_one
+
+    async def insert_message_then_race_suggestion(selector, update, upsert=False):
+        result = await original_update(selector, update, upsert=upsert)
+        if upsert and getattr(result, "upserted_id", None):
+            # Simulate a generator that leased a draft after the gateway's
+            # first stale pass but before the inserted message was visible to
+            # its initial timeline read.
+            db.collections[REPLY_SUGGESTIONS_COLLECTION].documents.append(
+                {
+                    "user_id": context.user_id,
+                    "merchant_id": context.merchant_id,
+                    "conversation_id": conversation_id,
+                    "source_message_id": "older-customer-message",
+                    "status": "pending_approval",
+                    "generation_status": "in_progress",
+                    "version": 1,
+                }
+            )
+        return result
+
+    message_collection.update_one = insert_message_then_race_suggestion
+
+    await ChannelGateway(db).ingest_inbound(
+        context=context,
+        message=_message(),
+    )
+
+    suggestion = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert suggestion["status"] == "stale"
+    assert suggestion["stale_reason"] == "customer_message"
+    assert suggestion["version"] == 2
+
+
+@pytest.mark.asyncio
 async def test_gateway_rejects_disabled_or_policy_unsafe_channel_before_writes():
     context = _context()
     disabled_db = FakeDB(_channel(context, ingress_enabled=False))
