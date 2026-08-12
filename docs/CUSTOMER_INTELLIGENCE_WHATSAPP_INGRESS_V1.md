@@ -148,6 +148,51 @@ ai_auto_reply_allowed=false
 العالمي يستخدم فقط لتحويل Webhook موقع إلى سجل القناة الوحيد، ثم تصبح جميع
 القراءات والكتابات التالية مقيدة بـ`user_id + merchant_id + channel_id`.
 
+### إنشاء الربط المباشر بعد تسجيل الرقم في Meta
+
+لا يُنشأ سجل القناة يدويًا في MongoDB. بعد أن تعرض Meta قيمة
+`Phone Number ID` الحقيقية، تُمرر داخل جلسة الطرفية فقط عبر متغير مؤقت، ثم
+يُشغّل أمر التهيئة أولًا دون كتابة:
+
+```bash
+read -rsp 'Meta Phone Number ID: ' MEZAN_WHATSAPP_PHONE_NUMBER_ID
+export MEZAN_WHATSAPP_PHONE_NUMBER_ID
+echo
+python scripts/provision_whatsapp_channel.py
+```
+
+الوضع الافتراضي `dry_run`، ويشترط وجود مالك واحد ومتجر سلة واحد متصل ومفتاح
+`MEZAN_CHANNEL_BINDING_HMAC_KEY` مستقل. لا يطبع الأمر قيمة `Phone Number ID`
+ولا يخزنها؛ يعرض بصمة غير قابلة للعكس فقط. عند ظهور خطة صحيحة، يطبقها المشغل
+بشكل صريح:
+
+```bash
+python scripts/provision_whatsapp_channel.py --apply
+```
+
+لا يستبدل الأمر أي قناة موجودة ولا يغير هويتها. إذا كانت القناة التجريبية
+موجودة، يخطط لإضافة ربط Meta الحقيقي كسجل مستقل بجانبها فقط بعد بوابة صريحة:
+
+```bash
+python scripts/provision_whatsapp_channel.py --allow-additional-channel
+python scripts/provision_whatsapp_channel.py --allow-additional-channel --apply
+```
+
+وجود أكثر من مالك أو أكثر من متجر متصل يتطلب تحديد النطاق صراحةً عبر
+`--owner-id` و`--merchant-id`. أي تعارض عالمي أو سجل غير آمن أو تغير في
+نطاق القنوات بين التخطيط والتنفيذ يوقف الأمر دون كتابة. أثناء التطبيق تُحجز
+مهلة ذرية قصيرة لنطاق المالك والمتجر والمزود، لذلك لا تستطيع عمليتا تهيئة
+متزامنتان تجاوز بوابة القناة الإضافية. إعادة تشغيل الأمر
+لنفس ربط Meta الصحيح تكون `noop` ولا تنفذ كتابة. بعد نجاح أول رسالة حقيقية
+فقط يمكن إيقاف السجل التجريبي بإجراء منفصل ومدقق؛ لا تحذفه أداة التهيئة.
+بعد الانتهاء تُزال قيمة
+`MEZAN_WHATSAPP_PHONE_NUMBER_ID` من جلسة الطرفية؛ لا تضاف إلى أسرار التشغيل
+الدائمة لأن Webhook يحتاج الربط غير القابل للعكس فقط.
+
+```bash
+unset MEZAN_WHATSAPP_PHONE_NUMBER_ID
+```
+
 ## ما يحفظ
 
 - معرفات المحادثة والرسالة الخارجية تتحول إلى HMAC tenant-scoped.
