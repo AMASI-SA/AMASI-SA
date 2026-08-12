@@ -5,18 +5,21 @@ import {
   CheckCircle,
   Gear,
   ListChecks,
+  Receipt,
   ShieldCheck,
   WarningCircle,
 } from "@phosphor-icons/react";
 
 import api from "../lib/api";
 import QoyodReconciliation from "./QoyodReconciliation";
+import QoyodInvoiceReview from "./QoyodInvoiceReview";
 import QoyodSettings from "./QoyodSettings";
 import QoyodUnsentOrders from "./QoyodUnsentOrders";
 
 export const QOYOD_V2_TABS = [
   { id: "overview", label: "الحالة", Icon: ShieldCheck },
   { id: "exceptions", label: "الاستثناءات", Icon: WarningCircle },
+  { id: "invoices", label: "فواتير قيود", Icon: Receipt },
   { id: "reconciliation", label: "المطابقة", Icon: ListChecks },
   { id: "settings", label: "الإعدادات", Icon: Gear },
 ];
@@ -211,6 +214,7 @@ export default function QoyodControlCenter() {
 
   const content = useMemo(() => {
     if (activeTab === "exceptions") return <QoyodUnsentOrders />;
+    if (activeTab === "invoices") return <QoyodInvoiceReview />;
     if (activeTab === "reconciliation") return <QoyodReconciliation />;
     if (activeTab === "settings") return <QoyodSettings />;
     return (
@@ -231,7 +235,7 @@ export default function QoyodControlCenter() {
         <div className="text-xs font-black text-emerald-300">MEZAN OS V2</div>
         <h1 className="mt-2 text-2xl font-black sm:text-3xl">قيود — مركز التشغيل التلقائي</h1>
         <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-300">
-          صفحة واحدة لحالة الربط، الاستثناءات، المطابقة، والإعدادات. أُزيلت صفحات التجارب والانتقال والتشخيص القديمة.
+          صفحة واحدة لحالة الربط، فواتير قيود، الاستثناءات، المطابقة، والإعدادات. أُزيلت صفحات التجارب والانتقال والتشخيص القديمة.
         </p>
       </header>
 

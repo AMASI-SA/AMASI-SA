@@ -443,6 +443,23 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         tags=["integrations:qoyod"],
     )
 
+    # Standalone Qoyod invoice review: local-mirror reads, GET-only sync,
+    # and Excel export.  Register before the legacy invoice endpoints so
+    # this independent surface can never be mistaken for an invoice-send
+    # operation.
+    from integrations.qoyod.invoice_review_routes import (
+        attach_invoice_review_routes,
+    )
+    attach_invoice_review_routes(
+        router,
+        db=db,
+        current_user=current_user,
+        tenant_id=_tenant_id,
+        orders_owner_id=orders_owner_id,
+        get_api_key=get_api_key,
+        build_api_client=_build_qoyod_client_for,
+    )
+
     async def _load_settings(tenant: str) -> dict:
         doc = await db.qoyod_settings.find_one(
             {"user_id": tenant}, {"_id": 0})
