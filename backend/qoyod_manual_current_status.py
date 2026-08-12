@@ -21,7 +21,9 @@ _STATUS_MATCHERS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
         frozenset({"تم التوصيل"}),
     ),
     "in_delivery": (
-        frozenset({"in_delivery", "جاري_التوصيل", "جاري التوصيل"}),
+        frozenset({
+            "in_delivery", "shipping", "جاري_التوصيل", "جاري التوصيل",
+        }),
         frozenset({"جاري التوصيل", "جارٍ التوصيل"}),
     ),
 }
@@ -177,4 +179,3 @@ def install_manual_list_current_status_patch() -> None:
         pass
 
     pending_module._current_status_patch_installed = True
-

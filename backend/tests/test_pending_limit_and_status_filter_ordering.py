@@ -153,3 +153,20 @@ async def test_status_filter_semantics_unchanged(db):
     ons = [o["order_number"] for o in res["orders"]]
     assert "del-1" in ons
     assert "comp-1" not in ons
+
+
+@pytest.mark.asyncio
+async def test_shipping_is_in_delivery_but_shipped_is_not(db):
+    now = datetime.now(timezone.utc)
+    await _insert(
+        db, order_number="shipping-1",
+        received_at=now, slug="shipping", native="جاري التوصيل")
+    await _insert(
+        db, order_number="shipped-1",
+        received_at=now, slug="shipped", native="تم الشحن")
+
+    res = await list_pending_orders(
+        db, user_id=TENANT, days=60, limit=500, status="in_delivery")
+    ons = [o["order_number"] for o in res["orders"]]
+    assert "shipping-1" in ons
+    assert "shipped-1" not in ons

@@ -144,6 +144,49 @@ def _inbox_row(*, order_number: str, order_date: str = "2026-07-05",
     return row
 
 
+@pytest.mark.asyncio
+async def test_manual_sender_accepts_shipping_as_in_delivery_until_next_guard(db):
+    """The report's canonical `shipping` slug must pass the sender status gate.
+
+    We intentionally omit the payment mapping so the next guard proves that
+    status itself was accepted without performing any Qoyod write.
+    """
+    row = _inbox_row(
+        order_number="SHIP-ELIGIBLE",
+        status="shipping",
+    )
+    row["canonical_payload"]["order_status_native"] = "جاري التوصيل"
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="SHIP-ELIGIBLE",
+        )
+
+    assert exc.value.code == "payment_method_unmapped"
+
+
+@pytest.mark.asyncio
+async def test_manual_sender_rejects_shipped_outside_three_status_policy(db):
+    row = _inbox_row(
+        order_number="SHIPPED-BLOCKED",
+        status="shipped",
+    )
+    row["canonical_payload"]["order_status_native"] = "تم الشحن"
+    await db.integration_inbox.insert_one(row)
+
+    with pytest.raises(ManualSendRefused) as exc:
+        await manual_send_one(
+            db,
+            user_id=TENANT,
+            order_number="SHIPPED-BLOCKED",
+        )
+
+    assert exc.value.code == "not_completed"
+
+
 async def _seed_settings(db, *, payment_methods_mapped: bool = True):
     doc = {
         "user_id":                    TENANT,

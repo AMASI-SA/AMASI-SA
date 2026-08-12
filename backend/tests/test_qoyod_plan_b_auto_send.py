@@ -38,7 +38,7 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
         canary_succeeded=True,
     )
     codes = {issue["code"] for issue in issues}
-    assert "completed_only_required" in codes
+    assert "completed_trigger_required" in codes
     assert "trigger_once_required" in codes
 
     issues = auto_send.activation_issues(
@@ -66,12 +66,12 @@ async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
             },
         }
 
-    async def fake_exact(db, order_number, *, orders_user_id):
+    async def fake_eligible(db, order_number, *, orders_user_id):
         assert orders_user_id == "orders-user"
         return True
 
     monkeypatch.setattr(auto_send, "resync_single_order", fake_resync)
-    monkeypatch.setattr(auto_send, "_still_exactly_completed", fake_exact)
+    monkeypatch.setattr(auto_send, "_still_qoyod_eligible", fake_eligible)
 
     exact, refresh = await auto_send._refresh_and_verify_salla_status(
         object(),
@@ -82,6 +82,55 @@ async def test_live_sender_refreshes_salla_before_accepting_status(monkeypatch):
     assert exact is True
     assert refresh["plan_b_status_snapshot"]["status_native"] == "تم التنفيذ"
     assert calls == [("orders-user", "273000001")]
+
+
+@pytest.mark.parametrize(
+    ("slug", "native"),
+    [
+        ("completed", "تم التنفيذ"),
+        ("in_delivery", "جاري التوصيل"),
+        ("shipping", "جاري التوصيل"),
+        ("delivered", "تم التوصيل"),
+        # Store custom label: safe only with the trusted completed slug.
+        ("completed", "تم التجهيز"),
+        # Old snapshots can carry the native label in the slug field too.
+        ("تم التنفيذ", "تم التنفيذ"),
+        ("جاري_التوصيل", "جاري التوصيل"),
+        ("تم التوصيل", "تم التوصيل"),
+        # Legacy snapshots without a slug retain the exact three aliases.
+        ("", "completed"),
+        ("", "جاري التوصيل"),
+        ("", "shipping"),
+        ("", "تم التوصيل"),
+    ],
+)
+def test_live_status_gate_accepts_only_the_three_eligible_states(slug, native):
+    assert auto_send._live_salla_status_is_eligible({
+        "order_status": slug,
+        "order_status_native": native,
+    }) is True
+
+
+@pytest.mark.parametrize(
+    ("slug", "native"),
+    [
+        ("processing", "تم التجهيز"),
+        # `shipped` is deliberately outside the three-status policy.
+        ("shipped", "تم الشحن"),
+        ("", "تم التجهيز"),
+        ("cancelled", "ملغي"),
+        ("refunded", "مسترجع"),
+        # Conflicting native evidence must not be hidden by an eligible slug.
+        ("completed", "ملغي"),
+        ("delivered", "مسترجع"),
+        ("processing", "تم التنفيذ"),
+    ],
+)
+def test_live_status_gate_rejects_untrusted_or_cancelled_states(slug, native):
+    assert auto_send._live_salla_status_is_eligible({
+        "order_status": slug,
+        "order_status_native": native,
+    }) is False
 
 
 @pytest.mark.asyncio
