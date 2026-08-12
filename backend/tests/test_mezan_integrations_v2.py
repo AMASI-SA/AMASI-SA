@@ -496,6 +496,7 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "mezan_snapchat_campaign_proposals_v1",
         "mezan_snapchat_campaign_audit_v1",
         "mezan_snapchat_campaign_entity_leases_v1",
+        "mezan_snapchat_campaign_preview_jobs_v1",
         "mezan_ad_decision_ledger_v1",
     }
     unique_names = {
@@ -514,6 +515,8 @@ async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
         "snap_management_proposal_unique",
         "snap_management_idempotency_unique",
         "snap_management_active_entity_lease_unique",
+        "snap_management_preview_job_unique",
+        "snap_management_preview_idempotency_unique",
         "ad_decision_ledger_entry_unique",
         "ad_decision_source_event_unique",
         "mezan_campaign_product_links_v2_event_unique",

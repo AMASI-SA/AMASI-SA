@@ -100,12 +100,14 @@ async def ensure_integrations_control_center_indexes(db: Any) -> None:
     # Keep the governed Snapchat write journal durable before either the
     # scheduler or a user action can append its first event.
     from .snapchat_campaign_management import ensure_snapchat_management_indexes
+    from .snapchat_campaign_preview_async import ensure_snapchat_preview_job_indexes
     from .snapchat_decision_ledger import ensure_ad_decision_indexes
     from .campaign_product_associations import (
         ensure_campaign_product_association_indexes,
     )
 
     await ensure_snapchat_management_indexes(db)
+    await ensure_snapchat_preview_job_indexes(db)
     await ensure_ad_decision_indexes(db)
     await ensure_campaign_product_association_indexes(db)
 

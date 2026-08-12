@@ -8,7 +8,9 @@ import {
     microToNativeAmount,
     nativeAmountToMicro,
     normalizeSnapchatManagementProposal,
+    normalizeSnapchatManagementPreviewJob,
     normalizeSnapchatManagementReadiness,
+    pollSnapchatManagementPreviewJob,
     pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
 } from "./snapchatCampaignManagement";
@@ -62,10 +64,14 @@ describe("snapchatCampaignManagement", () => {
 
     test("uses preview approval execution and rollback endpoints in order", async () => {
         api.post
+            .mockResolvedValueOnce({ data: { preview_job_id: "job-1", status: "queued" } })
             .mockResolvedValueOnce({ data: { proposal_id: "proposal-1", action: "campaign.create", status: "previewed", revision: 1, confirm_token: "1234567890123456", confirmation_phrase: "تراجع proposal" } })
             .mockResolvedValueOnce({ data: { proposal_id: "proposal-1", action: "campaign.create", status: "approved", revision: 2 } })
             .mockResolvedValueOnce({ data: { proposal_id: "proposal-1", action: "campaign.create", status: "completed", revision: 2, confirmation_phrase: "تراجع proposal" } })
             .mockResolvedValueOnce({ data: { proposal_id: "proposal-1", action: "campaign.create", status: "rolled_back" } });
+        api.get.mockResolvedValueOnce({
+            data: { preview_job_id: "job-1", status: "ready", proposal_id: "proposal-1" },
+        });
 
         const preview = await createSnapchatManagementProposal({
             action: "campaign.create",
@@ -79,27 +85,45 @@ describe("snapchatCampaignManagement", () => {
         await rollbackSnapchatManagementProposal(completed, "verified rollback");
 
         expect(api.post.mock.calls.map(([url]) => url)).toEqual([
+            "/integrations-v2/snapchat_ads/management/preview-jobs",
             "/integrations-v2/snapchat_ads/management/proposals",
             "/integrations-v2/snapchat_ads/management/proposals/proposal-1/approve",
             "/integrations-v2/snapchat_ads/management/proposals/proposal-1/execute",
             "/integrations-v2/snapchat_ads/management/proposals/proposal-1/rollback",
         ]);
-        expect(api.post.mock.calls[1][1]).toEqual({
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/preview-jobs/job-1",
+        );
+        expect(api.post.mock.calls.filter(([url]) => (
+            url === "/integrations-v2/snapchat_ads/management/proposals"
+        ))).toHaveLength(1);
+        expect(api.post.mock.calls[2][1]).toEqual({
             confirm_token: "1234567890123456",
             expected_revision: 1,
         });
-        expect(api.post.mock.calls[3][1]).toEqual({
+        expect(api.post.mock.calls[4][1]).toEqual({
             confirmation_phrase: "تراجع proposal",
             reason: "verified rollback",
         });
     });
 
     test("passes product scope measurable expectations and non-authoritative context to preview", async () => {
-        api.post.mockResolvedValueOnce({
+        api.post
+            .mockResolvedValueOnce({
+                data: { preview_job_id: "job-context-1", status: "queued" },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-context-1",
+                    action: "campaign.create",
+                    status: "previewed",
+                },
+            });
+        api.get.mockResolvedValueOnce({
             data: {
+                preview_job_id: "job-context-1",
+                status: "ready",
                 proposal_id: "proposal-context-1",
-                action: "campaign.create",
-                status: "previewed",
             },
         });
         const products = [{
@@ -135,7 +159,18 @@ describe("snapchatCampaignManagement", () => {
             trend_override_reason: "التحسن الحديث غير مكتمل الإسناد",
         });
 
-        expect(api.post).toHaveBeenCalledWith(
+        expect(api.post).toHaveBeenNthCalledWith(
+            1,
+            "/integrations-v2/snapchat_ads/management/preview-jobs",
+            expect.objectContaining({
+                products,
+                expected_outcome: expectedOutcome,
+                supporting_evidence: supportingEvidence,
+                trend_override_reason: "التحسن الحديث غير مكتمل الإسناد",
+            }),
+        );
+        expect(api.post).toHaveBeenNthCalledWith(
+            2,
             "/integrations-v2/snapchat_ads/management/proposals",
             expect.objectContaining({
                 products,
@@ -144,6 +179,54 @@ describe("snapchatCampaignManagement", () => {
                 trend_override_reason: "التحسن الحديث غير مكتمل الإسناد",
             }),
         );
+    });
+
+    test("normalizes and polls the timeout-safe preview job without a write retry", async () => {
+        expect(normalizeSnapchatManagementPreviewJob({
+            preview_job_id: "job-1",
+            status: "queued",
+            provider_write_reached: false,
+        })).toMatchObject({
+            preview_job_id: "job-1",
+            status: "queued",
+            provider_write_reached: false,
+            provider_write_state: "not_attempted",
+        });
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn()
+            .mockResolvedValueOnce({ preview_job_id: "job-1", status: "running" })
+            .mockResolvedValueOnce({
+                preview_job_id: "job-1", status: "ready", proposal_id: "proposal-1",
+            });
+        await expect(pollSnapchatManagementPreviewJob({
+            previewJobId: "job-1",
+            attempts: 3,
+            intervalMs: 1,
+            wait,
+            load,
+        })).resolves.toMatchObject({ status: "ready", proposal_id: "proposal-1" });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(wait).toHaveBeenCalledTimes(1);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("preview poll timeout never claims or starts a second job", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn().mockResolvedValue({
+            preview_job_id: "job-1", status: "running",
+        });
+        await expect(pollSnapchatManagementPreviewJob({
+            previewJobId: "job-1",
+            attempts: 2,
+            intervalMs: 1,
+            wait,
+            load,
+        })).rejects.toMatchObject({
+            code: "snapchat_management_preview_poll_timeout",
+            preview_job_id: "job-1",
+        });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(api.post).not.toHaveBeenCalled();
     });
 
     test("converts native currency to Snapchat micro-currency exactly", () => {

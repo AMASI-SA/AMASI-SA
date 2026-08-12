@@ -29,6 +29,27 @@ function objectList(value) {
     return Array.isArray(value) ? value.map(object).filter((item) => Object.keys(item).length) : [];
 }
 
+function proposalRequest(input = {}) {
+    if (!ACTIONS.has(input.action)) throw new Error("إجراء Snapchat غير مدعوم.");
+    return {
+        action: input.action,
+        account_id: text(input.account_id),
+        target_id: text(input.target_id) || null,
+        parent_id: text(input.parent_id) || null,
+        payload: object(input.payload),
+        reason: text(input.reason),
+        idempotency_key: text(input.idempotency_key),
+        activation_acknowledged: input.activation_acknowledged === true,
+        expected_outcome: input.expected_outcome === null
+            || input.expected_outcome === undefined
+            ? null
+            : object(input.expected_outcome),
+        supporting_evidence: objectList(input.supporting_evidence),
+        products: objectList(input.products),
+        trend_override_reason: text(input.trend_override_reason) || null,
+    };
+}
+
 export function managementError(error, fallback = "تعذّر تنفيذ طلب إدارة Snapchat.") {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) return detail;
@@ -112,6 +133,25 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
     };
 }
 
+export function normalizeSnapchatManagementPreviewJob(payload = {}) {
+    const value = object(payload?.data || payload);
+    return {
+        provider: "snapchat_ads",
+        preview_job_id: text(value.preview_job_id),
+        status: text(value.status, "unknown"),
+        proposal_id: text(value.proposal_id) || null,
+        created_at: text(value.created_at) || null,
+        started_at: text(value.started_at) || null,
+        finished_at: text(value.finished_at) || null,
+        failure: object(value.failure),
+        provider_write_reached: value.provider_write_reached === true,
+        provider_write_state: text(value.provider_write_state, "not_attempted"),
+        provider_write_uncertain: value.provider_write_uncertain === true,
+        accounting_write_reached: value.accounting_write_reached === true,
+        qoyod_write_reached: value.qoyod_write_reached === true,
+    };
+}
+
 export async function getSnapchatManagementReadiness() {
     const response = await api.get(`${BASE}/readiness`);
     return normalizeSnapchatManagementReadiness(response.data);
@@ -127,25 +167,66 @@ export async function listSnapchatManagementProposals({ limit = 20 } = {}) {
         : [];
 }
 
+export async function startSnapchatManagementPreviewJob(input = {}) {
+    const response = await api.post(`${BASE}/preview-jobs`, proposalRequest(input));
+    return normalizeSnapchatManagementPreviewJob(response.data);
+}
+
+export async function getSnapchatManagementPreviewJob(previewJobId) {
+    const response = await api.get(
+        `${BASE}/preview-jobs/${encodeURIComponent(text(previewJobId))}`,
+    );
+    return normalizeSnapchatManagementPreviewJob(response.data);
+}
+
+export async function pollSnapchatManagementPreviewJob({
+    previewJobId,
+    attempts = 180,
+    intervalMs = 1000,
+    wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    load = getSnapchatManagementPreviewJob,
+} = {}) {
+    const normalizedId = text(previewJobId);
+    const maxAttempts = Math.max(1, Math.trunc(Number(attempts) || 180));
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const job = await load(normalizedId);
+        if (["ready", "failed"].includes(job.status)) return job;
+        if (attempt < maxAttempts - 1) await wait(intervalMs);
+    }
+    const error = new Error(
+        "ما زال تجهيز المعاينة مستمرًا في الخلفية. لا تنشئ معاينة أخرى الآن؛ حدّث السجل لاحقًا.",
+    );
+    error.code = "snapchat_management_preview_poll_timeout";
+    error.preview_job_id = normalizedId;
+    throw error;
+}
+
+function previewJobFailure(job) {
+    const failure = object(job?.failure);
+    const error = new Error(
+        text(failure.message, "تعذّر تجهيز معاينة Snapchat في الخلفية."),
+    );
+    error.code = text(failure.code, "snapchat_management_preview_failed");
+    error.preview_job_id = job?.preview_job_id || null;
+    error.response = { data: { detail: failure } };
+    return error;
+}
+
 export async function createSnapchatManagementProposal(input = {}) {
-    if (!ACTIONS.has(input.action)) throw new Error("إجراء Snapchat غير مدعوم.");
-    const response = await api.post(`${BASE}/proposals`, {
-        action: input.action,
-        account_id: text(input.account_id),
-        target_id: text(input.target_id) || null,
-        parent_id: text(input.parent_id) || null,
-        payload: object(input.payload),
-        reason: text(input.reason),
-        idempotency_key: text(input.idempotency_key),
-        activation_acknowledged: input.activation_acknowledged === true,
-        expected_outcome: input.expected_outcome === null
-            || input.expected_outcome === undefined
-            ? null
-            : object(input.expected_outcome),
-        supporting_evidence: objectList(input.supporting_evidence),
-        products: objectList(input.products),
-        trend_override_reason: text(input.trend_override_reason) || null,
+    const request = proposalRequest(input);
+    const accepted = await startSnapchatManagementPreviewJob(request);
+    if (!accepted.preview_job_id) {
+        throw new Error("لم يُعد ميزان معرّف مهمة المعاينة.");
+    }
+    const job = await pollSnapchatManagementPreviewJob({
+        previewJobId: accepted.preview_job_id,
     });
+    if (job.status === "failed") throw previewJobFailure(job);
+
+    // The worker deliberately never persists the plaintext confirmation token.
+    // Replaying the same bounded request is idempotent and only rotates a token
+    // on the already-prepared proposal; it does not repeat baseline/provider reads.
+    const response = await api.post(`${BASE}/proposals`, request);
     return normalizeSnapchatManagementProposal(response.data);
 }
 

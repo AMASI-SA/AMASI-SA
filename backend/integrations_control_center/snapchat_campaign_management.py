@@ -25,6 +25,7 @@ from .snapchat_account_selection import _load_selected_accounts
 from .snapchat_native_data_common import (
     SNAPCHAT_API_BASE,
     SNAPCHAT_PROVIDER_ID,
+    SnapchatNativeSyncError,
     SnapchatSyncContext,
     _collection,
     _safe_provider_error_detail,
@@ -239,6 +240,21 @@ def _bounded_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(safe, dict):
         raise ValueError("payload is invalid")
     return safe
+
+
+def snapchat_management_request_fingerprint(
+    payload: "SnapchatManagementProposalInput",
+) -> str:
+    """Return the canonical fingerprint shared by sync and async previews."""
+    return hashlib.sha256(
+        json.dumps(
+            payload.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 class SnapchatDecisionEvidenceInput(BaseModel):
@@ -804,7 +820,23 @@ class SnapchatManagementProvider:
         body: Any = None,
         content_type: str = "application/json",
     ) -> dict[str, Any]:
-        token = await self.context.access_token()
+        try:
+            token = await self.context.access_token()
+        except SnapchatNativeSyncError as exc:
+            # The shared credential loader intentionally raises its own domain
+            # error.  Convert it at the management boundary so FastAPI always
+            # returns a bounded JSON response instead of an unhandled 500.
+            detail: dict[str, Any] = {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": bool(exc.retryable),
+            }
+            if isinstance(exc.result, dict) and exc.result.get("needs_reauth") is True:
+                detail["needs_reauth"] = True
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=detail,
+            ) from exc
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if body is not None:
             headers["Content-Type"] = content_type
@@ -1418,15 +1450,7 @@ async def create_snapchat_management_proposal(
     provider: SnapchatManagementProvider | None = None,
 ) -> dict[str, Any]:
     await ensure_snapchat_management_indexes(db)
-    request_fingerprint = hashlib.sha256(
-        json.dumps(
-            payload.model_dump(mode="json"),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()
+    request_fingerprint = snapchat_management_request_fingerprint(payload)
     existing = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "idempotency_key": payload.idempotency_key},
         {"_id": 0},
@@ -3953,4 +3977,5 @@ __all__ = [
     "snapchat_campaign_activation_enabled",
     "snapchat_campaign_mutations_enabled",
     "snapchat_management_readiness",
+    "snapchat_management_request_fingerprint",
 ]
