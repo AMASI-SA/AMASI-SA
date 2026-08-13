@@ -298,6 +298,21 @@ export async function getSnapchatManagementReadiness() {
     return normalizeSnapchatManagementReadiness(response.data);
 }
 
+export async function diagnoseSnapchatManagementPixels({ days = 7 } = {}) {
+    const parsedDays = Math.trunc(Number(days));
+    if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 62) {
+        throw new Error("invalid_snapchat_tracking_days");
+    }
+    const response = await api.post(
+        "/integrations-v2/snapchat_ads/tracking-diagnostics",
+        {
+            days: parsedDays,
+            idempotency_key: `management-pixel-${Date.now()}`,
+        },
+    );
+    return object(response.data);
+}
+
 export async function listSnapchatManagementProposals({ limit = 20 } = {}) {
     const response = await api.get(`${BASE}/proposals`, {
         params: { limit: Math.min(100, Math.max(1, Math.trunc(Number(limit) || 20))) },
