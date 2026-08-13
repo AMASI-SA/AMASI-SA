@@ -987,7 +987,7 @@ def make_dashboard_v2_router(
                 "orders_sales_payment_methods": "unified_orders:mezan_v2",
                 "product_cost": product_cost["source_contract"],
                 "advertising": ads["source_contract"],
-                "employee_salaries": "legacy_operating_expense_settings",
+                "employee_salaries": "mezan_employee_salary_contracts_v2",
                 "shipping_partners": "legacy_shipping_cost_ssot",
                 "payment_gateway_fees": "legacy_payment_method_settings + mezan_ad_account_cost_settings_v2",
             },

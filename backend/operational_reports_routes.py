@@ -19,6 +19,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 import calendar
 
+from employee_payroll_status import find_employee_salary
+
 
 def attach_operational_reports_routes(parent_router, db, current_user):
     router = APIRouter(prefix="/operational-reports", tags=["operational-reports"])
@@ -157,9 +159,7 @@ def attach_operational_reports_routes(parent_router, db, current_user):
             slot["paid"] += float(liab.get("paid_amount") or 0)
         # Resolve names + advance amounts
         for emp_id, slot in emp_map.items():
-            doc = await db.operating_salaries.find_one(
-                {"id": emp_id, "user_id": uid}, {"_id": 0, "name": 1},
-            )
+            doc = await find_employee_salary(db, uid, emp_id)
             if doc:
                 slot["name"] = doc["name"]
             slot["remaining"] = round(max(0.0, slot["salary_due"] - slot["paid"]), 2)

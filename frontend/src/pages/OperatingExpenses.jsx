@@ -14,6 +14,7 @@ const SALARY_CATEGORIES = [
     { value: "household",  label: "مصروف البيت الشهري",  icon: House,     hint: "مصروف الأسرة/المنزل/الشخصي الثابت" },
     { value: "charity",    label: "الصدقات والمساهمات",  icon: HandHeart, hint: "صدقات دورية، تبرعات، كفالات، مساهمات خيرية" },
 ];
+const EDITABLE_SALARY_CATEGORIES = SALARY_CATEGORIES.filter((category) => category.value !== "employee");
 
 const SALARY_COUNTRIES = [
     { value: "saudi", label: "السعودية", flag: "🇸🇦" },
@@ -280,7 +281,7 @@ function SalariesPanel({ items, onAdd, onEdit, onDelete }) {
     return (
         <Section
             title="الرواتب الشهرية"
-            description="الموظفين، مصروف البيت، الصدقات — يتم توزيع كل راتب يومياً تلقائياً."
+            description="رواتب الموظفين تُقرأ من عقود ميزان 2 فقط؛ هنا تُدار مصروفات البيت والصدقات."
             onAdd={onAdd}
             addTestId="oe-add-salary-btn"
         >
@@ -332,7 +333,7 @@ function SalariesPanel({ items, onAdd, onEdit, onDelete }) {
                                     <Td>{r.start_date}</Td>
                                     <Td><StatusBadge status={r.status} /></Td>
                                     <Td className="text-muted-foreground">{r.notes || "—"}</Td>
-                                    <Td><RowActions onEdit={() => onEdit(r)} onDelete={() => onDelete(r)} /></Td>
+                                    <Td>{r.category === "employee" ? <span className="text-[11px] font-bold text-emerald-700">يُدار من الموظفين</span> : <RowActions onEdit={() => onEdit(r)} onDelete={() => onDelete(r)} />}</Td>
                                 </tr>
                             );
                         })}
@@ -588,7 +589,7 @@ function Modal({ state, accounts, onClose, onSaved }) {
         if (state.kind === "salary") {
             return {
                 name: row.name || "",
-                category: row.category || "employee",
+                category: row.category || "household",
                 country: row.country || "saudi",
                 monthly_amount: row.monthly_amount ?? "",
                 start_date: row.start_date || todayISO(),
@@ -727,7 +728,7 @@ function SalaryFormFields({ form, setForm }) {
             </Field>
             <Field label="نوع الراتب">
                 <select required value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="oe-input" data-testid="oe-salary-category">
-                    {SALARY_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    {EDITABLE_SALARY_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <div className="text-xs text-muted-foreground mt-1">
                     {SALARY_CATEGORIES.find((c) => c.value === form.category)?.hint}

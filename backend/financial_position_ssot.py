@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from employee_payroll_status import employee_salary_rows
 from ledger_core import compute_balance
 from tz_utils import riyadh_today
 
@@ -157,10 +158,7 @@ async def account_balance_ssot(
 
 # ── salary breakdown (ledger-driven) ─────────────────────────────────
 async def salary_breakdown_ssot(db, user_id: str) -> dict:
-    """Per-employee salary breakdown using general_ledger for paid /
-    advance figures and operating_salaries for the calendar-based
-    accrued figure (which has no ledger equivalent and is correct by
-    construction — it's "what should have been earned by today")."""
+    """Per-employee salary breakdown from Ledger + Employee OS V2 contracts."""
     from liabilities_routes import _compute_employee_accrual
 
     employee_ledger = await _group_by_entity(db, user_id, "employee")
@@ -173,9 +171,7 @@ async def salary_breakdown_ssot(db, user_id: str) -> dict:
     active_count = 0
     suspended_count = 0
 
-    async for emp in db.operating_salaries.find(
-        {"user_id": user_id, "category": "employee"}, {"_id": 0},
-    ):
+    for emp in await employee_salary_rows(db, user_id):
         emp_id = emp.get("id")
         calc = _compute_employee_accrual(emp, today=today)
         accrued = round(float(calc.get("accrued") or 0), 2)

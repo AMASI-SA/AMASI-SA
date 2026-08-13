@@ -1,19 +1,16 @@
-"""Mezan Employees V2 identity management and guarded shadow migration.
+"""Mezan Employees V2 identity, access and payroll-status management.
 
-The legacy salary engine continues to own payroll until a later, separately
-validated cutover.  This module creates the employee identity that Mezan V2
-needs and links it to the existing salary, login, operational-role and ledger
-records without rewriting legacy payroll or financial history.
+Employee OS identities and V2 salary contracts are the live employee-payroll
+source. Historical salary and ledger keys stay linked for continuity, while
+the legacy employee-salary rows are never used by runtime payroll consumers.
 
 Migration modes
 ---------------
 preview
     Read-only projection.  No collection is modified.
 shadow_read_only
-    Creates idempotent employee and salary-contract snapshots in V2. Legacy
-    payroll and the general ledger remain authoritative. After pilot acceptance,
-    Employee OS may edit operational identity and access fields, but salary and
-    financial snapshots stay read-only until payroll cutover.
+    Historical migration/audit mode that creates idempotent V2 identities and
+    contracts without rewriting legacy salary or ledger history.
 """
 from __future__ import annotations
 
@@ -36,6 +33,11 @@ from ai_store_access_contract import (
     effective_permissions,
     validate_assignment,
 )
+from employee_payroll_status import (
+    PAYROLL_STATES,
+    suspension_history,
+    transition_suspensions,
+)
 from liabilities_routes import _aggregate_salary_accrual, _compute_employee_accrual
 from tz_utils import riyadh_today
 from warehouse_location_routes import WAREHOUSES
@@ -55,7 +57,8 @@ EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT"
 EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT"
 EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE"
 EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
-EMPLOYEE_STATUSES = {"active", "inactive"}
+EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
+EMPLOYEE_STATUSES = PAYROLL_STATES
 
 
 def _now() -> str:
@@ -312,8 +315,15 @@ def build_employee_management_snapshot(
         account = users_by_id.get(account_user_id)
         assignment = assignments_by_user.get(account_user_id)
         raw_status = _text(employee.get("status") or preview.get("status"))
-        status = "active" if raw_status == "active" else "inactive"
+        status = raw_status if raw_status in EMPLOYEE_STATUSES else "inactive"
         contract = contracts_by_employee.get(employee_id) or preview.get("salary_contract")
+        if contract:
+            contract = {
+                **contract,
+                "payroll_state": status,
+                "suspension_periods": suspension_history(contract, employee),
+                "source_authority": "mezan_employee_salary_contracts_v2",
+            }
         account_status = "linked" if account_user_id else _text(
             preview_account.get("status") or "not_linked"
         )
@@ -335,7 +345,8 @@ def build_employee_management_snapshot(
             "management_mode": "full_management",
             "source_system": source_system,
             "migrated": source_system == "mezan_legacy",
-            "payroll_writes_enabled": False,
+            "payroll_status_writes_enabled": True,
+            "payroll_amount_writes_enabled": False,
             "salary_contract": contract,
             "financial_snapshot": preview.get("financial_snapshot") or {
                 "salary_payable": 0.0,
@@ -422,6 +433,9 @@ def build_employee_management_snapshot(
         "employees_with_roles": sum(bool(row["operational_role"]["role_key"]) for row in rows),
         "can_create_employee": True,
         "migrated_employee_writes_enabled": True,
+        "employee_salary_source": SALARY_CONTRACTS,
+        "legacy_employee_salary_reads": 0,
+        "payroll_status_writes_enabled": True,
         "legacy_payroll_writes_enabled": False,
         "general_ledger_writes_enabled": False,
         "account_link_effect_scope": "employee_account_access",
@@ -1281,7 +1295,9 @@ async def _employee_management_response(
     *,
     owner_id: str,
 ) -> dict[str, Any]:
-    preview = await _preview_from_db(db, owner_id)
+    # The live management workspace is fully cut over. Migration preview is a
+    # separate, explicit audit endpoint and is never a runtime dependency.
+    preview = {"employees": []}
     management = await _management_from_db(
         db,
         owner_id=owner_id,
@@ -1525,6 +1541,38 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 detail={"code": str(exc)},
             ) from exc
 
+        current_status = _text(employee.get("status") or "active")
+        target_status = _text(values.get("status") or current_status)
+        status_changed = target_status != current_status
+        effective_date: date | None = None
+        contract = None
+        contract_update: dict[str, Any] | None = None
+        if status_changed:
+            if _text(payload.get("confirmation")) != EMPLOYEE_PAYROLL_STATUS_CONFIRMATION:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "employee_payroll_status_confirmation_required"},
+                )
+            try:
+                effective_date = date.fromisoformat(
+                    _text(payload.get("status_effective_date"))
+                    or riyadh_today().isoformat()
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "employee_payroll_status_effective_date_invalid"},
+                ) from exc
+            if effective_date > riyadh_today():
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "employee_payroll_status_effective_date_future"},
+                )
+            contract = await db[SALARY_CONTRACTS].find_one(
+                {"user_id": owner_id, "employee_id": employee_id},
+                {"_id": 0},
+            )
+
         account_id = _text(employee.get("account_user_id"))
         before_account = await db.users.find_one(
             {"id": account_id}, {"_id": 0}
@@ -1533,6 +1581,36 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             {"user_id": account_id}, {"_id": 0}
         ) if account_id else None
         now = _now()
+        if status_changed and contract is not None and effective_date is not None:
+            try:
+                periods = transition_suspensions(
+                    suspension_history(contract, employee),
+                    target_state=target_status,
+                    effective_date=effective_date,
+                    period_id=f"empsusp_{uuid.uuid4().hex}",
+                    changed_at=now,
+                    changed_by=owner_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": str(exc)},
+                ) from exc
+            contract_update = {
+                "payroll_state": target_status,
+                "status": (
+                    "active" if target_status == "active"
+                    else "paused" if target_status == "unpaid_leave"
+                    else "inactive"
+                ),
+                "suspension_periods": periods,
+                "effective_to": None,
+                "source_authority": "mezan_employee_salary_contracts_v2",
+                "authority_cutover_at": now,
+                "version": int(contract.get("version") or 1) + 1,
+                "updated_at": now,
+                "updated_by": owner_id,
+            }
         update_fields = {
             **values,
             "version": expected_version + 1,
@@ -1556,6 +1634,11 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 status_code=409,
                 detail={"code": "employee_version_conflict"},
             )
+        if contract_update is not None:
+            await db[SALARY_CONTRACTS].update_one(
+                {"user_id": owner_id, "id": contract.get("id")},
+                {"$set": contract_update},
+            )
         if "status" in values and account_id:
             await _set_employee_account_access(
                 db,
@@ -1572,15 +1655,25 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             db,
             owner_id=owner_id,
             employee_id=employee_id,
-            event_type="employee_updated",
+            event_type=(
+                "employee_payroll_status_changed"
+                if status_changed
+                else "employee_updated"
+            ),
             actor=user,
             before={
                 "employee": _employee_audit_view(employee),
+                "salary_contract": contract,
                 "account_access": _account_access_view(before_account),
                 "role_assignment": _role_audit_view(before_assignment),
             },
             after={
                 "employee": _employee_audit_view(updated),
+                "salary_contract": (
+                    {**contract, **contract_update}
+                    if contract is not None and contract_update is not None
+                    else contract
+                ),
                 "account_access": _account_access_view(
                     await db.users.find_one({"id": account_id}, {"_id": 0})
                     if account_id else None
@@ -1593,6 +1686,12 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             },
             metadata={
                 "changed_fields": sorted(values.keys()),
+                "status_effective_date": (
+                    effective_date.isoformat() if effective_date else None
+                ),
+                "payroll_status_source": SALARY_CONTRACTS,
+                "employee_salary_legacy_reads": 0,
+                "salary_contract_status_written": contract_update is not None,
                 "legacy_payroll_writes_made": False,
                 "general_ledger_writes_made": False,
             },
@@ -2114,7 +2213,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "effective_to": salary.get("effective_to"),
                 "status": salary.get("status"),
                 "accrual_policy": "legacy_calendar_daily_compatible",
-                "source_authority": "operating_salaries_until_cutover",
+                "source_authority": "mezan_employee_salary_contracts_v2",
             }
             before = (
                 {key: existing.get(key) for key in audit_fields}
@@ -2338,7 +2437,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "effective_to": salary["effective_to"],
                 "status": salary["status"],
                 "accrual_policy": "legacy_calendar_daily_compatible",
-                "source_authority": "operating_salaries_until_cutover",
+                "source_authority": "mezan_employee_salary_contracts_v2",
                 "migration": {
                     "mode": "shadow_read_only",
                     "run_id": run_id,

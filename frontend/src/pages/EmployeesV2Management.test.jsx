@@ -63,6 +63,9 @@ const workspace = {
         linked_account_count: 1,
         can_create_employee: true,
         migrated_employee_writes_enabled: true,
+        employee_salary_source: "mezan_employee_salary_contracts_v2",
+        legacy_employee_salary_reads: 0,
+        payroll_status_writes_enabled: true,
         legacy_payroll_writes_enabled: false,
         general_ledger_writes_enabled: false,
         financial_writes: 0,
@@ -101,15 +104,39 @@ beforeEach(() => {
 });
 
 
-test("opens full management for all 15 employees with zero financial writes", async () => {
+test("opens full management for all 15 employees with V2 payroll authority", async () => {
     const { container, root } = await renderPage();
     try {
         expect(container.textContent).toContain("إدارة الموظفين");
-        expect(container.textContent).toContain("الإدارة التشغيلية مفتوحة");
-        expect(container.textContent).toContain("الكتابات المالية من هذه الصفحة: 0");
+        expect(container.textContent).toContain("مصدر رواتب الموظفين: عقود ميزان 2");
+        expect(container.textContent).toContain("الاعتماد على رواتب الموظفين القديمة: 0");
         expect(container.textContent).not.toContain("موظف تجريبي واحد");
         expect(container.querySelectorAll('[data-testid="employees-v2-employee-card"]')).toHaveLength(15);
         expect(container.querySelector('[data-testid="employees-v2-add-employee"]').disabled).toBe(false);
+    } finally {
+        await cleanup(container, root);
+    }
+});
+
+
+test("unpaid leave shows its effective-date salary stop warning", async () => {
+    const { container, root } = await renderPage();
+    try {
+        const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        const edit = firstCard.querySelector('button[aria-label="تعديل الموظف"]');
+        await act(async () => edit.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+        const status = document.body.querySelector('[data-testid="employees-v2-status-select"]');
+        expect([...status.options].map((option) => option.value)).toContain("unpaid_leave");
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+            setter.call(status, "unpaid_leave");
+            status.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        expect(document.body.querySelector('[data-testid="employees-v2-payroll-status-warning"]')).not.toBeNull();
+        expect(document.body.textContent).toContain("أول يوم غير مدفوع");
+        expect(document.body.querySelector('[data-testid="employees-v2-status-effective-date"]')).not.toBeNull();
     } finally {
         await cleanup(container, root);
     }
