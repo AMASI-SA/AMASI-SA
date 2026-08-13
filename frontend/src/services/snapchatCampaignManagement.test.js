@@ -1,8 +1,11 @@
 import api from "../lib/api";
 import {
     approveSnapchatManagementProposal,
+    clearSnapchatManagementPreviewResume,
     createSnapchatManagementProposal,
     executeSnapchatManagementProposal,
+    getCurrentSnapchatManagementPreviewJob,
+    getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
     microToNativeAmount,
@@ -13,6 +16,7 @@ import {
     pollSnapchatManagementPreviewJob,
     pollSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
+    resumeSnapchatManagementProposal,
     startSnapchatManagementPreviewJob,
 } from "./snapchatCampaignManagement";
 
@@ -25,6 +29,7 @@ describe("snapchatCampaignManagement", () => {
     beforeEach(() => {
         api.get.mockReset();
         api.post.mockReset();
+        window.sessionStorage.clear();
     });
 
     test("normalizes readiness without making Salla a dependency", () => {
@@ -296,6 +301,350 @@ describe("snapchatCampaignManagement", () => {
         expect(load).toHaveBeenCalledTimes(3);
         expect(wait).toHaveBeenCalledTimes(2);
         expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("keeps a non-reconciled stale result pending until a ready reconciliation", async () => {
+        const wait = jest.fn().mockResolvedValue(undefined);
+        const load = jest.fn()
+            .mockResolvedValueOnce({
+                preview_job_id: "job-stale",
+                status: "failed",
+                terminal_reconciled: false,
+            })
+            .mockResolvedValueOnce({
+                preview_job_id: "job-stale",
+                status: "ready",
+                proposal_id: "proposal-after-stale",
+                terminal_reconciled: true,
+            });
+        await expect(pollSnapchatManagementPreviewJob({
+            previewJobId: "job-stale",
+            attempts: 2,
+            intervalMs: 1,
+            wait,
+            load,
+        })).resolves.toMatchObject({
+            status: "ready",
+            proposal_id: "proposal-after-stale",
+        });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("stores the exact request before start and never stores a confirmation token", async () => {
+        let storedDuringStart;
+        api.post
+            .mockImplementationOnce(async () => {
+                storedDuringStart = window.sessionStorage.getItem(
+                    "mezan:snapchat-management-preview:v1",
+                );
+                return { data: { preview_job_id: "job-stored", status: "queued" } };
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-stored",
+                    action: "campaign.create",
+                    status: "previewed",
+                    confirm_token: "secret-confirm-token",
+                },
+            });
+        api.get.mockResolvedValueOnce({
+            data: {
+                preview_job_id: "job-stored",
+                status: "ready",
+                proposal_id: "proposal-stored",
+                terminal_reconciled: true,
+            },
+        });
+        await createSnapchatManagementProposal({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Stored safely" },
+            reason: "safe storage preview",
+            idempotency_key: "stored-preview-001",
+        }, { ownerId: "owner-1" });
+
+        const during = JSON.parse(storedDuringStart);
+        const after = JSON.parse(window.sessionStorage.getItem(
+            "mezan:snapchat-management-preview:v1",
+        ));
+        expect(during.owner_id).toBe("owner-1");
+        expect(during.preview_job_id).toBeNull();
+        expect(during.request.idempotency_key).toBe("stored-preview-001");
+        expect(after.preview_job_id).toBe("job-stored");
+        expect(JSON.stringify(after)).not.toContain("secret-confirm-token");
+        expect(JSON.stringify(after)).not.toContain("confirm_token");
+    });
+
+    test("resumes a saved job with GET and an idempotent claim but no start POST", async () => {
+        api.post
+            .mockResolvedValueOnce({
+                data: { preview_job_id: "job-resume", status: "queued" },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-resume",
+                    action: "campaign.create",
+                    status: "previewed",
+                    confirm_token: "first-token",
+                },
+            });
+        api.get.mockResolvedValueOnce({
+            data: {
+                preview_job_id: "job-resume",
+                status: "ready",
+                proposal_id: "proposal-resume",
+                terminal_reconciled: true,
+            },
+        });
+        await createSnapchatManagementProposal({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Resume" },
+            reason: "resume the exact preview",
+            idempotency_key: "resume-preview-001",
+        }, { ownerId: "owner-1" });
+
+        api.post.mockReset();
+        api.get.mockReset();
+        api.get.mockResolvedValueOnce({
+            data: {
+                preview_job_id: "job-resume",
+                status: "ready",
+                proposal_id: "proposal-resume",
+                terminal_reconciled: true,
+            },
+        });
+        api.post.mockResolvedValueOnce({
+            data: {
+                proposal_id: "proposal-resume",
+                action: "campaign.create",
+                status: "previewed",
+                confirm_token: "rotated-token",
+            },
+        });
+        await expect(resumeSnapchatManagementProposal({
+            ownerId: "owner-1",
+        })).resolves.toMatchObject({
+            proposal_id: "proposal-resume",
+            confirm_token: "rotated-token",
+        });
+        expect(api.get).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/preview-jobs/job-resume",
+        );
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/proposals",
+            expect.objectContaining({ idempotency_key: "resume-preview-001" }),
+        );
+    });
+
+    test("coalesces concurrent resumes so reopening cannot rotate two tokens", async () => {
+        window.sessionStorage.setItem(
+            "mezan:snapchat-management-preview:v1",
+            JSON.stringify({
+                version: 1,
+                owner_id: "owner-1",
+                saved_at: Date.now(),
+                idempotency_key: "resume-coalesced-001",
+                preview_job_id: "job-coalesced",
+                request: {
+                    action: "campaign.create",
+                    account_id: "account-1",
+                    payload: { name: "Coalesced" },
+                    reason: "one token only",
+                    idempotency_key: "resume-coalesced-001",
+                },
+            }),
+        );
+        let finishRead;
+        api.get.mockImplementationOnce(() => new Promise((resolve) => {
+            finishRead = resolve;
+        }));
+        api.post.mockResolvedValueOnce({
+            data: {
+                proposal_id: "proposal-coalesced",
+                action: "campaign.create",
+                status: "previewed",
+                confirm_token: "only-current-token",
+            },
+        });
+
+        const first = resumeSnapchatManagementProposal({ ownerId: "owner-1" });
+        const reopened = resumeSnapchatManagementProposal({ ownerId: "owner-1" });
+        expect(reopened).toBe(first);
+        expect(api.get).toHaveBeenCalledTimes(1);
+
+        finishRead({
+            data: {
+                preview_job_id: "job-coalesced",
+                status: "ready",
+                proposal_id: "proposal-coalesced",
+                terminal_reconciled: true,
+            },
+        });
+        await expect(Promise.all([first, reopened])).resolves.toEqual([
+            expect.objectContaining({ confirm_token: "only-current-token" }),
+            expect.objectContaining({ confirm_token: "only-current-token" }),
+        ]);
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/proposals",
+            expect.objectContaining({ idempotency_key: "resume-coalesced-001" }),
+        );
+    });
+
+    test("coalesces create with reopen resume into one start and one token claim", async () => {
+        let finishRead;
+        api.post
+            .mockResolvedValueOnce({
+                data: { preview_job_id: "job-create-resume", status: "queued" },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-create-resume",
+                    action: "campaign.create",
+                    status: "previewed",
+                    confirm_token: "single-create-resume-token",
+                },
+            });
+        api.get.mockImplementationOnce(() => new Promise((resolve) => {
+            finishRead = resolve;
+        }));
+        const request = {
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Create then reopen" },
+            reason: "coalesce create and resume",
+            idempotency_key: "create-resume-001",
+        };
+
+        const created = createSnapchatManagementProposal(
+            request,
+            { ownerId: "owner-1" },
+        );
+        const reopened = resumeSnapchatManagementProposal({ ownerId: "owner-1" });
+        expect(reopened).toBe(created);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(api.get).toHaveBeenCalledTimes(1);
+
+        finishRead({
+            data: {
+                preview_job_id: "job-create-resume",
+                status: "ready",
+                proposal_id: "proposal-create-resume",
+                terminal_reconciled: true,
+            },
+        });
+        await expect(Promise.all([created, reopened])).resolves.toEqual([
+            expect.objectContaining({ confirm_token: "single-create-resume-token" }),
+            expect.objectContaining({ confirm_token: "single-create-resume-token" }),
+        ]);
+        expect(api.post.mock.calls.filter(([url]) => (
+            url.endsWith("/preview-jobs")
+        ))).toHaveLength(1);
+        expect(api.post.mock.calls.filter(([url]) => (
+            url.endsWith("/proposals")
+        ))).toHaveLength(1);
+    });
+
+    test("recovers a lost 202 by exact idempotency without creating another job", async () => {
+        const lost = { response: { status: 520 } };
+        api.post
+            .mockRejectedValueOnce(lost)
+            .mockRejectedValueOnce(lost)
+            .mockRejectedValueOnce(lost)
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-lost-202",
+                    action: "campaign.create",
+                    status: "previewed",
+                    confirm_token: "claim-token",
+                },
+            });
+        api.get
+            .mockResolvedValueOnce({
+                data: {
+                    preview_job_id: "job-lost-202",
+                    status: "ready",
+                    proposal_id: "proposal-lost-202",
+                    terminal_reconciled: true,
+                },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    preview_job_id: "job-lost-202",
+                    status: "ready",
+                    proposal_id: "proposal-lost-202",
+                    terminal_reconciled: true,
+                },
+            });
+        await expect(createSnapchatManagementProposal({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Lost 202" },
+            reason: "recover accepted preview",
+            idempotency_key: "lost-202-preview-001",
+        }, { ownerId: "owner-1" })).resolves.toMatchObject({
+            proposal_id: "proposal-lost-202",
+        });
+        expect(api.post.mock.calls.filter(([url]) => (
+            url.endsWith("/preview-jobs")
+        ))).toHaveLength(3);
+        expect(api.get).toHaveBeenNthCalledWith(
+            1,
+            "/integrations-v2/snapchat_ads/management/preview-jobs/current",
+            { params: { idempotency_key: "lost-202-preview-001" } },
+        );
+        expect(api.post.mock.calls.filter(([url]) => (
+            url.endsWith("/proposals")
+        ))).toHaveLength(1);
+    });
+
+    test("approval clears only the matching owner's saved preview", async () => {
+        api.post
+            .mockResolvedValueOnce({
+                data: { preview_job_id: "job-clear", status: "queued" },
+            })
+            .mockResolvedValueOnce({
+                data: {
+                    proposal_id: "proposal-clear",
+                    action: "campaign.create",
+                    status: "previewed",
+                    revision: 1,
+                    confirm_token: "confirm-clear-token",
+                },
+            });
+        api.get.mockResolvedValueOnce({
+            data: {
+                preview_job_id: "job-clear",
+                status: "ready",
+                proposal_id: "proposal-clear",
+                terminal_reconciled: true,
+            },
+        });
+        const proposal = await createSnapchatManagementProposal({
+            action: "campaign.create",
+            account_id: "account-1",
+            payload: { name: "Clear" },
+            reason: "clear after approval",
+            idempotency_key: "clear-preview-001",
+        }, { ownerId: "owner-1" });
+        expect(getSnapchatManagementPreviewResume("owner-1")).not.toBeNull();
+
+        api.post.mockReset();
+        api.post.mockResolvedValueOnce({
+            data: {
+                proposal_id: "proposal-clear",
+                action: "campaign.create",
+                status: "approved",
+                revision: 2,
+            },
+        });
+        await approveSnapchatManagementProposal(proposal, { ownerId: "owner-1" });
+        expect(getSnapchatManagementPreviewResume("owner-1")).toBeNull();
+        clearSnapchatManagementPreviewResume("owner-1");
     });
 
     test("preview polling rejects a non-transient GET failure immediately", async () => {
