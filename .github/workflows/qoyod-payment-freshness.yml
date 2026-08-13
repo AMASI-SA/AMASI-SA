@@ -21,6 +21,7 @@ on:
       - "backend/tests/test_qoyod_reconciliation_v2.py"
       - "backend/tests/test_qoyod_order_accounting_sync.py"
       - "backend/tests/test_qoyod_failed_retry.py"
+      - "backend/tests/test_qoyod_unsent_range_counts.py"
       - "frontend/src/pages/QoyodReconciliation.jsx"
       - "frontend/src/pages/QoyodUnsentOrders.jsx"
       - ".github/workflows/qoyod-payment-freshness.yml"
@@ -70,6 +71,7 @@ jobs:
             tests/test_qoyod_reconciliation_v2.py \
             tests/test_qoyod_order_accounting_sync.py \
             tests/test_qoyod_failed_retry.py \
+            tests/test_qoyod_unsent_range_counts.py \
             -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
           status=$?
           cat /tmp/qoyod-payment-freshness.log
