@@ -35,6 +35,8 @@ PREVIEW_JOB_SOURCE_MODE = "snapchat_campaign_preview_async_v1"
 PREVIEW_JOB_STALE_AFTER = timedelta(minutes=15)
 PREVIEW_JOB_EXECUTION_TIMEOUT_SECONDS = 150
 PREVIEW_JOB_RECONCILIATION_GRACE = timedelta(seconds=150)
+PREVIEW_JOB_LEASE_DURATION = timedelta(seconds=60)
+PREVIEW_JOB_HEARTBEAT_INTERVAL_SECONDS = 15
 ACTIVE_PREVIEW_JOB_STATUSES = {"queued", "running"}
 LOGGER = logging.getLogger(__name__)
 
@@ -164,6 +166,9 @@ async def _reconcile_ready_job(db: Any, row: dict[str, Any]) -> dict[str, Any]:
                 "terminal_reconciled": True,
                 "reconcile_deadline_at": None,
                 "recovery_action": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "heartbeat_at": None,
             }
         },
     )
@@ -224,6 +229,10 @@ async def queue_snapchat_management_preview_job(
         "phase_started_at": _iso(now_value),
         "terminal_reconciled": False,
         "stale_at": _iso(now_value + PREVIEW_JOB_STALE_AFTER),
+        "lease_token": None,
+        "lease_expires_at": None,
+        "heartbeat_at": None,
+        "recovery_count": 0,
         "failure": None,
         "provider_write_reached": False,
         "provider_write_state": "not_attempted",
@@ -254,6 +263,7 @@ async def _mark_job_failed(
     row: dict[str, Any],
     failure: dict[str, Any],
     *,
+    expected_lease_token: str | None,
     terminal_reconciled: bool = True,
     recovery_action: str = "create_new_preview",
     reconcile_deadline_at: str | None = None,
@@ -261,12 +271,17 @@ async def _mark_job_failed(
     reconciled = await _reconcile_ready_job(db, row)
     if reconciled.get("status") == "ready":
         return
+    query = {
+        "user_id": row.get("user_id"),
+        "preview_job_id": row.get("preview_job_id"),
+        "status": {"$in": list(ACTIVE_PREVIEW_JOB_STATUSES)},
+        # Always fence with the caller's observed ownership, including None
+        # for a queued or legacy row.  A worker must never adopt a newer
+        # replica's token from a later read and terminalize that new lease.
+        "lease_token": expected_lease_token,
+    }
     await _collection(db, PREVIEW_JOB_COLLECTION).update_one(
-        {
-            "user_id": row.get("user_id"),
-            "preview_job_id": row.get("preview_job_id"),
-            "status": {"$in": list(ACTIVE_PREVIEW_JOB_STATUSES)},
-        },
+        query,
         {
             "$set": {
                 "status": "failed",
@@ -281,9 +296,133 @@ async def _mark_job_failed(
                 "phase_started_at": _iso(),
                 "terminal_reconciled": terminal_reconciled,
                 "reconcile_deadline_at": reconcile_deadline_at,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "heartbeat_at": None,
             }
         },
     )
+
+
+def _preview_job_lease_deadline(row: dict[str, Any]) -> datetime | None:
+    """Return only a fenced lease created by this recovery-capable version."""
+    # Never reclaim a running row from a pre-lease replica during a rolling
+    # deploy.  That worker may remain live for the full execution timeout and
+    # has no fencing token on its late ready/failed update.  The existing
+    # stale/reconciliation policy safely bounds those legacy rows instead.
+    if not row.get("lease_token"):
+        return None
+    return _parse_datetime(row.get("lease_expires_at"))
+
+
+async def _recover_expired_preview_job_lease(
+    db: Any,
+    row: dict[str, Any],
+    *,
+    now_value: datetime,
+) -> dict[str, Any]:
+    """Atomically make one abandoned read-only job claimable again."""
+    if (
+        row.get("status") != "running"
+        or row.get("provider_write_reached") is not False
+        or row.get("provider_write_uncertain") is not False
+        or row.get("provider_write_state") != "not_attempted"
+    ):
+        return row
+    lease_deadline = _preview_job_lease_deadline(row)
+    if lease_deadline is None or lease_deadline > now_value:
+        return row
+
+    jobs = _collection(db, PREVIEW_JOB_COLLECTION)
+    query = {
+        "user_id": row.get("user_id"),
+        "preview_job_id": row.get("preview_job_id"),
+        "status": "running",
+        "provider_write_reached": False,
+        "provider_write_uncertain": False,
+        "provider_write_state": "not_attempted",
+        # Exact observed lease values make the reclaim compare-and-swap.  A
+        # concurrent heartbeat or another reclaimer makes this update miss.
+        "lease_token": row.get("lease_token"),
+        "lease_expires_at": row.get("lease_expires_at"),
+        "phase_started_at": row.get("phase_started_at"),
+    }
+    recovered_at = _iso(now_value)
+    await jobs.update_one(
+        query,
+        {
+            "$set": {
+                "status": "queued",
+                "phase": "queued_recovered",
+                "phase_started_at": recovered_at,
+                "failure": None,
+                "terminal_reconciled": False,
+                "reconcile_deadline_at": None,
+                "recovery_action": "resume_read_only_after_worker_loss",
+                "lease_token": None,
+                "lease_expires_at": None,
+                "heartbeat_at": None,
+                "recovered_at": recovered_at,
+                "recovery_count": int(row.get("recovery_count") or 0) + 1,
+                "provider_write_reached": False,
+                "provider_write_state": "not_attempted",
+                "provider_write_uncertain": False,
+            }
+        },
+    )
+    return (
+        await jobs.find_one(
+            {
+                "user_id": row.get("user_id"),
+                "preview_job_id": row.get("preview_job_id"),
+            },
+            {"_id": 0},
+        )
+        or row
+    )
+
+
+async def _heartbeat_preview_job_lease(
+    db: Any,
+    user_id: str,
+    preview_job_id: str,
+    lease_token: str,
+) -> None:
+    """Renew a live worker lease without changing any provider-write state."""
+    jobs = _collection(db, PREVIEW_JOB_COLLECTION)
+    while True:
+        await asyncio.sleep(PREVIEW_JOB_HEARTBEAT_INTERVAL_SECONDS)
+        heartbeat_at = _utcnow().astimezone(timezone.utc)
+        try:
+            updated = await jobs.update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "running",
+                    "lease_token": lease_token,
+                    "provider_write_reached": False,
+                    "provider_write_uncertain": False,
+                    "provider_write_state": "not_attempted",
+                },
+                {
+                    "$set": {
+                        "heartbeat_at": _iso(heartbeat_at),
+                        "lease_expires_at": _iso(
+                            heartbeat_at + PREVIEW_JOB_LEASE_DURATION
+                        ),
+                    }
+                },
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - next beat may recover
+            LOGGER.warning(
+                "Snapchat preview lease heartbeat failed (%s)",
+                type(exc).__name__,
+            )
+            continue
+        if int(getattr(updated, "matched_count", 0) or 0) != 1:
+            return
 
 
 async def execute_snapchat_management_preview_job(
@@ -294,18 +433,25 @@ async def execute_snapchat_management_preview_job(
 ) -> None:
     """Run the existing read-only proposal preparation after the 202 response."""
     jobs = _collection(db, PREVIEW_JOB_COLLECTION)
+    lease_token = str(uuid.uuid4())
+    heartbeat_task: asyncio.Task[None] | None = None
     row: dict[str, Any] = {
         "user_id": user_id,
         "preview_job_id": preview_job_id,
+        "lease_token": lease_token,
     }
     try:
         async with asyncio.timeout(PREVIEW_JOB_EXECUTION_TIMEOUT_SECONDS):
-            phase_at = _iso()
+            claimed_at = _utcnow().astimezone(timezone.utc)
+            phase_at = _iso(claimed_at)
             claimed = await jobs.update_one(
                 {
                     "user_id": user_id,
                     "preview_job_id": preview_job_id,
                     "status": "queued",
+                    "provider_write_reached": False,
+                    "provider_write_uncertain": False,
+                    "provider_write_state": "not_attempted",
                 },
                 {
                     "$set": {
@@ -314,21 +460,51 @@ async def execute_snapchat_management_preview_job(
                         "phase": "claimed",
                         "phase_started_at": phase_at,
                         "terminal_reconciled": False,
+                        "recovery_action": None,
+                        "lease_token": lease_token,
+                        "lease_expires_at": _iso(
+                            claimed_at + PREVIEW_JOB_LEASE_DURATION
+                        ),
+                        "heartbeat_at": phase_at,
                     }
                 },
             )
             if int(getattr(claimed, "matched_count", 0) or 0) != 1:
                 return
             loaded = await jobs.find_one(
-                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "running",
+                    "lease_token": lease_token,
+                },
                 {"_id": 0},
             )
             if not loaded:
-                raise RuntimeError("preview_job_missing_after_claim")
-            row = loaded
+                # The lease was reclaimed while this replica was suspended or
+                # the claimed row disappeared.  In either case it no longer
+                # owns the job and must not mutate the successor lease.
+                return
+            # The local token remains the fencing authority.  Never adopt a
+            # value returned by a later database read.
+            row = {**loaded, "lease_token": lease_token}
+            heartbeat_task = asyncio.create_task(
+                _heartbeat_preview_job_lease(
+                    db,
+                    user_id,
+                    preview_job_id,
+                    lease_token,
+                ),
+                name=f"snapchat-preview-heartbeat-{preview_job_id}",
+            )
             phase_at = _iso()
-            await jobs.update_one(
-                {"user_id": user_id, "preview_job_id": preview_job_id},
+            phase_updated = await jobs.update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "running",
+                    "lease_token": lease_token,
+                },
                 {
                     "$set": {
                         "phase": "request_loaded",
@@ -336,12 +512,19 @@ async def execute_snapchat_management_preview_job(
                     }
                 },
             )
+            if int(getattr(phase_updated, "matched_count", 0) or 0) != 1:
+                return
             payload = SnapchatManagementProposalInput(
                 **dict(row.get("request") or {})
             )
             phase_at = _iso()
-            await jobs.update_one(
-                {"user_id": user_id, "preview_job_id": preview_job_id},
+            phase_updated = await jobs.update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "running",
+                    "lease_token": lease_token,
+                },
                 {
                     "$set": {
                         "phase": "preparing_proposal",
@@ -349,6 +532,8 @@ async def execute_snapchat_management_preview_job(
                     }
                 },
             )
+            if int(getattr(phase_updated, "matched_count", 0) or 0) != 1:
+                return
             proposal = await create_snapchat_management_proposal(
                 db, user_id, actor_id, payload
             )
@@ -358,6 +543,7 @@ async def execute_snapchat_management_preview_job(
                     "user_id": user_id,
                     "preview_job_id": preview_job_id,
                     "status": "running",
+                    "lease_token": lease_token,
                 },
                 {
                     "$set": {
@@ -370,6 +556,9 @@ async def execute_snapchat_management_preview_job(
                         "terminal_reconciled": True,
                         "reconcile_deadline_at": None,
                         "recovery_action": None,
+                        "lease_token": None,
+                        "lease_expires_at": None,
+                        "heartbeat_at": None,
                     }
                 },
             )
@@ -387,6 +576,7 @@ async def execute_snapchat_management_preview_job(
                 "message": "تجاوز تجهيز معاينة Snapchat مهلة الأمان؛ أنشئ معاينة جديدة.",
                 "retryable": False,
             },
+            expected_lease_token=lease_token,
             terminal_reconciled=True,
         )
     except asyncio.CancelledError as exc:
@@ -398,11 +588,21 @@ async def execute_snapchat_management_preview_job(
                 "message": "توقف عامل المعاينة قبل اكتمالها؛ أنشئ معاينة جديدة.",
                 "retryable": False,
             },
+            expected_lease_token=lease_token,
             terminal_reconciled=True,
         )
         raise exc
     except Exception as exc:  # noqa: BLE001 - converted to a bounded job error
-        await _mark_job_failed(db, row, _safe_failure(exc))
+        await _mark_job_failed(
+            db,
+            row,
+            _safe_failure(exc),
+            expected_lease_token=lease_token,
+        )
+    finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
 
 
 def _consume_preview_worker_result(
@@ -474,6 +674,15 @@ async def get_snapchat_management_preview_job(
         )
     row = await _reconcile_ready_job(db, row)
     now_value = now().astimezone(timezone.utc)
+    # A container replacement stops its heartbeat.  Once that lease expires,
+    # atomically return the still read-only job to queued so this GET's replica
+    # can schedule it.  Live leases and concurrent heartbeats cannot match the
+    # compare-and-swap filter.
+    row = await _recover_expired_preview_job_lease(
+        db,
+        row,
+        now_value=now_value,
+    )
     stale_at = _parse_datetime(row.get("stale_at"))
     if (
         row.get("status") in ACTIVE_PREVIEW_JOB_STATUSES
@@ -492,6 +701,7 @@ async def get_snapchat_management_preview_job(
                 ),
                 "retryable": False,
             },
+            expected_lease_token=row.get("lease_token"),
             terminal_reconciled=False,
             recovery_action="continue_read_only_reconciliation",
             reconcile_deadline_at=_iso(reconcile_deadline),
@@ -630,11 +840,19 @@ def attach_snapchat_campaign_preview_async_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await get_current_snapchat_management_preview_job(
+        job = await get_current_snapchat_management_preview_job(
             db,
             str(owner["id"]),
             idempotency_key,
         )
+        if job.get("status") == "queued":
+            schedule_snapchat_management_preview_job(
+                db,
+                str(owner["id"]),
+                str(owner["id"]),
+                str(job["preview_job_id"]),
+            )
+        return job
 
     @router.get(
         f"/{SNAPCHAT_PROVIDER_ID}/management/preview-jobs/{{preview_job_id}}"
@@ -644,9 +862,17 @@ def attach_snapchat_campaign_preview_async_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = require_owner(user)
-        return await get_snapchat_management_preview_job(
+        job = await get_snapchat_management_preview_job(
             db, str(owner["id"]), preview_job_id
         )
+        if job.get("status") == "queued":
+            schedule_snapchat_management_preview_job(
+                db,
+                str(owner["id"]),
+                str(owner["id"]),
+                str(job["preview_job_id"]),
+            )
+        return job
 
 
 __all__ = [
