@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import DashboardDesignPreview from "./pages/DashboardDesignPreview";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
 import Settings from "./pages/Settings";
@@ -45,7 +46,6 @@ import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
-import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerIntelligenceIntegration";
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
@@ -125,6 +125,7 @@ function PublicOnly({ children }) {
 function AppRoutes() {
     return (
         <Routes>
+            <Route path="/dashboard-design-preview" element={<DashboardDesignPreview />} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
@@ -308,16 +309,6 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><AppsIntegrationsControlCenter /></Layout>
-                        </OwnerOnlyRoute>
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/integrations-v2/instagram"
-                element={
-                    <ProtectedRoute>
-                        <OwnerOnlyRoute>
-                            <Layout><InstagramCustomerIntelligenceIntegration /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
