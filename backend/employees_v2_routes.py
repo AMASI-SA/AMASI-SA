@@ -17,6 +17,7 @@ shadow_read_only
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import uuid
@@ -43,8 +44,11 @@ EMPLOYEES = "mezan_employees_v2"
 SALARY_CONTRACTS = "mezan_employee_salary_contracts_v2"
 EMPLOYEE_EVENTS = "mezan_employee_events_v2"
 MIGRATION_RUNS = "mezan_employee_migration_runs_v2"
+PAYROLL_PARALLEL_RUNS = "mezan_employee_payroll_parallel_runs_v2"
 ROLE_ASSIGNMENTS = "mezan_role_assignments_v2"
 APPLY_CONFIRMATION = "MIGRATE_EMPLOYEES_V2_SHADOW"
+SALARY_CONTRACT_SYNC_CONFIRMATION = "SYNC_EMPLOYEE_V2_SALARY_CONTRACTS"
+PARALLEL_CYCLE_CAPTURE_CONFIRMATION = "CAPTURE_EMPLOYEE_V2_PARALLEL_CYCLE"
 NATIVE_SOURCE_SYSTEM = "mezan_employees_v2_native"
 EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2"
 EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT"
@@ -94,6 +98,82 @@ def _iso_date(value: Any, *, field: str) -> str | None:
         return date.fromisoformat(normalized).isoformat()
     except ValueError as exc:
         raise ValueError(f"{field}_invalid") from exc
+
+
+def _legacy_contract_effective_to(
+    legacy: dict[str, Any],
+    *,
+    today: date | None = None,
+) -> str | None:
+    """Mirror the live legacy payroll stop-date rule exactly.
+
+    Older stopped salary rows may not have ``stopped_at``.  The live payroll
+    engine intentionally falls back to ``updated_at`` and finally to today,
+    while also clamping future stop dates.  Reusing its calculation prevents a
+    shadow contract from silently accruing past the date used by payroll.
+    """
+    if _text(legacy.get("status") or "active") == "active":
+        return None
+    return _text(_compute_employee_accrual(legacy, today=today).get("end_date")) or None
+
+
+def build_parallel_payroll_snapshot(
+    *,
+    readiness: dict[str, Any],
+    today: date | None = None,
+    source_fingerprint: str | None = None,
+) -> dict[str, Any]:
+    """Build read-only evidence for one parallel payroll-cycle checkpoint."""
+    today = today or riyadh_today()
+    period_start = today.replace(day=1)
+    period_end = today.replace(
+        day=calendar.monthrange(today.year, today.month)[1],
+    )
+    calculation_blockers = {
+        "legacy_employee_identity_invalid",
+        "employee_shadow_incomplete",
+        "salary_contract_incomplete",
+        "employee_or_contract_mismatch",
+        "v2_payroll_projection_mismatch",
+    }
+    blocking_reasons = set(readiness.get("blocking_reasons") or [])
+    calculations_match = not bool(blocking_reasons & calculation_blockers)
+    completed = calculations_match and today >= period_end
+    status = (
+        "mismatch"
+        if not calculations_match
+        else "matched_completed"
+        if completed
+        else "matched_in_progress"
+    )
+    summary = readiness.get("summary") or {}
+    return {
+        "status": status,
+        "completed": completed,
+        "calculations_match": calculations_match,
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "as_of_date": today.isoformat(),
+        "source_fingerprint": _text(source_fingerprint) or None,
+        "calculation_blocking_reasons": sorted(
+            blocking_reasons & calculation_blockers,
+        ),
+        "summary": {
+            key: summary.get(key)
+            for key in (
+                "legacy_employee_count",
+                "matched_employee_count",
+                "exact_contract_count",
+                "legacy_active_monthly_total",
+                "v2_active_monthly_total",
+                "legacy_accrued_total",
+                "v2_projected_accrued_total",
+                "legacy_net_due",
+                "v2_projected_net_due",
+            )
+        },
+        "financial_writes": 0,
+    }
 
 
 def normalize_employee_payload(
@@ -364,6 +444,7 @@ def _source_fingerprint(legacy_rows: list[dict[str, Any]]) -> str:
             "monthly_amount": _money(row.get("monthly_amount")),
             "start_date": _text(row.get("start_date")),
             "stopped_at": _text(row.get("stopped_at")),
+            "updated_at": _text(row.get("updated_at")),
             "status": _text(row.get("status") or "active"),
             "account_user_id": _text(
                 row.get("account_user_id")
@@ -630,7 +711,7 @@ def build_employee_migration_preview(
                 "monthly_amount": _money(legacy.get("monthly_amount")),
                 "currency": "SAR",
                 "effective_from": _text(legacy.get("start_date")) or None,
-                "effective_to": _text(legacy.get("stopped_at")) or None,
+                "effective_to": _legacy_contract_effective_to(legacy),
                 "status": "active" if _text(legacy.get("status") or "active") == "active" else "ended",
                 "shadow_exists": bool(existing_contract),
             },
@@ -711,6 +792,7 @@ def build_payroll_cutover_readiness(
     today: date | None = None,
     salary_contract_writes_enabled: bool = False,
     parallel_cycle_completed: bool = False,
+    parallel_cycle: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compare legacy payroll with the V2 shadow before any authority cutover.
 
@@ -721,6 +803,10 @@ def build_payroll_cutover_readiness(
     reconciliation surface.
     """
     today = today or riyadh_today()
+    parallel_cycle = parallel_cycle or {}
+    parallel_cycle_completed = bool(
+        parallel_cycle_completed or parallel_cycle.get("completed")
+    )
     tolerance = 0.01
     legacy_by_id = {
         _text(row.get("id")): row
@@ -773,9 +859,7 @@ def build_payroll_cutover_readiness(
         expected_contract_status = "active" if expected_active else "ended"
         expected_employee_statuses = {"active"} if expected_active else {"inactive", "stopped"}
         expected_from = _text(legacy.get("start_date")) or None
-        expected_to = None
-        if not expected_active:
-            expected_to = _text(legacy.get("stopped_at") or legacy.get("updated_at"))[:10] or None
+        expected_to = _legacy_contract_effective_to(legacy, today=today)
 
         if employee:
             employee_shadow_count += 1
@@ -895,6 +979,10 @@ def build_payroll_cutover_readiness(
         "financial_writes": 0,
         "salary_contract_writes_enabled": salary_contract_writes_enabled,
         "parallel_cycle_completed": parallel_cycle_completed,
+        "parallel_cycle": {
+            "completed": parallel_cycle_completed,
+            "latest": parallel_cycle.get("latest"),
+        },
         "as_of_date": today.isoformat(),
         "blocking_reasons": blocking_reasons,
         "summary": {
@@ -972,6 +1060,15 @@ async def ensure_employee_v2_indexes(db: Any) -> None:
         [("user_id", ASCENDING), ("source_fingerprint", ASCENDING)],
         unique=True,
         name="uq_mezan_employee_migration_v2_source",
+    )
+    await db[PAYROLL_PARALLEL_RUNS].create_index(
+        [("user_id", ASCENDING), ("as_of_date", ASCENDING)],
+        unique=True,
+        name="uq_mezan_employee_parallel_cycle_v2_day",
+    )
+    await db[PAYROLL_PARALLEL_RUNS].create_index(
+        [("user_id", ASCENDING), ("status", ASCENDING), ("captured_at", DESCENDING)],
+        name="ix_mezan_employee_parallel_cycle_v2_status",
     )
 
 
@@ -1057,14 +1154,33 @@ async def _preview_from_db(db: Any, owner_id: str) -> dict[str, Any]:
         existing_contracts=existing_contracts,
     )
     legacy_accrual = await _aggregate_salary_accrual(db, owner_id)
+    latest_parallel_rows = await db[PAYROLL_PARALLEL_RUNS].find(
+        {
+            "user_id": owner_id,
+            "source_fingerprint": preview.get("source_fingerprint"),
+        },
+        {"_id": 0},
+    ).sort("captured_at", -1).limit(1).to_list(1)
+    completed_parallel = await db[PAYROLL_PARALLEL_RUNS].find_one(
+        {
+            "user_id": owner_id,
+            "status": "matched_completed",
+            "source_fingerprint": preview.get("source_fingerprint"),
+        },
+        {"_id": 0, "id": 1},
+    )
+    parallel_cycle = {
+        "completed": bool(completed_parallel),
+        "latest": latest_parallel_rows[0] if latest_parallel_rows else None,
+    }
     preview["cutover_readiness"] = build_payroll_cutover_readiness(
         legacy_rows=legacy_rows,
         existing_employees=existing_employees,
         existing_contracts=existing_contracts,
         legacy_accrual=legacy_accrual,
         ledger_rows=ledger_rows,
-        salary_contract_writes_enabled=False,
-        parallel_cycle_completed=False,
+        salary_contract_writes_enabled=True,
+        parallel_cycle=parallel_cycle,
     )
     return preview
 
@@ -1929,6 +2045,205 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         _require_owner(user)
         return await _preview_from_db(db, _text(user.get("id")))
 
+    @router.post("/migration/sync-contracts")
+    async def sync_salary_contracts(
+        payload: dict[str, Any] = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Synchronize V2 contract shadows without changing live payroll."""
+        _require_owner(user)
+        if _text(payload.get("confirmation")) != SALARY_CONTRACT_SYNC_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_salary_contract_sync_confirmation_required"},
+            )
+        owner_id = _text(user.get("id"))
+        await ensure_employee_v2_indexes(db)
+        preview = await _preview_from_db(db, owner_id)
+        readiness = preview.get("cutover_readiness") or {}
+        readiness_summary = readiness.get("summary") or {}
+        if readiness_summary.get("employee_shadow_count") != readiness_summary.get(
+            "legacy_employee_count"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "employee_salary_contract_sync_requires_complete_shadow"},
+            )
+
+        existing_contracts = await db[SALARY_CONTRACTS].find(
+            {"user_id": owner_id},
+            {"_id": 0},
+        ).to_list(10000)
+        existing_by_legacy = {
+            _text(row.get("legacy_salary_id")): row
+            for row in existing_contracts
+            if _text(row.get("legacy_salary_id"))
+        }
+        sync_run_id = f"empctsync_{uuid.uuid4().hex}"
+        changed = 0
+        unchanged = 0
+        changed_employee_ids: list[str] = []
+        audit_fields = (
+            "id",
+            "employee_id",
+            "legacy_salary_id",
+            "contract_type",
+            "monthly_amount",
+            "currency",
+            "effective_from",
+            "effective_to",
+            "status",
+            "accrual_policy",
+            "source_authority",
+            "version",
+        )
+
+        for row in preview.get("employees") or []:
+            legacy_id = _text(row.get("legacy_employee_id"))
+            employee_id = _text(row.get("employee_id"))
+            salary = row.get("salary_contract") or {}
+            existing = existing_by_legacy.get(legacy_id)
+            intended = {
+                "id": _text((existing or {}).get("id") or salary.get("id")),
+                "employee_id": employee_id,
+                "legacy_salary_id": legacy_id,
+                "contract_type": "monthly",
+                "monthly_amount": _money(salary.get("monthly_amount")),
+                "currency": "SAR",
+                "effective_from": salary.get("effective_from"),
+                "effective_to": salary.get("effective_to"),
+                "status": salary.get("status"),
+                "accrual_policy": "legacy_calendar_daily_compatible",
+                "source_authority": "operating_salaries_until_cutover",
+            }
+            before = (
+                {key: existing.get(key) for key in audit_fields}
+                if existing
+                else None
+            )
+            comparable_before = {
+                key: (existing or {}).get(key)
+                for key in intended
+            }
+            if existing and comparable_before == intended:
+                unchanged += 1
+                continue
+
+            now = _now()
+            version = int((existing or {}).get("version") or 0) + 1
+            updates = {
+                **intended,
+                "version": version,
+                "updated_at": now,
+                "updated_by": owner_id,
+                "last_sync": {
+                    "run_id": sync_run_id,
+                    "source_fingerprint": preview.get("source_fingerprint"),
+                    "synced_at": now,
+                },
+            }
+            await db[SALARY_CONTRACTS].update_one(
+                {"user_id": owner_id, "legacy_salary_id": legacy_id},
+                {
+                    "$set": updates,
+                    "$setOnInsert": {
+                        "user_id": owner_id,
+                        "created_at": now,
+                    },
+                },
+                upsert=True,
+            )
+            after = {key: updates.get(key) for key in audit_fields}
+            await _record_employee_event(
+                db,
+                owner_id=owner_id,
+                employee_id=employee_id,
+                event_type="salary_contract_synchronized",
+                actor=user,
+                before=before,
+                after=after,
+                metadata={
+                    "sync_run_id": sync_run_id,
+                    "source_fingerprint": preview.get("source_fingerprint"),
+                    "operating_salaries_writes": False,
+                    "general_ledger_writes": False,
+                    "liability_writes": False,
+                },
+            )
+            changed += 1
+            changed_employee_ids.append(employee_id)
+
+        refreshed = await _preview_from_db(db, owner_id)
+        return {
+            "ok": True,
+            "sync_run_id": sync_run_id,
+            "contracts_changed": changed,
+            "contracts_unchanged": unchanged,
+            "changed_employee_ids": changed_employee_ids,
+            "financial_writes": 0,
+            "preview": refreshed,
+        }
+
+    @router.post("/migration/parallel-cycle/capture")
+    async def capture_parallel_payroll_cycle(
+        payload: dict[str, Any] = Body(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Persist a read-only parallel-cycle checkpoint for cutover evidence."""
+        _require_owner(user)
+        if _text(payload.get("confirmation")) != PARALLEL_CYCLE_CAPTURE_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_parallel_cycle_capture_confirmation_required"},
+            )
+        owner_id = _text(user.get("id"))
+        await ensure_employee_v2_indexes(db)
+        preview = await _preview_from_db(db, owner_id)
+        snapshot = build_parallel_payroll_snapshot(
+            readiness=preview.get("cutover_readiness") or {},
+            source_fingerprint=preview.get("source_fingerprint"),
+        )
+        existing = await db[PAYROLL_PARALLEL_RUNS].find_one(
+            {"user_id": owner_id, "as_of_date": snapshot["as_of_date"]},
+            {"_id": 0, "id": 1, "created_at": 1},
+        )
+        now = _now()
+        snapshot_updates = {
+            **snapshot,
+            "captured_at": now,
+            "captured_by": owner_id,
+            "safety": {
+                "operating_salaries_writes": False,
+                "salary_contract_writes": False,
+                "general_ledger_writes": False,
+                "liability_writes": False,
+            },
+        }
+        await db[PAYROLL_PARALLEL_RUNS].update_one(
+            {"user_id": owner_id, "as_of_date": snapshot["as_of_date"]},
+            {
+                "$set": snapshot_updates,
+                "$setOnInsert": {
+                    "id": _text((existing or {}).get("id"))
+                    or f"emppar_{uuid.uuid4().hex}",
+                    "user_id": owner_id,
+                    "created_at": _text((existing or {}).get("created_at")) or now,
+                },
+            },
+            upsert=True,
+        )
+        saved = await db[PAYROLL_PARALLEL_RUNS].find_one(
+            {"user_id": owner_id, "as_of_date": snapshot["as_of_date"]},
+            {"_id": 0},
+        )
+        refreshed = await _preview_from_db(db, owner_id)
+        return {
+            "ok": True,
+            "snapshot": saved,
+            "financial_writes": 0,
+            "preview": refreshed,
+        }
+
     @router.post("/migration/apply-shadow")
     async def apply_shadow_migration(
         payload: dict[str, Any] = Body(...),
@@ -2120,9 +2435,13 @@ __all__ = [
     "EMPLOYEE_PASSWORD_CONFIRMATION",
     "EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION",
     "NATIVE_SOURCE_SYSTEM",
+    "PARALLEL_CYCLE_CAPTURE_CONFIRMATION",
+    "PAYROLL_PARALLEL_RUNS",
+    "SALARY_CONTRACT_SYNC_CONFIRMATION",
     "SALARY_CONTRACTS",
     "build_employee_management_snapshot",
     "build_employee_migration_preview",
+    "build_parallel_payroll_snapshot",
     "build_payroll_cutover_readiness",
     "ensure_employee_v2_indexes",
     "make_employees_v2_router",

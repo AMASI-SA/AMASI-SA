@@ -5,6 +5,7 @@ from pathlib import Path
 
 from employees_v2_routes import (
     build_employee_migration_preview,
+    build_parallel_payroll_snapshot,
     build_payroll_cutover_readiness,
 )
 
@@ -135,6 +136,26 @@ def test_name_only_match_is_never_silently_linked():
     assert row["account"]["account_user_id"] is None
     assert row["account"]["suggested_account"]["id"] == "user-x"
     assert result["summary"]["blocking_issues"] == 0
+
+
+def test_stopped_contract_uses_the_same_updated_at_fallback_as_live_payroll():
+    result = _preview(
+        legacy_rows=[{
+            "id": "legacy-stopped",
+            "name": "موظف متوقف",
+            "monthly_amount": 2100,
+            "start_date": "2026-01-01",
+            "updated_at": "2026-07-15T10:30:00+00:00",
+            "status": "stopped",
+        }],
+        team_users=[],
+        role_assignments=[],
+        ledger_rows=[],
+    )
+
+    contract = result["employees"][0]["salary_contract"]
+    assert contract["effective_to"] == "2026-07-15"
+    assert contract["status"] == "ended"
 
 
 def test_owner_account_is_never_linked_even_when_legacy_reference_is_explicit():
@@ -297,6 +318,54 @@ def test_cutover_gate_exposes_stale_contract_ledger_gaps_and_missing_cycle():
         "salary_amount_mismatch",
         "accrual_projection_mismatch",
         "net_due_projection_mismatch",
+    ]
+
+
+def test_parallel_cycle_checkpoint_is_in_progress_until_the_month_is_complete():
+    readiness = _cutover_readiness()
+
+    in_progress = build_parallel_payroll_snapshot(
+        readiness=readiness,
+        today=date(2026, 1, 13),
+        source_fingerprint="source-1",
+    )
+    completed = build_parallel_payroll_snapshot(
+        readiness=readiness,
+        today=date(2026, 1, 31),
+        source_fingerprint="source-1",
+    )
+
+    assert in_progress["status"] == "matched_in_progress"
+    assert in_progress["completed"] is False
+    assert in_progress["period_end"] == "2026-01-31"
+    assert in_progress["financial_writes"] == 0
+    assert completed["status"] == "matched_completed"
+    assert completed["completed"] is True
+
+
+def test_parallel_cycle_checkpoint_records_calculation_mismatches_without_writes():
+    readiness = _cutover_readiness(
+        existing_contracts=[{
+            "id": "contract-a",
+            "employee_id": "employee-a",
+            "legacy_salary_id": "legacy-a",
+            "monthly_amount": 3000,
+            "effective_from": "2026-01-01",
+            "effective_to": None,
+            "status": "active",
+        }],
+    )
+
+    snapshot = build_parallel_payroll_snapshot(
+        readiness=readiness,
+        today=date(2026, 1, 31),
+    )
+
+    assert snapshot["status"] == "mismatch"
+    assert snapshot["completed"] is False
+    assert snapshot["calculation_blocking_reasons"] == [
+        "employee_or_contract_mismatch",
+        "v2_payroll_projection_mismatch",
     ]
 
 
