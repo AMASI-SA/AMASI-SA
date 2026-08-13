@@ -31,5 +31,8 @@ confirmed defect or an approved new Employee OS scope.
 
 - Salary contract editing and payroll execution.
 - Legacy payroll cutover and legacy employee-page retirement.
+- Clearing the read-only cutover gate: exact identity/contract parity, legacy
+  calendar accrual versus V2 projection, payroll-versus-ledger reconciliation,
+  and one complete parallel payroll cycle.
 - Final production login validation for a named employee requires that person's
   confirmed account and a privately supplied or owner-reset credential.

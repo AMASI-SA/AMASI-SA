@@ -35,6 +35,8 @@ from ai_store_access_contract import (
     effective_permissions,
     validate_assignment,
 )
+from liabilities_routes import _aggregate_salary_accrual, _compute_employee_accrual
+from tz_utils import riyadh_today
 from warehouse_location_routes import WAREHOUSES
 
 EMPLOYEES = "mezan_employees_v2"
@@ -699,6 +701,229 @@ def build_employee_migration_preview(
     }
 
 
+def build_payroll_cutover_readiness(
+    *,
+    legacy_rows: list[dict[str, Any]],
+    existing_employees: list[dict[str, Any]],
+    existing_contracts: list[dict[str, Any]],
+    legacy_accrual: dict[str, Any],
+    ledger_rows: list[dict[str, Any]],
+    today: date | None = None,
+    salary_contract_writes_enabled: bool = False,
+    parallel_cycle_completed: bool = False,
+) -> dict[str, Any]:
+    """Compare legacy payroll with the V2 shadow before any authority cutover.
+
+    The legacy accrual service remains the live payroll source.  V2 accrual is
+    projected exclusively from the persisted shadow contracts, so stale or
+    incomplete contracts cannot be hidden by copying values from the legacy
+    rows into the report.  Ledger balances are shown as a third, independent
+    reconciliation surface.
+    """
+    today = today or riyadh_today()
+    tolerance = 0.01
+    legacy_by_id = {
+        _text(row.get("id")): row
+        for row in legacy_rows
+        if _text(row.get("id"))
+    }
+    source_identity_valid = len(legacy_by_id) == len(legacy_rows)
+    employees_by_legacy = {
+        _text(row.get("legacy_employee_id")): row
+        for row in existing_employees
+        if _text(row.get("legacy_employee_id"))
+    }
+    contracts_by_legacy = {
+        _text(row.get("legacy_salary_id")): row
+        for row in existing_contracts
+        if _text(row.get("legacy_salary_id"))
+    }
+    accrual_by_legacy = {
+        _text(row.get("id")): row
+        for row in legacy_accrual.get("employees") or []
+        if _text(row.get("id"))
+    }
+    ledger_balances = _financial_balances(ledger_rows)
+
+    def differs(left: Any, right: Any) -> bool:
+        return abs(_money(left) - _money(right)) > tolerance
+
+    rows: list[dict[str, Any]] = []
+    projected_accrued_total = 0.0
+    projected_net_due_total = 0.0
+    legacy_monthly_total = 0.0
+    v2_monthly_total = 0.0
+    employee_shadow_count = 0
+    contract_shadow_count = 0
+    exact_contract_count = 0
+
+    for legacy_id, legacy in sorted(
+        legacy_by_id.items(),
+        key=lambda item: (
+            _text(item[1].get("status") or "active") != "active",
+            _normalized_name(item[1].get("name")),
+            item[0],
+        ),
+    ):
+        employee = employees_by_legacy.get(legacy_id)
+        contract = contracts_by_legacy.get(legacy_id)
+        live = accrual_by_legacy.get(legacy_id, {})
+        issues: list[str] = []
+        expected_active = _text(legacy.get("status") or "active") == "active"
+        expected_contract_status = "active" if expected_active else "ended"
+        expected_employee_statuses = {"active"} if expected_active else {"inactive", "stopped"}
+        expected_from = _text(legacy.get("start_date")) or None
+        expected_to = None
+        if not expected_active:
+            expected_to = _text(legacy.get("stopped_at") or legacy.get("updated_at"))[:10] or None
+
+        if employee:
+            employee_shadow_count += 1
+            if _text(employee.get("status") or "active") not in expected_employee_statuses:
+                issues.append("employee_status_mismatch")
+        else:
+            issues.append("missing_employee_shadow")
+
+        contract_issues: list[str] = []
+        projected_accrued = 0.0
+        projected_monthly = 0.0
+        if contract:
+            contract_shadow_count += 1
+            projected_monthly = _money(contract.get("monthly_amount"))
+            if differs(projected_monthly, legacy.get("monthly_amount")):
+                contract_issues.append("salary_amount_mismatch")
+            if _text(contract.get("status")) != expected_contract_status:
+                contract_issues.append("contract_status_mismatch")
+            if (_text(contract.get("effective_from")) or None) != expected_from:
+                contract_issues.append("contract_effective_from_mismatch")
+            if (_text(contract.get("effective_to")) or None) != expected_to:
+                contract_issues.append("contract_effective_to_mismatch")
+
+            projected = _compute_employee_accrual({
+                "monthly_amount": projected_monthly,
+                "start_date": contract.get("effective_from"),
+                "status": "active" if _text(contract.get("status")) == "active" else "stopped",
+                "stopped_at": contract.get("effective_to"),
+            }, today=today)
+            projected_accrued = _money(projected.get("accrued"))
+        else:
+            contract_issues.append("missing_salary_contract")
+
+        issues.extend(contract_issues)
+        live_accrued = _money(live.get("accrued"))
+        live_paid = _money(live.get("paid"))
+        live_net_due = _money(live.get("net_due"))
+        projected_net_due = _money(max(0.0, projected_accrued - live_paid))
+        if differs(projected_accrued, live_accrued):
+            issues.append("accrual_projection_mismatch")
+        if differs(projected_net_due, live_net_due):
+            issues.append("net_due_projection_mismatch")
+
+        if expected_active:
+            legacy_monthly_total += _money(legacy.get("monthly_amount"))
+            if contract and _text(contract.get("status")) == "active":
+                v2_monthly_total += projected_monthly
+        projected_accrued_total += projected_accrued
+        projected_net_due_total += projected_net_due
+        if not contract_issues:
+            exact_contract_count += 1
+        rows.append({
+            "legacy_employee_id": legacy_id,
+            "employee_id": _text((employee or {}).get("id")) or None,
+            "name": _text(legacy.get("name")),
+            "legacy_monthly_amount": _money(legacy.get("monthly_amount")),
+            "v2_monthly_amount": projected_monthly,
+            "legacy_accrued": live_accrued,
+            "v2_projected_accrued": projected_accrued,
+            "legacy_paid": live_paid,
+            "legacy_net_due": live_net_due,
+            "v2_projected_net_due": projected_net_due,
+            "matched": not issues,
+            "issues": issues,
+        })
+
+    legacy_count = len(legacy_rows)
+    legacy_accrued_total = _money(legacy_accrual.get("accrued_total"))
+    legacy_paid_total = _money(legacy_accrual.get("paid_total"))
+    legacy_net_due = _money(legacy_accrual.get("net_due"))
+    legacy_advances = _money(legacy_accrual.get("advances_total"))
+    projected_accrued_total = _money(projected_accrued_total)
+    projected_net_due_total = _money(projected_net_due_total)
+    ledger_salary_payable = _money(sum(
+        balances.get("salary_payable", 0.0)
+        for balances in ledger_balances.values()
+    ))
+    ledger_advances = _money(sum(
+        balances.get("advance", 0.0)
+        for balances in ledger_balances.values()
+    ))
+    ledger_custody = _money(sum(
+        balances.get("custody", 0.0)
+        for balances in ledger_balances.values()
+    ))
+
+    blocking_reasons: list[str] = []
+    if not source_identity_valid:
+        blocking_reasons.append("legacy_employee_identity_invalid")
+    if employee_shadow_count != legacy_count:
+        blocking_reasons.append("employee_shadow_incomplete")
+    if contract_shadow_count != legacy_count:
+        blocking_reasons.append("salary_contract_incomplete")
+    if any(
+        issue not in {"missing_employee_shadow", "missing_salary_contract"}
+        for row in rows
+        for issue in row["issues"]
+    ):
+        blocking_reasons.append("employee_or_contract_mismatch")
+    if differs(projected_accrued_total, legacy_accrued_total) or differs(
+        projected_net_due_total, legacy_net_due
+    ):
+        blocking_reasons.append("v2_payroll_projection_mismatch")
+    if differs(ledger_salary_payable, legacy_net_due):
+        blocking_reasons.append("salary_payable_ledger_unreconciled")
+    if differs(ledger_advances, legacy_advances):
+        blocking_reasons.append("employee_advances_ledger_unreconciled")
+    if not salary_contract_writes_enabled:
+        blocking_reasons.append("salary_contract_management_not_enabled")
+    if not parallel_cycle_completed:
+        blocking_reasons.append("parallel_payroll_cycle_not_completed")
+
+    return {
+        "status": "ready_for_cutover" if not blocking_reasons else "blocked",
+        "retire_legacy_page_allowed": not blocking_reasons,
+        "read_only": True,
+        "financial_writes": 0,
+        "salary_contract_writes_enabled": salary_contract_writes_enabled,
+        "parallel_cycle_completed": parallel_cycle_completed,
+        "as_of_date": today.isoformat(),
+        "blocking_reasons": blocking_reasons,
+        "summary": {
+            "legacy_employee_count": legacy_count,
+            "employee_shadow_count": employee_shadow_count,
+            "salary_contract_count": contract_shadow_count,
+            "exact_contract_count": exact_contract_count,
+            "matched_employee_count": sum(row["matched"] for row in rows),
+            "legacy_active_monthly_total": _money(legacy_monthly_total),
+            "v2_active_monthly_total": _money(v2_monthly_total),
+            "monthly_total_delta": _money(v2_monthly_total - legacy_monthly_total),
+            "legacy_accrued_total": legacy_accrued_total,
+            "v2_projected_accrued_total": projected_accrued_total,
+            "accrued_delta": _money(projected_accrued_total - legacy_accrued_total),
+            "legacy_paid_total": legacy_paid_total,
+            "legacy_net_due": legacy_net_due,
+            "v2_projected_net_due": projected_net_due_total,
+            "net_due_delta": _money(projected_net_due_total - legacy_net_due),
+            "ledger_salary_payable": ledger_salary_payable,
+            "salary_payable_ledger_gap": _money(legacy_net_due - ledger_salary_payable),
+            "legacy_open_advances": legacy_advances,
+            "ledger_advances": ledger_advances,
+            "advances_ledger_gap": _money(legacy_advances - ledger_advances),
+            "ledger_custody": ledger_custody,
+        },
+        "employees": rows,
+    }
+
+
 async def ensure_employee_v2_indexes(db: Any) -> None:
     await db[EMPLOYEES].create_index(
         [("user_id", ASCENDING), ("id", ASCENDING)],
@@ -822,7 +1047,7 @@ async def _preview_from_db(db: Any, owner_id: str) -> dict[str, Any]:
     existing_contracts = await db[SALARY_CONTRACTS].find(
         {"user_id": owner_id}, {"_id": 0}
     ).to_list(10000)
-    return build_employee_migration_preview(
+    preview = build_employee_migration_preview(
         owner_id=owner_id,
         legacy_rows=legacy_rows,
         team_users=active_team_users,
@@ -831,6 +1056,17 @@ async def _preview_from_db(db: Any, owner_id: str) -> dict[str, Any]:
         existing_employees=existing_employees,
         existing_contracts=existing_contracts,
     )
+    legacy_accrual = await _aggregate_salary_accrual(db, owner_id)
+    preview["cutover_readiness"] = build_payroll_cutover_readiness(
+        legacy_rows=legacy_rows,
+        existing_employees=existing_employees,
+        existing_contracts=existing_contracts,
+        legacy_accrual=legacy_accrual,
+        ledger_rows=ledger_rows,
+        salary_contract_writes_enabled=False,
+        parallel_cycle_completed=False,
+    )
+    return preview
 
 
 async def _record_employee_event(
@@ -1887,6 +2123,7 @@ __all__ = [
     "SALARY_CONTRACTS",
     "build_employee_management_snapshot",
     "build_employee_migration_preview",
+    "build_payroll_cutover_readiness",
     "ensure_employee_v2_indexes",
     "make_employees_v2_router",
     "normalize_employee_payload",

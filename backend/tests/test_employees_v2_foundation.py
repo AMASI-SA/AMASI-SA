@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
-from employees_v2_routes import build_employee_migration_preview
+from employees_v2_routes import (
+    build_employee_migration_preview,
+    build_payroll_cutover_readiness,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -178,6 +182,122 @@ def test_duplicate_legacy_identity_blocks_shadow_apply_readiness():
     assert result["summary"]["ready_to_create"] == 0
     assert all(row["migration_status"] == "blocked" for row in result["employees"])
     assert all("duplicate_or_missing_legacy_employee_id" in row["blockers"] for row in result["employees"])
+
+
+def _cutover_readiness(**overrides):
+    data = {
+        "legacy_rows": [{
+            "id": "legacy-a",
+            "name": "موظف أ",
+            "monthly_amount": 3100,
+            "start_date": "2026-01-01",
+            "status": "active",
+        }],
+        "existing_employees": [{
+            "id": "employee-a",
+            "legacy_employee_id": "legacy-a",
+            "status": "active",
+        }],
+        "existing_contracts": [{
+            "id": "contract-a",
+            "employee_id": "employee-a",
+            "legacy_salary_id": "legacy-a",
+            "monthly_amount": 3100,
+            "effective_from": "2026-01-01",
+            "effective_to": None,
+            "status": "active",
+        }],
+        "legacy_accrual": {
+            "accrued_total": 3100,
+            "paid_total": 1000,
+            "net_due": 2100,
+            "advances_total": 300,
+            "employees": [{
+                "id": "legacy-a",
+                "accrued": 3100,
+                "paid": 1000,
+                "net_due": 2100,
+            }],
+        },
+        "ledger_rows": [
+            {"employee_id": "legacy-a", "sub_account": "salary_payable", "side": "credit", "total": 2100},
+            {"employee_id": "legacy-a", "sub_account": "advance", "side": "debit", "total": 300},
+            {"employee_id": "legacy-a", "sub_account": "custody", "side": "debit", "total": 50},
+        ],
+        "today": date(2026, 1, 31),
+        "salary_contract_writes_enabled": True,
+        "parallel_cycle_completed": True,
+    }
+    data.update(overrides)
+    return build_payroll_cutover_readiness(**data)
+
+
+def test_cutover_gate_allows_retirement_only_after_exact_three_way_reconciliation():
+    result = _cutover_readiness()
+
+    assert result["status"] == "ready_for_cutover"
+    assert result["retire_legacy_page_allowed"] is True
+    assert result["financial_writes"] == 0
+    assert result["blocking_reasons"] == []
+    assert result["summary"] == {
+        "legacy_employee_count": 1,
+        "employee_shadow_count": 1,
+        "salary_contract_count": 1,
+        "exact_contract_count": 1,
+        "matched_employee_count": 1,
+        "legacy_active_monthly_total": 3100.0,
+        "v2_active_monthly_total": 3100.0,
+        "monthly_total_delta": 0.0,
+        "legacy_accrued_total": 3100.0,
+        "v2_projected_accrued_total": 3100.0,
+        "accrued_delta": 0.0,
+        "legacy_paid_total": 1000.0,
+        "legacy_net_due": 2100.0,
+        "v2_projected_net_due": 2100.0,
+        "net_due_delta": 0.0,
+        "ledger_salary_payable": 2100.0,
+        "salary_payable_ledger_gap": 0.0,
+        "legacy_open_advances": 300.0,
+        "ledger_advances": 300.0,
+        "advances_ledger_gap": 0.0,
+        "ledger_custody": 50.0,
+    }
+
+
+def test_cutover_gate_exposes_stale_contract_ledger_gaps_and_missing_cycle():
+    stale_contract = {
+        "id": "contract-a",
+        "employee_id": "employee-a",
+        "legacy_salary_id": "legacy-a",
+        "monthly_amount": 3000,
+        "effective_from": "2026-01-01",
+        "effective_to": None,
+        "status": "active",
+    }
+    result = _cutover_readiness(
+        existing_contracts=[stale_contract],
+        ledger_rows=[],
+        salary_contract_writes_enabled=False,
+        parallel_cycle_completed=False,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["retire_legacy_page_allowed"] is False
+    assert result["summary"]["v2_projected_accrued_total"] == 3000.0
+    assert result["summary"]["v2_projected_net_due"] == 2000.0
+    assert result["summary"]["salary_payable_ledger_gap"] == 2100.0
+    assert result["summary"]["advances_ledger_gap"] == 300.0
+    assert "employee_or_contract_mismatch" in result["blocking_reasons"]
+    assert "v2_payroll_projection_mismatch" in result["blocking_reasons"]
+    assert "salary_payable_ledger_unreconciled" in result["blocking_reasons"]
+    assert "employee_advances_ledger_unreconciled" in result["blocking_reasons"]
+    assert "salary_contract_management_not_enabled" in result["blocking_reasons"]
+    assert "parallel_payroll_cycle_not_completed" in result["blocking_reasons"]
+    assert result["employees"][0]["issues"] == [
+        "salary_amount_mismatch",
+        "accrual_projection_mismatch",
+        "net_due_projection_mismatch",
+    ]
 
 
 def test_existing_shadow_is_idempotent_and_salary_drift_is_visible():

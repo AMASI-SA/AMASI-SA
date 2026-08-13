@@ -656,3 +656,24 @@ The boundary is mandatory:
 Production ingress stays off until the owner-approved channel binding, App
 Secret, verify token, HMAC key and PII encryption key are installed in the
 backend deployment environment.
+
+---
+
+## Decision-035 — Legacy Payroll Retirement Requires a Three-Way Read-Only Gate
+
+Status: Approved, cutover-readiness implementation
+
+Employee OS reports payroll retirement readiness without changing payroll or
+financial authority. The gate compares three independent surfaces:
+
+- Legacy live payroll accrual, paid cash, net due and open salary advances.
+- A fresh V2 projection built only from persisted effective-dated shadow
+  contracts; it must not copy current legacy amounts into the projection.
+- Posted `general_ledger` salary-payable and advance balances.
+
+Retirement remains blocked when an employee or contract is missing, any status,
+amount or effective date differs, projected accrual or net due differs, ledger
+salary payable or advances are unreconciled, V2 salary-contract management is
+disabled, or one complete parallel payroll cycle has not passed. The gate is
+owner-visible, read-only and makes zero financial writes. It does not by itself
+authorize salary editing, switch payroll authority or hide the legacy page.

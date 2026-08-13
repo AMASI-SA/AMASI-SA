@@ -55,6 +55,37 @@ const preview = {
         user_account_writes: false,
         role_assignment_writes: false,
     },
+    cutover_readiness: {
+        status: "blocked",
+        retire_legacy_page_allowed: false,
+        read_only: true,
+        financial_writes: 0,
+        salary_contract_writes_enabled: false,
+        parallel_cycle_completed: false,
+        blocking_reasons: [
+            "salary_payable_ledger_unreconciled",
+            "employee_advances_ledger_unreconciled",
+            "salary_contract_management_not_enabled",
+            "parallel_payroll_cycle_not_completed",
+        ],
+        summary: {
+            legacy_employee_count: 15,
+            employee_shadow_count: 15,
+            salary_contract_count: 15,
+            exact_contract_count: 15,
+            matched_employee_count: 15,
+            legacy_active_monthly_total: 38200,
+            v2_active_monthly_total: 38200,
+            legacy_net_due: 120819.34,
+            v2_projected_net_due: 120819.34,
+            ledger_salary_payable: 0,
+            salary_payable_ledger_gap: 120819.34,
+            legacy_open_advances: 2695,
+            ledger_advances: 60,
+            advances_ledger_gap: 2635,
+        },
+        employees: [],
+    },
     employees: [],
 };
 
@@ -99,6 +130,35 @@ test("permissions stay in the same employee workspace instead of a second page",
 
     expect(markup).toContain("صلاحيات إدارة التجهيز الفعلية");
     expect(markup).not.toContain("Mezan Employee OS");
+});
+
+test("shows a read-only payroll retirement gate with live accrual and ledger gaps", async () => {
+    mockSearchParams = new URLSearchParams("workspace=migration");
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    getEmployeesV2.mockResolvedValue(preview);
+
+    try {
+        await act(async () => {
+            root.render(<EmployeesV2 />);
+        });
+
+        const gate = container.querySelector('[data-testid="employees-v2-cutover-readiness"]');
+        expect(gate).not.toBeNull();
+        expect(gate.textContent).toContain("الإيقاف محظور");
+        expect(gate.textContent).toContain("120,819.34");
+        expect(gate.textContent).toContain("2,695.00");
+        expect(gate.textContent).toContain("60.00");
+        expect(gate.textContent).toContain("تعديل عقود الرواتب لم يُفعّل بعد");
+        expect(gate.textContent).toContain("لم تكتمل دورة رواتب متوازية كاملة");
+        expect(gate.textContent).toContain("كتابات مالية من هذا التقرير");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
 });
 
 test("uses an in-app confirmation and submits the shadow migration exactly once", async () => {

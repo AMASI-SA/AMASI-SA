@@ -37,6 +37,30 @@ const ACCOUNT_STATUS = {
     conflict: { label: "تعارض في الربط", cls: "border-rose-200 bg-rose-50 text-rose-800" },
 };
 
+const CUTOVER_REASON_LABELS = {
+    legacy_employee_identity_invalid: "يوجد معرّف موظف قديم مفقود أو مكرر.",
+    employee_shadow_incomplete: "لم تُنشأ هوية جديدة لكل موظف قديم.",
+    salary_contract_incomplete: "لم يُنشأ عقد راتب جديد لكل موظف قديم.",
+    employee_or_contract_mismatch: "توجد فروقات في حالة الموظف أو مبلغ/تاريخ عقد الراتب.",
+    v2_payroll_projection_mismatch: "احتساب ميزان 2 التجريبي لا يطابق الاستحقاق الحي في النظام القديم.",
+    salary_payable_ledger_unreconciled: "الرصيد المستحق في Ledger لا يطابق صافي الرواتب المستحقة حاليًا.",
+    employee_advances_ledger_unreconciled: "رصيد السلف في Ledger لا يطابق السلف المفتوحة في نظام الرواتب.",
+    salary_contract_management_not_enabled: "تعديل عقود الرواتب لم يُفعّل بعد داخل صفحة الموظفين الجديدة.",
+    parallel_payroll_cycle_not_completed: "لم تكتمل دورة رواتب متوازية كاملة ومطابقة بعد.",
+};
+
+const CUTOVER_ISSUE_LABELS = {
+    missing_employee_shadow: "هوية الموظف الجديدة مفقودة",
+    missing_salary_contract: "عقد الراتب الجديد مفقود",
+    employee_status_mismatch: "حالة الموظف مختلفة",
+    salary_amount_mismatch: "مبلغ الراتب مختلف",
+    contract_status_mismatch: "حالة العقد مختلفة",
+    contract_effective_from_mismatch: "تاريخ بداية العقد مختلف",
+    contract_effective_to_mismatch: "تاريخ نهاية العقد مختلف",
+    accrual_projection_mismatch: "الاستحقاق التجريبي مختلف",
+    net_due_projection_mismatch: "صافي المستحق التجريبي مختلف",
+};
+
 function errorCode(error) {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string") return detail;
@@ -77,6 +101,84 @@ function SafetyPanel({ safety }) {
                     </div>
                 ))}
             </div>
+        </section>
+    );
+}
+
+function PayrollCutoverReadinessPanel({ readiness }) {
+    if (!readiness) return null;
+    const summary = readiness.summary || {};
+    const allowed = readiness.retire_legacy_page_allowed === true;
+    const mismatches = (readiness.employees || []).filter((row) => !row.matched);
+    return (
+        <section
+            className={`rounded-2xl border p-5 shadow-sm ${allowed ? "border-emerald-300 bg-emerald-50" : "border-rose-300 bg-rose-50"}`}
+            data-testid="employees-v2-cutover-readiness"
+        >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <h2 className={`flex items-center gap-2 text-lg font-black ${allowed ? "text-emerald-950" : "text-rose-950"}`}>
+                        {allowed ? <CheckCircle size={24} weight="fill" /> : <WarningCircle size={24} weight="fill" />}
+                        جاهزية إيقاف صفحة الرواتب القديمة
+                    </h2>
+                    <p className="mt-1 text-sm font-bold text-slate-700">
+                        {allowed ? "المصادر الثلاثة متطابقة ويمكن اعتماد خطة الإيقاف." : "لا يمكن الاستغناء عن الصفحة القديمة الآن؛ الحواجز أدناه إلزامية."}
+                    </p>
+                </div>
+                <div className={`rounded-full px-4 py-2 text-xs font-black ${allowed ? "bg-emerald-700 text-white" : "bg-rose-700 text-white"}`}>
+                    {allowed ? "جاهز للانتقال" : "الإيقاف محظور"}
+                </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border bg-white p-3">
+                    <div className="text-[11px] font-bold text-slate-500">هويات الموظفين الجديدة</div>
+                    <div className="mt-1 text-lg font-black" dir="ltr">{numberFormatter.format(summary.employee_shadow_count || 0)} / {numberFormatter.format(summary.legacy_employee_count || 0)}</div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                    <div className="text-[11px] font-bold text-slate-500">عقود مطابقة بالكامل</div>
+                    <div className="mt-1 text-lg font-black" dir="ltr">{numberFormatter.format(summary.exact_contract_count || 0)} / {numberFormatter.format(summary.legacy_employee_count || 0)}</div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                    <div className="text-[11px] font-bold text-slate-500">إجمالي الرواتب الشهرية: قديم / ميزان 2</div>
+                    <div className="mt-1 text-sm font-black tabular-nums" dir="ltr">{moneyFormatter.format(summary.legacy_active_monthly_total || 0)} / {moneyFormatter.format(summary.v2_active_monthly_total || 0)}</div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                    <div className="text-[11px] font-bold text-slate-500">كتابات مالية من هذا التقرير</div>
+                    <div className="mt-1 text-lg font-black text-emerald-800" dir="ltr">{numberFormatter.format(readiness.financial_writes || 0)}</div>
+                </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">صافي المستحق الحي — القديم</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.legacy_net_due || 0)}</div></div>
+                <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">صافي المستحق التجريبي — ميزان 2</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.v2_projected_net_due || 0)}</div></div>
+                <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">رصيد الرواتب في Ledger</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.ledger_salary_payable || 0)}</div><div className="mt-1 text-[10px] font-bold text-rose-700" dir="ltr">فرق {moneyFormatter.format(summary.salary_payable_ledger_gap || 0)}</div></div>
+                <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">السلف المفتوحة — القديم</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.legacy_open_advances || 0)}</div></div>
+                <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">رصيد السلف في Ledger</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.ledger_advances || 0)}</div><div className="mt-1 text-[10px] font-bold text-rose-700" dir="ltr">فرق {moneyFormatter.format(summary.advances_ledger_gap || 0)}</div></div>
+            </div>
+
+            {readiness.blocking_reasons?.length > 0 && (
+                <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
+                    <h3 className="text-sm font-black text-rose-950">الحواجز المطلوب إغلاقها</h3>
+                    <ul className="mt-2 space-y-1.5 text-xs font-bold leading-6 text-rose-900">
+                        {readiness.blocking_reasons.map((reason) => <li key={reason}>• {CUTOVER_REASON_LABELS[reason] || reason}</li>)}
+                    </ul>
+                </div>
+            )}
+
+            {mismatches.length > 0 && (
+                <details className="mt-3 rounded-xl border border-amber-200 bg-white p-4">
+                    <summary className="cursor-pointer text-sm font-black text-amber-950">فروقات الموظفين ({numberFormatter.format(mismatches.length)})</summary>
+                    <div className="mt-3 space-y-2">
+                        {mismatches.map((row) => (
+                            <div key={row.legacy_employee_id} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                                <div className="font-black">{row.name || row.legacy_employee_id}</div>
+                                <div className="mt-1 font-bold">{row.issues?.map((issue) => CUTOVER_ISSUE_LABELS[issue] || issue).join(" · ")}</div>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            )}
         </section>
     );
 }
@@ -212,6 +314,8 @@ function MigrationWorkspace() {
                 <SummaryCard Icon={WarningCircle} label="عوائق الترحيل" value={numberFormatter.format(summary.blocking_issues || 0)} hint={`${numberFormatter.format(summary.warnings || 0)} تنبيه غير مانع`} tone={summary.blocking_issues ? "amber" : "emerald"} />
             </section>
 
+            <PayrollCutoverReadinessPanel readiness={data?.cutover_readiness} />
+
             <SafetyPanel safety={data?.safety} />
 
             {confirmOpen && (
@@ -261,8 +365,8 @@ function MigrationWorkspace() {
             )}
 
             <section className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">رواتب مستحقة حسب Ledger</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.salary_payable_total || 0)}</div></div>
-                <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">سلف الموظفين</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.advance_total || 0)}</div></div>
+                <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">رصيد الرواتب المسجل في Ledger</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.salary_payable_total || 0)}</div></div>
+                <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">رصيد السلف المسجل في Ledger</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.advance_total || 0)}</div></div>
                 <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">عهد الموظفين</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.custody_total || 0)}</div></div>
             </section>
 
