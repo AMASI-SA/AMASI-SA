@@ -192,6 +192,28 @@ def simplify_row(row: dict, *,
     return {"status": UNSENT, "reason": "بانتظار الإرسال إلى قيود"}
 
 
+def _overlay_manual_failure(
+    classification: dict, failure: dict | None,
+) -> dict:
+    """Make Plan-B retry/quarantine failures visible in the four-state view.
+
+    A real invoice or duplicate marker always wins.  Everything else with a
+    persisted failed send is actionable and belongs in the red failure bucket.
+    """
+    if not failure or classification.get("status") in (SENT, DUPLICATE):
+        return classification
+    message = str(failure.get("message") or "").strip()
+    if not message:
+        message = "فشل الإرسال إلى قيود — يمكن إعادة الفحص والإرسال"
+    return {
+        "status": FAILED,
+        "reason": message,
+        "failure_code": failure.get("code"),
+        "failure_source": failure.get("source"),
+        "retry_allowed": True,
+    }
+
+
 async def list_unsent_orders(
     db, *, user_id: str, days: int = 30, limit: int = 500,
     orders_user_id: str | None = None,
@@ -250,6 +272,53 @@ async def list_unsent_orders(
             v = str(_inv.get(_f) or "").strip()
             if v:
                 ref_set.add(v)
+
+    # Plan-B automatic sends keep order-local failures outside the legacy
+    # integration stages.  Overlay those open quarantines (and failed manual
+    # send locks) so the operator sees them under "فشل" with the safe retry
+    # action instead of a misleading "لم يُرسل".
+    failure_by_order: dict[str, dict] = {}
+    quarantine_cursor = db.qoyod_manual_auto_quarantines.find(
+        {"user_id": user_id, "status": "open"},
+        {
+            "_id": 0,
+            "order_number": 1,
+            "code": 1,
+            "message": 1,
+            "attempt_count": 1,
+        },
+    )
+    async for failed in quarantine_cursor:
+        failed_order = str(failed.get("order_number") or "").strip()
+        if failed_order:
+            failure_by_order[failed_order] = {
+                "source": "auto_quarantine",
+                "code": failed.get("code"),
+                "message": failed.get("message"),
+            }
+
+    lock_cursor = db.qoyod_manual_send_locks.find(
+        {
+            "user_id": user_id,
+            "status": {"$in": ["failed", "partial_payment_failed"]},
+        },
+        {
+            "_id": 0,
+            "order_number": 1,
+            "status": 1,
+            "last_error": 1,
+        },
+    )
+    async for failed in lock_cursor:
+        failed_order = str(failed.get("order_number") or "").strip()
+        if not failed_order or failed_order in failure_by_order:
+            continue
+        last_error = failed.get("last_error") or {}
+        failure_by_order[failed_order] = {
+            "source": "manual_send_lock",
+            "code": last_error.get("code") or failed.get("status"),
+            "message": last_error.get("message"),
+        }
 
     # rev37.1 — ONE entry per SALLA ORDER, not per inbox row. The
     # inbox intentionally stores a row per status transition
@@ -315,6 +384,7 @@ async def list_unsent_orders(
         on = str(row.get("salla_order_number") or "").strip()
         in_qoyod = bool(on) and (on in ref_set)
         s = simplify_row(row, in_qoyod_by_reference=in_qoyod)
+        s = _overlay_manual_failure(s, failure_by_order.get(on))
         canon = row.get("canonical_payload") or {}
         received = row.get("received_at")
         # Debug bag (user directive 2026-07-09): every row surfaces
@@ -334,6 +404,11 @@ async def list_unsent_orders(
             "salla_status_slug": canon.get("order_status"),
             "status":         s["status"],
             "reason":         s["reason"],
+            "failure_code":   s.get("failure_code"),
+            "failure_source": s.get("failure_source"),
+            "retry_allowed":  bool(
+                s.get("retry_allowed", s["status"] == FAILED)
+            ),
             "qoyod_invoice_id": (row.get("qoyod_invoice_id")
                                  if _is_real(row.get("qoyod_invoice_id"))
                                  else None),
