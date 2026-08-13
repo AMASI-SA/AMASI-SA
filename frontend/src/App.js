@@ -46,6 +46,7 @@ import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
+import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerIntelligenceIntegration";
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
@@ -309,6 +310,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><AppsIntegrationsControlCenter /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/integrations-v2/instagram"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><InstagramCustomerIntelligenceIntegration /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
