@@ -32,7 +32,7 @@ jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToS
 });
 
 jest.mock("../components/fulfillment/CompletedFulfillmentOrders", () => function CompletedFulfillmentFixture() {
-    return <div data-testid="completed-fulfillment-orders">تم التنفيذ · طباعة الشحنة</div>;
+    return <div data-testid="completed-fulfillment-orders">تم التنفيذ · بوليصة الشحن</div>;
 });
 
 jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function SupplierReceivingFixture() {
@@ -178,12 +178,12 @@ test("assembly stage opens the simple employee receiving workspace", () => {
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("completed stage keeps the shipment print action available", () => {
+test("completed stage keeps the carrier label action available", () => {
     mockSearchParams = new URLSearchParams("stage=completed");
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain('data-testid="completed-fulfillment-orders"');
     expect(markup).toContain("تم التنفيذ");
-    expect(markup).toContain("طباعة الشحنة");
+    expect(markup).toContain("بوليصة الشحن");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });

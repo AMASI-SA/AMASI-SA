@@ -5,8 +5,10 @@ The file is assigned to one preparation employee, required services are
 inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
-This module is Mezan-only. It performs no Salla, Qoyod, supplier, WhatsApp, or
-accounting writes.
+Piece work stays in Mezan.  The one deliberate external transition happens
+after every piece is ready: the completed order is moved to ``تم التنفيذ`` in
+Salla so its configured courier can issue the official AWB.  No Qoyod,
+supplier, WhatsApp, or accounting writes are made here.
 """
 from __future__ import annotations
 
@@ -26,6 +28,8 @@ from fulfillment_v2_routes import (
     _actor_context,
     _require_permission,
 )
+from fulfillment_carrier_label import sync_completed_carrier_label
+from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
     EVENTS,
@@ -2018,7 +2022,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             responsibility="packing",
         )
         actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
-        return await _mark_assembly_piece_ready(
+        response = await _mark_assembly_piece_ready(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,
@@ -2026,6 +2030,31 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             actor_id=context["actor_id"],
             actor_name=actor_name,
         )
+        if (response.get("progress") or {}).get("order_completed"):
+            order_number = _text(
+                (response.get("progress") or {}).get("order_number")
+            )
+            try:
+                response["carrier_label"] = await sync_completed_carrier_label(
+                    db,
+                    user_id=context["merchant_id"],
+                    order_number=order_number,
+                    actor_id=context["actor_id"],
+                    actor_name=actor_name,
+                    action="issue",
+                )
+            except ShippingLabelError as exc:
+                # Product completion is durable even when Salla/iMile is
+                # temporarily unavailable.  The completed-order card exposes
+                # an explicit retry without asking the employee to redo work.
+                response["carrier_label"] = {
+                    "ok": False,
+                    "ready": False,
+                    "order_status_completed": False,
+                    "error_code": exc.code,
+                    "message": str(exc),
+                }
+        return response
 
     @router.get("/manager/summary")
     async def manager_summary(
