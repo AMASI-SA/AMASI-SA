@@ -297,7 +297,64 @@ async def test_worker_failure_is_terminal_known_no_write_without_a_proposal(
     assert result["provider_write_reached"] is False
     assert result["provider_write_state"] == "not_attempted"
     assert result["provider_write_uncertain"] is False
+    assert result["terminal_reconciled"] is True
     assert db[preview.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_worker_timeout_is_bounded_terminal_and_known_no_write(monkeypatch):
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", campaign_create(idempotency_key="timeout-001")
+    )
+    entered = asyncio.Event()
+
+    async def never_finishes(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(preview, "PREVIEW_JOB_EXECUTION_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(preview, "create_snapchat_management_proposal", never_finishes)
+    await preview.execute_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", job["preview_job_id"]
+    )
+    assert entered.is_set() is True
+    result = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"]
+    )
+    assert result["status"] == "failed"
+    assert result["failure"]["code"] == "snapchat_management_preview_worker_timeout"
+    assert result["terminal_reconciled"] is True
+    assert result["provider_write_reached"] is False
+    assert db[preview.PROPOSAL_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_post_claim_read_failure_is_caught_and_terminalized(monkeypatch):
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", campaign_create(idempotency_key="find-fail-001")
+    )
+    jobs = db[preview.PREVIEW_JOB_COLLECTION]
+    original_find = jobs.find_one
+
+    async def fail_claimed_read(query, projection=None):
+        if query.get("preview_job_id") == job["preview_job_id"]:
+            raise RuntimeError("simulated_post_claim_read_failure")
+        return await original_find(query, projection)
+
+    monkeypatch.setattr(jobs, "find_one", fail_claimed_read)
+    await preview.execute_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", job["preview_job_id"]
+    )
+    monkeypatch.setattr(jobs, "find_one", original_find)
+    result = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"]
+    )
+    assert result["status"] == "failed"
+    assert result["failure"]["error_type"] == "RuntimeError"
+    assert result["terminal_reconciled"] is True
+    assert result["provider_write_reached"] is False
 
 
 @pytest.mark.asyncio
@@ -325,6 +382,64 @@ async def test_orphan_running_job_reconciles_from_durable_proposal():
     assert result["status"] == "ready"
     assert result["proposal_id"] == "proposal-orphan"
     assert result["failure"] is None
+    assert result["terminal_reconciled"] is True
+
+
+@pytest.mark.asyncio
+async def test_current_lookup_is_exact_tenant_scoped_and_does_not_leak_request():
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", campaign_create(idempotency_key="current-001")
+    )
+    current = await preview.get_current_snapchat_management_preview_job(
+        db, "owner-1", "current-001"
+    )
+    assert current["preview_job_id"] == job["preview_job_id"]
+    assert current["status"] == "queued"
+    assert current["phase"] == "queued"
+    assert current["terminal_reconciled"] is False
+    for forbidden in (
+        "request",
+        "request_fingerprint",
+        "idempotency_key",
+        "actor_id",
+        "confirm_token",
+    ):
+        assert forbidden not in current
+
+    with pytest.raises(HTTPException) as other_owner:
+        await preview.get_current_snapchat_management_preview_job(
+            db, "owner-2", "current-001"
+        )
+    assert other_owner.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_current_route_is_not_captured_as_a_dynamic_job_id():
+    db = DB()
+    payload = campaign_create(idempotency_key="current-route-001")
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", payload
+    )
+    router = APIRouter()
+
+    async def current_user():
+        return {"id": "owner-1"}
+
+    preview.attach_snapchat_campaign_preview_async_routes(
+        router, db, current_user, lambda user: user
+    )
+    app = FastAPI()
+    app.include_router(router)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/snapchat_ads/management/preview-jobs/current",
+            params={"idempotency_key": payload.idempotency_key},
+        )
+    assert response.status_code == 200
+    assert response.json()["preview_job_id"] == job["preview_job_id"]
 
 
 @pytest.mark.asyncio
@@ -358,22 +473,84 @@ async def test_tenant_cannot_read_or_reconcile_another_owners_job():
 @pytest.mark.asyncio
 async def test_stale_job_fails_known_no_write_and_never_auto_retries():
     db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
     job, _ = await preview.queue_snapchat_management_preview_job(
         db, "owner-1", "owner-1", campaign_create()
     )
     row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
     row["status"] = "running"
-    row["stale_at"] = (
-        datetime.now(timezone.utc) - timedelta(minutes=1)
-    ).isoformat()
+    row["stale_at"] = (observed_at - timedelta(minutes=1)).isoformat()
     result = await preview.get_snapchat_management_preview_job(
-        db, "owner-1", job["preview_job_id"]
+        db, "owner-1", job["preview_job_id"], now=lambda: observed_at
     )
     assert result["status"] == "failed"
     assert result["failure"]["code"] == "snapchat_management_preview_job_stale"
     assert result["provider_write_state"] == "not_attempted"
     assert result["provider_write_uncertain"] is False
+    assert result["terminal_reconciled"] is False
+    assert result["recovery_action"] == "continue_read_only_reconciliation"
+    assert result["failure"]["message"] == (
+        "تجاوزت المعاينة مهلة المتابعة، وما زال التحقق من نتيجتها جاريًا؛ "
+        "استمر بمتابعة نفس المعاينة ولا تنشئ أخرى الآن."
+    )
+    assert result["reconcile_deadline_at"] == (
+        observed_at + preview.PREVIEW_JOB_RECONCILIATION_GRACE
+    ).isoformat()
     assert row["automatic_retry_allowed"] is False
+
+    db[preview.PROPOSAL_COLLECTION].rows.append(
+        {
+            "user_id": "owner-1",
+            "proposal_id": "proposal-after-stale",
+            "idempotency_key": row["idempotency_key"],
+            "request_fingerprint": row["request_fingerprint"],
+            "status": "previewed",
+        }
+    )
+    reconciled = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"]
+    )
+    assert reconciled["status"] == "ready"
+    assert reconciled["proposal_id"] == "proposal-after-stale"
+    assert reconciled["terminal_reconciled"] is True
+    assert reconciled["recovery_action"] is None
+
+
+@pytest.mark.asyncio
+async def test_stale_job_without_late_proposal_converges_to_terminal_failure():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", campaign_create(idempotency_key="stale-final-001")
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row["status"] = "running"
+    row["stale_at"] = (observed_at - timedelta(seconds=1)).isoformat()
+
+    pending = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"], now=lambda: observed_at
+    )
+    assert pending["status"] == "failed"
+    assert pending["terminal_reconciled"] is False
+    assert pending["recovery_action"] == "continue_read_only_reconciliation"
+
+    terminal_at = (
+        observed_at + preview.PREVIEW_JOB_RECONCILIATION_GRACE + timedelta(seconds=1)
+    )
+    terminal = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"], now=lambda: terminal_at
+    )
+    assert terminal["status"] == "failed"
+    assert terminal["terminal_reconciled"] is True
+    assert terminal["recovery_action"] == "create_new_preview"
+    assert terminal["failure"] == {
+        "code": "snapchat_management_preview_job_stale",
+        "message": (
+            "لم تكتمل المعاينة بعد انتهاء مهلة التحقق؛ يمكنك إنشاء معاينة جديدة."
+        ),
+        "retryable": False,
+    }
+    assert terminal["provider_write_reached"] is False
 
 
 def test_http_failure_preserves_only_bounded_retryability():
