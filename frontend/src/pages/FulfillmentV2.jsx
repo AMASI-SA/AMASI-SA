@@ -90,6 +90,20 @@ export const FULFILLMENT_STAGES = [
     },
 ];
 
+const MY_PRODUCTS_NAVIGATION_ITEM = {
+    key: "my_products",
+    label: "إدارة منتجاتي",
+    shortLabel: "إدارة منتجاتي",
+    Icon: Cube,
+    workspace: "my-products",
+};
+
+export const FULFILLMENT_NAVIGATION_ITEMS = [
+    ...FULFILLMENT_STAGES.slice(0, 3),
+    MY_PRODUCTS_NAVIGATION_ITEM,
+    ...FULFILLMENT_STAGES.slice(3),
+];
+
 function PlannedStage({ stage }) {
     return (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid={`fulfillment-stage-${stage.key}`}>
@@ -156,6 +170,14 @@ export default function FulfillmentV2() {
         setSearchParams(next, { replace: true });
     };
 
+    const selectNavigationItem = (item) => {
+        if (item.workspace === "my-products") {
+            setSearchParams(new URLSearchParams("workspace=my-products"), { replace: true });
+            return;
+        }
+        selectStage(item.key);
+    };
+
     const showFulfillmentOverview = () => {
         setSearchParams(new URLSearchParams(), { replace: true });
     };
@@ -203,9 +225,9 @@ export default function FulfillmentV2() {
                     <details className="group border-t border-emerald-100">
                         <summary className="cursor-pointer list-none px-4 py-2.5 text-center text-xs font-black text-emerald-800">الانتقال إلى مرحلة أخرى</summary>
                         <nav className="grid grid-cols-2 gap-2 border-t border-slate-100 bg-slate-50 p-3" aria-label="مراحل إدارة التجهيز للجوال">
-                            {FULFILLMENT_STAGES.map((stage) => (
-                                <button key={stage.key} type="button" onClick={() => selectStage(stage.key)} className={`rounded-xl border px-3 py-2 text-xs font-black ${stage.key === activeStage.key ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
-                                    {stage.shortLabel}
+                            {FULFILLMENT_NAVIGATION_ITEMS.map((item) => (
+                                <button key={item.key} type="button" onClick={() => selectNavigationItem(item)} className={`rounded-xl border px-3 py-2 text-xs font-black ${item.key === activeStage.key ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+                                    {item.shortLabel}
                                 </button>
                             ))}
                         </nav>
@@ -237,19 +259,19 @@ export default function FulfillmentV2() {
                             <p className="mt-0.5 text-xs text-slate-500">كل تبويب يمثل مرحلة مستقلة من دورة الطلب.</p>
                         </div>
                         <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-bold text-violet-700">
-                            {FULFILLMENT_STAGES.length} مراحل
+                            {FULFILLMENT_NAVIGATION_ITEMS.length} مراحل
                         </span>
                     </div>
                     <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" aria-label="مراحل إدارة التجهيز">
-                        {FULFILLMENT_STAGES.map((stage, index) => {
-                            const active = stage.key === activeStage.key;
-                            const Icon = stage.Icon;
+                        {FULFILLMENT_NAVIGATION_ITEMS.map((item, index) => {
+                            const active = item.key === activeStage.key;
+                            const Icon = item.Icon;
                             return (
                                 <button
                                     type="button"
-                                    key={stage.key}
-                                    data-testid={`fulfillment-stage-tab-${stage.key}`}
-                                    onClick={() => selectStage(stage.key)}
+                                    key={item.key}
+                                    data-testid={`fulfillment-stage-tab-${item.key}`}
+                                    onClick={() => selectNavigationItem(item)}
                                     aria-current={active ? "page" : undefined}
                                     className={`group flex min-w-[170px] items-center gap-3 rounded-xl border px-4 py-3 text-right transition ${active ? "border-violet-500 bg-violet-50 text-violet-950 ring-2 ring-violet-100" : "border-transparent bg-white text-slate-600 hover:border-violet-200 hover:bg-slate-50"}`}
                                 >
@@ -258,7 +280,7 @@ export default function FulfillmentV2() {
                                     </span>
                                     <span className="min-w-0">
                                         <span className="block text-[10px] font-bold opacity-60">المرحلة {index + 1}</span>
-                                        <span className="block whitespace-nowrap text-sm font-extrabold">{stage.shortLabel}</span>
+                                        <span className="block whitespace-nowrap text-sm font-extrabold">{item.shortLabel}</span>
                                     </span>
                                 </button>
                             );
