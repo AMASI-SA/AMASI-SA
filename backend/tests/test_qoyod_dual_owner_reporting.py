@@ -183,6 +183,40 @@ def test_unsent_report_deduplicates_when_main_is_the_orders_owner():
     assert db.integration_inbox.queries[0]["user_id"] == "main"
 
 
+def test_unsent_report_requires_a_proven_salla_date_on_or_after_floor():
+    now = datetime.now(timezone.utc)
+    before_floor = _inbox(
+        "main", "269999991", received_at=now,
+    )
+    before_floor["canonical_payload"]["order_date"] = "2026-06-30"
+
+    missing_date = _inbox(
+        "main", "269999992", received_at=now,
+    )
+    missing_date["canonical_payload"].pop("order_date")
+
+    on_floor = _inbox(
+        "main", "269999993", received_at=now,
+    )
+    on_floor["canonical_payload"]["order_date"] = "2026-07-01"
+
+    result = _run(list_unsent_orders(
+        _DB(inbox=[before_floor, missing_date, on_floor]),
+        user_id="main",
+        orders_user_id="main",
+        days=365,
+        limit=1000,
+    ))
+
+    assert result["counts"][UNSENT] == 1
+    assert [row["order_number"] for row in result["orders"]] == [
+        "269999993",
+    ]
+    assert result["sync_start_date"] == "2026-07-01"
+    assert result["excluded_pre_sync_start"] == 1
+    assert result["excluded_missing_order_date"] == 1
+
+
 def test_reconciliation_accepts_marker_from_current_orders_owner():
     order_number = "277274465"
     db = _DB(
