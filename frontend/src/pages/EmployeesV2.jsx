@@ -18,7 +18,9 @@ import StoreOperationsAccessWorkspace from "./StoreOperationsAccessWorkspace";
 import EmployeesV2Management from "./EmployeesV2Management";
 import {
     applyEmployeesV2ShadowMigration,
+    captureEmployeesV2ParallelCycle,
     getEmployeesV2,
+    syncEmployeesV2SalaryContracts,
 } from "../services/employeesV2";
 
 
@@ -45,7 +47,7 @@ const CUTOVER_REASON_LABELS = {
     v2_payroll_projection_mismatch: "احتساب ميزان 2 التجريبي لا يطابق الاستحقاق الحي في النظام القديم.",
     salary_payable_ledger_unreconciled: "الرصيد المستحق في Ledger لا يطابق صافي الرواتب المستحقة حاليًا.",
     employee_advances_ledger_unreconciled: "رصيد السلف في Ledger لا يطابق السلف المفتوحة في نظام الرواتب.",
-    salary_contract_management_not_enabled: "تعديل عقود الرواتب لم يُفعّل بعد داخل صفحة الموظفين الجديدة.",
+    salary_contract_management_not_enabled: "مزامنة عقود الرواتب لم تُفعّل بعد داخل صفحة الموظفين الجديدة.",
     parallel_payroll_cycle_not_completed: "لم تكتمل دورة رواتب متوازية كاملة ومطابقة بعد.",
 };
 
@@ -110,6 +112,12 @@ function PayrollCutoverReadinessPanel({ readiness }) {
     const summary = readiness.summary || {};
     const allowed = readiness.retire_legacy_page_allowed === true;
     const mismatches = (readiness.employees || []).filter((row) => !row.matched);
+    const latestCycle = readiness.parallel_cycle?.latest;
+    const cycleStatusLabels = {
+        mismatch: "آخر تسجيل: توجد فروقات",
+        matched_in_progress: "آخر تسجيل: مطابق حتى اليوم والدورة مستمرة",
+        matched_completed: "آخر تسجيل: دورة مكتملة ومطابقة",
+    };
     return (
         <section
             className={`rounded-2xl border p-5 shadow-sm ${allowed ? "border-emerald-300 bg-emerald-50" : "border-rose-300 bg-rose-50"}`}
@@ -155,6 +163,22 @@ function PayrollCutoverReadinessPanel({ readiness }) {
                 <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">رصيد الرواتب في Ledger</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.ledger_salary_payable || 0)}</div><div className="mt-1 text-[10px] font-bold text-rose-700" dir="ltr">فرق {moneyFormatter.format(summary.salary_payable_ledger_gap || 0)}</div></div>
                 <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">السلف المفتوحة — القديم</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.legacy_open_advances || 0)}</div></div>
                 <div className="rounded-xl border bg-white p-3"><div className="text-[11px] font-bold text-slate-500">رصيد السلف في Ledger</div><div className="mt-1 font-black" dir="ltr">{moneyFormatter.format(summary.ledger_advances || 0)}</div><div className="mt-1 text-[10px] font-bold text-rose-700" dir="ltr">فرق {moneyFormatter.format(summary.advances_ledger_gap || 0)}</div></div>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border bg-white p-3 text-xs font-bold text-slate-700">
+                    <div className="text-[11px] text-slate-500">مزامنة عقود الرواتب</div>
+                    <div className={`mt-1 font-black ${readiness.salary_contract_writes_enabled ? "text-emerald-800" : "text-rose-800"}`}>
+                        {readiness.salary_contract_writes_enabled ? "متاحة — لعقود ميزان 2 فقط" : "غير متاحة"}
+                    </div>
+                </div>
+                <div className="rounded-xl border bg-white p-3 text-xs font-bold text-slate-700" data-testid="employees-v2-parallel-cycle-status">
+                    <div className="text-[11px] text-slate-500">دورة المطابقة المتوازية</div>
+                    <div className={`mt-1 font-black ${latestCycle?.status === "matched_completed" ? "text-emerald-800" : "text-amber-800"}`}>
+                        {latestCycle ? (cycleStatusLabels[latestCycle.status] || latestCycle.status) : "لم تُسجّل نتيجة بعد"}
+                    </div>
+                    {latestCycle?.as_of_date && <div className="mt-1 text-[10px] text-slate-500" dir="ltr">{latestCycle.period_start} → {latestCycle.period_end} · {latestCycle.as_of_date}</div>}
+                </div>
             </div>
 
             {readiness.blocking_reasons?.length > 0 && (
@@ -226,14 +250,93 @@ function EmployeeCard({ employee }) {
     );
 }
 
+function ActionConfirmationDialog({
+    open,
+    title,
+    description,
+    confirmLabel,
+    busyLabel,
+    busy,
+    tone = "emerald",
+    testId,
+    confirmTestId,
+    cancelTestId,
+    onConfirm,
+    onCancel,
+}) {
+    const cancelRef = useRef(null);
+    useEffect(() => {
+        if (open) cancelRef.current?.focus();
+    }, [open]);
+    if (!open) return null;
+    const palette = tone === "violet"
+        ? {
+            border: "border-violet-200",
+            title: "text-violet-950",
+            button: "bg-violet-700 hover:bg-violet-800",
+        }
+        : {
+            border: "border-emerald-200",
+            title: "text-emerald-950",
+            button: "bg-emerald-700 hover:bg-emerald-800",
+        };
+    return (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/70 p-4">
+            <section
+                role="alertdialog"
+                aria-modal="true"
+                aria-label={title}
+                dir="rtl"
+                data-testid={testId}
+                onKeyDown={(event) => {
+                    if (event.key === "Escape" && !busy) onCancel();
+                }}
+                className={`w-full max-w-xl rounded-2xl border bg-white p-6 text-right shadow-2xl ${palette.border}`}
+            >
+                <h2 className={`flex items-center gap-2 text-lg font-black ${palette.title}`}>
+                    <ShieldCheck size={24} weight="duotone" />
+                    {title}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{description}</p>
+                <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button
+                        ref={cancelRef}
+                        type="button"
+                        onClick={onCancel}
+                        disabled={busy}
+                        data-testid={cancelTestId}
+                        className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        إلغاء
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={busy}
+                        data-testid={confirmTestId}
+                        className={`inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${palette.button}`}
+                    >
+                        {busy ? busyLabel : confirmLabel}
+                    </button>
+                </div>
+            </section>
+        </div>
+    );
+}
+
 function MigrationWorkspace() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [syncingContracts, setSyncingContracts] = useState(false);
+    const [contractConfirmOpen, setContractConfirmOpen] = useState(false);
+    const [capturingCycle, setCapturingCycle] = useState(false);
+    const [cycleConfirmOpen, setCycleConfirmOpen] = useState(false);
     const [query, setQuery] = useState("");
     const applyInFlight = useRef(false);
-    const cancelButtonRef = useRef(null);
+    const contractSyncInFlight = useRef(false);
+    const cycleCaptureInFlight = useRef(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -247,10 +350,6 @@ function MigrationWorkspace() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
-    useEffect(() => {
-        if (confirmOpen) cancelButtonRef.current?.focus();
-    }, [confirmOpen]);
-
     const employees = useMemo(() => {
         const rows = data?.employees || [];
         const needle = query.trim().toLocaleLowerCase("ar");
@@ -286,8 +385,56 @@ function MigrationWorkspace() {
         }
     }
 
+    async function syncContracts() {
+        if (contractSyncInFlight.current) return;
+        contractSyncInFlight.current = true;
+        setSyncingContracts(true);
+        try {
+            const result = await syncEmployeesV2SalaryContracts();
+            setData(result.preview);
+            setContractConfirmOpen(false);
+            toast.success(result.contracts_changed > 0
+                ? `تمت مطابقة ${numberFormatter.format(result.contracts_changed)} عقد راتب في ميزان 2`
+                : "عقود الرواتب في ميزان 2 مطابقة مسبقًا");
+        } catch (error) {
+            toast.error(errorCode(error));
+        } finally {
+            contractSyncInFlight.current = false;
+            setSyncingContracts(false);
+        }
+    }
+
+    async function captureParallelCycle() {
+        if (cycleCaptureInFlight.current) return;
+        cycleCaptureInFlight.current = true;
+        setCapturingCycle(true);
+        try {
+            const result = await captureEmployeesV2ParallelCycle();
+            setData(result.preview);
+            setCycleConfirmOpen(false);
+            const status = result.snapshot?.status;
+            toast.success(status === "matched_completed"
+                ? "تم تسجيل دورة رواتب كاملة ومطابقة"
+                : status === "matched_in_progress"
+                ? "تم تسجيل المطابقة حتى اليوم؛ الدورة الشهرية ما زالت مستمرة"
+                : "تم تسجيل النتيجة مع الفروقات الحالية للمراجعة");
+        } catch (error) {
+            toast.error(errorCode(error));
+        } finally {
+            cycleCaptureInFlight.current = false;
+            setCapturingCycle(false);
+        }
+    }
+
     const summary = data?.summary || {};
+    const readiness = data?.cutover_readiness || {};
+    const readinessSummary = readiness.summary || {};
+    const busy = applying || syncingContracts || capturingCycle;
     const canApply = !loading && summary.ready_to_create > 0 && summary.blocking_issues === 0;
+    const hasCompleteEmployeeShadow = readinessSummary.legacy_employee_count > 0
+        && readinessSummary.employee_shadow_count === readinessSummary.legacy_employee_count;
+    const canSyncContracts = !loading && !busy && hasCompleteEmployeeShadow;
+    const canCaptureCycle = !loading && !busy && hasCompleteEmployeeShadow;
     return (
         <div className="space-y-5" data-testid="employees-v2-migration-workspace">
             <section className="overflow-hidden rounded-3xl border border-slate-800 bg-white shadow-sm">
@@ -299,8 +446,8 @@ function MigrationWorkspace() {
                             <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-200">هوية موحدة تربط الموظف بحساب الدخول، الصلاحيات، إدارة التجهيز، عقد الراتب والسجل المالي—مع إبقاء الرواتب القديمة والـLedger مصدر الحقيقة أثناء التحقق.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={load} disabled={loading || applying} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-50"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث التقرير</button>
-                            <button type="button" onClick={requestShadowMigration} disabled={!canApply || applying} data-testid="employees-v2-open-shadow-confirmation" className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-50"><IdentificationCard size={20} weight="duotone" />{applying ? "جارٍ إنشاء النواة…" : "إنشاء النسخة التجريبية"}</button>
+                            <button type="button" onClick={load} disabled={loading || busy} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-50"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث التقرير</button>
+                            <button type="button" onClick={requestShadowMigration} disabled={!canApply || busy} data-testid="employees-v2-open-shadow-confirmation" className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-50"><IdentificationCard size={20} weight="duotone" />{applying ? "جارٍ إنشاء النواة…" : "إنشاء النسخة التجريبية"}</button>
                         </div>
                     </div>
                 </div>
@@ -316,53 +463,79 @@ function MigrationWorkspace() {
 
             <PayrollCutoverReadinessPanel readiness={data?.cutover_readiness} />
 
+            <section className="grid gap-3 lg:grid-cols-2" data-testid="employees-v2-payroll-validation-actions">
+                <article className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+                    <h2 className="font-black text-emerald-950">1. مطابقة عقود الرواتب</h2>
+                    <p className="mt-2 text-xs font-bold leading-6 text-slate-600">ينسخ مبلغ وحالة وتواريخ العقد من الرواتب القديمة إلى عقد ميزان 2 مع سجل تدقيق. لا يعدّل الرواتب القديمة أو Ledger أو السلف والعهد.</p>
+                    <button
+                        type="button"
+                        onClick={() => setContractConfirmOpen(true)}
+                        disabled={!canSyncContracts}
+                        data-testid="employees-v2-open-contract-sync-confirmation"
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <ArrowClockwise size={19} />
+                        {syncingContracts ? "جارٍ مطابقة العقود…" : "مطابقة عقود ميزان 2"}
+                    </button>
+                </article>
+                <article className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
+                    <h2 className="font-black text-violet-950">2. تسجيل دورة المطابقة</h2>
+                    <p className="mt-2 text-xs font-bold leading-6 text-slate-600">يحفظ نتيجة مقارنة احتساب القديم وميزان 2 لهذا اليوم كدليل تحقق فقط. لا تُعد الدورة مكتملة إلا في نهاية الشهر مع تطابق كامل.</p>
+                    <button
+                        type="button"
+                        onClick={() => setCycleConfirmOpen(true)}
+                        disabled={!canCaptureCycle}
+                        data-testid="employees-v2-open-cycle-capture-confirmation"
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <ClockCounterClockwise size={19} />
+                        {capturingCycle ? "جارٍ تسجيل النتيجة…" : "تسجيل نتيجة اليوم"}
+                    </button>
+                </article>
+            </section>
+
             <SafetyPanel safety={data?.safety} />
 
-            {confirmOpen && (
-                <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/70 p-4">
-                    <section
-                        role="alertdialog"
-                        aria-modal="true"
-                        aria-labelledby="employees-v2-shadow-confirmation-title"
-                        aria-describedby="employees-v2-shadow-confirmation-description"
-                        dir="rtl"
-                        data-testid="employees-v2-shadow-confirmation"
-                        onKeyDown={(event) => {
-                            if (event.key === "Escape" && !applying) setConfirmOpen(false);
-                        }}
-                        className="w-full max-w-xl rounded-2xl border border-emerald-200 bg-white p-6 text-right shadow-2xl"
-                    >
-                        <h2 id="employees-v2-shadow-confirmation-title" className="flex items-center gap-2 text-lg font-black text-emerald-950">
-                            <IdentificationCard size={24} weight="duotone" />
-                            تأكيد إنشاء النسخة التجريبية
-                        </h2>
-                        <p id="employees-v2-shadow-confirmation-description" className="mt-3 text-sm leading-7 text-slate-600">
-                            سيتم إنشاء نسخة تجريبية آمنة لـ {numberFormatter.format(summary.ready_to_create || 0)} موظف وعقد راتب داخل ميزان 2. لن تتغير الرواتب القديمة أو القيود أو السلف والعهد. هل تريد المتابعة؟
-                        </p>
-                        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                            <button
-                                ref={cancelButtonRef}
-                                type="button"
-                                onClick={() => setConfirmOpen(false)}
-                                disabled={applying}
-                                data-testid="employees-v2-cancel-shadow-migration"
-                                className="inline-flex h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                إلغاء
-                            </button>
-                            <button
-                                type="button"
-                                onClick={applyShadow}
-                                disabled={applying}
-                                data-testid="employees-v2-confirm-shadow-migration"
-                                className="inline-flex h-10 items-center justify-center rounded-md bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {applying ? "جارٍ إنشاء النواة…" : "نعم، إنشاء النسخة التجريبية"}
-                            </button>
-                        </div>
-                    </section>
-                </div>
-            )}
+            <ActionConfirmationDialog
+                open={confirmOpen}
+                title="تأكيد إنشاء النسخة التجريبية"
+                description={`سيتم إنشاء نسخة تجريبية آمنة لـ ${numberFormatter.format(summary.ready_to_create || 0)} موظف وعقد راتب داخل ميزان 2. لن تتغير الرواتب القديمة أو القيود أو السلف والعهد. هل تريد المتابعة؟`}
+                confirmLabel="نعم، إنشاء النسخة التجريبية"
+                busyLabel="جارٍ إنشاء النواة…"
+                busy={applying}
+                testId="employees-v2-shadow-confirmation"
+                confirmTestId="employees-v2-confirm-shadow-migration"
+                cancelTestId="employees-v2-cancel-shadow-migration"
+                onConfirm={applyShadow}
+                onCancel={() => setConfirmOpen(false)}
+            />
+            <ActionConfirmationDialog
+                open={contractConfirmOpen}
+                title="تأكيد مطابقة عقود الرواتب"
+                description="سيتم تحديث عقود ميزان 2 فقط لتطابق المصدر القديم، مع تسجيل القيم قبل وبعد. لن يحدث أي تعديل مالي أو قيد أو تغيير في السلف والعهد."
+                confirmLabel="نعم، مطابقة العقود"
+                busyLabel="جارٍ مطابقة العقود…"
+                busy={syncingContracts}
+                testId="employees-v2-contract-sync-confirmation"
+                confirmTestId="employees-v2-confirm-contract-sync"
+                cancelTestId="employees-v2-cancel-contract-sync"
+                onConfirm={syncContracts}
+                onCancel={() => setContractConfirmOpen(false)}
+            />
+            <ActionConfirmationDialog
+                open={cycleConfirmOpen}
+                title="تأكيد تسجيل نتيجة المطابقة"
+                description="سيتم حفظ لقطة تحقق للقراءة فقط عن مقارنة احتساب الرواتب لهذا اليوم. لا يبدأ دفعًا ولا قيدًا ولا يوقف النظام القديم."
+                confirmLabel="نعم، تسجيل النتيجة"
+                busyLabel="جارٍ تسجيل النتيجة…"
+                busy={capturingCycle}
+                tone="violet"
+                testId="employees-v2-cycle-capture-confirmation"
+                confirmTestId="employees-v2-confirm-cycle-capture"
+                cancelTestId="employees-v2-cancel-cycle-capture"
+                onConfirm={captureParallelCycle}
+                onCancel={() => setCycleConfirmOpen(false)}
+            />
 
             <section className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-bold text-slate-500">رصيد الرواتب المسجل في Ledger</div><div className="mt-1 text-xl font-black" dir="ltr">{moneyFormatter.format(summary.salary_payable_total || 0)}</div></div>

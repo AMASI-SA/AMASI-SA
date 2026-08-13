@@ -1,6 +1,8 @@
 import api from "../lib/api";
 
 export const EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION = "MIGRATE_EMPLOYEES_V2_SHADOW";
+export const EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION = "SYNC_EMPLOYEE_V2_SALARY_CONTRACTS";
+export const EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION = "CAPTURE_EMPLOYEE_V2_PARALLEL_CYCLE";
 export const EMPLOYEE_CREATE_CONFIRMATION = "CREATE_EMPLOYEE_V2";
 export const EMPLOYEE_ACCOUNT_LINK_CONFIRMATION = "LINK_EMPLOYEE_V2_ACCOUNT";
 export const EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION = "UNLINK_EMPLOYEE_V2_ACCOUNT";
@@ -18,6 +20,18 @@ export async function previewEmployeesV2Migration() {
 export async function applyEmployeesV2ShadowMigration() {
     return (await api.post("/employees-v2/migration/apply-shadow", {
         confirmation: EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION,
+    })).data;
+}
+
+export async function syncEmployeesV2SalaryContracts() {
+    return (await api.post("/employees-v2/migration/sync-contracts", {
+        confirmation: EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION,
+    })).data;
+}
+
+export async function captureEmployeesV2ParallelCycle() {
+    return (await api.post("/employees-v2/migration/parallel-cycle/capture", {
+        confirmation: EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION,
     })).data;
 }
 

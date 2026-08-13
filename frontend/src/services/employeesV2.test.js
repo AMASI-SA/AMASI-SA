@@ -2,20 +2,24 @@ import api from "../lib/api";
 import {
     applyEmployeesV2ShadowMigration,
     assignEmployeesV2Role,
+    captureEmployeesV2ParallelCycle,
     createAndLinkEmployeesV2Account,
     createEmployeesV2,
     EMPLOYEE_ACCOUNT_LINK_CONFIRMATION,
     EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION,
     EMPLOYEE_CREATE_CONFIRMATION,
     EMPLOYEE_PASSWORD_CONFIRMATION,
+    EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION,
     EMPLOYEE_ROLE_CONFIRMATION,
     EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION,
+    EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION,
     getEmployeesV2,
     getEmployeesV2Events,
     getEmployeesV2Management,
     linkEmployeesV2Account,
     previewEmployeesV2Migration,
     resetEmployeesV2AccountPassword,
+    syncEmployeesV2SalaryContracts,
     unlinkEmployeesV2Account,
     updateEmployeesV2,
 } from "./employeesV2";
@@ -108,6 +112,20 @@ test("shadow migration keeps its exact guarded confirmation", async () => {
     expect(EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION).toBe("MIGRATE_EMPLOYEES_V2_SHADOW");
     expect(api.post).toHaveBeenCalledWith("/employees-v2/migration/apply-shadow", {
         confirmation: "MIGRATE_EMPLOYEES_V2_SHADOW",
+    });
+});
+
+test("payroll validation writes use exact non-financial confirmations", async () => {
+    await syncEmployeesV2SalaryContracts();
+    await captureEmployeesV2ParallelCycle();
+
+    expect(EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION).toBe("SYNC_EMPLOYEE_V2_SALARY_CONTRACTS");
+    expect(EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION).toBe("CAPTURE_EMPLOYEE_V2_PARALLEL_CYCLE");
+    expect(api.post).toHaveBeenNthCalledWith(1, "/employees-v2/migration/sync-contracts", {
+        confirmation: "SYNC_EMPLOYEE_V2_SALARY_CONTRACTS",
+    });
+    expect(api.post).toHaveBeenNthCalledWith(2, "/employees-v2/migration/parallel-cycle/capture", {
+        confirmation: "CAPTURE_EMPLOYEE_V2_PARALLEL_CYCLE",
     });
 });
 

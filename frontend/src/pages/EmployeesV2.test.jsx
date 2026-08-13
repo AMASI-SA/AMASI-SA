@@ -20,6 +20,8 @@ jest.mock("./EmployeesV2Management", () => function ManagementFixture() {
 jest.mock("../services/employeesV2", () => ({
     getEmployeesV2: jest.fn(),
     applyEmployeesV2ShadowMigration: jest.fn(),
+    syncEmployeesV2SalaryContracts: jest.fn(),
+    captureEmployeesV2ParallelCycle: jest.fn(),
 }));
 
 jest.mock("sonner", () => ({
@@ -29,7 +31,9 @@ jest.mock("sonner", () => ({
 import EmployeesV2 from "./EmployeesV2";
 import {
     applyEmployeesV2ShadowMigration,
+    captureEmployeesV2ParallelCycle,
     getEmployeesV2,
+    syncEmployeesV2SalaryContracts,
 } from "../services/employeesV2";
 
 const preview = {
@@ -60,12 +64,20 @@ const preview = {
         retire_legacy_page_allowed: false,
         read_only: true,
         financial_writes: 0,
-        salary_contract_writes_enabled: false,
+        salary_contract_writes_enabled: true,
         parallel_cycle_completed: false,
+        parallel_cycle: {
+            completed: false,
+            latest: {
+                status: "matched_in_progress",
+                period_start: "2026-08-01",
+                period_end: "2026-08-31",
+                as_of_date: "2026-08-13",
+            },
+        },
         blocking_reasons: [
             "salary_payable_ledger_unreconciled",
             "employee_advances_ledger_unreconciled",
-            "salary_contract_management_not_enabled",
             "parallel_payroll_cycle_not_completed",
         ],
         summary: {
@@ -101,6 +113,8 @@ beforeEach(() => {
     mockSearchParams = new URLSearchParams("");
     getEmployeesV2.mockReset();
     applyEmployeesV2ShadowMigration.mockReset();
+    syncEmployeesV2SalaryContracts.mockReset();
+    captureEmployeesV2ParallelCycle.mockReset();
 });
 
 test("employee workspace opens full employee management by default", () => {
@@ -151,9 +165,58 @@ test("shows a read-only payroll retirement gate with live accrual and ledger gap
         expect(gate.textContent).toContain("120,819.34");
         expect(gate.textContent).toContain("2,695.00");
         expect(gate.textContent).toContain("60.00");
-        expect(gate.textContent).toContain("تعديل عقود الرواتب لم يُفعّل بعد");
+        expect(gate.textContent).toContain("متاحة — لعقود ميزان 2 فقط");
         expect(gate.textContent).toContain("لم تكتمل دورة رواتب متوازية كاملة");
+        expect(gate.textContent).toContain("مطابق حتى اليوم والدورة مستمرة");
         expect(gate.textContent).toContain("كتابات مالية من هذا التقرير");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("synchronizes contracts and captures a parallel checkpoint through guarded actions", async () => {
+    mockSearchParams = new URLSearchParams("workspace=migration");
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    getEmployeesV2.mockResolvedValue(preview);
+    syncEmployeesV2SalaryContracts.mockResolvedValue({
+        contracts_changed: 2,
+        preview,
+    });
+    captureEmployeesV2ParallelCycle.mockResolvedValue({
+        snapshot: { status: "matched_in_progress" },
+        preview,
+    });
+
+    try {
+        await act(async () => {
+            root.render(<EmployeesV2 />);
+        });
+
+        const contractButton = container.querySelector('[data-testid="employees-v2-open-contract-sync-confirmation"]');
+        expect(contractButton.disabled).toBe(false);
+        await act(async () => {
+            contractButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(document.body.querySelector('[data-testid="employees-v2-contract-sync-confirmation"]')).not.toBeNull();
+        await act(async () => {
+            document.body.querySelector('[data-testid="employees-v2-confirm-contract-sync"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(syncEmployeesV2SalaryContracts).toHaveBeenCalledTimes(1);
+
+        const cycleButton = container.querySelector('[data-testid="employees-v2-open-cycle-capture-confirmation"]');
+        await act(async () => {
+            cycleButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(document.body.querySelector('[data-testid="employees-v2-cycle-capture-confirmation"]')).not.toBeNull();
+        await act(async () => {
+            document.body.querySelector('[data-testid="employees-v2-confirm-cycle-capture"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(captureEmployeesV2ParallelCycle).toHaveBeenCalledTimes(1);
     } finally {
         await act(async () => root.unmount());
         container.remove();
