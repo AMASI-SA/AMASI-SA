@@ -232,10 +232,22 @@ async def list_unsent_orders(
     from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
     sync_start = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        days=max(1, min(days, 365)))
+    requested_days = max(1, min(days, 365))
+    requested_start = (
+        datetime.now(timezone.utc) - timedelta(days=requested_days)
+    ).date()
+    # The integration itself cannot expose orders before 2026-07-01, even
+    # when the operator selects a wider period such as 90 days.
+    period_start = max(sync_start, requested_start)
+    # Query by the earliest possible receive time, then enforce the requested
+    # period with Salla's order creation date below.  A backfill received today
+    # must not make an old Salla order look like a "last 7 days" order.
+    scan_cutoff = datetime.combine(
+        period_start, datetime.min.time(), tzinfo=timezone.utc,
+    )
     excluded_pre_sync = 0
     excluded_missing_order_date = 0
+    excluded_outside_requested_period = 0
 
     # Qoyod accounting markers historically live under the singleton
     # ``main`` tenant, while the live Salla refresh stores its newest inbox
@@ -335,7 +347,7 @@ async def list_unsent_orders(
         inbox_owner_query = {"$in": inbox_user_ids}
     query: dict = {
         "user_id": inbox_owner_query,
-        "received_at": {"$gte": cutoff},
+        "received_at": {"$gte": scan_cutoff},
     }
     if search and str(search).strip():
         import re as _re
@@ -362,11 +374,11 @@ async def list_unsent_orders(
          "canonical_payload.order_status": 1,
          "canonical_payload.order_status_native": 1},
     )
-    # Preserve roughly the same per-owner scan budget when both the legacy
-    # accounting tenant and the Orders owner are present.  The result is still
-    # collapsed to one row per order below.
-    scan_limit = max(1, min(limit * len(inbox_user_ids), 5000))
-    cursor = cursor.sort("received_at", -1).limit(scan_limit)
+    # Do not apply the public row limit to raw inbox events.  One Salla order
+    # can have several status traces, so limiting here makes 30 and 90 days
+    # collapse to the same newest-event window.  We group and classify the
+    # complete requested period first, then cap only the returned table rows.
+    cursor = cursor.sort("received_at", -1)
 
     async for row in cursor:
         # ── Integration start date — hard scope boundary ─────────────
@@ -380,6 +392,9 @@ async def list_unsent_orders(
             continue
         if order_date < sync_start:
             excluded_pre_sync += 1
+            continue
+        if order_date < period_start:
+            excluded_outside_requested_period += 1
             continue
         on = str(row.get("salla_order_number") or "").strip()
         in_qoyod = bool(on) and (on in ref_set)
@@ -451,14 +466,6 @@ async def list_unsent_orders(
                         and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
 
-    # ``limit`` is the public result cap, not a per-owner cap.  We scan a
-    # larger two-owner window above so one tenant's status trace cannot evict
-    # the other's authoritative marker, then apply the documented cap after
-    # cross-owner de-duplication.
-    if len(order_keys) > limit:
-        order_keys = order_keys[:limit]
-        grouped = {key: grouped[key] for key in order_keys}
-
     # Daily operations must only call an order "لم يُرسل" when its
     # CURRENT Salla status is eligible for invoicing. Historical inbox
     # rows for awaiting-review/payment, cancelled, deleted, etc. remain
@@ -488,20 +495,31 @@ async def list_unsent_orders(
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     orders: list[dict] = []
+    matched_order_count = 0
     for key in visible_keys:
         e = grouped[key]
         if not _salla_match(e):
             continue
+        # Count the full period before limiting table rows.  The cards must
+        # reflect the selected 7/30/90-day range, not the display page size.
         counts[e["status"]] += 1
         if status and e["status"] != status:
             continue
-        orders.append(e)
+        matched_order_count += 1
+        if len(orders) < limit:
+            orders.append(e)
 
     return {"ok": True, "days": days, "counts": counts,
             "total": sum(counts.values()),
             "sync_start_date": sync_start.isoformat(),
+            "requested_order_start_date": period_start.isoformat(),
             "excluded_pre_sync_start": excluded_pre_sync,
             "excluded_missing_order_date": excluded_missing_order_date,
+            "excluded_outside_requested_period":
+                excluded_outside_requested_period,
             "excluded_not_eligible": excluded_not_eligible,
+            "matched_order_count": matched_order_count,
+            "returned_order_count": len(orders),
+            "truncated": matched_order_count > len(orders),
             "salla_status_counts": salla_status_counts,
             "orders": orders}
