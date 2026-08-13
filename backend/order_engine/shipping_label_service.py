@@ -465,28 +465,56 @@ async def _shipment_rows(
         if isinstance(embedded, list)
         else [dict(embedded)] if isinstance(embedded, dict) else []
     )
-    try:
-        response = await call_salla(
-            db,
-            user_id,
-            "GET",
-            "/shipments",
-            params={"order_id": internal_order_id, "per_page": 50},
-        )
-    except SallaError as exc:
-        # Order Details uses the orders.read scope and includes shipments in
-        # its full response.  Older Mezan installations may not yet have the
-        # separate shipping.read scope, so use Salla's own embedded shipment
-        # facts instead of blocking an already-issued courier label.
-        if exc.status_code not in {401, 403} or not embedded_rows:
-            raise
-        response = None
+    response: dict[str, Any] | None = None
+    modern_error: SallaError | None = None
+    if not any(_snapshot(row)["ready"] for row in embedded_rows):
+        try:
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                "/shipments",
+                params={"order_id": internal_order_id, "per_page": 50},
+            )
+        except SallaError as exc:
+            if exc.status_code not in {401, 403}:
+                raise
+            modern_error = exc
+            try:
+                # Salla's legacy order-shipment route is available to apps
+                # that can read and update orders even when the standalone
+                # shipping scope was not granted.  Existing Amasi shipping
+                # apps use this route after moving the order to completed.
+                response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/orders/{internal_order_id}/shipments",
+                    params={"per_page": 50},
+                )
+            except SallaError as legacy_exc:
+                if legacy_exc.status_code not in {401, 403}:
+                    raise
+
     listed = response.get("data") if isinstance(response, dict) else None
+    if isinstance(listed, dict):
+        nested = listed.get("shipments")
+        if isinstance(nested, list):
+            listed = nested
+        elif isinstance(nested, dict):
+            listed = [nested]
+        elif listed.get("id"):
+            listed = [listed]
+        else:
+            listed = []
     rows = (
         [dict(row) for row in listed if isinstance(row, dict)]
         if isinstance(listed, list)
         else embedded_rows
     )
+    if response is None and modern_error is not None and not rows:
+        raise modern_error
+
     async def enrich(row: dict[str, Any]) -> dict[str, Any]:
         shipment_id = _text(row.get("id"))
         if not shipment_id:
@@ -816,11 +844,21 @@ async def _poll_shipment(
                 if isinstance(order_details, dict)
                 else None
             )
-            embedded_rows = _active_outbound(
-                [dict(row) for row in embedded if isinstance(row, dict)]
-                if isinstance(embedded, list)
-                else [dict(embedded)] if isinstance(embedded, dict) else []
-            )
+            try:
+                embedded_rows = _active_outbound(
+                    await _shipment_rows(
+                        db,
+                        user_id,
+                        internal_order_id,
+                        embedded,
+                    )
+                )
+            except SallaError:
+                embedded_rows = _active_outbound(
+                    [dict(row) for row in embedded if isinstance(row, dict)]
+                    if isinstance(embedded, list)
+                    else [dict(embedded)] if isinstance(embedded, dict) else []
+                )
             for row in embedded_rows:
                 if _text(row.get("id")) == shipment_id or _snapshot(row)["ready"]:
                     latest = {**latest, **row}
