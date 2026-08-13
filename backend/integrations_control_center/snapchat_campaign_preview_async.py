@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo.errors import DuplicateKeyError
 
 from .snapchat_campaign_management import (
@@ -33,6 +33,8 @@ from .snapchat_native_data_common import (
 PREVIEW_JOB_COLLECTION = "mezan_snapchat_campaign_preview_jobs_v1"
 PREVIEW_JOB_SOURCE_MODE = "snapchat_campaign_preview_async_v1"
 PREVIEW_JOB_STALE_AFTER = timedelta(minutes=15)
+PREVIEW_JOB_EXECUTION_TIMEOUT_SECONDS = 150
+PREVIEW_JOB_RECONCILIATION_GRACE = timedelta(seconds=150)
 ACTIVE_PREVIEW_JOB_STATUSES = {"queued", "running"}
 LOGGER = logging.getLogger(__name__)
 
@@ -98,6 +100,11 @@ def _safe_job(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "started_at": row.get("started_at"),
         "finished_at": row.get("finished_at"),
+        "phase": row.get("phase") or "unknown",
+        "phase_started_at": row.get("phase_started_at"),
+        "terminal_reconciled": row.get("terminal_reconciled") is True,
+        "reconcile_deadline_at": row.get("reconcile_deadline_at"),
+        "recovery_action": row.get("recovery_action"),
         "failure": failure,
         "provider_write_reached": False,
         "provider_write_state": "not_attempted",
@@ -152,6 +159,11 @@ async def _reconcile_ready_job(db: Any, row: dict[str, Any]) -> dict[str, Any]:
                 "proposal_id": proposal.get("proposal_id"),
                 "finished_at": row.get("finished_at") or _iso(),
                 "failure": None,
+                "phase": "ready",
+                "phase_started_at": _iso(),
+                "terminal_reconciled": True,
+                "reconcile_deadline_at": None,
+                "recovery_action": None,
             }
         },
     )
@@ -208,6 +220,9 @@ async def queue_snapchat_management_preview_job(
         "created_at": _iso(now_value),
         "started_at": None,
         "finished_at": None,
+        "phase": "queued",
+        "phase_started_at": _iso(now_value),
+        "terminal_reconciled": False,
         "stale_at": _iso(now_value + PREVIEW_JOB_STALE_AFTER),
         "failure": None,
         "provider_write_reached": False,
@@ -238,6 +253,10 @@ async def _mark_job_failed(
     db: Any,
     row: dict[str, Any],
     failure: dict[str, Any],
+    *,
+    terminal_reconciled: bool = True,
+    recovery_action: str = "create_new_preview",
+    reconcile_deadline_at: str | None = None,
 ) -> None:
     reconciled = await _reconcile_ready_job(db, row)
     if reconciled.get("status") == "ready":
@@ -257,7 +276,11 @@ async def _mark_job_failed(
                 "provider_write_state": "not_attempted",
                 "provider_write_uncertain": False,
                 "automatic_retry_allowed": False,
-                "recovery_action": "create_new_preview",
+                "recovery_action": recovery_action,
+                "phase": "failed",
+                "phase_started_at": _iso(),
+                "terminal_reconciled": terminal_reconciled,
+                "reconcile_deadline_at": reconcile_deadline_at,
             }
         },
     )
@@ -271,40 +294,100 @@ async def execute_snapchat_management_preview_job(
 ) -> None:
     """Run the existing read-only proposal preparation after the 202 response."""
     jobs = _collection(db, PREVIEW_JOB_COLLECTION)
-    claimed = await jobs.update_one(
-        {
-            "user_id": user_id,
-            "preview_job_id": preview_job_id,
-            "status": "queued",
-        },
-        {"$set": {"status": "running", "started_at": _iso()}},
-    )
-    if int(getattr(claimed, "matched_count", 0) or 0) != 1:
-        return
-    row = await jobs.find_one(
-        {"user_id": user_id, "preview_job_id": preview_job_id}, {"_id": 0}
-    )
-    if not row:
-        return
+    row: dict[str, Any] = {
+        "user_id": user_id,
+        "preview_job_id": preview_job_id,
+    }
     try:
-        payload = SnapchatManagementProposalInput(**dict(row.get("request") or {}))
-        proposal = await create_snapchat_management_proposal(
-            db, user_id, actor_id, payload
-        )
-        await jobs.update_one(
+        async with asyncio.timeout(PREVIEW_JOB_EXECUTION_TIMEOUT_SECONDS):
+            phase_at = _iso()
+            claimed = await jobs.update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "queued",
+                },
+                {
+                    "$set": {
+                        "status": "running",
+                        "started_at": phase_at,
+                        "phase": "claimed",
+                        "phase_started_at": phase_at,
+                        "terminal_reconciled": False,
+                    }
+                },
+            )
+            if int(getattr(claimed, "matched_count", 0) or 0) != 1:
+                return
+            loaded = await jobs.find_one(
+                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {"_id": 0},
+            )
+            if not loaded:
+                raise RuntimeError("preview_job_missing_after_claim")
+            row = loaded
+            phase_at = _iso()
+            await jobs.update_one(
+                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {
+                    "$set": {
+                        "phase": "request_loaded",
+                        "phase_started_at": phase_at,
+                    }
+                },
+            )
+            payload = SnapchatManagementProposalInput(
+                **dict(row.get("request") or {})
+            )
+            phase_at = _iso()
+            await jobs.update_one(
+                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {
+                    "$set": {
+                        "phase": "preparing_proposal",
+                        "phase_started_at": phase_at,
+                    }
+                },
+            )
+            proposal = await create_snapchat_management_proposal(
+                db, user_id, actor_id, payload
+            )
+            ready_at = _iso()
+            updated = await jobs.update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "running",
+                },
+                {
+                    "$set": {
+                        "status": "ready",
+                        "proposal_id": proposal.get("proposal_id"),
+                        "finished_at": ready_at,
+                        "failure": None,
+                        "phase": "ready",
+                        "phase_started_at": ready_at,
+                        "terminal_reconciled": True,
+                        "reconcile_deadline_at": None,
+                        "recovery_action": None,
+                    }
+                },
+            )
+            if int(getattr(updated, "matched_count", 0) or 0) != 1:
+                # A lazy stale read may have marked the row failed while the
+                # read-only worker was finishing.  The durable proposal is the
+                # authority, so reconcile that late success back to ready.
+                await _reconcile_ready_job(db, row)
+    except TimeoutError:
+        await _mark_job_failed(
+            db,
+            row,
             {
-                "user_id": user_id,
-                "preview_job_id": preview_job_id,
-                "status": "running",
+                "code": "snapchat_management_preview_worker_timeout",
+                "message": "تجاوز تجهيز معاينة Snapchat مهلة الأمان؛ أنشئ معاينة جديدة.",
+                "retryable": False,
             },
-            {
-                "$set": {
-                    "status": "ready",
-                    "proposal_id": proposal.get("proposal_id"),
-                    "finished_at": _iso(),
-                    "failure": None,
-                }
-            },
+            terminal_reconciled=True,
         )
     except asyncio.CancelledError as exc:
         await _mark_job_failed(
@@ -315,6 +398,7 @@ async def execute_snapchat_management_preview_job(
                 "message": "توقف عامل المعاينة قبل اكتمالها؛ أنشئ معاينة جديدة.",
                 "retryable": False,
             },
+            terminal_reconciled=True,
         )
         raise exc
     except Exception as exc:  # noqa: BLE001 - converted to a bounded job error
@@ -389,25 +473,121 @@ async def get_snapchat_management_preview_job(
             detail={"code": "snapchat_management_preview_job_not_found"},
         )
     row = await _reconcile_ready_job(db, row)
+    now_value = now().astimezone(timezone.utc)
     stale_at = _parse_datetime(row.get("stale_at"))
     if (
         row.get("status") in ACTIVE_PREVIEW_JOB_STATUSES
         and stale_at is not None
-        and stale_at <= now().astimezone(timezone.utc)
+        and stale_at <= now_value
     ):
+        reconcile_deadline = now_value + PREVIEW_JOB_RECONCILIATION_GRACE
         await _mark_job_failed(
             db,
             row,
             {
                 "code": "snapchat_management_preview_job_stale",
-                "message": "لم تكتمل المعاينة ضمن مهلة الأمان؛ أنشئ معاينة جديدة.",
+                "message": (
+                    "تجاوزت المعاينة مهلة المتابعة، وما زال التحقق من نتيجتها "
+                    "جاريًا؛ استمر بمتابعة نفس المعاينة ولا تنشئ أخرى الآن."
+                ),
                 "retryable": False,
             },
+            terminal_reconciled=False,
+            recovery_action="continue_read_only_reconciliation",
+            reconcile_deadline_at=_iso(reconcile_deadline),
         )
         row = await _collection(db, PREVIEW_JOB_COLLECTION).find_one(
             {"user_id": user_id, "preview_job_id": preview_job_id}, {"_id": 0}
         ) or row
+    if row.get("status") == "failed" and row.get("terminal_reconciled") is not True:
+        reconcile_deadline = _parse_datetime(row.get("reconcile_deadline_at"))
+        if reconcile_deadline is None:
+            # Upgrade an older non-terminal stale row safely.  Give any
+            # already-running read-only worker the same bounded grace window
+            # before allowing a new preview.
+            reconcile_deadline = now_value + PREVIEW_JOB_RECONCILIATION_GRACE
+            await _collection(db, PREVIEW_JOB_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "failed",
+                },
+                {
+                    "$set": {
+                        "reconcile_deadline_at": _iso(reconcile_deadline),
+                        "recovery_action": "continue_read_only_reconciliation",
+                        "failure": {
+                            "code": "snapchat_management_preview_job_stale",
+                            "message": (
+                                "تجاوزت المعاينة مهلة المتابعة، وما زال التحقق من "
+                                "نتيجتها جاريًا؛ استمر بمتابعة نفس المعاينة ولا "
+                                "تنشئ أخرى الآن."
+                            ),
+                            "retryable": False,
+                        },
+                    }
+                },
+            )
+            row = await _collection(db, PREVIEW_JOB_COLLECTION).find_one(
+                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {"_id": 0},
+            ) or row
+        elif reconcile_deadline <= now_value:
+            terminal_at = _iso(now_value)
+            await _collection(db, PREVIEW_JOB_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "preview_job_id": preview_job_id,
+                    "status": "failed",
+                },
+                {
+                    "$set": {
+                        "terminal_reconciled": True,
+                        "recovery_action": "create_new_preview",
+                        "finished_at": terminal_at,
+                        "phase": "failed",
+                        "phase_started_at": terminal_at,
+                        "failure": {
+                            "code": "snapchat_management_preview_job_stale",
+                            "message": (
+                                "لم تكتمل المعاينة بعد انتهاء مهلة التحقق؛ "
+                                "يمكنك إنشاء معاينة جديدة."
+                            ),
+                            "retryable": False,
+                        },
+                    }
+                },
+            )
+            row = await _collection(db, PREVIEW_JOB_COLLECTION).find_one(
+                {"user_id": user_id, "preview_job_id": preview_job_id},
+                {"_id": 0},
+            ) or row
     return _safe_job(row)
+
+
+async def get_current_snapchat_management_preview_job(
+    db: Any,
+    user_id: str,
+    idempotency_key: str,
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> dict[str, Any]:
+    """Recover one exact tenant-owned job without exposing its stored request."""
+    row = await _collection(db, PREVIEW_JOB_COLLECTION).find_one(
+        {"user_id": user_id, "idempotency_key": idempotency_key},
+        {"_id": 0},
+    )
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "snapchat_management_preview_job_not_found"},
+        )
+    return await get_snapchat_management_preview_job(
+        db,
+        user_id,
+        str(row.get("preview_job_id") or ""),
+        now=now,
+    )
 
 
 def attach_snapchat_campaign_preview_async_routes(
@@ -443,6 +623,20 @@ def attach_snapchat_campaign_preview_async_routes(
         return job
 
     @router.get(
+        f"/{SNAPCHAT_PROVIDER_ID}/management/preview-jobs/current"
+    )
+    async def read_current_preview_job(
+        idempotency_key: str = Query(min_length=8, max_length=128),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = require_owner(user)
+        return await get_current_snapchat_management_preview_job(
+            db,
+            str(owner["id"]),
+            idempotency_key,
+        )
+
+    @router.get(
         f"/{SNAPCHAT_PROVIDER_ID}/management/preview-jobs/{{preview_job_id}}"
     )
     async def read_preview_job(
@@ -460,6 +654,7 @@ __all__ = [
     "attach_snapchat_campaign_preview_async_routes",
     "ensure_snapchat_preview_job_indexes",
     "execute_snapchat_management_preview_job",
+    "get_current_snapchat_management_preview_job",
     "get_snapchat_management_preview_job",
     "queue_snapchat_management_preview_job",
     "schedule_snapchat_management_preview_job",
