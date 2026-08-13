@@ -1,3 +1,5 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 
 let mockSearchParams = new URLSearchParams("stage=pending_review");
@@ -43,7 +45,7 @@ jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function
     return <div data-testid="supplier-receiving-workspace">استلام منتجات المورد بالباركود · من المستودع · من المورد · تصنيع داخلي · ينتظر توريد · قيد التجميع · متوقف بسبب نقص منتج</div>;
 });
 
-import FulfillmentV2, { FULFILLMENT_STAGES } from "./FulfillmentV2";
+import FulfillmentV2, { FULFILLMENT_NAVIGATION_ITEMS, FULFILLMENT_STAGES } from "./FulfillmentV2";
 
 const EXPECTED_STAGE_KEYS = [
     "pending_review",
@@ -56,6 +58,14 @@ const EXPECTED_STAGE_KEYS = [
     "delivering",
     "delivered",
 ];
+
+beforeAll(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterAll(() => {
+    delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+});
 
 beforeEach(() => {
     mockSearchParams = new URLSearchParams("stage=pending_review");
@@ -78,16 +88,39 @@ test("fulfillment workspace keeps the governed stage order", () => {
     ]);
 });
 
-test("preparation is the Mezan OS parent with nine nested stage tabs", () => {
+test("my products is a navigation stop immediately before supplier receiving", () => {
+    expect(FULFILLMENT_NAVIGATION_ITEMS.map((item) => item.key)).toEqual([
+        "pending_review",
+        "reviewed",
+        "in_progress",
+        "my_products",
+        "preparation",
+        "assembly",
+        "ready_to_ship",
+        "completed",
+        "delivering",
+        "delivered",
+    ]);
+    expect(FULFILLMENT_NAVIGATION_ITEMS[3]).toMatchObject({
+        label: "إدارة منتجاتي",
+        workspace: "my-products",
+    });
+});
+
+test("preparation is the Mezan OS parent with ten nested navigation tabs", () => {
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain("إدارة التجهيز");
     expect(markup).not.toContain("إدارة رفع الطلبات");
     expect(markup).toContain("تبويبات إدارة التجهيز");
-    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(9);
+    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(10);
     EXPECTED_STAGE_KEYS.forEach((stageKey) => {
         expect(markup).toContain(`data-testid="fulfillment-stage-tab-${stageKey}"`);
     });
+    expect(markup).toContain('data-testid="fulfillment-stage-tab-my_products"');
+    expect(markup.indexOf('data-testid="fulfillment-stage-tab-my_products"')).toBeLessThan(
+        markup.indexOf('data-testid="fulfillment-stage-tab-preparation"'),
+    );
 });
 
 test("opening fulfillment without a stage starts at pending review", () => {
@@ -110,6 +143,22 @@ test("my products workspace is standalone and separate from fulfillment stages",
     expect(markup).not.toContain("تبويبات إدارة التجهيز");
     expect(markup).not.toContain("Mezan OS V2");
     expect(markup).not.toContain('data-testid="pending-review-queue"');
+});
+
+test("clicking my products opens its standalone workspace route", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    act(() => root.render(<FulfillmentV2 />));
+    const myProductsLink = container.querySelector('[data-testid="fulfillment-stage-tab-my_products"]');
+    expect(myProductsLink).not.toBeNull();
+
+    act(() => myProductsLink.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    const [nextSearchParams, options] = mockSetSearchParams.mock.calls.at(-1);
+    expect(nextSearchParams.toString()).toBe("workspace=my-products");
+    expect(options).toEqual({ replace: true });
+    act(() => root.unmount());
 });
 
 test("pending review is embedded under the organized preparation tabs", () => {
