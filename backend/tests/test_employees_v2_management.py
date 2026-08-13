@@ -12,6 +12,7 @@ from employees_v2_routes import (
     EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION,
     EMPLOYEE_CREATE_CONFIRMATION,
     EMPLOYEE_PASSWORD_CONFIRMATION,
+    EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION,
     NATIVE_SOURCE_SYSTEM,
     build_employee_management_snapshot,
@@ -151,6 +152,10 @@ def test_employee_payload_accepts_operational_statuses_without_salary_fields():
 
     with pytest.raises(ValueError, match="employee_status_invalid"):
         normalize_employee_payload({"name": "موظف", "status": "stopped"})
+    assert normalize_employee_payload({
+        "name": "موظف بإجازة",
+        "status": "unpaid_leave",
+    })["status"] == "unpaid_leave"
 
 
 def test_full_management_snapshot_contains_all_employees_and_protects_owner_account():
@@ -251,6 +256,7 @@ def test_management_routes_use_general_employee_contracts():
     assert EMPLOYEE_ACCOUNT_UNLINK_CONFIRMATION == "UNLINK_EMPLOYEE_V2_ACCOUNT"
     assert EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION == "ASSIGN_EMPLOYEE_V2_ROLE"
     assert EMPLOYEE_PASSWORD_CONFIRMATION == "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
+    assert EMPLOYEE_PAYROLL_STATUS_CONFIRMATION == "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
 
 
 def test_full_employee_api_flow_revokes_and_restores_access_without_financial_writes(monkeypatch):
@@ -324,6 +330,8 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
     asyncio.run(update(employee_id=employee_id, payload={
         "expected_version": 2,
         "status": "inactive",
+        "status_effective_date": "2026-08-13",
+        "confirmation": EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     }, user=owner))
     assert db.users.rows[0]["disabled"] is True
     assert db.users.rows[0]["is_active"] is False
@@ -333,6 +341,8 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
     asyncio.run(update(employee_id=employee_id, payload={
         "expected_version": 3,
         "status": "active",
+        "status_effective_date": "2026-08-13",
+        "confirmation": EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     }, user=owner))
     assert db.users.rows[0]["disabled"] is False
     assert db.users.rows[0]["is_active"] is True
@@ -368,8 +378,8 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
         "employee_created",
         "employee_account_linked",
         "employee_role_assigned",
-        "employee_updated",
-        "employee_updated",
+        "employee_payroll_status_changed",
+        "employee_payroll_status_changed",
         "employee_account_password_reset",
         "employee_account_unlinked",
     ]
@@ -378,6 +388,63 @@ def test_full_employee_api_flow_revokes_and_restores_access_without_financial_wr
     assert "general_ledger" not in db.collections
     assert "liabilities" not in db.collections
     assert "Temporary123!" not in repr(db[employee_routes.EMPLOYEE_EVENTS].rows)
+
+
+def test_status_change_writes_v2_contract_leave_history_only(monkeypatch):
+    db = _Database()
+    owner = {"id": "owner-1", "role": "owner", "name": "المالك"}
+    db[employee_routes.EMPLOYEES].rows.append({
+        "id": "employee-1",
+        "user_id": "owner-1",
+        "legacy_employee_id": "legacy-1",
+        "display_name": "موظف",
+        "status": "active",
+        "version": 1,
+    })
+    db[employee_routes.SALARY_CONTRACTS].rows.append({
+        "id": "contract-1",
+        "user_id": "owner-1",
+        "employee_id": "employee-1",
+        "legacy_salary_id": "legacy-1",
+        "monthly_amount": 3100,
+        "effective_from": "2026-01-01",
+        "status": "active",
+        "version": 1,
+    })
+
+    async def response(_db, *, owner_id):
+        return {"mode": "full_management", "owner_id": owner_id}
+
+    monkeypatch.setattr(employee_routes, "_employee_management_response", response)
+    update = _route_endpoint(
+        make_employees_v2_router(db, lambda: owner),
+        "/employees-v2/management/employees/{employee_id}",
+        "PUT",
+    )
+    asyncio.run(update(employee_id="employee-1", payload={
+        "expected_version": 1,
+        "status": "unpaid_leave",
+        "status_effective_date": "2026-08-10",
+        "confirmation": EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
+    }, user=owner))
+
+    contract = db[employee_routes.SALARY_CONTRACTS].rows[0]
+    assert contract["payroll_state"] == "unpaid_leave"
+    assert contract["status"] == "paused"
+    assert contract["source_authority"] == "mezan_employee_salary_contracts_v2"
+    assert contract["suspension_periods"][0]["started_on"] == "2026-08-10"
+    assert contract["suspension_periods"][0]["returned_on"] is None
+
+    asyncio.run(update(employee_id="employee-1", payload={
+        "expected_version": 2,
+        "status": "active",
+        "status_effective_date": "2026-08-13",
+        "confirmation": EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
+    }, user=owner))
+    contract = db[employee_routes.SALARY_CONTRACTS].rows[0]
+    assert contract["payroll_state"] == "active"
+    assert contract["suspension_periods"][0]["returned_on"] == "2026-08-13"
+    assert "operating_salaries" not in db.collections
 
 
 def test_management_code_never_writes_financial_sources():

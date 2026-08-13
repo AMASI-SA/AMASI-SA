@@ -37,6 +37,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db
+from employee_payroll_status import (
+    employee_salary_rows,
+    find_employee_salary,
+    salary_active_on as employee_salary_active_on,
+)
+from tz_utils import riyadh_today
 
 
 SALARY_CATEGORIES = {"employee", "household", "charity"}
@@ -162,7 +168,9 @@ def _daily_from_annual(annual_amount: float) -> float:
 
 
 def _salary_active_on(s: dict, day: date) -> bool:
-    """A salary is active on `day` iff its status is active and start_date <= day."""
+    """Apply Employee OS dates to employees and legacy dates to other costs."""
+    if s.get("category") == "employee" or s.get("payroll_source"):
+        return employee_salary_active_on(s, day)
     if (s.get("status") or "active") != "active":
         return False
     start = _parse_iso(s.get("start_date") or "")
@@ -339,9 +347,11 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
       - daily_other_total         (sum of `daily_expenses` rows on that exact date)
       - operating_total           (grand total of all above)
     """
-    salaries = await db.operating_salaries.find(
-        {"user_id": user_id}, {"_id": 0}
+    non_employee_salaries = await db.operating_salaries.find(
+        {"user_id": user_id, "category": {"$in": ["household", "charity"]}},
+        {"_id": 0},
     ).to_list(5000)
+    salaries = await employee_salary_rows(db, user_id) + non_employee_salaries
     rentals = await db.operating_rentals.find(
         {"user_id": user_id}, {"_id": 0}
     ).to_list(5000)
@@ -408,9 +418,11 @@ async def compute_operating_expenses_for_range(
     if to_day < from_day:
         from_day, to_day = to_day, from_day
 
-    salaries = await db.operating_salaries.find(
-        {"user_id": user_id}, {"_id": 0}
+    non_employee_salaries = await db.operating_salaries.find(
+        {"user_id": user_id, "category": {"$in": ["household", "charity"]}},
+        {"_id": 0},
     ).to_list(5000)
+    salaries = await employee_salary_rows(db, user_id) + non_employee_salaries
     rentals = await db.operating_rentals.find(
         {"user_id": user_id}, {"_id": 0}
     ).to_list(5000)
@@ -483,15 +495,29 @@ def _build_router(db) -> APIRouter:
     # ─── Salaries CRUD ────────────────────────────────────────────────────────
     @router.get("/salaries")
     async def list_salaries(user: dict = Depends(current_user)):
-        items = await db.operating_salaries.find(
-            {"user_id": user["id"]}, {"_id": 0}
+        non_employee_items = await db.operating_salaries.find(
+            {
+                "user_id": user["id"],
+                "category": {"$in": ["household", "charity"]},
+            },
+            {"_id": 0},
         ).sort("created_at", -1).to_list(2000)
-        return {"items": items}
+        items = await employee_salary_rows(db, user["id"])
+        return {
+            "items": items + non_employee_items,
+            "employee_salary_source": "mezan_employee_salary_contracts_v2",
+            "legacy_employee_salary_reads": 0,
+        }
 
     @router.post("/salaries")
     async def create_salary(payload: SalaryIn, user: dict = Depends(current_user)):
         if payload.category not in SALARY_CATEGORIES:
             raise HTTPException(status_code=400, detail="نوع الراتب غير صحيح")
+        if payload.category == "employee":
+            raise HTTPException(
+                status_code=409,
+                detail="رواتب الموظفين تُدار من إدارة الموظفين في ميزان 2",
+            )
         if payload.country not in SALARY_COUNTRIES:
             raise HTTPException(status_code=400, detail="الدولة غير صحيحة")
         if _parse_iso(payload.start_date) is None:
@@ -519,8 +545,18 @@ def _build_router(db) -> APIRouter:
     async def update_salary(
         salary_id: str, payload: SalaryUpdate, user: dict = Depends(current_user)
     ):
+        if await find_employee_salary(db, user["id"], salary_id):
+            raise HTTPException(
+                status_code=409,
+                detail="حالة وراتب الموظف تُداران من إدارة الموظفين في ميزان 2",
+            )
         existing = await db.operating_salaries.find_one(
-            {"id": salary_id, "user_id": user["id"]}, {"_id": 0}
+            {
+                "id": salary_id,
+                "user_id": user["id"],
+                "category": {"$in": ["household", "charity"]},
+            },
+            {"_id": 0},
         )
         if not existing:
             raise HTTPException(status_code=404, detail="سجل الراتب غير موجود")
@@ -530,6 +566,11 @@ def _build_router(db) -> APIRouter:
         if payload.category is not None:
             if payload.category not in SALARY_CATEGORIES:
                 raise HTTPException(status_code=400, detail="نوع الراتب غير صحيح")
+            if payload.category == "employee":
+                raise HTTPException(
+                    status_code=409,
+                    detail="رواتب الموظفين تُدار من إدارة الموظفين في ميزان 2",
+                )
             update["category"] = payload.category
         if payload.country is not None:
             if payload.country not in SALARY_COUNTRIES:
@@ -566,8 +607,17 @@ def _build_router(db) -> APIRouter:
 
     @router.delete("/salaries/{salary_id}")
     async def delete_salary(salary_id: str, user: dict = Depends(current_user)):
+        if await find_employee_salary(db, user["id"], salary_id):
+            raise HTTPException(
+                status_code=409,
+                detail="لا يمكن حذف عقد موظف من صفحة المصروفات القديمة",
+            )
         res = await db.operating_salaries.delete_one(
-            {"id": salary_id, "user_id": user["id"]}
+            {
+                "id": salary_id,
+                "user_id": user["id"],
+                "category": {"$in": ["household", "charity"]},
+            }
         )
         if res.deleted_count == 0:
             raise HTTPException(status_code=404, detail="سجل الراتب غير موجود")
@@ -940,11 +990,20 @@ def _build_router(db) -> APIRouter:
             used by the dashboard / reports)
         """
         uid = user["id"]
-        today = datetime.now(timezone.utc).date()
+        today = riyadh_today()
 
-        salaries = await db.operating_salaries.find(
-            {"user_id": uid, "status": "active"}, {"_id": 0}
+        non_employee_salaries = await db.operating_salaries.find(
+            {
+                "user_id": uid,
+                "status": "active",
+                "category": {"$in": ["household", "charity"]},
+            },
+            {"_id": 0},
         ).to_list(5000)
+        salaries = [
+            row for row in await employee_salary_rows(db, uid)
+            if _salary_active_on(row, today)
+        ] + non_employee_salaries
         emp = house = char = 0.0
         country_breakdown: dict = {}
         for s in salaries:

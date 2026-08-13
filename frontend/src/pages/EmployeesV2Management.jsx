@@ -49,6 +49,7 @@ const EMPTY_FORM = {
 const EVENT_LABELS = {
     employee_created: "إضافة الموظف",
     employee_updated: "تعديل بيانات الموظف أو حالته",
+    employee_payroll_status_changed: "تغيير حالة الموظف واحتساب الراتب",
     employee_account_linked: "ربط حساب الدخول",
     employee_account_unlinked: "فصل حساب الدخول وإيقافه",
     employee_role_assigned: "تعيين الدور والصلاحيات",
@@ -99,7 +100,11 @@ function errorMessage(error) {
         employee_account_link_required_before_role: "اربط حساب الدخول أولًا ثم عيّن الدور.",
         employee_account_link_required_before_password: "اربط حساب الدخول أولًا ثم غيّر كلمة المرور.",
         employee_login_account_not_available: "حساب الدخول غير متاح أو لا يتبع هذا المتجر.",
-        employee_status_invalid: "حالة الموظف يجب أن تكون نشط أو موقوف.",
+        employee_status_invalid: "حالة الموظف يجب أن تكون نشط أو إجازة بدون راتب أو موقوف.",
+        employee_payroll_status_confirmation_required: "تعذر اعتماد تغيير حالة الراتب؛ أعد فتح الموظف وحاول مرة أخرى.",
+        employee_payroll_status_effective_date_invalid: "تاريخ بدء الحالة غير صحيح.",
+        employee_payroll_status_effective_date_future: "لا يمكن بدء إيقاف أو استئناف الراتب بتاريخ مستقبلي.",
+        employee_payroll_return_before_leave: "تاريخ العودة يجب ألا يسبق بداية الإجازة أو الإيقاف.",
         employee_password_invalid: "كلمة المرور يجب أن تكون بين 6 و128 حرفًا.",
     };
     return messages[code] || code || "تعذر تنفيذ العملية";
@@ -133,6 +138,15 @@ function ModalShell({ title, children, onClose, busy = false, testId }) {
 
 function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
     const editing = Boolean(employee);
+    const riyadhToday = useMemo(() => {
+        const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+            timeZone: "Asia/Riyadh",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+        return `${parts.year}-${parts.month}-${parts.day}`;
+    }, []);
     const [form, setForm] = useState(() => employee ? {
         name: employee.name || "",
         phone: employee.phone || "",
@@ -141,9 +155,11 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
         department: employee.department || "",
         hire_date: employee.hire_date || "",
         status: employee.status || "inactive",
+        status_effective_date: "",
         notes: employee.notes || "",
     } : EMPTY_FORM);
     const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+    const statusChanged = editing && form.status !== employee.status;
     const inputClass = "mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500";
     return (
         <ModalShell title={editing ? "تعديل الموظف" : "إضافة موظف"} onClose={onClose} busy={busy} testId="employees-v2-employee-form-dialog">
@@ -151,15 +167,18 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                 onSubmit={(event) => {
                     event.preventDefault();
                     if (!form.name.trim()) return toast.error("اسم الموظف مطلوب");
-                    onSubmit({
+                    const payload = {
                         ...form,
                         name: form.name.trim(),
                         ...(editing ? { expected_version: employee.version } : {}),
-                    });
+                    };
+                    if (statusChanged) payload.status_effective_date = form.status_effective_date || riyadhToday;
+                    else delete payload.status_effective_date;
+                    onSubmit(payload);
                 }}
                 className="max-h-[calc(95vh-65px)] overflow-y-auto p-5"
             >
-                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-6 text-emerald-950"><ShieldCheck className="ml-1 inline" /> بيانات الهوية والتشغيل فقط. الراتب والسلف والعهد والـLedger تبقى للقراءة من النظام المالي الحالي.</div>
+                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-6 text-emerald-950"><ShieldCheck className="ml-1 inline" /> عقد الراتب في ميزان 2 هو المصدر الوحيد للاحتساب. مبلغ الراتب والسلف والعهد والـLedger للقراءة فقط؛ تغيير الحالة هنا يوقف أو يستأنف احتساب الراتب.</div>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <label className="text-xs font-bold text-slate-600">اسم الموظف *<input autoFocus value={form.name} onChange={(event) => set("name", event.target.value)} maxLength={80} className={inputClass} data-testid="employees-v2-employee-name" /></label>
                     <label className="text-xs font-bold text-slate-600">رقم الجوال<input value={form.phone} onChange={(event) => set("phone", event.target.value)} maxLength={40} className={inputClass} dir="ltr" /></label>
@@ -167,8 +186,9 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                     <label className="text-xs font-bold text-slate-600">المسمى الوظيفي<input value={form.job_title} onChange={(event) => set("job_title", event.target.value)} maxLength={120} className={inputClass} /></label>
                     <label className="text-xs font-bold text-slate-600">القسم<input value={form.department} onChange={(event) => set("department", event.target.value)} maxLength={120} className={inputClass} /></label>
                     <label className="text-xs font-bold text-slate-600">تاريخ الانضمام<input type="date" value={form.hire_date} onChange={(event) => set("hire_date", event.target.value)} className={inputClass} dir="ltr" /></label>
-                    <label className="text-xs font-bold text-slate-600 sm:col-span-2">الحالة<select value={form.status} onChange={(event) => set("status", event.target.value)} className={inputClass} data-testid="employees-v2-status-select"><option value="active">نشط — يسمح لحساب الدخول بالعمل</option><option value="inactive">موقوف — يُلغى الوصول فورًا مع حفظ التاريخ</option></select></label>
+                    <label className="text-xs font-bold text-slate-600 sm:col-span-2">الحالة<select value={form.status} onChange={(event) => set("status", event.target.value)} className={inputClass} data-testid="employees-v2-status-select"><option value="active">نشط — الراتب والدخول مفعّلان</option><option value="unpaid_leave">إجازة بدون راتب — يتوقف الراتب والدخول</option><option value="inactive">موقوف — يتوقف الراتب والدخول</option></select></label>
                 </div>
+                {statusChanged && <section className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4" data-testid="employees-v2-payroll-status-warning"><label className="block text-xs font-black text-amber-950">تاريخ سريان الحالة<input type="date" max={riyadhToday} value={form.status_effective_date || riyadhToday} onChange={(event) => set("status_effective_date", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-status-effective-date" /></label><p className="mt-3 text-xs font-bold leading-6 text-amber-900">{form.status === "active" ? "يعود احتساب الراتب والدخول من هذا اليوم فقط، ولا تُحتسب أيام الإجازة أو الإيقاف بأثر رجعي." : "يصبح هذا اليوم أول يوم غير مدفوع، ويتوقف احتساب الراتب والدخول حتى إعادة التفعيل."}</p></section>}
                 <label className="mt-4 block text-xs font-bold text-slate-600">ملاحظات<textarea value={form.notes} onChange={(event) => set("notes", event.target.value)} maxLength={1000} rows={4} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-emerald-500" /></label>
                 <footer className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-5 py-3 text-sm font-bold text-slate-700 disabled:opacity-40">إلغاء</button>
@@ -302,14 +322,16 @@ function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onEvent
     const role = employee.operational_role || {};
     const salary = employee.salary_contract?.monthly_amount;
     const roleLabel = role.role_key ? management.role_labels?.[role.role_key] || ROLE_FALLBACK_LABELS[role.role_key] || role.role_key : "غير محدد";
+    const statusLabel = employee.status === "active" ? "نشط" : employee.status === "unpaid_leave" ? "إجازة بدون راتب" : "موقوف";
+    const statusClass = employee.status === "active" ? "bg-emerald-100 text-emerald-800" : employee.status === "unpaid_leave" ? "bg-amber-100 text-amber-900" : "bg-rose-100 text-rose-800";
     return (
         <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" data-testid="employees-v2-employee-card">
             <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black text-slate-950">{employee.name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${employee.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{employee.status === "active" ? "نشط" : "موقوف"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{employee.migrated ? "مرحّل" : "جديد"}</span></div><p className="mt-2 text-xs text-slate-500">{[employee.job_title, employee.department].filter(Boolean).join(" · ") || "لم يحدد المسمى أو القسم"}</p></div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-black text-slate-950">{employee.name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusClass}`}>{statusLabel}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{employee.migrated ? "مرحّل" : "جديد"}</span></div><p className="mt-2 text-xs text-slate-500">{[employee.job_title, employee.department].filter(Boolean).join(" · ") || "لم يحدد المسمى أو القسم"}</p></div>
                 <button type="button" onClick={onEdit} className="shrink-0 rounded-xl border p-2.5 text-slate-700" aria-label="تعديل الموظف"><PencilSimple /></button>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الراتب — قراءة فقط</div><div className="mt-1 truncate text-sm font-black" dir="ltr">{salary == null ? "—" : moneyFormatter.format(salary)}</div></div>
+                <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">عقد راتب ميزان 2</div><div className="mt-1 truncate text-sm font-black" dir="ltr">{salary == null ? "—" : moneyFormatter.format(salary)}</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">حساب الدخول</div><div className={`mt-1 truncate text-sm font-black ${linked && employee.account.access_enabled ? "text-emerald-700" : "text-slate-700"}`}>{!linked ? "غير مرتبط" : employee.account.access_enabled ? "مفعّل" : "موقوف"}</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الدور</div><div className="mt-1 truncate text-sm font-black">{roleLabel}</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الصلاحيات</div><div className="mt-1 text-sm font-black">{numberFormatter.format(role.effective_permissions?.length || 0)}</div></div>
@@ -392,18 +414,18 @@ export default function EmployeesV2ManagementWorkspace() {
         <div className="space-y-5" data-testid="employees-v2-management">
             <section className="overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-sm">
                 <div className="bg-gradient-to-l from-slate-950 via-emerald-950 to-slate-950 p-5 text-white sm:p-6"><div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex items-center gap-2 text-sm font-black text-emerald-200"><IdentificationCard size={24} weight="duotone" /> Mezan Employee OS</div><h1 className="mt-2 text-2xl font-black sm:text-3xl">إدارة الموظفين</h1><p className="mt-2 max-w-3xl text-sm leading-7 text-slate-200">إدارة الهوية، الحالة، حساب الدخول، كلمة المرور، الدور والصلاحيات لجميع الموظفين من مكان واحد.</p></div><div className="flex gap-2"><button type="button" onClick={load} disabled={loading || busy} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black disabled:opacity-40"><ArrowClockwise className={loading ? "animate-spin" : ""} /> تحديث</button><button type="button" onClick={() => setModal({ type: "form" })} disabled={loading || busy || !management.can_create_employee} data-testid="employees-v2-add-employee" className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 disabled:opacity-40"><UserPlus size={20} /> إضافة موظف</button></div></div></div>
-                <div className="border-t border-emerald-900 bg-emerald-950 px-5 py-3 text-xs font-bold text-emerald-100"><ShieldCheck className="ml-1 inline" /> الإدارة التشغيلية مفتوحة، بينما الرواتب والسلف والعهد والـLedger تبقى قراءة فقط. الكتابات المالية من هذه الصفحة: 0.</div>
+                <div className="border-t border-emerald-900 bg-emerald-950 px-5 py-3 text-xs font-bold text-emerald-100"><ShieldCheck className="ml-1 inline" /> مصدر رواتب الموظفين: عقود ميزان 2، والاعتماد على رواتب الموظفين القديمة: 0. الإجازة أو الإيقاف يوقفان الاحتساب، والتفعيل يعيده من تاريخ العودة دون أثر رجعي.</div>
             </section>
 
             <section className="grid grid-cols-2 gap-3 xl:grid-cols-4"><div className="rounded-2xl border bg-white p-4"><UsersThree className="text-emerald-700" size={22} /><div className="mt-2 text-xs font-bold text-slate-500">إجمالي الموظفين</div><div className="mt-1 text-2xl font-black">{numberFormatter.format(management.managed_count || 0)}</div></div><div className="rounded-2xl border bg-white p-4"><UserCircle className="text-sky-700" size={22} /><div className="mt-2 text-xs font-bold text-slate-500">نشطون</div><div className="mt-1 text-2xl font-black">{numberFormatter.format(management.active_count || 0)}</div></div><div className="rounded-2xl border bg-white p-4"><LinkSimple className="text-violet-700" size={22} /><div className="mt-2 text-xs font-bold text-slate-500">حسابات مرتبطة</div><div className="mt-1 text-2xl font-black">{numberFormatter.format(management.linked_account_count || 0)}</div></div><div className="rounded-2xl border bg-white p-4"><CurrencyCircleDollar className="text-rose-700" size={22} /><div className="mt-2 text-xs font-bold text-slate-500">كتابات مالية</div><div className="mt-1 text-2xl font-black text-emerald-800">0</div></div></section>
 
-            <section className="rounded-2xl border bg-white p-4 shadow-sm"><div className="relative"><MagnifyingGlass className="absolute right-3 top-3 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو الجوال أو البريد أو المسمى…" className="h-11 w-full rounded-xl border pr-10 pl-4 text-sm outline-none focus:border-emerald-500" data-testid="employees-v2-search" /></div><div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={selectClass} data-testid="employees-v2-status-filter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="inactive">موقوف</option></select><select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className={selectClass}><option value="all">كل الحسابات</option><option value="linked">حساب مرتبط</option><option value="unlinked">بدون حساب</option></select><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className={selectClass}><option value="all">كل الأدوار</option><option value="assigned">له دور</option><option value="unassigned">بدون دور</option>{Object.keys(management.role_catalog || {}).filter((key) => !["owner", "ai_product_optimizer"].includes(key)).map((key) => <option key={key} value={key}>{management.role_labels?.[key] || ROLE_FALLBACK_LABELS[key] || key}</option>)}</select></div></section>
+            <section className="rounded-2xl border bg-white p-4 shadow-sm"><div className="relative"><MagnifyingGlass className="absolute right-3 top-3 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو الجوال أو البريد أو المسمى…" className="h-11 w-full rounded-xl border pr-10 pl-4 text-sm outline-none focus:border-emerald-500" data-testid="employees-v2-search" /></div><div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={selectClass} data-testid="employees-v2-status-filter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="unpaid_leave">إجازة بدون راتب</option><option value="inactive">موقوف</option></select><select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className={selectClass}><option value="all">كل الحسابات</option><option value="linked">حساب مرتبط</option><option value="unlinked">بدون حساب</option></select><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className={selectClass}><option value="all">كل الأدوار</option><option value="assigned">له دور</option><option value="unassigned">بدون دور</option>{Object.keys(management.role_catalog || {}).filter((key) => !["owner", "ai_product_optimizer"].includes(key)).map((key) => <option key={key} value={key}>{management.role_labels?.[key] || ROLE_FALLBACK_LABELS[key] || key}</option>)}</select></div></section>
 
             {loading && <div className="rounded-3xl border bg-white p-12 text-center font-bold text-slate-500">جارٍ تحميل إدارة الموظفين…</div>}
             {!loading && !employees.length && <div className="rounded-3xl border border-dashed bg-white p-12 text-center text-slate-500">لا يوجد موظفون مطابقون للبحث والتصفية.</div>}
             {!loading && employees.length > 0 && <section className="grid gap-3 xl:grid-cols-2">{employees.map((employee) => <EmployeeCard key={employee.id} employee={employee} management={management} onEdit={() => setModal({ type: "form", employee })} onAccount={() => setModal({ type: "account", employee })} onRole={() => setModal({ type: "role", employee })} onEvents={() => openEvents(employee)} />)}</section>}
 
-            {modal?.type === "form" && <EmployeeFormModal employee={selectedEmployee} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => selectedEmployee ? updateEmployeesV2(selectedEmployee.id, payload) : createEmployeesV2(payload), selectedEmployee ? "تم تحديث الموظف وحالة الوصول" : "تمت إضافة الموظف دون أي كتابة مالية")} />}
+            {modal?.type === "form" && <EmployeeFormModal employee={selectedEmployee} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => selectedEmployee ? updateEmployeesV2(selectedEmployee.id, payload) : createEmployeesV2(payload), selectedEmployee ? "تم تحديث الموظف والراتب والوصول من التاريخ المحدد" : "تمت إضافة الموظف دون إنشاء عقد راتب")} />}
             {modal?.type === "account" && selectedEmployee && <AccountModal employee={selectedEmployee} candidates={management.login_account_candidates || []} busy={busy} onClose={() => setModal(null)} onLink={(accountId) => mutate(() => linkEmployeesV2Account(selectedEmployee.id, accountId), "تم ربط حساب الدخول بالحالة الحالية للموظف")} onCreateAndLink={(payload) => mutate(() => createAndLinkEmployeesV2Account(selectedEmployee.id, payload), "تم إنشاء حساب الدخول وربطه بصفر صلاحيات قديمة")} onUnlink={() => mutate(() => unlinkEmployeesV2Account(selectedEmployee.id), "تم فصل الحساب وإيقاف وصوله فورًا")} onPassword={(password) => mutate(() => resetEmployeesV2AccountPassword(selectedEmployee.id, password), "تم تغيير كلمة مرور الموظف دون إظهارها في السجل")} />}
             {modal?.type === "role" && selectedEmployee && <RoleModal employee={selectedEmployee} management={management} busy={busy} onClose={() => setModal(null)} onSubmit={(payload) => mutate(() => assignEmployeesV2Role(selectedEmployee.id, payload), "تم حفظ الدور والصلاحيات")} />}
             {modal?.type === "events" && <EventsModal employee={selectedEmployee} items={events.items} loading={events.loading} onClose={() => setModal(null)} />}

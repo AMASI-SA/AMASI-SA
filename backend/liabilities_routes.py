@@ -4,7 +4,7 @@
 Single new collection `liabilities` that models every monetary obligation
 the merchant carries:
 
-  • salary           — generated monthly from active `operating_salaries`
+  • salary           — generated from authoritative Employee OS V2 contracts
                        (idempotent: one row per (employee × month)).
   • ad_account       — manually entered when Snap/TikTok/Meta send a bill.
   • salary_advance   — money advanced to an employee out of the bank
@@ -12,7 +12,7 @@ the merchant carries:
                        the matching salary obligation when generated.
 
 Reused (no new collections):
-  • operating_salaries     — employee definitions (read-only here).
+  • mezan_employee_salary_contracts_v2 — authoritative employee salaries.
   • accounts               — source of payment (bank / wallet).
   • account_transactions   — every payment writes a row here so the bank
                              ledger stays consistent.
@@ -37,6 +37,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, validator
 
 from auth import get_current_user_from_db
+from employee_payroll_status import (
+    employee_salary_rows,
+    find_employee_salary,
+    payable_days,
+)
 from tz_utils import riyadh_today, riyadh_today_iso
 
 
@@ -384,10 +389,9 @@ def _last_day_of_month(year: int, month: int) -> str:
 
 # ── Iter-115 — Cross-month daily salary accrual ────────────────────────────
 # Per user requirement: an employee's accrued salary equals the sum of
-# their daily-rate over every actually-worked calendar day.  Each month
-# uses ITS OWN days_in_month (June=30, July=31, ...). Suspended employees
-# stop accruing at their stop date (operating_salaries.stopped_at if set,
-# else updated_at as a fallback).
+# their daily-rate over every payable calendar day. Each month uses ITS OWN
+# days_in_month (June=30, July=31, ...). Employee OS suspension periods stop
+# accrual on the first leave day and resume it on the explicit return day.
 def _parse_iso_safe(s: Optional[str]) -> Optional[date]:
     if not s or len(s) < 10:
         return None
@@ -411,11 +415,10 @@ def _compute_employee_accrual(
     Rules (Iter-115):
       • Daily rate is recomputed per month using THAT month's day count.
       • Active employees accrue from start_date → today (inclusive).
-      • Stopped employees accrue from start_date → stop_date (inclusive).
-        stop_date = operating_salaries.stopped_at  ─ if explicitly stored
-                  ↪ else operating_salaries.updated_at  (when status was
-                    flipped to 'stopped').
-        If neither exists, we DON'T accrue past today (defensive default).
+      • V2 stopped/leave employees retain only payable days outside their
+        half-open suspension ranges.
+      • The legacy stop-date branch remains solely for pure unit compatibility;
+        runtime rows are loaded from Employee OS V2 contracts.
       • If the employee has not started yet (start_date > end), accrued=0.
     """
     today = today or riyadh_today()
@@ -429,8 +432,13 @@ def _compute_employee_accrual(
             "is_active": (emp.get("status") or "active") == "active",
         }
 
-    is_active = (emp.get("status") or "active") == "active"
-    if is_active:
+    is_active = (emp.get("payroll_state") or emp.get("status") or "active") == "active"
+    has_v2_calendar = bool(
+        emp.get("payroll_source")
+        or "payroll_suspension_periods" in emp
+        or emp.get("effective_to")
+    )
+    if is_active or has_v2_calendar:
         end = today
     else:
         stop_str = (
@@ -460,7 +468,11 @@ def _compute_employee_accrual(
         dim = calendar.monthrange(cursor.year, cursor.month)[1]
         month_last = date(cursor.year, cursor.month, dim)
         eff_end = min(end, month_last)
-        seg_days = (eff_end - cursor).days + 1
+        seg_days = (
+            payable_days(emp, cursor, eff_end)
+            if has_v2_calendar
+            else (eff_end - cursor).days + 1
+        )
         daily_rate = (monthly / dim) if dim > 0 else 0.0
         total += daily_rate * seg_days
         days += seg_days
@@ -493,10 +505,7 @@ async def _aggregate_salary_accrual(db, user_id: str) -> dict:
     active_count = 0
     suspended_count = 0
 
-    cursor = db.operating_salaries.find(
-        {"user_id": user_id, "category": "employee"}, {"_id": 0},
-    )
-    async for emp in cursor:
+    for emp in await employee_salary_rows(db, user_id):
         calc = _compute_employee_accrual(emp, today=today)
         accrued_total += calc["accrued"]
         if calc["is_active"]:
@@ -667,7 +676,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     ):
         """Idempotent salary-obligation generation.
 
-        For each active row in `operating_salaries`, ensure exactly one
+        For each payable Employee OS V2 salary contract, ensure exactly one
         `liabilities` row exists with
             kind='salary', period_key='YYYY-MM',
             expected_amount=monthly_amount,
@@ -684,9 +693,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         period_key = f"{y:04d}-{m:02d}"
         due_date = _last_day_of_month(y, m)
 
-        salaries = await db.operating_salaries.find(
-            {"user_id": user["id"], "status": "active"}, {"_id": 0},
-        ).to_list(2000)
+        salaries = await employee_salary_rows(db, user["id"])
 
         created = 0
         skipped = 0
@@ -695,6 +702,17 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             if start_date[:7] > period_key:
                 skipped += 1
                 continue
+            period_start = date(y, m, 1)
+            period_end = date(y, m, calendar.monthrange(y, m)[1])
+            paid_days = payable_days(s, period_start, period_end)
+            if paid_days <= 0:
+                skipped += 1
+                continue
+            expected_amount = _round(
+                float(s.get("monthly_amount") or 0)
+                * paid_days
+                / calendar.monthrange(y, m)[1]
+            )
             existing = await db.liabilities.find_one(
                 {
                     "user_id": user["id"],
@@ -721,17 +739,16 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 # which recomputes expected_amount = base × worked / total.
                 "monthly_amount_base": _round(s.get("monthly_amount")),
                 "days_in_month": calendar.monthrange(y, m)[1],
-                "days_worked": calendar.monthrange(y, m)[1],
+                "days_worked": paid_days,
                 # Iter-113 — daily-accrual mode. When `accrual_mode='daily'`
                 # the salary-status endpoint returns the time-accrued amount
                 # only (monthly × days_passed_in_month / days_in_month).
-                # The stored `expected_amount` STILL equals the full
-                # monthly figure so legacy code continues to work; daily
-                # views computed live via _compute_accrued().
+                # The stored expected amount is prorated by payable Employee
+                # OS days, including unpaid leave and stopped periods.
                 "accrual_mode": s.get("accrual_mode") or "monthly",
                 "accrual_start_date": s.get("accrual_start_date")
                     or f"{y:04d}-{m:02d}-01",
-                "expected_amount": _round(s.get("monthly_amount")),
+                "expected_amount": expected_amount,
                 "paid_amount": 0.0,
                 "advance_deducted": 0.0,
                 "due_date": due_date,
@@ -753,6 +770,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             "ok": True, "period": period_key,
             "created": created, "skipped": skipped,
             "total_active_salaries": len(salaries),
+            "employee_salary_source": "mezan_employee_salary_contracts_v2",
+            "legacy_employee_salary_reads": 0,
         }
 
     # ── POST /salary-topup ─────────────────────────────────────────────
@@ -769,7 +788,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     @router.post("/salary-topup")
     async def create_salary_topup(
         employee_salary_id: str = Query(...,
-            description="The operating_salaries row id"),
+            description="Employee OS salary compatibility id"),
         amount: Optional[float] = Query(
             None, gt=0.0,
             description="Override expected_amount (defaults to net_due)",
@@ -777,10 +796,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         notes: Optional[str] = Query(None),
         user: dict = Depends(current_user),
     ):
-        emp = await db.operating_salaries.find_one(
-            {"id": employee_salary_id, "user_id": user["id"]},
-            {"_id": 0},
-        )
+        emp = await find_employee_salary(db, user["id"], employee_salary_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
         if emp.get("category") != "employee":
@@ -867,7 +883,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     # الموظف".
     #
     # Inputs:
-    #   employee_salary_id  — the operating_salaries row
+    #   employee_salary_id  — Employee OS contract compatibility id
     #   amount              — total cash leaving the bank to/for the
     #                         employee
     #   paid_from_account_id— the bank account being debited
@@ -910,10 +926,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             raise HTTPException(400, "اختر الحساب البنكي")
         if not payment_date:
             raise HTTPException(400, "اختر التاريخ")
-        emp = await db.operating_salaries.find_one(
-            {"id": emp_id, "user_id": uid, "category": "employee"},
-            {"_id": 0},
-        )
+        emp = await find_employee_salary(db, uid, emp_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
         bank = await db.accounts.find_one(
@@ -1221,9 +1234,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         # salary_advance — money OUT of bank to employee, no salary yet
         # to deduct from. Recorded as expected=paid (it's already paid)
         # with advance_status=open for later consumption.
-        emp = await db.operating_salaries.find_one(
-            {"id": payload.employee_salary_id, "user_id": user["id"]},
-            {"_id": 0, "name": 1},
+        emp = await find_employee_salary(
+            db, user["id"], payload.employee_salary_id,
         )
         if not emp:
             raise HTTPException(404, "Employee salary record not found")
@@ -1603,8 +1615,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     # `expected_amount = monthly_amount_base × days_worked / days_in_month`.
     # Constraints:
     #   • Only `kind=salary` rows.
-    #   • Only when the linked operating_salaries row is `category=employee`
-    #     (household / charity payments are not day-based).
+    #   • Only when linked to an Employee OS V2 salary contract.
     #   • `days_worked` must be in [0, days_in_month].
     #   • The new expected_amount must not be < already-paid amount.
     # ── Iter-113 — Daily-accrual mode helpers ─────────────────────────
@@ -1636,7 +1647,14 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         period_last  = date(y, m, dim)
         eff_start = max(start_d, period_first)
         eff_end   = min(today_d, period_last)
-        days_accrued = max(0, (eff_end - eff_start).days + 1) if eff_end >= eff_start else 0
+        employee_salary = await find_employee_salary(
+            db, user["id"], liab.get("employee_salary_id"),
+        )
+        days_accrued = (
+            payable_days(employee_salary, eff_start, eff_end)
+            if employee_salary and eff_end >= eff_start
+            else 0
+        )
         days_accrued = min(days_accrued, dim)
 
         accrual_mode = liab.get("accrual_mode") or "monthly"
@@ -1644,10 +1662,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             accrued = round(daily * days_accrued, 2)
         else:
             dw = liab.get("days_worked")
-            if dw is not None and dim > 0:
-                accrued = round(monthly * float(dw) / dim, 2)
-            else:
-                accrued = round(float(liab.get("expected_amount") or 0), 2)
+            payable_worked = min(days_accrued, int(dw)) if dw is not None else days_accrued
+            accrued = round(monthly * payable_worked / dim, 2) if dim > 0 else 0.0
 
         paid = round(float(liab.get("paid_amount") or 0), 2)
         remaining = round(max(0.0, accrued - paid), 2)
@@ -1703,13 +1719,32 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             start_d = date.fromisoformat(start)
             eff_start = max(start_d, date(y, m, 1))
             eff_end   = min(riyadh_today(), date(y, m, dim))
-            days_accrued = max(0, (eff_end - eff_start).days + 1) if eff_end >= eff_start else 0
+            employee_salary = await find_employee_salary(
+                db, user["id"], liab.get("employee_salary_id"),
+            )
+            days_accrued = (
+                payable_days(employee_salary, eff_start, eff_end)
+                if employee_salary and eff_end >= eff_start
+                else 0
+            )
             days_accrued = min(days_accrued, dim)
             upd["days_worked"] = days_accrued
             upd["expected_amount"] = round(monthly * days_accrued / dim, 2)
         else:
-            dw = int(liab.get("days_worked") or dim)
-            upd["expected_amount"] = round(monthly * dw / dim, 2)
+            employee_salary = await find_employee_salary(
+                db, user["id"], liab.get("employee_salary_id"),
+            )
+            period_start = date(y, m, 1)
+            period_end = date(y, m, dim)
+            payable_in_period = (
+                payable_days(employee_salary, period_start, period_end)
+                if employee_salary
+                else 0
+            )
+            existing_days = int(liab.get("days_worked") or dim)
+            worked_days = min(existing_days, payable_in_period)
+            upd["days_worked"] = worked_days
+            upd["expected_amount"] = round(monthly * worked_days / dim, 2)
 
         paid = float(liab.get("paid_amount") or 0)
         if upd["expected_amount"] <= paid + 0.01 and upd["expected_amount"] > 0:
@@ -1743,10 +1778,9 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         if liab.get("status") == "paid":
             raise HTTPException(400, "لا يمكن تعديل الأيام بعد سداد الراتب")
 
-        # Verify the underlying employee is in category=employee.
-        emp = await db.operating_salaries.find_one(
-            {"id": liab.get("employee_salary_id"), "user_id": user["id"]},
-            {"_id": 0, "category": 1, "monthly_amount": 1},
+        # Verify the authoritative Employee OS V2 contract.
+        emp = await find_employee_salary(
+            db, user["id"], liab.get("employee_salary_id"),
         )
         if not emp:
             raise HTTPException(404, "Employee record not found")

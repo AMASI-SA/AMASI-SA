@@ -10,6 +10,7 @@ import {
     EMPLOYEE_CREATE_CONFIRMATION,
     EMPLOYEE_PASSWORD_CONFIRMATION,
     EMPLOYEE_PARALLEL_CYCLE_CAPTURE_CONFIRMATION,
+    EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
     EMPLOYEE_ROLE_CONFIRMATION,
     EMPLOYEE_SHADOW_MIGRATION_CONFIRMATION,
     EMPLOYEE_SALARY_CONTRACT_SYNC_CONFIRMATION,
@@ -40,6 +41,25 @@ beforeEach(() => {
     api.post.mockResolvedValue({ data: { ok: true } });
     api.put.mockResolvedValue({ data: { ok: true } });
     api.delete.mockResolvedValue({ data: { ok: true } });
+});
+
+test("payroll status changes carry the exact guarded confirmation", async () => {
+    await updateEmployeesV2("employee/1", {
+        expected_version: 2,
+        status: "unpaid_leave",
+        status_effective_date: "2026-08-13",
+    });
+
+    expect(EMPLOYEE_PAYROLL_STATUS_CONFIRMATION).toBe("CHANGE_EMPLOYEE_V2_PAYROLL_STATUS");
+    expect(api.put).toHaveBeenCalledWith(
+        "/employees-v2/management/employees/employee%2F1",
+        {
+            expected_version: 2,
+            status: "unpaid_leave",
+            status_effective_date: "2026-08-13",
+            confirmation: "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS",
+        },
+    );
 });
 
 test("full management uses guarded employee, account, role, password, and audit contracts", async () => {
