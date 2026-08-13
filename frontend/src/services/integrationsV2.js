@@ -1,7 +1,7 @@
 import api from "../lib/api";
 
 export const PROVIDER_ORDER = Object.freeze([
-    "salla", "openai", "snapchat_ads", "tiktok_ads", "meta_ads",
+    "salla", "openai", "instagram", "snapchat_ads", "tiktok_ads", "meta_ads",
     "google_analytics_4", "google_search_console", "google_merchant_center",
     "google_ads", "qoyod", "shipping_companies",
 ]);
@@ -9,6 +9,7 @@ export const PROVIDER_ORDER = Object.freeze([
 const PROVIDER_DEFAULTS = Object.freeze({
     salla: ["Salla", "سلة", "commerce"],
     openai: ["OpenAI", "OpenAI · ذكاء ميزان", "ai"],
+    instagram: ["Instagram", "إنستغرام", "customer_channel"],
     snapchat_ads: ["Snapchat Ads", "إعلانات سناب شات", "advertising"],
     tiktok_ads: ["TikTok Ads", "إعلانات تيك توك", "advertising"],
     meta_ads: ["Meta Ads", "إعلانات ميتا", "advertising"],

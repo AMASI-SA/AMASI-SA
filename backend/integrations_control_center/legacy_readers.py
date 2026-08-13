@@ -72,6 +72,26 @@ LEGACY_PROJECTIONS: dict[str, dict[str, int]] = {
         "errors_count": 1,
         "pages_fetched": 1,
     },
+    "mezan_customer_channels_v1": {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "status": 1,
+        "ingress_enabled": 1,
+        "egress_mode": 1,
+        "send_allowed": 1,
+        "ai_auto_reply_allowed": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    },
+    "mezan_meta_oauth_credentials_v2": {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "scope": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    },
     "snapchat_connections": {
         "_id": 0,
         "user_id": 1,
@@ -1017,6 +1037,81 @@ async def _read_meta(db: Any, user_id: str, definition: ProviderDefinition) -> d
     )
 
 
+async def _read_instagram(
+    db: Any,
+    user_id: str,
+    definition: ProviderDefinition,
+) -> dict:
+    channel = await _find_one(
+        db,
+        "mezan_customer_channels_v1",
+        {"user_id": user_id, "provider": "instagram"},
+        sort=[("updated_at", -1)],
+    )
+    safe_channel = await _find_one(
+        db,
+        "mezan_customer_channels_v1",
+        {
+            "user_id": user_id,
+            "provider": "instagram",
+            "status": "connected",
+            "ingress_enabled": True,
+            "egress_mode": "disabled",
+            "send_allowed": False,
+            "ai_auto_reply_allowed": False,
+            "plaintext_credentials_stored": False,
+        },
+        sort=[("updated_at", -1)],
+    )
+    credential = await _find_one(
+        db,
+        "mezan_meta_oauth_credentials_v2",
+        {"user_id": user_id, "provider": "meta_ads"},
+        sort=[("updated_at", -1)],
+    )
+    permissions = _split_permissions((credential or {}).get("scope"))
+
+    if safe_channel:
+        status = "connected"
+        provenance = "api_connection"
+        latest_error = None
+    elif channel:
+        status = "error"
+        provenance = "unknown"
+        latest_error = _safe_legacy_error(
+            provider_label=definition.name,
+            code="instagram_receive_only_policy_invalid",
+            occurred_at=channel.get("updated_at"),
+            source_mode="customer_channel",
+        )
+    else:
+        status = "not_connected"
+        provenance = "disconnected"
+        latest_error = None
+
+    accounts = []
+    if safe_channel:
+        accounts.append(
+            _account(
+                user_id,
+                definition.provider,
+                display_name="Instagram · استقبال الرسائل والتعليقات",
+            )
+        )
+    return _snapshot(
+        definition,
+        connection_status=status,
+        connection_provenance=provenance,
+        source_mode="customer_channel",
+        accounts=accounts,
+        current_permissions=permissions,
+        permissions_observed=credential is not None,
+        last_sync_at=(safe_channel or channel or {}).get("updated_at"),
+        latest_error=latest_error,
+        has_data=False,
+    )
+
+
 async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> dict:
     # The current Qoyod connector intentionally uses the legacy singleton
     # tenant "main".  Prefer a user-scoped row and only then inspect that
@@ -1142,6 +1237,8 @@ async def read_provider_snapshot(
     provider = definition.provider
     if provider == "salla":
         result = await _read_salla(db, user_id, definition)
+    elif provider == "instagram":
+        result = await _read_instagram(db, user_id, definition)
     elif provider == "snapchat_ads":
         result = await _read_snapchat(db, user_id, definition)
     elif provider == "tiktok_ads":

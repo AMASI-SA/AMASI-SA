@@ -17,12 +17,12 @@ jest.mock("../lib/api", () => ({
     },
 }));
 
-test("overview always contains the eleven providers in the fixed order", () => {
+test("overview always contains the twelve providers in the fixed order", () => {
     const overview = normalizeIntegrationOverview({
         providers: [{ provider: "qoyod", connection_status: "connected", connection_provenance: "legacy_integration" }],
     });
     expect(overview.providers.map((row) => row.provider)).toEqual(PROVIDER_ORDER);
-    expect(overview.providers).toHaveLength(11);
+    expect(overview.providers).toHaveLength(12);
     expect(overview.providers.find((row) => row.provider === "qoyod").connection_status).toBe("connected");
     expect(overview.providers.find((row) => row.provider === "google_ads").connection_status).toBe("not_configured");
 });
@@ -200,10 +200,10 @@ test("connection provenance produces exact independent counters", () => {
         { provider: "qoyod", connection_status: "connected", connection_provenance: "legacy_integration" },
         { provider: "tiktok_ads", connection_status: "data_available", connection_provenance: "data_feed" },
     ] });
-    expect(overview.summary).toMatchObject({ total: 11, connected: 4, api_connections: 2, legacy_integrations: 2, data_feeds: 1, disconnected: 5, planned: 1, unknown: 0 });
+    expect(overview.summary).toMatchObject({ total: 12, connected: 4, api_connections: 2, legacy_integrations: 2, data_feeds: 1, disconnected: 6, planned: 1, unknown: 0 });
     expect(overview.summary.api_connections + overview.summary.legacy_integrations + overview.summary.data_feeds + overview.summary.disconnected + overview.summary.planned + overview.summary.unknown).toBe(overview.summary.total);
     expect(filterIntegrationProviders(overview.providers, { status: "data_feed" }).map((row) => row.provider)).toEqual(["tiktok_ads"]);
-    expect(filterIntegrationProviders(overview.providers, { status: "disconnected" })).toHaveLength(5);
+    expect(filterIntegrationProviders(overview.providers, { status: "disconnected" })).toHaveLength(6);
 });
 
 test("unknown connection provenance has its own counter and filter", () => {

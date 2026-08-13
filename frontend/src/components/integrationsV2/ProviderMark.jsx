@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-    ChartLineUp, ChartPieSlice, Ghost, LinkSimple, MagnifyingGlass, Package, Plug,
+    ChartLineUp, ChartPieSlice, Ghost, InstagramLogo, LinkSimple, MagnifyingGlass, Package, Plug,
     Receipt, Robot, Storefront, Truck,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { startTikTokConnection } from "../../services/tiktokIntegrationsV2";
 const PROVIDERS = {
     salla: { Icon: Storefront, className: "bg-emerald-600 text-white", label: "Salla" },
     openai: { Icon: Robot, className: "bg-slate-950 text-white", label: "OpenAI · Mezan AI" },
+    instagram: { Icon: InstagramLogo, className: "bg-gradient-to-br from-fuchsia-600 via-rose-500 to-amber-400 text-white", label: "Instagram" },
     snapchat_ads: { Icon: Ghost, className: "bg-yellow-300 text-slate-950", label: "Snapchat Ads" },
     tiktok_ads: { Icon: ChartPieSlice, className: "bg-slate-950 text-white", label: "TikTok Ads" },
     meta_ads: { Icon: ChartLineUp, className: "bg-blue-600 text-white", label: "Meta Ads" },
