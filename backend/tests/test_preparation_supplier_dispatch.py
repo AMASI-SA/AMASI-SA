@@ -119,6 +119,63 @@ def test_product_quantity_selection_chooses_stable_physical_units():
     ]
 
 
+def test_same_product_with_and_without_service_uses_two_independent_cards():
+    without_service = _piece(
+        "plain-piece",
+        unit_index=1,
+        services=[],
+        service_specifications_snapshot=[],
+    )
+    with_name_service = _piece(
+        "named-piece",
+        unit_index=2,
+        services=[{
+            "service_id": "embroider-name",
+            "service_name": "تطريز الاسم",
+            "status": "pending",
+        }],
+        service_specifications_snapshot=[{
+            "spec_key": "name",
+            "name": "الاسم",
+            "value": "محمد",
+        }],
+    )
+
+    products = _group_piece_products([without_service, with_name_service])
+
+    assert len(products) == 2
+    assert {row["available_quantity"] for row in products} == {1}
+    assert {tuple(service["service_name"] for service in row["services"]) for row in products} == {
+        (),
+        ("تطريز الاسم",),
+    }
+    assert len({row["group_key"] for row in products}) == 2
+
+    named_group = next(row for row in products if row["services"])["group_key"]
+    plain_group = next(row for row in products if not row["services"])["group_key"]
+    assert [row["piece_id"] for row in plan_piece_selections(
+        [without_service, with_name_service],
+        [{"group_key": named_group, "quantity": 1}],
+    )] == ["named-piece"]
+    assert [row["piece_id"] for row in plan_piece_selections(
+        [without_service, with_name_service],
+        [{"group_key": plain_group, "quantity": 1}],
+    )] == ["plain-piece"]
+
+
+def test_stale_product_only_selection_is_rejected_when_services_are_ambiguous():
+    pieces = [
+        _piece("plain-piece", services=[]),
+        _piece("named-piece"),
+    ]
+
+    with pytest.raises(ValueError, match="ambiguous_piece_group"):
+        plan_piece_selections(
+            pieces,
+            [{"group_key": "product:1", "quantity": 1}],
+        )
+
+
 def test_rejected_or_already_sent_piece_is_not_available_for_another_dispatch():
     assert piece_is_available_for_supplier_dispatch(_piece("available")) is True
     assert piece_is_available_for_supplier_dispatch(
