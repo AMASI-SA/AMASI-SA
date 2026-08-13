@@ -13,6 +13,11 @@ from pymongo import ASCENDING, DESCENDING
 
 from ai_store_access_control import effective_permissions
 from ai_store_operations_foundation import PERMISSIONS, ROLE_ASSIGNMENTS
+from carrier_handoff import (
+    CarrierHandoffError,
+    confirm_carrier_label_print,
+    receive_carrier_shipment,
+)
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
@@ -70,10 +75,30 @@ class BatchActionRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class CarrierBarcodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=256)
+
+
 async def ensure_fulfillment_indexes(db: Any) -> None:
     await db[WORKFLOWS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
         unique=True,
+    )
+    await db[WORKFLOWS].create_index(
+        [("user_id", ASCENDING), ("carrier_label_barcode", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"carrier_label_barcode": {"$type": "string"}},
+        name="uq_carrier_label_barcode_v2",
+    )
+    await db[WORKFLOWS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("carrier_handoff_employee_id", ASCENDING),
+            ("carrier_handoff_state", ASCENDING),
+            ("carrier_handoff_scanned_at", DESCENDING),
+        ],
+        name="ix_carrier_handoff_employee_v2",
     )
     await db[FULFILLMENT_DECISIONS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
@@ -1018,9 +1043,28 @@ def _can_operate_completed_carrier_label(context: dict[str, Any]) -> bool:
         return False
     return bool(
         context["is_owner"]
-        or {"packing", "shipping_labeling"}.intersection(
-            context["responsibilities"]
+        or "shipping_labeling" in context["responsibilities"]
+    )
+
+
+def _can_receive_carrier_handoff(context: dict[str, Any]) -> bool:
+    return bool(
+        "fulfillment.carrier.handoff" in context["permissions"]
+        and (
+            context["is_owner"]
+            or "carrier_handoff" in context["responsibilities"]
         )
+    )
+
+
+def _carrier_handoff_http_error(exc: CarrierHandoffError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={
+            "code": exc.code,
+            "message": str(exc),
+            **exc.details,
+        },
     )
 
 
@@ -1124,6 +1168,25 @@ async def _order_view(
         "carrier_label_message": workflow.get("carrier_label_message"),
         "carrier_label_error_code": workflow.get("carrier_label_error_code"),
         "carrier_label_error_message": workflow.get("carrier_label_error_message"),
+        "carrier_label_print_confirmed": bool(
+            workflow.get("carrier_label_print_confirmed")
+        ),
+        "carrier_label_print_confirmed_at": workflow.get(
+            "carrier_label_print_confirmed_at"
+        ),
+        "carrier_label_print_confirmed_by_name": workflow.get(
+            "carrier_label_print_confirmed_by_name"
+        ),
+        "carrier_handoff_state": workflow.get("carrier_handoff_state"),
+        "carrier_handoff_employee_id": workflow.get(
+            "carrier_handoff_employee_id"
+        ),
+        "carrier_handoff_employee_name": workflow.get(
+            "carrier_handoff_employee_name"
+        ),
+        "carrier_handoff_scanned_at": workflow.get(
+            "carrier_handoff_scanned_at"
+        ),
     }
 
 
@@ -1186,17 +1249,35 @@ def make_fulfillment_v2_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
-        _require_permission(
-            context,
-            "fulfillment.ready.read",
-            responsibility="instant_ready",
-        )
+        _require_permission(context, "fulfillment.ready.read")
+        can_label = _can_operate_completed_carrier_label(context)
+        can_handoff = _can_receive_carrier_handoff(context)
+        if not can_label and not can_handoff:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "fulfillment_responsibility_required",
+                    "responsibility": "shipping_labeling_or_carrier_handoff",
+                },
+            )
+        query: dict[str, Any] = {
+            "user_id": context["merchant_id"],
+            "stage": "completed",
+            "assembly_status": "completed",
+        }
+        # Labeling owns the order until the handoff employee scans the AWB.
+        # Handoff employees receive their custody list from the dedicated
+        # endpoint below and must not see other employees' labeling queues.
+        if can_label:
+            query["$or"] = [
+                {"carrier_handoff_employee_id": {"$exists": False}},
+                {"carrier_handoff_employee_id": None},
+                {"carrier_handoff_employee_id": ""},
+            ]
+        else:
+            query["carrier_handoff_employee_id"] = "__scan_to_receive__"
         workflows = await db[WORKFLOWS].find(
-            {
-                "user_id": context["merchant_id"],
-                "stage": "completed",
-                "assembly_status": "completed",
-            },
+            query,
             {"_id": 0},
         ).sort("completed_at", -1).limit(limit * 2).to_list(limit * 2)
         items = []
@@ -1242,9 +1323,9 @@ def make_fulfillment_v2_router(
             "items": items,
             "total": len(items),
             "permissions": {
-                "can_print": (
-                    _can_operate_completed_carrier_label(context)
-                ),
+                "can_print": can_label,
+                "can_confirm_print": can_label,
+                "can_handoff_scan": can_handoff,
                 "can_reprint": (
                     "fulfillment.labels.reprint" in context["permissions"]
                 ),
@@ -1264,7 +1345,7 @@ def make_fulfillment_v2_router(
                 status_code=403,
                 detail={
                     "code": "fulfillment_responsibility_required",
-                    "responsibility": "packing_or_shipping_labeling",
+                    "responsibility": "shipping_labeling",
                 },
             )
         actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
@@ -1308,6 +1389,95 @@ def make_fulfillment_v2_router(
             user=user,
             action="refresh",
         )
+
+    @router.post("/completed/{order_number}/carrier-label/confirm-print")
+    async def confirm_completed_order_carrier_label_print(
+        order_number: str,
+        payload: CarrierBarcodeRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.labels.print",
+            responsibility="shipping_labeling",
+        )
+        try:
+            return await confirm_carrier_label_print(
+                db,
+                user_id=context["merchant_id"],
+                order_number=_text(order_number),
+                scanned_barcode=payload.barcode,
+                actor_id=context["actor_id"],
+                actor_name=(
+                    _text(user.get("name") or user.get("email"))
+                    or "موظف العنونة والشحن"
+                ),
+            )
+        except CarrierHandoffError as exc:
+            raise _carrier_handoff_http_error(exc) from exc
+
+    @router.get("/carrier-handoff")
+    async def list_employee_carrier_handoff_shipments(
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.carrier.handoff",
+            responsibility="carrier_handoff",
+        )
+        query: dict[str, Any] = {
+            "user_id": context["merchant_id"],
+            "stage": "completed",
+            "carrier_handoff_state": "with_handoff_employee",
+        }
+        if not context["is_owner"]:
+            query["carrier_handoff_employee_id"] = context["actor_id"]
+        workflows = await db[WORKFLOWS].find(
+            query,
+            {"_id": 0},
+        ).sort("carrier_handoff_scanned_at", -1).limit(limit).to_list(limit)
+        items = []
+        for workflow in workflows:
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if row:
+                items.append(row)
+        return {
+            "items": items,
+            "total": len(items),
+            "poll_seconds": 15,
+        }
+
+    @router.post("/carrier-handoff/scan")
+    async def scan_carrier_handoff_shipment(
+        payload: CarrierBarcodeRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.carrier.handoff",
+            responsibility="carrier_handoff",
+        )
+        try:
+            return await receive_carrier_shipment(
+                db,
+                user_id=context["merchant_id"],
+                scanned_barcode=payload.barcode,
+                actor_id=context["actor_id"],
+                actor_name=(
+                    _text(user.get("name") or user.get("email"))
+                    or "موظف تسليم الشحن"
+                ),
+            )
+        except CarrierHandoffError as exc:
+            raise _carrier_handoff_http_error(exc) from exc
 
     @router.post("/ready-to-ship/claim")
     async def claim_ready_batch(

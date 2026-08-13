@@ -31,6 +31,8 @@ from typing import Any, Optional
 
 from pymongo.errors import DuplicateKeyError
 
+from carrier_handoff import advance_carrier_handoff_from_salla_status
+
 from salla_marketing_attribution import promoted_salla_attribution
 
 from .service import SallaError, call_salla
@@ -152,6 +154,26 @@ async def _refresh_plan_b_status_snapshot(
             "reason": "missing_order_or_status",
         }
 
+    carrier_handoff_transition = {
+        "advanced": False,
+        "reason": "evaluation_failed",
+    }
+    try:
+        carrier_handoff_transition = (
+            await advance_carrier_handoff_from_salla_status(
+                db,
+                user_id=str(user_id),
+                order_number=order_number,
+                status_slug=status_slug,
+                status_name=status_native,
+                source="mezan_orders_page_status_sync",
+            )
+        )
+    except Exception as exc:
+        # Status snapshots must remain available even when the local
+        # fulfillment workflow has not been initialized yet.
+        carrier_handoff_transition["error"] = str(exc)[:300]
+
     latest = await db.integration_inbox.find_one(
         {
             "user_id": {"$in": [user_id, "main"]},
@@ -253,6 +275,7 @@ async def _refresh_plan_b_status_snapshot(
             "status_slug": status_slug,
             "status_native": status_native,
             "no_qoyod_send": True,
+            "carrier_handoff_transition": carrier_handoff_transition,
         }
 
     return {
@@ -266,6 +289,7 @@ async def _refresh_plan_b_status_snapshot(
         "status_slug": status_slug,
         "status_native": status_native,
         "no_qoyod_send": True,
+        "carrier_handoff_transition": carrier_handoff_transition,
     }
 
 
