@@ -13,6 +13,7 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     microToNativeAmount: (value) => Number(value) / 1_000_000,
     nativeAmountToMicro: (value) => Math.round(Number(value) * 1_000_000),
     pollSnapchatManagementProposal: jest.fn(),
+    reconcileSnapchatManagementProposal: jest.fn(),
     resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
 }));
@@ -33,6 +34,7 @@ import {
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
     pollSnapchatManagementProposal,
+    reconcileSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
@@ -73,6 +75,11 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 management_allowed: true,
                 creative_allowed: true,
                 creative_role: "creative",
+                pixels: [{
+                    pixel_id: "pixel-1",
+                    display_name: "AMASI Pixel",
+                    effective_status: "ACTIVE",
+                }],
             }],
         });
         listSnapchatManagementProposals.mockResolvedValue([]);
@@ -168,6 +175,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(container.querySelector(
             '[data-testid="snapchat-management-optimization-goal"]',
         ).value).toBe("PIXEL_PURCHASE");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-pixel-select"]',
+        ).value).toBe("pixel-1");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-conversion-window"]',
+        ).value).toBe("SWIPE_28DAY_VIEW_1DAY");
         expect(container.querySelector('[data-testid="snapchat-management-product-select"]').value)
             .toBe("710474094");
         expect(previewButton.disabled).toBe(false);
@@ -184,6 +197,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 action: "ad_squad.create",
                 account_id: "account-1",
                 parent_id: "campaign-1",
+                payload: expect.objectContaining({
+                    pixel_id: "pixel-1",
+                    conversion_window: "SWIPE_28DAY_VIEW_1DAY",
+                    optimization_goal: "PIXEL_PURCHASE",
+                    delivery_constraint: "DAILY_BUDGET",
+                }),
                 products: [{
                     product_id: "710474094",
                     product_variant_id: "variant-1",
@@ -205,6 +224,150 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                     weight: 0,
                 }],
                 trend_override_reason: "التحسن الحديث قصير ولم يكتمل إسناد الطلبات",
+            }),
+            { ownerId: "owner-1" },
+        );
+    });
+
+    test("blocks PIXEL optimization without a discovered Pixel but allows a non-Pixel goal", async () => {
+        getSnapchatManagementReadiness.mockResolvedValue({
+            proposal_enabled: true,
+            execution_enabled: false,
+            activation_enabled: false,
+            accounts: [{
+                account_id: "account-1",
+                display_name: "AMASI",
+                currency: "SAR",
+                role: "general",
+                management_allowed: true,
+                creative_allowed: true,
+                creative_role: "creative",
+                pixels: [],
+            }],
+        });
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="ad_squads"
+                    selectedCampaign={{ campaign_id: "campaign-1" }}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-product-select"]'),
+                "710474094",
+            );
+        });
+
+        const previewButton = container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        );
+        expect(previewButton.disabled).toBe(true);
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-pixel-status"]',
+        ).textContent).toContain("لا يمكن إنشاء المعاينة");
+
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-optimization-goal"]'),
+                "SWIPES",
+            );
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-pixel-select"]',
+        )).toBeNull();
+        expect(previewButton.disabled).toBe(false);
+
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const request = createSnapchatManagementProposal.mock.calls[0][0];
+        expect(request.payload.optimization_goal).toBe("SWIPES");
+        expect(request.payload).not.toHaveProperty("pixel_id");
+        expect(request.payload).not.toHaveProperty("conversion_window");
+    });
+
+    test("requires an explicit Pixel choice when the account has multiple pixels", async () => {
+        getSnapchatManagementReadiness.mockResolvedValue({
+            proposal_enabled: true,
+            execution_enabled: false,
+            activation_enabled: false,
+            accounts: [{
+                account_id: "account-1",
+                display_name: "AMASI",
+                currency: "SAR",
+                role: "general",
+                management_allowed: true,
+                creative_allowed: true,
+                creative_role: "creative",
+                pixels: [
+                    { pixel_id: "pixel-1", display_name: "Pixel One" },
+                    { pixel_id: "pixel-2", display_name: "Pixel Two" },
+                ],
+            }],
+        });
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="ad_squads"
+                    selectedCampaign={{ campaign_id: "campaign-1" }}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-product-select"]'),
+                "710474094",
+            );
+        });
+        const previewButton = container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        );
+        expect(previewButton.disabled).toBe(true);
+
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-pixel-select"]'),
+                "pixel-2",
+            );
+            change(
+                container.querySelector('[data-testid="snapchat-management-conversion-window"]'),
+                "SWIPE_7DAY",
+            );
+        });
+        expect(previewButton.disabled).toBe(false);
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(createSnapchatManagementProposal).toHaveBeenCalledWith(
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    pixel_id: "pixel-2",
+                    conversion_window: "SWIPE_7DAY",
+                }),
             }),
             { ownerId: "owner-1" },
         );
@@ -449,6 +612,73 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 
+    test("reconciles an uncertain create through the explicit read-only control", async () => {
+        const adSquadId = "ad-squad-reconciled-1";
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-uncertain-create",
+            action: "ad_squad.create",
+            status: "failed",
+            account_id: "account-1",
+            parent_id: "campaign-1",
+            provider_write_reached: true,
+            provider_write_state: "unknown_needs_reconciliation",
+            provider_write_uncertain: true,
+            provider_entity_id: null,
+            verification: {},
+            products: [{ product_id: "710474094", product_name: "المشط" }],
+            preview: { name: "مجموعة غير محسومة" },
+        }]);
+        reconcileSnapchatManagementProposal.mockResolvedValue({
+            proposal_id: "proposal-uncertain-create",
+            action: "ad_squad.create",
+            status: "completed",
+            account_id: "account-1",
+            parent_id: "campaign-1",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: adSquadId,
+            verified_entity_id: adSquadId,
+            verification: { verified: true, entity_id: adSquadId },
+            products: [{ product_id: "710474094", product_name: "المشط" }],
+            preview: { name: "مجموعة غير محسومة" },
+        });
+
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const historyItem = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal"));
+        await act(async () => {
+            historyItem.click();
+        });
+        const reconcileButton = container.querySelector(
+            '[data-testid="snapchat-management-reconcile"]',
+        );
+        expect(reconcileButton.textContent).toContain("قراءة فقط");
+        await act(async () => {
+            reconcileButton.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(reconcileSnapchatManagementProposal)
+            .toHaveBeenCalledWith("proposal-uncertain-create");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-verified-entity"]',
+        ).textContent).toContain(adSquadId);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(approveSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
     test("reopening coalesces the saved resume and never approves or executes automatically", async () => {
         getSnapchatManagementPreviewResume.mockReturnValue({
             owner_id: "owner-1",
@@ -636,6 +866,7 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
                 management_allowed: true,
                 creative_allowed: true,
                 creative_role: "creative",
+                pixels: [{ pixel_id: "pixel-1", display_name: "AMASI Pixel" }],
             }],
         });
         createSnapchatManagementProposal.mockResolvedValue({

@@ -15,6 +15,7 @@ import {
     normalizeSnapchatManagementReadiness,
     pollSnapchatManagementPreviewJob,
     pollSnapchatManagementProposal,
+    reconcileSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
     startSnapchatManagementPreviewJob,
@@ -43,12 +44,49 @@ describe("snapchatCampaignManagement", () => {
                 display_name: "AMASI",
                 role: "general",
                 management_allowed: true,
+                pixels: [{
+                    pixel_id: "pixel-1",
+                    display_name: "AMASI Pixel",
+                    effective_status: "ACTIVE",
+                    has_event_data: true,
+                }],
             }],
         })).toMatchObject({
             execution_enabled: true,
             activation_enabled: false,
             salla_permission_dependency: false,
-            accounts: [{ account_id: "account-1", role: "general", management_allowed: true }],
+            accounts: [{
+                account_id: "account-1",
+                role: "general",
+                management_allowed: true,
+                pixels: [{
+                    pixel_id: "pixel-1",
+                    display_name: "AMASI Pixel",
+                    effective_status: "ACTIVE",
+                    has_event_data: true,
+                }],
+                pixel_selection_required: false,
+            }],
+        });
+    });
+
+    test("requires explicit Pixel selection when an account exposes multiple pixels", () => {
+        expect(normalizeSnapchatManagementReadiness({
+            accounts: [{
+                account_id: "account-1",
+                pixel_selection_required: false,
+                pixels: [
+                    { pixel_id: "pixel-1" },
+                    { pixel_id: "pixel-2" },
+                    { display_name: "missing id" },
+                ],
+            }],
+        }).accounts[0]).toMatchObject({
+            pixel_selection_required: true,
+            pixels: [
+                { pixel_id: "pixel-1" },
+                { pixel_id: "pixel-2" },
+            ],
         });
     });
 
@@ -114,6 +152,30 @@ describe("snapchatCampaignManagement", () => {
         });
     });
 
+    test("reconciles an uncertain proposal through the read-only provider workflow", async () => {
+        api.post.mockResolvedValueOnce({
+            data: {
+                proposal_id: "proposal-uncertain",
+                action: "ad_squad.create",
+                status: "completed",
+                provider_write_reached: true,
+                provider_write_state: "confirmed",
+                provider_write_uncertain: false,
+                provider_entity_id: "squad-1",
+                verification: { verified: true, entity_id: "squad-1" },
+            },
+        });
+
+        await expect(reconcileSnapchatManagementProposal("proposal-uncertain"))
+            .resolves.toMatchObject({
+                status: "completed",
+                verified_entity_id: "squad-1",
+            });
+        expect(api.post).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/management/proposals/proposal-uncertain/reconcile",
+        );
+    });
+
     test("passes product scope measurable expectations and non-authoritative context to preview", async () => {
         api.post
             .mockResolvedValueOnce({
@@ -170,6 +232,7 @@ describe("snapchatCampaignManagement", () => {
             1,
             "/integrations-v2/snapchat_ads/management/preview-jobs",
             expect.objectContaining({
+                safety_protocol_version: 2,
                 products,
                 expected_outcome: expectedOutcome,
                 supporting_evidence: supportingEvidence,
@@ -180,6 +243,7 @@ describe("snapchatCampaignManagement", () => {
             2,
             "/integrations-v2/snapchat_ads/management/proposals",
             expect.objectContaining({
+                safety_protocol_version: 2,
                 products,
                 expected_outcome: expectedOutcome,
                 supporting_evidence: supportingEvidence,
@@ -337,7 +401,7 @@ describe("snapchatCampaignManagement", () => {
         api.post
             .mockImplementationOnce(async () => {
                 storedDuringStart = window.sessionStorage.getItem(
-                    "mezan:snapchat-management-preview:v1",
+                    "mezan:snapchat-management-preview:v2",
                 );
                 return { data: { preview_job_id: "job-stored", status: "queued" } };
             })
@@ -367,7 +431,7 @@ describe("snapchatCampaignManagement", () => {
 
         const during = JSON.parse(storedDuringStart);
         const after = JSON.parse(window.sessionStorage.getItem(
-            "mezan:snapchat-management-preview:v1",
+            "mezan:snapchat-management-preview:v2",
         ));
         expect(during.owner_id).toBe("owner-1");
         expect(during.preview_job_id).toBeNull();
@@ -442,9 +506,9 @@ describe("snapchatCampaignManagement", () => {
 
     test("coalesces concurrent resumes so reopening cannot rotate two tokens", async () => {
         window.sessionStorage.setItem(
-            "mezan:snapchat-management-preview:v1",
+            "mezan:snapchat-management-preview:v2",
             JSON.stringify({
-                version: 1,
+                version: 2,
                 owner_id: "owner-1",
                 saved_at: Date.now(),
                 idempotency_key: "resume-coalesced-001",
@@ -712,6 +776,19 @@ describe("snapchatCampaignManagement", () => {
         });
     });
 
+    test("maps protocol-v2 lifecycle states for the existing UI while preserving the provider state", () => {
+        expect(normalizeSnapchatManagementProposal({
+            proposal_id: "proposal-v2",
+            action: "ad_squad.create",
+            status: "approved_v2",
+            safety_protocol_version: 2,
+        })).toMatchObject({
+            status: "approved",
+            provider_status: "approved_v2",
+            safety_protocol_version: 2,
+        });
+    });
+
     test.each([
         ["execution is not complete", { status: "executing" }],
         ["readback did not verify", { verification: { verified: false, entity_id: "campaign-verified-1" } }],
@@ -765,6 +842,30 @@ describe("snapchatCampaignManagement", () => {
                 provider_error_message: (
                     "Creative type WEB_VIEW requires REMOTE_WEBPAGE"
                 ),
+            },
+        });
+    });
+
+    test("preserves verified Pixel eligibility evidence", () => {
+        expect(normalizeSnapchatManagementProposal({
+            proposal_id: "proposal-pixel",
+            action: "ad_squad.create",
+            status: "previewed",
+            pixel_eligibility: {
+                verified: true,
+                pixel_id: "pixel-1",
+                account_id: "account-1",
+                optimization_goal: "PIXEL_PURCHASE",
+                conversion_window: "SWIPE_7DAY",
+                eligibility_status: "ELIGIBLE",
+            },
+        })).toMatchObject({
+            pixel_eligibility: {
+                verified: true,
+                pixel_id: "pixel-1",
+                optimization_goal: "PIXEL_PURCHASE",
+                conversion_window: "SWIPE_7DAY",
+                eligibility_status: "ELIGIBLE",
             },
         });
     });
