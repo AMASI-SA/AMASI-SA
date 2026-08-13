@@ -132,7 +132,10 @@ Phase 2 employee management:
 Required before payroll cutover:
 
 - Resolve suggested or conflicting login links manually
-- Validate employee and salary totals at 100%
+- Keep the Employee OS cutover gate read-only and validate identity, contract,
+  live accrual, net due, salary-payable ledger and open-advance totals at 100%
+- Reconcile the live payroll-versus-ledger gaps; a zero ledger balance is not a
+  substitute for the calendar-daily salary accrual used by legacy payroll
 - Route new salary changes through effective-dated V2 contracts
 - Run one complete payroll cycle in parallel
 - Verify fulfillment permissions and task assignment by canonical employee ID
