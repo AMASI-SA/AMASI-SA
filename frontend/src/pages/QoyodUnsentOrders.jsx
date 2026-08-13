@@ -35,6 +35,9 @@ export default function QoyodUnsentOrders() {
   const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
   const [recoveryRunning, setRecoveryRunning] = useState(false);
   const [recoveryResults, setRecoveryResults] = useState([]);
+  const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
+  const [retryingOrder, setRetryingOrder] = useState(null);
+  const [retryNotice, setRetryNotice] = useState(null);
 
   // Intentionally absent from the daily workflow.  Operators open the
   // bounded recovery panel only with ?recovery=1 after reconciling a concrete
@@ -105,6 +108,34 @@ export default function QoyodUnsentOrders() {
 
     setRecoveryRunning(false);
     await fetchAll(days, sallaStatus, search);
+  };
+
+  const retryFailedOrder = async (orderNumber) => {
+    setRetryingOrder(orderNumber);
+    setRetryNotice(null);
+    setError(null);
+    try {
+      const { data: result } = await api.post(
+        `${QOYOD_BASE}/manual/retry-failed/${encodeURIComponent(orderNumber)}`,
+      );
+      const alreadySent = result?.retry_outcome === "already_sent";
+      setRetryNotice({
+        type: "success",
+        message: alreadySent
+          ? `تم التحقق من الطلب ${orderNumber}: الفاتورة موجودة مسبقاً في قيود، ولم تُنشأ فاتورة مكررة.`
+          : `تم فحص الطلب ${orderNumber} من سلة وإرساله إلى قيود بنجاح.`,
+      });
+      setRetryConfirmOrder(null);
+      await fetchAll(days, sallaStatus, search);
+    } catch (requestError) {
+      const detail = requestError?.response?.data?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : (detail?.message || "تعذر إعادة فحص الطلب وإرساله");
+      setRetryNotice({ type: "error", message });
+    } finally {
+      setRetryingOrder(null);
+    }
   };
 
   const fetchAll = async (d = days, ss = sallaStatus, q = search) => {
@@ -287,6 +318,18 @@ export default function QoyodUnsentOrders() {
              data-testid="unsent-error">{String(error)}</div>
       )}
 
+      {retryNotice && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            retryNotice.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+          data-testid="qoyod-failed-retry-notice">
+          {retryNotice.message}
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto"
            data-testid="unsent-orders-table">
         {loading ? (
@@ -309,6 +352,7 @@ export default function QoyodUnsentOrders() {
                 <th className="px-3 py-2 text-right">الحالة</th>
                 <th className="px-3 py-2 text-right">السبب</th>
                 <th className="px-3 py-2 text-right">فاتورة قيود</th>
+                <th className="px-3 py-2 text-right">الإجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -336,6 +380,40 @@ export default function QoyodUnsentOrders() {
                   </td>
                   <td className="px-3 py-2 text-slate-600 max-w-md">{o.reason}</td>
                   <td className="px-3 py-2" dir="ltr">{o.qoyod_invoice_id || "—"}</td>
+                  <td className="px-3 py-2 min-w-48">
+                    {o.status === "فشل" && o.retry_allowed !== false ? (
+                      retryConfirmOrder === o.order_number ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => retryFailedOrder(o.order_number)}
+                            disabled={retryingOrder === o.order_number}
+                            data-testid={`qoyod-failed-retry-confirm-${o.order_number}`}
+                            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800 disabled:opacity-50">
+                            {retryingOrder === o.order_number
+                              ? "جاري الفحص والإرسال…"
+                              : "تأكيد الإرسال"}
+                          </button>
+                          <button
+                            onClick={() => setRetryConfirmOrder(null)}
+                            disabled={retryingOrder === o.order_number}
+                            data-testid={`qoyod-failed-retry-cancel-${o.order_number}`}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50">
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setRetryConfirmOrder(o.order_number);
+                            setRetryNotice(null);
+                          }}
+                          data-testid={`qoyod-failed-retry-${o.order_number}`}
+                          className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-800 hover:bg-red-100">
+                          إعادة الفحص والإرسال
+                        </button>
+                      )
+                    ) : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
