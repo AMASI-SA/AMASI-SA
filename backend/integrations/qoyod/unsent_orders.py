@@ -220,6 +220,7 @@ async def list_unsent_orders(
     status: str | None = None,
     salla_status: str | None = None,
     search: str | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """All recent orders mapped to the 4-status contract + counts.
 
@@ -232,9 +233,13 @@ async def list_unsent_orders(
     from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
     sync_start = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
     requested_days = max(1, min(days, 365))
     requested_start = (
-        datetime.now(timezone.utc) - timedelta(days=requested_days)
+        current_time.astimezone(timezone.utc) - timedelta(
+            days=requested_days)
     ).date()
     # The integration itself cannot expose orders before 2026-07-01, even
     # when the operator selects a wider period such as 90 days.
