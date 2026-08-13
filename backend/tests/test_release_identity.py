@@ -5,7 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from release_identity import CRITICAL_FILES, read_release_identity
+from release_identity import (
+    CRITICAL_FILES,
+    RELEASE_PROTOCOL_VERSION,
+    read_release_identity,
+)
 
 
 class ReleaseIdentityTests(unittest.TestCase):
@@ -13,10 +17,11 @@ class ReleaseIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "release_identity.json"
             path.write_text(json.dumps({
+                "release_id": "9d7a9a23-1f46-44a8-a0d0-851a71e15af6",
                 "git_sha": "a" * 40,
                 "branch": "hotfix/prod-snap-meta-final",
                 "prepared_at": "2026-08-12T00:00:00+00:00",
-                "protocol_version": 1,
+                "protocol_version": RELEASE_PROTOCOL_VERSION,
                 "actor": "must-not-be-exposed",
                 "critical_file_hashes": {
                     relative: __import__("hashlib").sha256(
@@ -29,7 +34,12 @@ class ReleaseIdentityTests(unittest.TestCase):
             result = read_release_identity(path)
 
         self.assertTrue(result["verified_identity_available"])
+        self.assertEqual(
+            result["release_id"],
+            "9d7a9a23-1f46-44a8-a0d0-851a71e15af6",
+        )
         self.assertEqual(result["git_sha"], "a" * 40)
+        self.assertEqual(result["protocol_version"], RELEASE_PROTOCOL_VERSION)
         self.assertNotIn("actor", result)
         self.assertTrue(result["critical_file_hashes_match"])
 
@@ -39,10 +49,42 @@ class ReleaseIdentityTests(unittest.TestCase):
             missing = read_release_identity(path)
             path.write_text('{"git_sha":"short"}', encoding="utf-8")
             invalid = read_release_identity(path)
+            path.write_text(json.dumps({
+                "release_id": "not-a-uuid",
+                "git_sha": "a" * 40,
+                "protocol_version": RELEASE_PROTOCOL_VERSION,
+            }), encoding="utf-8")
+            invalid_release_id = read_release_identity(path)
 
         self.assertFalse(missing["verified_identity_available"])
         self.assertIsNone(missing["git_sha"])
         self.assertFalse(invalid["verified_identity_available"])
+        self.assertFalse(invalid_release_id["verified_identity_available"])
+        self.assertIsNone(invalid_release_id["release_id"])
+
+    def test_v1_identity_is_rejected_after_v2_protocol_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "legacy-v1-release-identity.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "release_id": "9d7a9a23-1f46-44a8-a0d0-851a71e15af6",
+                        "git_sha": "a" * 40,
+                        "branch": "hotfix/prod-snap-meta-final",
+                        "prepared_at": "2026-08-12T00:00:00+00:00",
+                        "protocol_version": 1,
+                        "critical_file_hashes": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = read_release_identity(path)
+
+        self.assertEqual(RELEASE_PROTOCOL_VERSION, 2)
+        self.assertFalse(result["verified_identity_available"])
+        self.assertIsNone(result["release_id"])
+        self.assertEqual(result["protocol_version"], RELEASE_PROTOCOL_VERSION)
 
 
 if __name__ == "__main__":

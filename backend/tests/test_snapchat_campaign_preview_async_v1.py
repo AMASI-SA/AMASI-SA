@@ -260,6 +260,127 @@ async def test_worker_prepares_existing_governed_proposal_without_provider_write
 
 
 @pytest.mark.asyncio
+async def test_atomic_lease_claim_allows_only_one_cross_replica_worker(monkeypatch):
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="atomic-lease-claim-001"),
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    calls = []
+
+    async def create_proposal(db_arg, user_id, actor_id, payload):
+        calls.append(payload.idempotency_key)
+        entered.set()
+        await release.wait()
+        db_arg[preview.PROPOSAL_COLLECTION].rows.append(
+            {
+                "user_id": user_id,
+                "proposal_id": "proposal-atomic-lease",
+                "idempotency_key": payload.idempotency_key,
+                "request_fingerprint": (
+                    preview.snapchat_management_request_fingerprint(payload)
+                ),
+                "status": "previewed",
+                "provider_write_reached": False,
+            }
+        )
+        return {"proposal_id": "proposal-atomic-lease", "status": "previewed"}
+
+    monkeypatch.setattr(preview, "create_snapchat_management_proposal", create_proposal)
+    workers = [
+        asyncio.create_task(
+            preview.execute_snapchat_management_preview_job(
+                db, "owner-1", "owner-1", job["preview_job_id"]
+            )
+        )
+        for _ in range(2)
+    ]
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    await asyncio.sleep(0)
+
+    running = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    assert calls == ["atomic-lease-claim-001"]
+    assert running["status"] == "running"
+    assert running["lease_token"]
+    assert preview._parse_datetime(running["lease_expires_at"]) is not None
+    assert running["provider_write_reached"] is False
+
+    release.set()
+    await asyncio.gather(*workers)
+    ready = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    assert ready["status"] == "ready"
+    assert ready["proposal_id"] == "proposal-atomic-lease"
+    assert ready["lease_token"] is None
+    assert ready["lease_expires_at"] is None
+    assert ready["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_live_worker_heartbeat_renews_lease_and_terminal_clears_it(
+    monkeypatch,
+):
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="heartbeat-lease-001"),
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def create_proposal(db_arg, user_id, actor_id, payload):
+        entered.set()
+        await release.wait()
+        db_arg[preview.PROPOSAL_COLLECTION].rows.append(
+            {
+                "user_id": user_id,
+                "proposal_id": "proposal-heartbeat",
+                "idempotency_key": payload.idempotency_key,
+                "request_fingerprint": (
+                    preview.snapchat_management_request_fingerprint(payload)
+                ),
+                "status": "previewed",
+            }
+        )
+        return {"proposal_id": "proposal-heartbeat", "status": "previewed"}
+
+    monkeypatch.setattr(preview, "create_snapchat_management_proposal", create_proposal)
+    monkeypatch.setattr(preview, "PREVIEW_JOB_HEARTBEAT_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(preview, "PREVIEW_JOB_LEASE_DURATION", timedelta(seconds=0.05))
+    worker = asyncio.create_task(
+        preview.execute_snapchat_management_preview_job(
+            db, "owner-1", "owner-1", job["preview_job_id"]
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    first_heartbeat = row["heartbeat_at"]
+    first_deadline = preview._parse_datetime(row["lease_expires_at"])
+
+    for _ in range(50):
+        if row["heartbeat_at"] != first_heartbeat:
+            break
+        await asyncio.sleep(0.005)
+    renewed_deadline = preview._parse_datetime(row["lease_expires_at"])
+    assert row["heartbeat_at"] != first_heartbeat
+    assert renewed_deadline is not None and first_deadline is not None
+    assert renewed_deadline > first_deadline
+    assert row["provider_write_reached"] is False
+
+    release.set()
+    await worker
+    assert row["status"] == "ready"
+    assert row["heartbeat_at"] is None
+    assert row["lease_expires_at"] is None
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
 async def test_worker_failure_is_terminal_known_no_write_without_a_proposal(
     monkeypatch,
 ):
@@ -358,6 +479,55 @@ async def test_post_claim_read_failure_is_caught_and_terminalized(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stale_claim_loader_cannot_adopt_or_fail_a_successor_lease(
+    monkeypatch,
+):
+    db = DB()
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="stale-loader-successor-001"),
+    )
+    jobs = db[preview.PREVIEW_JOB_COLLECTION]
+    row = jobs.rows[0]
+    original_find = jobs.find_one
+    observed_claim_token = None
+
+    async def replace_lease_then_fail(query, projection=None):
+        nonlocal observed_claim_token
+        if query.get("preview_job_id") == job["preview_job_id"] and query.get(
+            "lease_token"
+        ):
+            observed_claim_token = query["lease_token"]
+            row.update(
+                {
+                    "status": "running",
+                    "lease_token": "successor-lease-token",
+                    "lease_expires_at": "2999-01-01T00:00:00+00:00",
+                    "heartbeat_at": "2026-08-13T03:00:00+00:00",
+                    "phase": "preparing_proposal",
+                    "failure": None,
+                }
+            )
+            raise RuntimeError("simulated_stale_loader_after_successor_claim")
+        return await original_find(query, projection)
+
+    monkeypatch.setattr(jobs, "find_one", replace_lease_then_fail)
+    await preview.execute_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", job["preview_job_id"]
+    )
+
+    assert observed_claim_token
+    assert observed_claim_token != "successor-lease-token"
+    assert row["status"] == "running"
+    assert row["lease_token"] == "successor-lease-token"
+    assert row["phase"] == "preparing_proposal"
+    assert row["failure"] is None
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
 async def test_orphan_running_job_reconciles_from_durable_proposal():
     db = DB()
     payload = campaign_create()
@@ -386,6 +556,275 @@ async def test_orphan_running_job_reconciles_from_durable_proposal():
 
 
 @pytest.mark.asyncio
+async def test_live_running_lease_is_not_reclaimed_before_expiry():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="live-running-lease-001"),
+        now=lambda: observed_at - timedelta(seconds=10),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(seconds=5)).isoformat(),
+            "lease_token": "live-lease-token",
+            "lease_expires_at": (observed_at + timedelta(seconds=30)).isoformat(),
+            "heartbeat_at": (observed_at - timedelta(seconds=5)).isoformat(),
+        }
+    )
+
+    result = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"], now=lambda: observed_at
+    )
+
+    assert result["status"] == "running"
+    assert result["phase"] == "preparing_proposal"
+    assert row["lease_token"] == "live-lease-token"
+    assert row["recovery_count"] == 0
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_expired_running_lease_is_atomically_requeued_once():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="expired-running-lease-001"),
+        now=lambda: observed_at - timedelta(minutes=2),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(seconds=70)).isoformat(),
+            "lease_token": "expired-lease-token",
+            "lease_expires_at": (observed_at - timedelta(seconds=10)).isoformat(),
+            "heartbeat_at": (observed_at - timedelta(seconds=70)).isoformat(),
+        }
+    )
+    observed_row = deepcopy(row)
+
+    recovered, raced = await asyncio.gather(
+        preview._recover_expired_preview_job_lease(
+            db, observed_row, now_value=observed_at
+        ),
+        preview._recover_expired_preview_job_lease(
+            db, deepcopy(observed_row), now_value=observed_at
+        ),
+    )
+
+    assert recovered["status"] == "queued"
+    assert raced["status"] == "queued"
+    assert row["status"] == "queued"
+    assert row["phase"] == "queued_recovered"
+    assert row["lease_token"] is None
+    assert row["lease_expires_at"] is None
+    assert row["recovery_count"] == 1
+    assert row["recovery_action"] == "resume_read_only_after_worker_loss"
+    assert row["provider_write_reached"] is False
+    assert row["provider_write_state"] == "not_attempted"
+    assert row["provider_write_uncertain"] is False
+
+
+@pytest.mark.asyncio
+async def test_legacy_running_job_without_lease_is_never_reclaimed_during_rollout():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="legacy-running-lease-001"),
+        now=lambda: observed_at - timedelta(minutes=20),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(minutes=19)).isoformat(),
+            # Keep the independent legacy stale/reconciliation policy out of
+            # this test.  This assertion is only about lease reclaim safety.
+            "stale_at": (observed_at + timedelta(minutes=1)).isoformat(),
+        }
+    )
+    row.pop("lease_token")
+    row.pop("lease_expires_at")
+    row.pop("heartbeat_at")
+
+    result = await preview.get_snapchat_management_preview_job(
+        db, "owner-1", job["preview_job_id"], now=lambda: observed_at
+    )
+
+    assert result["status"] == "running"
+    assert result["phase"] == "preparing_proposal"
+    assert row["recovery_count"] == 0
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_wins_against_an_expired_stale_snapshot_reclaim():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="heartbeat-cas-race-001"),
+        now=lambda: observed_at - timedelta(minutes=2),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(seconds=70)).isoformat(),
+            "lease_token": "heartbeat-race-token",
+            "lease_expires_at": (observed_at - timedelta(seconds=1)).isoformat(),
+            "heartbeat_at": (observed_at - timedelta(seconds=70)).isoformat(),
+        }
+    )
+    stale_snapshot = deepcopy(row)
+
+    # A live worker renews the durable row after GET loaded an expired
+    # snapshot but before reclaim's compare-and-swap reaches Mongo.
+    row["heartbeat_at"] = observed_at.isoformat()
+    row["lease_expires_at"] = (observed_at + timedelta(seconds=60)).isoformat()
+    result = await preview._recover_expired_preview_job_lease(
+        db, stale_snapshot, now_value=observed_at
+    )
+
+    assert result["status"] == "running"
+    assert row["status"] == "running"
+    assert row["lease_token"] == "heartbeat-race-token"
+    assert row["recovery_count"] == 0
+    assert row["lease_expires_at"] == (observed_at + timedelta(seconds=60)).isoformat()
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
+async def test_uncertain_provider_write_state_is_never_reclaimed():
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="uncertain-write-no-reclaim-001"),
+        now=lambda: observed_at - timedelta(minutes=2),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(seconds=70)).isoformat(),
+            "lease_token": "uncertain-write-token",
+            "lease_expires_at": (observed_at - timedelta(seconds=10)).isoformat(),
+            "heartbeat_at": (observed_at - timedelta(seconds=70)).isoformat(),
+            "provider_write_uncertain": True,
+            "provider_write_state": "uncertain",
+        }
+    )
+
+    result = await preview._recover_expired_preview_job_lease(
+        db, deepcopy(row), now_value=observed_at
+    )
+
+    assert result["status"] == "running"
+    assert row["status"] == "running"
+    assert row["recovery_count"] == 0
+    assert row["provider_write_uncertain"] is True
+    assert row["provider_write_state"] == "uncertain"
+
+
+@pytest.mark.asyncio
+async def test_expired_worker_token_cannot_fail_a_new_lease(monkeypatch):
+    db = DB()
+    observed_at = datetime(2026, 8, 13, 3, 0, tzinfo=timezone.utc)
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db,
+        "owner-1",
+        "owner-1",
+        campaign_create(idempotency_key="fenced-old-worker-001"),
+        now=lambda: observed_at - timedelta(minutes=2),
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": (observed_at - timedelta(seconds=70)).isoformat(),
+            "lease_token": "old-worker-token",
+            "lease_expires_at": (observed_at - timedelta(seconds=10)).isoformat(),
+            "heartbeat_at": (observed_at - timedelta(seconds=70)).isoformat(),
+        }
+    )
+    expired_worker_row = deepcopy(row)
+    await preview._recover_expired_preview_job_lease(
+        db, expired_worker_row, now_value=observed_at
+    )
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def create_proposal(db_arg, user_id, actor_id, payload):
+        entered.set()
+        await release.wait()
+        db_arg[preview.PROPOSAL_COLLECTION].rows.append(
+            {
+                "user_id": user_id,
+                "proposal_id": "proposal-new-lease",
+                "idempotency_key": payload.idempotency_key,
+                "request_fingerprint": (
+                    preview.snapchat_management_request_fingerprint(payload)
+                ),
+                "status": "previewed",
+            }
+        )
+        return {"proposal_id": "proposal-new-lease", "status": "previewed"}
+
+    monkeypatch.setattr(preview, "create_snapchat_management_proposal", create_proposal)
+    new_worker = asyncio.create_task(
+        preview.execute_snapchat_management_preview_job(
+            db, "owner-1", "owner-1", job["preview_job_id"]
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    new_token = row["lease_token"]
+    assert new_token and new_token != "old-worker-token"
+
+    await preview._mark_job_failed(
+        db,
+        expired_worker_row,
+        {
+            "code": "old_worker_failed_late",
+            "message": "must not win",
+            "retryable": False,
+        },
+        expected_lease_token="old-worker-token",
+    )
+    assert row["status"] == "running"
+    assert row["lease_token"] == new_token
+    assert row["failure"] is None
+
+    release.set()
+    await new_worker
+    assert row["status"] == "ready"
+    assert row["proposal_id"] == "proposal-new-lease"
+    assert row["provider_write_reached"] is False
+
+
+@pytest.mark.asyncio
 async def test_current_lookup_is_exact_tenant_scoped_and_does_not_leak_request():
     db = DB()
     job, _ = await preview.queue_snapchat_management_preview_job(
@@ -404,6 +843,9 @@ async def test_current_lookup_is_exact_tenant_scoped_and_does_not_leak_request()
         "idempotency_key",
         "actor_id",
         "confirm_token",
+        "lease_token",
+        "lease_expires_at",
+        "heartbeat_at",
     ):
         assert forbidden not in current
 
@@ -415,11 +857,22 @@ async def test_current_lookup_is_exact_tenant_scoped_and_does_not_leak_request()
 
 
 @pytest.mark.asyncio
-async def test_current_route_is_not_captured_as_a_dynamic_job_id():
+async def test_current_route_is_not_captured_and_reschedules_a_queued_orphan(
+    monkeypatch,
+):
     db = DB()
     payload = campaign_create(idempotency_key="current-route-001")
     job, _ = await preview.queue_snapchat_management_preview_job(
         db, "owner-1", "owner-1", payload
+    )
+    scheduled = []
+
+    def record_schedule(db_arg, user_id, actor_id, preview_job_id):
+        scheduled.append((db_arg, user_id, actor_id, preview_job_id))
+        return None
+
+    monkeypatch.setattr(
+        preview, "schedule_snapchat_management_preview_job", record_schedule
     )
     router = APIRouter()
 
@@ -440,6 +893,64 @@ async def test_current_route_is_not_captured_as_a_dynamic_job_id():
         )
     assert response.status_code == 200
     assert response.json()["preview_job_id"] == job["preview_job_id"]
+    assert response.json()["status"] == "queued"
+    assert scheduled == [
+        (db, "owner-1", "owner-1", job["preview_job_id"]),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_poll_route_reschedules_expired_running_job_after_container_loss(
+    monkeypatch,
+):
+    db = DB()
+    payload = campaign_create(idempotency_key="poll-reclaims-running-001")
+    job, _ = await preview.queue_snapchat_management_preview_job(
+        db, "owner-1", "owner-1", payload
+    )
+    row = db[preview.PREVIEW_JOB_COLLECTION].rows[0]
+    row.update(
+        {
+            "status": "running",
+            "phase": "preparing_proposal",
+            "phase_started_at": "2000-01-01T00:00:00+00:00",
+            "lease_token": "dead-container-token",
+            "lease_expires_at": "2000-01-01T00:01:00+00:00",
+            "heartbeat_at": "2000-01-01T00:00:00+00:00",
+            # Keep the separate global terminal bound out of this lease test.
+            "stale_at": "2999-01-01T00:00:00+00:00",
+        }
+    )
+    scheduled = []
+
+    def record_schedule(db_arg, user_id, actor_id, preview_job_id):
+        scheduled.append((db_arg, user_id, actor_id, preview_job_id))
+        return None
+
+    monkeypatch.setattr(
+        preview, "schedule_snapchat_management_preview_job", record_schedule
+    )
+    router = APIRouter()
+    preview.attach_snapchat_campaign_preview_async_routes(
+        router, db, lambda: {"id": "owner-1"}, lambda user: user
+    )
+    route = next(
+        item
+        for item in router.routes
+        if item.path.endswith("/management/preview-jobs/{preview_job_id}")
+    )
+
+    result = await route.endpoint(
+        preview_job_id=job["preview_job_id"], user={"id": "owner-1"}
+    )
+
+    assert result["status"] == "queued"
+    assert result["phase"] == "queued_recovered"
+    assert scheduled == [
+        (db, "owner-1", "owner-1", job["preview_job_id"]),
+    ]
+    assert row["recovery_count"] == 1
+    assert row["provider_write_reached"] is False
 
 
 @pytest.mark.asyncio

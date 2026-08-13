@@ -3,6 +3,11 @@
 Production is a shared Emergent workspace. Multiple conversations can safely
 prepare code, but only one may own an active production release.
 
+The current guard and embedded identity use protocol v2. If `status` shows a
+lease prepared by v1, its owner must abort it with the original v1 guard
+before `/app` is updated. After updating, run `prepare` again; a v1 lease or
+identity must never be reused by the v2 guard.
+
 ## Prepare
 
 After all intended commits are on `origin/hotfix/prod-snap-meta-final`, update
@@ -46,10 +51,13 @@ Inspect the owner and SHA:
 python scripts/production_release_guard.py status
 ```
 
-The owner may release a failed lease by providing the exact full SHA:
+The owner may release a failed lease only by providing both the exact full SHA
+and release ID returned by `prepare` or `status`:
 
 ```bash
-python scripts/production_release_guard.py abort --expected-sha <full-sha>
+python scripts/production_release_guard.py abort \
+  --expected-sha <full-sha> \
+  --expected-release-id <release-uuid>
 ```
 
 Never clear the lease merely because the publish button became enabled.
