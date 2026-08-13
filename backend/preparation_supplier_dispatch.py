@@ -10,6 +10,8 @@ external supplier-account writes.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -270,16 +272,76 @@ def _piece_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _piece_dispatch_group_key(piece: dict[str, Any]) -> str:
+    """Keep product cards separate when their required services differ.
+
+    The reviewed-products catalog intentionally uses a product-level key, but
+    supplier work happens at the physical-piece grain.  Reusing only that base
+    key merged a personalised piece with a service-free piece and exposed the
+    first piece's service list for both.  The derived key is deterministic and
+    is used only by this supplier-dispatch API; the immutable stored group key
+    remains unchanged for historical traceability.
+    """
+    base_key = _text(piece.get("group_key")) or _text(piece.get("piece_id"))
+    services = sorted({
+        (
+            _text(
+                service.get("service_id")
+                or service.get("service_code")
+                or service.get("service_name")
+            ),
+            _text(service.get("status")) or "pending",
+        )
+        for service in piece.get("services") or []
+        if isinstance(service, dict)
+        and _text(
+            service.get("service_id")
+            or service.get("service_code")
+            or service.get("service_name")
+        )
+    })
+    specifications = sorted({
+        (
+            _text(specification.get("spec_key") or specification.get("key")),
+            _text(specification.get("name")),
+            _text(specification.get("value")),
+        )
+        for specification in piece.get("service_specifications_snapshot") or []
+        if isinstance(specification, dict)
+        and (
+            _text(specification.get("spec_key") or specification.get("key"))
+            or _text(specification.get("name"))
+            or _text(specification.get("value"))
+        )
+    })
+    if not services:
+        suffix = "none"
+    else:
+        encoded = json.dumps(
+            {"services": services, "specifications": specifications},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        suffix = hashlib.sha256(encoded).hexdigest()[:20]
+    # PreparationPieceSelection caps the public key at 500 characters.
+    return f"{base_key[:470]}::service:{suffix}"
+
+
 def plan_piece_selections(
     pieces: list[dict[str, Any]],
     selections: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Choose deterministic physical pieces for product/quantity selections."""
     by_group: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    effective_keys_by_stored_key: dict[str, set[str]] = defaultdict(set)
     for piece in pieces:
-        group_key = _text(piece.get("group_key"))
+        group_key = _piece_dispatch_group_key(piece)
         if group_key:
             by_group[group_key].append(piece)
+        stored_key = _text(piece.get("group_key"))
+        if stored_key and group_key:
+            effective_keys_by_stored_key[stored_key].add(group_key)
     for rows in by_group.values():
         rows.sort(key=_piece_sort_key)
 
@@ -297,6 +359,14 @@ def plan_piece_selections(
             raise ValueError("duplicate_piece_group")
         seen.add(group_key)
         available = by_group.get(group_key) or []
+        if not available:
+            # Accept the pre-fix product key only when it resolves to exactly
+            # one service-aware group.  Ambiguous stale clients must refresh.
+            effective_keys = effective_keys_by_stored_key.get(group_key) or set()
+            if len(effective_keys) == 1:
+                available = by_group[next(iter(effective_keys))]
+            elif len(effective_keys) > 1:
+                raise ValueError("ambiguous_piece_group")
         if len(available) < quantity:
             raise ValueError("piece_quantity_exceeds_available")
         planned.extend(available[:quantity])
@@ -474,7 +544,7 @@ def supplier_receiving_dispatch_blocker(
 def _group_piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for piece in pieces:
-        group_key = _text(piece.get("group_key")) or _text(piece.get("piece_id"))
+        group_key = _piece_dispatch_group_key(piece)
         row = grouped.setdefault(group_key, {
             "group_key": group_key,
             "product_id": _text(piece.get("product_id")) or None,
