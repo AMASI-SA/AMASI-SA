@@ -23,7 +23,14 @@ DUPLICATE = "مكرر"
 def _order_created_date(row: dict) -> date | None:
     """Salla order CREATION date for an inbox row — same priority as
     eligible_orders._extract_order_created_at (canonical order_date →
-    raw_payload data.date.date → data.created_at)."""
+    raw_payload data.date.date → data.created_at).
+
+    Never fall back to ``received_at`` here.  That is the time the event
+    reached Mezan, not the time Salla created the order.  Using it as an order
+    date can make a pre-integration legacy order look newer than the fixed
+    2026-07-01 Qoyod floor and incorrectly place it in both the yellow header
+    alert and the unsent-orders page.
+    """
     from integrations.qoyod.eligible_orders import _parse_iso_date
     canon = row.get("canonical_payload") or {}
     d = _parse_iso_date(canon.get("order_date")) \
@@ -45,9 +52,6 @@ def _order_created_date(row: dict) -> date | None:
         d = _parse_iso_date(data.get("created_at"))
         if d is not None:
             return d
-    received = row.get("received_at")
-    if hasattr(received, "date"):
-        return received.date()
     return None
 
 
@@ -209,6 +213,7 @@ async def list_unsent_orders(
     cutoff = datetime.now(timezone.utc) - timedelta(
         days=max(1, min(days, 365)))
     excluded_pre_sync = 0
+    excluded_missing_order_date = 0
 
     # Qoyod accounting markers historically live under the singleton
     # ``main`` tenant, while the live Salla refresh stores its newest inbox
@@ -297,7 +302,14 @@ async def list_unsent_orders(
     async for row in cursor:
         # ── Integration start date — hard scope boundary ─────────────
         order_date = _order_created_date(row)
-        if order_date is not None and order_date < sync_start:
+        # The unsent alert/page are operational accounting surfaces.  An
+        # order must prove its Salla creation date is inside the integration
+        # period; an unknown date is not eligible and must not be represented
+        # as an actionable unsent invoice.
+        if order_date is None:
+            excluded_missing_order_date += 1
+            continue
+        if order_date < sync_start:
             excluded_pre_sync += 1
             continue
         on = str(row.get("salla_order_number") or "").strip()
@@ -414,6 +426,7 @@ async def list_unsent_orders(
             "total": sum(counts.values()),
             "sync_start_date": sync_start.isoformat(),
             "excluded_pre_sync_start": excluded_pre_sync,
+            "excluded_missing_order_date": excluded_missing_order_date,
             "excluded_not_eligible": excluded_not_eligible,
             "salla_status_counts": salla_status_counts,
             "orders": orders}

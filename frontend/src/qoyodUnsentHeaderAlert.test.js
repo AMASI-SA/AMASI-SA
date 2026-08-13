@@ -29,4 +29,7 @@ test("the warning stays hidden at zero and does not count sent, duplicate, or re
     expect(source).toContain("if in_qoyod_by_reference:");
     expect(source).toContain('return {"status": SENT,');
     expect(source).toContain("counts[e[\"status\"]] += 1");
+    expect(source).toContain("if order_date is None:");
+    expect(source).toContain("if order_date < sync_start:");
+    expect(source).not.toContain('return received.date()');
 });
