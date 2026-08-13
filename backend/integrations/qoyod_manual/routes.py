@@ -28,6 +28,7 @@ from integrations.qoyod.orders_owner import orders_owner_id
 from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
 )
+from integrations.qoyod_manual.failed_retry import retry_failed_order
 from integrations.qoyod_manual.diagnose import diagnose_totals
 from integrations.qoyod_manual.missing_diagnostics import (
     list_missing_from_plan_b,
@@ -451,6 +452,45 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             actor,
         )
         return result
+
+    @router.post("/retry-failed/{order_number}")
+    async def retry_failed(order_number: str,
+                           user=Depends(current_user)):
+        """Safely retry one failed order after a fresh Salla status check."""
+        actor = "failed-retry-ui"
+        try:
+            username = (user or {}).get("email") or (user or {}).get("id")
+            if username:
+                actor = f"failed-retry-ui:{username}"
+        except Exception:
+            pass
+
+        try:
+            return await retry_failed_order(
+                db,
+                orders_user_id=orders_owner_id(user),
+                order_number=str(order_number),
+                actor=actor,
+            )
+        except ManualSendRefused as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=exc.to_dict(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            ref = uuid.uuid4().hex[:8]
+            logger.exception(
+                "failed Qoyod retry ref=%s order=%s actor=%s",
+                ref, order_number, actor,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "failed_retry_unexpected",
+                    "message": "تعذر إكمال إعادة الإرسال بأمان",
+                    "error_reference": ref,
+                },
+            ) from exc
 
     @router.get("/status/{order_number}")
     async def send_status(order_number: str,
