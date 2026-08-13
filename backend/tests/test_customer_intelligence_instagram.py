@@ -308,7 +308,7 @@ async def test_instagram_webhook_routes_verify_and_ingest_without_send_operation
 
 
 @pytest.mark.asyncio
-async def test_instagram_router_reuses_shared_meta_secret_and_fails_closed(
+async def test_instagram_router_reuses_shared_meta_configuration_and_fails_closed(
     monkeypatch,
 ):
     for key in (
@@ -316,6 +316,7 @@ async def test_instagram_router_reuses_shared_meta_secret_and_fails_closed(
         "MEZAN_INSTAGRAM_WEBHOOK_VERIFY_TOKEN",
         "MEZAN_INSTAGRAM_APP_SECRET",
         "META_BUSINESS_APP_SECRET",
+        "MEZAN_WHATSAPP_INGRESS_ENABLED",
         "MEZAN_WHATSAPP_APP_SECRET",
         "MEZAN_WHATSAPP_WEBHOOK_VERIFY_TOKEN",
     ):
@@ -337,7 +338,7 @@ async def test_instagram_router_reuses_shared_meta_secret_and_fails_closed(
         base_url="http://test",
     ) as client:
         disabled = await client.get(path, params=params)
-        monkeypatch.setenv("MEZAN_INSTAGRAM_INGRESS_ENABLED", "true")
+        monkeypatch.setenv("MEZAN_WHATSAPP_INGRESS_ENABLED", "true")
         unconfigured = await client.get(path, params=params)
         monkeypatch.setenv("MEZAN_WHATSAPP_WEBHOOK_VERIFY_TOKEN", VERIFY_TOKEN)
         monkeypatch.setenv("META_BUSINESS_APP_SECRET", APP_SECRET)
