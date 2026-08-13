@@ -8,6 +8,7 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import uuid
 import logging
+import asyncio as _asyncio
 from datetime import datetime, timezone, timedelta
 from tz_utils import riyadh_date_from_utc, riyadh_today_iso
 from typing import List, Optional, Dict
@@ -4080,12 +4081,14 @@ from customer_intelligence.foundation import (
     ensure_customer_intelligence_foundation_indexes,
 )
 from customer_intelligence.whatsapp import make_whatsapp_inbound_router
+from customer_intelligence.instagram import make_instagram_inbound_router
 from customer_intelligence.whatsapp_360dialog import make_360dialog_inbound_router
 from customer_intelligence.temporary_whatsapp_provisioning import (
     make_temporary_whatsapp_provisioning_router,
 )
 api.include_router(make_customer_intelligence_router(current_user, db=db))
 api.include_router(make_whatsapp_inbound_router(db))
+api.include_router(make_instagram_inbound_router(db))
 api.include_router(make_360dialog_inbound_router(db))
 api.include_router(make_temporary_whatsapp_provisioning_router(db, current_user))
 
@@ -4389,6 +4392,18 @@ async def on_startup():
     # indexes and reuses the encrypted customer identity vault; it does not
     # connect a channel, send a message or expose any mutation endpoint.
     await ensure_customer_intelligence_foundation_indexes(db)
+    # Every inbound customer-authored channel event is queued by the gateway.
+    # Reuse the already-configured Mezan OpenAI runtime to turn that queue into
+    # encrypted, evidence-linked signals, problems and decision proposals.
+    # The worker contains no channel-send or commerce-mutation capability.
+    from customer_intelligence.learning_worker import (
+        queue_existing_channel_evidence as _queue_existing_customer_evidence,
+        start_worker as _start_customer_learning_worker,
+    )
+    queued_customer_evidence = await _queue_existing_customer_evidence(db)
+    if any(queued_customer_evidence.values()):
+        logger.info("Queued existing customer-channel evidence for governed AI analysis: %s", queued_customer_evidence)
+    app.state.customer_learning_task = _start_customer_learning_worker(db)
     # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
     # `qoyod_*` collections. Idempotent — safe to call on every boot.
     # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
@@ -5005,6 +5020,13 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    customer_learning_task = getattr(app.state, "customer_learning_task", None)
+    if customer_learning_task is not None:
+        customer_learning_task.cancel()
+        try:
+            await customer_learning_task
+        except _asyncio.CancelledError:
+            pass
     maintenance_task = getattr(
         app.state, "salla_token_maintenance_task", None
     )

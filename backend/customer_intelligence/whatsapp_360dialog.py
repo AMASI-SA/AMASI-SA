@@ -369,7 +369,7 @@ class D360InboundAdapter:
             source_event=f"360dialog.smb_message_echoes.{_text(raw_echo.get('type')) or 'unknown'}",
             direction="outbound",
             sender_type="employee",
-            analysis_status="not_requested",
+            analysis_status="pending",
             delivery_state="sent",
         )
 

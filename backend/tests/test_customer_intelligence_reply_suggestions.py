@@ -254,6 +254,37 @@ async def test_create_is_encrypted_idempotent_pending_only_and_never_sends():
 
 
 @pytest.mark.asyncio
+async def test_instagram_comment_suggestion_uses_public_privacy_policy():
+    db = FakeDB()
+    inbound = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    inbound["source_event"] = "instagram.comments.comment"
+    inbound["content_ciphertext"] = customer_identity.encrypt_private_payload(
+        {
+            "content_type": "text",
+            "payload": {
+                "surface": "comment",
+                "text": "طلبي متأخر، هذا رقم الطلب 123",
+            },
+        }
+    )
+    responses = FakeResponses(text="نعتذر لك، فضلاً راسلنا على الخاص بالتفاصيل.")
+    service = ReplySuggestionService(
+        db,
+        client_factory=lambda: SimpleNamespace(responses=responses),
+        now=lambda: NOW + timedelta(seconds=1),
+    )
+
+    result = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+
+    assert result.surface == "comment"
+    assert "تعليق إنستغرام عام" in responses.last_kwargs["instructions"]
+    assert "لا تذكر ولا تطلب رقم جوال" in responses.last_kwargs["instructions"]
+    stored = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert stored["surface"] == "comment"
+    assert stored["send_allowed"] is False
+
+
+@pytest.mark.asyncio
 async def test_concurrent_generation_lease_collision_is_safe_conflict_not_500():
     db = FakeDB()
     responses = FakeResponses()

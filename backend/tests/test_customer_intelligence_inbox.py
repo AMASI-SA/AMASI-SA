@@ -206,6 +206,15 @@ async def test_live_inbox_decrypts_display_content_without_exposing_provider_pii
         "receiving_channels": 1,
         "status": "connected",
     }
+    assert payload["connections"] == [
+        payload["connection"],
+        {
+            "provider": "instagram",
+            "connected_channels": 0,
+            "receiving_channels": 0,
+            "status": "not_connected",
+        },
+    ]
     assert payload["conversation_count"] == 1
     assert payload["message_count"] == 1
     assert payload["content_unavailable_count"] == 0
@@ -218,6 +227,8 @@ async def test_live_inbox_decrypts_display_content_without_exposing_provider_pii
         "receive_only": True,
         "writes_allowed": False,
         "whatsapp_send_allowed": False,
+        "instagram_send_allowed": False,
+        "instagram_comment_reply_allowed": False,
         "ai_auto_reply_allowed": False,
         "commerce_mutation_allowed": False,
     }
@@ -229,6 +240,87 @@ async def test_live_inbox_decrypts_display_content_without_exposing_provider_pii
     assert "hidden-message" not in rendered
     assert "ciphertext" not in rendered
     assert "provider_media_id" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_live_inbox_unifies_instagram_comments_without_treating_them_as_private():
+    db = _db()
+    channel_id = "channel-instagram-live"
+    conversation_id = "conv-instagram-comment"
+    customer_id = "cust-instagram-comment"
+    db.collections[CHANNELS_COLLECTION].documents.append(
+        ChannelRecord(
+            user_id=OWNER["id"],
+            merchant_id=MERCHANT_ID,
+            channel_id=channel_id,
+            provider="instagram",
+            external_account_key="account:v1:hidden-instagram-binding",
+            status="connected",
+            ingress_enabled=True,
+            created_at=NOW,
+            updated_at=NOW,
+        ).model_dump()
+    )
+    db.collections[CONVERSATIONS_COLLECTION].documents.append(
+        ConversationRecord(
+            user_id=OWNER["id"],
+            merchant_id=MERCHANT_ID,
+            conversation_id=conversation_id,
+            channel_id=channel_id,
+            customer_id=customer_id,
+            external_conversation_key="external:v1:hidden-comment-thread",
+            status="open",
+            started_at=NOW + timedelta(seconds=1),
+            last_message_at=NOW + timedelta(seconds=1),
+            created_at=NOW + timedelta(seconds=1),
+            updated_at=NOW + timedelta(seconds=1),
+        ).model_dump()
+    )
+    db.collections[CONVERSATION_MESSAGES_COLLECTION].documents.append(
+        ConversationMessageRecord(
+            user_id=OWNER["id"],
+            merchant_id=MERCHANT_ID,
+            message_id="msg-instagram-comment",
+            conversation_id=conversation_id,
+            channel_id=channel_id,
+            customer_id=customer_id,
+            external_message_key="external:v1:hidden-instagram-comment",
+            direction="inbound",
+            sender_type="customer",
+            content_type="text",
+            content_ciphertext=customer_identity.encrypt_private_payload(
+                {
+                    "content_type": "text",
+                    "payload": {
+                        "surface": "comment",
+                        "text": "هل يتوفر بلون آخر؟",
+                        "comment_id": "private-provider-comment-id",
+                    },
+                }
+            ),
+            content_fields=["surface", "text", "comment_id"],
+            source_event="instagram.comments.comment",
+            occurred_at=NOW + timedelta(seconds=1),
+            received_at=NOW + timedelta(seconds=1),
+            delivery_state="received",
+            created_at=NOW + timedelta(seconds=1),
+        ).model_dump()
+    )
+
+    payload = await CustomerIntelligenceInboxService(
+        db,
+        now=lambda: NOW + timedelta(seconds=2),
+    ).inbox(owner_user_id=OWNER["id"])
+
+    assert payload.data_origin == "channel_webhooks"
+    assert [row.status for row in payload.connections] == ["connected", "connected"]
+    instagram = next(row for row in payload.conversations if row.channel == "instagram")
+    assert instagram.surface == "comment"
+    assert instagram.messages[0].surface == "comment"
+    assert instagram.messages[0].body == "هل يتوفر بلون آخر؟"
+    assert "private-provider-comment-id" not in payload.model_dump_json()
+    assert payload.safety_policy.instagram_send_allowed is False
+    assert payload.safety_policy.instagram_comment_reply_allowed is False
 
 
 @pytest.mark.asyncio

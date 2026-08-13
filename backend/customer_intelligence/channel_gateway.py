@@ -138,10 +138,10 @@ class NormalizedInboundMessage(FoundationRecord):
         elif (
             self.sender_type != "employee"
             or self.delivery_state == "received"
-            or self.analysis_status != "not_requested"
+            or self.analysis_status != "pending"
         ):
             raise ValueError(
-                "outbound echoes must be employee messages excluded from analysis"
+                "outbound echoes must be employee evidence queued for response-quality analysis"
             )
         return self
 

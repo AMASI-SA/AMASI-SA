@@ -401,7 +401,7 @@ async def test_employee_echo_first_creates_human_takeover_conversation():
         {
             "direction": "outbound",
             "sender_type": "employee",
-            "analysis_status": "not_requested",
+            "analysis_status": "pending",
             "delivery_state": "sent",
             "source_event": "360dialog.smb_message_echoes.text",
         }
@@ -420,7 +420,7 @@ async def test_employee_echo_first_creates_human_takeover_conversation():
     assert conversation["human_takeover_at"] == NOW
     assert message["direction"] == "outbound"
     assert message["sender_type"] == "employee"
-    assert message["analysis_status"] == "not_requested"
+    assert message["analysis_status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -448,7 +448,7 @@ async def test_older_employee_echo_does_not_reopen_or_stale_newer_work():
             "occurred_at": NOW - timedelta(hours=1),
             "direction": "outbound",
             "sender_type": "employee",
-            "analysis_status": "not_requested",
+            "analysis_status": "pending",
             "delivery_state": "sent",
             "source_event": "360dialog.smb_message_echoes.text",
         }
@@ -507,7 +507,7 @@ async def test_new_inbound_and_employee_echo_stale_pending_suggestions_once():
             "external_message_id": "echo-after-suggestion",
             "direction": "outbound",
             "sender_type": "employee",
-            "analysis_status": "not_requested",
+            "analysis_status": "pending",
             "delivery_state": "sent",
             "source_event": "360dialog.smb_message_echoes.text",
         }
