@@ -5,6 +5,7 @@ jest.mock("../../services/snapchatCampaignManagement", () => ({
     approveSnapchatManagementProposal: jest.fn(),
     clearSnapchatManagementPreviewResume: jest.fn(),
     createSnapchatManagementProposal: jest.fn(),
+    diagnoseSnapchatManagementPixels: jest.fn(),
     executeSnapchatManagementProposal: jest.fn(),
     getSnapchatManagementPreviewResume: jest.fn(() => null),
     getSnapchatManagementReadiness: jest.fn(),
@@ -29,6 +30,7 @@ jest.mock("../../services/mezanProductsV2", () => ({
 import {
     approveSnapchatManagementProposal,
     createSnapchatManagementProposal,
+    diagnoseSnapchatManagementPixels,
     executeSnapchatManagementProposal,
     getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
@@ -227,6 +229,73 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             }),
             { ownerId: "owner-1" },
         );
+    });
+
+    test("discovers a missing Pixel and refreshes the governed readiness list", async () => {
+        getSnapchatManagementReadiness
+            .mockResolvedValueOnce({
+                proposal_enabled: true,
+                execution_enabled: true,
+                activation_enabled: true,
+                accounts: [{
+                    account_id: "account-1",
+                    display_name: "AMASI",
+                    currency: "USD",
+                    role: "admin",
+                    management_allowed: true,
+                    creative_allowed: true,
+                    creative_role: "admin",
+                    pixels: [],
+                }],
+            })
+            .mockResolvedValueOnce({
+                proposal_enabled: true,
+                execution_enabled: true,
+                activation_enabled: true,
+                accounts: [{
+                    account_id: "account-1",
+                    display_name: "AMASI",
+                    currency: "USD",
+                    role: "admin",
+                    management_allowed: true,
+                    creative_allowed: true,
+                    creative_role: "admin",
+                    pixels: [{ pixel_id: "pixel-1", display_name: "AMASI Pixel" }],
+                }],
+            });
+        diagnoseSnapchatManagementPixels.mockResolvedValue({
+            status: "complete",
+            pixels_found: 1,
+        });
+
+        await act(async () => {
+            root.render(
+                <SnapchatCampaignManagementPanel
+                    accountId="account-1"
+                    entityLevel="ad_squads"
+                    selectedCampaign={{ campaign_id: "campaign-1" }}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(container.querySelector('[data-testid="snapchat-management-pixel-select"]').value)
+            .toBe("");
+
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-discover-pixels"]').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(diagnoseSnapchatManagementPixels).toHaveBeenCalledWith({ days: 7 });
+        expect(getSnapchatManagementReadiness).toHaveBeenCalledTimes(2);
+        expect(container.querySelector('[data-testid="snapchat-management-pixel-select"]').value)
+            .toBe("pixel-1");
     });
 
     test("blocks PIXEL optimization without a discovered Pixel but allows a non-Pixel goal", async () => {

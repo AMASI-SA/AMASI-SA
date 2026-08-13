@@ -3,6 +3,7 @@ import {
     approveSnapchatManagementProposal,
     clearSnapchatManagementPreviewResume,
     createSnapchatManagementProposal,
+    diagnoseSnapchatManagementPixels,
     executeSnapchatManagementProposal,
     getCurrentSnapchatManagementPreviewJob,
     getSnapchatManagementPreviewResume,
@@ -104,6 +105,30 @@ describe("snapchatCampaignManagement", () => {
             2,
             "/integrations-v2/snapchat_ads/management/proposals",
             { params: { limit: 100 } },
+        );
+    });
+
+    test("discovers Pixels through the bounded read-only tracking diagnostic", async () => {
+        api.post.mockResolvedValueOnce({
+            data: {
+                status: "complete",
+                pixels_found: 1,
+                source_only: true,
+                provider_write_reached: false,
+            },
+        });
+
+        await expect(diagnoseSnapchatManagementPixels({ days: 7 })).resolves.toMatchObject({
+            status: "complete",
+            pixels_found: 1,
+            source_only: true,
+        });
+        expect(api.post).toHaveBeenCalledWith(
+            "/integrations-v2/snapchat_ads/tracking-diagnostics",
+            expect.objectContaining({
+                days: 7,
+                idempotency_key: expect.stringMatching(/^management-pixel-/),
+            }),
         );
     });
 

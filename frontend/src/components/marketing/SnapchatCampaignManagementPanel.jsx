@@ -17,6 +17,7 @@ import {
     approveSnapchatManagementProposal,
     clearSnapchatManagementPreviewResume,
     createSnapchatManagementProposal,
+    diagnoseSnapchatManagementPixels,
     executeSnapchatManagementProposal,
     getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
@@ -513,6 +514,7 @@ export default function SnapchatCampaignManagementPanel({
     const [resumeBusy, setResumeBusy] = useState(false);
     const [previewPending, setPreviewPending] = useState(false);
     const [resumeVersion, setResumeVersion] = useState(0);
+    const [pixelDiscoveryBusy, setPixelDiscoveryBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const resumeAttempted = useRef(false);
@@ -555,8 +557,10 @@ export default function SnapchatCampaignManagementPanel({
                         : selectedPixels.length === 1 ? selectedPixels[0].pixel_id : "",
                 };
             });
+            return nextReadiness;
         } catch (loadError) {
             setError(managementError(loadError, "تعذّر فحص جاهزية إدارة Snapchat."));
+            return null;
         } finally {
             setLoading(false);
         }
@@ -882,6 +886,32 @@ export default function SnapchatCampaignManagementPanel({
         }
     }
 
+    async function discoverPixels() {
+        beginOperation();
+        setPixelDiscoveryBusy(true);
+        setError("");
+        setNotice("يفحص ميزان أصول Pixel من Snapchat قراءةً فقط؛ لن ينشئ حملة أو يغيّر الصرف.");
+        try {
+            await diagnoseSnapchatManagementPixels({ days: 7 });
+            const refreshed = await load();
+            const selectedPixels = refreshed?.accounts?.find(
+                (item) => item.account_id === form.accountId,
+            )?.pixels || [];
+            if (selectedPixels.length < 1) {
+                setNotice("");
+                setError("اكتمل الفحص ولم يجد Snapchat Pixel مرتبطًا بالحساب المحدد.");
+            } else {
+                setNotice("اكتمل اكتشاف Pixel وتحديث قائمة المجموعة من Snapchat.");
+            }
+        } catch (requestError) {
+            setNotice("");
+            setError(managementError(requestError, "تعذّر اكتشاف Pixel من Snapchat."));
+        } finally {
+            setPixelDiscoveryBusy(false);
+            finishOperation();
+        }
+    }
+
     const busy = operationBusy || resumeBusy;
     const isUpdate = form.action.endsWith(".update");
     const showsBudget = ["campaign.create", "campaign.update", "ad_squad.create", "ad_squad.update"].includes(form.action);
@@ -1081,9 +1111,23 @@ export default function SnapchatCampaignManagementPanel({
 
                                 {pixelOptimization && (
                                     <div className={`rounded-xl border p-3 text-xs font-bold ${pixelSelectionMissing ? "border-rose-200 bg-rose-50 text-rose-800" : "border-sky-200 bg-sky-50 text-sky-900"}`} data-testid="snapchat-management-pixel-status">
-                                        {pixelSelectionMissing
-                                            ? "لا يمكن إنشاء المعاينة: اختر Pixel تابعًا للحساب. سيتحقق ميزان من أهليته مباشرةً لدى Snapchat قبل المعاينة وقبل التنفيذ."
-                                            : "Pixel محدد من أصول الحساب. سيثبت ميزان الارتباط والأهلية مباشرةً لدى Snapchat؛ الاكتشاف المحلي وحده لا يكفي."}
+                                        <div>
+                                            {pixelSelectionMissing
+                                                ? "لا يمكن إنشاء المعاينة: اختر Pixel تابعًا للحساب. سيتحقق ميزان من أهليته مباشرةً لدى Snapchat قبل المعاينة وقبل التنفيذ."
+                                                : "Pixel محدد من أصول الحساب. سيثبت ميزان الارتباط والأهلية مباشرةً لدى Snapchat؛ الاكتشاف المحلي وحده لا يكفي."}
+                                        </div>
+                                        {pixelSelectionMissing && (
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={discoverPixels}
+                                                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                                                data-testid="snapchat-management-discover-pixels"
+                                            >
+                                                <ArrowClockwise size={18} className={pixelDiscoveryBusy ? "animate-spin" : ""} />
+                                                {pixelDiscoveryBusy ? "جاري اكتشاف Pixel…" : "اكتشاف Pixel من Snapchat"}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
