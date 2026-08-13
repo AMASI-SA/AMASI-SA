@@ -39,6 +39,7 @@ INSTAGRAM_INGRESS_FLAG = "MEZAN_INSTAGRAM_INGRESS_ENABLED"
 INSTAGRAM_VERIFY_TOKEN_ENV = "MEZAN_INSTAGRAM_WEBHOOK_VERIFY_TOKEN"
 INSTAGRAM_APP_SECRET_ENV = "MEZAN_INSTAGRAM_APP_SECRET"
 SHARED_META_APP_SECRET_ENV = "META_BUSINESS_APP_SECRET"
+WHATSAPP_INGRESS_FLAG_FALLBACK_ENV = "MEZAN_WHATSAPP_INGRESS_ENABLED"
 WHATSAPP_APP_SECRET_FALLBACK_ENV = "MEZAN_WHATSAPP_APP_SECRET"
 MAX_INSTAGRAM_WEBHOOK_BYTES = 1024 * 1024
 
@@ -411,7 +412,10 @@ class InstagramInboundAdapter:
 
 
 def _configured_adapter(db: Any) -> InstagramInboundAdapter:
-    if not _enabled(os.environ.get(INSTAGRAM_INGRESS_FLAG)):
+    ingress_flag = os.environ.get(INSTAGRAM_INGRESS_FLAG) or os.environ.get(
+        WHATSAPP_INGRESS_FLAG_FALLBACK_ENV
+    )
+    if not _enabled(ingress_flag):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "instagram_ingress_disabled"},
