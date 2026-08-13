@@ -44,6 +44,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/components-v2",
         "/suppliers-v2",
         "/integrations-v2",
+        "/assistant",
         "/customer-intelligence",
         "/ads-manager",
         "/ads-manager/cost-settings",
@@ -126,6 +127,22 @@ test("inventory receiving belongs to products rather than orders", () => {
         search: "",
     });
     expect(section?.id).toBe("products");
+});
+
+test("AI section exposes the conversational Mezan assistant", () => {
+    const section = MEZAN_V2_NAV_SECTIONS.find(
+        (item) => item.id === "intelligence",
+    );
+
+    expect(section.items.map((item) => item.to)).toEqual([
+        "/assistant",
+        "/customer-intelligence",
+    ]);
+    expect(isMezanV2Route("/assistant")).toBe(true);
+    expect(activeNavigationSection({
+        pathname: "/assistant",
+        search: "",
+    })?.id).toBe("intelligence");
 });
 
 test("Mezan 2 exposes an independent suppliers section", () => {
