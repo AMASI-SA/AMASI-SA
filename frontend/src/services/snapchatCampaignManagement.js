@@ -12,6 +12,9 @@ const ACTIONS = new Set([
 ]);
 const TRANSIENT_PREVIEW_TRANSPORT_STATUSES = new Set([502, 503, 504, 520]);
 const MAX_PREVIEW_START_ATTEMPTS = 3;
+const PREVIEW_RESUME_STORAGE_KEY = "mezan:snapchat-management-preview:v1";
+const PREVIEW_RESUME_TTL_MS = 60 * 60 * 1000;
+const previewPreparationInflight = new Map();
 
 function text(value, fallback = "") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -29,6 +32,77 @@ function object(value) {
 
 function objectList(value) {
     return Array.isArray(value) ? value.map(object).filter((item) => Object.keys(item).length) : [];
+}
+
+function previewSessionStorage() {
+    try {
+        return typeof window !== "undefined" ? window.sessionStorage : null;
+    } catch (_error) {
+        return null;
+    }
+}
+
+export function clearSnapchatManagementPreviewResume(ownerId = "") {
+    const ownerScope = text(ownerId);
+    const storage = previewSessionStorage();
+    if (!storage) return;
+    try {
+        const existing = JSON.parse(storage.getItem(PREVIEW_RESUME_STORAGE_KEY) || "null");
+        if (!ownerScope || !existing?.owner_id || existing.owner_id === ownerScope) {
+            storage.removeItem(PREVIEW_RESUME_STORAGE_KEY);
+        }
+    } catch (_error) {
+        storage.removeItem(PREVIEW_RESUME_STORAGE_KEY);
+    }
+}
+
+export function getSnapchatManagementPreviewResume(ownerId = "") {
+    const ownerScope = text(ownerId);
+    const storage = previewSessionStorage();
+    if (!storage || !ownerScope) return null;
+    try {
+        const value = JSON.parse(storage.getItem(PREVIEW_RESUME_STORAGE_KEY) || "null");
+        const savedAt = Number(value?.saved_at);
+        if (
+            value?.version !== 1
+            || value?.owner_id !== ownerScope
+            || !Number.isFinite(savedAt)
+            || Date.now() - savedAt > PREVIEW_RESUME_TTL_MS
+        ) {
+            storage.removeItem(PREVIEW_RESUME_STORAGE_KEY);
+            return null;
+        }
+        const request = proposalRequest(value.request || {});
+        if (!request.idempotency_key || request.idempotency_key !== value.idempotency_key) {
+            storage.removeItem(PREVIEW_RESUME_STORAGE_KEY);
+            return null;
+        }
+        return {
+            owner_id: ownerScope,
+            saved_at: savedAt,
+            request,
+            idempotency_key: request.idempotency_key,
+            preview_job_id: text(value.preview_job_id) || null,
+        };
+    } catch (_error) {
+        storage.removeItem(PREVIEW_RESUME_STORAGE_KEY);
+        return null;
+    }
+}
+
+function saveSnapchatManagementPreviewResume({ ownerId, request, previewJobId = null }) {
+    const ownerScope = text(ownerId);
+    const storage = previewSessionStorage();
+    if (!storage || !ownerScope) return;
+    const normalizedRequest = proposalRequest(request);
+    storage.setItem(PREVIEW_RESUME_STORAGE_KEY, JSON.stringify({
+        version: 1,
+        owner_id: ownerScope,
+        saved_at: Date.now(),
+        request: normalizedRequest,
+        idempotency_key: normalizedRequest.idempotency_key,
+        preview_job_id: text(previewJobId) || null,
+    }));
 }
 
 function proposalRequest(input = {}) {
@@ -152,6 +226,11 @@ export function normalizeSnapchatManagementPreviewJob(payload = {}) {
         created_at: text(value.created_at) || null,
         started_at: text(value.started_at) || null,
         finished_at: text(value.finished_at) || null,
+        phase: text(value.phase, "unknown"),
+        phase_started_at: text(value.phase_started_at) || null,
+        terminal_reconciled: value.terminal_reconciled === true,
+        reconcile_deadline_at: text(value.reconcile_deadline_at) || null,
+        recovery_action: text(value.recovery_action) || null,
         failure: object(value.failure),
         provider_write_reached: value.provider_write_reached === true,
         provider_write_state: text(value.provider_write_state, "not_attempted"),
@@ -215,6 +294,13 @@ export async function getSnapchatManagementPreviewJob(previewJobId) {
     return normalizeSnapchatManagementPreviewJob(response.data);
 }
 
+export async function getCurrentSnapchatManagementPreviewJob(idempotencyKey) {
+    const response = await api.get(`${BASE}/preview-jobs/current`, {
+        params: { idempotency_key: text(idempotencyKey) },
+    });
+    return normalizeSnapchatManagementPreviewJob(response.data);
+}
+
 export async function pollSnapchatManagementPreviewJob({
     previewJobId,
     attempts = 180,
@@ -231,7 +317,13 @@ export async function pollSnapchatManagementPreviewJob({
         } catch (error) {
             if (!isTransientPreviewTransportError(error)) throw error;
         }
-        if (job && ["ready", "failed"].includes(job.status)) return job;
+        if (
+            job
+            && (
+                job.status === "ready"
+                || (job.status === "failed" && job.terminal_reconciled)
+            )
+        ) return job;
         if (attempt < maxAttempts - 1) await wait(intervalMs);
     }
     const error = new Error(
@@ -253,16 +345,46 @@ function previewJobFailure(job) {
     return error;
 }
 
-export async function createSnapchatManagementProposal(input = {}) {
-    const request = proposalRequest(input);
-    const accepted = await startSnapchatManagementPreviewJob(request);
+async function createSnapchatManagementProposalOnce(request, ownerScope) {
+    let accepted;
+    try {
+        accepted = await startSnapchatManagementPreviewJob(request);
+    } catch (startError) {
+        if (!isTransientPreviewTransportError(startError)) {
+            clearSnapchatManagementPreviewResume(ownerScope);
+            throw startError;
+        }
+        try {
+            accepted = await getCurrentSnapchatManagementPreviewJob(
+                request.idempotency_key,
+            );
+        } catch (lookupError) {
+            if (Number(lookupError?.response?.status) === 404) {
+                clearSnapchatManagementPreviewResume(ownerScope);
+            }
+            throw startError;
+        }
+    }
     if (!accepted.preview_job_id) {
+        clearSnapchatManagementPreviewResume(ownerScope);
         throw new Error("لم يُعد ميزان معرّف مهمة المعاينة.");
+    }
+    if (ownerScope) {
+        saveSnapchatManagementPreviewResume({
+            ownerId: ownerScope,
+            request,
+            previewJobId: accepted.preview_job_id,
+        });
     }
     const job = await pollSnapchatManagementPreviewJob({
         previewJobId: accepted.preview_job_id,
     });
-    if (job.status === "failed") throw previewJobFailure(job);
+    if (job.status === "failed") {
+        if (ownerScope && job.terminal_reconciled) {
+            clearSnapchatManagementPreviewResume(ownerScope);
+        }
+        throw previewJobFailure(job);
+    }
 
     // The worker deliberately never persists the plaintext confirmation token.
     // Replaying the same bounded request is idempotent and only rotates a token
@@ -271,7 +393,93 @@ export async function createSnapchatManagementProposal(input = {}) {
     return normalizeSnapchatManagementProposal(response.data);
 }
 
-export async function approveSnapchatManagementProposal(proposal) {
+function trackPreviewPreparation(inflightKey, operation) {
+    const tracked = operation.finally(() => {
+        if (previewPreparationInflight.get(inflightKey) === tracked) {
+            previewPreparationInflight.delete(inflightKey);
+        }
+    });
+    previewPreparationInflight.set(inflightKey, tracked);
+    return tracked;
+}
+
+export function createSnapchatManagementProposal(
+    input = {},
+    { ownerId = "" } = {},
+) {
+    const request = proposalRequest(input);
+    const ownerScope = text(ownerId);
+    if (!ownerScope) {
+        return createSnapchatManagementProposalOnce(request, ownerScope);
+    }
+    const inflightKey = `${ownerScope}:${request.idempotency_key}`;
+    const existing = previewPreparationInflight.get(inflightKey);
+    if (existing) return existing;
+    saveSnapchatManagementPreviewResume({ ownerId: ownerScope, request });
+    return trackPreviewPreparation(
+        inflightKey,
+        createSnapchatManagementProposalOnce(request, ownerScope),
+    );
+}
+
+async function resumeSnapchatManagementProposalOnce({ ownerId, saved }) {
+    const ownerScope = text(ownerId);
+    let job;
+    if (saved.preview_job_id) {
+        job = await pollSnapchatManagementPreviewJob({
+            previewJobId: saved.preview_job_id,
+        });
+    } else {
+        try {
+            const current = await getCurrentSnapchatManagementPreviewJob(
+                saved.idempotency_key,
+            );
+            if (!current.preview_job_id) {
+                throw new Error("لم يُعد ميزان معرّف مهمة المعاينة.");
+            }
+            saveSnapchatManagementPreviewResume({
+                ownerId: ownerScope,
+                request: saved.request,
+                previewJobId: current.preview_job_id,
+            });
+            job = await pollSnapchatManagementPreviewJob({
+                previewJobId: current.preview_job_id,
+            });
+        } catch (error) {
+            if (Number(error?.response?.status) === 404) {
+                clearSnapchatManagementPreviewResume(ownerScope);
+            }
+            throw error;
+        }
+    }
+    if (job.status === "failed") {
+        if (job.terminal_reconciled) {
+            clearSnapchatManagementPreviewResume(ownerScope);
+        }
+        throw previewJobFailure(job);
+    }
+    const response = await api.post(`${BASE}/proposals`, saved.request);
+    return normalizeSnapchatManagementProposal(response.data);
+}
+
+export function resumeSnapchatManagementProposal({ ownerId = "" } = {}) {
+    const ownerScope = text(ownerId);
+    const saved = getSnapchatManagementPreviewResume(ownerScope);
+    if (!saved) return Promise.resolve(null);
+    const inflightKey = `${ownerScope}:${saved.idempotency_key}`;
+    const existing = previewPreparationInflight.get(inflightKey);
+    if (existing) return existing;
+    const operation = resumeSnapchatManagementProposalOnce({
+        ownerId: ownerScope,
+        saved,
+    });
+    return trackPreviewPreparation(inflightKey, operation);
+}
+
+export async function approveSnapchatManagementProposal(
+    proposal,
+    { ownerId = "" } = {},
+) {
     const normalized = normalizeSnapchatManagementProposal(proposal);
     if (!normalized.proposal_id || !normalized.confirm_token) {
         throw new Error("رمز اعتماد المعاينة غير متوفر؛ أنشئ المعاينة من جديد.");
@@ -283,7 +491,9 @@ export async function approveSnapchatManagementProposal(proposal) {
             expected_revision: normalized.revision,
         },
     );
-    return normalizeSnapchatManagementProposal(response.data);
+    const result = normalizeSnapchatManagementProposal(response.data);
+    clearSnapchatManagementPreviewResume(ownerId);
+    return result;
 }
 
 export async function executeSnapchatManagementProposal(proposalId) {
