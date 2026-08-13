@@ -3,15 +3,22 @@ import { createRoot } from "react-dom/client";
 
 jest.mock("../../services/snapchatCampaignManagement", () => ({
     approveSnapchatManagementProposal: jest.fn(),
+    clearSnapchatManagementPreviewResume: jest.fn(),
     createSnapchatManagementProposal: jest.fn(),
     executeSnapchatManagementProposal: jest.fn(),
+    getSnapchatManagementPreviewResume: jest.fn(() => null),
     getSnapchatManagementReadiness: jest.fn(),
     listSnapchatManagementProposals: jest.fn(),
     managementError: (error, fallback) => error?.message || fallback,
     microToNativeAmount: (value) => Number(value) / 1_000_000,
     nativeAmountToMicro: (value) => Math.round(Number(value) * 1_000_000),
     pollSnapchatManagementProposal: jest.fn(),
+    resumeSnapchatManagementProposal: jest.fn(),
     rollbackSnapchatManagementProposal: jest.fn(),
+}));
+
+jest.mock("../../context/AuthContext", () => ({
+    useAuth: () => ({ user: { id: "owner-1" } }),
 }));
 
 jest.mock("../../services/mezanProductsV2", () => ({
@@ -19,9 +26,14 @@ jest.mock("../../services/mezanProductsV2", () => ({
 }));
 
 import {
+    approveSnapchatManagementProposal,
     createSnapchatManagementProposal,
+    executeSnapchatManagementProposal,
+    getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
+    pollSnapchatManagementProposal,
+    resumeSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
 import SnapchatCampaignManagementPanel from "./SnapchatCampaignManagementPanel";
@@ -47,6 +59,8 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         document.body.appendChild(container);
         root = createRoot(container);
         jest.clearAllMocks();
+        getSnapchatManagementPreviewResume.mockReturnValue(null);
+        resumeSnapchatManagementProposal.mockReset();
         getSnapchatManagementReadiness.mockResolvedValue({
             proposal_enabled: true,
             execution_enabled: false,
@@ -165,31 +179,343 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
             await Promise.resolve();
         });
 
-        expect(createSnapchatManagementProposal).toHaveBeenCalledWith(expect.objectContaining({
-            action: "ad_squad.create",
-            account_id: "account-1",
-            parent_id: "campaign-1",
-            products: [{
-                product_id: "710474094",
-                product_variant_id: "variant-1",
-                product_name: "المشط",
-            }],
-            expected_outcome: {
-                primary_goal: "grow_sales_while_protecting_contribution_profit",
-                sales_direction: "stable",
-                contribution_profit_direction: "increase",
-                evaluation_horizons_hours: [24, 72, 168],
-            },
-            supporting_evidence: [{
-                kind: "user_context",
-                value: "نزول الرواتب احتمال يحتاج تحقق من النتائج الفعلية",
-                source: "snapchat_management_panel:user",
-                verification_status: "user_suggestion",
-                confidence: 0,
-                used_in_decision: false,
-                weight: 0,
-            }],
-            trend_override_reason: "التحسن الحديث قصير ولم يكتمل إسناد الطلبات",
+        expect(createSnapchatManagementProposal).toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: "ad_squad.create",
+                account_id: "account-1",
+                parent_id: "campaign-1",
+                products: [{
+                    product_id: "710474094",
+                    product_variant_id: "variant-1",
+                    product_name: "المشط",
+                }],
+                expected_outcome: {
+                    primary_goal: "grow_sales_while_protecting_contribution_profit",
+                    sales_direction: "stable",
+                    contribution_profit_direction: "increase",
+                    evaluation_horizons_hours: [24, 72, 168],
+                },
+                supporting_evidence: [{
+                    kind: "user_context",
+                    value: "نزول الرواتب احتمال يحتاج تحقق من النتائج الفعلية",
+                    source: "snapchat_management_panel:user",
+                    verification_status: "user_suggestion",
+                    confidence: 0,
+                    used_in_decision: false,
+                    weight: 0,
+                }],
+                trend_override_reason: "التحسن الحديث قصير ولم يكتمل إسناد الطلبات",
+            }),
+            { ownerId: "owner-1" },
+        );
+    });
+
+    test("reopening coalesces the saved resume and never approves or executes automatically", async () => {
+        getSnapchatManagementPreviewResume.mockReturnValue({
+            owner_id: "owner-1",
+            idempotency_key: "resume-panel-001",
+            preview_job_id: "job-panel-1",
+        });
+        let finishResume;
+        const sharedResume = new Promise((resolve) => {
+            finishResume = resolve;
+        });
+        resumeSnapchatManagementProposal.mockReturnValue(sharedResume);
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        const toggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+            finishResume({
+                proposal_id: "proposal-panel-1",
+                action: "campaign.create",
+                status: "previewed",
+                confirm_token: "current-token",
+                preview: {},
+            });
+            await sharedResume;
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-approve"]',
+        )).not.toBeNull();
+        expect(approveSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("reopening during create follows the same pending preview without auto action", async () => {
+        let finishPreview;
+        const sharedPreview = new Promise((resolve) => {
+            finishPreview = resolve;
+        });
+        createSnapchatManagementProposal.mockReturnValue(sharedPreview);
+        resumeSnapchatManagementProposal.mockReturnValue(sharedPreview);
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        const toggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-product-select"]'),
+                "710474094",
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+        });
+        expect(createSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+
+        getSnapchatManagementPreviewResume.mockReturnValue({
+            owner_id: "owner-1",
+            idempotency_key: "created-preview-key",
+            preview_job_id: "created-preview-job",
+        });
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).not.toHaveBeenCalled();
+
+        await act(async () => {
+            finishPreview({
+                proposal_id: "proposal-create-reopen",
+                action: "campaign.create",
+                status: "previewed",
+                confirm_token: "single-token",
+                preview: {},
+            });
+            await sharedPreview;
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-approve"]',
+        )).not.toBeNull();
+        expect(approveSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("collapse and reopen keeps an in-flight approval locked", async () => {
+        getSnapchatManagementPreviewResume.mockReturnValue({
+            owner_id: "owner-1",
+            idempotency_key: "approval-lock-001",
+            preview_job_id: "job-approval-lock",
+        });
+        resumeSnapchatManagementProposal.mockResolvedValue({
+            proposal_id: "proposal-approval-lock",
+            action: "campaign.create",
+            status: "previewed",
+            confirm_token: "approval-token",
+            preview: {},
+        });
+        let finishApproval;
+        approveSnapchatManagementProposal.mockReturnValue(new Promise((resolve) => {
+            finishApproval = resolve;
         }));
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        const toggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-approve"]').click();
+            await Promise.resolve();
+        });
+        expect(approveSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-approve"]',
+        ).disabled).toBe(true);
+        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+        expect(approveSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            finishApproval({
+                proposal_id: "proposal-approval-lock",
+                action: "campaign.create",
+                status: "approved",
+                preview: {},
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(approveSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+    });
+
+    test("collapse and reopen keeps an in-flight execution locked", async () => {
+        getSnapchatManagementReadiness.mockResolvedValue({
+            proposal_enabled: true,
+            execution_enabled: true,
+            activation_enabled: false,
+            accounts: [{
+                account_id: "account-1",
+                display_name: "AMASI",
+                currency: "SAR",
+                role: "general",
+                management_allowed: true,
+                creative_allowed: true,
+                creative_role: "creative",
+            }],
+        });
+        createSnapchatManagementProposal.mockResolvedValue({
+            proposal_id: "proposal-execution-lock",
+            action: "campaign.create",
+            status: "previewed",
+            confirm_token: "execution-approval-token",
+            preview: {},
+        });
+        approveSnapchatManagementProposal.mockResolvedValue({
+            proposal_id: "proposal-execution-lock",
+            action: "campaign.create",
+            status: "approved",
+            preview: {},
+        });
+        let finishExecution;
+        executeSnapchatManagementProposal.mockReturnValue(new Promise((resolve) => {
+            finishExecution = resolve;
+        }));
+        pollSnapchatManagementProposal.mockResolvedValue({
+            proposal: {
+                proposal_id: "proposal-execution-lock",
+                action: "campaign.create",
+                status: "completed",
+            },
+            proposals: [],
+        });
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        const toggle = container.querySelector(
+            '[data-testid="snapchat-campaign-management-panel"] > button',
+        );
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-product-select"]'),
+                "710474094",
+            );
+            container.querySelector('[data-testid="snapchat-management-form"]')
+                .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-approve"]').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-management-execute"]').click();
+            await Promise.resolve();
+        });
+        expect(executeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            toggle.click();
+            await Promise.resolve();
+        });
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-execute"]',
+        ).disabled).toBe(true);
+        expect(executeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+        expect(resumeSnapchatManagementProposal).not.toHaveBeenCalled();
+
+        await act(async () => {
+            finishExecution({
+                proposal_id: "proposal-execution-lock",
+                action: "campaign.create",
+                status: "executing",
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(executeSnapchatManagementProposal).toHaveBeenCalledTimes(1);
+    });
+
+    test("keeps a GET-only resume control after the preview polling timeout", async () => {
+        getSnapchatManagementPreviewResume.mockReturnValue({
+            owner_id: "owner-1",
+            idempotency_key: "resume-timeout-001",
+            preview_job_id: "job-timeout-1",
+        });
+        const timeout = Object.assign(new Error("ما زال تجهيز المعاينة مستمرًا"), {
+            code: "snapchat_management_preview_poll_timeout",
+        });
+        resumeSnapchatManagementProposal.mockRejectedValue(timeout);
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const resumeButton = container.querySelector(
+            '[data-testid="snapchat-management-resume-preview"]',
+        );
+        expect(resumeButton).not.toBeNull();
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-create-preview"]',
+        ).disabled).toBe(true);
+
+        await act(async () => {
+            resumeButton.click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(resumeSnapchatManagementProposal).toHaveBeenCalledTimes(2);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 });

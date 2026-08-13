@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowClockwise,
     CaretDown,
@@ -15,17 +15,21 @@ import {
 
 import {
     approveSnapchatManagementProposal,
+    clearSnapchatManagementPreviewResume,
     createSnapchatManagementProposal,
     executeSnapchatManagementProposal,
+    getSnapchatManagementPreviewResume,
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
     managementError,
     microToNativeAmount,
     nativeAmountToMicro,
     pollSnapchatManagementProposal,
+    resumeSnapchatManagementProposal,
     rollbackSnapchatManagementProposal,
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
+import { useAuth } from "../../context/AuthContext";
 
 const ACTIONS = [
     ["campaign.create", "إنشاء حملة"],
@@ -360,6 +364,8 @@ export default function SnapchatCampaignManagementPanel({
     selectedAdSquad = null,
     onChanged,
 }) {
+    const { user } = useAuth();
+    const ownerId = String(user?.id || "").trim();
     const preferredAction = entityLevel === "ads"
         ? "ad.create"
         : entityLevel === "ad_squads"
@@ -377,9 +383,24 @@ export default function SnapchatCampaignManagementPanel({
     const [productError, setProductError] = useState("");
     const [activeProposal, setActiveProposal] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [busy, setBusy] = useState(false);
+    const [operationBusy, setOperationBusy] = useState(false);
+    const [resumeBusy, setResumeBusy] = useState(false);
+    const [previewPending, setPreviewPending] = useState(false);
+    const [resumeVersion, setResumeVersion] = useState(0);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const resumeAttempted = useRef(false);
+    const operationBusyRef = useRef(false);
+
+    function beginOperation() {
+        operationBusyRef.current = true;
+        setOperationBusy(true);
+    }
+
+    function finishOperation() {
+        operationBusyRef.current = false;
+        setOperationBusy(false);
+    }
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -434,6 +455,63 @@ export default function SnapchatCampaignManagementPanel({
     }, [expanded, productsLoaded, productsLoading, loadProducts]);
 
     useEffect(() => {
+        if (
+            !expanded
+            || !ownerId
+            || resumeAttempted.current
+        ) return undefined;
+        resumeAttempted.current = true;
+        if (operationBusyRef.current) return undefined;
+        if (!getSnapchatManagementPreviewResume(ownerId)) return undefined;
+        let cancelled = false;
+        setResumeBusy(true);
+        setPreviewPending(true);
+        setError("");
+        setNotice("يستأنف ميزان متابعة المعاينة السابقة دون إنشاء طلب جديد.");
+        resumeSnapchatManagementProposal({ ownerId })
+            .then((proposal) => {
+                if (cancelled || !proposal) return;
+                setActiveProposal(proposal);
+                setProposals((current) => [
+                    proposal,
+                    ...current.filter((row) => row.proposal_id !== proposal.proposal_id),
+                ].slice(0, 12));
+                setPreviewPending(false);
+                setNotice("اكتملت المعاينة السابقة. راجعها ثم اعتمدها قبل التنفيذ.");
+            })
+            .catch((resumeError) => {
+                if (cancelled) return;
+                const remainsPending = Boolean(
+                    getSnapchatManagementPreviewResume(ownerId),
+                );
+                setPreviewPending(remainsPending);
+                if (resumeError?.code === "snapchat_management_preview_poll_timeout") {
+                    setError("");
+                    setNotice(resumeError.message);
+                } else {
+                    setNotice("");
+                    setError(managementError(
+                        resumeError,
+                        "تعذّر استئناف متابعة معاينة Snapchat.",
+                    ));
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setResumeBusy(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [expanded, ownerId, resumeVersion]);
+
+    useEffect(() => {
+        if (!expanded) {
+            resumeAttempted.current = false;
+            setResumeBusy(false);
+        }
+    }, [expanded]);
+
+    useEffect(() => {
         setForm((current) => {
             if (current.action !== preferredAction) return current;
             const next = initialForm({ action: preferredAction, selectedCampaign, selectedAdSquad });
@@ -479,39 +557,58 @@ export default function SnapchatCampaignManagementPanel({
 
     async function preview(event) {
         event.preventDefault();
-        setBusy(true);
+        beginOperation();
         setError("");
+        setPreviewPending(true);
         setNotice("بدأ تجهيز المعاينة في الخلفية. لا تغلق الصفحة ولا تنشئ معاينة أخرى.");
         try {
-            const proposal = await createSnapchatManagementProposal(buildProposal(form));
+            const proposal = await createSnapchatManagementProposal(
+                buildProposal(form),
+                { ownerId },
+            );
             setActiveProposal(proposal);
+            setPreviewPending(false);
             setNotice("تم إنشاء معاينة فقط. راجعها ثم اعتمدها قبل التنفيذ.");
             setProposals((current) => [proposal, ...current.filter((row) => row.proposal_id !== proposal.proposal_id)].slice(0, 12));
         } catch (requestError) {
-            setNotice("");
-            setError(managementError(requestError, "تعذّر إنشاء معاينة العملية."));
+            const remainsPending = Boolean(
+                getSnapchatManagementPreviewResume(ownerId),
+            );
+            setPreviewPending(remainsPending);
+            if (requestError?.code === "snapchat_management_preview_poll_timeout") {
+                setError("");
+                setNotice(requestError.message);
+            } else {
+                setNotice("");
+                setError(managementError(requestError, "تعذّر إنشاء معاينة العملية."));
+            }
         } finally {
-            setBusy(false);
+            finishOperation();
         }
     }
 
     async function approve() {
-        setBusy(true);
+        beginOperation();
         setError("");
         try {
-            const proposal = await approveSnapchatManagementProposal(activeProposal);
+            const proposal = await approveSnapchatManagementProposal(
+                activeProposal,
+                { ownerId },
+            );
+            clearSnapchatManagementPreviewResume(ownerId);
+            setPreviewPending(false);
             setActiveProposal(proposal);
             setNotice("تم اعتماد المعاينة. لم تصل أي كتابة إلى Snapchat بعد.");
         } catch (requestError) {
             setError(managementError(requestError, "تعذّر اعتماد المعاينة."));
         } finally {
-            setBusy(false);
+            finishOperation();
         }
     }
 
     async function execute() {
         const proposalId = activeProposal.proposal_id;
-        setBusy(true);
+        beginOperation();
         setError("");
         setNotice("");
         try {
@@ -538,12 +635,12 @@ export default function SnapchatCampaignManagementPanel({
             setNotice("");
             setError(`${managementError(requestError, "تعذّر تأكيد الحالة النهائية.")} لا تضغط تنفيذ مرة أخرى؛ حدّث السجل لاحقًا.`);
         } finally {
-            setBusy(false);
+            finishOperation();
         }
     }
 
     async function rollback() {
-        setBusy(true);
+        beginOperation();
         setError("");
         try {
             const proposal = await rollbackSnapchatManagementProposal(
@@ -557,10 +654,11 @@ export default function SnapchatCampaignManagementPanel({
         } catch (requestError) {
             setError(managementError(requestError, "تعذّر التراجع عن العملية."));
         } finally {
-            setBusy(false);
+            finishOperation();
         }
     }
 
+    const busy = operationBusy || resumeBusy;
     const isUpdate = form.action.endsWith(".update");
     const showsBudget = ["campaign.create", "campaign.update", "ad_squad.create", "ad_squad.update"].includes(form.action);
     const showsParent = form.action.startsWith("ad_squad.") || form.action.startsWith("ad.");
@@ -784,9 +882,24 @@ export default function SnapchatCampaignManagementPanel({
 
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <p className="text-[11px] font-bold text-slate-500">الزر التالي ينشئ معاينة فقط؛ لا يكتب في Snapchat.</p>
-                                    <button type="submit" disabled={busy || !form.accountId || !actionAllowed || (requiresProduct && !form.productId)} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
-                                        إنشاء معاينة آمنة
-                                    </button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {previewPending && !busy && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    resumeAttempted.current = false;
+                                                    setResumeVersion((value) => value + 1);
+                                                }}
+                                                className="min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-800"
+                                                data-testid="snapchat-management-resume-preview"
+                                            >
+                                                استئناف متابعة المعاينة
+                                            </button>
+                                        )}
+                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId)} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
+                                            إنشاء معاينة آمنة
+                                        </button>
+                                    </div>
                                 </div>
                             </form>
 
