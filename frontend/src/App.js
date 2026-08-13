@@ -216,7 +216,20 @@ function AppRoutes() {
             <Route path="/audit/ad-account-forensic" element={<ProtectedRoute><Layout><AdAccountForensic /></Layout></ProtectedRoute>} />
             <Route path="/audit/balance-drift" element={<ProtectedRoute><Layout><BalanceDriftDiagnostic /></Layout></ProtectedRoute>} />
             <Route path="/audit/ledger-health" element={<ProtectedRoute><Layout><LedgerHealthDiagnostic /></Layout></ProtectedRoute>} />
-            <Route path="/ai/control-center" element={<ProtectedRoute><Layout><AIControlCenter /></Layout></ProtectedRoute>} />
+            <Route
+                path="/assistant"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><AIControlCenter /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/ai/control-center"
+                element={<ProtectedRoute><Navigate to="/assistant" replace /></ProtectedRoute>}
+            />
             <Route path="/expense-categories-tree" element={<ProtectedRoute><Layout><ExpenseCategoryTreePage /></Layout></ProtectedRoute>} />
             <Route path="/suppliers-new" element={<ProtectedRoute><Layout><SuppliersPage /></Layout></ProtectedRoute>} />
             <Route path="/financial-movement/new" element={<ProtectedRoute><Layout><FinancialMovementNewPage /></Layout></ProtectedRoute>} />
