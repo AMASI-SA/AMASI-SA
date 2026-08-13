@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import api from "../lib/api";
 import { AI_DATA_CONTRACT, AI_ORDER_FIELDS } from "./aiControl/fields";
+import { getMarketingPerformance } from "../services/marketingPerformance";
 import {
     addDaysIso,
     BLOCK,
@@ -125,9 +127,12 @@ export default function AIControlCenter() {
     const [aiQuestion, setAiQuestion] = useState("حلّل حالة ميزان وحدد أهم مشكلة والخطوة التالية.");
     const [aiLoading, setAiLoading] = useState(false);
     const [aiResult, setAiResult] = useState(null);
+    const [marketingContext, setMarketingContext] = useState(null);
+    const [marketingError, setMarketingError] = useState(null);
 
     const load = async () => {
         setLoading(true);
+        setMarketingError(null);
         const range = { from_date: fromDate, to_date: toDate };
         const endpoints = [
             ["dashboard", `/dashboard${buildQuery(range)}`],
@@ -145,6 +150,23 @@ export default function AIControlCenter() {
                 next[key] = { ok: false, error: e?.response?.data?.detail || e?.message || "فشل التحميل" };
             }
         }));
+        try {
+            const snapchat = await getMarketingPerformance({
+                platform: "snapchat",
+                dateFrom: fromDate,
+                dateTo: toDate,
+                page: 1,
+                limit: 50,
+            });
+            setMarketingContext(snapchat);
+        } catch (error) {
+            setMarketingContext(null);
+            setMarketingError(
+                error?.response?.data?.detail
+                || error?.message
+                || "تعذر تحميل بيانات سناب شات",
+            );
+        }
         setData(next);
         setLoading(false);
         const failed = Object.values(next).filter((x) => !x.ok).length;
@@ -196,9 +218,30 @@ export default function AIControlCenter() {
 
     const overall = model.gates.some((gate) => gate.status === BLOCK) ? BLOCK : model.gates.some((gate) => gate.status === WARN) ? WARN : OK;
 
+    const askAssistant = (question) => {
+        setAiQuestion(question);
+    };
+
     const runAiAnalysis = async () => {
         setAiLoading(true);
         try {
+            const campaignRows = (marketingContext?.campaigns || [])
+                .slice(0, 30)
+                .map((campaign) => ({
+                    campaign_id: campaign.campaign_id,
+                    campaign_name: campaign.campaign_name,
+                    status: campaign.status,
+                    delivery_status: campaign.delivery_status,
+                    spend_sar: campaign.spend_sar,
+                    sales_sar: campaign.sales_sar,
+                    orders: campaign.orders,
+                    roas: campaign.roas,
+                    cpa_sar: campaign.cpa_sar,
+                    ctr_pct: campaign.ctr_pct,
+                    daily_budget: campaign.budget?.daily_native,
+                    currency: campaign.budget?.currency,
+                    data_complete: campaign.data_complete,
+                }));
             const context = {
                 period: { from_date: fromDate, to_date: toDate },
                 readiness: statusLabel(overall),
@@ -206,10 +249,27 @@ export default function AIControlCenter() {
                     api_orders: Number(data.orders?.data?.total || model.orders.length || 0),
                     dashboard_orders: Number(model.dashboardSummary.total_orders || 0),
                     total_sales: Number(model.dashboardSummary.total_sales || 0),
-                    ad_spend: Number(model.dashboardSummary.daily_ads_total || model.adsBreakdown.total_amount || 0),
+                    ad_spend: Number(
+                        marketingContext?.totals?.spend_sar
+                        || model.dashboardSummary.daily_ads_total
+                        || model.adsBreakdown.total_amount
+                        || 0,
+                    ),
                     qoyod_failed: Number(model.qoyodStats?.stats?.failed || model.qoyodStats?.failed || 0),
                     duplicate_orders: model.duplicates.length,
                     missing_critical_fields: model.missingOrders.length,
+                    snapchat: {
+                        spend_sar: marketingContext?.totals?.spend_sar,
+                        sales_sar: marketingContext?.totals?.sales_sar,
+                        orders: marketingContext?.totals?.orders,
+                        roas: marketingContext?.totals?.roas,
+                        cpa_sar: marketingContext?.totals?.cpa_sar,
+                        data_complete: marketingContext?.totals?.data_complete,
+                        ai_analysis_ready:
+                            marketingContext?.ai_readiness?.ai_analysis_ready === true,
+                        campaign_count: campaignRows.length,
+                        campaigns: campaignRows,
+                    },
                 },
                 gates: model.gates.map((gate) => ({
                     title: gate.title,
@@ -223,9 +283,17 @@ export default function AIControlCenter() {
                     percent: Number(row.pct.toFixed(1)),
                     status: statusLabel(row.status),
                 })),
-                errors: Object.entries(data)
-                    .filter(([, result]) => !result?.ok)
-                    .map(([source, result]) => ({ source, message: result?.error || "فشل المصدر" })),
+                errors: [
+                    ...Object.entries(data)
+                        .filter(([, result]) => !result?.ok)
+                        .map(([source, result]) => ({
+                            source,
+                            message: result?.error || "فشل المصدر",
+                        })),
+                    ...(marketingError
+                        ? [{ source: "snapchat_campaigns", message: marketingError }]
+                        : []),
+                ],
                 anomalies: model.duplicates.map(([order, count]) => ({ type: "duplicate_order", order, count })),
                 recommendations: model.recommendations,
             };
@@ -243,9 +311,9 @@ export default function AIControlCenter() {
         <div className="space-y-6" dir="rtl" data-testid="ai-control-center">
             <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
-                    <div className="inline-flex bg-slate-900 text-white rounded-full px-3 py-1 text-xs font-bold mb-3">🧠 AI Preflight · قراءة فقط</div>
-                    <h1 className="text-3xl font-extrabold">مركز الذكاء والتحقق</h1>
-                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">تفحص الصفحة اكتمال البيانات وتكشف الفروقات، ثم يقرأ محلل ميزان النتائج ويشرح السبب والخطوة التالية دون تعديل أو إرسال أي بيانات.</p>
+                    <div className="inline-flex bg-slate-900 text-white rounded-full px-3 py-1 text-xs font-bold mb-3">🧠 مساعد ميزان · قرارات مبنية على الدليل</div>
+                    <h1 className="text-3xl font-extrabold">مساعد ميزان</h1>
+                    <p className="text-sm text-slate-600 mt-2 leading-7 max-w-3xl">تحدث معه بطريقتك الطبيعية: اطلب توسيع المبيعات أو مراجعة حملات سناب، وسيشرح القرار والدليل. أي تعديل فعلي ينتقل إلى المعاينة والاعتماد والتحقق قبل التنفيذ.</p>
                 </div>
                 <div className="rounded-xl border bg-white p-3 flex flex-wrap items-end gap-3">
                     <label className="text-xs font-bold text-slate-600">من<input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="block mt-1 border rounded-lg px-3 py-2 text-sm" /></label>
@@ -253,6 +321,41 @@ export default function AIControlCenter() {
                     <button onClick={load} disabled={loading} className="bg-brand text-white rounded-lg px-4 py-2 font-bold text-sm disabled:opacity-50">{loading ? "جارٍ الفحص…" : "🔄 فحص الآن"}</button>
                 </div>
             </div>
+
+            <section className="rounded-2xl border border-violet-200 bg-gradient-to-l from-violet-50 to-white p-5" data-testid="mezan-assistant-quick-actions">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                        <h2 className="text-lg font-extrabold">ماذا تريد من ميزان؟</h2>
+                        <p className="mt-1 text-sm text-slate-600">اختر سؤالًا جاهزًا أو اكتب بطريقتك في المحادثة أدناه.</p>
+                    </div>
+                    <Link
+                        to="/ads-manager?provider=snapchat"
+                        className="rounded-xl border border-violet-200 bg-white px-4 py-2 text-sm font-bold text-violet-800 hover:bg-violet-100"
+                    >
+                        فتح إدارة سناب
+                    </Link>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {[
+                        "وسّع المبيعات من الحملات الرابحة، ولا تتبع كلامي إذا خالف الأرقام.",
+                        "راجع حملات سناب آخر 3 أيام وحدد ما يستمر وما يحتاج إيقافًا.",
+                        "لماذا ارتفعت تكلفة الطلب؟ افحص الإعلان والحملة وصفحة المنتج.",
+                        "اقترح اختبارًا جديدًا للكوب والمشط بدون زيادة عشوائية للميزانية.",
+                    ].map((question) => (
+                        <button
+                            key={question}
+                            type="button"
+                            onClick={() => askAssistant(question)}
+                            className="rounded-xl border border-slate-200 bg-white p-3 text-right text-sm font-bold leading-6 hover:border-violet-300 hover:bg-violet-50"
+                        >
+                            {question}
+                        </button>
+                    ))}
+                </div>
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    التنفيذ الآلي غير مفتوح بلا حدود: المساعد يحلل ويقترح، ثم تستخدم إدارة سناب لمسار المعاينة ← الاعتماد ← التنفيذ ← التحقق ← التراجع.
+                </div>
+            </section>
 
             <div className={`rounded-xl border-2 p-5 ${toneClass(overall)}`}>
                 <h2 className="text-xl font-extrabold">حكم الجاهزية العام: {statusLabel(overall)}</h2>
@@ -313,7 +416,7 @@ function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
                     maxLength={500}
                     rows={2}
                     className="flex-1 rounded-lg border px-3 py-2 text-sm leading-6"
-                    placeholder="مثال: لماذا توقفت مزامنة قيود؟ وما أول شيء أراجعه؟"
+                    placeholder="مثال: وسّع المبيعات وقرر ما الذي يستمر أو يتوقف بناءً على الربحية."
                 />
                 <button
                     type="button"
@@ -321,7 +424,7 @@ function AIAnalyst({ question, setQuestion, loading, result, onAnalyze }) {
                     disabled={loading || question.trim().length < 3}
                     className="rounded-lg bg-violet-700 text-white px-5 py-2 font-bold disabled:opacity-50"
                 >
-                    {loading ? "جارٍ التحليل…" : "حلّل الآن"}
+                    {loading ? "مساعد ميزان يحلل…" : "إرسال إلى مساعد ميزان"}
                 </button>
             </div>
             {result && (
