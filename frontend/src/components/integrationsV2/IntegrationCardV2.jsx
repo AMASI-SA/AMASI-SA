@@ -347,7 +347,11 @@ export default function IntegrationCard({
                                     {account.display_name || "حساب مرتبط"}
                                 </div>
                                 <div className="truncate font-mono text-[11px] text-slate-400">
-                                    {account.external_account_id || account.store_id || account.ad_account_id || "هوية غير متاحة"}
+                                    {account.external_account_id || account.store_id || account.ad_account_id || (
+                                        integration.provider === "instagram"
+                                            ? "هوية الحساب محفوظة بأمان"
+                                            : "هوية غير متاحة"
+                                    )}
                                 </div>
                             </div>
                             <div className="shrink-0 text-left font-mono text-[11px] text-slate-500">

@@ -240,6 +240,7 @@ def _service(db: FakeDB) -> IntegrationsControlCenterService:
 def test_catalog_has_exact_provider_and_ad_capability_contract():
     assert [item.provider for item in PROVIDERS] == [
         "salla",
+        "instagram",
         "snapchat_ads",
         "tiktok_ads",
         "meta_ads",
@@ -595,7 +596,7 @@ async def test_index_installation_is_idempotent_across_repeated_startup():
 
 
 @pytest.mark.asyncio
-async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
+async def test_overview_has_eleven_cards_and_distinguishes_tiktok_data_feed():
     db = FakeDB(
         {
             "salla_integrations": [
@@ -632,8 +633,8 @@ async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
     )
     overview = await _service(db).overview("owner-1")
     OverviewResponse.model_validate(overview)
-    assert overview["summary"]["total"] == 10
-    assert len(overview["providers"]) == 10
+    assert overview["summary"]["total"] == 11
+    assert len(overview["providers"]) == 11
     by_provider = {card["provider"]: card for card in overview["providers"]}
     assert by_provider["salla"]["connection_status"] == "connected"
     assert by_provider["salla"]["connection_provenance"] == "api_connection"
@@ -719,6 +720,71 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
         for key, entry in incomplete_salla["capabilities"].items()
         if key != "abandoned_carts.read"
     } == {"available"}
+
+
+@pytest.mark.asyncio
+async def test_instagram_card_reads_only_safe_receive_only_binding_evidence():
+    raw_account_key = "account:v1:raw-instagram-binding-must-not-render"
+    raw_access_token = "raw-meta-token-must-not-render"
+    scopes = [
+        "instagram_basic",
+        "instagram_manage_comments",
+        "instagram_manage_messages",
+        "pages_manage_metadata",
+    ]
+    db = FakeDB(
+        {
+            "mezan_customer_channels_v1": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "instagram",
+                    "status": "connected",
+                    "external_account_key": raw_account_key,
+                    "ingress_enabled": True,
+                    "egress_mode": "disabled",
+                    "send_allowed": False,
+                    "ai_auto_reply_allowed": False,
+                    "plaintext_credentials_stored": False,
+                    "updated_at": "2026-07-28T11:30:00+00:00",
+                }
+            ],
+            "mezan_meta_oauth_credentials_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "meta_ads",
+                    "scope": scopes,
+                    "access_token": raw_access_token,
+                    "updated_at": "2026-07-28T11:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    instagram = next(
+        card for card in overview["providers"] if card["provider"] == "instagram"
+    )
+
+    assert instagram["connection_status"] == "connected"
+    assert instagram["connection_provenance"] == "api_connection"
+    assert instagram["source_mode"] == "customer_channel"
+    assert instagram["permissions"] == {
+        "current": sorted(scopes),
+        "missing": [],
+        "unknown": False,
+    }
+    assert instagram["accounts"][0]["display_name"] == (
+        "Instagram · استقبال الرسائل والتعليقات"
+    )
+    assert instagram["accounts"][0]["external_account_id"] is None
+    assert instagram["actions"]["settings"]["href"] == (
+        "/integrations-v2/instagram"
+    )
+    assert instagram["actions"]["disconnect"]["enabled"] is False
+    rendered = json.dumps(instagram, ensure_ascii=False)
+    assert raw_account_key not in rendered
+    assert raw_access_token not in rendered
+    assert "إرسال رسائل من إنستغرام" in rendered
 
 
 @pytest.mark.asyncio
@@ -820,12 +886,12 @@ async def test_production_shape_separates_api_legacy_feed_and_disconnected():
     assert by_provider["shipping_companies"]["connection_provenance"] == "planned"
 
     expected_summary = {
-        "total": 10,
+        "total": 11,
         "connected": 4,
         "api_connections": 2,
         "legacy_integrations": 2,
         "data_feeds": 1,
-        "disconnected": 4,
+        "disconnected": 5,
         "planned": 1,
         "unknown": 0,
         "missing_permissions": 0,
@@ -1106,6 +1172,7 @@ async def test_safe_settings_and_reconnect_deep_links_never_enable_disconnect():
     by_provider = {card["provider"]: card for card in overview["providers"]}
     expected = {
         "salla": "/settings/salla",
+        "instagram": "/integrations-v2/instagram",
         "meta_ads": "/settings",
         "qoyod": "/integrations-v2/qoyod",
     }

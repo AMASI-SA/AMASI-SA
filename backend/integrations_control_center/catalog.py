@@ -126,6 +126,40 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
         ),
     ),
     ProviderDefinition(
+        provider="instagram",
+        name="Instagram",
+        name_ar="إنستغرام",
+        category="customer_channel",
+        legacy_sources=(
+            "mezan_customer_channels_v1",
+            "mezan_meta_oauth_credentials_v2",
+        ),
+        required_permissions=(
+            "instagram_basic",
+            "instagram_manage_comments",
+            "instagram_manage_messages",
+            "pages_manage_metadata",
+        ),
+        native_capabilities=(
+            "account.read",
+            "messages.receive",
+            "comments.receive",
+        ),
+        capability_permissions=(
+            ("account.read", ("instagram_basic",)),
+            ("messages.receive", ("instagram_manage_messages",)),
+            ("comments.receive", ("instagram_manage_comments",)),
+        ),
+        ai_can_when_ready=(
+            "قراءة رسائل إنستغرام الواردة داخل ذكاء العملاء",
+            "قراءة التعليقات الواردة وتحليل احتياجات العملاء",
+        ),
+        ai_cannot_phase_one=(
+            "إرسال رسائل من إنستغرام أو الرد على التعليقات",
+            "تشغيل ردود تلقائية أو نشر محتوى دون اعتماد بشري",
+        ),
+    ),
+    ProviderDefinition(
         provider="snapchat_ads",
         name="Snapchat Ads",
         name_ar="إعلانات سناب شات",
