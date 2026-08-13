@@ -22,6 +22,9 @@ on:
       - "backend/preparation_supplier_dispatch.py"
       - "backend/mezan_supplier_management_routes.py"
       - "backend/supplier_receiving_routes.py"
+      - "backend/carrier_handoff.py"
+      - "backend/fulfillment_v2_routes.py"
+      - "backend/salla_integration/sync.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/customer_history.py"
@@ -48,6 +51,7 @@ on:
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "backend/tests/test_carrier_handoff.py"
       - "tests/test_order_review_image_modes_contract.py"
       - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
@@ -92,11 +96,15 @@ on:
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx"
+      - "frontend/src/components/fulfillment/CompletedFulfillmentOrders.jsx"
+      - "frontend/src/components/fulfillment/CompletedFulfillmentOrders.test.jsx"
+      - "frontend/src/components/fulfillment/ShippingBarcodeScanner.jsx"
       - "frontend/src/components/fulfillment/supplierDispatchPrint.js"
       - "frontend/src/components/fulfillment/supplierDispatchPrint.test.js"
       - "frontend/src/services/mezanSuppliersV2.js"
       - "frontend/src/services/supplierReceiving.js"
       - "frontend/src/services/preparationSupplierDispatch.js"
+      - "frontend/src/services/fulfillmentV2.js"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
       - "frontend/src/pages/ReviewedOrders.jsx"
@@ -127,6 +135,9 @@ on:
       - "backend/preparation_supplier_dispatch.py"
       - "backend/mezan_supplier_management_routes.py"
       - "backend/supplier_receiving_routes.py"
+      - "backend/carrier_handoff.py"
+      - "backend/fulfillment_v2_routes.py"
+      - "backend/salla_integration/sync.py"
       - "backend/order_engine/__init__.py"
       - "backend/order_engine/mapper.py"
       - "backend/order_engine/customer_history.py"
@@ -153,6 +164,7 @@ on:
       - "backend/tests/test_customer_history_complete_lookup.py"
       - "backend/tests/test_customer_history_route.py"
       - "backend/tests/test_fulfillment_v2_contract.py"
+      - "backend/tests/test_carrier_handoff.py"
       - "tests/test_order_review_image_modes_contract.py"
       - "tests/test_order_review_mezan_image_upload_contract.py"
       - "frontend/src/App.js"
@@ -195,11 +207,15 @@ on:
       - "frontend/src/components/fulfillment/PreparationWorkDashboard.test.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx"
       - "frontend/src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx"
+      - "frontend/src/components/fulfillment/CompletedFulfillmentOrders.jsx"
+      - "frontend/src/components/fulfillment/CompletedFulfillmentOrders.test.jsx"
+      - "frontend/src/components/fulfillment/ShippingBarcodeScanner.jsx"
       - "frontend/src/components/fulfillment/supplierDispatchPrint.js"
       - "frontend/src/components/fulfillment/supplierDispatchPrint.test.js"
       - "frontend/src/services/mezanSuppliersV2.js"
       - "frontend/src/services/supplierReceiving.js"
       - "frontend/src/services/preparationSupplierDispatch.js"
+      - "frontend/src/services/fulfillmentV2.js"
       - "frontend/src/pages/OrderReview.jsx"
       - "frontend/src/pages/OrderReview.test.jsx"
       - "frontend/src/pages/ReviewedOrders.jsx"
@@ -262,6 +278,7 @@ jobs:
           tests/test_customer_history_complete_lookup.py
           tests/test_customer_history_route.py
           tests/test_fulfillment_v2_contract.py
+          tests/test_carrier_handoff.py
           -q --tb=short
       - name: Run root image-mode contracts
         env:
@@ -292,7 +309,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/GlobalSearch.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/GlobalSearch.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/CompletedFulfillmentOrders.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"

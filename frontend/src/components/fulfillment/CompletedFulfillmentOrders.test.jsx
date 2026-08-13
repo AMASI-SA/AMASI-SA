@@ -2,14 +2,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 jest.mock("sonner", () => ({ toast: { success: jest.fn() } }));
 jest.mock("../../services/fulfillmentV2", () => ({
+    confirmCompletedCarrierLabelPrint: jest.fn(),
     issueCompletedOrderCarrierLabel: jest.fn(),
+    listCarrierHandoffShipments: jest.fn(() => Promise.resolve({ items: [] })),
     listCompletedFulfillmentOrders: jest.fn(() => Promise.resolve({ items: [], permissions: {} })),
     refreshCompletedOrderCarrierLabel: jest.fn(),
+    scanCarrierHandoffShipment: jest.fn(),
 }));
 
 import { CarrierLabelControl } from "./CompletedFulfillmentOrders";
 
-const permissions = { can_print: true };
+const permissions = { can_print: true, can_confirm_print: true };
 
 test("external courier exposes only the official provider label link", () => {
     const markup = renderToStaticMarkup(
@@ -28,6 +31,7 @@ test("external courier exposes only the official provider label link", () => {
             permissions={permissions}
             busy={false}
             onIssue={() => {}}
+            onConfirmPrint={() => {}}
         />,
     );
 
@@ -56,6 +60,7 @@ test("store courier exposes the Mezan-designed printable label", () => {
             permissions={permissions}
             busy={false}
             onIssue={() => {}}
+            onConfirmPrint={() => {}}
         />,
     );
 
@@ -71,8 +76,55 @@ test("unfinished order makes the Salla completed transition explicit", () => {
             permissions={permissions}
             busy={false}
             onIssue={() => {}}
+            onConfirmPrint={() => {}}
         />,
     );
 
     expect(markup).toContain("تحويل سلة إلى تم التنفيذ وإصدار البوليصة");
+});
+
+test("external label stays with labeling until its exact barcode is confirmed", () => {
+    const pending = renderToStaticMarkup(
+        <CarrierLabelControl
+            order={{
+                order_number: "276628330",
+                shipping_company: "iMile",
+                carrierSnapshot: {
+                    ready: true,
+                    label_url: "https://carrier.example/label.pdf",
+                    tracking_number: "6081326581116",
+                    courier_name: "iMile",
+                    order_status_completed: true,
+                },
+            }}
+            permissions={permissions}
+            busy={false}
+            onIssue={() => {}}
+            onConfirmPrint={() => {}}
+        />,
+    );
+    expect(pending).toContain("تأكيد الطباعة وتصوير باركود الشحنة");
+
+    const confirmed = renderToStaticMarkup(
+        <CarrierLabelControl
+            order={{
+                order_number: "276628330",
+                shipping_company: "iMile",
+                carrierSnapshot: {
+                    ready: true,
+                    label_url: "https://carrier.example/label.pdf",
+                    tracking_number: "6081326581116",
+                    courier_name: "iMile",
+                    order_status_completed: true,
+                    print_confirmed: true,
+                },
+            }}
+            permissions={permissions}
+            busy={false}
+            onIssue={() => {}}
+            onConfirmPrint={() => {}}
+        />,
+    );
+    expect(confirmed).toContain("تم التنفيذ وطباعة الشحنة");
+    expect(confirmed).toContain("بانتظار موظف تسليم الشحن");
 });

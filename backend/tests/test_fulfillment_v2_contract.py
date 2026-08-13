@@ -154,6 +154,29 @@ def test_orders_v2_shipping_card_shows_complete_order_address():
     assert 'تفاصيل العنوان لم تصل من سلة' in source
 
 
+def test_carrier_handoff_is_barcode_governed_and_released_by_orders_page_sync():
+    backend_source = (ROOT / "backend/fulfillment_v2_routes.py").read_text(
+        encoding="utf-8"
+    )
+    salla_sync_source = (
+        ROOT / "backend/salla_integration/sync.py"
+    ).read_text(encoding="utf-8")
+    frontend_source = (
+        ROOT / "frontend/src/components/fulfillment/CompletedFulfillmentOrders.jsx"
+    ).read_text(encoding="utf-8")
+
+    assert '"/completed/{order_number}/carrier-label/confirm-print"' in backend_source
+    assert '"/carrier-handoff/scan"' in backend_source
+    assert '"carrier_handoff_state": "with_handoff_employee"' in (
+        ROOT / "backend/carrier_handoff.py"
+    ).read_text(encoding="utf-8")
+    assert "advance_carrier_handoff_from_salla_status" in salla_sync_source
+    assert 'source="mezan_orders_page_status_sync"' in salla_sync_source
+    assert 'data-testid="confirm-carrier-label-print"' in frontend_source
+    assert 'data-testid="open-carrier-handoff-scanner"' in frontend_source
+    assert "setInterval" in frontend_source
+
+
 def test_review_supports_internal_operational_items_without_supplier_export():
     backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
