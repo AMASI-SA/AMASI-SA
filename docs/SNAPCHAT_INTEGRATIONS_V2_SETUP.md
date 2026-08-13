@@ -69,7 +69,64 @@ roles for every asset Mezan must manage.
 - V2 public projections contain no token, Client Secret, or authorization code.
 - The native connector does not read or write `snapchat_connections`,
   `snapchat_ad_accounts`, `snapchat_account_daily`, or the old analytics engine.
-- Provider campaign writes, accounting writes, and Qoyod writes remain blocked.
+- Provider campaign writes are available only through Mezan's guarded management
+  lifecycle. Accounting and Qoyod writes remain separate and are never implied
+  by a Snapchat proposal.
+
+## Guarded campaign management v2
+
+Every new campaign, ad squad, ad, or creative follows this lifecycle:
+
+1. immutable preview;
+2. explicit approval;
+3. one fenced provider execution;
+4. provider readback and exact verification;
+5. audit and optional verified rollback.
+
+Delivery entities are always created with `status=PAUSED`. Activating an entity
+is a separate update that requires an explicit spend acknowledgement and the
+independent activation switch.
+
+For an ad squad that uses a `PIXEL_*` optimization goal, the caller must select
+an account-scoped `pixel_id` and an explicit `conversion_window`. Mezan reads the
+complete Pixel catalogue directly from Snapchat and accepts only an active Pixel
+belonging to the selected ad account. It then verifies the exact optimization
+goal and conversion window through Snapchat's campaign-eligibility endpoint.
+`ELIGIBLE` and `ELIGIBLE_WARNING` are accepted and persisted; incomplete,
+ambiguous, inactive, or ineligible results fail closed. The full association and
+eligibility check runs once for preview and again after the durable execution
+lock immediately before the provider write.
+
+If a delivery-entity create request has an uncertain provider outcome, Mezan
+does not retry it. For campaigns, ad squads, and ads, the read-only
+reconciliation path scans every bounded, trusted provider page (including
+deleted entities), matches the complete immutable intent and parent
+relationship, and verifies a single candidate by ID. Multiple matches require
+manual review. Absence is accepted only after two complete zero-result scans
+separated by at least five minutes; partial results never prove either presence
+or absence. Snapchat does not expose the same deleted-aware catalogue contract
+for creatives, so an uncertain creative create remains manual-only and is never
+automatically adopted or classified as not applied.
+
+## Rolling deployment gate for management v2
+
+Never roll out a management protocol change while provider mutations are
+enabled. The safe order is:
+
+1. set `MEZAN_SNAPCHAT_CAMPAIGN_MUTATIONS_ENABLED=false` and verify every live
+   replica reports `execution_enabled=false`;
+2. deploy the new Git SHA through `scripts/production_release_guard.py` and
+   complete its multi-replica verification;
+3. verify readiness reports `safety_protocol_version=2` and
+   `mutation_rollout_requires_homogeneous_replicas=true` on the homogeneous
+   release;
+4. enable mutations only after that proof and re-publish the same code SHA;
+5. keep `MEZAN_SNAPCHAT_CAMPAIGN_ACTIVATION_ENABLED=false` until an operator has
+   explicitly approved an action that can begin spending.
+
+Protocol-v2 previews use `previewed_v2` and `approved_v2`. Older replicas do not
+understand these states and therefore cannot execute them during a rolling
+deployment.
 
 ## Native data synchronization
 

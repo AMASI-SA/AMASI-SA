@@ -28,6 +28,7 @@ from .snapchat_native_data_common import (
     SnapchatNativeSyncError,
     SnapchatSyncContext,
     _collection,
+    _safe_next_url,
     _safe_provider_error_detail,
 )
 from .snapchat_native_entities_sync import _safe_provider_value, _upsert_entity
@@ -43,6 +44,13 @@ MUTATIONS_ENABLED_ENV = "MEZAN_SNAPCHAT_CAMPAIGN_MUTATIONS_ENABLED"
 ACTIVATION_ENABLED_ENV = "MEZAN_SNAPCHAT_CAMPAIGN_ACTIVATION_ENABLED"
 MAX_DAILY_BUDGET_ENV = "MEZAN_SNAPCHAT_MAX_DAILY_BUDGET_MICRO"
 DEFAULT_MAX_DAILY_BUDGET_MICRO = 5_000_000_000
+TRACKING_ASSET_COLLECTION = "mezan_snapchat_tracking_assets_v2"
+MANAGEMENT_SAFETY_PROTOCOL_VERSION = 2
+MAX_MANAGEMENT_LIST_PAGES = 10
+MAX_MANAGEMENT_LIST_ROWS = 10_000
+CREATE_RECONCILIATION_GRACE = timedelta(minutes=5)
+PIXEL_CONVERSION_WINDOWS = {"SWIPE_28DAY_VIEW_1DAY", "SWIPE_7DAY"}
+PIXEL_ELIGIBLE_STATUSES = {"ELIGIBLE", "ELIGIBLE_WARNING"}
 
 Action = Literal[
     "campaign.create",
@@ -106,6 +114,7 @@ AD_SQUAD_CREATE_FIELDS = {
     "child_ad_type",
     "forced_view_setting",
     "event_sources",
+    "delivery_constraint",
 }
 AD_SQUAD_UPDATE_FIELDS = AD_SQUAD_CREATE_FIELDS | {"status"}
 AD_CREATE_FIELDS = {"name", "creative_id", "type"}
@@ -136,9 +145,8 @@ CREATIVE_CREATE_FIELDS = {
 }
 
 # Snapchat's ad endpoint uses an ad type that can differ from the attached
-# creative type.  Keep this allow-list deliberately narrow: unknown creative
-# types continue to be handled by Snapchat, while documented mappings are
-# rejected locally before a provider write can be attempted.
+# creative type. Keep this allow-list deliberately narrow and fail closed for
+# unknown mappings before a provider write can be attempted.
 CREATIVE_TYPE_TO_AD_TYPES = {
     "WEB_VIEW": ("REMOTE_WEBPAGE",),
 }
@@ -160,6 +168,10 @@ def _expired(value: Any) -> bool:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc) <= _utcnow()
+
+
+def _is_pixel_optimization_goal(value: Any) -> bool:
+    return str(value or "").strip().upper().startswith("PIXEL_")
 
 
 def _enabled(name: str, default: str = "false") -> bool:
@@ -340,6 +352,11 @@ class SnapchatManagementProposalInput(BaseModel):
         default_factory=list, max_length=20
     )
     trend_override_reason: str | None = Field(default=None, max_length=500)
+    # The UI sends v2 explicitly.  A pre-v2 replica rejects the unknown field,
+    # which prevents it from preparing a proposal that it cannot safely
+    # execute during a rolling deployment.  Defaulting to v1 preserves
+    # read/reconciliation compatibility for durable legacy proposals.
+    safety_protocol_version: Literal[1, 2] = 1
 
     @field_validator("account_id", "target_id", "parent_id")
     @classmethod
@@ -505,10 +522,38 @@ def build_snapchat_operation(
         ):
             if entity.get(required) in (None, "", {}, []):
                 raise ValueError(f"{required} is required")
-        if not any(
-            key in entity for key in ("daily_budget_micro", "lifetime_budget_micro")
-        ):
+        budget_fields = [
+            key
+            for key in ("daily_budget_micro", "lifetime_budget_micro")
+            if key in entity
+        ]
+        if not budget_fields:
             raise ValueError("daily_budget_micro or lifetime_budget_micro is required")
+        if len(budget_fields) != 1:
+            raise ValueError(
+                "exactly one of daily_budget_micro or lifetime_budget_micro is required"
+            )
+        optimization_goal = str(entity.get("optimization_goal") or "").upper()
+        entity["optimization_goal"] = optimization_goal
+        if _is_pixel_optimization_goal(optimization_goal):
+            entity["pixel_id"] = _identifier(
+                entity.get("pixel_id"), field="pixel_id"
+            )
+            conversion_window = str(entity.get("conversion_window") or "").upper()
+            if conversion_window not in PIXEL_CONVERSION_WINDOWS:
+                raise ValueError(
+                    "conversion_window is required for a PIXEL optimization goal"
+                )
+            entity["conversion_window"] = conversion_window
+        elif entity.get("pixel_id"):
+            entity["pixel_id"] = _identifier(
+                entity.get("pixel_id"), field="pixel_id"
+            )
+        entity["delivery_constraint"] = (
+            "DAILY_BUDGET"
+            if budget_fields == ["daily_budget_micro"]
+            else "LIFETIME_BUDGET"
+        )
         entity["campaign_id"] = parent_id
         entity["status"] = "PAUSED"
         operation = {
@@ -638,8 +683,41 @@ def _operation_summary(
         "daily_budget_micro": entity.get("daily_budget_micro"),
         "lifetime_budget_micro": entity.get("lifetime_budget_micro"),
         "lifetime_spend_cap_micro": entity.get("lifetime_spend_cap_micro"),
+        "pixel_id": entity.get("pixel_id"),
+        "optimization_goal": entity.get("optimization_goal"),
+        "conversion_window": entity.get("conversion_window"),
         "changed_fields": sorted(entity),
     }
+
+
+def snapchat_management_intent_fingerprint(operation: dict[str, Any]) -> str:
+    """Fence logically identical creates even when their proposal IDs differ."""
+    body = operation.get("body")
+    rows = body.get(operation.get("plural")) if isinstance(body, dict) else None
+    entity = dict(rows[0]) if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+    for provider_field in (
+        "status",
+        "ad_account_id",
+        "campaign_id",
+        "ad_squad_id",
+        "delivery_constraint",
+    ):
+        entity.pop(provider_field, None)
+    canonical = {
+        "action": operation.get("action"),
+        "account_id": operation.get("account_id"),
+        "parent_id": operation.get("parent_id"),
+        "entity": _canonical_control_value(entity),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            canonical,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _assert_stored_operation_integrity(
@@ -754,6 +832,36 @@ def _assert_stored_operation_integrity(
     activates_delivery = str(entity.get("status") or "").upper() == "ACTIVE"
     if operation.get("activates_delivery") is not activates_delivery:
         raise ValueError("stored activation flag does not match the proposal")
+    if action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS:
+        stored_intent = str(row.get("intent_fingerprint") or "")
+        if int(row.get("safety_protocol_version") or 1) == 2 and (
+            not stored_intent
+            or stored_intent != snapchat_management_intent_fingerprint(operation)
+        ):
+            raise ValueError("stored create intent fingerprint is invalid")
+    if action == "ad_squad.create" and int(
+        row.get("safety_protocol_version") or 1
+    ) == 2:
+        goal = str(entity.get("optimization_goal") or "").upper()
+        if _is_pixel_optimization_goal(goal):
+            pixel_id = _identifier(entity.get("pixel_id"), field="pixel_id")
+            window = str(entity.get("conversion_window") or "").upper()
+            proof = row.get("pixel_eligibility")
+            if (
+                not isinstance(proof, dict)
+                or proof.get("verified") is not True
+                or str(proof.get("pixel_id") or "") != pixel_id
+                or str(proof.get("account_id") or "") != account_id
+                or str(proof.get("optimization_goal") or "").upper() != goal
+                or str(proof.get("conversion_window") or "").upper() != window
+                or str(proof.get("eligibility_status") or "").upper()
+                not in PIXEL_ELIGIBLE_STATUSES
+                or proof.get("membership_verified") is not True
+                or str(proof.get("pixel_status") or "").upper() != "ACTIVE"
+                or str(proof.get("pixel_effective_status") or "").upper()
+                != "ACTIVE"
+            ):
+                raise ValueError("stored Pixel eligibility proof is invalid")
 
 
 def _safe_nested_provider_error_detail(payload: Any) -> dict[str, str]:
@@ -805,6 +913,66 @@ def _safe_nested_provider_error_detail(payload: Any) -> dict[str, str]:
     return best
 
 
+def _explicit_provider_validation_no_write_proof(
+    payload: Any, *, http_status: int, expected_plural: str | None = None
+) -> dict[str, Any] | None:
+    """Recognize only explicit whole-request validation rejection evidence."""
+    if not isinstance(payload, dict):
+        return None
+    request_status = str(payload.get("request_status") or "").upper()
+    if "FAIL" not in request_status and "ERROR" not in request_status:
+        return None
+    wrappers: list[dict[str, Any]] = []
+    present_plural_count = 0
+    for plural in ("campaigns", "adsquads", "ads", "creatives"):
+        if plural not in payload:
+            continue
+        present_plural_count += 1
+        value = payload.get(plural)
+        if (
+            not isinstance(value, list)
+            or len(value) != 1
+            or not isinstance(value[0], dict)
+        ):
+            return None
+        wrappers.append(value[0])
+    if (
+        present_plural_count != 1
+        or len(wrappers) != 1
+        or not expected_plural
+        or expected_plural not in payload
+    ):
+        # A bare HTTP/top-level rejection does not prove that the provider did
+        # not apply an earlier duplicate or partially processed create.
+        return None
+    expected_singular = {
+        "campaigns": "campaign",
+        "adsquads": "adsquad",
+        "ads": "ad",
+        "creatives": "creative",
+    }.get(str(expected_plural or ""))
+    if not expected_singular:
+        return None
+    for wrapper in wrappers:
+        sub_status = str(wrapper.get("sub_request_status") or "").upper()
+        if "FAIL" not in sub_status and "ERROR" not in sub_status:
+            return None
+        for singular in ("campaign", "adsquad", "ad", "creative"):
+            if singular in wrapper and singular != expected_singular:
+                return None
+            entity = wrapper.get(singular)
+            if singular in wrapper:
+                if not isinstance(entity, dict) or entity.get("id"):
+                    return None
+    return {
+        "proof_kind": "explicit_whole_request_validation_rejection",
+        "http_status": http_status,
+        "request_status": request_status,
+        "failed_subrequests": len(wrappers),
+        "expected_plural": expected_plural,
+    }
+
+
 class SnapchatManagementProvider:
     def __init__(self, db: Any, user_id: str) -> None:
         self.db = db
@@ -819,6 +987,7 @@ class SnapchatManagementProvider:
         *,
         body: Any = None,
         content_type: str = "application/json",
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         try:
             token = await self.context.access_token()
@@ -847,6 +1016,7 @@ class SnapchatManagementProvider:
                     f"{SNAPCHAT_API_BASE}{path}",
                     headers=headers,
                     json=body,
+                    params=params,
                 )
         except httpx.HTTPError as exc:
             raise HTTPException(
@@ -862,6 +1032,23 @@ class SnapchatManagementProvider:
             except (TypeError, ValueError):
                 provider_payload = {}
             safe_detail = _safe_nested_provider_error_detail(provider_payload)
+            expected_plural = (
+                next(
+                    (
+                        plural
+                        for plural in ("campaigns", "adsquads", "ads", "creatives")
+                        if isinstance(body, dict) and plural in body
+                    ),
+                    None,
+                )
+                if method.upper() == "POST"
+                else None
+            )
+            no_write_proof = _explicit_provider_validation_no_write_proof(
+                provider_payload,
+                http_status=response.status_code,
+                expected_plural=expected_plural,
+            )
             if response.status_code in {401, 403}:
                 raise HTTPException(
                     status_code=409,
@@ -877,6 +1064,11 @@ class SnapchatManagementProvider:
                     "code": f"snapchat_management_http_{response.status_code}",
                     "message": "رفض Snapchat العملية المقترحة.",
                     **safe_detail,
+                    **(
+                        {"provider_no_write_proof": no_write_proof}
+                        if no_write_proof
+                        else {}
+                    ),
                 },
             )
         try:
@@ -893,19 +1085,408 @@ class SnapchatManagementProvider:
             raise HTTPException(
                 status_code=502, detail={"code": "snapchat_management_invalid_payload"}
             )
-        request_status = str(
-            payload.get("request_status") or payload.get("status") or "SUCCESS"
-        ).upper()
-        if "FAIL" in request_status or "ERROR" in request_status:
+        request_status = str(payload.get("request_status") or "").upper()
+        if request_status not in {"SUCCESS", "OK"}:
+            expected_plural = (
+                next(
+                    (
+                        plural
+                        for plural in ("campaigns", "adsquads", "ads", "creatives")
+                        if isinstance(body, dict) and plural in body
+                    ),
+                    None,
+                )
+                if method.upper() == "POST"
+                else None
+            )
+            no_write_proof = _explicit_provider_validation_no_write_proof(
+                payload,
+                http_status=response.status_code,
+                expected_plural=expected_plural,
+            )
             raise HTTPException(
                 status_code=502,
                 detail={
                     "code": "snapchat_management_request_failed",
                     "message": "أبلغ Snapchat عن فشل العملية.",
                     **_safe_nested_provider_error_detail(payload),
+                    **(
+                        {"provider_no_write_proof": no_write_proof}
+                        if no_write_proof
+                        else {}
+                    ),
                 },
             )
         return payload
+
+    async def _list_complete(
+        self,
+        path: str,
+        *,
+        plural: str,
+        singular: str,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read every bounded, trusted page or fail without using partial data."""
+        next_path = path
+        next_params = {"limit": 1000, **(params or {})}
+        rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for page in range(MAX_MANAGEMENT_LIST_PAGES):
+            payload = await self._request("GET", next_path, params=next_params)
+            wrappers = payload.get(plural)
+            if not isinstance(wrappers, list):
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "code": "snapchat_management_catalog_incomplete",
+                        "message": "تعذر إكمال قراءة كتالوج Snapchat بأمان.",
+                    },
+                )
+            for wrapper in wrappers:
+                if not isinstance(wrapper, dict):
+                    raise HTTPException(
+                        status_code=502,
+                        detail={"code": "snapchat_management_catalog_incomplete"},
+                    )
+                sub_status = str(wrapper.get("sub_request_status") or "").upper()
+                if sub_status not in {"SUCCESS", "OK"}:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={
+                            "code": "snapchat_management_catalog_incomplete",
+                            **_safe_nested_provider_error_detail(wrapper),
+                        },
+                    )
+                if singular not in wrapper:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={"code": "snapchat_management_catalog_incomplete"},
+                    )
+                entity = wrapper.get(singular)
+                if not isinstance(entity, dict) or (
+                    not entity.get("id")
+                    and singular != "campaign_eligibility"
+                ):
+                    raise HTTPException(
+                        status_code=502,
+                        detail={"code": "snapchat_management_catalog_incomplete"},
+                    )
+                entity_id = str(
+                    entity.get("id")
+                    or (
+                        f"{entity.get('optimization_goal')}:{entity.get('conversion_window')}"
+                        if singular == "campaign_eligibility"
+                        else ""
+                    )
+                ).strip()
+                if not entity_id:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={"code": "snapchat_management_catalog_incomplete"},
+                    )
+                if entity_id in seen:
+                    existing = next(
+                        (
+                            row
+                            for row in rows
+                            if str(row.get("id") or "").strip() == entity_id
+                        ),
+                        None,
+                    )
+                    safe_duplicate = _safe_provider_value(entity)
+                    if isinstance(safe_duplicate, dict):
+                        safe_duplicate.setdefault("id", entity_id)
+                    if not isinstance(safe_duplicate, dict) or (
+                        _canonical_control_value(existing)
+                        != _canonical_control_value(safe_duplicate)
+                    ):
+                        raise HTTPException(
+                            status_code=502,
+                            detail={
+                                "code": "snapchat_management_catalog_duplicate_conflict"
+                            },
+                        )
+                    continue
+                seen.add(entity_id)
+                safe = _safe_provider_value(entity)
+                if isinstance(safe, dict):
+                    safe.setdefault("id", entity_id)
+                    rows.append(safe)
+                if len(rows) > MAX_MANAGEMENT_LIST_ROWS:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "snapchat_management_catalog_limit_reached"},
+                    )
+            paging = payload.get("paging")
+            if paging is None:
+                paging = {}
+            if not isinstance(paging, dict):
+                raise HTTPException(
+                    status_code=502,
+                    detail={"code": "snapchat_management_catalog_incomplete"},
+                )
+            has_next = "next_link" in paging
+            raw_next = paging.get("next_link")
+            # The provider may omit ``next_link`` or return null / the exact
+            # empty string on the terminal page.  Every other supplied value
+            # must be a non-empty trusted URL.  In particular, falsey values
+            # such as 0, False, [], {}, and whitespace are malformed rather
+            # than evidence that the catalogue is complete.
+            terminal_next = raw_next is None or raw_next == ""
+            if has_next and not terminal_next:
+                if not isinstance(raw_next, str) or not _safe_next_url(raw_next):
+                    raise HTTPException(
+                        status_code=502,
+                        detail={"code": "snapchat_management_catalog_incomplete"},
+                    )
+            trusted_next = _safe_next_url(raw_next)
+            if not trusted_next:
+                return rows
+            if not trusted_next.startswith(f"{SNAPCHAT_API_BASE}/"):
+                raise HTTPException(
+                    status_code=502,
+                    detail={"code": "snapchat_management_catalog_incomplete"},
+                )
+            next_path = trusted_next[len(SNAPCHAT_API_BASE) :]
+            next_params = None
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_catalog_page_limit_reached"},
+        )
+
+    async def list_account_pixels(self, account_id: str) -> list[dict[str, Any]]:
+        return await self._list_complete(
+            f"/adaccounts/{account_id}/pixels",
+            plural="pixels",
+            singular="pixel",
+        )
+
+    async def pixel_eligibility(
+        self,
+        *,
+        account_id: str,
+        pixel_id: str,
+        optimization_goal: str,
+        conversion_window: str,
+    ) -> dict[str, Any]:
+        eligibility_rows = await self._list_complete(
+            f"/pixels/{pixel_id}/campaign_eligibilities",
+            plural="campaign_eligibilities",
+            singular="campaign_eligibility",
+            params={
+                "ad_account_id": account_id,
+                "optimization_goal": optimization_goal,
+                "conversion_window": conversion_window,
+            },
+        )
+        matches: list[dict[str, Any]] = []
+        for value in eligibility_rows:
+            if (
+                str(value.get("optimization_goal") or "").upper()
+                == optimization_goal
+                and str(value.get("conversion_window") or "").upper()
+                == conversion_window
+            ):
+                matches.append(value)
+        if len(matches) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_pixel_eligibility_unavailable",
+                    "matching_rows": len(matches),
+                },
+            )
+        eligibility_status = str(
+            matches[0].get("eligibility_status") or ""
+        ).upper()
+        proof = {
+            "verified": eligibility_status in PIXEL_ELIGIBLE_STATUSES,
+            "pixel_id": pixel_id,
+            "account_id": account_id,
+            "optimization_goal": optimization_goal,
+            "conversion_window": conversion_window,
+            "eligibility_status": eligibility_status,
+            "warning": eligibility_status == "ELIGIBLE_WARNING",
+            "verified_at": _iso(),
+        }
+        if eligibility_status not in PIXEL_ELIGIBLE_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_pixel_ineligible",
+                    **proof,
+                    "ineligible_properties": _safe_provider_value(
+                        matches[0].get("ineligible_properties") or []
+                    ),
+                },
+            )
+        return proof
+
+    async def validate_pixel_ad_squad_intent(
+        self,
+        *,
+        account_id: str,
+        parent_id: str,
+        operation: dict[str, Any],
+        reread_parent: bool = True,
+    ) -> dict[str, Any] | None:
+        entity = _operation_create_entity(operation)
+        goal = str(entity.get("optimization_goal") or "").upper()
+        if not _is_pixel_optimization_goal(goal):
+            return None
+        pixel_id = _identifier(entity.get("pixel_id"), field="pixel_id")
+        conversion_window = str(entity.get("conversion_window") or "").upper()
+        if conversion_window not in PIXEL_CONVERSION_WINDOWS:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "snapchat_management_pixel_conversion_window_required"},
+            )
+        if reread_parent:
+            parent = await self.read_entity("campaign", parent_id)
+            if str(parent.get("id") or "") != parent_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_target_parent_mismatch"},
+                )
+            if str(parent.get("ad_account_id") or "") != account_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_parent_account_mismatch"},
+                )
+        pixels = await self.list_account_pixels(account_id)
+        matching = [row for row in pixels if str(row.get("id") or "") == pixel_id]
+        if len(matching) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_pixel_account_mismatch"},
+            )
+        pixel_status = str(matching[0].get("status") or "").upper()
+        effective_status = str(matching[0].get("effective_status") or "").upper()
+        if pixel_status != "ACTIVE" or effective_status != "ACTIVE":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_pixel_not_active",
+                    "status": pixel_status or None,
+                    "effective_status": effective_status or None,
+                },
+            )
+        proof = await self.pixel_eligibility(
+            account_id=account_id,
+            pixel_id=pixel_id,
+            optimization_goal=goal,
+            conversion_window=conversion_window,
+        )
+        return {
+            **proof,
+            "membership_verified": True,
+            "pixel_status": pixel_status,
+            "pixel_effective_status": effective_status,
+            "membership_verified_at": _iso(),
+        }
+
+    async def validate_ad_create_dependencies(
+        self,
+        *,
+        account_id: str,
+        parent_id: str,
+        operation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Re-read the full ad dependency chain immediately before creation."""
+        entity = _operation_create_entity(operation)
+        requested_ad_type = str(entity.get("type") or "").strip().upper()
+        creative_id = _identifier(entity.get("creative_id"), field="creative_id")
+        ad_squad = await self.read_entity("ad_squad", parent_id)
+        if str(ad_squad.get("id") or "") != parent_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_target_parent_mismatch"},
+            )
+        campaign_id = _identifier(
+            ad_squad.get("campaign_id"), field="campaign_id"
+        )
+        campaign = await self.read_entity("campaign", campaign_id)
+        if str(campaign.get("id") or "") != campaign_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_campaign_identity_mismatch"},
+            )
+        if str(campaign.get("ad_account_id") or "") != account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_parent_account_mismatch"},
+            )
+        creative = await self.read_entity("creative", creative_id)
+        if str(creative.get("id") or "") != creative_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_creative_identity_mismatch"},
+            )
+        if str(creative.get("ad_account_id") or "") != account_id:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_creative_account_mismatch"},
+            )
+        creative_type = str(creative.get("type") or "").strip().upper()
+        allowed_ad_types = CREATIVE_TYPE_TO_AD_TYPES.get(creative_type) or ()
+        if requested_ad_type not in allowed_ad_types:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "snapchat_management_creative_ad_type_mismatch",
+                    "creative_type": creative_type,
+                    "requested_ad_type": requested_ad_type,
+                    "allowed_ad_types": list(allowed_ad_types),
+                },
+            )
+        return {
+            "verified": True,
+            "ad_squad_id": parent_id,
+            "campaign_id": campaign_id,
+            "creative_id": creative_id,
+            "creative_type": creative_type,
+            "requested_ad_type": requested_ad_type,
+            "verified_at": _iso(),
+        }
+
+    async def list_create_reconciliation_candidates(
+        self, operation: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        entity_type = str(operation.get("entity_type") or "")
+        account_id = str(operation.get("account_id") or "")
+        config = {
+            "campaign": (
+                f"/adaccounts/{account_id}/campaigns",
+                "campaigns",
+                "campaign",
+            ),
+            "ad_squad": (
+                f"/adaccounts/{account_id}/adsquads",
+                "adsquads",
+                "adsquad",
+            ),
+            "ad": (
+                f"/adaccounts/{account_id}/ads",
+                "ads",
+                "ad",
+            ),
+        }.get(entity_type)
+        if not config:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_reconciliation_unsupported"},
+            )
+        path, plural, singular = config
+        return await self._list_complete(
+            path,
+            plural=plural,
+            singular=singular,
+            # Deleted-aware catalogs are required for safe absence proof. Snap
+            # forbids combining this flag with sort, so consume every bounded
+            # page in provider order.
+            params={"read_deleted_entities": "true"},
+        )
 
     async def read_entity(self, entity_type: str, entity_id: str) -> dict[str, Any]:
         path_kind = {
@@ -940,16 +1521,14 @@ class SnapchatManagementProvider:
         account_id = str(account.get("ad_account_id") or "").strip()
         cached = self._management_roles_cache.get(account_id)
         if cached is None:
-            organizations = await self._request(
-                "GET", "/me/organizations?with_ad_accounts=true"
+            organizations = await self._list_complete(
+                "/me/organizations",
+                plural="organizations",
+                singular="organization",
+                params={"with_ad_accounts": "true"},
             )
             member_id = ""
-            for wrapped in organizations.get("organizations") or []:
-                org = (
-                    wrapped.get("organization", wrapped)
-                    if isinstance(wrapped, dict)
-                    else {}
-                )
+            for org in organizations:
                 if str(org.get("id") or "") == organization_id:
                     member_id = str(org.get("my_member_id") or "").strip()
                     break
@@ -959,13 +1538,15 @@ class SnapchatManagementProvider:
                     "role": None,
                     "reason": "member_identity_missing",
                 }
-            roles_payload = await self._request(
-                "GET", f"/members/{member_id}/roles?limit=200"
+            roles = await self._list_complete(
+                f"/members/{member_id}/roles",
+                plural="roles",
+                singular="role",
+                params={"limit": 200},
             )
             account_roles: set[str] = set()
             organization_roles: set[str] = set()
-            for wrapped in roles_payload.get("roles") or []:
-                role = wrapped.get("role", wrapped) if isinstance(wrapped, dict) else {}
+            for role in roles:
                 role_type = str(role.get("type") or "").lower()
                 if str(role.get("ad_account_id") or "") == account_id:
                     account_roles.add(role_type)
@@ -994,8 +1575,18 @@ class SnapchatManagementProvider:
 def _extract_entity(
     payload: dict[str, Any], plural: str, singular: str
 ) -> dict[str, Any]:
+    present_operation_plurals = [
+        key
+        for key in ("campaigns", "adsquads", "ads", "creatives")
+        if key in payload
+    ]
+    if present_operation_plurals != [plural]:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "snapchat_management_entity_invalid"},
+        )
     rows = payload.get(plural) or []
-    if not isinstance(rows, list) or not rows:
+    if not isinstance(rows, list) or len(rows) != 1:
         raise HTTPException(
             status_code=502,
             detail={
@@ -1003,11 +1594,14 @@ def _extract_entity(
                 "message": "لم يعد Snapchat الكيان المتوقع.",
             },
         )
-    wrapper = rows[0] if isinstance(rows[0], dict) else {}
-    sub_status = str(
-        wrapper.get("sub_request_status") or wrapper.get("status") or "SUCCESS"
-    ).upper()
-    if "FAIL" in sub_status or "ERROR" in sub_status:
+    if not isinstance(rows[0], dict):
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "snapchat_management_entity_invalid"},
+        )
+    wrapper = rows[0]
+    sub_status = str(wrapper.get("sub_request_status") or "").upper()
+    if sub_status not in {"SUCCESS", "OK"}:
         raise HTTPException(
             status_code=502,
             detail={
@@ -1016,7 +1610,7 @@ def _extract_entity(
                 **_safe_nested_provider_error_detail(wrapper),
             },
         )
-    entity = wrapper.get(singular, wrapper)
+    entity = wrapper.get(singular)
     if not isinstance(entity, dict) or not entity.get("id"):
         raise HTTPException(
             status_code=502, detail={"code": "snapchat_management_entity_invalid"}
@@ -1143,6 +1737,19 @@ def _public_proposal(
         "product_link_state": row.get("product_link_state") or "not_supplied",
         "trend_review": _safe_provider_value(row.get("trend_review") or {}),
         "trend_override_reason": row.get("trend_override_reason"),
+        "safety_protocol_version": int(
+            row.get("safety_protocol_version") or 1
+        ),
+        "pixel_eligibility": _safe_provider_value(
+            row.get("pixel_eligibility") or {}
+        ),
+        "execution_pixel_eligibility": _safe_provider_value(
+            row.get("execution_pixel_eligibility") or {}
+        ),
+        "execution_ad_dependency_verification": _safe_provider_value(
+            row.get("execution_ad_dependency_verification") or {}
+        ),
+        "intent_fingerprint": row.get("intent_fingerprint"),
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
     }
@@ -1464,14 +2071,14 @@ async def create_snapchat_management_proposal(
                     "message": ("مفتاح التكرار مستخدم لطلب مختلف؛ أنشئ مفتاحًا جديدًا."),
                 },
             )
-        if existing.get("status") == "previewed":
+        if existing.get("status") in {"previewed", "previewed_v2"}:
             await _ensure_proposal_product_links(db, user_id, actor_id, existing)
             replacement_token = secrets.token_urlsafe(32)
             await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
                     "user_id": user_id,
                     "proposal_id": existing.get("proposal_id"),
-                    "status": "previewed",
+                    "status": existing.get("status"),
                 },
                 {
                     "$set": {
@@ -1503,6 +2110,7 @@ async def create_snapchat_management_proposal(
         ) from exc
 
     original: dict[str, Any] | None = None
+    pixel_eligibility: dict[str, Any] | None = None
     if payload.action in UPDATE_ACTIONS:
         original = await client.read_entity(
             operation["entity_type"], payload.target_id or ""
@@ -1542,13 +2150,29 @@ async def create_snapchat_management_proposal(
                 )
     elif payload.action == "ad_squad.create":
         parent = await client.read_entity("campaign", payload.parent_id or "")
+        if str(parent.get("id") or "") != str(payload.parent_id or ""):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_target_parent_mismatch"},
+            )
         if str(parent.get("ad_account_id") or "") != payload.account_id:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_management_parent_account_mismatch"},
             )
+        pixel_eligibility = await client.validate_pixel_ad_squad_intent(
+            account_id=payload.account_id,
+            parent_id=payload.parent_id or "",
+            operation=operation,
+            reread_parent=False,
+        )
     elif payload.action == "ad.create":
         parent = await client.read_entity("ad_squad", payload.parent_id or "")
+        if str(parent.get("id") or "") != str(payload.parent_id or ""):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_target_parent_mismatch"},
+            )
         campaign = await client.read_entity(
             "campaign", str(parent.get("campaign_id") or "")
         )
@@ -1561,6 +2185,13 @@ async def create_snapchat_management_proposal(
         creative = await client.read_entity(
             "creative", str(ad_entity.get("creative_id") or "")
         )
+        if str(creative.get("id") or "") != str(
+            ad_entity.get("creative_id") or ""
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_creative_identity_mismatch"},
+            )
         if str(creative.get("ad_account_id") or "") != payload.account_id:
             raise HTTPException(
                 status_code=409,
@@ -1571,15 +2202,22 @@ async def create_snapchat_management_proposal(
             )
         creative_type = str(creative.get("type") or "").strip().upper()
         requested_ad_type = str(ad_entity.get("type") or "").strip().upper()
-        allowed_ad_types = CREATIVE_TYPE_TO_AD_TYPES.get(creative_type)
-        if allowed_ad_types and requested_ad_type not in allowed_ad_types:
+        allowed_ad_types = CREATIVE_TYPE_TO_AD_TYPES.get(creative_type) or ()
+        if requested_ad_type not in allowed_ad_types:
             raise HTTPException(
                 status_code=422,
                 detail={
                     "code": "snapchat_management_creative_ad_type_mismatch",
                     "message": (
-                        f"نوع الإبداع {creative_type} يتطلب نوع إعلان "
-                        f"{allowed_ad_types[0]} في Snapchat."
+                        (
+                            f"نوع الإبداع {creative_type} يتطلب نوع إعلان "
+                            f"{allowed_ad_types[0]} في Snapchat."
+                        )
+                        if allowed_ad_types
+                        else (
+                            f"نوع الإبداع {creative_type} ليس ضمن أنواع "
+                            "الإبداع المعتمدة لهذا المسار الآمن."
+                        )
                     ),
                     "creative_type": creative_type,
                     "requested_ad_type": requested_ad_type,
@@ -1657,6 +2295,12 @@ async def create_snapchat_management_proposal(
     proposal_id = str(uuid.uuid4())
     token = secrets.token_urlsafe(32)
     now = _utcnow()
+    protocol_version = int(payload.safety_protocol_version or 1)
+    intent_fingerprint = (
+        snapchat_management_intent_fingerprint(operation)
+        if payload.action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS
+        else None
+    )
     row = {
         "proposal_id": proposal_id,
         "user_id": user_id,
@@ -1668,7 +2312,7 @@ async def create_snapchat_management_proposal(
         "reason": payload.reason,
         "idempotency_key": payload.idempotency_key,
         "request_fingerprint": request_fingerprint,
-        "status": "previewed",
+        "status": "previewed_v2" if protocol_version == 2 else "previewed",
         "revision": 1,
         "operation": operation,
         "original_snapshot": original,
@@ -1681,6 +2325,9 @@ async def create_snapchat_management_proposal(
         "product_link_state": "pending" if product_rows else "not_supplied",
         "trend_review": trend_review,
         "trend_override_reason": payload.trend_override_reason,
+        "safety_protocol_version": protocol_version,
+        "pixel_eligibility": _safe_provider_value(pixel_eligibility or {}),
+        "intent_fingerprint": intent_fingerprint,
         "role": role.get("role"),
         "confirm_token_hash": hashlib.sha256(token.encode()).hexdigest(),
         "created_at": _iso(now),
@@ -1722,7 +2369,7 @@ async def approve_snapchat_management_proposal(
             status_code=404, detail={"code": "snapchat_management_proposal_not_found"}
         )
     if (
-        row.get("status") != "previewed"
+        row.get("status") not in {"previewed", "previewed_v2"}
         or int(row.get("revision") or 0) != payload.expected_revision
     ):
         raise HTTPException(
@@ -1740,16 +2387,20 @@ async def approve_snapchat_management_proposal(
             detail={"code": "snapchat_management_confirm_token_mismatch"},
         )
     now_iso = _iso()
+    preview_status = str(row.get("status") or "")
+    approved_status = (
+        "approved_v2" if preview_status == "previewed_v2" else "approved"
+    )
     result = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {
             "user_id": user_id,
             "proposal_id": proposal_id,
-            "status": "previewed",
+            "status": preview_status,
             "revision": payload.expected_revision,
         },
         {
             "$set": {
-                "status": "approved",
+                "status": approved_status,
                 "approved_at": now_iso,
                 "approved_by": actor_id,
                 "confirm_token_hash": None,
@@ -1779,9 +2430,28 @@ def _changed_values_match(
 ) -> tuple[bool, list[str]]:
     mismatches: list[str] = []
     for key, value in expected.items():
-        if _canonical_control_value(actual.get(key)) != _canonical_control_value(value):
+        if not _expected_control_subset_matches(value, actual.get(key)):
             mismatches.append(key)
     return not mismatches, mismatches
+
+
+def _expected_control_subset_matches(expected: Any, actual: Any) -> bool:
+    """Provider dictionaries may add defaults; submitted controls may not drift."""
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return False
+        return all(
+            key in actual and _expected_control_subset_matches(value, actual.get(key))
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        if not isinstance(actual, list) or len(actual) != len(expected):
+            return False
+        return all(
+            _expected_control_subset_matches(expected_item, actual_item)
+            for expected_item, actual_item in zip(expected, actual)
+        )
+    return _canonical_control_value(actual) == _canonical_control_value(expected)
 
 
 def _canonical_control_value(value: Any) -> Any:
@@ -1814,6 +2484,14 @@ def _operation_expected_values(operation: dict[str, Any]) -> dict[str, Any]:
         for key, value in entity.items()
         if key != "id"
     }
+
+
+def _operation_create_entity(operation: dict[str, Any]) -> dict[str, Any]:
+    body = operation.get("body")
+    rows = body.get(operation.get("plural")) if isinstance(body, dict) else None
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        return {}
+    return dict(rows[0])
 
 
 async def _refresh_verified_entity_cache_deferred_safe(
@@ -1857,8 +2535,17 @@ async def _reset_execution_claim(
     proposal_id: str,
     failure: dict[str, Any] | None = None,
 ) -> None:
+    current = await _collection(db, PROPOSAL_COLLECTION).find_one(
+        {"user_id": user_id, "proposal_id": proposal_id},
+        {"_id": 0, "safety_protocol_version": 1},
+    )
+    approved_status = (
+        "approved_v2"
+        if int((current or {}).get("safety_protocol_version") or 1) == 2
+        else "approved"
+    )
     values: dict[str, Any] = {
-        "status": "approved",
+        "status": approved_status,
         "provider_write_reached": False,
         "provider_write_state": "not_attempted",
         "provider_write_uncertain": False,
@@ -1908,7 +2595,7 @@ async def _complete_verified_execution(
         ),
     }
     now_iso = _iso()
-    await _collection(db, PROPOSAL_COLLECTION).update_one(
+    terminal = await _collection(db, PROPOSAL_COLLECTION).update_one(
         {"user_id": user_id, "proposal_id": proposal_id, "status": "executing"},
         {
             "$set": {
@@ -1926,6 +2613,11 @@ async def _complete_verified_execution(
             }
         },
     )
+    if int(getattr(terminal, "matched_count", 0) or 0) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_terminal_state_race"},
+        )
     await _refresh_verified_entity_cache_deferred_safe(
         db,
         user_id=user_id,
@@ -2006,6 +2698,11 @@ def _lease_entity_id(row: dict[str, Any], operation: dict[str, Any]) -> str:
     return str(
         row.get("provider_entity_id")
         or row.get("target_id")
+        or (
+            f"intent:{row.get('intent_fingerprint')}"
+            if row.get("intent_fingerprint")
+            else None
+        )
         or f"pending:{row.get('proposal_id')}"
     )
 
@@ -2096,23 +2793,65 @@ async def _release_proposal_entity_lease(
     user_id: str,
     row: dict[str, Any],
 ) -> None:
-    lease = await _collection(db, ENTITY_LEASE_COLLECTION).find_one(
+    collection = _collection(db, ENTITY_LEASE_COLLECTION)
+    query = {
+        "user_id": user_id,
+        "proposal_id": str(row.get("proposal_id") or ""),
+        "active": True,
+    }
+    updater = getattr(collection, "update_many", None)
+    if callable(updater):
+        await updater(
+            query,
+            {"$set": {"active": False, "released_at": _iso()}},
+        )
+        return
+    # Lightweight test doubles and legacy adapters may not implement
+    # update_many. Re-read after every CAS release until no active lease for
+    # this proposal remains; never assume there is only one.
+    for _ in range(10):
+        lease = await collection.find_one(query, {"_id": 0})
+        if not lease or not lease.get("lease_token"):
+            return
+        await collection.update_one(
+            {**query, "lease_token": str(lease["lease_token"])},
+            {"$set": {"active": False, "released_at": _iso()}},
+        )
+    raise HTTPException(
+        status_code=409,
+        detail={"code": "snapchat_management_entity_lease_release_incomplete"},
+    )
+
+
+async def _release_observed_entity_lease(
+    db: Any,
+    *,
+    user_id: str,
+    lease: dict[str, Any] | None,
+) -> None:
+    """Release only the exact fence observed before a terminal transition."""
+    if not lease:
+        return
+    lease_token = str(lease.get("lease_token") or "")
+    if not lease_token:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_entity_lease_identity_missing"},
+        )
+    released = await _collection(db, ENTITY_LEASE_COLLECTION).update_one(
         {
             "user_id": user_id,
-            "proposal_id": str(row.get("proposal_id") or ""),
+            "proposal_id": str(lease.get("proposal_id") or ""),
+            "lease_token": lease_token,
+            "entity_id": str(lease.get("entity_id") or ""),
             "active": True,
         },
-        {"_id": 0},
+        {"$set": {"active": False, "released_at": _iso()}},
     )
-    if lease and lease.get("lease_token"):
-        await _collection(db, ENTITY_LEASE_COLLECTION).update_one(
-            {
-                "user_id": user_id,
-                "proposal_id": str(row.get("proposal_id") or ""),
-                "lease_token": str(lease["lease_token"]),
-                "active": True,
-            },
-            {"$set": {"active": False, "released_at": _iso()}},
+    if not getattr(released, "matched_count", 1):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_entity_lease_release_race"},
         )
 
 
@@ -2147,6 +2886,11 @@ async def execute_snapchat_management_proposal(
     if row.get("status") == "completed":
         row = await _retry_terminal_product_adoption(db, user_id, actor_id, row)
         return _public_proposal(row)
+    if row.get("status") not in {"approved", "approved_v2"}:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_proposal_not_executable"},
+        )
     operation = dict(row.get("operation") or {})
     lease_token = await _acquire_entity_lease(
         db,
@@ -2262,6 +3006,830 @@ async def _stabilize_cancelled_execution(
         return
 
 
+def _provider_datetime(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _create_candidate_matches(
+    row: dict[str, Any], operation: dict[str, Any], candidate: dict[str, Any]
+) -> bool:
+    if str(candidate.get("deleted") or "").strip().lower() in {"true", "1", "yes"}:
+        return False
+    expected = _operation_expected_values(operation)
+    exact, _ = _changed_values_match(expected, candidate)
+    if not exact or str(candidate.get("status") or "").upper() != "PAUSED":
+        return False
+    action = str(row.get("action") or "")
+    if action == "campaign.create" and str(candidate.get("ad_account_id") or "") != str(
+        row.get("account_id") or ""
+    ):
+        return False
+    if action == "ad_squad.create" and str(candidate.get("campaign_id") or "") != str(
+        row.get("parent_id") or ""
+    ):
+        return False
+    if action == "ad.create" and str(candidate.get("ad_squad_id") or "") != str(
+        row.get("parent_id") or ""
+    ):
+        return False
+    if action == "creative.create" and str(candidate.get("ad_account_id") or "") != str(
+        row.get("account_id") or ""
+    ):
+        return False
+    started = _provider_datetime(row.get("execution_started_at"))
+    failed = _provider_datetime(row.get("failed_at"))
+    created = _provider_datetime(candidate.get("created_at"))
+    if not started or not failed or not created or failed < started:
+        return False
+    return started - timedelta(minutes=1) <= created <= failed + timedelta(minutes=1)
+
+
+def _submitted_control_shape_present(expected: Any, actual: Any) -> bool:
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual
+            and _submitted_control_shape_present(value, actual.get(key))
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _submitted_control_shape_present(expected_item, actual_item)
+                for expected_item, actual_item in zip(expected, actual)
+            )
+        )
+    return True
+
+
+def _create_candidate_deleted(candidate: dict[str, Any]) -> bool:
+    return str(candidate.get("deleted") or "").strip().lower() in {
+        "true",
+        "1",
+        "yes",
+    }
+
+
+def _create_candidate_base_evidence_complete(
+    row: dict[str, Any], candidate: Any
+) -> bool:
+    """Require only evidence needed to place a row outside or inside scope."""
+    if not isinstance(candidate, dict) or not str(candidate.get("id") or "").strip():
+        return False
+    deleted = _create_candidate_deleted(candidate)
+    if not deleted and str(candidate.get("status") or "").upper() not in {
+        "ACTIVE",
+        "PAUSED",
+    }:
+        return False
+    if not _provider_datetime(candidate.get("created_at")):
+        return False
+    relationship = {
+        "campaign.create": "ad_account_id",
+        "ad_squad.create": "campaign_id",
+        "ad.create": "ad_squad_id",
+    }.get(str(row.get("action") or ""))
+    if not relationship or not str(candidate.get(relationship) or "").strip():
+        return False
+    return True
+
+
+def _create_candidate_same_scope_and_window(
+    row: dict[str, Any], candidate: dict[str, Any]
+) -> bool:
+    relationship = {
+        "campaign.create": ("ad_account_id", str(row.get("account_id") or "")),
+        "ad_squad.create": ("campaign_id", str(row.get("parent_id") or "")),
+        "ad.create": ("ad_squad_id", str(row.get("parent_id") or "")),
+    }.get(str(row.get("action") or ""))
+    if not relationship or str(candidate.get(relationship[0]) or "") != relationship[1]:
+        return False
+    started = _provider_datetime(row.get("execution_started_at"))
+    failed = _provider_datetime(row.get("failed_at"))
+    created = _provider_datetime(candidate.get("created_at"))
+    if not started or not failed or not created or failed < started:
+        return False
+    return started - timedelta(minutes=1) <= created <= failed + timedelta(minutes=1)
+
+
+def _create_candidate_submitted_shape_complete(
+    operation: dict[str, Any], candidate: dict[str, Any]
+) -> bool:
+    expected = _operation_expected_values(operation)
+    return all(
+        key in candidate
+        and _submitted_control_shape_present(value, candidate.get(key))
+        for key, value in expected.items()
+    )
+
+
+def _classify_create_reconciliation_catalog(
+    row: dict[str, Any],
+    operation: dict[str, Any],
+    catalog: Any,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    if not isinstance(catalog, list):
+        return [], [], True
+    matches: list[dict[str, Any]] = []
+    plausible: list[dict[str, Any]] = []
+    for candidate in catalog:
+        if not _create_candidate_base_evidence_complete(row, candidate):
+            return [], [], True
+        if not _create_candidate_same_scope_and_window(row, candidate):
+            continue
+        if (
+            _create_candidate_deleted(candidate)
+            or not _create_candidate_submitted_shape_complete(operation, candidate)
+        ):
+            plausible.append(candidate)
+        elif _create_candidate_matches(row, operation, candidate):
+            matches.append(candidate)
+        else:
+            plausible.append(candidate)
+    return matches, plausible, False
+
+
+async def _ensure_create_intent_fence(
+    db: Any,
+    *,
+    user_id: str,
+    row: dict[str, Any],
+    operation: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        _assert_stored_operation_integrity(row, operation)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_legacy_intent_incomplete",
+                "recovery_action": "manual_provider_identity_review",
+            },
+        ) from exc
+    fingerprint = str(row.get("intent_fingerprint") or "")
+    calculated = snapchat_management_intent_fingerprint(operation)
+    if fingerprint and fingerprint != calculated:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_intent_mismatch"},
+        )
+    if not fingerprint:
+        fingerprint = calculated
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": row.get("proposal_id")},
+            {"$set": {"intent_fingerprint": fingerprint}},
+        )
+        row = {**row, "intent_fingerprint": fingerprint}
+    entity_id = f"intent:{fingerprint}"
+    leases = _collection(db, ENTITY_LEASE_COLLECTION)
+    own_cursor = leases.find(
+        {
+            "user_id": user_id,
+            "proposal_id": str(row.get("proposal_id") or ""),
+            "active": True,
+        },
+        {"_id": 0},
+    )
+    if hasattr(own_cursor, "limit"):
+        own_cursor = own_cursor.limit(3)
+    if hasattr(own_cursor, "to_list"):
+        own_active = await own_cursor.to_list(length=3)
+    elif isinstance(own_cursor, list):
+        own_active = own_cursor[:3]
+    else:
+        own_active = []
+    if len(own_active) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_create_intent_lease_ambiguous",
+                "recovery_action": "manual_lease_review",
+            },
+        )
+    if own_active:
+        current = own_active[0]
+        current_entity_id = str(current.get("entity_id") or "")
+        if current_entity_id == entity_id:
+            return row
+        if not current_entity_id.startswith("pending:") or not current.get(
+            "lease_token"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "snapchat_management_create_intent_lease_mismatch",
+                    "recovery_action": "manual_lease_review",
+                },
+            )
+        try:
+            upgraded = await leases.update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": str(row.get("proposal_id") or ""),
+                    "lease_token": str(current.get("lease_token") or ""),
+                    "entity_id": current_entity_id,
+                    "active": True,
+                },
+                {
+                    "$set": {
+                        "entity_id": entity_id,
+                        "operation_kind": "reconcile_create_intent",
+                        "intent_fingerprint": fingerprint,
+                        "intent_fence_upgraded_at": _iso(),
+                    }
+                },
+            )
+        except Exception as exc:
+            if type(exc).__name__ != "DuplicateKeyError":
+                raise
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_create_intent_busy"},
+            ) from exc
+        if not getattr(upgraded, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_create_intent_lease_race"},
+            )
+        return row
+
+    existing = await leases.find_one(
+        {
+            "user_id": user_id,
+            "account_id": str(row.get("account_id") or ""),
+            "entity_type": str(operation.get("entity_type") or ""),
+            "entity_id": entity_id,
+            "active": True,
+        },
+        {"_id": 0},
+    )
+    if existing and str(existing.get("proposal_id") or "") != str(
+        row.get("proposal_id") or ""
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_create_intent_busy",
+                "message": "توجد محاولة إنشاء مطابقة غير محسومة؛ أُوقفت المصالحة الموازية.",
+            },
+        )
+    if not existing:
+        await _acquire_entity_lease(
+            db,
+            user_id=user_id,
+            row=row,
+            operation=operation,
+            operation_kind="reconcile_create_intent",
+        )
+    return row
+
+
+async def _claim_create_reconciliation_scan(
+    db: Any,
+    *,
+    user_id: str,
+    row: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    """Serialize read-only create scans so contradictory results cannot race."""
+    proposals = _collection(db, PROPOSAL_COLLECTION)
+    current = await proposals.find_one(
+        {
+            "user_id": user_id,
+            "proposal_id": str(row.get("proposal_id") or ""),
+            "status": "failed",
+            "provider_write_uncertain": True,
+        },
+        {"_id": 0},
+    )
+    if not current:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_race"},
+        )
+    active = current.get("create_reconciliation_scan_active") is True
+    scan_expiry = current.get("create_reconciliation_scan_expires_at")
+    if active and not _expired(scan_expiry):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_scan_busy"},
+        )
+    previous_token = current.get("create_reconciliation_scan_token")
+    token = secrets.token_urlsafe(24)
+    claimed = await proposals.update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": str(row.get("proposal_id") or ""),
+            "status": "failed",
+            "provider_write_uncertain": True,
+            "create_reconciliation_scan_token": previous_token,
+        },
+        {
+            "$set": {
+                "create_reconciliation_scan_active": True,
+                "create_reconciliation_scan_token": token,
+                "create_reconciliation_scan_started_at": _iso(),
+                "create_reconciliation_scan_expires_at": _iso(
+                    _utcnow() + ENTITY_LEASE_DURATION
+                ),
+            }
+        },
+    )
+    if not getattr(claimed, "matched_count", 1):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_scan_race"},
+        )
+    return current, token
+
+
+async def _release_create_reconciliation_scan(
+    db: Any,
+    *,
+    user_id: str,
+    proposal_id: str,
+    scan_token: str,
+) -> bool:
+    released = await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "failed",
+            "provider_write_uncertain": True,
+            "create_reconciliation_scan_active": True,
+            "create_reconciliation_scan_token": scan_token,
+        },
+        {
+            "$set": {
+                "create_reconciliation_scan_active": False,
+                "create_reconciliation_scan_finished_at": _iso(),
+            }
+        },
+    )
+    return bool(getattr(released, "matched_count", 1))
+
+
+async def _record_create_reconciliation_inconclusive(
+    db: Any,
+    *,
+    user_id: str,
+    proposal_id: str,
+    scan_token: str,
+    reason: str,
+    matching_candidates: int | None = None,
+    plausible_candidates: int | None = None,
+    catalog_incomplete: bool | None = None,
+) -> None:
+    """Persist sticky evidence that can never be downgraded into absence."""
+    evidence: dict[str, Any] = {
+        "complete_scan": catalog_incomplete is not True,
+        "inconclusive": True,
+        "reason": reason,
+        "scanned_at": _iso(),
+    }
+    if matching_candidates is not None:
+        evidence["matching_candidates"] = max(0, int(matching_candidates))
+    if plausible_candidates is not None:
+        evidence["plausible_candidates"] = max(0, int(plausible_candidates))
+    if catalog_incomplete is not None:
+        evidence["catalog_incomplete"] = bool(catalog_incomplete)
+    recorded = await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "failed",
+            "provider_write_uncertain": True,
+            "create_reconciliation_scan_active": True,
+            "create_reconciliation_scan_token": scan_token,
+        },
+        {
+            "$set": {
+                "create_reconciliation_scan_active": False,
+                "create_reconciliation_scan_finished_at": _iso(),
+                "recovery_action": "manual_review_plausible_create_candidate",
+                "create_reconciliation": evidence,
+            }
+        },
+    )
+    if not getattr(recorded, "matched_count", 1):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_race"},
+        )
+
+
+async def _reconcile_uncertain_create_without_id(
+    db: Any,
+    *,
+    user_id: str,
+    actor_id: str,
+    row: dict[str, Any],
+    operation: dict[str, Any],
+    account: dict[str, Any],
+    client: "SnapchatManagementProvider",
+) -> dict[str, Any]:
+    row, scan_token = await _claim_create_reconciliation_scan(
+        db, user_id=user_id, row=row
+    )
+    proposal_id = str(row.get("proposal_id") or "")
+    try:
+        row = await _ensure_create_intent_fence(
+            db, user_id=user_id, row=row, operation=operation
+        )
+    except Exception:
+        await _release_create_reconciliation_scan(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+        )
+        raise
+    intent_lease = await _active_proposal_entity_lease(
+        db,
+        user_id=user_id,
+        proposal_id=proposal_id,
+    )
+    expected_intent_entity = f"intent:{row.get('intent_fingerprint')}"
+    if (
+        not intent_lease
+        or str(intent_lease.get("entity_id") or "") != expected_intent_entity
+        or not str(intent_lease.get("lease_token") or "")
+    ):
+        await _release_create_reconciliation_scan(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_create_intent_lease_mismatch"},
+        )
+    started_at = _provider_datetime(row.get("execution_started_at"))
+    failed_at = _provider_datetime(row.get("failed_at"))
+    if not started_at or not failed_at or failed_at < started_at:
+        await _release_create_reconciliation_scan(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_legacy_window_missing",
+                "recovery_action": "manual_provider_identity_review",
+            },
+        )
+    try:
+        catalog = await client.list_create_reconciliation_candidates(operation)
+    except Exception:
+        await _release_create_reconciliation_scan(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+        )
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=str(row.get("proposal_id") or ""),
+            event="create_reconciliation_catalog_incomplete",
+            actor_id=actor_id,
+            detail={"adoption_performed": False, "absence_proven": False},
+        )
+        raise
+    matches, plausible_drift, catalog_incomplete = (
+        _classify_create_reconciliation_catalog(row, operation, catalog)
+    )
+    if catalog_incomplete:
+        await _release_create_reconciliation_scan(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+        )
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="create_reconciliation_catalog_inconclusive",
+            actor_id=actor_id,
+            detail={"adoption_performed": False, "absence_proven": False},
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "snapchat_management_reconciliation_catalog_inconclusive"},
+        )
+    previous_reconciliation = row.get("create_reconciliation")
+    previous_reconciliation = (
+        previous_reconciliation
+        if isinstance(previous_reconciliation, dict)
+        else {}
+    )
+    sticky_manual = bool(
+        int(previous_reconciliation.get("matching_candidates") or 0) > 1
+        or previous_reconciliation.get("inconclusive") is True
+    )
+    if plausible_drift or sticky_manual:
+        reason = (
+            "deleted_candidate_in_attempt_window"
+            if any(
+                _create_candidate_deleted(candidate)
+                for candidate in plausible_drift
+            )
+            else "same_scope_candidate_drifted_in_attempt_window"
+            if plausible_drift
+            else "prior_manual_reconciliation_is_sticky"
+        )
+        recorded = await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "failed",
+                "provider_write_uncertain": True,
+                "create_reconciliation_scan_active": True,
+                "create_reconciliation_scan_token": scan_token,
+            },
+            {
+                "$set": {
+                    "create_reconciliation_scan_active": False,
+                    "create_reconciliation_scan_finished_at": _iso(),
+                    "recovery_action": "manual_review_plausible_create_candidate",
+                    "create_reconciliation": {
+                        "complete_scan": True,
+                        "inconclusive": True,
+                        "reason": reason,
+                        "plausible_candidates": len(plausible_drift),
+                        "scanned_at": _iso(),
+                    },
+                }
+            },
+        )
+        if not getattr(recorded, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_reconciliation_race"},
+            )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_inconclusive",
+                "reason": reason,
+            },
+        )
+    if len(matches) > 1:
+        recorded = await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "failed",
+                "provider_write_uncertain": True,
+                "create_reconciliation_scan_active": True,
+                "create_reconciliation_scan_token": scan_token,
+            },
+            {
+                "$set": {
+                    "create_reconciliation_scan_active": False,
+                    "create_reconciliation_scan_finished_at": _iso(),
+                    "recovery_action": "manual_review_ambiguous_create_candidates",
+                    "create_reconciliation": {
+                        "complete_scan": True,
+                        "matching_candidates": len(matches),
+                        "scanned_at": _iso(),
+                    },
+                }
+            },
+        )
+        if not getattr(recorded, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_reconciliation_race"},
+            )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_ambiguous",
+                "matching_candidates": len(matches),
+            },
+        )
+    if not matches:
+        now = _utcnow()
+        previous = previous_reconciliation
+        previous_zero_scans = int(previous.get("complete_zero_scans") or 0)
+        first_zero = _provider_datetime(previous.get("first_zero_scan_at")) or now
+        failed_at = _provider_datetime(row.get("failed_at"))
+        zero_scans = previous_zero_scans + 1
+        grace_elapsed = bool(
+            failed_at
+            and now >= failed_at + CREATE_RECONCILIATION_GRACE
+            and now >= first_zero + CREATE_RECONCILIATION_GRACE
+        )
+        scan = {
+            "complete_scan": True,
+            "matching_candidates": 0,
+            "complete_zero_scans": zero_scans,
+            "first_zero_scan_at": _iso(first_zero),
+            "last_zero_scan_at": _iso(now),
+            "grace_elapsed": grace_elapsed,
+        }
+        if zero_scans >= 2 and grace_elapsed:
+            confirmed = await _collection(db, PROPOSAL_COLLECTION).update_one(
+                {
+                    "user_id": user_id,
+                    "proposal_id": proposal_id,
+                    "status": "failed",
+                    "provider_write_uncertain": True,
+                    "create_reconciliation_scan_active": True,
+                    "create_reconciliation_scan_token": scan_token,
+                },
+                {
+                    "$set": {
+                        "create_reconciliation_scan_active": False,
+                        "create_reconciliation_scan_finished_at": _iso(),
+                        "provider_write_reached": False,
+                        "provider_write_state": "confirmed_not_applied",
+                        "provider_write_uncertain": False,
+                        "execution_retryable": False,
+                        "automatic_retry_allowed": False,
+                        "recovery_action": "create_new_preview",
+                        "create_reconciliation": scan,
+                    }
+                },
+            )
+            if not getattr(confirmed, "matched_count", 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_reconciliation_race"},
+                )
+            await _release_observed_entity_lease(
+                db, user_id=user_id, lease=intent_lease
+            )
+            updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+                {"user_id": user_id, "proposal_id": row.get("proposal_id")},
+                {"_id": 0},
+            )
+            return _public_proposal(updated or row)
+        recorded = await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "failed",
+                "provider_write_uncertain": True,
+                "create_reconciliation_scan_active": True,
+                "create_reconciliation_scan_token": scan_token,
+            },
+            {
+                "$set": {
+                    "create_reconciliation_scan_active": False,
+                    "create_reconciliation_scan_finished_at": _iso(),
+                    "create_reconciliation": scan,
+                    "recovery_action": "repeat_read_only_reconciliation_after_grace",
+                }
+            },
+        )
+        if not getattr(recorded, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_reconciliation_race"},
+            )
+        updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": row.get("proposal_id")},
+            {"_id": 0},
+        )
+        return _public_proposal(updated or row)
+
+    candidate_id = str(matches[0].get("id") or "")
+    try:
+        verified = await client.read_entity(operation["entity_type"], candidate_id)
+    except Exception:
+        await _record_create_reconciliation_inconclusive(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+            reason="exact_candidate_readback_unavailable",
+            matching_candidates=1,
+        )
+        raise
+    if (
+        str(verified.get("id") or "") != candidate_id
+        or not _create_candidate_base_evidence_complete(row, verified)
+        or not _create_candidate_submitted_shape_complete(operation, verified)
+        or not _create_candidate_matches(row, operation, verified)
+    ):
+        await _record_create_reconciliation_inconclusive(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+            reason="exact_candidate_readback_drifted",
+            matching_candidates=1,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_candidate_drift"},
+        )
+    # A point GET verifies the entity body but cannot prove uniqueness. Repeat
+    # the complete deleted-aware catalogue after readback, and adopt only if
+    # the same ID remains the sole exact candidate with no plausible row.
+    try:
+        confirmation_catalog = await client.list_create_reconciliation_candidates(
+            operation
+        )
+    except Exception:
+        await _record_create_reconciliation_inconclusive(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+            reason="exact_candidate_confirmation_catalog_unavailable",
+            matching_candidates=1,
+            catalog_incomplete=True,
+        )
+        raise
+    confirmation_matches, confirmation_plausible, confirmation_incomplete = (
+        _classify_create_reconciliation_catalog(
+            row, operation, confirmation_catalog
+        )
+    )
+    if (
+        confirmation_incomplete
+        or confirmation_plausible
+        or len(confirmation_matches) != 1
+        or str(confirmation_matches[0].get("id") or "") != candidate_id
+    ):
+        await _record_create_reconciliation_inconclusive(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            scan_token=scan_token,
+            reason="exact_candidate_confirmation_changed",
+            matching_candidates=len(confirmation_matches),
+            plausible_candidates=len(confirmation_plausible),
+            catalog_incomplete=confirmation_incomplete,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_confirmation_failed",
+                "matching_candidates": len(confirmation_matches),
+                "plausible_candidates": len(confirmation_plausible),
+                "catalog_incomplete": confirmation_incomplete,
+            },
+        )
+    claimed = await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": row.get("proposal_id"),
+            "status": "failed",
+            "provider_write_uncertain": True,
+            "create_reconciliation_scan_active": True,
+            "create_reconciliation_scan_token": scan_token,
+        },
+        {
+            "$set": {
+                "status": "executing",
+                "create_reconciliation_scan_active": False,
+                "create_reconciliation_scan_finished_at": _iso(),
+                "provider_entity_id": candidate_id,
+                "create_reconciliation": {
+                    "complete_scan": True,
+                    "matching_candidates": 1,
+                    "scanned_at": _iso(),
+                },
+            }
+        },
+    )
+    if not getattr(claimed, "matched_count", 1):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_reconciliation_race"},
+        )
+    result = await _complete_verified_execution(
+        db,
+        user_id=user_id,
+        actor_id=actor_id,
+        proposal_id=str(row.get("proposal_id") or ""),
+        row=row,
+        operation=operation,
+        account=account,
+        provider_entity_id=candidate_id,
+        verified=verified,
+        event="execution_reconciled_create_by_exact_catalog_match",
+    )
+    await _release_observed_entity_lease(
+        db, user_id=user_id, lease=intent_lease
+    )
+    return result
+
+
 async def _execute_snapchat_management_proposal_under_lease(
     db: Any,
     user_id: str,
@@ -2287,7 +3855,7 @@ async def _execute_snapchat_management_proposal_under_lease(
         )
     if row.get("status") == "completed":
         return _public_proposal(row)
-    if row.get("status") != "approved":
+    if row.get("status") not in {"approved", "approved_v2"}:
         raise HTTPException(
             status_code=409,
             detail={"code": "snapchat_management_proposal_not_executable"},
@@ -2298,6 +3866,20 @@ async def _execute_snapchat_management_proposal_under_lease(
             detail={"code": "snapchat_management_proposal_expired"},
         )
     operation = dict(row.get("operation") or {})
+    if (
+        str(row.get("action") or "") == "ad_squad.create"
+        and _is_pixel_optimization_goal(
+            _operation_create_entity(operation).get("optimization_goal")
+        )
+        and int(row.get("safety_protocol_version") or 1) != 2
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_pixel_preview_v2_required",
+                "message": "أنشئ معاينة v2 جديدة بعد التحقق من Pixel وأهليته.",
+            },
+        )
     if row.get("products") and row.get("product_link_state") not in {
         "confirmed",
         "adopted",
@@ -2396,13 +3978,20 @@ async def _execute_snapchat_management_proposal_under_lease(
                     ),
                 },
             )
+    approved_status = str(row.get("status") or "")
     locked = await _collection(db, PROPOSAL_COLLECTION).update_one(
-        {"user_id": user_id, "proposal_id": proposal_id, "status": "approved"},
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": approved_status,
+        },
         {
             "$set": {
                 "status": "executing",
                 "execution_started_at": _iso(),
-                "provider_write_state": "attempting",
+                "provider_write_state": "preflighting",
+                "provider_write_reached": False,
+                "provider_write_uncertain": False,
             }
         },
     )
@@ -2474,6 +4063,48 @@ async def _execute_snapchat_management_proposal_under_lease(
                 status_code=409,
                 detail=_provider_state_conflict_detail(stale_fields),
             )
+    final_pixel_eligibility: dict[str, Any] | None = None
+    final_ad_dependency_verification: dict[str, Any] | None = None
+    if str(row.get("action") or "") == "ad_squad.create":
+        try:
+            # This is the final provider-read sequence after the durable lease
+            # and proposal claim: parent -> complete account Pixel catalogue ->
+            # exact goal/window eligibility.  No provider write can happen on
+            # any failure and no other provider call is interposed before POST.
+            final_pixel_eligibility = await client.validate_pixel_ad_squad_intent(
+                account_id=str(row.get("account_id") or ""),
+                parent_id=str(row.get("parent_id") or ""),
+                operation=operation,
+                reread_parent=True,
+            )
+        except Exception:
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure={"code": "snapchat_management_pixel_final_preflight_failed"},
+            )
+            raise
+    if str(row.get("action") or "") == "ad.create":
+        try:
+            # Re-read the complete ad dependency chain after the durable
+            # proposal/entity claims. Snapchat can change any of these
+            # relationships after preview; no POST is allowed on drift.
+            final_ad_dependency_verification = (
+                await client.validate_ad_create_dependencies(
+                    account_id=str(row.get("account_id") or ""),
+                    parent_id=str(row.get("parent_id") or ""),
+                    operation=operation,
+                )
+            )
+        except Exception:
+            await _reset_execution_claim(
+                db,
+                user_id=user_id,
+                proposal_id=proposal_id,
+                failure={"code": "snapchat_management_ad_final_preflight_failed"},
+            )
+            raise
     if not snapchat_campaign_mutations_enabled():
         await _reset_execution_claim(
             db,
@@ -2498,6 +4129,31 @@ async def _execute_snapchat_management_proposal_under_lease(
         raise HTTPException(
             status_code=409,
             detail={"code": "snapchat_campaign_activation_disabled"},
+        )
+    write_claim = await _collection(db, PROPOSAL_COLLECTION).update_one(
+        {
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "status": "executing",
+            "provider_write_state": "preflighting",
+        },
+        {
+            "$set": {
+                "provider_write_state": "attempting",
+                "provider_write_attempted_at": _iso(),
+            }
+        },
+    )
+    if not getattr(write_claim, "matched_count", 1):
+        await _reset_execution_claim(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            failure={"code": "snapchat_management_provider_write_claim_failed"},
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_provider_write_claim_failed"},
         )
     provider_write_confirmed = False
     provider_entity_id = (
@@ -2524,6 +4180,12 @@ async def _execute_snapchat_management_proposal_under_lease(
                     # verification request.  If that request fails, recovery
                     # still knows exactly what Snapchat acknowledged.
                     "provider_response_snapshot": _safe_provider_value(provider_entity),
+                    "execution_pixel_eligibility": _safe_provider_value(
+                        final_pixel_eligibility or {}
+                    ),
+                    "execution_ad_dependency_verification": _safe_provider_value(
+                        final_ad_dependency_verification or {}
+                    ),
                 }
             },
         )
@@ -2590,7 +4252,13 @@ async def _execute_snapchat_management_proposal_under_lease(
                 readback,
             )
 
-        known_not_applied = original_ok
+        explicit_validation_no_write = bool(
+            isinstance(detail, dict)
+            and isinstance(detail.get("provider_no_write_proof"), dict)
+            and not provider_write_confirmed
+            and not provider_entity_id
+        )
+        known_not_applied = original_ok or explicit_validation_no_write
         uncertain = not known_not_applied
         write_state = (
             "confirmed_not_applied"
@@ -2607,7 +4275,9 @@ async def _execute_snapchat_management_proposal_under_lease(
             {
                 "reconciliation": (
                     "current_matches_original"
-                    if known_not_applied
+                    if original_ok
+                    else "explicit_provider_validation_rejection"
+                    if explicit_validation_no_write
                     else "mixed_or_unavailable"
                 ),
                 "recovery_action": recovery_action,
@@ -2714,7 +4384,7 @@ async def reconcile_snapchat_management_proposal(
         or known_execution_no_write
         or known_rollback_no_write
     ):
-        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
         await _audit(
             db,
             user_id=user_id,
@@ -2734,12 +4404,12 @@ async def reconcile_snapchat_management_proposal(
     if (
         lease_expired
         and lease_kind == "execute"
-        and row.get("status") == "approved"
+        and row.get("status") in {"approved", "approved_v2"}
         and execution_state == "not_attempted"
         and row.get("provider_write_reached") is not True
         and row.get("provider_write_uncertain") is not True
     ):
-        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
         await _audit(
             db,
             user_id=user_id,
@@ -2747,6 +4417,82 @@ async def reconcile_snapchat_management_proposal(
             event="expired_no_write_entity_lease_released",
             actor_id=actor_id,
             detail={"recovery_action": "retry_approved_proposal"},
+        )
+        updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
+        )
+        return _public_proposal(updated or row)
+
+    # ``preflighting`` is persisted before any provider POST can occur. An
+    # expired lease in this exact state therefore proves no write was sent.
+    # Restore through a CAS, then release only the exact expired lease token;
+    # any ownership race leaves the provider-entity fence in place.
+    if (
+        lease_expired
+        and lease_kind == "execute"
+        and row.get("status") == "executing"
+        and execution_state == "preflighting"
+        and row.get("provider_write_reached") is not True
+        and row.get("provider_write_uncertain") is not True
+        and str((lease or {}).get("lease_token") or "")
+    ):
+        restored_status = (
+            "approved_v2"
+            if int(row.get("safety_protocol_version") or 1) == 2
+            else "approved"
+        )
+        restored = await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "status": "executing",
+                "provider_write_state": "preflighting",
+                "provider_write_reached": {"$ne": True},
+                "provider_write_uncertain": {"$ne": True},
+            },
+            {
+                "$set": {
+                    "status": restored_status,
+                    "provider_write_state": "not_attempted",
+                    "provider_write_reached": False,
+                    "provider_write_uncertain": False,
+                    "execution_started_at": None,
+                    "execution_retryable": True,
+                    "automatic_retry_allowed": False,
+                    "recovery_action": "retry_approved_proposal",
+                    "failure": {
+                        "code": "snapchat_management_worker_lost_during_preflight"
+                    },
+                }
+            },
+        )
+        if not getattr(restored, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_preflight_recovery_race"},
+            )
+        released = await _collection(db, ENTITY_LEASE_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "proposal_id": proposal_id,
+                "lease_token": str((lease or {}).get("lease_token") or ""),
+                "expires_at": (lease or {}).get("expires_at"),
+                "active": True,
+            },
+            {"$set": {"active": False, "released_at": _iso()}},
+        )
+        if not getattr(released, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_entity_lease_release_race"},
+            )
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="expired_preflight_entity_lease_recovered",
+            actor_id=actor_id,
+            detail={"restored_status": restored_status},
         )
         updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
             {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
@@ -2805,11 +4551,13 @@ async def reconcile_snapchat_management_proposal(
         and rollback_state == "not_attempted"
         and row.get("rollback_write_uncertain") is not True
     ):
-        await _collection(db, PROPOSAL_COLLECTION).update_one(
+        restored = await _collection(db, PROPOSAL_COLLECTION).update_one(
             {
                 "user_id": user_id,
                 "proposal_id": proposal_id,
                 "status": "rolling_back",
+                "rollback_write_state": "not_attempted",
+                "rollback_write_uncertain": False,
             },
             {
                 "$set": {
@@ -2820,7 +4568,12 @@ async def reconcile_snapchat_management_proposal(
                 }
             },
         )
-        await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+        if not getattr(restored, "matched_count", 1):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "snapchat_management_reconciliation_race"},
+            )
+        await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
         await _audit(
             db,
             user_id=user_id,
@@ -2873,9 +4626,56 @@ async def reconcile_snapchat_management_proposal(
         return _public_proposal(row)
     operation = dict(row.get("operation") or {})
     entity_id = str(row.get("provider_entity_id") or row.get("target_id") or "")
+    if (
+        not entity_id
+        and execution_uncertain
+        and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS
+        and (
+            not _provider_datetime(row.get("execution_started_at"))
+            or not _provider_datetime(row.get("failed_at"))
+            or _provider_datetime(row.get("failed_at"))
+            < _provider_datetime(row.get("execution_started_at"))
+        )
+    ):
+        await _audit(
+            db,
+            user_id=user_id,
+            proposal_id=proposal_id,
+            event="reconciliation_requires_manual_provider_identity",
+            actor_id=actor_id,
+            detail={
+                "recovery_action": "manual_provider_identity_review",
+                "reason": "legacy_attempt_window_missing",
+            },
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "snapchat_management_reconciliation_entity_unknown",
+                "recovery_action": "manual_provider_identity_review",
+            },
+        )
+    account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
+    client = provider or SnapchatManagementProvider(db, user_id)
+    role = await client.management_role(account, str(row.get("action") or ""))
+    if not role.get("allowed"):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "snapchat_management_role_missing"},
+        )
     if not entity_id:
-        # A timed-out create without an acknowledged provider ID cannot be
-        # identified safely by name or other mutable attributes.
+        if execution_uncertain and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS:
+            return await _reconcile_uncertain_create_without_id(
+                db,
+                user_id=user_id,
+                actor_id=actor_id,
+                row=row,
+                operation=operation,
+                account=account,
+                client=client,
+            )
+        # Creative creates and incomplete legacy rows remain manual: they lack
+        # the PAUSED delivery invariant required for exact safe adoption.
         await _audit(
             db,
             user_id=user_id,
@@ -2891,14 +4691,6 @@ async def reconcile_snapchat_management_proposal(
                 "recovery_action": "locate_provider_entity_id_manually",
             },
         )
-    account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
-    client = provider or SnapchatManagementProvider(db, user_id)
-    role = await client.management_role(account, str(row.get("action") or ""))
-    if not role.get("allowed"):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "snapchat_management_role_missing"},
-        )
     try:
         current = await client.read_entity(operation["entity_type"], entity_id)
     except Exception:
@@ -2911,6 +4703,11 @@ async def reconcile_snapchat_management_proposal(
             detail={"recovery_action": "retry_read_only_reconciliation"},
         )
         raise
+    if str(current.get("id") or "") != entity_id:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "snapchat_management_reconciliation_identity_mismatch"},
+        )
 
     if execution_uncertain:
         expected = _operation_expected_values(operation)
@@ -2942,7 +4739,7 @@ async def reconcile_snapchat_management_proposal(
                 verified=current,
                 event="execution_reconciled_applied",
             )
-            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
             return result
         original_ok = str(
             row.get("action") or ""
@@ -2952,7 +4749,7 @@ async def reconcile_snapchat_management_proposal(
             current,
         )
         if original_ok:
-            await _collection(db, PROPOSAL_COLLECTION).update_one(
+            confirmed = await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
                     "user_id": user_id,
                     "proposal_id": proposal_id,
@@ -2971,7 +4768,12 @@ async def reconcile_snapchat_management_proposal(
                     }
                 },
             )
-            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            if not getattr(confirmed, "matched_count", 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_reconciliation_race"},
+                )
+            await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
             return _public_proposal(
                 await _collection(db, PROPOSAL_COLLECTION).find_one(
                     {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
@@ -3008,7 +4810,7 @@ async def reconcile_snapchat_management_proposal(
                 entity=current,
                 event="rollback_entity_cache_refresh_deferred",
             )
-            await _collection(db, PROPOSAL_COLLECTION).update_one(
+            confirmed = await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
                     "user_id": user_id,
                     "proposal_id": proposal_id,
@@ -3032,7 +4834,12 @@ async def reconcile_snapchat_management_proposal(
                     }
                 },
             )
-            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            if not getattr(confirmed, "matched_count", 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_reconciliation_race"},
+                )
+            await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
             updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
                 {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
             )
@@ -3044,7 +4851,7 @@ async def reconcile_snapchat_management_proposal(
         if verified_after and not _rollback_drift_fields(
             operation, verified_after, current
         ):
-            await _collection(db, PROPOSAL_COLLECTION).update_one(
+            confirmed = await _collection(db, PROPOSAL_COLLECTION).update_one(
                 {
                     "user_id": user_id,
                     "proposal_id": proposal_id,
@@ -3063,7 +4870,12 @@ async def reconcile_snapchat_management_proposal(
                     }
                 },
             )
-            await _release_proposal_entity_lease(db, user_id=user_id, row=row)
+            if not getattr(confirmed, "matched_count", 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "snapchat_management_reconciliation_race"},
+                )
+            await _release_observed_entity_lease(db, user_id=user_id, lease=lease)
             updated = await _collection(db, PROPOSAL_COLLECTION).find_one(
                 {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
             )
@@ -3719,6 +5531,48 @@ async def snapchat_management_readiness(
     for account in accounts:
         role = await client.management_role(account, "campaign.update")
         creative_role = await client.management_role(account, "creative.create")
+        pixel_cursor = _collection(db, TRACKING_ASSET_COLLECTION).find(
+            {
+                "user_id": user_id,
+                "ad_account_id": str(account.get("ad_account_id") or ""),
+                "pixel_id": {"$nin": [None, ""]},
+            },
+            {
+                "_id": 0,
+                "pixel_id": 1,
+                "display_name": 1,
+                "status": 1,
+                "effective_status": 1,
+                "diagnostics_status": 1,
+                "has_event_data": 1,
+                "last_observed_at": 1,
+            },
+        )
+        if hasattr(pixel_cursor, "sort"):
+            pixel_cursor = pixel_cursor.sort("last_observed_at", -1)
+        if hasattr(pixel_cursor, "limit"):
+            pixel_cursor = pixel_cursor.limit(101)
+        if hasattr(pixel_cursor, "to_list"):
+            cached_pixels = await pixel_cursor.to_list(length=101)
+        elif isinstance(pixel_cursor, list):
+            cached_pixels = pixel_cursor[:101]
+        else:
+            cached_pixels = []
+        pixel_catalog_truncated = len(cached_pixels) > 100
+        cached_pixels = cached_pixels[:100]
+        visible_pixels = [
+            {
+                "pixel_id": str(row.get("pixel_id") or ""),
+                "display_name": row.get("display_name") or row.get("pixel_id"),
+                "status": row.get("status"),
+                "effective_status": row.get("effective_status"),
+                "diagnostics_status": row.get("diagnostics_status"),
+                "has_event_data": row.get("has_event_data") is True,
+                "last_observed_at": row.get("last_observed_at"),
+            }
+            for row in cached_pixels
+            if row.get("pixel_id")
+        ]
         output.append(
             {
                 "account_id": account.get("ad_account_id"),
@@ -3731,6 +5585,9 @@ async def snapchat_management_readiness(
                 "creative_role": creative_role.get("role"),
                 "creative_allowed": creative_role.get("allowed") is True,
                 "creative_reason": creative_role.get("reason"),
+                "pixels": visible_pixels,
+                "pixel_selection_required": len(visible_pixels) > 1,
+                "pixel_catalog_truncated": pixel_catalog_truncated,
             }
         )
     return {
@@ -3751,6 +5608,8 @@ async def snapchat_management_readiness(
         ],
         "new_entities_status": "PAUSED",
         "salla_permission_dependency": False,
+        "safety_protocol_version": MANAGEMENT_SAFETY_PROTOCOL_VERSION,
+        "mutation_rollout_requires_homogeneous_replicas": True,
     }
 
 
@@ -3840,7 +5699,7 @@ def attach_snapchat_campaign_management_routes(
             )
         if queued.get("status") == "completed":
             return _public_proposal(queued)
-        if queued.get("status") != "approved":
+        if queued.get("status") not in {"approved", "approved_v2"}:
             raise HTTPException(
                 status_code=409,
                 detail={"code": "snapchat_management_proposal_not_executable"},
@@ -3850,7 +5709,7 @@ def attach_snapchat_campaign_management_routes(
                 {
                     "user_id": str(owner["id"]),
                     "proposal_id": normalized_id,
-                    "status": "approved",
+                    "status": queued.get("status"),
                 },
                 {
                     "$set": {
@@ -3901,11 +5760,15 @@ def attach_snapchat_campaign_management_routes(
                     {
                         "user_id": str(owner["id"]),
                         "proposal_id": normalized_id,
-                        "status": "approved",
+                        "status": queued.get("status"),
                     },
                     {
                         "$set": {
-                            "status": "failed" if requires_new_preview else "approved",
+                            "status": (
+                                "failed"
+                                if requires_new_preview
+                                else queued.get("status")
+                            ),
                             "failure": _safe_provider_value(safe_detail),
                             "background_failure_at": _iso(),
                             "execution_retryable": not requires_new_preview,

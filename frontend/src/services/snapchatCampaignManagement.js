@@ -12,9 +12,10 @@ const ACTIONS = new Set([
 ]);
 const TRANSIENT_PREVIEW_TRANSPORT_STATUSES = new Set([502, 503, 504, 520]);
 const MAX_PREVIEW_START_ATTEMPTS = 3;
-const PREVIEW_RESUME_STORAGE_KEY = "mezan:snapchat-management-preview:v1";
+const PREVIEW_RESUME_STORAGE_KEY = "mezan:snapchat-management-preview:v2";
 const PREVIEW_RESUME_TTL_MS = 60 * 60 * 1000;
 const previewPreparationInflight = new Map();
+const SAFETY_PROTOCOL_VERSION = 2;
 
 function text(value, fallback = "") {
     return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -64,7 +65,7 @@ export function getSnapchatManagementPreviewResume(ownerId = "") {
         const value = JSON.parse(storage.getItem(PREVIEW_RESUME_STORAGE_KEY) || "null");
         const savedAt = Number(value?.saved_at);
         if (
-            value?.version !== 1
+            value?.version !== SAFETY_PROTOCOL_VERSION
             || value?.owner_id !== ownerScope
             || !Number.isFinite(savedAt)
             || Date.now() - savedAt > PREVIEW_RESUME_TTL_MS
@@ -96,7 +97,7 @@ function saveSnapchatManagementPreviewResume({ ownerId, request, previewJobId = 
     if (!storage || !ownerScope) return;
     const normalizedRequest = proposalRequest(request);
     storage.setItem(PREVIEW_RESUME_STORAGE_KEY, JSON.stringify({
-        version: 1,
+        version: SAFETY_PROTOCOL_VERSION,
         owner_id: ownerScope,
         saved_at: Date.now(),
         request: normalizedRequest,
@@ -116,6 +117,7 @@ function proposalRequest(input = {}) {
         reason: text(input.reason),
         idempotency_key: text(input.idempotency_key),
         activation_acknowledged: input.activation_acknowledged === true,
+        safety_protocol_version: SAFETY_PROTOCOL_VERSION,
         expected_outcome: input.expected_outcome === null
             || input.expected_outcome === undefined
             ? null
@@ -160,18 +162,32 @@ export function normalizeSnapchatManagementReadiness(payload = {}) {
         required_lifecycle: Array.isArray(value.required_lifecycle)
             ? value.required_lifecycle.filter((item) => typeof item === "string")
             : [],
-        accounts: Array.isArray(value.accounts) ? value.accounts.map((account) => ({
-            account_id: text(account?.account_id),
-            display_name: text(account?.display_name, account?.account_id || "حساب Snapchat"),
-            currency: text(account?.currency, "SAR"),
-            timezone: text(account?.timezone),
-            role: text(account?.role) || null,
-            management_allowed: account?.management_allowed === true,
-            reason: text(account?.reason) || null,
-            creative_role: text(account?.creative_role) || null,
-            creative_allowed: account?.creative_allowed === true,
-            creative_reason: text(account?.creative_reason) || null,
-        })).filter((account) => account.account_id) : [],
+        accounts: Array.isArray(value.accounts) ? value.accounts.map((account) => {
+            const pixels = Array.isArray(account?.pixels) ? account.pixels.map((pixel) => ({
+                pixel_id: text(pixel?.pixel_id),
+                display_name: text(pixel?.display_name, pixel?.pixel_id || "Snap Pixel"),
+                status: text(pixel?.status) || null,
+                effective_status: text(pixel?.effective_status) || null,
+                diagnostics_status: text(pixel?.diagnostics_status) || null,
+                has_event_data: pixel?.has_event_data === true,
+                last_observed_at: text(pixel?.last_observed_at) || null,
+            })).filter((pixel) => pixel.pixel_id) : [];
+            return {
+                account_id: text(account?.account_id),
+                display_name: text(account?.display_name, account?.account_id || "حساب Snapchat"),
+                currency: text(account?.currency, "SAR"),
+                timezone: text(account?.timezone),
+                role: text(account?.role) || null,
+                management_allowed: account?.management_allowed === true,
+                reason: text(account?.reason) || null,
+                creative_role: text(account?.creative_role) || null,
+                creative_allowed: account?.creative_allowed === true,
+                creative_reason: text(account?.creative_reason) || null,
+                pixels,
+                pixel_selection_required: account?.pixel_selection_required === true
+                    || pixels.length > 1,
+            };
+        }).filter((account) => account.account_id) : [],
     };
 }
 
@@ -201,9 +217,14 @@ export function verifiedSnapchatManagementEntityId(payload = {}) {
 export function normalizeSnapchatManagementProposal(payload = {}) {
     const value = object(payload?.data || payload);
     const action = ACTIONS.has(value.action) ? value.action : null;
+    const providerStatus = text(value.status, "unknown");
+    const status = providerStatus.endsWith("_v2")
+        ? providerStatus.slice(0, -3)
+        : providerStatus;
     return {
         proposal_id: text(value.proposal_id),
-        status: text(value.status, "unknown"),
+        status,
+        provider_status: providerStatus,
         revision: Math.max(1, Math.trunc(number(value.revision) || 1)),
         action,
         account_id: text(value.account_id),
@@ -230,6 +251,14 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         verification: object(value.verification),
         rollback: object(value.rollback),
         failure: object(value.failure),
+        recovery_action: text(value.recovery_action) || null,
+        safety_protocol_version: Math.max(
+            1,
+            Math.trunc(number(value.safety_protocol_version) || 1),
+        ),
+        execution_retryable: value.execution_retryable === true,
+        automatic_retry_allowed: value.automatic_retry_allowed === true,
+        pixel_eligibility: object(value.pixel_eligibility),
         provider_write_reached: value.provider_write_reached === true,
         provider_write_state: text(value.provider_write_state, "not_attempted"),
         provider_write_uncertain: value.provider_write_uncertain === true,
@@ -523,6 +552,13 @@ export async function approveSnapchatManagementProposal(
 export async function executeSnapchatManagementProposal(proposalId) {
     const response = await api.post(
         `${BASE}/proposals/${encodeURIComponent(text(proposalId))}/execute`,
+    );
+    return normalizeSnapchatManagementProposal(response.data);
+}
+
+export async function reconcileSnapchatManagementProposal(proposalId) {
+    const response = await api.post(
+        `${BASE}/proposals/${encodeURIComponent(text(proposalId))}/reconcile`,
     );
     return normalizeSnapchatManagementProposal(response.data);
 }
