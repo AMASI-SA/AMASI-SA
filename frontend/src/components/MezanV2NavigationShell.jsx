@@ -78,6 +78,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         label: "الذكاء الاصطناعي",
         Icon: Robot,
         items: [
+            { to: "/assistant", label: "مساعد ميزان", exactSearch: true },
             { to: "/customer-intelligence", label: "ذكاء العملاء", exactSearch: true },
         ],
     },
@@ -91,6 +92,7 @@ const MEZAN_V2_PATHS = [
     "/products-v2",
     "/components-v2",
     "/integrations-v2",
+    "/assistant",
     "/customer-intelligence",
     "/ads-manager",
 ];
