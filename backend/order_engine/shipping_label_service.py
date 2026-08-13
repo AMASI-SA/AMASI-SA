@@ -460,18 +460,32 @@ async def _shipment_rows(
     internal_order_id: str,
     embedded: Any,
 ) -> list[dict[str, Any]]:
-    response = await call_salla(
-        db,
-        user_id,
-        "GET",
-        "/shipments",
-        params={"order_id": internal_order_id, "per_page": 50},
+    embedded_rows = (
+        [dict(row) for row in embedded if isinstance(row, dict)]
+        if isinstance(embedded, list)
+        else [dict(embedded)] if isinstance(embedded, dict) else []
     )
+    try:
+        response = await call_salla(
+            db,
+            user_id,
+            "GET",
+            "/shipments",
+            params={"order_id": internal_order_id, "per_page": 50},
+        )
+    except SallaError as exc:
+        # Order Details uses the orders.read scope and includes shipments in
+        # its full response.  Older Mezan installations may not yet have the
+        # separate shipping.read scope, so use Salla's own embedded shipment
+        # facts instead of blocking an already-issued courier label.
+        if exc.status_code not in {401, 403} or not embedded_rows:
+            raise
+        response = None
     listed = response.get("data") if isinstance(response, dict) else None
     rows = (
         [dict(row) for row in listed if isinstance(row, dict)]
         if isinstance(listed, list)
-        else []
+        else embedded_rows
     )
     async def enrich(row: dict[str, Any]) -> dict[str, Any]:
         shipment_id = _text(row.get("id"))
@@ -549,11 +563,28 @@ async def _wait_for_active_outbound_shipments(
     for attempt in range(attempts):
         if attempt:
             await asyncio.sleep(0.5)
+        latest_embedded = embedded
+        try:
+            order_response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                f"/orders/{internal_order_id}",
+            )
+        except SallaError:
+            order_response = None
+        order_details = (
+            order_response.get("data")
+            if isinstance(order_response, dict)
+            else None
+        )
+        if isinstance(order_details, dict):
+            latest_embedded = order_details.get("shipments")
         rows = await _shipment_rows(
             db,
             user_id,
             internal_order_id,
-            embedded,
+            latest_embedded,
         )
         active = _active_outbound(rows)
         if active:
@@ -723,6 +754,7 @@ async def _poll_shipment(
     seed: dict[str, Any],
     *,
     attempts: int = 12,
+    internal_order_id: str = "",
 ) -> dict[str, Any]:
     latest = dict(seed)
     for attempt in range(attempts):
@@ -753,7 +785,7 @@ async def _poll_shipment(
                     f"/shipments/{shipment_id}/tracking",
                 )
             except SallaError:
-                continue
+                tracking_response = None
             tracking_details = (
                 tracking_response.get("data")
                 if isinstance(tracking_response, dict)
@@ -764,6 +796,36 @@ async def _poll_shipment(
                 if isinstance(nested, dict):
                     tracking_details = {**tracking_details, **nested}
                 latest = {**latest, **tracking_details}
+        if not _snapshot(latest)["ready"] and internal_order_id:
+            try:
+                order_response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/orders/{internal_order_id}",
+                )
+            except SallaError:
+                order_response = None
+            order_details = (
+                order_response.get("data")
+                if isinstance(order_response, dict)
+                else None
+            )
+            embedded = (
+                order_details.get("shipments")
+                if isinstance(order_details, dict)
+                else None
+            )
+            embedded_rows = _active_outbound(
+                [dict(row) for row in embedded if isinstance(row, dict)]
+                if isinstance(embedded, list)
+                else [dict(embedded)] if isinstance(embedded, dict) else []
+            )
+            for row in embedded_rows:
+                if _text(row.get("id")) == shipment_id or _snapshot(row)["ready"]:
+                    latest = {**latest, **row}
+                    if _snapshot(latest)["ready"]:
+                        break
     return latest
 
 
@@ -796,6 +858,7 @@ async def _recover_created_shipment(
         shipment_id,
         source,
         attempts=6,
+        internal_order_id=internal_order_id,
     )
     if _tracking(latest) or _snapshot(latest)["ready"]:
         return latest
@@ -1046,13 +1109,18 @@ async def issue_shipping_label(
         )
 
     source = active[0]
-    if _status(source.get("status")) in _PENDING or _tracking(source):
+    if (
+        order_status_changed
+        or _status(source.get("status")) in _PENDING
+        or _tracking(source)
+    ):
         polled = await _poll_shipment(
             db,
             user_id,
             _text(source.get("id")),
             source,
             attempts=8,
+            internal_order_id=internal_id,
         )
         snapshot = _snapshot(polled)
         await _best_effort_resync(db, user_id, normalized)
@@ -1154,6 +1222,7 @@ async def issue_shipping_label(
         user_id,
         shipment_id,
         created,
+        internal_order_id=internal_id,
     )
     snapshot = _snapshot(latest)
     await _best_effort_resync(db, user_id, normalized)
