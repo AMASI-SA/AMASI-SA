@@ -31,6 +31,10 @@ jest.mock("../components/fulfillment/ReadyToShipOrders", () => function ReadyToS
     return <div data-testid="ready-to-ship-window">جاهز للشحن</div>;
 });
 
+jest.mock("../components/fulfillment/CompletedFulfillmentOrders", () => function CompletedFulfillmentFixture() {
+    return <div data-testid="completed-fulfillment-orders">تم التنفيذ · طباعة الشحنة</div>;
+});
+
 jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function SupplierReceivingFixture() {
     return <div data-testid="supplier-receiving-workspace">استلام منتجات المورد بالباركود · من المستودع · من المورد · تصنيع داخلي · ينتظر توريد · قيد التجميع · متوقف بسبب نقص منتج</div>;
 });
@@ -171,5 +175,15 @@ test("assembly stage opens the simple employee receiving workspace", () => {
     expect(markup).toContain("بحث برقم الطلب");
     expect(markup).toContain("فتح الكاميرا");
     expect(markup).toContain("استلام المنتج جاهز");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
+});
+
+test("completed stage keeps the shipment print action available", () => {
+    mockSearchParams = new URLSearchParams("stage=completed");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="completed-fulfillment-orders"');
+    expect(markup).toContain("تم التنفيذ");
+    expect(markup).toContain("طباعة الشحنة");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });

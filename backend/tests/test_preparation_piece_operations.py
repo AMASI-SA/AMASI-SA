@@ -11,6 +11,9 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_ASSEMBLY,
     FileSchedulePatchRequest,
+    _assembly_batch_id,
+    _assembly_piece_public,
+    _assembly_progress,
     _can_start_assigned_file,
     _piece_has_completed_preparation_receipt,
     _preparation_receipt_order_number,
@@ -21,6 +24,7 @@ from preparation_piece_operations import (
     inherit_required_services,
     make_preparation_piece_operations_router,
     preparation_receipt_blocker,
+    assembly_piece_blocker,
     validate_materialized_piece_count,
 )
 
@@ -288,6 +292,11 @@ def test_router_registers_work_receiving_manager_start_and_schedule_routes():
         "/preparation-work-v1/receiving/pieces/{piece_id}/receive",
         "POST",
     ) in routes
+    assert ("/preparation-work-v1/assembly/search", "GET") in routes
+    assert (
+        "/preparation-work-v1/assembly/pieces/{piece_id}/ready",
+        "POST",
+    ) in routes
     assert ("/preparation-work-v1/manager/summary", "GET") in routes
     assert ("/preparation-work-v1/files/{file_number}/start", "POST") in routes
     assert ("/preparation-work-v1/files/{file_number}/schedule", "PUT") in routes
@@ -361,3 +370,62 @@ def test_preparation_receipt_is_final_and_order_search_accepts_arabic_prefix():
         "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
     }) is True
     assert _preparation_receipt_order_number("طلب #10452") == "10452"
+
+
+def test_assembly_product_card_keeps_full_information_and_search_priority():
+    card = _assembly_piece_public(
+        {
+            "piece_id": "piece-1",
+            "order_number": "10452",
+            "unit_index": 2,
+            "product_name": "سلسال بالاسم",
+            "sku": "AMS-22",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "responsible_employee_name": "عرفات",
+            "specifications_snapshot": [
+                {"name": "الاسم", "value": "سارة"},
+                {"name": "اللون", "value": "ذهبي"},
+            ],
+            "services": [
+                {"service_name": "كتابة الاسم", "status": "completed"},
+            ],
+        },
+        matched_piece_id="piece-1",
+    )
+
+    assert card["search_match"] is True
+    assert card["can_mark_ready"] is True
+    assert card["assembly_ready"] is False
+    assert card["product_name"] == "سلسال بالاسم"
+    assert card["specifications"] == [
+        {"name": "الاسم", "value": "سارة"},
+        {"name": "اللون", "value": "ذهبي"},
+    ]
+    assert card["services"] == [
+        {"name": "كتابة الاسم", "status": "completed"},
+    ]
+
+
+def test_assembly_ready_is_idempotent_and_batch_id_is_stable():
+    assert assembly_piece_blocker({
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+    }) is None
+    assert assembly_piece_blocker({
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "assembly_status": "ready",
+    }) == "assembly_piece_already_ready"
+    assert _assembly_batch_id("merchant-1", "10452") == _assembly_batch_id(
+        "merchant-1", "10452"
+    )
+    assert _assembly_batch_id("merchant-1", "10452").startswith(
+        "ship_assembly_"
+    )
+
+
+def test_last_assembly_piece_moves_order_to_completed_and_creates_print_batch():
+    source = inspect.getsource(_assembly_progress)
+
+    assert '"stage": "completed"' in source
+    assert '"shipping_print_batch_id": batch_id' in source
+    assert "SHIPPING_BATCHES" in source
+    assert '"source": "assembly_completion"' in source

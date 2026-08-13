@@ -25,6 +25,13 @@ function errorMessage(error, fallback) {
         preparation_piece_not_started: "لم يبدأ موظف التجهيز هذه القطعة بعد.",
         preparation_piece_not_ready_for_receipt: "حالة القطعة لا تسمح باستلامها الآن.",
         preparation_piece_receipt_conflict: "تغيرت حالة القطعة. ابحث عن الطلب مرة أخرى.",
+        assembly_piece_not_found: "لم نتعرف على هذا الباركود داخل التجميع والعنونة.",
+        assembly_search_required: "اكتب رقم الطلب أو صوّر باركود المنتج.",
+        assembly_order_not_ready: "هذا الطلب غير جاهز للتجميع والعنونة بعد.",
+        assembly_order_products_not_found: "لم نجد منتجات هذا الطلب داخل التجميع والعنونة.",
+        assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا.",
+        assembly_piece_stopped: "هذا المنتج متوقف ولا يمكن إكماله.",
+        assembly_piece_ready_conflict: "تغيرت حالة المنتج. افتح الطلب مرة أخرى.",
     };
     return messages[detail?.code] || error?.message || fallback;
 }
@@ -104,5 +111,33 @@ export async function receivePreparationPiece(pieceId, clientRequestId) {
         )).data;
     } catch (error) {
         throw new Error(errorMessage(error, "تعذّر استلام المنتج من التجهيز."));
+    }
+}
+
+export function newAssemblyReadyRequestId() {
+    if (globalThis.crypto?.randomUUID) {
+        return `assembly-ready:${globalThis.crypto.randomUUID()}`;
+    }
+    return `assembly-ready:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
+export async function searchAssemblyOrder(query) {
+    try {
+        return (await api.get("/preparation-work-v1/assembly/search", {
+            params: { q: String(query || "").trim() },
+        })).data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر البحث داخل التجميع والعنونة."));
+    }
+}
+
+export async function markAssemblyPieceReady(pieceId, clientRequestId) {
+    try {
+        return (await api.post(
+            `/preparation-work-v1/assembly/pieces/${encodeURIComponent(pieceId)}/ready`,
+            { client_request_id: clientRequestId || newAssemblyReadyRequestId() },
+        )).data;
+    } catch (error) {
+        throw new Error(errorMessage(error, "تعذّر تسجيل المنتج جاهزًا."));
     }
 }

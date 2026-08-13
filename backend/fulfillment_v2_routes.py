@@ -1023,6 +1023,22 @@ def _warehouse_allowed(
     return required.issubset(context["warehouse_ids"])
 
 
+def _ready_order_allowed(
+    context: dict[str, Any],
+    workflow: dict[str, Any],
+) -> bool:
+    warehouses = (
+        (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
+        or []
+    )
+    if warehouses:
+        return _warehouse_allowed(context, warehouses)
+    # Preparation orders are physical pieces already received into Mezan's
+    # assembly queue. They do not need an inventory-location assignment to be
+    # assembled and labeled.
+    return _text(workflow.get("ready_to_ship_source")) == "preparation_receipt"
+
+
 async def _order_view(
     repository: MongoOrderRepository,
     *,
@@ -1070,6 +1086,21 @@ async def _order_view(
         "claimed_by": workflow.get("claimed_by"),
         "claimed_by_name": workflow.get("claimed_by_name"),
         "ready_at": workflow.get("ready_to_ship_at"),
+        "ready_to_ship_source": workflow.get("ready_to_ship_source"),
+        "assembly_status": workflow.get("assembly_status"),
+        "assembly_ready_count": int(
+            workflow.get("assembly_ready_piece_count") or 0
+        ),
+        "assembly_piece_count": int(
+            workflow.get("assembly_piece_count")
+            or workflow.get("preparation_piece_count")
+            or 0
+        ),
+        "print_batch_id": (
+            workflow.get("shipping_print_batch_id")
+            or workflow.get("claim_batch_id")
+        ),
+        "completed_at": workflow.get("completed_at"),
     }
 
 
@@ -1100,11 +1131,7 @@ def make_fulfillment_v2_router(
         ).sort("ready_to_ship_at", 1).limit(limit * 3).to_list(limit * 3)
         items = []
         for workflow in workflows:
-            warehouses = (
-                (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
-                or []
-            )
-            if not _warehouse_allowed(context, warehouses):
+            if not _ready_order_allowed(context, workflow):
                 continue
             claimed_by = _text(workflow.get("claimed_by"))
             if claimed_by and claimed_by != context["actor_id"] and not context["is_owner"]:
@@ -1127,6 +1154,77 @@ def make_fulfillment_v2_router(
                 "can_reprint": "fulfillment.labels.reprint" in context["permissions"],
                 "can_pack": "fulfillment.pack.confirm" in context["permissions"],
                 "can_handoff": "fulfillment.carrier.handoff" in context["permissions"],
+            },
+        }
+
+    @router.get("/completed")
+    async def list_completed_assembly_orders(
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.ready.read",
+            responsibility="instant_ready",
+        )
+        workflows = await db[WORKFLOWS].find(
+            {
+                "user_id": context["merchant_id"],
+                "stage": "completed",
+                "assembly_status": "completed",
+            },
+            {"_id": 0},
+        ).sort("completed_at", -1).limit(limit * 2).to_list(limit * 2)
+        items = []
+        for workflow in workflows:
+            claimed_by = _text(workflow.get("claimed_by"))
+            if (
+                claimed_by
+                and claimed_by != context["actor_id"]
+                and not context["is_owner"]
+            ):
+                continue
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if row:
+                items.append(row)
+            if len(items) >= limit:
+                break
+        batch_ids = sorted({
+            _text(row.get("print_batch_id"))
+            for row in items
+            if _text(row.get("print_batch_id"))
+        })
+        batches = (
+            await db[BATCHES].find(
+                {
+                    "user_id": context["merchant_id"],
+                    "id": {"$in": batch_ids},
+                },
+                {"_id": 0, "id": 1, "print_count": 1, "status": 1},
+            ).to_list(max(1, len(batch_ids)))
+            if batch_ids
+            else []
+        )
+        batch_by_id = {_text(row.get("id")): row for row in batches}
+        for row in items:
+            batch = batch_by_id.get(_text(row.get("print_batch_id"))) or {}
+            row["print_count"] = int(batch.get("print_count") or 0)
+            row["print_status"] = _text(batch.get("status")) or None
+        return {
+            "items": items,
+            "total": len(items),
+            "permissions": {
+                "can_print": (
+                    "fulfillment.labels.print" in context["permissions"]
+                ),
+                "can_reprint": (
+                    "fulfillment.labels.reprint" in context["permissions"]
+                ),
             },
         }
 
@@ -1179,10 +1277,16 @@ def make_fulfillment_v2_router(
             })
             for workflow in workflows
         }
+        preparation_orders = {
+            _text(workflow.get("order_number"))
+            for workflow in workflows
+            if _text(workflow.get("ready_to_ship_source"))
+            == "preparation_receipt"
+        }
         missing_inventory_orders = sorted(
             order_number
             for order_number, warehouse_ids in inventory_by_order.items()
-            if not warehouse_ids
+            if not warehouse_ids and order_number not in preparation_orders
         )
         if missing_inventory_orders:
             raise HTTPException(
@@ -1195,7 +1299,7 @@ def make_fulfillment_v2_router(
         unauthorized_orders = sorted(
             order_number
             for order_number, warehouse_ids in inventory_by_order.items()
-            if not _warehouse_allowed(context, warehouse_ids)
+            if warehouse_ids and not _warehouse_allowed(context, warehouse_ids)
         )
         if unauthorized_orders:
             raise HTTPException(
@@ -1254,7 +1358,10 @@ def make_fulfillment_v2_router(
             "status": "claimed",
             "order_numbers": order_numbers,
             "warehouse_ids": warehouse_ids,
-            "warehouse_resolution_sources": ["inventory_location"],
+            "warehouse_resolution_sources": sorted({
+                *(["inventory_location"] if warehouse_ids else []),
+                *(["preparation_receipt"] if preparation_orders else []),
+            }),
             "claimed_by": context["actor_id"],
             "claimed_by_name": _text(user.get("name") or user.get("email")),
             "claimed_at": now,

@@ -21,6 +21,14 @@ export async function listReadyToShipOrders({ limit = 100 } = {}) {
     }
 }
 
+export async function listCompletedFulfillmentOrders({ limit = 100 } = {}) {
+    try {
+        return (await api.get("/fulfillment-v2/completed", { params: { limit } })).data;
+    } catch (error) {
+        throw new Error(detailMessage(error, "تعذر تحميل الطلبات المكتملة."));
+    }
+}
+
 export async function claimReadyToShipBatch(orderNumbers) {
     try {
         return (await api.post("/fulfillment-v2/ready-to-ship/claim", { order_numbers: orderNumbers })).data;

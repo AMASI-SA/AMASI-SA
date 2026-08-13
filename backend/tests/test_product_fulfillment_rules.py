@@ -7,6 +7,7 @@ from fulfillment_v2_routes import (
     _inventory_reservation_blockers,
     _inventory_consumption_targets,
     _reserve_inventory_for_line,
+    _ready_order_allowed,
     _satisfy_preparation_with_ready_stock,
     _warehouse_allowed,
 )
@@ -474,6 +475,22 @@ def test_employee_assignment_filters_inventory_but_never_replaces_it():
     assert _warehouse_allowed(context, ["wh-employee"]) is True
     assert _warehouse_allowed(context, ["wh-other"]) is False
     assert _warehouse_allowed(owner, ["wh-stock"]) is True
+
+
+def test_received_preparation_order_enters_assembly_without_inventory_location():
+    employee = {
+        "is_owner": False,
+        "warehouse_ids": set(),
+    }
+
+    assert _ready_order_allowed(employee, {
+        "ready_to_ship_source": "preparation_receipt",
+        "fulfillment_decision": {"warehouse_ids": []},
+    }) is True
+    assert _ready_order_allowed(employee, {
+        "ready_to_ship_source": "instant_inventory",
+        "fulfillment_decision": {"warehouse_ids": []},
+    }) is False
 
 
 def test_exact_ready_stock_marks_linked_services_as_already_completed():
