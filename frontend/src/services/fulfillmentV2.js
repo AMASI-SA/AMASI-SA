@@ -29,6 +29,30 @@ export async function listCompletedFulfillmentOrders({ limit = 100 } = {}) {
     }
 }
 
+export async function issueCompletedOrderCarrierLabel(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+    if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    try {
+        return (await api.post(
+            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label`,
+        )).data;
+    } catch (error) {
+        throw new Error(detailMessage(error, "تعذر تحويل الطلب في سلة وإصدار البوليصة."));
+    }
+}
+
+export async function refreshCompletedOrderCarrierLabel(orderNumber) {
+    const normalized = String(orderNumber || "").trim();
+    if (!normalized) throw new Error("رقم الطلب مطلوب.");
+    try {
+        return (await api.post(
+            `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/refresh`,
+        )).data;
+    } catch (error) {
+        throw new Error(detailMessage(error, "تعذر التحقق من رابط البوليصة في سلة."));
+    }
+}
+
 export async function claimReadyToShipBatch(orderNumbers) {
     try {
         return (await api.post("/fulfillment-v2/ready-to-ship/claim", { order_numbers: orderNumbers })).data;

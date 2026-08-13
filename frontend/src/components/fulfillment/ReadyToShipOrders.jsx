@@ -5,6 +5,7 @@ import {
     Camera,
     CheckCircle,
     ClipboardText,
+    DownloadSimple,
     MagnifyingGlass,
     Package,
     Printer,
@@ -28,6 +29,7 @@ import {
     searchAssemblyOrder,
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
+import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
 
 const ASSEMBLY_BLOCKERS = {
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
@@ -237,9 +239,19 @@ export default function ReadyToShipOrders() {
                 newAssemblyReadyRequestId(),
             );
             const refreshed = await searchAssemblyOrder(result.order_number);
-            setResult({ ...refreshed, progress: response.progress });
+            setResult({
+                ...refreshed,
+                progress: response.progress,
+                carrier_label: response.carrier_label,
+            });
             if (response.progress?.order_completed) {
-                setSuccess("اكتملت كل منتجات الطلب وانتقل إلى تم التنفيذ. يمكنك الآن طباعة الشحنة.");
+                if (response.carrier_label?.ready) {
+                    setSuccess("اكتملت المنتجات، وتحول الطلب في سلة إلى تم التنفيذ، ووصلت البوليصة.");
+                } else if (response.carrier_label?.order_status_completed) {
+                    setSuccess("اكتملت المنتجات وتحول الطلب في سلة إلى تم التنفيذ. ننتظر رابط البوليصة من شركة الشحن.");
+                } else {
+                    setSuccess("اكتملت المنتجات داخل ميزان. افتح تم التنفيذ لإعادة ربط سلة وإصدار البوليصة.");
+                }
             } else {
                 setSuccess(`تم تسجيل المنتج جاهزًا — المتبقي ${response.progress?.total_count - response.progress?.ready_count}.`);
             }
@@ -310,8 +322,7 @@ export default function ReadyToShipOrders() {
         || result?.summary?.all_ready
         || result?.stage === "completed",
     );
-    const printBatchId = result?.progress?.print_batch_id || result?.print_batch_id;
-    const currentPrintCount = Number(batchById[printBatchId]?.print_count || 0);
+    const carrierLabel = result?.carrier_label || {};
 
     return (
         <section className="mx-auto w-full max-w-3xl space-y-4" dir="rtl" data-testid="ready-to-ship-orders">
@@ -366,15 +377,26 @@ export default function ReadyToShipOrders() {
                         <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
                             <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
                             <h3 className="mt-2 text-xl font-black text-emerald-950">انتقل الطلب إلى تم التنفيذ</h3>
-                            <p className="mt-1 text-sm font-bold text-emerald-800">اكتملت كل المنتجات وأصبح ملف الشحنة جاهزًا للطباعة.</p>
-                            {currentPrintCount > 0 && (
-                                <input value={reprintReasons[printBatchId] || ""} onChange={(event) => setReprintReasons((current) => ({ ...current, [printBatchId]: event.target.value }))} placeholder="سبب إعادة الطباعة" className="mt-3 h-12 w-full rounded-2xl border border-amber-300 bg-white px-3 text-sm font-bold" />
+                            <p className="mt-1 text-sm font-bold text-emerald-800">اكتملت كل المنتجات. الطباعة أدناه هي بوليصة الناقل الرسمية، أو بوليصة ميزان إذا كان الناقل مندوب المتجر.</p>
+                            {carrierLabel.ready && carrierLabel.label_url && (
+                                <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+                                    <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
+                                </a>
                             )}
-                            <button type="button" onClick={() => print(printBatchId)} disabled={!permissions.can_print || (currentPrintCount > 0 && !permissions.can_reprint) || !printBatchId || busy === `print:${printBatchId}`} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white disabled:opacity-50">
-                                {busy === `print:${printBatchId}` ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={24} weight="fill" />}
-                                {currentPrintCount > 0 ? "إعادة طباعة الشحنة" : "طباعة الشحنة"}
-                            </button>
-                            {currentPrintCount > 0 && !permissions.can_reprint && <p className="mt-2 text-xs font-black text-amber-800">إعادة الطباعة تحتاج صلاحية من المالك.</p>}
+                            {carrierLabel.ready && carrierLabel.label_type === "store_courier" && carrierLabel.print_data?.qr_code && (
+                                <button type="button" onClick={() => {
+                                    const printWindow = window.open("about:blank", "_blank");
+                                    if (printWindow) printWindow.opener = null;
+                                    if (!printStoreCourierLabel(printWindow, carrierLabel.print_data)) printWindow?.close();
+                                }} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
+                                    <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
+                                </button>
+                            )}
+                            {!carrierLabel.ready && (
+                                <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
+                                    {carrierLabel.message || "لم يصل رابط البوليصة بعد. افتح تم التنفيذ لإعادة المحاولة دون إعادة تجهيز المنتجات."}
+                                </div>
+                            )}
                             <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>
                         </div>
                     )}

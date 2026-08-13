@@ -530,6 +530,37 @@ async def _shipment_rows(
     return list(await asyncio.gather(*(enrich(row) for row in rows)))
 
 
+async def _wait_for_active_outbound_shipments(
+    db: Any,
+    user_id: str,
+    internal_order_id: str,
+    embedded: Any,
+    *,
+    attempts: int = 7,
+) -> list[dict[str, Any]]:
+    """Wait briefly for a courier AWB triggered by ``completed`` status.
+
+    Salla shipping apps run asynchronously.  iMile and similar couriers may
+    attach the shipment a couple of seconds after the order status update, so
+    a single immediate list request can incorrectly report that no shipment
+    exists.  This bounded poll never creates a second shipment.
+    """
+    active: list[dict[str, Any]] = []
+    for attempt in range(attempts):
+        if attempt:
+            await asyncio.sleep(0.5)
+        rows = await _shipment_rows(
+            db,
+            user_id,
+            internal_order_id,
+            embedded,
+        )
+        active = _active_outbound(rows)
+        if active:
+            return active
+    return active
+
+
 def _location(value: Any) -> Any:
     if isinstance(value, dict):
         return (
@@ -948,6 +979,18 @@ async def issue_shipping_label(
         ) from exc
 
     active = _active_outbound(rows)
+    if order_status_changed and not active:
+        try:
+            active = await _wait_for_active_outbound_shipments(
+                db,
+                user_id,
+                internal_id,
+                order.get("shipments"),
+            )
+        except SallaError:
+            # The normal error below remains more useful than leaking a
+            # transient provider response after Salla accepted the status.
+            active = []
     if active and _is_store_courier(active[0]):
         source = active[0]
         store = await _store_identity(db, user_id)
@@ -1003,7 +1046,7 @@ async def issue_shipping_label(
         )
 
     source = active[0]
-    if _status(source.get("status")) == "creating" or _tracking(source):
+    if _status(source.get("status")) in _PENDING or _tracking(source):
         polled = await _poll_shipment(
             db,
             user_id,

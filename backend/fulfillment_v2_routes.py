@@ -14,8 +14,10 @@ from pymongo import ASCENDING, DESCENDING
 from ai_store_access_control import effective_permissions
 from ai_store_operations_foundation import PERMISSIONS, ROLE_ASSIGNMENTS
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
+from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
+from order_engine.shipping_label_service import ShippingLabelError
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
     FULFILLMENT_DECISIONS,
@@ -1011,6 +1013,17 @@ def _require_permission(
         )
 
 
+def _can_operate_completed_carrier_label(context: dict[str, Any]) -> bool:
+    if "fulfillment.labels.print" not in context["permissions"]:
+        return False
+    return bool(
+        context["is_owner"]
+        or {"packing", "shipping_labeling"}.intersection(
+            context["responsibilities"]
+        )
+    )
+
+
 def _warehouse_allowed(
     context: dict[str, Any],
     warehouse_ids: list[str],
@@ -1101,6 +1114,16 @@ async def _order_view(
             or workflow.get("claim_batch_id")
         ),
         "completed_at": workflow.get("completed_at"),
+        "salla_order_status": workflow.get("salla_order_status"),
+        "carrier_label_status": workflow.get("carrier_label_status"),
+        "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
+        "carrier_label_url": workflow.get("carrier_label_url"),
+        "carrier_label_type": workflow.get("carrier_label_type"),
+        "carrier_name": workflow.get("carrier_name") or order.shipping.company,
+        "carrier_tracking_number": workflow.get("carrier_tracking_number"),
+        "carrier_label_message": workflow.get("carrier_label_message"),
+        "carrier_label_error_code": workflow.get("carrier_label_error_code"),
+        "carrier_label_error_message": workflow.get("carrier_label_error_message"),
     }
 
 
@@ -1220,13 +1243,71 @@ def make_fulfillment_v2_router(
             "total": len(items),
             "permissions": {
                 "can_print": (
-                    "fulfillment.labels.print" in context["permissions"]
+                    _can_operate_completed_carrier_label(context)
                 ),
                 "can_reprint": (
                     "fulfillment.labels.reprint" in context["permissions"]
                 ),
             },
         }
+
+    async def _carrier_label_action(
+        *,
+        order_number: str,
+        user: dict[str, Any],
+        action: str,
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.labels.print")
+        if not _can_operate_completed_carrier_label(context):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "fulfillment_responsibility_required",
+                    "responsibility": "packing_or_shipping_labeling",
+                },
+            )
+        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        try:
+            return await sync_completed_carrier_label(
+                db,
+                user_id=context["merchant_id"],
+                order_number=_text(order_number),
+                actor_id=context["actor_id"],
+                actor_name=actor_name,
+                action=action,
+            )
+        except ShippingLabelError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "order_number": _text(order_number),
+                },
+            ) from exc
+
+    @router.post("/completed/{order_number}/carrier-label")
+    async def issue_completed_order_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _carrier_label_action(
+            order_number=order_number,
+            user=user,
+            action="issue",
+        )
+
+    @router.post("/completed/{order_number}/carrier-label/refresh")
+    async def refresh_completed_order_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _carrier_label_action(
+            order_number=order_number,
+            user=user,
+            action="refresh",
+        )
 
     @router.post("/ready-to-ship/claim")
     async def claim_ready_batch(
