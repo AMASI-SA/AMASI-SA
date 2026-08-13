@@ -210,6 +210,245 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         );
     });
 
+    test("continues from a verified campaign id without consulting the performance report", async () => {
+        const campaignId = "b633eafd-f257-44dc-9a3d-26da7ac61fc6";
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-campaign-completed",
+            action: "campaign.create",
+            status: "completed",
+            account_id: "account-1",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: campaignId,
+            verified_entity_id: campaignId,
+            verification: {
+                verified: true,
+                entity_id: campaignId,
+            },
+            products: [{
+                product_id: "710474094",
+                product_variant_id: "variant-1",
+                product_name: "المشط",
+            }],
+            expected_outcome: {
+                sales_direction: "stable",
+                contribution_profit_direction: "increase",
+            },
+            preview: { name: "حملة موثقة" },
+        }]);
+
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        const historyItem = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal"));
+        await act(async () => {
+            change(
+                container.querySelector('[data-testid="snapchat-management-user-context"]'),
+                "سياق من نموذج آخر يجب ألا ينتقل",
+            );
+            change(
+                container.querySelector('[data-testid="snapchat-management-trend-override"]'),
+                "تجاوز من نموذج آخر يجب ألا ينتقل",
+            );
+        });
+        await act(async () => {
+            historyItem.click();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-verified-entity"]',
+        ).textContent).toContain(campaignId);
+
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-management-continue-ad-squad"]',
+            ).click();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-action-select"]',
+        ).value).toBe("ad_squad.create");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-parent-id"]',
+        ).value).toBe(campaignId);
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-account-select"]',
+        ).value).toBe("account-1");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-product-select"]',
+        ).value).toBe("710474094");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-sales-direction"]',
+        ).value).toBe("stable");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-user-context"]',
+        ).value).toBe("");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-trend-override"]',
+        ).value).toBe("");
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(approveSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test("blocks child creation when provider and readback ids are not canonical", async () => {
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-campaign-mismatch",
+            action: "campaign.create",
+            status: "completed",
+            account_id: "account-1",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: "campaign-provider",
+            verified_entity_id: null,
+            verification: {
+                verified: true,
+                entity_id: "campaign-readback",
+            },
+            products: [{ product_id: "710474094", product_name: "المشط" }],
+            preview: { name: "حملة غير متطابقة" },
+        }]);
+
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const historyItem = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal"));
+        await act(async () => {
+            historyItem.click();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-verified-id-blocked"]',
+        )).not.toBeNull();
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-continue-ad-squad"]',
+        )).toBeNull();
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-verification-confirmed"]',
+        )).toBeNull();
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["account", { account_id: "" }],
+        ["product", { products: [] }],
+        ["single product", {
+            products: [
+                { product_id: "710474094", product_name: "المشط" },
+                { product_id: "other-product", product_name: "منتج آخر" },
+            ],
+        }],
+    ])("blocks a historical continuation without one canonical %s", async (_label, change) => {
+        const campaignId = "campaign-context-verified";
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-context-blocked",
+            action: "campaign.create",
+            status: "completed",
+            account_id: "account-1",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: campaignId,
+            verified_entity_id: campaignId,
+            verification: { verified: true, entity_id: campaignId },
+            products: [{ product_id: "710474094", product_name: "المشط" }],
+            preview: { name: "حملة سياق" },
+            ...change,
+        }]);
+
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const historyItem = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal"));
+        await act(async () => {
+            historyItem.click();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-verified-id-blocked"]',
+        )).not.toBeNull();
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-continue-ad-squad"]',
+        )).toBeNull();
+    });
+
+    test("continues from a verified ad squad into an ad form without a write", async () => {
+        const adSquadId = "ad-squad-verified-1";
+        listSnapchatManagementProposals.mockResolvedValue([{
+            proposal_id: "proposal-ad-squad-completed",
+            action: "ad_squad.create",
+            status: "completed",
+            account_id: "account-1",
+            parent_id: "campaign-verified-1",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: adSquadId,
+            verified_entity_id: adSquadId,
+            verification: { verified: true, entity_id: adSquadId },
+            products: [{ product_id: "710474094", product_name: "المشط" }],
+            preview: { name: "مجموعة موثقة" },
+        }]);
+
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-campaign-management-panel"] > button',
+            ).click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        const historyItem = Array.from(container.querySelectorAll("button"))
+            .find((button) => button.textContent.includes("proposal"));
+        await act(async () => {
+            historyItem.click();
+        });
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="snapchat-management-continue-ad"]',
+            ).click();
+        });
+
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-action-select"]',
+        ).value).toBe("ad.create");
+        expect(container.querySelector(
+            '[data-testid="snapchat-management-parent-id"]',
+        ).value).toBe(adSquadId);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(approveSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
     test("reopening coalesces the saved resume and never approves or executes automatically", async () => {
         getSnapchatManagementPreviewResume.mockReturnValue({
             owner_id: "owner-1",

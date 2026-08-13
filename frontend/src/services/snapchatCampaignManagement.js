@@ -175,6 +175,29 @@ export function normalizeSnapchatManagementReadiness(payload = {}) {
     };
 }
 
+export function verifiedSnapchatManagementEntityId(payload = {}) {
+    const value = object(payload?.data || payload);
+    const verification = object(value.verification);
+    const verifiedEntityId = text(verification.entity_id);
+    const providerEntityId = text(value.provider_entity_id);
+
+    if (
+        text(value.status) !== "completed"
+        || value.provider_write_reached !== true
+        || text(value.provider_write_state) !== "confirmed"
+        || value.provider_write_uncertain !== false
+        || verification.verified !== true
+        || !providerEntityId
+        || !verifiedEntityId
+    ) {
+        return null;
+    }
+    if (providerEntityId !== verifiedEntityId) {
+        return null;
+    }
+    return providerEntityId;
+}
+
 export function normalizeSnapchatManagementProposal(payload = {}) {
     const value = object(payload?.data || payload);
     const action = ACTIONS.has(value.action) ? value.action : null;
@@ -211,6 +234,7 @@ export function normalizeSnapchatManagementProposal(payload = {}) {
         provider_write_state: text(value.provider_write_state, "not_attempted"),
         provider_write_uncertain: value.provider_write_uncertain === true,
         provider_entity_id: text(value.provider_entity_id) || null,
+        verified_entity_id: verifiedSnapchatManagementEntityId(value),
         accounting_write_reached: value.accounting_write_reached === true,
         qoyod_write_reached: value.qoyod_write_reached === true,
     };

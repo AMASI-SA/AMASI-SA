@@ -18,6 +18,7 @@ import {
     rollbackSnapchatManagementProposal,
     resumeSnapchatManagementProposal,
     startSnapchatManagementPreviewJob,
+    verifiedSnapchatManagementEntityId,
 } from "./snapchatCampaignManagement";
 
 jest.mock("../lib/api", () => ({
@@ -686,6 +687,61 @@ describe("snapchatCampaignManagement", () => {
         expect(nativeAmountToMicro(50)).toBe(50_000_000);
         expect(nativeAmountToMicro("12.25")).toBe(12_250_000);
         expect(microToNativeAmount(12_250_000)).toBe(12.25);
+    });
+
+    test("exposes a canonical entity id only after verified completion", () => {
+        const completed = {
+            proposal_id: "proposal-verified-id",
+            action: "campaign.create",
+            status: "completed",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: "campaign-verified-1",
+            verification: {
+                verified: true,
+                entity_id: "campaign-verified-1",
+            },
+        };
+
+        expect(verifiedSnapchatManagementEntityId(completed))
+            .toBe("campaign-verified-1");
+        expect(normalizeSnapchatManagementProposal(completed)).toMatchObject({
+            provider_entity_id: "campaign-verified-1",
+            verified_entity_id: "campaign-verified-1",
+        });
+    });
+
+    test.each([
+        ["execution is not complete", { status: "executing" }],
+        ["readback did not verify", { verification: { verified: false, entity_id: "campaign-verified-1" } }],
+        ["readback id is missing", { verification: { verified: true } }],
+        ["provider id is missing", { provider_entity_id: null }],
+        ["provider write was not reached", { provider_write_reached: false }],
+        ["write is not confirmed", { provider_write_state: "attempting" }],
+        ["write outcome is uncertain", { provider_write_uncertain: true }],
+        ["write certainty is missing", { provider_write_uncertain: undefined }],
+        ["provider and readback ids conflict", {
+            provider_entity_id: "campaign-other",
+            verification: { verified: true, entity_id: "campaign-verified-1" },
+        }],
+    ])("rejects a non-canonical entity id when %s", (_label, change) => {
+        const value = {
+            proposal_id: "proposal-untrusted-id",
+            action: "campaign.create",
+            status: "completed",
+            provider_write_reached: true,
+            provider_write_state: "confirmed",
+            provider_write_uncertain: false,
+            provider_entity_id: "campaign-verified-1",
+            verification: {
+                verified: true,
+                entity_id: "campaign-verified-1",
+            },
+            ...change,
+        };
+        expect(verifiedSnapchatManagementEntityId(value)).toBeNull();
+        expect(normalizeSnapchatManagementProposal(value).verified_entity_id).toBeNull();
     });
 
     test("preserves safe provider failure details", () => {
