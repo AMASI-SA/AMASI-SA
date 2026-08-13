@@ -57,6 +57,18 @@ const DELIVERY_CREATE_ACTIONS = new Set([
     "ad_squad.create",
     "ad.create",
 ]);
+const VERIFIED_CONTINUATIONS = {
+    "campaign.create": {
+        action: "ad_squad.create",
+        label: "إنشاء مجموعة داخل هذه الحملة",
+        testId: "snapchat-management-continue-ad-squad",
+    },
+    "ad_squad.create": {
+        action: "ad.create",
+        label: "إنشاء إعلان داخل هذه المجموعة",
+        testId: "snapchat-management-continue-ad",
+    },
+};
 
 const MEASURABLE_DIRECTIONS = [
     ["increase", "ارتفاع"],
@@ -191,6 +203,32 @@ function productLabel(product) {
     return sku ? `${name} · ${sku}` : name;
 }
 
+function verifiedContinuationContext(proposal) {
+    const providerEntityId = String(proposal?.provider_entity_id || "").trim();
+    const verifiedEntityId = String(proposal?.verified_entity_id || "").trim();
+    const readbackEntityId = String(proposal?.verification?.entity_id || "").trim();
+    const accountId = String(proposal?.account_id || "").trim();
+    const products = Array.isArray(proposal?.products) ? proposal.products : [];
+    const product = products.length === 1 ? products[0] : null;
+    const productId = String(product?.product_id || "").trim();
+    if (
+        proposal?.status !== "completed"
+        || proposal?.provider_write_reached !== true
+        || proposal?.provider_write_state !== "confirmed"
+        || proposal?.provider_write_uncertain !== false
+        || proposal?.verification?.verified !== true
+        || !providerEntityId
+        || providerEntityId !== verifiedEntityId
+        || providerEntityId !== readbackEntityId
+        || !accountId
+        || products.length !== 1
+        || !productId
+    ) {
+        return null;
+    }
+    return { accountId, product, productId, verifiedEntityId };
+}
+
 function buildProposal(form) {
     if (DELIVERY_CREATE_ACTIONS.has(form.action) && !form.productId) {
         throw new Error("اختر المنتج الذي سيعلن له قبل إنشاء كيان إعلاني جديد.");
@@ -290,9 +328,15 @@ function buildProposal(form) {
     return { ...common, payload: mergeAdvanced(payload, form.advancedJson) };
 }
 
-function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRollback }) {
+function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRollback, onContinue }) {
     if (!proposal?.proposal_id) return null;
     const preview = proposal.preview || {};
+    const verifiedEntityId = proposal.verified_entity_id || "";
+    const continuation = VERIFIED_CONTINUATIONS[proposal.action] || null;
+    const continuationContext = verifiedContinuationContext(proposal);
+    const continuationBlocked = proposal.status === "completed"
+        && continuation
+        && !continuationContext;
     const canApprove = proposal.status === "previewed" && proposal.confirm_token;
     const canExecute = proposal.status === "approved" && readiness?.execution_enabled;
     const canRollback = readiness?.execution_enabled && (
@@ -316,14 +360,32 @@ function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRo
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الميزانية اليومية</span><strong>{preview.daily_budget_micro ? `${microToNativeAmount(preview.daily_budget_micro).toLocaleString("en-US")} وحدة` : "—"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الحقول</span><strong>{(preview.changed_fields || []).join("، ") || "—"}</strong></div>
             </div>
+            {verifiedEntityId && (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3 text-xs" data-testid="snapchat-management-verified-entity">
+                    <span className="block font-black text-emerald-800">معرّف Snapchat الموثق</span>
+                    <code className="mt-1 block select-all break-all text-left font-mono text-sm font-black text-slate-900" dir="ltr">
+                        {verifiedEntityId}
+                    </code>
+                    {proposal.parent_id && (
+                        <span className="mt-2 block text-slate-500">
+                            الكيان الأب: <code className="select-all font-mono" dir="ltr">{proposal.parent_id}</code>
+                        </span>
+                    )}
+                </div>
+            )}
             {proposal.creates_paused && (
                 <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-100 p-3 text-xs font-black text-emerald-900">
                     <PauseCircle size={20} weight="fill" /> سيُنشأ الكيان متوقفًا؛ لا يبدأ صرف بمجرد التنفيذ.
                 </div>
             )}
-            {proposal.verification?.verified && (
-                <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-100 p-3 text-xs font-black text-emerald-900">
+            {verifiedEntityId && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-100 p-3 text-xs font-black text-emerald-900" data-testid="snapchat-management-verification-confirmed">
                     <CheckCircle size={20} weight="fill" /> تحقق ميزان من الكيان بعد قراءته مرة أخرى من Snapchat.
+                </div>
+            )}
+            {continuationBlocked && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-100 p-3 text-xs font-black text-rose-900" data-testid="snapchat-management-verified-id-blocked">
+                    <WarningCircle size={20} weight="fill" /> لم يثبت ميزان تطابق معرّف الكيان؛ لا تنشئ مستوى تابعًا حتى تكتمل المصالحة.
                 </div>
             )}
             {proposal.provider_write_uncertain && (
@@ -350,6 +412,17 @@ function ProposalPreview({ proposal, readiness, busy, onApprove, onExecute, onRo
                 {canRollback && (
                     <button type="button" disabled={busy} onClick={onRollback} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-700 disabled:opacity-50" data-testid="snapchat-management-rollback">
                         <ClockCounterClockwise size={18} weight="bold" /> تراجع متحقق
+                    </button>
+                )}
+                {continuation && continuationContext && (
+                    <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => onContinue(continuation.action, proposal)}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-sky-700 px-4 text-xs font-black text-white disabled:opacity-50"
+                        data-testid={continuation.testId}
+                    >
+                        <CheckCircle size={18} weight="fill" /> {continuation.label}
                     </button>
                 )}
             </div>
@@ -541,6 +614,45 @@ export default function SnapchatCampaignManagementPanel({
             ...retainedDecisionContext(current),
             accountId: current.accountId,
         }));
+    }
+
+    function continueFromVerifiedProposal(nextAction, proposal) {
+        const continuation = VERIFIED_CONTINUATIONS[proposal?.action];
+        const context = verifiedContinuationContext(proposal);
+        if (!continuation || continuation.action !== nextAction || !context) {
+            setNotice("");
+            setError("تعذّر اعتماد معرّف Snapchat الموثق مع الحساب والمنتج؛ حدّث سجل العملية ولا تستخدم رقمًا يدويًا.");
+            return;
+        }
+
+        const { accountId: verifiedAccountId, product, productId, verifiedEntityId } = context;
+        const productName = String(product?.product_name || "").trim();
+        const matchedProduct = catalogProducts.find(
+            (item) => productIdentity(item) === productId,
+        ) || (productId ? {
+            salla_product_id: productId,
+            name: productName,
+            variants: [],
+        } : null);
+        const expected = proposal.expected_outcome || {};
+
+        setSelectedCatalogProduct(matchedProduct);
+        setForm(() => ({
+            ...initialForm({ action: nextAction, selectedCampaign, selectedAdSquad }),
+            accountId: verifiedAccountId,
+            parentId: verifiedEntityId,
+            productId,
+            productVariantId: String(product?.product_variant_id || "").trim(),
+            productName,
+            salesDirection: MEASURABLE_DIRECTIONS.some(
+                ([value]) => value === expected.sales_direction,
+            ) ? expected.sales_direction : "increase",
+            contributionProfitDirection: MEASURABLE_DIRECTIONS.some(
+                ([value]) => value === expected.contribution_profit_direction,
+            ) ? expected.contribution_profit_direction : "increase",
+        }));
+        setError("");
+        setNotice("استخدم ميزان معرّف Snapchat الموثق تلقائيًا لبناء المستوى التالي.");
     }
 
     function chooseProduct(value) {
@@ -819,7 +931,7 @@ export default function SnapchatCampaignManagementPanel({
 
                                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                                     {isUpdate && <TextField label="معرّف الكيان المطلوب تعديله" value={form.targetId} onChange={(value) => field("targetId", value)} required dir="ltr" />}
-                                    {showsParent && <TextField label={form.action.startsWith("ad_squad.") ? "معرّف الحملة الأب" : "معرّف المجموعة الأب"} value={form.parentId} onChange={(value) => field("parentId", value)} required dir="ltr" />}
+                                    {showsParent && <TextField label={form.action.startsWith("ad_squad.") ? "معرّف الحملة الأب" : "معرّف المجموعة الأب"} value={form.parentId} onChange={(value) => field("parentId", value)} required dir="ltr" testId="snapchat-management-parent-id" />}
                                     {!isUpdate && <TextField label="الاسم" value={form.name} onChange={(value) => field("name", value)} required />}
                                     {isUpdate && <TextField label="اسم جديد (اختياري)" value={form.name} onChange={(value) => field("name", value)} />}
                                     {form.action === "campaign.create" && <TextField label="بداية الحملة" value={form.startTime} onChange={(value) => field("startTime", value)} type="datetime-local" required dir="ltr" />}
@@ -903,7 +1015,7 @@ export default function SnapchatCampaignManagementPanel({
                                 </div>
                             </form>
 
-                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} onApprove={approve} onExecute={execute} onRollback={rollback} />
+                            <ProposalPreview proposal={activeProposal} readiness={readiness} busy={busy} onApprove={approve} onExecute={execute} onRollback={rollback} onContinue={continueFromVerifiedProposal} />
 
                             {proposals.length > 0 && (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
