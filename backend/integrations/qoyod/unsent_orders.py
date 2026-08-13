@@ -74,11 +74,17 @@ def _is_real(v) -> bool:
 
 def _include_in_daily_report(entry: dict) -> bool:
     """Return whether an entry is an actionable daily Qoyod result."""
-    if entry.get("status") != UNSENT:
+    # A real Qoyod invoice or duplicate evidence remains useful history even
+    # when the order later moves to a non-billable Salla status.  A merely
+    # pending/failed local attempt does not: the *current* Salla status is the
+    # final authority on whether the order is an actionable exception.
+    if entry.get("status") in (SENT, DUPLICATE):
         return True
     current = entry.get("salla_status_slug") or entry.get("salla_status")
     # Preserve unknown legacy rows for investigation; only exclude a row
-    # when Salla supplied a definite non-eligible current status.
+    # when Salla supplied a definite non-eligible current status.  This also
+    # prevents an old quarantine/manual-send failure from exposing a retry
+    # button after the order became non-eligible in Salla.
     if not current:
         return True
     from integrations.qoyod.eligible_orders import _is_eligible_status
@@ -471,11 +477,11 @@ async def list_unsent_orders(
                         and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
 
-    # Daily operations must only call an order "لم يُرسل" when its
-    # CURRENT Salla status is eligible for invoicing. Historical inbox
-    # rows for awaiting-review/payment, cancelled, deleted, etc. remain
-    # available in the source collections but are not actionable Qoyod
-    # exceptions and must not inflate the unsent count.
+    # Daily operations must only call an unsent/failed order actionable when
+    # its CURRENT Salla status is eligible for invoicing. Historical inbox
+    # rows for awaiting-review/payment, cancelled, shipped, deleted, etc.
+    # remain available in the source collections but are not actionable
+    # Qoyod exceptions and must not inflate the unsent/failed counts.
     visible_keys = [
         key for key in order_keys
         if _include_in_daily_report(grouped[key])

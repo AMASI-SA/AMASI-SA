@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import mongomock_motor
 import pytest
 
-from integrations.qoyod.unsent_orders import SENT, list_unsent_orders
+from integrations.qoyod.unsent_orders import FAILED, SENT, list_unsent_orders
 
 
 TENANT = "main"
@@ -50,6 +50,37 @@ async def _insert_sent(
     await db.qoyod_invoices.insert_one({
         "user_id": TENANT,
         "reference": order_number,
+    })
+
+
+async def _insert_quarantined(
+    db, *, order_number: str, status_slug: str, status_native: str,
+) -> None:
+    await db.integration_inbox.insert_one({
+        "id": f"row-{order_number}",
+        "trace_id": f"trace-{order_number}",
+        "user_id": TENANT,
+        "salla_order_number": order_number,
+        "received_at": NOW,
+        "pipeline_stage": "NORMALIZED",
+        "canonical_payload": {
+            "order_number": order_number,
+            "order_date": "2026-08-08",
+            "created_at": "2026-08-08",
+            "order_status": status_slug,
+            "order_status_native": status_native,
+            "total_amount": 315.88,
+            "payment_method": "cod",
+        },
+        "raw_payload": {"data": {"created_at": "2026-08-08"}},
+    })
+    await db.qoyod_manual_auto_quarantines.insert_one({
+        "_id": f"{TENANT}:{order_number}",
+        "user_id": TENANT,
+        "order_number": order_number,
+        "status": "open",
+        "code": "qoyod_preflight_total_mismatch",
+        "message": "فرق المبلغ 7.0 ريال أكبر من 0.01 — أُوقف الإرسال",
     })
 
 
@@ -122,3 +153,44 @@ async def test_cards_count_full_period_before_table_row_limit(db):
     assert result["returned_order_count"] == 2
     assert result["truncated"] is True
     assert len(result["orders"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_noneligible_current_salla_status_hides_old_failure(db):
+    """Order 273187928 must not stay failed/retryable after Salla marks it
+    ``تم الشحن`` (shipped), which is outside the closed Qoyod status gate.
+    """
+    await _insert_quarantined(
+        db,
+        order_number="273187928",
+        status_slug="shipped",
+        status_native="تم الشحن",
+    )
+
+    result = await list_unsent_orders(
+        db, user_id=TENANT, days=90, limit=1000, now=NOW,
+    )
+
+    assert result["counts"][FAILED] == 0
+    assert result["excluded_not_eligible"] == 1
+    assert result["orders"] == []
+    assert "تم الشحن" not in result["salla_status_counts"]
+
+
+@pytest.mark.asyncio
+async def test_eligible_current_salla_status_keeps_actionable_failure(db):
+    await _insert_quarantined(
+        db,
+        order_number="eligible-failure",
+        status_slug="completed",
+        status_native="تم التنفيذ",
+    )
+
+    result = await list_unsent_orders(
+        db, user_id=TENANT, days=90, limit=1000, now=NOW,
+    )
+
+    assert result["counts"][FAILED] == 1
+    assert result["excluded_not_eligible"] == 0
+    assert result["orders"][0]["status"] == FAILED
+    assert result["orders"][0]["retry_allowed"] is True
