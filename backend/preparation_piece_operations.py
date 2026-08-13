@@ -10,6 +10,7 @@ accounting writes.
 """
 from __future__ import annotations
 
+import hashlib
 import statistics
 import uuid
 from collections import defaultdict
@@ -20,7 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
-from fulfillment_v2_routes import _actor_context
+from fulfillment_v2_routes import (
+    BATCHES as SHIPPING_BATCHES,
+    _actor_context,
+    _require_permission,
+)
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
     EVENTS,
@@ -79,6 +84,12 @@ class StartPreparationFileRequest(BaseModel):
 
 
 class ReceivePreparationPieceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str = Field(min_length=8, max_length=160)
+
+
+class MarkAssemblyPieceReadyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     client_request_id: str = Field(min_length=8, max_length=160)
@@ -1346,6 +1357,405 @@ async def _receive_preparation_piece(
     }
 
 
+def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
+    """Return why a received piece cannot be completed in assembly."""
+    if _text(piece.get("assembly_status")) == "ready":
+        return "assembly_piece_already_ready"
+    if _text(piece.get("status")) != PIECE_STATUS_READY_FOR_ASSEMBLY:
+        return "assembly_piece_preparation_receipt_required"
+    if piece.get("active_hold_id"):
+        return "assembly_piece_stopped"
+    return None
+
+
+def _assembly_piece_public(
+    piece: dict[str, Any],
+    *,
+    matched_piece_id: str = "",
+) -> dict[str, Any]:
+    piece_id = _text(piece.get("piece_id") or piece.get("id"))
+    assembly_ready = _text(piece.get("assembly_status")) == "ready"
+    blocker = assembly_piece_blocker(piece)
+    services = []
+    for service in piece.get("services") or []:
+        if not isinstance(service, dict):
+            continue
+        name = _text(service.get("service_name") or service.get("name"))
+        if not name:
+            continue
+        services.append({
+            "name": name,
+            "status": _text(service.get("status")) or None,
+        })
+    return {
+        **_preparation_receipt_piece_public(
+            piece,
+            matched_piece_id=matched_piece_id,
+        ),
+        "piece_id": piece_id,
+        "services": services,
+        "assembly_ready": assembly_ready,
+        "assembly_status": "ready" if assembly_ready else "pending",
+        "assembly_ready_at": piece.get("assembly_ready_at"),
+        "assembly_ready_by_name": (
+            _text(piece.get("assembly_ready_by_name")) or None
+        ),
+        "can_mark_ready": blocker is None,
+        "assembly_blocker_code": blocker,
+        "search_match": bool(
+            matched_piece_id and piece_id == matched_piece_id
+        ),
+    }
+
+
+def _assembly_batch_id(user_id: str, order_number: str) -> str:
+    digest = hashlib.sha256(
+        f"{user_id}:{order_number}".encode("utf-8")
+    ).hexdigest()[:24]
+    return f"ship_assembly_{digest}"
+
+
+async def _assembly_progress(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+    actor_id: str,
+    actor_name: str,
+    now: datetime,
+) -> dict[str, Any]:
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "piece_id": 1, "assembly_status": 1},
+    ).to_list(10000)
+    total_count = len(pieces)
+    ready_count = sum(
+        1 for piece in pieces if _text(piece.get("assembly_status")) == "ready"
+    )
+    completed = bool(total_count and total_count == ready_count)
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": user_id, "order_number": order_number},
+        {"_id": 0},
+    ) or {}
+    batch_id = _text(
+        workflow.get("shipping_print_batch_id")
+    )
+    workflow_patch: dict[str, Any] = {
+        "assembly_status": "completed" if completed else "in_progress",
+        "assembly_ready_piece_count": ready_count,
+        "assembly_piece_count": total_count,
+        "assembly_updated_at": now,
+        "updated_at": now,
+    }
+    if completed:
+        # One completed order gets one deterministic shipment file. Never
+        # reuse a legacy multi-order claim batch because the button says
+        # "طباعة الشحنة" for this exact order.
+        batch_id = batch_id or _assembly_batch_id(user_id, order_number)
+        warehouse_ids = sorted({
+            _text(value)
+            for value in (
+                (workflow.get("fulfillment_decision") or {}).get(
+                    "warehouse_ids"
+                )
+                or []
+            )
+            if _text(value)
+        })
+        await db[SHIPPING_BATCHES].update_one(
+            {"id": batch_id, "user_id": user_id},
+            {"$setOnInsert": {
+                "id": batch_id,
+                "user_id": user_id,
+                "status": "claimed",
+                "source": "assembly_completion",
+                "order_numbers": [order_number],
+                "warehouse_ids": warehouse_ids,
+                "warehouse_resolution_sources": [
+                    "inventory_location" if warehouse_ids
+                    else "preparation_receipt"
+                ],
+                "claimed_by": actor_id,
+                "claimed_by_name": actor_name,
+                "claimed_at": now,
+                "print_count": 0,
+                "created_at": now,
+                "updated_at": now,
+            }},
+            upsert=True,
+        )
+        workflow_patch.update({
+            "stage": "completed",
+            "completed_at": now,
+            "completed_by": actor_id,
+            "completed_by_name": actor_name,
+            "assembly_completed_at": now,
+            "assembly_completed_by": actor_id,
+            "assembly_completed_by_name": actor_name,
+            "shipping_print_batch_id": batch_id,
+            "claim_batch_id": batch_id,
+            "claimed_by": actor_id,
+            "claimed_by_name": actor_name,
+            "claimed_at": workflow.get("claimed_at") or now,
+        })
+    await db[WORKFLOWS].update_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "stage": {"$in": ["ready_to_ship", "completed"]},
+        },
+        {"$set": workflow_patch, "$inc": {"revision": 1}},
+    )
+    return {
+        "order_number": order_number,
+        "ready_count": ready_count,
+        "total_count": total_count,
+        "order_completed": completed,
+        "stage": "completed" if completed else "ready_to_ship",
+        "print_batch_id": batch_id or None,
+    }
+
+
+async def _assembly_search(
+    db: Any,
+    *,
+    user_id: str,
+    query: str,
+) -> dict[str, Any]:
+    matched_piece_id = parse_preparation_piece_barcode(query) or ""
+    order_number = ""
+    if matched_piece_id:
+        matched_piece = await db[PIECES].find_one(
+            {"user_id": user_id, "piece_id": matched_piece_id},
+            {"_id": 0, "order_number": 1},
+        )
+        if not matched_piece:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "assembly_piece_not_found"},
+            )
+        order_number = _text(matched_piece.get("order_number"))
+    else:
+        order_number = _preparation_receipt_order_number(query)
+    if not order_number:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "assembly_search_required"},
+        )
+    workflow = await db[WORKFLOWS].find_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "$or": [
+                {"stage": "ready_to_ship"},
+                {"stage": "completed", "assembly_status": "completed"},
+            ],
+        },
+        {"_id": 0},
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_order_not_ready"},
+        )
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "status": {"$ne": PIECE_STATUS_CANCELLED},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "image_b64": 0},
+    ).to_list(1000)
+    if not pieces:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "assembly_order_products_not_found"},
+        )
+    rows = [
+        _assembly_piece_public(
+            piece,
+            matched_piece_id=matched_piece_id,
+        )
+        for piece in pieces
+    ]
+    rows.sort(key=lambda row: (
+        0 if row["search_match"] else 1,
+        0 if not row["assembly_ready"] else 1,
+        int(row.get("unit_index") or 0),
+        _text(row.get("piece_id")),
+    ))
+    ready_count = sum(1 for row in rows if row["assembly_ready"])
+    completed = bool(rows and ready_count == len(rows))
+    return {
+        "order_number": order_number,
+        "stage": _text(workflow.get("stage")),
+        "matched_piece_id": matched_piece_id or None,
+        "print_batch_id": _text(
+            workflow.get("shipping_print_batch_id")
+            or workflow.get("claim_batch_id")
+        ) or None,
+        "pieces": rows,
+        "summary": {
+            "total": len(rows),
+            "ready": ready_count,
+            "remaining": len(rows) - ready_count,
+            "all_ready": completed,
+        },
+    }
+
+
+async def _mark_assembly_piece_ready(
+    db: Any,
+    *,
+    user_id: str,
+    piece_id: str,
+    client_request_id: str,
+    actor_id: str,
+    actor_name: str,
+) -> dict[str, Any]:
+    normalized_piece_id = _text(piece_id).lower()
+    piece = await db[PIECES].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"piece_id": normalized_piece_id},
+                {"id": normalized_piece_id},
+            ],
+        },
+        {"_id": 0},
+    )
+    if not piece:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "assembly_piece_not_found"},
+        )
+    order_number = _text(piece.get("order_number"))
+    workflow = await db[WORKFLOWS].find_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "stage": {"$in": ["ready_to_ship", "completed"]},
+        },
+        {"_id": 0, "stage": 1, "assembly_status": 1},
+    )
+    if not workflow or (
+        _text(workflow.get("stage")) == "completed"
+        and _text(workflow.get("assembly_status")) != "completed"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_order_not_ready"},
+        )
+    now = _now()
+    if _text(piece.get("assembly_status")) == "ready":
+        progress = await _assembly_progress(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            actor_id=actor_id,
+            actor_name=actor_name,
+            now=now,
+        )
+        return {
+            "ok": True,
+            "idempotent": True,
+            "piece": _assembly_piece_public(piece),
+            "progress": progress,
+        }
+    blocker = assembly_piece_blocker(piece)
+    if blocker:
+        raise HTTPException(status_code=409, detail={"code": blocker})
+    result = await db[PIECES].update_one(
+        {
+            "user_id": user_id,
+            "piece_id": normalized_piece_id,
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": {"$ne": "ready"},
+        },
+        {"$set": {
+            "assembly_status": "ready",
+            "assembly_ready_at": now,
+            "assembly_ready_by": actor_id,
+            "assembly_ready_by_name": actor_name,
+            "assembly_client_request_id": client_request_id,
+            "updated_at": now,
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }},
+    )
+    if not result.modified_count:
+        latest = await db[PIECES].find_one(
+            {"user_id": user_id, "piece_id": normalized_piece_id},
+            {"_id": 0},
+        )
+        if latest and _text(latest.get("assembly_status")) == "ready":
+            progress = await _assembly_progress(
+                db,
+                user_id=user_id,
+                order_number=order_number,
+                actor_id=actor_id,
+                actor_name=actor_name,
+                now=now,
+            )
+            return {
+                "ok": True,
+                "idempotent": True,
+                "piece": _assembly_piece_public(latest),
+                "progress": progress,
+            }
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "assembly_piece_ready_conflict"},
+        )
+    updated = await db[PIECES].find_one(
+        {"user_id": user_id, "piece_id": normalized_piece_id},
+        {"_id": 0},
+    ) or {**piece, "assembly_status": "ready", "assembly_ready_at": now}
+    await db[PIECE_EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "piece_id": normalized_piece_id,
+        "batch_id": _text(piece.get("batch_id")) or None,
+        "file_number": _text(piece.get("file_number")) or None,
+        "order_number": order_number,
+        "event_type": "assembly_piece_marked_ready",
+        "client_request_id": client_request_id,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "occurred_at": now,
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+    progress = await _assembly_progress(
+        db,
+        user_id=user_id,
+        order_number=order_number,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        now=now,
+    )
+    return {
+        "ok": True,
+        "idempotent": False,
+        "piece": _assembly_piece_public(updated),
+        "progress": progress,
+    }
+
+
 def _file_public(row: dict[str, Any], counts: dict[str, int]) -> dict[str, Any]:
     return {
         "file_number": _text(row.get("file_number")),
@@ -1569,6 +1979,46 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             )
         actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
         return await _receive_preparation_piece(
+            db,
+            user_id=context["merchant_id"],
+            piece_id=piece_id,
+            client_request_id=payload.client_request_id,
+            actor_id=context["actor_id"],
+            actor_name=actor_name,
+        )
+
+    @router.get("/assembly/search")
+    async def search_assembly_order(
+        q: str = Query(min_length=1, max_length=160),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.ready.read",
+            responsibility="instant_ready",
+        )
+        await ensure_piece_operation_indexes(db)
+        return await _assembly_search(
+            db,
+            user_id=context["merchant_id"],
+            query=q,
+        )
+
+    @router.post("/assembly/pieces/{piece_id}/ready")
+    async def mark_assembly_piece_ready(
+        piece_id: str,
+        payload: MarkAssemblyPieceReadyRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.pack.confirm",
+            responsibility="packing",
+        )
+        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        return await _mark_assembly_piece_ready(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,

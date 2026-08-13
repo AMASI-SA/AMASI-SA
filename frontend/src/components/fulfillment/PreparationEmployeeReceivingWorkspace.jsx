@@ -29,7 +29,7 @@ const BLOCKER_MESSAGES = {
     preparation_piece_not_ready_for_receipt: "غير جاهز للاستلام",
 };
 
-function CameraScanner({ onDetected, onClose }) {
+export function CameraScanner({ onDetected, onClose }) {
     const videoRef = useRef(null);
     const [error, setError] = useState("");
     const [ready, setReady] = useState(false);

@@ -20,6 +20,7 @@ import PreparationFilesRegistry from "../components/fulfillment/PreparationFiles
 import PreparationEmployeeReceivingWorkspace from "../components/fulfillment/PreparationEmployeeReceivingWorkspace";
 import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
+import CompletedFulfillmentOrders from "../components/fulfillment/CompletedFulfillmentOrders";
 import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
 
 export const FULFILLMENT_STAGES = [
@@ -174,6 +175,8 @@ export default function FulfillmentV2() {
         <PreparationEmployeeReceivingWorkspace />
     ) : activeStage.key === "ready_to_ship" ? (
         <ReadyToShipOrders />
+    ) : activeStage.key === "completed" ? (
+        <CompletedFulfillmentOrders />
     ) : (
         <PlannedStage stage={activeStage} />
     );
