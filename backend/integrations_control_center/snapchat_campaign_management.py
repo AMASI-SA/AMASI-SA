@@ -1449,7 +1449,6 @@ async def create_snapchat_management_proposal(
     *,
     provider: SnapchatManagementProvider | None = None,
 ) -> dict[str, Any]:
-    await ensure_snapchat_management_indexes(db)
     request_fingerprint = snapchat_management_request_fingerprint(payload)
     existing = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "idempotency_key": payload.idempotency_key},
