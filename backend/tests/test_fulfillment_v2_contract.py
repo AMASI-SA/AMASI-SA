@@ -177,6 +177,25 @@ def test_carrier_handoff_is_barcode_governed_and_released_by_orders_page_sync():
     assert "setInterval" in frontend_source
 
 
+def test_delivery_tracking_board_reads_mezan_state_and_keeps_store_courier_separate():
+    backend_source = (ROOT / "backend/fulfillment_v2_routes.py").read_text(
+        encoding="utf-8"
+    )
+    stage_source = (ROOT / "frontend/src/pages/FulfillmentV2.jsx").read_text(
+        encoding="utf-8"
+    )
+    tracking_source = (
+        ROOT / "frontend/src/components/fulfillment/DeliveryTrackingOrders.jsx"
+    ).read_text(encoding="utf-8")
+
+    assert '@router.get("/delivery-tracking")' in backend_source
+    assert '"carrier_label_type": {"$ne": "store_courier"}' in backend_source
+    assert '"sync_source": "mezan_orders_page_status_sync"' in backend_source
+    assert "activeStage.key === \"delivering\" || activeStage.key === \"delivered\"" in stage_source
+    assert "تتغير هذه المرحلة فقط بعد مزامنة الحالة من صفحة الطلبات في ميزان" in tracking_source
+    assert "طلبات مندوب المتجر لها مسار مستقل" in tracking_source
+
+
 def test_review_supports_internal_operational_items_without_supplier_export():
     backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")

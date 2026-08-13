@@ -1187,6 +1187,14 @@ async def _order_view(
         "carrier_handoff_scanned_at": workflow.get(
             "carrier_handoff_scanned_at"
         ),
+        "carrier_handoff_released_at": workflow.get(
+            "carrier_handoff_released_at"
+        ),
+        "carrier_handoff_release_source": workflow.get(
+            "carrier_handoff_release_source"
+        ),
+        "delivering_at": workflow.get("delivering_at"),
+        "delivered_at": workflow.get("delivered_at"),
     }
 
 
@@ -1451,6 +1459,54 @@ def make_fulfillment_v2_router(
         return {
             "items": items,
             "total": len(items),
+            "poll_seconds": 15,
+        }
+
+    @router.get("/delivery-tracking")
+    async def list_delivery_tracking_shipments(
+        stage: str = Query(pattern="^(delivering|delivered)$"),
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Read the external-carrier delivery board from Mezan state only.
+
+        This endpoint never calls Salla. The existing Orders V2 page sync is
+        the sole process that advances carrier custody to these stages.
+        Store-courier orders intentionally remain on their separate flow.
+        """
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.ready.read")
+        normalized_stage = _text(stage).casefold()
+        workflows = await db[WORKFLOWS].find(
+            {
+                "user_id": context["merchant_id"],
+                "stage": normalized_stage,
+                "carrier_label_type": {"$ne": "store_courier"},
+            },
+            {"_id": 0},
+        ).sort(
+            (
+                "delivered_at"
+                if normalized_stage == "delivered"
+                else "delivering_at"
+            ),
+            -1,
+        ).limit(limit).to_list(limit)
+        items = []
+        for workflow in workflows:
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if row:
+                items.append(row)
+        return {
+            "stage": normalized_stage,
+            "items": items,
+            "total": len(items),
+            "flow": "external_carrier",
+            "sync_source": "mezan_orders_page_status_sync",
             "poll_seconds": 15,
         }
 

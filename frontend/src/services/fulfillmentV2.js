@@ -94,6 +94,17 @@ export async function scanCarrierHandoffShipment(barcode) {
     }
 }
 
+export async function listDeliveryTrackingShipments({ stage, limit = 100 } = {}) {
+    const normalizedStage = stage === "delivered" ? "delivered" : "delivering";
+    try {
+        return (await api.get("/fulfillment-v2/delivery-tracking", {
+            params: { stage: normalizedStage, limit },
+        })).data;
+    } catch (error) {
+        throw new Error(detailMessage(error, "تعذر تحميل طلبات التوصيل."));
+    }
+}
+
 export async function claimReadyToShipBatch(orderNumbers) {
     try {
         return (await api.post("/fulfillment-v2/ready-to-ship/claim", { order_numbers: orderNumbers })).data;

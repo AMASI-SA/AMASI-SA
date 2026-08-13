@@ -35,6 +35,10 @@ jest.mock("../components/fulfillment/CompletedFulfillmentOrders", () => function
     return <div data-testid="completed-fulfillment-orders">تم التنفيذ · بوليصة الشحن</div>;
 });
 
+jest.mock("../components/fulfillment/DeliveryTrackingOrders", () => function DeliveryTrackingFixture({ stage }) {
+    return <div data-testid={`delivery-tracking-${stage}`}>{stage === "delivered" ? "تم التوصيل" : "جاري التوصيل"} · مزامنة صفحة الطلبات في ميزان</div>;
+});
+
 jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function SupplierReceivingFixture() {
     return <div data-testid="supplier-receiving-workspace">استلام منتجات المورد بالباركود · من المستودع · من المورد · تصنيع داخلي · ينتظر توريد · قيد التجميع · متوقف بسبب نقص منتج</div>;
 });
@@ -185,5 +189,24 @@ test("completed stage keeps the carrier label action available", () => {
     expect(markup).toContain('data-testid="completed-fulfillment-orders"');
     expect(markup).toContain("تم التنفيذ");
     expect(markup).toContain("بوليصة الشحن");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
+});
+
+test("delivering stage renders the external carrier tracking board", () => {
+    mockSearchParams = new URLSearchParams("stage=delivering");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="delivery-tracking-delivering"');
+    expect(markup).toContain("جاري التوصيل");
+    expect(markup).toContain("مزامنة صفحة الطلبات في ميزان");
+    expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
+});
+
+test("delivered stage renders the completed external carrier board", () => {
+    mockSearchParams = new URLSearchParams("stage=delivered");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="delivery-tracking-delivered"');
+    expect(markup).toContain("تم التوصيل");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
