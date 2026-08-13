@@ -35,10 +35,13 @@ import {
 } from "../components/customerIntelligence/CustomerIntelligencePanels";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    connectInstagramCustomerIntelligence,
     createCustomerIntelligenceReplySuggestion,
     customerIntelligenceWritesLocked,
     getCustomerIntelligenceInbox,
+    getCustomerLearningStatus,
     getCustomerIntelligenceWorkspace,
+    getInstagramCustomerIntelligenceSetup,
     normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
     reviewCustomerIntelligenceReplySuggestion,
@@ -83,6 +86,9 @@ function renderActivePanel({
     writesLocked,
     inbox,
     inboxError,
+    instagramSetup,
+    learningStatus,
+    onConnectInstagram,
     onCreateSuggestion,
     onReviewSuggestion,
     onRejectSuggestion,
@@ -95,6 +101,9 @@ function renderActivePanel({
                 <ConversationsPanel
                     inbox={inbox}
                     error={inboxError}
+                    learningStatus={learningStatus}
+                    instagramSetup={instagramSetup}
+                    onConnectInstagram={onConnectInstagram}
                     onCreateSuggestion={onCreateSuggestion}
                     onReviewSuggestion={onReviewSuggestion}
                     onRejectSuggestion={onRejectSuggestion}
@@ -151,6 +160,9 @@ export function CustomerIntelligenceCenterView({
     refreshing = false,
     error = "",
     inboxError = "",
+    instagramSetup = null,
+    learningStatus = null,
+    onConnectInstagram = null,
     onCreateSuggestion = null,
     onReviewSuggestion = null,
     onRejectSuggestion = null,
@@ -170,7 +182,7 @@ export function CustomerIntelligenceCenterView({
     const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
     const titleEn = normalized.workspace.title_en || "Customer Intelligence & Sales Center";
     const description = liveInbox
-        ? "صندوق واتساب الحقيقي الوارد إلى ميزان للقراءة والتحقق، مع بقاء الرد والتنفيذ مغلقين."
+        ? "صندوق موحّد لتفاعلات واتساب وإنستغرام الواردة إلى ميزان، مع اقتراحات قابلة للمراجعة وبقاء الإرسال التلقائي مغلقًا."
         : normalized.workspace.description_ar
             || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
     const inboxConnected = normalizedInbox.connection.status === "connected";
@@ -191,7 +203,7 @@ export function CustomerIntelligenceCenterView({
                                 ? <ChatCircleDots size={16} weight="fill" />
                                 : <Eye size={16} weight="fill" />}
                             {liveInbox
-                                ? `واتساب حي · ${inboxConnected ? "متصل" : "قراءة فقط"}`
+                                ? `قنوات حية · ${inboxConnected ? "متصلة" : "قراءة فقط"}`
                                 : "معاينة المالك · Owner Preview"}
                         </div>
                         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{titleAr}</h1>
@@ -228,7 +240,7 @@ export function CustomerIntelligenceCenterView({
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-6 text-emerald-100 sm:px-7">
                     {liveInbox ? (
                         <>
-                            المعروض في هذا التبويب رسائل واتساب حقيقية واردة ومحفوظة في ميزان.
+                            المعروض في هذا التبويب تفاعلات واتساب وإنستغرام الحقيقية الواردة والمحفوظة في ميزان.
                             الإرسال والرد التلقائي وإنشاء الطلبات وأي تعديل خارجي مغلق.
                         </>
                     ) : (
@@ -248,7 +260,7 @@ export function CustomerIntelligenceCenterView({
                     <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
                     <div>
                         <div className="font-extrabold">
-                            {liveInbox ? "تعذر تحميل رسائل واتساب" : "تعذر تحميل مساحة المعاينة"}
+                            {liveInbox ? "تعذر تحميل تفاعلات قنوات العملاء" : "تعذر تحميل مساحة المعاينة"}
                         </div>
                         <p className="mt-1 text-xs leading-5">{liveInbox ? inboxError : error}</p>
                         <p className="mt-1 text-xs font-bold">
@@ -289,6 +301,9 @@ export function CustomerIntelligenceCenterView({
                 writesLocked,
                 inbox: normalizedInbox,
                 inboxError,
+                instagramSetup,
+                learningStatus,
+                onConnectInstagram,
                 onCreateSuggestion,
                 onReviewSuggestion,
                 onRejectSuggestion,
@@ -321,6 +336,8 @@ export default function CustomerIntelligenceCenter() {
     const [inboxLoading, setInboxLoading] = useState(activeTab === "conversations");
     const [inboxRefreshing, setInboxRefreshing] = useState(false);
     const [inboxError, setInboxError] = useState("");
+    const [instagramSetup, setInstagramSetup] = useState(null);
+    const [learningStatus, setLearningStatus] = useState(null);
 
     const load = useCallback(async ({ refresh = false } = {}) => {
         if (refresh) setRefreshing(true);
@@ -350,13 +367,38 @@ export default function CustomerIntelligenceCenter() {
             setInbox(normalizeCustomerIntelligenceInbox({}));
             setInboxError(errorMessage(
                 requestError,
-                "تعذر تحميل رسائل واتساب الواردة.",
+                "تعذر تحميل تفاعلات قنوات العملاء الواردة.",
             ));
         } finally {
             setInboxLoading(false);
             setInboxRefreshing(false);
         }
     }, []);
+
+    const loadInstagramSetup = useCallback(async () => {
+        if (!isOwner) return;
+        try {
+            setInstagramSetup(await getInstagramCustomerIntelligenceSetup());
+        } catch (_requestError) {
+            setInstagramSetup(null);
+        }
+    }, [isOwner]);
+
+    const loadLearningStatus = useCallback(async () => {
+        try {
+            setLearningStatus(await getCustomerLearningStatus());
+        } catch (_requestError) {
+            setLearningStatus(null);
+        }
+    }, []);
+
+    const connectInstagram = useCallback(async (candidateRef) => {
+        await connectInstagramCustomerIntelligence(candidateRef);
+        await Promise.all([
+            loadInstagramSetup(),
+            loadInbox({ refresh: true }),
+        ]);
+    }, [loadInbox, loadInstagramSetup]);
 
     const createSuggestion = useCallback(async (conversationId) => {
         await createCustomerIntelligenceReplySuggestion(conversationId);
@@ -390,8 +432,11 @@ export default function CustomerIntelligenceCenter() {
     }, [isOwner, load]);
 
     useEffect(() => {
-        if (activeTab === "conversations") loadInbox();
-    }, [activeTab, loadInbox]);
+        if (activeTab !== "conversations") return;
+        loadInbox();
+        loadLearningStatus();
+        if (isOwner) loadInstagramSetup();
+    }, [activeTab, isOwner, loadInbox, loadInstagramSetup, loadLearningStatus]);
 
     useEffect(() => {
         if (isOwner || requestedTab === "conversations") return;
@@ -417,13 +462,20 @@ export default function CustomerIntelligenceCenter() {
         onTabChange: selectTab,
         onRefresh: () => (
             activeTab === "conversations"
-                ? loadInbox({ refresh: true })
+                ? Promise.all([
+                    loadInbox({ refresh: true }),
+                    loadLearningStatus(),
+                    ...(isOwner ? [loadInstagramSetup()] : []),
+                ])
                 : load({ refresh: true })
         ),
         loading: activeTab === "conversations" ? inboxLoading : loading,
         refreshing: activeTab === "conversations" ? inboxRefreshing : refreshing,
         error,
         inboxError,
+        instagramSetup,
+        learningStatus,
+        onConnectInstagram: connectInstagram,
         isOwner,
         onCreateSuggestion: createSuggestion,
         onReviewSuggestion: (conversationId, suggestionId, review) => (
@@ -442,15 +494,20 @@ export default function CustomerIntelligenceCenter() {
         inboxError,
         inboxLoading,
         inboxRefreshing,
+        instagramSetup,
+        learningStatus,
         isOwner,
         load,
         loadInbox,
+        loadInstagramSetup,
+        loadLearningStatus,
         loading,
         model,
         refreshing,
         reviewSuggestion,
         selectTab,
         createSuggestion,
+        connectInstagram,
     ]);
 
     return <CustomerIntelligenceCenterView {...viewProps} />;

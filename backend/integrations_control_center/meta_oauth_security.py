@@ -35,9 +35,12 @@ META_DEFAULT_SCOPES = (
     "catalog_management",
     "pages_show_list",
     "pages_read_engagement",
+    "pages_manage_metadata",
     "leads_retrieval",
     "instagram_basic",
     "instagram_manage_insights",
+    "instagram_manage_comments",
+    "instagram_manage_messages",
 )
 META_CAPABILITY_EVIDENCE = (
     "campaigns.read",

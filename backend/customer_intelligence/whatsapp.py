@@ -314,7 +314,7 @@ class WhatsAppInboundAdapter:
             ),
             direction="outbound",
             sender_type="employee",
-            analysis_status="not_requested",
+            analysis_status="pending",
             delivery_state="sent",
         )
 

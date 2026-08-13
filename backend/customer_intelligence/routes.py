@@ -9,6 +9,17 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, st
 from ai_store_access_contract import PERMISSIONS, ROLE_ASSIGNMENTS, effective_permissions
 
 from .inbox import CustomerIntelligenceInboxService, LiveInboxResponse
+from .instagram_provisioning import (
+    InstagramProvisionIn,
+    InstagramProvisionResult,
+    InstagramProvisioningError,
+    InstagramProvisioningService,
+    InstagramSetupPublic,
+)
+from .learning_status import (
+    CustomerLearningStatusPublic,
+    CustomerLearningStatusService,
+)
 from .models import CustomerIntelligenceWorkspaceResponse
 from .reply_suggestions import (
     ESCALATE_PERMISSION,
@@ -153,6 +164,8 @@ def make_customer_intelligence_router(
     service: CustomerIntelligencePreviewService | None = None,
     inbox_service: CustomerIntelligenceInboxService | None = None,
     reply_suggestion_service: ReplySuggestionService | None = None,
+    instagram_provisioning_service: InstagramProvisioningService | None = None,
+    learning_status_service: CustomerLearningStatusService | None = None,
 ) -> APIRouter:
     router = APIRouter(
         prefix="/customer-intelligence/v1",
@@ -185,6 +198,25 @@ def make_customer_intelligence_router(
     live_service = inbox_service or (
         CustomerIntelligenceInboxService(db) if db is not None else None
     )
+
+    learning_status = learning_status_service or (
+        CustomerLearningStatusService(db) if db is not None else None
+    )
+    if learning_status is not None and _live_inbox_enabled():
+
+        @router.get(
+            "/learning/status",
+            response_model=CustomerLearningStatusPublic,
+        )
+        async def get_customer_learning_status(
+            response: Response,
+            user: dict = Depends(current_user),
+        ) -> CustomerLearningStatusPublic:
+            actor = await _actor_context(db, user)
+            _require_actor_permission(actor, INBOX_READ_PERMISSION)
+            response.headers["Cache-Control"] = "no-store, private"
+            return await learning_status.status(owner_user_id=actor.owner_user_id)
+
     if live_service is not None and _live_inbox_enabled():
 
         @router.get(
@@ -294,5 +326,56 @@ def make_customer_intelligence_router(
                 ReplySuggestionConflict,
             ) as exc:
                 raise _reply_error(exc) from exc
+
+    instagram_setup = instagram_provisioning_service or (
+        InstagramProvisioningService(db) if db is not None else None
+    )
+    if instagram_setup is not None and _live_inbox_enabled():
+
+        @router.get(
+            "/channels/instagram/setup",
+            response_model=InstagramSetupPublic,
+        )
+        async def get_instagram_setup(
+            response: Response,
+            user: dict = Depends(current_user),
+        ) -> InstagramSetupPublic:
+            owner = _require_owner(user)
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await instagram_setup.setup(owner_user_id=str(owner["id"]))
+            except InstagramProvisioningError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": exc.code},
+                ) from exc
+
+        @router.post(
+            "/channels/instagram/setup",
+            response_model=InstagramProvisionResult,
+            status_code=status.HTTP_201_CREATED,
+        )
+        async def provision_instagram(
+            request: InstagramProvisionIn,
+            response: Response,
+            user: dict = Depends(current_user),
+        ) -> InstagramProvisionResult:
+            owner = _require_owner(user)
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await instagram_setup.provision(
+                    owner_user_id=str(owner["id"]),
+                    request=request,
+                )
+            except InstagramProvisioningError as exc:
+                status_code = (
+                    status.HTTP_404_NOT_FOUND
+                    if exc.code == "instagram_candidate_not_found"
+                    else status.HTTP_409_CONFLICT
+                )
+                raise HTTPException(
+                    status_code=status_code,
+                    detail={"code": exc.code},
+                ) from exc
 
     return router

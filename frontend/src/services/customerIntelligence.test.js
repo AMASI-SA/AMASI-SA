@@ -1,12 +1,17 @@
 import api from "../lib/api";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    connectInstagramCustomerIntelligence,
     createCustomerIntelligenceReplySuggestion,
     customerIntelligenceWritesLocked,
     getCustomerIntelligenceInbox,
+    getCustomerLearningStatus,
     getCustomerIntelligenceWorkspace,
+    getInstagramCustomerIntelligenceSetup,
     normalizeCustomerIntelligenceInbox,
+    normalizeCustomerLearningStatus,
     normalizeCustomerIntelligenceWorkspace,
+    normalizeInstagramCustomerIntelligenceSetup,
     reviewCustomerIntelligenceReplySuggestion,
 } from "./customerIntelligence";
 
@@ -384,6 +389,8 @@ test("normalizes the live receive-only inbox and drops unapproved sensitive fiel
             receive_only: true,
             writes_allowed: false,
             whatsapp_send_allowed: false,
+            instagram_send_allowed: false,
+            instagram_comment_reply_allowed: false,
             ai_auto_reply_allowed: false,
             commerce_mutation_allowed: false,
         },
@@ -417,6 +424,129 @@ test("normalizes the live receive-only inbox and drops unapproved sensitive fiel
     expect(serialized).not.toContain("hidden-provider-id");
     expect(serialized).not.toContain("must-never-render");
     expect(serialized).not.toContain("hidden-suggestion-secret");
+});
+
+test("keeps Instagram public comments distinct from private messages in the unified inbox", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        data_origin: "channel_webhooks",
+        connections: [
+            liveInboxPayload.connection,
+            {
+                provider: "instagram",
+                status: "connected",
+                connected_channels: 1,
+                receiving_channels: 1,
+            },
+        ],
+        conversation_count: 2,
+        message_count: 3,
+        conversations: [
+            ...liveInboxPayload.conversations,
+            {
+                conversation_id: "conv-instagram-comment",
+                customer_name: "instagram_customer",
+                channel: "instagram",
+                surface: "comment",
+                status: "open",
+                last_message: "هل يتوفر لون آخر؟",
+                last_message_at: "2026-08-12T00:31:00Z",
+                message_count: 1,
+                messages: [{
+                    message_id: "ig-comment-1",
+                    direction: "inbound",
+                    sender: "customer",
+                    kind: "text",
+                    surface: "comment",
+                    body: "هل يتوفر لون آخر؟",
+                    occurred_at: "2026-08-12T00:31:00Z",
+                    delivery_state: "received",
+                    content_available: true,
+                }],
+                reply_suggestion: {
+                    suggestion_id: "suggestion-instagram-comment",
+                    status: "pending_approval",
+                    text: "أهلًا، راسلنا على الخاص بالتفاصيل.",
+                    version: 1,
+                    surface: "comment",
+                    requires_human_approval: true,
+                    send_allowed: false,
+                    created_at: "2026-08-12T00:31:30Z",
+                },
+            },
+        ],
+    });
+
+    expect(inbox.data_origin).toBe("channel_webhooks");
+    expect(inbox.connections).toHaveLength(2);
+    expect(inbox.connection).toMatchObject({
+        status: "connected",
+        connected_channels: 2,
+        receiving_channels: 2,
+    });
+    expect(inbox.conversations[1]).toMatchObject({
+        channel: "instagram",
+        surface: "comment",
+        reply_suggestion: { surface: "comment", send_allowed: false },
+    });
+    expect(inbox.conversations[1].messages[0].surface).toBe("comment");
+    expect(inbox.safety_policy.instagram_send_allowed).toBe(false);
+    expect(inbox.safety_policy.instagram_comment_reply_allowed).toBe(false);
+});
+
+test("normalizes Instagram setup without exposing provider identifiers or enabling send", async () => {
+    const raw = {
+        schema_version: 1,
+        state: "ready",
+        candidates: [{
+            candidate_ref: "instagram_candidate_opaque",
+            display_name: "amasi_store",
+            external_asset_id: "17841400000000001",
+        }],
+        required_permissions_ready: true,
+        receive_only: false,
+        send_allowed: true,
+        comment_reply_allowed: true,
+        ai_auto_reply_allowed: true,
+    };
+    api.get.mockResolvedValueOnce({ data: raw });
+
+    const normalized = normalizeInstagramCustomerIntelligenceSetup(raw);
+    const fetched = await getInstagramCustomerIntelligenceSetup();
+
+    expect(api.get).toHaveBeenCalledWith(
+        "/customer-intelligence/v1/channels/instagram/setup",
+    );
+    expect(fetched).toEqual(normalized);
+    expect(normalized).toMatchObject({
+        state: "ready",
+        required_permissions_ready: true,
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    });
+    expect(JSON.stringify(normalized)).not.toContain("17841400000000001");
+});
+
+test("Instagram connection requires an opaque candidate and fixed receive-only confirmation", async () => {
+    api.post.mockResolvedValueOnce({ data: { status: "connected", send_allowed: true } });
+
+    const result = await connectInstagramCustomerIntelligence("instagram_candidate_opaque");
+
+    expect(api.post).toHaveBeenCalledWith(
+        "/customer-intelligence/v1/channels/instagram/setup",
+        {
+            candidate_ref: "instagram_candidate_opaque",
+            confirmation: "CONNECT_RECEIVE_ONLY_INSTAGRAM",
+        },
+    );
+    expect(result).toMatchObject({
+        status: "connected",
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    });
 });
 
 test("live inbox normalization is idempotent so the container cannot drop a suggestion", () => {
@@ -546,7 +676,7 @@ test("accepts governed employee echoes and drops every other outbound shape", ()
             {
                 ...liveInboxPayload.conversations[0],
                 conversation_id: "unexpected-channel",
-                channel: "instagram",
+                channel: "telegram",
             },
         ],
     });
@@ -566,6 +696,48 @@ test("loads the live inbox from its single read-only endpoint", async () => {
 
     expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
     expect(inbox.conversations[0].messages).toHaveLength(2);
+});
+
+test("normalizes content-free Mezan learning coverage and keeps execution locked", async () => {
+    const payload = {
+        schema_version: 1,
+        generated_at: "2026-08-13T11:00:00Z",
+        state: "processing",
+        runtime_configured: true,
+        worker_enabled: true,
+        inbound_customer_messages: 10,
+        employee_responses: 2,
+        total_evidence_events: 12,
+        queued_for_analysis: 10,
+        analyzed_messages: 8,
+        pending_messages: 2,
+        failed_messages: 0,
+        queue_coverage_percent: 100,
+        analysis_completion_percent: 80,
+        signals_detected: 14,
+        open_problems: 3,
+        proposed_decisions: 4,
+        metadata_only_media_events: 2,
+        customer_content: "must-not-pass",
+        automatic_execution_allowed: true,
+    };
+    api.get.mockResolvedValueOnce({ data: payload });
+
+    const direct = normalizeCustomerLearningStatus(payload);
+    const fetched = await getCustomerLearningStatus();
+
+    expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/learning/status");
+    expect(fetched).toEqual(direct);
+    expect(fetched).toMatchObject({
+        state: "processing",
+        total_evidence_events: 12,
+        queue_coverage_percent: 100,
+        analysis_completion_percent: 80,
+        automatic_execution_allowed: false,
+        customer_content_exposed: false,
+        metadata_only_media_events: 2,
+    });
+    expect(JSON.stringify(fetched)).not.toContain("must-not-pass");
 });
 
 test("uses explicit suggestion lifecycle endpoints and never calls a send route", async () => {

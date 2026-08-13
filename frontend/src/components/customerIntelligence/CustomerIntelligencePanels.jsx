@@ -49,8 +49,11 @@ function percent(value) {
 
 function liveMessageLabel(message) {
     if (message.direction === "outbound" && message.sender === "employee") {
-        return "رد الموظف من واتساب";
+        return message.surface === "comment"
+            ? "رد الموظف على تعليق إنستغرام"
+            : "رد الموظف من القناة";
     }
+    if (message.surface === "comment") return "تعليق إنستغرام وارد";
     const labels = {
         text: "رسالة نصية واردة",
         image: "صورة واردة",
@@ -81,7 +84,7 @@ function liveMessageBody(message) {
         image: "تم حفظ مرجع الصورة بأمان، والمعاينة غير متاحة في هذه المرحلة.",
         audio: "تم حفظ مرجع الرسالة الصوتية بأمان، والتشغيل غير متاح في هذه المرحلة.",
         document: "تم حفظ مرجع المستند بأمان، والتنزيل غير متاح في هذه المرحلة.",
-        interactive: "تم استلام تفاعل من واتساب.",
+        interactive: "تم استلام تفاعل من قناة العميل.",
         text: "لا يوجد نص قابل للعرض.",
     };
     return placeholders[message.kind] || "لا يوجد محتوى قابل للعرض.";
@@ -169,7 +172,7 @@ function PendingReplySuggestion({
                     ? "تم رفض الاقتراح دون إرسال الرسالة."
                     : "تم تصعيد المحادثة لمراجعة بشرية دون إرسال الرسالة.");
         } catch (_error) {
-            setFeedback("تعذر حفظ الإجراء. لم تُرسل أي رسالة إلى واتساب.");
+            setFeedback("تعذر حفظ الإجراء. لم يُرسل أي رد للعميل.");
         } finally {
             actionLock.current = false;
             setBusyAction("");
@@ -188,6 +191,12 @@ function PendingReplySuggestion({
                     <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
                         يحتاج اعتماد موظف. راجع النص وعدّله قبل أي اعتماد مستقبلي.
                     </p>
+                    {suggestion.surface === "comment" && (
+                        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                            هذا رد عام على تعليق إنستغرام: لا تذكر بيانات طلب أو جوال أو عنوان،
+                            وانقل التفاصيل الحساسة إلى الرسائل الخاصة.
+                        </p>
+                    )}
                 </div>
                 <StatusPill status="needs_review" label="بانتظار اعتماد الموظف" />
             </div>
@@ -265,7 +274,7 @@ function PendingReplySuggestion({
     );
 }
 
-function CreateReplySuggestion({ conversationId, onCreate = null }) {
+function CreateReplySuggestion({ conversationId, surface = "direct_message", onCreate = null }) {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState("");
     const createLock = useRef(false);
@@ -278,7 +287,7 @@ function CreateReplySuggestion({ conversationId, onCreate = null }) {
         try {
             await onCreate(conversationId);
         } catch (_requestError) {
-            setError("تعذر إنشاء الاقتراح. لم تُرسل أي رسالة إلى واتساب.");
+            setError("تعذر إنشاء الاقتراح. لم يُرسل أي رد للعميل.");
         } finally {
             createLock.current = false;
             setCreating(false);
@@ -294,6 +303,11 @@ function CreateReplySuggestion({ conversationId, onCreate = null }) {
             <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
                 يمكنك طلب اقتراح من الذكاء لهذه المحادثة. لن يؤدي ذلك إلى إرسال أي رد للعميل.
             </p>
+            {surface === "comment" && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                    سيُصاغ الاقتراح كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
+                </p>
+            )}
             <button
                 type="button"
                 onClick={create}
@@ -311,6 +325,136 @@ function CreateReplySuggestion({ conversationId, onCreate = null }) {
                     data-testid="customer-intelligence-create-suggestion-error"
                 >
                     {error}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function InstagramSetupCard({ setup, onConnect = null }) {
+    const [busyRef, setBusyRef] = useState("");
+    const [feedback, setFeedback] = useState("");
+    if (!setup || setup.state === "connected") return null;
+
+    const messages = {
+        meta_reauthorization_required: "أعد ربط Meta من مركز التطبيقات لمنح صلاحيات رسائل وتعليقات إنستغرام الجديدة، ثم ارجع هنا.",
+        no_instagram_account: "لم يعثر ربط Meta الحالي على حساب إنستغرام احترافي مرتبط.",
+        store_not_ready: "يلزم وجود متجر سلة واحد متصل قبل إنشاء ذاكرة قناة إنستغرام.",
+    };
+    const connect = async (candidateRef) => {
+        if (busyRef || typeof onConnect !== "function") return;
+        setBusyRef(candidateRef);
+        setFeedback("");
+        try {
+            await onConnect(candidateRef);
+            setFeedback("تم إنشاء ربط إنستغرام للاستقبال فقط دون تفعيل الإرسال.");
+        } catch (_error) {
+            setFeedback("تعذر إكمال الربط. لم تتغير صلاحيات الإرسال أو ربط واتساب.");
+        } finally {
+            setBusyRef("");
+        }
+    };
+
+    return (
+        <section
+            className="rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-instagram-setup"
+        >
+            <div className="flex items-start gap-3">
+                <Plug size={24} weight="duotone" className="mt-0.5 shrink-0 text-violet-700" />
+                <div className="min-w-0 flex-1">
+                    <div className="font-black text-violet-950">إكمال ربط إنستغرام مع ذكاء ميزان</div>
+                    <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
+                        الربط يستخدم تطبيق Meta نفسه، ويستقبل التعليقات والرسائل فقط. الإرسال التلقائي مغلق.
+                    </p>
+                    {setup.state === "ready" ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {(setup.candidates || []).map((candidate) => (
+                                <button
+                                    key={candidate.candidate_ref}
+                                    type="button"
+                                    onClick={() => connect(candidate.candidate_ref)}
+                                    disabled={busyRef !== "" || typeof onConnect !== "function"}
+                                    className="min-h-11 rounded-lg bg-violet-700 px-4 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                                >
+                                    {busyRef === candidate.candidate_ref
+                                        ? "جارٍ الربط…"
+                                        : `ربط ${candidate.display_name}`}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950">
+                            {messages[setup.state] || "إعداد إنستغرام غير جاهز حاليًا."}
+                        </p>
+                    )}
+                    {feedback && (
+                        <p className="mt-3 text-xs font-extrabold leading-5 text-violet-900" role="status">
+                            {feedback}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function CustomerLearningStatusCard({ status }) {
+    if (!status) return null;
+    const totalEvidence = status.total_evidence_events
+        ?? ((status.inbound_customer_messages || 0) + (status.employee_responses || 0));
+    const metadataOnlyMedia = status.metadata_only_media_events || 0;
+    const state = {
+        healthy: ["يعمل بصورة سليمة", "open"],
+        processing: ["جارٍ تحليل الوارد", "needs_review"],
+        attention_required: ["توجد رسائل تحتاج مراجعة", "blocked"],
+        no_data: ["بانتظار أول تفاعل", "open"],
+        not_configured: ["تشغيل الذكاء غير جاهز", "blocked"],
+    }[status.state] || ["حالة غير معروفة", "blocked"];
+    return (
+        <section
+            className="rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-learning-status"
+            data-learning-state={status.state}
+        >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <Eye size={24} weight="duotone" className="mt-0.5 shrink-0 text-violet-700" />
+                    <div>
+                        <div className="font-black text-violet-950">تغذية ذكاء ميزان من قنوات العملاء</div>
+                        <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
+                            كل رسالة أو تعليق وارد يُدرج للتحليل، وتبقى النتائج مرتبطة بدليلها
+                            ومقترحات التنفيذ خاضعة للمراجعة البشرية.
+                        </p>
+                    </div>
+                </div>
+                <StatusPill status={state[1]} label={state[0]} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                {[
+                    ["تغطية طابور الذكاء", `${status.queue_coverage_percent}%`],
+                    ["اكتمل تحليلها", `${status.analyzed_messages} / ${totalEvidence}`],
+                    ["قيد التحليل", status.pending_messages],
+                    ["مشكلات مفتوحة", status.open_problems],
+                    ["قرارات مقترحة", status.proposed_decisions],
+                    ["وسائط ببيانات وصفية فقط", metadataOnlyMedia],
+                ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-violet-100 bg-white p-3">
+                        <div className="text-[11px] font-extrabold text-violet-700">{label}</div>
+                        <div className="num mt-1 text-lg font-black text-violet-950">{value}</div>
+                    </div>
+                ))}
+            </div>
+            {status.failed_messages > 0 && (
+                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-extrabold leading-5 text-rose-900">
+                    تعذر تحليل <span className="num">{status.failed_messages}</span> تفاعل بعد المحاولات الآمنة؛
+                    بقي محفوظًا ويحتاج مراجعة تشغيلية، ولم يُرسل أي رد تلقائي.
+                </p>
+            )}
+            {metadataOnlyMedia > 0 && (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                    توجد <span className="num">{metadataOnlyMedia}</span> رسالة وسائط بلا نص أو وصف؛
+                    دخل حدثها وبياناتها الوصفية في التحليل، لكن محتوى الصورة أو الصوت نفسه يحتاج موصل وسائط آمنًا.
                 </p>
             )}
         </section>
@@ -408,6 +552,9 @@ export function OverviewPanel({ model, writesLocked, policyKeys }) {
 export function ConversationsPanel({
     inbox,
     error = "",
+    learningStatus = null,
+    instagramSetup = null,
+    onConnectInstagram = null,
     onCreateSuggestion = null,
     onReviewSuggestion = null,
     onRejectSuggestion = null,
@@ -420,6 +567,14 @@ export function ConversationsPanel({
         || conversations[0]
         || null;
     const connected = inbox?.connection?.status === "connected";
+    const connections = inbox?.connections || [];
+    const providerName = (provider) => (provider === "instagram" ? "إنستغرام" : "واتساب");
+    const conversationChannelLabel = (conversation) => {
+        if (conversation?.channel !== "instagram") return "واتساب";
+        return conversation.surface === "comment"
+            ? "إنستغرام · تعليق عام"
+            : "إنستغرام · رسالة خاصة";
+    };
 
     // The parent renders the single canonical inbox error banner. Avoid a
     // second empty/error state here for the same failed request.
@@ -427,6 +582,8 @@ export function ConversationsPanel({
 
     return (
         <div className="space-y-5" data-testid="customer-intelligence-panel-conversations" data-live-inbox="true">
+            <InstagramSetupCard setup={instagramSetup} onConnect={onConnectInstagram} />
+            <CustomerLearningStatusCard status={learningStatus} />
             <section
                 className={`rounded-xl border p-4 ${
                     connected
@@ -442,7 +599,9 @@ export function ConversationsPanel({
                             : <WarningCircle size={24} weight="duotone" className="mt-0.5 shrink-0 text-amber-700" />}
                         <div>
                             <div className="font-extrabold">
-                                {connected ? "واتساب متصل ويستقبل الرسائل" : "واتساب غير متصل للاستقبال"}
+                                {connected
+                                    ? "قنوات العملاء متصلة وتستقبل التفاعلات"
+                                    : "قنوات العملاء غير جاهزة للاستقبال"}
                             </div>
                             <p className="mt-1 text-xs leading-5 opacity-80">
                                 صندوق وارد حقيقي للقراءة فقط. الإرسال والرد التلقائي وكل إجراءات التجارة مغلقة.
@@ -450,6 +609,14 @@ export function ConversationsPanel({
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-bold">
+                        {connections.map((item) => (
+                            <span
+                                key={item.provider}
+                                className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5"
+                            >
+                                {`${providerName(item.provider)} · ${item.status === "connected" ? "متصل" : "غير متصل"}`}
+                            </span>
+                        ))}
                         <span className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5">
                             <span className="num">{inbox?.conversation_count || 0}</span> محادثة
                         </span>
@@ -471,8 +638,8 @@ export function ConversationsPanel({
 
             {!connected ? (
                 <EmptyState
-                    title="قناة واتساب غير جاهزة للاستقبال"
-                    detail="عند اكتمال الربط ستظهر الرسائل الواردة هنا تلقائيًا."
+                    title="لا توجد قناة عملاء جاهزة للاستقبال"
+                    detail="عند اكتمال ربط واتساب أو إنستغرام ستظهر التفاعلات الواردة هنا تلقائيًا."
                 />
             ) : !conversations.length ? (
                 <EmptyState
@@ -486,12 +653,12 @@ export function ConversationsPanel({
                 >
                     <div className={explicitlySelected ? "hidden lg:block" : "block"}>
                         <Panel
-                            title="محادثات واتساب"
+                            title="محادثات وتفاعلات العملاء"
                             subtitle="الأحدث أولًا · اختر محادثة لعرض الرسائل المحفوظة المتاحة"
                             Icon={UsersThree}
                             testid="customer-intelligence-live-conversation-list"
                         >
-                        <div className="space-y-2" role="list" aria-label="محادثات واتساب الواردة">
+                        <div className="space-y-2" role="list" aria-label="محادثات وتفاعلات العملاء الواردة">
                             {conversations.map((conversation) => {
                                 const active = conversation.id === selectedConversation?.id;
                                 return (
@@ -510,7 +677,10 @@ export function ConversationsPanel({
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <div className="truncate font-extrabold text-slate-950">
-                                                        {conversation.customer_name || "عميل واتساب"}
+                                                        {conversation.customer_name || "عميل القناة"}
+                                                    </div>
+                                                    <div className="mt-1 text-[11px] font-extrabold text-violet-700">
+                                                        {conversationChannelLabel(conversation)}
                                                     </div>
                                                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600" dir="auto">
                                                         {conversation.last_message || "لا توجد رسالة قابلة للعرض"}
@@ -548,12 +718,21 @@ export function ConversationsPanel({
                             رجوع إلى المحادثات
                         </button>
                         <Panel
-                            title={selectedConversation?.customer_name || "محادثة واتساب"}
+                            title={selectedConversation?.customer_name || "محادثة عميل"}
                             subtitle="رسائل العميل وردود الموظف المحفوظة في ميزان · بتوقيت الرياض"
                             Icon={ChatCircleDots}
                             testid="customer-intelligence-live-message-stream"
                             actions={<StatusPill status={selectedConversation?.status} />}
                         >
+                        {selectedConversation?.surface === "comment" && (
+                            <div
+                                className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950"
+                                data-testid="customer-intelligence-public-comment-warning"
+                            >
+                                هذا تعليق عام على إنستغرام. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
+                                اطلب من العميل الانتقال إلى الرسائل الخاصة لأي تفاصيل حساسة.
+                            </div>
+                        )}
                         {selectedConversation?.messages?.length ? (
                             <>
                                 {selectedConversation.message_count > selectedConversation.messages.length && (
@@ -585,6 +764,7 @@ export function ConversationsPanel({
                             {!selectedConversation?.reply_suggestion && (
                                 <CreateReplySuggestion
                                     conversationId={selectedConversation?.id}
+                                    surface={selectedConversation?.surface}
                                     onCreate={onCreateSuggestion}
                                 />
                             )}

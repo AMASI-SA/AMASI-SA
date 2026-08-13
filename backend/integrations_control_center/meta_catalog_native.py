@@ -21,9 +21,12 @@ def install_meta_native_catalog() -> None:
         "catalog_management",
         "pages_show_list",
         "pages_read_engagement",
+        "pages_manage_metadata",
         "leads_retrieval",
         "instagram_basic",
         "instagram_manage_insights",
+        "instagram_manage_comments",
+        "instagram_manage_messages",
     )
     if not current.legacy_sources and current.required_permissions == expected_permissions:
         return
@@ -36,6 +39,7 @@ def install_meta_native_catalog() -> None:
             "قراءة Business Manager والحسابات الإعلانية المصرح بها مباشرة من Meta",
             "قراءة الحملات والمجموعات والإعلانات والتصاميم والجماهير والتقارير بعد المزامنة",
             "فحص Pixels وCatalogs وحسابات Instagram المرتبطة واكتشاف نقص التتبع",
+            "استقبال تعليقات ورسائل Instagram وربطها بأدلة ذكاء العملاء بعد منح الصلاحيات",
             "قراءة الرصيد والإنفاق وحدود الصرف وتوفر مصدر التمويل دون كشف بيانات الدفع",
             "تحليل الأداء وربطه بالطلبات والمنتجات وصافي الربح",
         ),

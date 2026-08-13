@@ -33,6 +33,21 @@ CHANNELS_COLLECTION = "mezan_customer_channels_v1"
 CONVERSATIONS_COLLECTION = "mezan_customer_conversations_v1"
 CONVERSATION_MESSAGES_COLLECTION = "mezan_customer_conversation_messages_v1"
 
+CUSTOMER_INTELLIGENCE_ANALYSIS_TARGETS = (
+    "reply_context",
+    "customer_signal",
+    "problem_detection",
+    "sales_opportunity",
+    "product_feedback",
+    "service_quality",
+    "decision_support",
+)
+EMPLOYEE_RESPONSE_ANALYSIS_TARGETS = (
+    "reply_context",
+    "service_quality",
+    "decision_support",
+)
+
 FOUNDATION_COLLECTIONS = {
     "customers": CUSTOMERS_COLLECTION,
     "customer_identities": CUSTOMER_IDENTITIES_COLLECTION,
@@ -148,6 +163,19 @@ class ConversationMessageRecord(FoundationRecord):
     analysis_status: Literal["pending", "ready", "failed", "not_requested"] = (
         "pending"
     )
+    analysis_contract_version: Literal[1] = 1
+    analysis_targets: list[
+        Literal[
+            "reply_context",
+            "customer_signal",
+            "problem_detection",
+            "sales_opportunity",
+            "product_feedback",
+            "service_quality",
+            "decision_support",
+        ]
+    ] = Field(default_factory=list)
+    analysis_requested_at: datetime | None = None
     delivery_state: Literal["received", "sent", "delivered", "read", "failed"]
     created_at: datetime
     plaintext_content_stored: Literal[False] = False
@@ -158,6 +186,19 @@ class ConversationMessageRecord(FoundationRecord):
             raise ValueError("inbound messages must use delivery_state=received")
         if self.direction == "outbound" and self.delivery_state == "received":
             raise ValueError("outbound messages cannot use delivery_state=received")
+        if self.analysis_status == "pending":
+            targets = (
+                EMPLOYEE_RESPONSE_ANALYSIS_TARGETS
+                if self.direction == "outbound" and self.sender_type == "employee"
+                else CUSTOMER_INTELLIGENCE_ANALYSIS_TARGETS
+            )
+            if self.analysis_targets and set(self.analysis_targets) != set(targets):
+                raise ValueError("pending messages must feed their governed intelligence targets")
+            self.analysis_targets = list(targets)
+            self.analysis_requested_at = self.analysis_requested_at or self.received_at
+        elif self.analysis_status == "not_requested":
+            self.analysis_targets = []
+            self.analysis_requested_at = None
         return self
 
 
@@ -169,8 +210,10 @@ async def ensure_customer_intelligence_foundation_indexes(db: Any) -> None:
     # Kept as a lazy import so the channel foundation stays usable in
     # receive-only deployments where the optional OpenAI SDK is absent.
     from .reply_suggestions import ensure_reply_suggestion_indexes
+    from .learning_contract import ensure_customer_learning_indexes
 
     await ensure_reply_suggestion_indexes(db)
+    await ensure_customer_learning_indexes(db)
 
     customers = getattr(db, CUSTOMERS_COLLECTION)
     await customers.create_index(
@@ -301,6 +344,8 @@ __all__ = [
     "CONVERSATIONS_COLLECTION",
     "CONVERSATION_MESSAGES_COLLECTION",
     "CUSTOMERS_COLLECTION",
+    "CUSTOMER_INTELLIGENCE_ANALYSIS_TARGETS",
+    "EMPLOYEE_RESPONSE_ANALYSIS_TARGETS",
     "CUSTOMER_IDENTITIES_COLLECTION",
     "FOUNDATION_COLLECTIONS",
     "FOUNDATION_SCHEMA_VERSION",

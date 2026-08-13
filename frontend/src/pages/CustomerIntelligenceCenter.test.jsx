@@ -394,6 +394,27 @@ test("forces a permitted employee into conversations without loading the owner w
         if (path === "/customer-intelligence/v1/inbox") {
             return Promise.resolve({ data: liveInboxPayload });
         }
+        if (path === "/customer-intelligence/v1/learning/status") {
+            return Promise.resolve({ data: {
+                schema_version: 1,
+                state: "healthy",
+                runtime_configured: true,
+                worker_enabled: true,
+                inbound_customer_messages: 4,
+                employee_responses: 1,
+                total_evidence_events: 5,
+                queued_for_analysis: 4,
+                analyzed_messages: 4,
+                pending_messages: 0,
+                failed_messages: 0,
+                queue_coverage_percent: 100,
+                analysis_completion_percent: 100,
+                signals_detected: 3,
+                open_problems: 1,
+                proposed_decisions: 1,
+                metadata_only_media_events: 0,
+            } });
+        }
         return Promise.reject(new Error(`Unexpected owner request: ${path}`));
     });
     const container = document.createElement("div");
@@ -407,8 +428,9 @@ test("forces a permitted employee into conversations without loading the owner w
             await Promise.resolve();
         });
 
-        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.get).toHaveBeenCalledTimes(2);
         expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
+        expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/learning/status");
         expect(container.querySelectorAll(
             '[data-testid^="customer-intelligence-tab-"]',
         )).toHaveLength(1);
@@ -432,7 +454,7 @@ test("forces a permitted employee into conversations without loading the owner w
     }
 });
 
-test("shows a pending employee-approved suggestion while keeping WhatsApp send locked", () => {
+test("shows a pending employee-approved suggestion while keeping channel send locked", () => {
     const markup = renderTab("conversations");
 
     expect(markup).toContain('data-preview-only="false"');
@@ -442,11 +464,11 @@ test("shows a pending employee-approved suggestion while keeping WhatsApp send l
     expect(markup.match(/data-testid="customer-intelligence-live-message"/g) || []).toHaveLength(3);
     expect(markup).toContain("اختبار ربط ميزان 2");
     expect(markup).toContain("صورة المنتج");
-    expect(markup).toContain("رد الموظف من واتساب");
+    expect(markup).toContain("رد الموظف من القناة");
     expect(markup).toContain("رد الموظف السابق من تطبيق واتساب");
     expect(markup).toContain('data-message-direction="outbound"');
     expect(markup).toContain("تمت القراءة");
-    expect(markup).toContain("واتساب متصل ويستقبل الرسائل");
+    expect(markup).toContain("واتساب · متصل");
     expect(markup).toContain('data-testid="customer-intelligence-content-unavailable-warning"');
     expect(markup).toContain("تعذر عرض محتوى");
     expect(markup).not.toContain("WhatsApp وهمي");
@@ -461,6 +483,94 @@ test("shows a pending employee-approved suggestion while keeping WhatsApp send l
     expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
     expect(markup).toContain("<textarea");
     expect(markup).not.toContain("<form");
+});
+
+test("shows measurable learning coverage without exposing customer content or execution", () => {
+    const markup = renderTab("conversations", {
+        learningStatus: {
+            state: "processing",
+            queue_coverage_percent: 100,
+            analyzed_messages: 3,
+            inbound_customer_messages: 4,
+            employee_responses: 1,
+            total_evidence_events: 5,
+            pending_messages: 1,
+            failed_messages: 0,
+            open_problems: 2,
+            proposed_decisions: 1,
+            metadata_only_media_events: 0,
+        },
+    });
+
+    expect(markup).toContain('data-testid="customer-intelligence-learning-status"');
+    expect(markup).toContain('data-learning-state="processing"');
+    expect(markup).toContain("تغطية طابور الذكاء");
+    expect(markup).toContain("100%");
+    expect(markup).toContain("مقترحات التنفيذ خاضعة للمراجعة البشرية");
+    expect(markup).not.toContain("إرسال تلقائي مفعل");
+});
+
+test("labels Instagram comments as public and displays the privacy guardrail", () => {
+    const instagramInbox = {
+        ...liveInboxPayload,
+        data_origin: "channel_webhooks",
+        connections: [{
+            provider: "instagram",
+            status: "connected",
+            connected_channels: 1,
+            receiving_channels: 1,
+        }],
+        connection: {
+            provider: "whatsapp",
+            status: "not_connected",
+            connected_channels: 0,
+            receiving_channels: 0,
+        },
+        conversation_count: 1,
+        message_count: 1,
+        conversations: [{
+            conversation_id: "conversation-instagram-comment",
+            customer_id: "customer-instagram-comment",
+            customer_name: "عميل إنستغرام",
+            channel: "instagram",
+            surface: "comment",
+            status: "open",
+            last_message: "هل يتوفر لون آخر؟",
+            last_message_at: "2026-08-12T00:31:00Z",
+            message_count: 1,
+            content_unavailable_count: 0,
+            messages: [{
+                message_id: "message-instagram-comment",
+                direction: "inbound",
+                sender: "customer",
+                kind: "text",
+                surface: "comment",
+                body: "هل يتوفر لون آخر؟",
+                occurred_at: "2026-08-12T00:31:00Z",
+                delivery_state: "received",
+                content_available: true,
+            }],
+            reply_suggestion: {
+                suggestion_id: "reply-suggestion-instagram-comment",
+                status: "pending_approval",
+                text: "أهلًا، راسلنا على الخاص بالتفاصيل.",
+                version: 1,
+                surface: "comment",
+                requires_human_approval: true,
+                send_allowed: false,
+                created_at: "2026-08-12T00:31:30Z",
+            },
+        }],
+    };
+
+    const markup = renderTab("conversations", { inbox: instagramInbox });
+
+    expect(markup).toContain("إنستغرام · تعليق عام");
+    expect(markup).toContain("تعليق إنستغرام وارد");
+    expect(markup).toContain('data-testid="customer-intelligence-public-comment-warning"');
+    expect(markup).toContain("لا تعرض بيانات الطلب أو الجوال أو العنوان");
+    expect(markup).toContain("هذا رد عام على تعليق إنستغرام");
+    expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
 });
 
 test("mobile inbox starts with the list, then offers a clear back control", () => {
@@ -572,7 +682,7 @@ test("shows a live inbox error without falling back to preview conversations", (
 
     expect(markup).toContain('data-testid="customer-intelligence-error"');
     expect(markup.match(/data-testid="customer-intelligence-error"/g) || []).toHaveLength(1);
-    expect(markup).toContain("تعذر تحميل رسائل واتساب");
+    expect(markup).toContain("تعذر تحميل تفاعلات قنوات العملاء");
     expect(markup).toContain("لم تُعرض بيانات بديلة");
     expect(markup).not.toContain("عميلة تجريبية");
 });
@@ -775,7 +885,7 @@ test("failed AI suggestion creation shows one local error and never sends", asyn
         expect(container.querySelectorAll(
             '[data-testid="customer-intelligence-create-suggestion-error"]',
         )).toHaveLength(1);
-        expect(container.textContent).toContain("لم تُرسل أي رسالة إلى واتساب");
+        expect(container.textContent).toContain("لم يُرسل أي رد للعميل");
         expect(container.querySelector("form")).toBeNull();
     } finally {
         await act(async () => root.unmount());

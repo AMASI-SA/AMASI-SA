@@ -4,6 +4,8 @@ const READ_ONLY_KEYS = [
     "writes_allowed",
     "external_calls_allowed",
     "whatsapp_send_allowed",
+    "instagram_send_allowed",
+    "instagram_comment_reply_allowed",
     "order_creation_allowed",
     "discount_creation_allowed",
     "payment_link_creation_allowed",
@@ -46,6 +48,7 @@ const EMPTY_LIVE_INBOX = {
         connected_channels: 0,
         receiving_channels: 0,
     },
+    connections: [],
     conversation_count: 0,
     message_count: 0,
     content_unavailable_count: 0,
@@ -57,6 +60,8 @@ const EMPTY_LIVE_INBOX = {
         receive_only: true,
         writes_allowed: false,
         whatsapp_send_allowed: false,
+        instagram_send_allowed: false,
+        instagram_comment_reply_allowed: false,
         ai_auto_reply_allowed: false,
         commerce_mutation_allowed: false,
     },
@@ -197,7 +202,7 @@ function normalizeLiveInboxMessage(message, index) {
     const employeeEcho = source.direction === "outbound" && source.sender === "employee";
     return {
         id: text(source.message_id || source.id) || `live-message-${index + 1}`,
-        // An outbound employee echo is history received from WhatsApp, not a
+        // An outbound employee echo is history received from a channel, not a
         // UI send capability and never a substitute for reply_suggestion.
         direction: employeeEcho ? "outbound" : "inbound",
         sender: employeeEcho ? "employee" : "customer",
@@ -208,6 +213,9 @@ function normalizeLiveInboxMessage(message, index) {
         mime_type: text(source.mime_type),
         occurred_at: timestamp(source.occurred_at),
         delivery_state: employeeEcho ? text(source.delivery_state) : "received",
+        surface: ["direct_message", "comment", "unknown"].includes(source.surface)
+            ? source.surface
+            : "direct_message",
         content_available: source.content_available === true,
     };
 }
@@ -245,6 +253,9 @@ function normalizePendingReplySuggestion(value, conversationId) {
         version,
         requires_human_approval: true,
         send_allowed: false,
+        surface: ["direct_message", "comment", "unknown"].includes(source.surface)
+            ? source.surface
+            : "direct_message",
         created_at: timestamp(source.created_at),
     };
 }
@@ -265,10 +276,18 @@ function normalizeLiveInboxConversation(conversation, index) {
         })
         .map(normalizeLiveInboxMessage);
     const id = text(source.conversation_id || source.id) || `live-conversation-${index + 1}`;
+    const channel = ["whatsapp", "instagram"].includes(source.channel)
+        ? source.channel
+        : "whatsapp";
+    const surface = ["direct_message", "comment", "unknown"].includes(source.surface)
+        ? source.surface
+        : (messages[messages.length - 1]?.surface || "direct_message");
     return {
         id,
-        customer_name: text(source.customer_name) || "عميل واتساب",
-        channel: "whatsapp",
+        customer_name: text(source.customer_name)
+            || (channel === "instagram" ? "عميل إنستغرام" : "عميل واتساب"),
+        channel,
+        surface,
         status: LIVE_INBOX_CONVERSATION_STATUSES.has(status) ? status : "open",
         last_message: text(source.last_message),
         last_message_at: timestamp(source.last_message_at),
@@ -722,31 +741,58 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
     const source = object(payload);
     const connection = object(source.connection);
     const conversations = array(source.conversations)
-        .filter((conversation) => object(conversation).channel === "whatsapp")
+        .filter((conversation) => ["whatsapp", "instagram"].includes(
+            object(conversation).channel,
+        ))
         .map(normalizeLiveInboxConversation);
-    const connectedChannels = nonNegativeInteger(connection.connected_channels);
-    const receivingChannels = nonNegativeInteger(connection.receiving_channels);
+    const suppliedConnections = array(source.connections).length
+        ? array(source.connections)
+        : (connection.provider ? [connection] : []);
+    const connections = suppliedConnections
+        .filter((item) => ["whatsapp", "instagram"].includes(object(item).provider))
+        .map((item) => {
+            const row = object(item);
+            const receivingChannels = nonNegativeInteger(row.receiving_channels);
+            return {
+                provider: row.provider,
+                status: row.status === "connected" && receivingChannels > 0
+                    ? "connected"
+                    : "not_connected",
+                connected_channels: nonNegativeInteger(row.connected_channels),
+                receiving_channels: receivingChannels,
+            };
+        });
+    const connectedChannels = connections.reduce(
+        (total, item) => total + item.connected_channels,
+        0,
+    );
+    const receivingChannels = connections.reduce(
+        (total, item) => total + item.receiving_channels,
+        0,
+    );
+    const supportedOrigin = ["whatsapp_webhook", "channel_webhooks"].includes(
+        source.data_origin,
+    );
     const liveContract = Number(source.schema_version) === 1
         && source.mode === "live_receive_only"
-        && source.data_origin === "whatsapp_webhook"
-        && connection.provider === "whatsapp";
+        && supportedOrigin
+        && connections.length > 0;
 
     return {
         ...EMPTY_LIVE_INBOX,
         connection: {
             ...EMPTY_LIVE_INBOX.connection,
-            status: liveContract
-                && connection.status === "connected"
-                && receivingChannels > 0
+            status: liveContract && receivingChannels > 0
                 ? "connected"
                 : "not_connected",
             connected_channels: connectedChannels,
             receiving_channels: receivingChannels,
         },
+        connections: liveContract ? connections : [],
         schema_version: Number(source.schema_version) === 1 ? 1 : null,
         generated_at: timestamp(source.generated_at),
         mode: liveContract ? "live_receive_only" : null,
-        data_origin: liveContract ? "whatsapp_webhook" : null,
+        data_origin: liveContract ? source.data_origin : null,
         conversation_count: liveContract ? nonNegativeInteger(source.conversation_count) : 0,
         message_count: liveContract ? nonNegativeInteger(source.message_count) : 0,
         content_unavailable_count: liveContract
@@ -766,6 +812,111 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
 export async function getCustomerIntelligenceInbox() {
     const response = await api.get("/customer-intelligence/v1/inbox");
     return normalizeCustomerIntelligenceInbox(response.data);
+}
+
+const CUSTOMER_LEARNING_STATES = new Set([
+    "not_configured",
+    "no_data",
+    "healthy",
+    "processing",
+    "attention_required",
+]);
+
+export function normalizeCustomerLearningStatus(payload = {}) {
+    const source = object(payload);
+    return {
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        generated_at: timestamp(source.generated_at),
+        state: CUSTOMER_LEARNING_STATES.has(source.state)
+            ? source.state
+            : "not_configured",
+        runtime_configured: source.runtime_configured === true,
+        worker_enabled: source.worker_enabled === true,
+        inbound_customer_messages: nonNegativeInteger(source.inbound_customer_messages),
+        employee_responses: nonNegativeInteger(source.employee_responses),
+        total_evidence_events: nonNegativeInteger(source.total_evidence_events),
+        queued_for_analysis: nonNegativeInteger(source.queued_for_analysis),
+        analyzed_messages: nonNegativeInteger(source.analyzed_messages),
+        pending_messages: nonNegativeInteger(source.pending_messages),
+        failed_messages: nonNegativeInteger(source.failed_messages),
+        queue_coverage_percent: Math.min(100, finite(source.queue_coverage_percent) ?? 0),
+        analysis_completion_percent: Math.min(
+            100,
+            finite(source.analysis_completion_percent) ?? 0,
+        ),
+        signals_detected: nonNegativeInteger(source.signals_detected),
+        open_problems: nonNegativeInteger(source.open_problems),
+        proposed_decisions: nonNegativeInteger(source.proposed_decisions),
+        metadata_only_media_events: nonNegativeInteger(source.metadata_only_media_events),
+        // Status is content-free and cannot grant execution authority.
+        customer_content_exposed: false,
+        automatic_execution_allowed: false,
+    };
+}
+
+export async function getCustomerLearningStatus() {
+    const response = await api.get("/customer-intelligence/v1/learning/status");
+    return normalizeCustomerLearningStatus(response.data);
+}
+
+const INSTAGRAM_SETUP_STATES = new Set([
+    "ready",
+    "connected",
+    "meta_reauthorization_required",
+    "no_instagram_account",
+    "store_not_ready",
+]);
+
+export function normalizeInstagramCustomerIntelligenceSetup(payload = {}) {
+    const source = object(payload);
+    const state = INSTAGRAM_SETUP_STATES.has(source.state) ? source.state : null;
+    return {
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        state,
+        candidates: state === "ready"
+            ? array(source.candidates).map((candidate) => {
+                const row = object(candidate);
+                return {
+                    candidate_ref: text(row.candidate_ref),
+                    display_name: text(row.display_name) || "حساب إنستغرام",
+                };
+            }).filter((candidate) => candidate.candidate_ref)
+            : [],
+        required_permissions_ready: source.required_permissions_ready === true,
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    };
+}
+
+export async function getInstagramCustomerIntelligenceSetup() {
+    const response = await api.get(
+        "/customer-intelligence/v1/channels/instagram/setup",
+    );
+    return normalizeInstagramCustomerIntelligenceSetup(response.data);
+}
+
+export async function connectInstagramCustomerIntelligence(candidateRef) {
+    const candidate = text(candidateRef);
+    if (!candidate) throw new Error("instagram candidate is required");
+    const response = await api.post(
+        "/customer-intelligence/v1/channels/instagram/setup",
+        {
+            candidate_ref: candidate,
+            confirmation: "CONNECT_RECEIVE_ONLY_INSTAGRAM",
+        },
+    );
+    return {
+        status: ["connected", "no_change"].includes(response.data?.status)
+            ? response.data.status
+            : null,
+        provider: "instagram",
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    };
 }
 
 function replySuggestionPath(conversationId) {

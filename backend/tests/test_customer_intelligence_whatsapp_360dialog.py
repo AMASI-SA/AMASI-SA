@@ -218,7 +218,7 @@ async def test_channel_basic_auth_routes_inbound_echo_and_status_without_send():
     echo = gateway.messages[1][1]
     assert inbound.direction == "inbound" and inbound.sender_type == "customer"
     assert echo.direction == "outbound" and echo.sender_type == "employee"
-    assert echo.analysis_status == "not_requested"
+    assert echo.analysis_status == "pending"
     assert echo.external_conversation_id.get_secret_value() == "966500000000"
     assert gateway.statuses[0][1:] == ("wamid.echo-1", "delivered")
     assert not hasattr(_adapter(db), "send")

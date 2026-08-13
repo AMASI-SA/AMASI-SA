@@ -1,7 +1,7 @@
 """Permission-scoped, no-egress view of persisted customer conversations.
 
-The WhatsApp webhook stores customer identity and message content encrypted at
-rest.  This module is the only read boundary for the live inbox: it scopes every
+Channel webhooks store customer identity and message content encrypted at rest.
+This module is the only read boundary for the live inbox: it scopes every
 query to channels owned by the authenticated Mezan owner, decrypts only the
 fields required by the screen, and never exposes provider identifiers, phone
 numbers, credentials, or a send capability.
@@ -48,6 +48,7 @@ class LiveInboxMessage(InboxResponseModel):
     mime_type: str | None = None
     occurred_at: datetime
     delivery_state: Literal["received", "sent", "delivered", "read", "failed"]
+    surface: Literal["direct_message", "comment", "unknown"] = "direct_message"
     content_available: bool = True
 
 
@@ -55,7 +56,8 @@ class LiveInboxConversation(InboxResponseModel):
     conversation_id: str
     customer_id: str
     customer_name: str
-    channel: Literal["whatsapp"] = "whatsapp"
+    channel: Literal["whatsapp", "instagram"]
+    surface: Literal["direct_message", "comment", "unknown"] = "direct_message"
     status: Literal["open", "needs_human", "follow_up_due", "resolved", "closed"]
     last_message: str
     last_message_at: datetime
@@ -66,7 +68,7 @@ class LiveInboxConversation(InboxResponseModel):
 
 
 class LiveInboxConnection(InboxResponseModel):
-    provider: Literal["whatsapp"] = "whatsapp"
+    provider: Literal["whatsapp", "instagram"]
     connected_channels: int = Field(ge=0)
     receiving_channels: int = Field(ge=0)
     status: Literal["connected", "not_connected"]
@@ -77,6 +79,8 @@ class LiveInboxSafetyPolicy(InboxResponseModel):
     receive_only: Literal[True] = True
     writes_allowed: Literal[False] = False
     whatsapp_send_allowed: Literal[False] = False
+    instagram_send_allowed: Literal[False] = False
+    instagram_comment_reply_allowed: Literal[False] = False
     ai_auto_reply_allowed: Literal[False] = False
     commerce_mutation_allowed: Literal[False] = False
 
@@ -85,8 +89,9 @@ class LiveInboxResponse(InboxResponseModel):
     schema_version: Literal[1] = 1
     generated_at: datetime
     mode: Literal["live_receive_only"] = "live_receive_only"
-    data_origin: Literal["whatsapp_webhook"] = "whatsapp_webhook"
+    data_origin: Literal["whatsapp_webhook", "channel_webhooks"] = "whatsapp_webhook"
     connection: LiveInboxConnection
+    connections: list[LiveInboxConnection] = Field(default_factory=list)
     conversation_count: int = Field(ge=0)
     message_count: int = Field(ge=0)
     content_unavailable_count: int = Field(default=0, ge=0)
@@ -145,10 +150,10 @@ def _decrypt(ciphertext: Any) -> tuple[dict[str, Any], bool]:
         return {}, False
 
 
-def _customer_name(identity: dict[str, Any] | None) -> str:
+def _customer_name(identity: dict[str, Any] | None, *, provider: str) -> str:
     profile, available = _decrypt((identity or {}).get("private_profile_ciphertext"))
     name = _text(profile.get("name")) if available else None
-    return name or "عميل واتساب"
+    return name or ("عميل إنستغرام" if provider == "instagram" else "عميل واتساب")
 
 
 def _message_view(document: dict[str, Any], *, fallback: datetime) -> LiveInboxMessage:
@@ -162,6 +167,9 @@ def _message_view(document: dict[str, Any], *, fallback: datetime) -> LiveInboxM
     caption = _text(payload.get("caption"))
     filename = _text(payload.get("filename"))
     mime_type = _text(payload.get("mime_type"))
+    surface = _text(payload.get("surface")) or "direct_message"
+    if surface not in {"direct_message", "comment", "unknown"}:
+        surface = "unknown"
     return LiveInboxMessage(
         message_id=str(document.get("message_id") or "message"),
         direction=(
@@ -182,11 +190,12 @@ def _message_view(document: dict[str, Any], *, fallback: datetime) -> LiveInboxM
             in {"received", "sent", "delivered", "read", "failed"}
             else ("sent" if document.get("direction") == "outbound" else "received")
         ),
+        surface=surface,
         content_available=available,
     )
 
 
-def _message_summary(message: LiveInboxMessage) -> str:
+def _message_summary(message: LiveInboxMessage, *, provider: str) -> str:
     if not message.content_available:
         return "تعذر عرض محتوى الرسالة المشفّر"
     if message.body:
@@ -197,13 +206,13 @@ def _message_summary(message: LiveInboxMessage) -> str:
         "image": "صورة",
         "audio": "رسالة صوتية",
         "document": message.filename or "مستند",
-        "interactive": "تفاعل واتساب",
+        "interactive": "تفاعل إنستغرام" if provider == "instagram" else "تفاعل واتساب",
     }
     return labels.get(message.kind, "رسالة واردة")
 
 
 class CustomerIntelligenceInboxService:
-    """Read persisted WhatsApp evidence for one authenticated owner."""
+    """Read persisted WhatsApp and Instagram evidence for one owner."""
 
     def __init__(self, db: Any, *, now: Any | None = None):
         self._db = db
@@ -222,24 +231,31 @@ class CustomerIntelligenceInboxService:
         generated_at = self._now()
         owner_id = str(owner_user_id).strip()
         resolved_actor_id = str(actor_id or owner_id).strip()
-        channel_documents = await _find_many(
-            getattr(self._db, CHANNELS_COLLECTION),
-            {"user_id": owner_id, "provider": "whatsapp"},
-            {
-                "_id": 0,
-                "user_id": 1,
-                "merchant_id": 1,
-                "channel_id": 1,
-                "status": 1,
-                "ingress_enabled": 1,
-                "egress_mode": 1,
-                "send_allowed": 1,
-                "ai_auto_reply_allowed": 1,
-                "updated_at": 1,
-            },
-            sort=[("updated_at", -1)],
-            limit=20,
-        )
+        channel_collection = getattr(self._db, CHANNELS_COLLECTION)
+        channel_projection = {
+            "_id": 0,
+            "user_id": 1,
+            "merchant_id": 1,
+            "channel_id": 1,
+            "provider": 1,
+            "status": 1,
+            "ingress_enabled": 1,
+            "egress_mode": 1,
+            "send_allowed": 1,
+            "ai_auto_reply_allowed": 1,
+            "updated_at": 1,
+        }
+        channel_documents: list[dict[str, Any]] = []
+        for provider in ("whatsapp", "instagram"):
+            channel_documents.extend(
+                await _find_many(
+                    channel_collection,
+                    {"user_id": owner_id, "provider": provider},
+                    channel_projection,
+                    sort=[("updated_at", -1)],
+                    limit=20,
+                )
+            )
 
         # Fail closed if an out-of-band database edit violates receive-only.
         safe_channels = [
@@ -249,23 +265,43 @@ class CustomerIntelligenceInboxService:
             and channel.get("send_allowed") is False
             and channel.get("ai_auto_reply_allowed") is False
         ]
-        connected_channels = [
-            channel for channel in safe_channels if channel.get("status") == "connected"
-        ]
-        receiving_channels = [
-            channel
-            for channel in connected_channels
-            if channel.get("ingress_enabled") is True
-        ]
-        connection = LiveInboxConnection(
-            connected_channels=len(connected_channels),
-            receiving_channels=len(receiving_channels),
-            status="connected" if receiving_channels else "not_connected",
+        connections: list[LiveInboxConnection] = []
+        receiving_channels: list[dict[str, Any]] = []
+        for provider in ("whatsapp", "instagram"):
+            provider_safe = [
+                channel for channel in safe_channels if channel.get("provider") == provider
+            ]
+            provider_connected = [
+                channel for channel in provider_safe if channel.get("status") == "connected"
+            ]
+            provider_receiving = [
+                channel
+                for channel in provider_connected
+                if channel.get("ingress_enabled") is True
+            ]
+            receiving_channels.extend(provider_receiving)
+            connections.append(
+                LiveInboxConnection(
+                    provider=provider,
+                    connected_channels=len(provider_connected),
+                    receiving_channels=len(provider_receiving),
+                    status="connected" if provider_receiving else "not_connected",
+                )
+            )
+        # ``connection`` remains the WhatsApp compatibility field for older
+        # clients. New clients use the complete provider list above.
+        connection = connections[0]
+        data_origin = (
+            "channel_webhooks"
+            if any(row.get("provider") == "instagram" for row in channel_documents)
+            else "whatsapp_webhook"
         )
         if not receiving_channels:
             return LiveInboxResponse(
                 generated_at=generated_at,
+                data_origin=data_origin,
                 connection=connection,
+                connections=connections,
                 conversation_count=0,
                 message_count=0,
                 conversations=[],
@@ -283,7 +319,9 @@ class CustomerIntelligenceInboxService:
         if not scopes:
             return LiveInboxResponse(
                 generated_at=generated_at,
+                data_origin=data_origin,
                 connection=connection,
+                connections=connections,
                 conversation_count=0,
                 message_count=0,
                 conversations=[],
@@ -355,6 +393,10 @@ class CustomerIntelligenceInboxService:
 
         conversations: list[LiveInboxConversation] = []
         content_unavailable_count = 0
+        channel_providers = {
+            str(channel.get("channel_id") or ""): str(channel.get("provider") or "")
+            for channel in receiving_channels
+        }
         for conversation in conversation_documents:
             scope = {
                 "user_id": owner_id,
@@ -411,14 +453,22 @@ class CustomerIntelligenceInboxService:
                 "closed",
             }:
                 status_value = "open"
+            provider = channel_providers.get(scope["channel_id"], "whatsapp")
+            if provider not in {"whatsapp", "instagram"}:
+                provider = "whatsapp"
+            surface = messages[-1].surface if messages else "unknown"
             conversations.append(
                 LiveInboxConversation(
                     conversation_id=scope["conversation_id"],
                     customer_id=str(conversation.get("customer_id") or "customer"),
-                    customer_name=_customer_name(identity),
+                    customer_name=_customer_name(identity, provider=provider),
+                    channel=provider,
+                    surface=surface,
                     status=status_value,
                     last_message=(
-                        _message_summary(messages[-1]) if messages else "لا توجد رسالة قابلة للعرض"
+                        _message_summary(messages[-1], provider=provider)
+                        if messages
+                        else "لا توجد رسالة قابلة للعرض"
                     ),
                     last_message_at=last_message_at,
                     message_count=conversation_message_count,
@@ -445,7 +495,9 @@ class CustomerIntelligenceInboxService:
 
         return LiveInboxResponse(
             generated_at=generated_at,
+            data_origin=data_origin,
             connection=connection,
+            connections=connections,
             conversation_count=conversation_count,
             message_count=total_message_count,
             content_unavailable_count=content_unavailable_count,
