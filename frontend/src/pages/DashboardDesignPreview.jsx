@@ -320,7 +320,7 @@ function AdsSpendCard() {
     const interval = granularity === "daily" ? 2 : 0;
 
     return (
-        <Panel className="h-full border-amber-200" testid="preview-ads-chart">
+        <Panel className="border-amber-200" testid="preview-ads-chart">
             <div className="flex h-14 items-center justify-between border-b border-amber-100 bg-amber-50/60 px-4">
                 <div className="flex items-center gap-2">
                     <CircleDollarSign className="h-5 w-5 text-amber-600" />
@@ -396,7 +396,7 @@ function ProfitSummaryCardPreview() {
         - PREVIEW_TOTALS.operatingExpenses;
 
     return (
-        <Panel className="h-full border-emerald-200" testid="preview-profit-summary">
+        <Panel className="border-emerald-200" testid="preview-profit-summary">
             <div className="flex h-14 items-center justify-between border-b border-emerald-100 bg-emerald-50/60 px-4">
                 <div className="flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-emerald-600" />
@@ -406,7 +406,7 @@ function ProfitSummaryCardPreview() {
             </div>
             <div className="px-5 py-3">
                 {PROFIT_ROWS.map((row) => (
-                    <div dir="ltr" key={row.label} className="grid min-h-[54px] grid-cols-[minmax(180px,0.72fr)_minmax(0,1.28fr)_40px] items-center gap-4 border-b border-slate-100 py-2 last:border-b-0">
+                    <div dir="ltr" key={row.label} className="grid min-h-[58px] grid-cols-[minmax(180px,0.72fr)_minmax(0,1.28fr)_40px] items-center gap-4 border-b border-slate-100 py-2 last:border-b-0">
                         <div className="flex min-w-0 items-center gap-2 text-left">
                             {row.expandable && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
                             <div className="min-w-0">
