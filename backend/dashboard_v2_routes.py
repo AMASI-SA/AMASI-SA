@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 
 from auth import ensure_user_settings
+from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
 from dashboard_v2_ad_costs import (
     apply_mezan_v2_ad_account_costs,
     merge_ad_bank_fees_into_dashboard,
@@ -934,6 +935,29 @@ def make_dashboard_v2_router(
             shipping_companies=shipping_companies,
             include_marketing_attribution=True,
         )
+        today = _today_riyadh()
+        month_start = today.replace(day=1).isoformat()
+        today_s = today.isoformat()
+        if from_date == month_start and to_date == today_s:
+            month_orders = orders
+        else:
+            month_orders = await _filtered_orders(
+                db,
+                user_id,
+                from_date=month_start,
+                to_date=today_s,
+                payment_methods=payment_methods,
+                shipping_companies=shipping_companies,
+            )
+        month_kpis = {
+            "from_date": month_start,
+            "to_date": today_s,
+            "total_orders": len(month_orders),
+            "total_sales": round(
+                sum(_float(order.get("total_amount")) for order in month_orders),
+                2,
+            ),
+        }
         product_cost = await build_mezan_v2_product_cost(db, user_id, orders)
         ads = await build_mezan_v2_ads(
             db,
@@ -950,7 +974,6 @@ def make_dashboard_v2_router(
         previous_ads = _float(totals.get("total_ads_cost"))
         previous_operating = _float(totals.get("operating_expenses_total"))
         salary_total = _float(totals.get("operating_salaries_total"))
-        today = _today_riyadh()
         try:
             operating_from = date.fromisoformat(from_date) if from_date else today.replace(day=1)
         except (TypeError, ValueError):
@@ -1031,6 +1054,7 @@ def make_dashboard_v2_router(
             "recent_analyses": [],
             "product_cost_v2": product_cost,
             "ads_v2": ads,
+            "month_kpis": month_kpis,
             "dashboard_source": "mezan_v2",
             "source_contract": {
                 "orders_sales_payment_methods": "unified_orders:mezan_v2",
@@ -1064,12 +1088,79 @@ def make_dashboard_v2_router(
                     "currency": 1,
                     "total": 1,
                     "items": 1,
+                    "customer_identity_id": 1,
                     "cart_updated_at": 1,
                     "updated_at": 1,
                 },
             ).sort([("cart_updated_at", -1), ("updated_at", -1)]),
-            5,
+            20,
         )
+        identity_ids = sorted({
+            str(row.get("customer_identity_id"))
+            for row in rows
+            if row.get("customer_identity_id")
+        })
+        customer_names: dict[str, str] = {}
+        if identity_ids:
+            identities = await _to_list(
+                db[CUSTOMER_IDENTITY_COLLECTION].find(
+                    {
+                        "user_id": str(current["id"]),
+                        "customer_identity_id": {"$in": identity_ids},
+                    },
+                    {"_id": 0, "customer_identity_id": 1, "private_profile_ciphertext": 1},
+                ),
+                len(identity_ids),
+            )
+            for identity in identities:
+                try:
+                    profile = decrypt_private_payload(identity.get("private_profile_ciphertext"))
+                except (RuntimeError, ValueError, TypeError):
+                    profile = {}
+                name = str(
+                    profile.get("name")
+                    or " ".join(filter(None, [profile.get("first_name"), profile.get("last_name")]))
+                ).strip()
+                if name:
+                    customer_names[str(identity.get("customer_identity_id"))] = name[:160]
+
+        product_ids = sorted({
+            str(item.get("product_id"))
+            for row in rows
+            for item in (row.get("items") or [])
+            if isinstance(item, dict) and item.get("product_id")
+        })
+        product_images: dict[str, str] = {}
+        if product_ids:
+            product_id_values: list[Any] = list(product_ids)
+            product_id_values.extend(
+                int(product_id) for product_id in product_ids if product_id.isdigit()
+            )
+            products = await _to_list(
+                db[PRODUCTS].find(
+                    {
+                        "user_id": str(current["id"]),
+                        "salla_product_id": {"$in": product_id_values},
+                    },
+                    {"_id": 0, "salla_product_id": 1, "main_image": 1},
+                ),
+                len(product_ids),
+            )
+            product_images = {
+                str(product.get("salla_product_id")): str(product.get("main_image") or "")
+                for product in products
+                if product.get("main_image")
+            }
+
+        for row in rows:
+            row["customer_name"] = customer_names.get(
+                str(row.get("customer_identity_id") or ""),
+                "عميل سلة",
+            )
+            row.pop("customer_identity_id", None)
+            for item in row.get("items") or []:
+                if isinstance(item, dict) and not item.get("image_url"):
+                    item["image_url"] = product_images.get(str(item.get("product_id") or ""), "")
         return {"items": rows, "count": len(rows), "live": True}
 
     @router.get("/dashboard-v2/product-cost-summary")
