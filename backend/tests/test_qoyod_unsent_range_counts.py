@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 import mongomock_motor
 import pytest
 
-from integrations.qoyod.unsent_orders import FAILED, SENT, list_unsent_orders
+from integrations.qoyod.unsent_orders import (
+    FAILED,
+    SENT,
+    UNSENT,
+    list_unsent_orders,
+)
 
 
 TENANT = "main"
@@ -178,7 +183,7 @@ async def test_noneligible_current_salla_status_hides_old_failure(db):
 
 
 @pytest.mark.asyncio
-async def test_eligible_current_salla_status_keeps_actionable_failure(db):
+async def test_eligible_current_salla_status_keeps_error_in_unsent_list(db):
     await _insert_quarantined(
         db,
         order_number="eligible-failure",
@@ -190,7 +195,8 @@ async def test_eligible_current_salla_status_keeps_actionable_failure(db):
         db, user_id=TENANT, days=90, limit=1000, now=NOW,
     )
 
-    assert result["counts"][FAILED] == 1
+    assert result["counts"][UNSENT] == 1
+    assert result["counts"][FAILED] == 0
     assert result["excluded_not_eligible"] == 0
-    assert result["orders"][0]["status"] == FAILED
+    assert result["orders"][0]["status"] == UNSENT
     assert result["orders"][0]["retry_allowed"] is True
