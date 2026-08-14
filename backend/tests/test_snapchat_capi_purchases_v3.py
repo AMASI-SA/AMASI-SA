@@ -186,8 +186,10 @@ class _Cursor:
 class _PixelCollection:
     def __init__(self, rows):
         self.rows = rows
+        self.query = None
 
     def find(self, query, projection):
+        self.query = query
         return _Cursor(self.rows)
 
 
@@ -208,16 +210,23 @@ async def test_pixel_resolution_fails_closed_for_multiple_pixels(monkeypatch):
         return [{"ad_account_id": "a1"}, {"ad_account_id": "a2"}]
 
     monkeypatch.setattr(capi, "_load_selected_accounts", selected_accounts)
-    result = await capi.resolve_capi_pixel_id(
-        _PixelDb([
+    db = _PixelDb(
+        [
             {"pixel_id": "pixel-one"},
             {"pixel_id": "pixel-two"},
-        ]),
+        ]
+    )
+    result = await capi.resolve_capi_pixel_id(
+        db,
         "owner-1",
     )
     assert result.status == "pixel_selection_required"
     assert result.pixel_id is None
     assert result.candidates == ("pixel-one", "pixel-two")
+    assert db.collection.query["$or"] == [
+        {"ad_account_id": {"$in": ["a1", "a2"]}},
+        {"ad_account_ids": {"$in": ["a1", "a2"]}},
+    ]
 
 
 @pytest.mark.asyncio
