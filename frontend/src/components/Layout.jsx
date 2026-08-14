@@ -13,6 +13,7 @@ import {
     Plug,
     Queue,
     Robot,
+    CalendarBlank,
     UsersThree,
     Warehouse,
 } from "@phosphor-icons/react";
@@ -46,6 +47,7 @@ const V2_LINKS = [
     { to: "/fulfillment-v2", label: "إدارة التجهيز", Icon: Queue },
     { to: "/inventory-receiving-v2", label: "استلام المخزون", Icon: ClipboardText },
     { to: "/employees-v2", label: "الموظفون والرواتب", Icon: UsersThree },
+    { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", Icon: CalendarBlank },
     { to: "/employees-v2?workspace=permissions", label: "الصلاحيات وإدارة التجهيز", Icon: UsersThree },
     { to: "/products-v2", label: "المنتجات", Icon: Package },
     { to: "/products-v2?workspace=intake", label: "استقبال المنتجات", Icon: Robot },

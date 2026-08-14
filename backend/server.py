@@ -86,6 +86,10 @@ from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
 )
+from recurring_obligations_routes import (
+    ensure_recurring_obligation_indexes,
+    make_recurring_obligations_router,
+)
 from settlements_routes import (
     attach_settlements_routes,
     aggregate_settlements_by_provider,
@@ -3968,6 +3972,7 @@ attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
+api.include_router(make_recurring_obligations_router(db, current_user))
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_transfers_routes(api, db)
@@ -4371,6 +4376,7 @@ async def on_startup():
     await ensure_transfers_indexes(db)
     await ensure_accounts_indexes(db)
     await ensure_liabilities_indexes(db)
+    await ensure_recurring_obligation_indexes(db)
     await ensure_counterparties_indexes(db)
     await ensure_purchase_invoices_indexes(db)
     await ensure_custom_app_indexes(db)
