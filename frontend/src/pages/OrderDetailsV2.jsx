@@ -35,6 +35,7 @@ import {
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
+import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
@@ -766,7 +767,10 @@ function AdvancedOrderInfo({ order }) {
     const attribution = firstPresent(order.utm, order.marketing, order.attribution, sourceObject.attribution, sourceObject.utm) || {};
     const source = firstPresent(order.source_native, order.source_name, sourceObject.source_native, sourceObject.source, attribution.source, attribution.utm_source, typeof order.source === "string" ? order.source : null);
     const medium = firstPresent(order.utm_medium, sourceObject.utm_medium, attribution.medium, attribution.utm_medium);
-    const campaign = firstPresent(order.utm_campaign, sourceObject.utm_campaign, attribution.campaign, attribution.utm_campaign);
+    const {
+        campaignDisplay: campaign,
+        campaignId,
+    } = resolveOrderCampaign(order);
     const channel = firstPresent(order.channel_native, order.channel, order.order_channel, sourceObject.channel, sourceObject.source_event);
     const device = firstPresent(order.device_name, order.device, order.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
     const assignments = firstPresent(order.assignments, order.responsibilities, order.staff) || {};
@@ -781,6 +785,7 @@ function AdvancedOrderInfo({ order }) {
                     <InfoRow label="المصدر" value={source} />
                     <InfoRow label="الوسيط" value={medium} />
                     <InfoRow label="الحملة" value={campaign} />
+                    <InfoRow label="معرّف الحملة" value={campaignId} />
                     <InfoRow label="القناة" value={channel} />
                     <InfoRow label="الجهاز" value={device} />
                 </div>

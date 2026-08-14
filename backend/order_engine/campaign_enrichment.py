@@ -35,6 +35,13 @@ async def _lookup_campaign_name(db: Any, *, user_id: str, campaign_id: str) -> s
 
     lookups = (
         (
+            "mezan_meta_campaign_performance_daily_v2",
+            {"user_id": user_id, "campaign_id": campaign_id},
+            {"campaign_name": 1, "updated_at": 1, "date": 1},
+            "campaign_name",
+            [("date", -1), ("updated_at", -1)],
+        ),
+        (
             "ads_v2_spend_raw",
             {"user_id": user_id, "dimension_keys.campaign_id": campaign_id},
             {"dimension_keys.campaign_name": 1, "fetched_at": 1},
@@ -113,6 +120,13 @@ async def enrich_order_campaigns(
             campaign_id = raw_campaign
         elif not campaign_name and raw_campaign and not _looks_like_campaign_id(raw_campaign):
             campaign_name = raw_campaign
+
+        # Salla commonly places the numeric campaign ID in utm_campaign.
+        # canonical_order_source preserves that provider value as a possible
+        # campaign name, so normalize it back to identity before catalog lookup.
+        if campaign_name and _looks_like_campaign_id(campaign_name):
+            campaign_id = campaign_id or campaign_name
+            campaign_name = None
 
         if campaign_id and not campaign_name:
             if campaign_id not in cache:

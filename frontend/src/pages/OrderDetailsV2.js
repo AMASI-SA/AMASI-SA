@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import CompactOrderTimeline from "../components/CompactOrderTimeline";
 import { useOrder } from "../hooks/useOrders";
+import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import OriginalOrderDetailsV2 from "./OrderDetailsV2.jsx";
 
 const ENABLE_LEGACY_COMPACT_TIMELINE = false;
@@ -75,12 +76,6 @@ function translate(value, dictionary) {
     return dictionary[raw.toLowerCase()] || raw;
 }
 
-function looksLikeCampaignId(value) {
-    const text = readable(value);
-    if (text === "—") return false;
-    return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(text) || /^\d{12,}$/.test(text) || text.length >= 24;
-}
-
 function sourceValues(order) {
     const sourceObject = typeof order?.source === "object" && order.source ? order.source : {};
     const attribution = firstPresent(order?.utm, order?.marketing, order?.attribution, sourceObject.attribution, sourceObject.utm) || {};
@@ -90,30 +85,15 @@ function sourceValues(order) {
         typeof order?.source === "string" ? order.source : null,
     );
     const medium = firstPresent(order?.utm_medium, sourceObject.utm_medium, attribution.medium, attribution.utm_medium);
-    const campaignName = firstPresent(
-        order?.campaign_name,
-        sourceObject.campaign_name,
-        attribution.campaign_name,
-    );
-    const rawCampaign = firstPresent(
-        order?.utm_campaign,
-        sourceObject.utm_campaign,
-        attribution.campaign,
-        attribution.utm_campaign,
-    );
-    const campaignId = firstPresent(order?.campaign_id, sourceObject.campaign_id, looksLikeCampaignId(rawCampaign) ? rawCampaign : null);
-    const campaignDisplay = readable(campaignName) !== "—"
-        ? readable(campaignName)
-        : campaignId
-            ? "اسم الحملة غير متوفر"
-            : readable(rawCampaign);
+    const { campaignDisplay, campaignId } = resolveOrderCampaign(order);
     const channel = firstPresent(order?.channel_native, order?.channel, order?.order_channel, sourceObject.channel, sourceObject.source_event);
     const device = firstPresent(order?.device_name, order?.device, order?.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
 
     return {
         المصدر: translate(source, SOURCE_LABELS),
         الوسيط: translate(medium, MEDIUM_LABELS),
-        الحملة: campaignDisplay,
+        الحملة: readable(campaignDisplay),
+        "معرّف الحملة": readable(campaignId),
         القناة: translate(channel, SOURCE_LABELS),
         الجهاز: translate(device, DEVICE_LABELS),
     };
