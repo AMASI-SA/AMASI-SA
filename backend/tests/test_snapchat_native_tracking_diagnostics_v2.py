@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pytest
@@ -116,6 +117,10 @@ class FakeCollection:
             if inserted:
                 target.update(deepcopy(update.get("$setOnInsert") or {}))
             target.update(deepcopy(update.get("$set") or {}))
+            for key, value in (update.get("$addToSet") or {}).items():
+                values = target.setdefault(key, [])
+                if value not in values:
+                    values.append(deepcopy(value))
         self.db.writes.append(
             (
                 self.name,
@@ -344,6 +349,7 @@ async def test_tracking_diagnostics_reads_pixel_domains_and_signal_quality(monke
 
     asset = db.rows[tracking.TRACKING_ASSET_COLLECTION][0]
     assert asset["pixel_id"] == "pixel-1"
+    assert asset["ad_account_ids"] == ["account-1"]
     assert asset["total_events_7d"] == 150
     assert "pixel_javascript" not in repr(asset)
     diagnostics = db.rows[tracking.EVENT_DIAGNOSTIC_COLLECTION]
@@ -376,6 +382,44 @@ async def test_tracking_diagnostics_reads_pixel_domains_and_signal_quality(monke
         "campaigns",
         "orders",
     } & write_collections
+
+
+@pytest.mark.asyncio
+async def test_shared_pixel_preserves_every_linked_ad_account():
+    db = FakeDB()
+    context = SimpleNamespace(
+        db=db,
+        user_id="owner-1",
+        now_iso=lambda: NOW.isoformat(),
+    )
+    pixel = {
+        "id": "shared-pixel",
+        "name": "Self Service Pixel",
+        "status": "ACTIVE",
+        "effective_status": "ACTIVE",
+    }
+
+    await tracking._upsert_asset(
+        context,
+        account={"ad_account_id": "self-service"},
+        pixel=pixel,
+        domains=[],
+        total_events=4,
+        diagnostics_status="complete",
+    )
+    await tracking._upsert_asset(
+        context,
+        account={"ad_account_id": "saudi"},
+        pixel=pixel,
+        domains=[],
+        total_events=4,
+        diagnostics_status="complete",
+    )
+
+    rows = db.rows[tracking.TRACKING_ASSET_COLLECTION]
+    assert len(rows) == 1
+    assert rows[0]["ad_account_id"] == "saudi"
+    assert rows[0]["ad_account_ids"] == ["self-service", "saudi"]
 
 
 @pytest.mark.asyncio
