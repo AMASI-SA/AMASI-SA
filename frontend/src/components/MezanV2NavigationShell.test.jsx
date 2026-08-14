@@ -40,6 +40,7 @@ test("Mezan 2 shell is limited to Mezan 2 routes", () => {
         "/orders-v2/280001234",
         "/fulfillment-v2",
         "/inventory-receiving-v2",
+        "/recurring-obligations",
         "/products-v2",
         "/components-v2",
         "/suppliers-v2",
@@ -152,6 +153,15 @@ test("Mezan 2 exposes an independent suppliers section", () => {
         { to: "/suppliers-v2", label: "الموردون والفواتير", exactSearch: true },
     ]);
     expect(activeNavigationSection({ pathname: "/suppliers-v2", search: "" })?.id).toBe("suppliers");
+});
+
+test("recurring obligations are a first-class Mezan 2 finance page", () => {
+    const finance = MEZAN_V2_NAV_SECTIONS.find((section) => section.id === "finance");
+    expect(finance.label).toBe("الإدارة المالية");
+    expect(finance.items).toEqual([
+        { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", exactSearch: true },
+    ]);
+    expect(activeNavigationSection({ pathname: "/recurring-obligations", search: "" })?.id).toBe("finance");
 });
 
 test("marketing report and cost routes are separate from app integration routes", () => {

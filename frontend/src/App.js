@@ -17,6 +17,7 @@ import ShippingTransfers from "./pages/ShippingTransfers";
 import ShippingCompanySettings from "./pages/ShippingCompanySettings";
 import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
+import RecurringObligations from "./pages/RecurringObligations";
 import OperationalReports from "./pages/OperationalReports";
 import AdsReport from "./pages/AdsReport";
 import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
@@ -293,6 +294,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><EmployeesV2 /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/recurring-obligations"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><RecurringObligations /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

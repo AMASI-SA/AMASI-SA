@@ -11,6 +11,7 @@ import {
     Package,
     Plug,
     Queue,
+    Receipt,
     Robot,
     Storefront,
     UsersThree,
@@ -78,6 +79,14 @@ export const MEZAN_V2_NAV_SECTIONS = [
         ],
     },
     {
+        id: "finance",
+        label: "الإدارة المالية",
+        Icon: Receipt,
+        items: [
+            { to: "/recurring-obligations", label: "الالتزامات والمصاريف الدورية", exactSearch: true },
+        ],
+    },
+    {
         id: "marketing",
         label: "التسويق",
         Icon: Megaphone,
@@ -116,6 +125,7 @@ const MEZAN_V2_PATHS = [
     "/fulfillment-v2",
     "/inventory-receiving-v2",
     "/employees-v2",
+    "/recurring-obligations",
     "/products-v2",
     "/components-v2",
     "/suppliers-v2",

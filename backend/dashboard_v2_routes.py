@@ -35,6 +35,7 @@ from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
+from recurring_obligations_routes import compute_recurring_obligations_for_range
 from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
@@ -921,13 +922,29 @@ def make_dashboard_v2_router(
         previous_ads = _float(totals.get("total_ads_cost"))
         previous_operating = _float(totals.get("operating_expenses_total"))
         salary_total = _float(totals.get("operating_salaries_total"))
+        today = _today_riyadh()
+        try:
+            operating_from = date.fromisoformat(from_date) if from_date else today.replace(day=1)
+        except (TypeError, ValueError):
+            operating_from = today.replace(day=1)
+        try:
+            operating_to = date.fromisoformat(to_date) if to_date else today
+        except (TypeError, ValueError):
+            operating_to = today
+        if operating_to < operating_from:
+            operating_from, operating_to = operating_to, operating_from
+        recurring = await compute_recurring_obligations_for_range(
+            db, user_id, operating_from, operating_to
+        )
+        recurring_total = _float(recurring.get("total"))
+        operating_total = salary_total + recurring_total
         product_total = product_cost["total"]
         ads_total = ads["total"]
         totals["net_profit"] = round(
             _float(totals.get("net_profit"))
             + previous_product - product_total
             + previous_ads - ads_total
-            + previous_operating - salary_total,
+            + previous_operating - operating_total,
             2,
         )
         config = response.get("net_sales_config") or {}
@@ -943,7 +960,7 @@ def make_dashboard_v2_router(
             )
         if config.get("deduct_operating_expenses", True):
             totals["net_sales"] = round(
-                _float(totals.get("net_sales")) + previous_operating - salary_total,
+                _float(totals.get("net_sales")) + previous_operating - operating_total,
                 2,
             )
         totals.update({
@@ -959,8 +976,12 @@ def make_dashboard_v2_router(
             "daily_products_total": product_total,
             "daily_costs_total": round(product_total + ads_total, 2),
             "daily_expenses_total": product_total,
-            "operating_expenses_total": round(salary_total, 2),
-            "operating_rentals_total": 0.0,
+            "operating_expenses_total": round(operating_total, 2),
+            "operating_rentals_total": recurring["rentals_total"],
+            "operating_utilities_total": recurring["utilities_total"],
+            "operating_renewals_total": recurring["renewals_total"],
+            "operating_recurring_total": recurring["total"],
+            "operating_recurring_by_type": recurring["by_type"],
             "operating_prepaid_total": 0.0,
             "operating_prepaid_by_type": {},
             "operating_daily_other_total": 0.0,
@@ -988,6 +1009,7 @@ def make_dashboard_v2_router(
                 "product_cost": product_cost["source_contract"],
                 "advertising": ads["source_contract"],
                 "employee_salaries": "mezan_employee_salary_contracts_v2",
+                "recurring_obligations": "operating_recurring_obligations_v2",
                 "shipping_partners": "legacy_shipping_cost_ssot",
                 "payment_gateway_fees": "legacy_payment_method_settings + mezan_ad_account_cost_settings_v2",
             },
@@ -995,6 +1017,7 @@ def make_dashboard_v2_router(
             "accounting_write_reached": False,
             "qoyod_write_reached": False,
         })
+        response["recurring_obligations_v2"] = recurring
         return response
 
     @router.get("/dashboard-v2/product-cost-summary")
