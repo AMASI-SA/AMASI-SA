@@ -196,6 +196,130 @@ async def test_circuit_breaker_disables_automatic_sending():
     assert persisted["plan_b_auto_send_last_error"]["run_id"] == "run-1"
 
 
+class _RecoveryLookupCollection:
+    def __init__(self, row):
+        self.row = row
+        self.calls = []
+
+    async def find_one(self, selector, projection, **kwargs):
+        self.calls.append((selector, projection, kwargs))
+        return self.row
+
+
+class _RecoverySettingsCollection:
+    def __init__(self, modified_count=1):
+        self.modified_count = modified_count
+        self.calls = []
+
+    async def update_one(self, selector, update):
+        self.calls.append((selector, update))
+        result = _UpdateResult()
+        result.modified_count = self.modified_count
+        return result
+
+
+class _RecoveryDb:
+    def __init__(self, *, canary=True, salla=True):
+        self.qoyod_settings = _RecoverySettingsCollection()
+        self.qoyod_manual_canary_runs = _RecoveryLookupCollection(
+            {"run_id": "canary-1"} if canary else None
+        )
+        self.salla_integrations = _RecoveryLookupCollection(
+            {"user_id": "orders-user"} if salla else None
+        )
+
+
+def _transient_breaker_settings(**overrides):
+    value = _ready_settings(
+        auto_send=False,
+        plan_b_auto_send_armed_at=None,
+        plan_b_auto_send_disabled_reason="circuit_breaker",
+        plan_b_auto_send_disabled_at="2026-08-13T18:00:00+00:00",
+        plan_b_auto_send_last_error={
+            "code": "salla_status_refresh_failed",
+            "message": "تعذر التحقق من الحالة الحالية للطلب في سلة",
+            "run_id": "qoyod-auto-old",
+            "at": "2026-08-13T18:00:00+00:00",
+        },
+    )
+    value.update(overrides)
+    return value
+
+
+@pytest.mark.asyncio
+async def test_transient_salla_breaker_recovers_after_full_readiness_check(
+    monkeypatch,
+):
+    async def fake_get_api_key(db, tenant):
+        assert tenant == "main"
+        return "configured-key"
+
+    monkeypatch.setattr(auto_send, "get_api_key", fake_get_api_key)
+    db = _RecoveryDb()
+
+    recovered = await auto_send._recover_transient_salla_breaker(
+        db,
+        _transient_breaker_settings(),
+    )
+
+    assert auto_send.is_armed(recovered) is True
+    assert recovered["auto_send"] is True
+    assert recovered["plan_b_auto_send_disabled_reason"] is None
+    assert recovered["plan_b_auto_send_last_error"] is None
+    assert len(db.qoyod_settings.calls) == 1
+    selector, update = db.qoyod_settings.calls[0]
+    assert selector["plan_b_auto_send_last_error.code"] == (
+        "salla_status_refresh_failed"
+    )
+    assert update["$set"]["auto_send"] is True
+    assert update["$set"]["plan_b_auto_send_last_recovery"][
+        "previous_run_id"
+    ] == "qoyod-auto-old"
+    assert update["$inc"]["plan_b_auto_send_recovery_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_real_qoyod_breaker_never_auto_recovers(monkeypatch):
+    async def forbidden_get_api_key(db, tenant):
+        raise AssertionError("real failures must remain stopped")
+
+    monkeypatch.setattr(auto_send, "get_api_key", forbidden_get_api_key)
+    db = _RecoveryDb()
+    settings = _transient_breaker_settings(
+        plan_b_auto_send_last_error={
+            "code": "qoyod_http_error",
+            "message": "تعذر الاتصال بقيود",
+        },
+    )
+
+    recovered = await auto_send._recover_transient_salla_breaker(
+        db,
+        settings,
+    )
+
+    assert recovered is None
+    assert db.qoyod_settings.calls == []
+
+
+@pytest.mark.asyncio
+async def test_transient_breaker_stays_stopped_when_readiness_is_incomplete(
+    monkeypatch,
+):
+    async def missing_get_api_key(db, tenant):
+        return None
+
+    monkeypatch.setattr(auto_send, "get_api_key", missing_get_api_key)
+    db = _RecoveryDb()
+
+    recovered = await auto_send._recover_transient_salla_breaker(
+        db,
+        _transient_breaker_settings(),
+    )
+
+    assert recovered is None
+    assert db.qoyod_settings.calls == []
+
+
 class _AutoRunsCollection:
     def __init__(self):
         self.inserted = []

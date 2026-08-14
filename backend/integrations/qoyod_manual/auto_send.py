@@ -35,6 +35,7 @@ from typing import Any, Optional
 
 from pymongo.errors import DuplicateKeyError
 
+from integrations.qoyod.credentials import get_api_key
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
 from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
@@ -164,6 +165,121 @@ async def _current_settings(db) -> dict:
     return await db.qoyod_settings.find_one(
         {"user_id": _TENANT}, {"_id": 0},
     ) or {}
+
+
+async def _recover_transient_salla_breaker(
+    db, settings: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Re-arm a legacy breaker caused only by a transient Salla read.
+
+    ``salla_status_refresh_failed`` is handled as ``retry_later`` by the
+    current worker, so it can no longer trip the circuit breaker.  A breaker
+    persisted by an older process, however, leaves ``auto_send`` disabled
+    forever after a deploy.  Recover that one known-safe state atomically,
+    but only after re-validating the same credential, canary, Salla-owner and
+    settings contract used by the settings activation endpoint.
+
+    Real Qoyod, amount, authentication and unknown failures remain stopped.
+    """
+    last_error = settings.get("plan_b_auto_send_last_error") or {}
+    error_code = str(last_error.get("code") or "").strip()
+    if not (
+        settings.get("enabled") is True
+        and settings.get("auto_send") is False
+        and settings.get("dry_run_mode") is not True
+        and settings.get("plan_b_auto_send_disabled_reason")
+        == "circuit_breaker"
+        and error_code in _PER_ORDER_RETRY_CODES
+    ):
+        return None
+
+    orders_user_id = str(
+        settings.get("plan_b_auto_send_orders_user_id") or ""
+    ).strip()
+    if not orders_user_id:
+        return None
+
+    try:
+        key = await get_api_key(db, _TENANT)
+        canary = await db.qoyod_manual_canary_runs.find_one(
+            {"status": "succeeded"},
+            {"_id": 0, "run_id": 1, "finished_at": 1},
+            sort=[("finished_at", -1)],
+        )
+        salla_integration = await db.salla_integrations.find_one(
+            {"user_id": orders_user_id, "status": "connected"},
+            {"_id": 0, "user_id": 1},
+        )
+    except Exception:
+        logger.exception(
+            "Plan-B transient Salla breaker readiness check failed"
+        )
+        return None
+
+    candidate = {
+        **settings,
+        "auto_send": True,
+        "plan_b_auto_send_armed_at": _now().isoformat(),
+    }
+    issues = activation_issues(
+        candidate,
+        credentials_configured=bool(key),
+        canary_succeeded=bool(canary),
+        salla_connected=bool(salla_integration),
+    )
+    if issues or not is_armed(candidate):
+        logger.warning(
+            "Plan-B transient Salla breaker remains stopped issues=%s",
+            [issue.get("code") for issue in issues],
+        )
+        return None
+
+    now = _now()
+    recovered_at = now.isoformat()
+    recovery_audit = {
+        "reason": "transient_salla_status_refresh",
+        "previous_error_code": error_code,
+        "previous_run_id": last_error.get("run_id"),
+        "previous_error_at": last_error.get("at"),
+        "recovered_at": recovered_at,
+    }
+    result = await db.qoyod_settings.update_one(
+        {
+            "user_id": _TENANT,
+            "enabled": True,
+            "auto_send": False,
+            "dry_run_mode": {"$ne": True},
+            "plan_b_auto_send_disabled_reason": "circuit_breaker",
+            "plan_b_auto_send_last_error.code": error_code,
+            "plan_b_auto_send_orders_user_id": orders_user_id,
+        },
+        {
+            "$set": {
+                "auto_send": True,
+                "plan_b_auto_send_armed_at": recovered_at,
+                "plan_b_auto_send_disabled_at": None,
+                "plan_b_auto_send_disabled_reason": None,
+                "plan_b_auto_send_last_error": None,
+                "plan_b_auto_send_last_recovery": recovery_audit,
+                "updated_at": now,
+            },
+            "$inc": {"plan_b_auto_send_recovery_count": 1},
+        },
+    )
+    if result.modified_count != 1:
+        return None
+
+    logger.warning(
+        "Plan-B automatic sender recovered transient Salla breaker"
+    )
+    return {
+        **candidate,
+        "plan_b_auto_send_armed_at": recovered_at,
+        "plan_b_auto_send_disabled_at": None,
+        "plan_b_auto_send_disabled_reason": None,
+        "plan_b_auto_send_last_error": None,
+        "plan_b_auto_send_last_recovery": recovery_audit,
+    }
 
 
 async def _acquire_lease(db, *, seconds: int = 45) -> Optional[str]:
@@ -402,6 +518,9 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
     settings = await _current_settings(db)
+    recovered = await _recover_transient_salla_breaker(db, settings)
+    if recovered is not None:
+        settings = recovered
     if not is_armed(settings):
         result = {"ok": True, "status": "not_armed", "sent_count": 0}
         _LAST_RUN_OK = True
