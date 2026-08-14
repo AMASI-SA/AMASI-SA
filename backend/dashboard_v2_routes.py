@@ -793,7 +793,7 @@ async def build_mezan_v2_ads(
     google_rows = await _to_list(
         db.daily_costs.find(
             {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
-            {"_id": 0, "google_ads": 1},
+            {"_id": 0, "date": 1, "google_ads": 1},
         ),
         100000,
     )
@@ -809,9 +809,37 @@ async def build_mezan_v2_ads(
     bank_commissions["google_account_allocation"] = (
         "not_available" if breakdown["google_transitional"] > 0 else "not_required"
     )
+    history_by_date: dict[str, dict[str, float]] = defaultdict(lambda: {
+        "snapchat": 0.0,
+        "meta": 0.0,
+        "tiktok": 0.0,
+        "google": 0.0,
+    })
+    for provider, rows in platform_rows.items():
+        for row in rows:
+            row_date = str(row.get("date") or "")[:10]
+            if not row_date:
+                continue
+            history_by_date[row_date][provider] += _float(
+                row.get("effective_spend_sar")
+                if row.get("effective_spend_sar") is not None
+                else row.get("spend_sar")
+            )
+    for row in google_rows:
+        row_date = str(row.get("date") or "")[:10]
+        if row_date:
+            history_by_date[row_date]["google"] += _float(row.get("google_ads"))
+    history = [
+        {
+            "date": row_date,
+            **{provider: round(amount, 2) for provider, amount in values.items()},
+        }
+        for row_date, values in sorted(history_by_date.items())
+    ]
     return {
         "total": round(sum(breakdown.values()), 2),
         "breakdown": breakdown,
+        "history": history,
         "providers": {
             provider: _aggregate_provider_rows(rows, start, end)
             for provider, rows in platform_rows.items()
@@ -1019,6 +1047,30 @@ def make_dashboard_v2_router(
         })
         response["recurring_obligations_v2"] = recurring
         return response
+
+    @router.get("/dashboard-v2/abandoned-carts/recent")
+    async def recent_abandoned_carts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        """Latest active carts for the live dashboard rail; never date-filtered."""
+        current = owner(user)
+        rows = await _to_list(
+            db.salla_abandoned_carts_v1.find(
+                {
+                    "user_id": str(current["id"]),
+                    "purchased": {"$ne": True},
+                },
+                {
+                    "_id": 0,
+                    "cart_id": 1,
+                    "currency": 1,
+                    "total": 1,
+                    "items": 1,
+                    "cart_updated_at": 1,
+                    "updated_at": 1,
+                },
+            ).sort([("cart_updated_at", -1), ("updated_at", -1)]),
+            5,
+        )
+        return {"items": rows, "count": len(rows), "live": True}
 
     @router.get("/dashboard-v2/product-cost-summary")
     async def product_cost_summary(user: dict = Depends(current_user)) -> dict[str, Any]:

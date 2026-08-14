@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import AdvancedDashboard from "./pages/AdvancedDashboard";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
 import Settings from "./pages/Settings";
@@ -254,6 +255,16 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><Dashboard sourceMode="mezan_v2" /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/dashboard-advanced"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><AdvancedDashboard /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }

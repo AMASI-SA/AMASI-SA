@@ -545,6 +545,16 @@ export default function Dashboard({ sourceMode = "legacy" }) {
                             : "نظرة شاملة على أدائك المالي عبر جميع التحاليل المحفوظة."}
                     </p>
                 </div>
+                {isMezanV2 && (
+                    <Link
+                        to="/dashboard-advanced"
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-emerald-800"
+                        data-testid="advanced-dashboard-link"
+                    >
+                        <TrendUp size={18} weight="bold" />
+                        لوحة التحكم المتقدمة
+                    </Link>
+                )}
             </div>
 
             {/* Iter-159h — Smart Settlement Alerts card */}

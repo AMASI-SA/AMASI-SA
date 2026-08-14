@@ -1,0 +1,139 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+    AlertTriangle, ArrowRight, BarChart3, BriefcaseBusiness, ChevronLeft,
+    CircleDollarSign, CreditCard, Instagram, MapPin, Megaphone, PackageOpen,
+    RefreshCw, ShoppingBag, ShoppingCart, TrendingUp, Truck, Trophy, UsersRound,
+} from "lucide-react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import api from "../lib/api";
+import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
+import { useOrders } from "../hooks/useOrders";
+import { buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
+
+const PLATFORM_META = [
+    { key: "snapchat", label: "سناب شات", color: "#f59e0b" },
+    { key: "tiktok", label: "تيك توك", color: "#111827" },
+    { key: "meta", label: "Meta", color: "#2563eb" },
+    { key: "google", label: "Google Ads", color: "#059669" },
+];
+
+const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+function Panel({ children, className = "", testid }) {
+    return <section data-testid={testid} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
+}
+
+function relativeTime(value) {
+    const date = new Date(value || 0);
+    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (!Number.isFinite(seconds)) return "—";
+    if (seconds < 60) return `منذ ${Math.max(1, seconds)} ثانية`;
+    if (seconds < 3600) return `منذ ${Math.floor(seconds / 60)} دقيقة`;
+    if (seconds < 86400) return `منذ ${Math.floor(seconds / 3600)} ساعة`;
+    if (seconds < 2592000) return `منذ ${Math.floor(seconds / 86400)} يوم`;
+    if (seconds < 31536000) return `منذ ${Math.floor(seconds / 2592000)} شهر`;
+    return `منذ ${Math.floor(seconds / 31536000)} سنة`;
+}
+
+function productName(item) {
+    return item?.name || item?.product_name || item?.title || "منتج من السلة";
+}
+
+function AbandonedCartsCard({ carts }) {
+    return (
+        <Panel testid="advanced-abandoned-carts">
+            <div className="flex h-14 items-center justify-between border-b px-4">
+                <h2 className="flex items-center gap-2 font-extrabold text-slate-700"><ShoppingCart className="h-5 w-5 text-rose-500" />آخر 5 سلات متروكة</h2>
+                <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-600">{carts.length} سلات</span>
+            </div>
+            {carts.length ? carts.map((cart) => {
+                const item = Array.isArray(cart.items) ? cart.items[0] : null;
+                return <div key={cart.cart_id} className="flex min-h-[82px] items-center gap-3 border-b px-4 py-3 last:border-0">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-xl">🛒</div>
+                    <div className="min-w-0 flex-1"><p className="line-clamp-2 text-xs font-bold">{productName(item)}</p><p className="mt-1 text-[10px] text-slate-400">سلة #{cart.cart_id}</p></div>
+                    <div className="text-left"><p className="num text-xs font-black text-rose-500">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.cart_updated_at || cart.updated_at)}</p></div>
+                </div>;
+            }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
+        </Panel>
+    );
+}
+
+function TopProductsCard({ rows }) {
+    const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0)).slice(0, 5);
+    return (
+        <Panel testid="advanced-top-products">
+            <div className="flex h-14 items-center justify-between border-b px-4"><h2 className="flex items-center gap-2 font-extrabold text-slate-700"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><span className="text-[10px] text-slate-400">حسب الفترة المحددة</span></div>
+            <div className="grid grid-cols-[minmax(0,1fr)_58px_94px] gap-2 border-b px-3 py-2 text-[9px] font-bold text-slate-400"><span>المنتج</span><span>الوحدات</span><span>المبيعات</span></div>
+            {products.length ? products.map((item) => <div key={item.identity} className="grid min-h-[66px] grid-cols-[minmax(0,1fr)_58px_94px] items-center gap-2 border-b px-3 py-2 last:border-0">
+                <div className="flex min-w-0 items-center gap-2">{item.image_url ? <img src={item.image_url} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">📦</div>}<p className="line-clamp-2 text-[10px] font-bold">{item.name}</p></div>
+                <span className="num text-xs font-bold">{integer(item.units_sold)}</span><span className="num text-[10px] font-black text-blue-600">{money(item.total_sales)} ر.س</span>
+            </div>) : <div className="p-8 text-center text-xs text-slate-400">لا توجد منتجات مباعة في الفترة.</div>}
+        </Panel>
+    );
+}
+
+function Metric({ label, value, Icon, tone }) {
+    return <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-3 shadow-sm"><div className="min-w-0"><p className="line-clamp-2 text-[10px] font-bold text-slate-500">{label}</p><p className="num mt-1 whitespace-nowrap text-base font-black">{value}</p></div><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone}`}><Icon className="h-4 w-4" /></span></div>;
+}
+
+function SummaryStrip({ data, filters }) {
+    const totals = data?.totals || {};
+    const orders = Number(totals.total_orders || 0);
+    const averageBasket = orders ? Number(totals.total_sales || 0) / orders : 0;
+    const missing = Number(data?.product_cost_v2?.missing_products_count || totals.missing_product_cost_count || 0);
+    return <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-[minmax(0,1.75fr)_minmax(260px,.7fr)]" data-testid="advanced-date-summary">
+        <div dir="rtl" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Metric label="تكلفة الطلب" value={totals.avg_cost_per_order == null ? "—" : `${money(totals.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" />
+            <Metric label="عدد الطلبات" value={integer(orders)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" />
+            <Metric label="العائد" value={totals.overall_roas == null ? "—" : `${Number(totals.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" />
+            <Metric label="متوسط قيمة سلة المشتريات" value={`${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" />
+        </div>
+        <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان<span className="block text-amber-700">أضف التكلفة لاعتماد الأرباح</span></p></Link>
+    </div>;
+}
+
+function AdsCard({ ads }) {
+    const [monthly, setMonthly] = useState(false);
+    const rows = useMemo(() => {
+        const daily = ads?.history || [];
+        if (!monthly) return daily.map((row) => ({ ...row, label: row.date?.slice(5) }));
+        const grouped = {};
+        daily.forEach((row) => { const key = String(row.date || "").slice(0, 7); grouped[key] ||= { label: key, snapchat: 0, tiktok: 0, meta: 0, google: 0 }; PLATFORM_META.forEach(({ key: p }) => { grouped[key][p] += Number(row[p] || 0); }); });
+        return Object.values(grouped);
+    }, [ads?.history, monthly]);
+    const breakdown = ads?.breakdown || {};
+    return <Panel className="border-amber-200" testid="advanced-ads-chart">
+        <div className="flex h-14 items-center justify-between border-b border-amber-100 bg-amber-50 px-4"><h2 className="flex items-center gap-2 font-extrabold text-amber-800"><CircleDollarSign className="h-5 w-5" />مصروفات منصات الإعلانات</h2><div className="rounded-lg border bg-white p-1 text-[10px] font-bold"><button onClick={() => setMonthly(false)} className={`rounded-md px-2 py-1 ${!monthly ? "bg-amber-500 text-white" : ""}`}>يومي</button><button onClick={() => setMonthly(true)} className={`rounded-md px-2 py-1 ${monthly ? "bg-amber-500 text-white" : ""}`}>شهري</button></div></div>
+        <div className="h-[190px] px-2 pt-3" dir="ltr"><ResponsiveContainer><LineChart data={rows}><CartesianGrid vertical={false} strokeDasharray="4 4" /><XAxis dataKey="label" tick={{ fontSize: 9 }} /><YAxis tick={{ fontSize: 9 }} width={36} /><Tooltip formatter={(value) => `${money(value)} ر.س`} />{PLATFORM_META.map((p) => <Line key={p.key} dataKey={p.key} name={p.label} stroke={p.color} strokeWidth={2} dot={false} />)}</LineChart></ResponsiveContainer></div>
+        <div className="grid grid-cols-4 gap-1 p-2">{PLATFORM_META.map((p) => <div key={p.key} className="rounded-lg border p-2 text-center"><p className="text-[9px] font-bold" style={{ color: p.color }}>{p.label}</p><p className="num mt-1 text-[10px] font-black">{money(breakdown[p.key === "google" ? "google_transitional" : p.key])}</p></div>)}</div>
+        <div className="flex h-11 items-center justify-between border-t bg-amber-50 px-4 font-extrabold"><span>إجمالي المصروفات</span><span className="num">{money(ads?.total)} ر.س</span></div>
+    </Panel>;
+}
+
+function ProfitCard({ data }) {
+    const t = data?.totals || {};
+    const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
+    const rows = [
+        ["المبيعات", t.total_sales, CircleDollarSign, "text-emerald-700"], ["تكاليف المنتجات", t.total_product_cost, PackageOpen, "text-amber-700"], ["إجمالي تكاليف الإعلانات", t.total_ads_cost, Megaphone, "text-rose-600"], ["إجمالي تكاليف الشحن (مقدم + آجل)", t.total_shipping_cost, Truck, "text-sky-700"], ["إجمالي رسوم جميع طرق الدفع", fees, CreditCard, "text-violet-700"], ["المصروفات التشغيلية (رواتب وإيجارات وغيرها)", t.operating_expenses_total, BriefcaseBusiness, "text-orange-700"],
+    ];
+    const sales = Number(t.total_sales || 0);
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b bg-emerald-50 px-4"><h2 className="flex items-center gap-2 font-extrabold text-emerald-800"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-700">الفترة المحددة</span></div><div className="px-4 py-2">{rows.map(([label, value, Icon, color], index) => <div dir="ltr" key={label} className="grid min-h-[56px] grid-cols-[minmax(150px,.75fr)_minmax(0,1.25fr)_38px] items-center gap-3 border-b last:border-0"><div className={`num text-left text-base font-black ${color}`}>{money(value)} ر.س{index > 0 && sales > 0 && <span className="ml-2 text-[9px] opacity-70">{(Number(value || 0) / sales * 100).toFixed(2)}%</span>}</div><p dir="rtl" className="text-right text-xs font-extrabold text-slate-700">{label}</p><span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 ${color}`}><Icon className="h-4 w-4" /></span></div>)}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num text-xl font-black">{money(t.net_profit)} ر.س</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">بعد جميع التكاليف والمصروفات</p></div></div></Panel>;
+}
+
+function orderSource(order) { return [order?.source?.channel, order?.source?.platform, order?.source?.source, order?.utm_source, order?.attribution?.source].map((v) => String(v || "").toLowerCase()).find(Boolean) || ""; }
+function SourceBadge({ order }) { const source = orderSource(order); let b; if (source.includes("snap")) b = ["👻", "bg-yellow-300 text-black"]; else if (source.includes("google")) b = ["G", "bg-white text-blue-600"]; else if (source.includes("tiktok")) b = ["♪", "bg-black text-white"]; else if (/meta|facebook|instagram/.test(source)) b = [source.includes("instagram") ? <Instagram className="h-3 w-3" /> : "∞", "bg-blue-500 text-white"]; return b ? <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-black ${b[1]}`}>{b[0]}</span> : null; }
+function LatestOrders({ orders }) { return <Panel testid="advanced-latest-orders"><div className="flex h-14 items-center justify-between border-b px-4"><h2 className="flex items-center gap-2 font-extrabold"><ShoppingBag className="h-5 w-5" />أحدث الطلبات</h2><span className="text-[10px] text-slate-400">مباشر</span></div>{orders.slice(0, 8).map((order) => { const id = String(order.order_number); const status = order.status?.name || order.status || "بانتظار المراجعة"; return <Link key={id} to={`/orders-v2/${encodeURIComponent(id)}?returnTo=${encodeURIComponent("/dashboard-advanced")}`} dir="ltr" className="grid min-h-[58px] grid-cols-[92px_130px_minmax(0,1fr)] items-center gap-3 border-b px-4 py-2 hover:bg-slate-50 last:border-0"><div className="flex items-center gap-1 text-[10px] text-slate-400"><ChevronLeft className="h-4 w-4" />{relativeTime(order.created_at || order.order_date)}</div><div className="flex items-center gap-2"><span className="num text-xs font-black text-teal-700">SAR {money(order.totals?.total || order.total_amount)}</span><SourceBadge order={order} /></div><div dir="rtl" className="min-w-0"><p className="truncate text-xs font-extrabold">{order.customer?.name || "عميل سلة"}</p><p className="mt-1 flex items-center gap-1 text-[9px] text-slate-400"><span>#{id}</span><MapPin className="h-3 w-3" /><span>{order.shipping?.address?.city || "غير محدد"}</span><span>•</span><span>{status}</span></p></div></Link>; })}</Panel>; }
+
+function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); return <div className="space-y-4"><Panel className="border-blue-200"><div className="flex h-14 items-center gap-2 border-b px-4"><BarChart3 className="h-5 w-5 text-blue-600" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200"><div className="flex items-center gap-2 px-4 pt-4"><UsersRound className="h-5 w-5 text-violet-600" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 px-4 pb-4" dir="ltr">{minutes.map((m, i) => <div key={i} className="flex-1 rounded-t bg-violet-600" style={{ height: `${Math.max(4, Number(m.active_users || 0) * 5)}%` }} />)}</div></Panel></div>; }
+
+export default function AdvancedDashboard() {
+    const [filters, setFilters] = useState(() => defaultFilters("today"));
+    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true);
+    const { orders } = useOrders();
+    const loadPeriod = useCallback(async (next) => { setLoading(true); try { const response = await api.get(`/dashboard-v2?${filtersToQueryString(next)}`); setData(response.data); } finally { setLoading(false); } }, []);
+    useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
+    useEffect(() => { let active = true; const loadLive = async () => { const [cartResult, gaResult] = await Promise.allSettled([api.get("/dashboard-v2/abandoned-carts/recent"), api.get("/integrations-v2/google_analytics_4/realtime-dashboard")]); if (!active) return; if (cartResult.status === "fulfilled") setCarts(cartResult.value.data?.items || []); if (gaResult.status === "fulfilled") setGa(gaResult.value.data); }; loadLive(); const timer = window.setInterval(loadLive, 60000); return () => { active = false; window.clearInterval(timer); }; }, []);
+    return <div dir="rtl" className="space-y-4" data-testid="advanced-dashboard-page"><header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-slate-400">لوحة مستقلة — لوحة التحكم الحالية محفوظة</p><h1 className="text-2xl font-black sm:text-3xl">لوحة التحكم المتقدمة</h1></div><Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />العودة للوحة الحالية</Link></header><div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div><SummaryStrip data={data} filters={filters} /><div dir="ltr" className="grid gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AbandonedCartsCard carts={carts} /><AdsCard ads={data?.ads_v2} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} /><LatestOrders orders={orders} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div></div>;
+}
