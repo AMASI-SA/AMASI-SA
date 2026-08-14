@@ -13,6 +13,10 @@
   var TOUCH_KEY = "mz_touch_v1";
   var TOUCH_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
   var SESSION_MAX_IDLE_MS = 30 * 60 * 1000;
+  // Pilot safety gate: saving an App Snippet publishes it to every store that
+  // installed the app. Keep collection disabled outside the demo store until
+  // the end-to-end attribution test is approved.
+  var PILOT_STORE_NAME = "Mezan Attribution Test";
 
   function randomId(prefix) {
     var value = window.crypto && window.crypto.randomUUID
@@ -145,10 +149,20 @@
     });
   }
 
-  function storeId() {
+  function storeConfig(key) {
     try {
-      return clean(window.salla && window.salla.config && window.salla.config.get("store.id"), 160);
+      return window.salla && window.salla.config
+        ? window.salla.config.get(key)
+        : null;
     } catch (_) { return null; }
+  }
+
+  function storeId() {
+    return clean(storeConfig("store.id"), 160);
+  }
+
+  function isPilotStore() {
+    return clean(storeConfig("store.name"), 160) === PILOT_STORE_NAME;
   }
 
   function normalizeEventName(eventName) {
@@ -204,6 +218,7 @@
   function register() {
     var Salla = window.Salla || window.salla;
     if (!Salla || !Salla.analytics || typeof Salla.analytics.registerTracker !== "function") return;
+    if (!isPilotStore()) return;
     Salla.analytics.registerTracker({
       name: "MezanFirstPartyAttributionV1",
       track: function (eventName, payload) {
