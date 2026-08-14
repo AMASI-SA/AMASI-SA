@@ -95,6 +95,10 @@ async def ensure_snapchat_tracking_indexes(db: Any) -> None:
         [("user_id", 1), ("ad_account_id", 1), ("last_observed_at", -1)],
         name="mezan_snapchat_tracking_assets_v2_account_latest",
     )
+    await _collection(db, TRACKING_ASSET_COLLECTION).create_index(
+        [("user_id", 1), ("ad_account_ids", 1), ("last_observed_at", -1)],
+        name="mezan_snapchat_tracking_assets_v2_shared_account_latest",
+    )
     await _collection(db, EVENT_DIAGNOSTIC_COLLECTION).create_index(
         [("user_id", 1), ("pixel_id", 1), ("diagnostic_type", 1), ("diagnostic_key", 1)],
         unique=True,
@@ -338,6 +342,7 @@ async def _upsert_asset(
     diagnostics_status: str,
 ) -> None:
     pixel_id = str(pixel.get("id") or "").strip()
+    account_id = str(account.get("ad_account_id") or "").strip()
     now_iso = context.now_iso()
     await _collection(context.db, TRACKING_ASSET_COLLECTION).update_one(
         {"user_id": context.user_id, "pixel_id": pixel_id},
@@ -346,7 +351,7 @@ async def _upsert_asset(
                 "user_id": context.user_id,
                 "provider": SNAPCHAT_PROVIDER_ID,
                 "pixel_id": pixel_id,
-                "ad_account_id": account["ad_account_id"],
+                "ad_account_id": account_id,
                 "mezan_integration_account_id": account.get("mezan_integration_account_id"),
                 "organization_id": pixel.get("organization_id") or account.get("organization_id"),
                 "display_name": pixel.get("name") or pixel_id,
@@ -363,6 +368,7 @@ async def _upsert_asset(
                 "last_observed_at": now_iso,
                 "updated_at": now_iso,
             },
+            "$addToSet": {"ad_account_ids": account_id},
             "$setOnInsert": {"created_at": now_iso},
         },
         upsert=True,
