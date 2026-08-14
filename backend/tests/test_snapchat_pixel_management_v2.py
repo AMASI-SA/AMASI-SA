@@ -17,13 +17,28 @@ class _Result:
 
 def _matches(row, query):
     for key, expected in query.items():
+        if key == "$or":
+            if not any(_matches(row, clause) for clause in expected):
+                return False
+            continue
         actual = row.get(key)
         if isinstance(expected, dict):
-            if "$in" in expected and actual not in expected["$in"]:
-                return False
-            if "$nin" in expected and actual in expected["$nin"]:
-                return False
+            if "$in" in expected:
+                if isinstance(actual, list):
+                    if not any(value in expected["$in"] for value in actual):
+                        return False
+                elif actual not in expected["$in"]:
+                    return False
+            if "$nin" in expected:
+                if isinstance(actual, list):
+                    if any(value in expected["$nin"] for value in actual):
+                        return False
+                elif actual in expected["$nin"]:
+                    return False
             if "$ne" in expected and actual == expected["$ne"]:
+                return False
+        elif isinstance(actual, list):
+            if expected not in actual:
                 return False
         elif actual != expected:
             return False
@@ -93,6 +108,53 @@ class _DB:
 
     def __getitem__(self, name):
         return self.collections.setdefault(name, _Collection())
+
+
+@pytest.mark.asyncio
+async def test_readiness_exposes_shared_pixel_for_every_linked_account(monkeypatch):
+    db = _DB()
+    db[management.TRACKING_ASSET_COLLECTION].rows.append({
+        "user_id": "owner-1",
+        "pixel_id": "shared-pixel",
+        "display_name": "Self Service Pixel",
+        "ad_account_id": "saudi",
+        "ad_account_ids": ["self-service", "saudi"],
+        "status": "ACTIVE",
+        "effective_status": "ACTIVE",
+        "last_observed_at": "2026-08-14T13:00:00+00:00",
+    })
+
+    async def selected_accounts(*_args, **_kwargs):
+        return [
+            {
+                "ad_account_id": "self-service",
+                "display_name": "متجر أماسي Self Service",
+                "currency": "USD",
+                "timezone": "America/Los_Angeles",
+            },
+            {
+                "ad_account_id": "saudi",
+                "display_name": "متجر أماسي سعودي",
+                "currency": "SAR",
+                "timezone": "Asia/Riyadh",
+            },
+        ]
+
+    class Provider:
+        async def management_role(self, *_args, **_kwargs):
+            return {"role": "admin", "allowed": True, "reason": None}
+
+    monkeypatch.setattr(management, "_load_selected_accounts", selected_accounts)
+    result = await management.snapchat_management_readiness(
+        db,
+        "owner-1",
+        provider=Provider(),
+    )
+
+    assert [account["pixels"][0]["pixel_id"] for account in result["accounts"]] == [
+        "shared-pixel",
+        "shared-pixel",
+    ]
 
 
 def _ad_squad_payload(**overrides):
