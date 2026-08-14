@@ -21,7 +21,11 @@ PRODUCTS = "mezan_products_v2"
 SYNC_RUNS = "mezan_product_sync_runs_v2"
 CHANGE_LOG = "mezan_product_change_log_v2"
 PRODUCTS_PER_PAGE = 60
-MAX_PRODUCT_PAGES = 100
+# Salla may ignore the requested page size and return only 15-20 products.
+# Amasi has more than 2,000 products, so 100 pages can end a healthy sync
+# before the catalogue is exhausted.  The sync still has repeated-page and
+# empty-page guards; this limit is only the final runaway protection.
+MAX_PRODUCT_PAGES = 250
 
 
 def _now() -> datetime:
