@@ -271,13 +271,13 @@ function FiltersRow() {
 
 function MetricCard({ label, value, Icon, tone }) {
     return (
-        <div dir="rtl" className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-            <div className="min-w-0">
-                <p className="line-clamp-2 text-[10px] font-bold leading-4 text-slate-600">{label}</p>
-                <p className="num mt-1 text-lg font-black text-slate-900">{value}</p>
+        <div dir="rtl" className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-[11px] font-bold leading-4 text-slate-600">{label}</p>
+                <p className="num mt-1 whitespace-nowrap text-lg font-black text-slate-900">{value}</p>
             </div>
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClasses(tone)}`}>
-                <Icon className="h-4 w-4" />
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClasses(tone)}`}>
+                <Icon className="h-[18px] w-[18px]" />
             </span>
         </div>
     );
@@ -285,13 +285,13 @@ function MetricCard({ label, value, Icon, tone }) {
 
 function PreviewSummaryStrip() {
     return (
-        <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-2" data-testid="preview-summary-strip">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.72fr)]" data-testid="preview-summary-strip">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="preview-kpi-cards">
                 {KPI_CARDS.map((card) => <MetricCard key={card.label} {...card} />)}
             </div>
-            <div dir="rtl" className="flex min-h-[82px] items-center justify-center gap-4 rounded-xl border border-amber-300 bg-amber-50/80 px-5 text-center text-amber-900 shadow-sm" data-testid="preview-missing-cost-alert">
+            <div dir="rtl" className="flex min-h-[82px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-center text-amber-900 shadow-sm" data-testid="preview-missing-cost-alert">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
-                <p className="text-sm font-extrabold leading-6">
+                <p className="text-[13px] font-extrabold leading-5">
                     19 منتجًا مبيعًا بدون تكلفة ميزان
                     <span className="block text-amber-700">أضف التكلفة لاعتماد الأرباح</span>
                 </p>
@@ -404,32 +404,32 @@ function ProfitSummaryCardPreview() {
                 </div>
                 <span className="rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-bold text-emerald-700">كل المعلومات محفوظة</span>
             </div>
-            <div className="px-3 py-2">
+            <div className="px-5 py-3">
                 {PROFIT_ROWS.map((row) => (
-                    <div key={row.label} className="grid min-h-[44px] grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-100 py-1.5 last:border-b-0">
-                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${PROFIT_TONES[row.color]}`}><row.Icon className="h-4 w-4" /></span>
-                        <div className="min-w-0">
-                            <p className="truncate text-[11px] font-extrabold text-slate-700">{row.label}</p>
-                            {!row.isSales && <span className={`mt-0.5 inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-black ${PROFIT_TONES[row.color]}`}>{percentage(row.value)}</span>}
+                    <div dir="ltr" key={row.label} className="grid min-h-[54px] grid-cols-[minmax(180px,0.72fr)_minmax(0,1.28fr)_40px] items-center gap-4 border-b border-slate-100 py-2 last:border-b-0">
+                        <div className="flex min-w-0 items-center gap-2 text-left">
+                            {row.expandable && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                            <div className="min-w-0">
+                                <span className={`num block whitespace-nowrap text-lg font-black ${row.isSales ? "text-emerald-700" : "text-slate-900"}`}>{money(row.value)} ر.س</span>
+                                {!row.isSales && <span className={`mt-1 inline-flex rounded-md px-2 py-0.5 text-[10px] font-black ${PROFIT_TONES[row.color]}`}>{percentage(row.value)}</span>}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                            {row.expandable && <ChevronDown className="h-3 w-3 text-slate-400" />}
-                            <span className={`num text-sm font-black ${row.isSales ? "text-emerald-700" : "text-slate-800"}`}>{money(row.value)} ر.س</span>
-                        </div>
+                        <p dir="rtl" className="text-right text-[13px] font-extrabold leading-5 text-slate-700">{row.label}</p>
+                        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${PROFIT_TONES[row.color]}`}><row.Icon className="h-5 w-5" /></span>
                     </div>
                 ))}
             </div>
-            <div className="mx-3 mb-3 flex min-h-[58px] items-center justify-between rounded-xl bg-emerald-600 px-4 text-white shadow-md shadow-emerald-100">
-                <div className="flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15"><TrendingUp className="h-5 w-5" /></span>
-                    <div>
-                        <p className="text-base font-black">صافي الأرباح</p>
-                        <p className="text-[9px] text-emerald-100">بعد جميع التكاليف والمصروفات</p>
-                    </div>
-                </div>
+            <div dir="ltr" className="mx-5 mb-4 flex min-h-[70px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white shadow-md shadow-emerald-100">
                 <div className="text-left">
-                    <p className="num text-xl font-black">{money(netProfit)} ر.س</p>
+                    <p className="num whitespace-nowrap text-2xl font-black">{money(netProfit)} ر.س</p>
                     <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-bold">{percentage(netProfit)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div dir="rtl" className="text-right">
+                        <p className="text-lg font-black">صافي الأرباح</p>
+                        <p className="text-[10px] text-emerald-100">بعد جميع التكاليف والمصروفات</p>
+                    </div>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15"><TrendingUp className="h-5 w-5" /></span>
                 </div>
             </div>
         </Panel>
@@ -562,6 +562,7 @@ export default function DashboardDesignPreview() {
                 <div dir="ltr" className="grid gap-4 min-[1280px]:grid-cols-[clamp(300px,25vw,380px)_minmax(0,1fr)]">
                     <aside dir="rtl" className="space-y-4">
                         <AbandonedCartsCard />
+                        <AdsSpendCard />
                         <TopProductsCard />
                     </aside>
 
@@ -571,10 +572,7 @@ export default function DashboardDesignPreview() {
 
                         <div dir="ltr" className="grid min-w-0 gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(300px,0.92fr)]">
                             <div dir="rtl" className="min-w-0 space-y-4">
-                                <div dir="ltr" className="grid min-w-0 gap-3 min-[860px]:grid-cols-2">
-                                    <AdsSpendCard />
-                                    <ProfitSummaryCardPreview />
-                                </div>
+                                <ProfitSummaryCardPreview />
                                 <LatestOrdersCard />
                             </div>
                             <div dir="rtl" className="min-w-0 space-y-4">

@@ -28,6 +28,25 @@ describe("DashboardDesignPreview", () => {
         expect(html).toContain("Google Ads");
     });
 
+    test("places advertising between abandoned carts and top products", () => {
+        const html = renderToStaticMarkup(<DashboardDesignPreview />);
+        const abandonedIndex = html.indexOf('data-testid="preview-abandoned-carts"');
+        const adsIndex = html.indexOf('data-testid="preview-ads-chart"');
+        const productsIndex = html.indexOf('data-testid="preview-top-products"');
+
+        expect(abandonedIndex).toBeGreaterThan(-1);
+        expect(adsIndex).toBeGreaterThan(abandonedIndex);
+        expect(productsIndex).toBeGreaterThan(adsIndex);
+    });
+
+    test("keeps all four KPI values on one line in the wider KPI strip", () => {
+        const html = renderToStaticMarkup(<DashboardDesignPreview />);
+
+        expect(html).toContain('data-testid="preview-kpi-cards"');
+        ["25.18 ر.س", "903", "7.44×", "187.33 ر.س"].forEach((value) => expect(html).toContain(value));
+        expect((html.match(/whitespace-nowrap/g) || []).length).toBeGreaterThanOrEqual(5);
+    });
+
     test("renders the approved order row structure and elapsed-time sequence", () => {
         const html = renderToStaticMarkup(<DashboardDesignPreview />);
         let previousIndex = html.indexOf("أحدث الطلبات");
