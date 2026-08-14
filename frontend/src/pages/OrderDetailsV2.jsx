@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
     ArrowRight,
     ArrowsClockwise,
@@ -35,7 +35,6 @@ import {
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
-import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
@@ -767,10 +766,7 @@ function AdvancedOrderInfo({ order }) {
     const attribution = firstPresent(order.utm, order.marketing, order.attribution, sourceObject.attribution, sourceObject.utm) || {};
     const source = firstPresent(order.source_native, order.source_name, sourceObject.source_native, sourceObject.source, attribution.source, attribution.utm_source, typeof order.source === "string" ? order.source : null);
     const medium = firstPresent(order.utm_medium, sourceObject.utm_medium, attribution.medium, attribution.utm_medium);
-    const {
-        campaignDisplay: campaign,
-        campaignId,
-    } = resolveOrderCampaign(order);
+    const campaign = firstPresent(order.utm_campaign, sourceObject.utm_campaign, attribution.campaign, attribution.utm_campaign);
     const channel = firstPresent(order.channel_native, order.channel, order.order_channel, sourceObject.channel, sourceObject.source_event);
     const device = firstPresent(order.device_name, order.device, order.client_device, sourceObject.device, sourceObject.device_type, attribution.device);
     const assignments = firstPresent(order.assignments, order.responsibilities, order.staff) || {};
@@ -785,7 +781,6 @@ function AdvancedOrderInfo({ order }) {
                     <InfoRow label="المصدر" value={source} />
                     <InfoRow label="الوسيط" value={medium} />
                     <InfoRow label="الحملة" value={campaign} />
-                    <InfoRow label="معرّف الحملة" value={campaignId} />
                     <InfoRow label="القناة" value={channel} />
                     <InfoRow label="الجهاز" value={device} />
                 </div>
@@ -828,6 +823,11 @@ function AccountingSummary({ order, currency }) {
 
 export default function OrderDetailsV2() {
     const { orderNumber } = useParams();
+    const [searchParams] = useSearchParams();
+    const requestedReturnTo = searchParams.get("returnTo");
+    const allowedReturnPaths = new Set(["/orders-v2", "/dashboard-v2", "/dashboard-advanced"]);
+    const returnTo = allowedReturnPaths.has(requestedReturnTo) ? requestedReturnTo : "/orders-v2";
+    const returnLabel = returnTo.startsWith("/dashboard") ? "العودة إلى لوحة التحكم" : "العودة إلى الطلبات";
     const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
     const [returnEngineOpen, setReturnEngineOpen] = useState(false);
@@ -871,7 +871,7 @@ export default function OrderDetailsV2() {
     }
 
     if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
-    if (error || !order) return <div className="space-y-4" dir="rtl"><Link to="/orders-v2" className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> العودة إلى الطلبات</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div></div>;
+    if (error || !order) return <div className="space-y-4" dir="rtl"><Link to={returnTo} className="inline-flex items-center gap-2 font-bold text-violet-700"><ArrowRight size={18} /> {returnLabel}</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800"><div className="flex items-center gap-2 font-extrabold"><WarningCircle size={24} weight="fill" /> تعذّر فتح الطلب</div><p className="mt-2 text-sm">{error}</p></div></div>;
 
     const customer = order.customer || {};
     const payment = order.payment || {};
@@ -884,7 +884,7 @@ export default function OrderDetailsV2() {
     return (
         <div className="space-y-5" dir="rtl" data-testid="order-details-v2-page">
             <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-                <div><Link to="/orders-v2" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> العودة إلى الطلبات الجديدة</Link><h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div></div>
+                <div><Link to={returnTo} className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-violet-700"><ArrowRight size={17} /> {returnLabel}</Link><h1 className="num text-2xl font-extrabold text-slate-950">الطلب #{orderNumber}</h1><div className="mt-2 flex flex-wrap items-center gap-2 text-sm"><span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-bold text-sky-800">{status}</span><span className="text-slate-500">تاريخ الإنشاء: {formatOrderDate(order.created_at)}</span></div></div>
                 <div className="flex flex-col items-start gap-3 lg:items-end">
                     <div className="text-left"><div className="num text-2xl font-extrabold text-slate-950">{formatMoney(total, currency)}</div><div className="mt-1 text-xs font-bold text-slate-400">عملة الطلب: {currency}</div></div>
                     <button
