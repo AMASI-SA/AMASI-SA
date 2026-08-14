@@ -264,7 +264,10 @@ async def test_event_is_idempotent_and_order_links_by_hashed_identity():
 
 
 @pytest.mark.asyncio
-async def test_pilot_store_records_attribution_without_becoming_an_integration():
+async def test_pilot_store_records_attribution_without_becoming_an_integration(
+    monkeypatch,
+):
+    monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", "748155538")
     db = FakeDB()
     await db.salla_integrations.insert_one({
         "user_id": "amasi-owner",
