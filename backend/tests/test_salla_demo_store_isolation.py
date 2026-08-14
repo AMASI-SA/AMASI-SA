@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from salla_integration import easy_mode_webhook
 from salla_integration.easy_mode_webhook import (
     _handle_app_uninstalled,
     _handle_store_authorize,
@@ -11,6 +12,7 @@ from salla_integration.easy_mode_webhook import (
 from salla_integration.shipment_webhook_sync import (
     sync_shipment_from_verified_webhook,
 )
+from salla_integration.store_scope import is_attribution_pilot_store
 from salla_integration.webhook_order_sync import (
     _resolve_user_id,
     sync_order_from_verified_webhook,
@@ -24,6 +26,11 @@ PILOT_STORE_ID = "748155538"
 @pytest.fixture(autouse=True)
 def pilot_store_env(monkeypatch):
     monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", PILOT_STORE_ID)
+
+
+def test_live_amasi_store_is_not_a_pilot_without_explicit_configuration(monkeypatch):
+    monkeypatch.delenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", raising=False)
+    assert not is_attribution_pilot_store("748155538")
 
 
 class NeverTouchedDB:
@@ -43,6 +50,19 @@ class IntegrationCollection:
         return None
 
 
+class BoundIntegrationCollection:
+    def __init__(self, store_id):
+        self.store_id = store_id
+        self.updated = False
+
+    async def find_one(self, query, projection=None, **kwargs):
+        return {"store_id": self.store_id}
+
+    async def update_one(self, query, update):
+        self.updated = True
+        return SimpleNamespace(matched_count=0)
+
+
 @pytest.mark.asyncio
 async def test_unknown_store_never_falls_back_to_amasi_owner():
     db = SimpleNamespace(
@@ -51,6 +71,35 @@ async def test_unknown_store_never_falls_back_to_amasi_owner():
         ])
     )
     assert await _resolve_user_id(db, "unknown-store") is None
+
+
+@pytest.mark.asyncio
+async def test_foreign_easy_mode_authorization_cannot_replace_connected_store(
+    monkeypatch,
+):
+    monkeypatch.delenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", raising=False)
+    monkeypatch.setattr(
+        easy_mode_webhook,
+        "resolve_owner_user_id",
+        lambda db: _owner("amasi-owner", "owner@example.test"),
+    )
+    collection = BoundIntegrationCollection("748155538")
+    db = SimpleNamespace(salla_integrations=collection)
+    result = await _handle_store_authorize(
+        db,
+        {
+            "event": "app.store.authorize",
+            "merchant": "9999000111",
+            "data": {"access_token": "foreign-token"},
+        },
+    )
+    assert result["stored"] is False
+    assert result["reason"] == "different_store_authorization_ignored"
+    assert result["current_store_id"] == "748155538"
+
+
+async def _owner(user_id, email):
+    return user_id, email
 
 
 @pytest.mark.asyncio

@@ -56,8 +56,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import uuid
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -67,8 +67,8 @@ from .service import (
     encrypt_token,
     upsert_integration,
 )
-from .webhook_event_capture import capture_unknown_event
 from .store_scope import is_attribution_pilot_store, normalize_store_id
+from .webhook_event_capture import capture_unknown_event
 
 log = logging.getLogger("salla.easy_mode")
 
@@ -255,12 +255,12 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
     scope = data.get("scope") or DEFAULT_SCOPES
     token_type = data.get("token_type") or "Bearer"
     merchant_id = event_body.get("merchant")  # store id
+    normalized_merchant_id = normalize_store_id(merchant_id)
 
     # The attribution pilot is intentionally not a second production Salla
     # integration. Never let its install/update rotate Amasi's tokens or store
     # binding. Browser attribution events for this store are handled separately.
     if is_attribution_pilot_store(merchant_id):
-        normalized_merchant_id = normalize_store_id(merchant_id)
         log.info(
             "easy_mode.attribution_pilot_authorization_ignored merchant=%s",
             normalized_merchant_id,
@@ -270,6 +270,13 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
             "stored": False,
             "reason": "attribution_pilot_store_authorization_ignored",
             "merchant_id": normalized_merchant_id,
+        }
+
+    if not normalized_merchant_id:
+        return {
+            "ok": False,
+            "stored": False,
+            "reason": "missing_merchant_id",
         }
 
     if not access:
@@ -290,6 +297,29 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
             "ok": False,
             "stored": False,
             "reason": "no_owner_user_found",
+        }
+
+    # Mezan is currently a single-store production system. An Easy Mode
+    # authorization from another Salla store must never rotate the tokens or
+    # replace the binding of the already-connected Amasi store.
+    current = await db.salla_integrations.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "store_id": 1},
+        sort=[("updated_at", -1)],
+    )
+    current_store_id = normalize_store_id((current or {}).get("store_id"))
+    if current_store_id and current_store_id != normalized_merchant_id:
+        log.warning(
+            "easy_mode.different_store_authorization_ignored merchant=%s current_store=%s",
+            normalized_merchant_id,
+            current_store_id,
+        )
+        return {
+            "ok": True,
+            "stored": False,
+            "reason": "different_store_authorization_ignored",
+            "merchant_id": normalized_merchant_id,
+            "current_store_id": current_store_id,
         }
 
     # Compute expires_at. Salla sends a future unix timestamp (seconds).
@@ -315,7 +345,7 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
         # install was created — useful when both Custom + Easy Mode
         # exist).
         "install_mode": "easy_mode",
-        "store_id": merchant_id,
+        "store_id": normalized_merchant_id,
         "easy_mode_owner_email": user_email,
     }
     if refresh:
@@ -325,14 +355,14 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
 
     log.info(
         "easy_mode.store_authorize merchant=%s → user_id=%s email=%s expires_in=%ss scope=%r",
-        merchant_id, user_id, user_email, expires_in_sec, scope,
+        normalized_merchant_id, user_id, user_email, expires_in_sec, scope,
     )
     return {
         "ok": True,
         "stored": True,
         "user_id": user_id,
         "user_email": user_email,
-        "merchant_id": merchant_id,
+        "merchant_id": normalized_merchant_id,
         "expires_in_seconds": expires_in_sec,
     }
 
@@ -374,7 +404,13 @@ async def _handle_app_uninstalled(db, event_body: dict) -> dict:
     if not user_id:
         return {"ok": True, "stored": False, "reason": "no_owner_user"}
     result = await db.salla_integrations.update_one(
-        {"user_id": user_id},
+        {
+            "user_id": user_id,
+            "store_id": {"$in": [
+                normalize_store_id(merchant_id),
+                int(merchant_id) if normalize_store_id(merchant_id).isdigit() else merchant_id,
+            ]},
+        },
         {"$set": {
             "status": "not_connected",
             "last_error": "Merchant uninstalled the app from Salla store.",
@@ -386,7 +422,12 @@ async def _handle_app_uninstalled(db, event_body: dict) -> dict:
         "easy_mode.app_uninstalled merchant=%s user_id=%s matched=%s",
         merchant_id, user_id, result.matched_count,
     )
-    return {"ok": True, "stored": result.matched_count > 0, "merchant_id": merchant_id}
+    return {
+        "ok": True,
+        "stored": result.matched_count > 0,
+        "merchant_id": normalize_store_id(merchant_id),
+        "reason": None if result.matched_count > 0 else "different_store_uninstall_ignored",
+    }
 
 
 # ── Event router ──────────────────────────────────────────────────────

@@ -16,7 +16,6 @@ from zoneinfo import ZoneInfo
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-DEFAULT_ATTRIBUTION_PILOT_STORE_ID = "748155538"
 ORDER_ATTRIBUTION_COLLECTION = "mezan_order_attributions_v1"
 OUTBOX_COLLECTION = "mezan_snapchat_capi_outbox_v1"
 QUARANTINE_COLLECTION = "mezan_demo_store_quarantine_v1"
@@ -33,10 +32,7 @@ def _confirmation(store_id: str) -> str:
 
 
 def _configured_pilot_store_id() -> str:
-    return _text(
-        os.environ.get("SALLA_ATTRIBUTION_PILOT_STORE_ID")
-        or DEFAULT_ATTRIBUTION_PILOT_STORE_ID
-    )
+    return _text(os.environ.get("SALLA_ATTRIBUTION_PILOT_STORE_ID"))
 
 
 def _has_accounting_projection(order: dict[str, Any]) -> bool:
@@ -297,6 +293,10 @@ async def main() -> None:
     except ValueError as exc:
         raise SystemExit("--date must use YYYY-MM-DD") from exc
     expected_store_id = _configured_pilot_store_id()
+    if not expected_store_id:
+        raise SystemExit(
+            "refusing: SALLA_ATTRIBUTION_PILOT_STORE_ID must be set explicitly"
+        )
     if args.store_id != expected_store_id:
         raise SystemExit("refusing: --store-id is not the configured attribution pilot")
     if args.apply and args.confirm != _confirmation(expected_store_id):
