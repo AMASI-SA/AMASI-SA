@@ -127,26 +127,28 @@
     return null;
   }
 
-  function sha256(value) {
+  async function sha256(value) {
     if (!value || !window.crypto || !window.crypto.subtle || !window.TextEncoder) {
-      return Promise.resolve(null);
+      return null;
     }
-    return window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)).then(function (buffer) {
+    try {
+      var buffer = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
       return Array.prototype.map.call(new Uint8Array(buffer), function (byte) {
         return byte.toString(16).padStart(2, "0");
       }).join("");
-    }).catch(function () { return null; });
+    } catch (_) {
+      return null;
+    }
   }
 
-  function identityHashes(payload) {
+  async function identityHashes(payload) {
     var email = deepFirst(payload, ["email"], 0);
     var phone = deepFirst(payload, ["phone", "mobile", "mobile_number"], 0);
     var tasks = [];
     if (email) tasks.push(sha256("email:" + email.trim().toLowerCase()));
     if (phone) tasks.push(sha256("phone:" + phone.replace(/\D/g, "").replace(/^00/, "")));
-    return Promise.all(tasks).then(function (rows) {
-      return rows.filter(Boolean).slice(0, 8);
-    });
+    var rows = await Promise.all(tasks);
+    return rows.filter(Boolean).slice(0, 8);
   }
 
   function storeConfig(key) {
@@ -178,11 +180,11 @@
     })[compact] || null;
   }
 
-  function send(eventName, payload) {
-    if (!eventName) return Promise.resolve();
+  async function send(eventName, payload) {
+    if (!eventName) return;
     var touch = activeTouch();
-    return identityHashes(payload || {}).then(function (hashes) {
-      var body = {
+    var hashes = await identityHashes(payload || {});
+    var body = {
         event_id: randomId("me"),
         visitor_id: visitorId(),
         session_id: sessionId(),
@@ -203,16 +205,19 @@
         identity_hashes: hashes,
         page_url: window.location.href.slice(0, 3000),
         referrer: (document.referrer || "").slice(0, 3000)
-      };
-      return fetch(ENDPOINT, {
+    };
+    try {
+      await fetch(ENDPOINT, {
         method: "POST",
         mode: "cors",
         credentials: "omit",
         keepalive: true,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
-      }).catch(function () { /* Attribution never blocks the storefront. */ });
-    });
+      });
+    } catch (_) {
+      /* Attribution never blocks the storefront. */
+    }
   }
 
   function register() {
