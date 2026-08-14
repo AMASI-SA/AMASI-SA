@@ -68,6 +68,7 @@ from .service import (
     upsert_integration,
 )
 from .webhook_event_capture import capture_unknown_event
+from .store_scope import is_attribution_pilot_store, normalize_store_id
 
 log = logging.getLogger("salla.easy_mode")
 
@@ -255,6 +256,22 @@ async def _handle_store_authorize(db, event_body: dict) -> dict:
     token_type = data.get("token_type") or "Bearer"
     merchant_id = event_body.get("merchant")  # store id
 
+    # The attribution pilot is intentionally not a second production Salla
+    # integration. Never let its install/update rotate Amasi's tokens or store
+    # binding. Browser attribution events for this store are handled separately.
+    if is_attribution_pilot_store(merchant_id):
+        normalized_merchant_id = normalize_store_id(merchant_id)
+        log.info(
+            "easy_mode.attribution_pilot_authorization_ignored merchant=%s",
+            normalized_merchant_id,
+        )
+        return {
+            "ok": True,
+            "stored": False,
+            "reason": "attribution_pilot_store_authorization_ignored",
+            "merchant_id": normalized_merchant_id,
+        }
+
     if not access:
         return {
             "ok": False,
@@ -341,6 +358,18 @@ async def _handle_app_uninstalled(db, event_body: dict) -> dict:
     integration `not_connected` but keep the row for historical
     auditing (refund disputes, etc.)."""
     merchant_id = event_body.get("merchant")
+    if is_attribution_pilot_store(merchant_id):
+        normalized_merchant_id = normalize_store_id(merchant_id)
+        log.info(
+            "easy_mode.attribution_pilot_uninstall_ignored merchant=%s",
+            normalized_merchant_id,
+        )
+        return {
+            "ok": True,
+            "stored": False,
+            "reason": "attribution_pilot_store_uninstall_ignored",
+            "merchant_id": normalized_merchant_id,
+        }
     user_id, _ = await resolve_owner_user_id(db)
     if not user_id:
         return {"ok": True, "stored": False, "reason": "no_owner_user"}

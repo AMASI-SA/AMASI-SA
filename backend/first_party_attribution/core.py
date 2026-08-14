@@ -23,6 +23,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from salla_integration.store_scope import is_attribution_pilot_store
+
 
 EVENT_COLLECTION = "mezan_first_party_events_v1"
 LINK_COLLECTION = "mezan_first_party_links_v1"
@@ -297,7 +299,23 @@ async def _resolve_user_id(db: Any, store_id: str) -> str | None:
     row = await db.salla_integrations.find_one(
         {"store_id": {"$in": values}}, {"user_id": 1}, sort=[("updated_at", -1)]
     )
-    return _text((row or {}).get("user_id"), 160) or None
+    user_id = _text((row or {}).get("user_id"), 160)
+    if user_id:
+        return user_id
+
+    # The pilot is allowed to record attribution events under the production
+    # owner without becoming an order-capable Salla integration.
+    if is_attribution_pilot_store(store_id):
+        owner = await db.salla_integrations.find_one(
+            {
+                "status": "connected",
+                "user_id": {"$exists": True, "$nin": [None, ""]},
+            },
+            {"user_id": 1},
+            sort=[("updated_at", -1)],
+        )
+        return _text((owner or {}).get("user_id"), 160) or None
+    return None
 
 
 async def persist_storefront_event(db: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -364,10 +382,14 @@ async def persist_storefront_event(db: Any, payload: dict[str, Any]) -> dict[str
         ad_id = ad_id if ("ad", ad_id or "") in verified else None
         creative_id = creative_id if ("creative", creative_id or "") in verified else None
         provider_ids_verified = bool(requested) and len(verified) == len(requested)
+    store_id = _text(payload.get("store_id"), 160) or None
+    pilot_store = is_attribution_pilot_store(store_id)
     record = {
         "event_id": event_id,
         "user_id": user_id,
-        "store_id": _text(payload.get("store_id"), 160) or None,
+        "store_id": store_id,
+        "store_scope": "attribution_pilot" if pilot_store else "production",
+        "environment": "pilot" if pilot_store else "production",
         "visitor_id": visitor_id,
         "session_id": session_id,
         "event_name": event_name,
@@ -449,6 +471,7 @@ async def link_order_attribution(
     order_number: str,
     order_payload: dict[str, Any],
     order_doc: dict[str, Any] | None = None,
+    store_id: str | None = None,
 ) -> dict[str, Any]:
     order_doc = order_doc or {}
     evidence = _order_match_evidence(order_payload, order_doc)
@@ -472,6 +495,8 @@ async def link_order_attribution(
             query_field[kind]: {"$in": values},
             "occurred_at": {"$gte": cutoff.isoformat()},
         }
+        if store_id:
+            query["store_id"] = _text(store_id, 160)
         events = await db[EVENT_COLLECTION].find(query, {"_id": 0}).sort(
             "occurred_at", 1
         ).to_list(500)
@@ -479,12 +504,15 @@ async def link_order_attribution(
             matched_by = kind
             visitor_ids = list({row.get("visitor_id") for row in events if row.get("visitor_id")})
             if visitor_ids:
-                events = await db[EVENT_COLLECTION].find(
-                    {
+                journey_query = {
                         "user_id": user_id,
                         "visitor_id": {"$in": visitor_ids},
                         "occurred_at": {"$gte": cutoff.isoformat()},
-                    },
+                    }
+                if store_id:
+                    journey_query["store_id"] = _text(store_id, 160)
+                events = await db[EVENT_COLLECTION].find(
+                    journey_query,
                     {"_id": 0},
                 ).sort("occurred_at", 1).to_list(500)
             break

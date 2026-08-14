@@ -632,9 +632,13 @@ async def enqueue_snapchat_purchase_from_salla_event(
     db: Any,
     event_body: dict[str, Any],
 ) -> dict[str, Any]:
+    from salla_integration.store_scope import is_attribution_pilot_store
+
     event_name = str(event_body.get("event") or "").strip()
     if event_name not in {"order.created", "order.updated", "order.status.updated"}:
         return {"queued": False, "reason": "not_order_event"}
+    if is_attribution_pilot_store(event_body.get("merchant")):
+        return {"queued": False, "reason": "attribution_pilot_store_orders_blocked"}
     user_id = await _resolve_salla_user_id(db, event_body.get("merchant"))
     raw = _salla_event_order(event_body)
     if not user_id or not raw:

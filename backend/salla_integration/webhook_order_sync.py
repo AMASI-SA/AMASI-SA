@@ -12,6 +12,7 @@ from typing import Any, Optional
 from orders_db import upsert_order
 
 from .sync import _salla_order_to_doc
+from .store_scope import is_attribution_pilot_store
 
 
 def _text(value: Any) -> Optional[str]:
@@ -83,13 +84,7 @@ async def _resolve_user_id(db: Any, merchant_id: Optional[str]) -> Optional[str]
         user_id = _text((doc or {}).get("user_id"))
         if user_id:
             return user_id
-
-    doc = await db.salla_integrations.find_one(
-        {"user_id": {"$exists": True, "$nin": [None, ""]}},
-        {"user_id": 1},
-        sort=[("updated_at", -1)],
-    )
-    return _text((doc or {}).get("user_id"))
+    return None
 
 
 def _event_data(event_body: dict[str, Any]) -> dict[str, Any]:
@@ -413,6 +408,13 @@ async def sync_order_from_verified_webhook(
         return {"attempted": False, "reason": "not_order_snapshot_event"}
 
     merchant_id = _text(event_body.get("merchant"))
+    if is_attribution_pilot_store(merchant_id):
+        return {
+            "attempted": True,
+            "synced": False,
+            "merchant_id": merchant_id,
+            "reason": "attribution_pilot_store_orders_blocked",
+        }
     user_id = await _resolve_user_id(db, merchant_id)
     if not user_id:
         return {
@@ -462,6 +464,7 @@ async def sync_order_from_verified_webhook(
                 order_number=order_number,
                 order_payload=payload,
                 order_doc=result.get("doc") or doc,
+                store_id=merchant_id,
             )
         except Exception as exc:
             # Attribution is enrichment only. An analytics failure must never
@@ -536,6 +539,15 @@ async def sync_shipment_payload_from_verified_webhook(
         return {"attempted": False, "reason": "not_shipment_event"}
 
     merchant_id = _text(event_body.get("merchant"))
+    if is_attribution_pilot_store(merchant_id):
+        return {
+            "attempted": True,
+            "synced": False,
+            "merchant_id": merchant_id,
+            "reason": "attribution_pilot_store_shipments_blocked",
+            "no_salla_api_calls": True,
+            "no_qoyod_calls": True,
+        }
     user_id = await _resolve_user_id(db, merchant_id)
     if not user_id:
         return {
