@@ -38,6 +38,7 @@ from pymongo import ReturnDocument
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 
+from auth_preview_policy import preview_password_only_enabled
 from email_otp_policy import email_otp_enabled, requires_email_otp
 
 logger = logging.getLogger(__name__)
@@ -615,6 +616,19 @@ class EmailOtpSecurityMiddleware:
             return
 
         try:
+            if preview_password_only_enabled(scope):
+                # Keep password validation, account status checks, rate limits,
+                # and authorization intact; only skip delivery of the Preview
+                # second factor. The account's OTP policy is not modified.
+                await self.store.safe_event(
+                    "email_otp_preview_password_only_login",
+                    user,
+                )
+                response = _session_response(user)
+                response.headers["X-Mezan-Auth-Mode"] = "preview-password-only"
+                await response(scope, _replay_receive(messages), send)
+                return
+
             recipient = str(user.get("email") or "").strip().lower()
             if not _valid_recipient(recipient):
                 raise ValueError("account has no deliverable email address")
