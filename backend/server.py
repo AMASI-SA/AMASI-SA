@@ -4358,6 +4358,9 @@ origins = list({o.strip() for o in [
     "http://localhost:3000",
     "https://amasi-sa.com",
     "https://www.amasi-sa.com",
+    # Salla partner demo storefront used to validate App Snippets before
+    # enabling them for the live Amasi store.
+    "https://demostore.salla.sa",
 ] + extra if o and o.strip() and o.strip() != "*"})
 
 app.add_middleware(

@@ -3,6 +3,7 @@
  */
 (function mezanFirstPartyAttribution() {
   "use strict";
+  window.__mezanBuild = "20260814-01";
 
   if (window.__mezanFirstPartyAttributionV1) return;
   window.__mezanFirstPartyAttributionV1 = true;
@@ -16,7 +17,11 @@
   // Pilot safety gate: saving an App Snippet publishes it to every store that
   // installed the app. Keep collection disabled outside the demo store until
   // the end-to-end attribution test is approved.
-  var PILOT_STORE_NAME = "Mezan Attribution Test";
+  // The Partners Portal label is "Mezan Attribution Test", while the
+  // storefront SDK exposes the demo store's real name as "متجر تجريبي".
+  // Gate on the immutable store ID so a translated/renamed label cannot
+  // accidentally enable collection for another installed store.
+  var PILOT_STORE_ID = "748155538";
 
   function randomId(prefix) {
     var value = window.crypto && window.crypto.randomUUID
@@ -165,7 +170,7 @@
   }
 
   function isPilotStore() {
-    return clean(storeConfig("store.name"), 160) === PILOT_STORE_NAME;
+    return clean(storeConfig("store.id"), 160) === PILOT_STORE_ID;
   }
 
   function normalizeEventName(eventName) {
@@ -221,10 +226,15 @@
     }
   }
 
+  var trackerRegistered = false;
+
   function register() {
+    if (trackerRegistered) return true;
     var Salla = window.Salla || window.salla;
-    if (!Salla || !Salla.analytics || typeof Salla.analytics.registerTracker !== "function") return;
-    if (!isPilotStore()) return;
+    if (!Salla || !Salla.analytics || typeof Salla.analytics.registerTracker !== "function") {
+      return false;
+    }
+    if (!isPilotStore()) return false;
     Salla.analytics.registerTracker({
       name: "MezanFirstPartyAttributionV1",
       track: function (eventName, payload) {
@@ -234,12 +244,26 @@
         send("page_view", payload || {});
       }
     });
+    trackerRegistered = true;
+    send("page_view", {});
+    return true;
+  }
+
+  function startRegistration() {
+    var attempts = 0;
+
+    function attempt() {
+      attempts += 1;
+      if (register() || attempts >= 60) return;
+      window.setTimeout(attempt, 500);
+    }
+
+    attempt();
   }
 
   var sdk = window.Salla || window.salla;
   if (sdk && typeof sdk.onReady === "function") {
     sdk.onReady(register);
-  } else {
-    window.addEventListener("load", register, { once: true });
   }
+  startRegistration();
 }());
