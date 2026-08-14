@@ -764,7 +764,10 @@ async def resolve_capi_pixel_id(db: Any, user_id: str) -> PixelResolution:
     ]
     query: dict[str, Any] = {"user_id": str(user_id), "pixel_id": {"$nin": [None, ""]}}
     if selected_ids:
-        query["ad_account_id"] = {"$in": selected_ids}
+        query["$or"] = [
+            {"ad_account_id": {"$in": selected_ids}},
+            {"ad_account_ids": {"$in": selected_ids}},
+        ]
     cursor = _collection(db, TRACKING_ASSET_COLLECTION).find(
         query,
         {"_id": 0, "pixel_id": 1, "last_observed_at": 1},
