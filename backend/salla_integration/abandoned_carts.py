@@ -266,6 +266,16 @@ def _normalise_item(item: Any) -> dict[str, Any] | None:
     variant_id = _text(_first(source.get("variant_id"), variant.get("id")))
     sku = _text(_first(source.get("sku"), variant.get("sku"), product.get("sku")))
     name = _text(_first(source.get("name"), product.get("name"), variant.get("name")))
+    image_source = _first(
+        source.get("image_url"),
+        source.get("image"),
+        product.get("image_url"),
+        product.get("main_image"),
+        variant.get("image_url"),
+        variant.get("image"),
+    )
+    if isinstance(image_source, dict):
+        image_source = _first(image_source.get("url"), image_source.get("original"), image_source.get("src"))
     quantity = _number(_first(source.get("quantity"), source.get("qty"), 1))
     unit_price_source = _first(source.get("price"), source.get("unit_price"))
     total_price_source = _first(source.get("total"), source.get("total_price"))
@@ -274,6 +284,7 @@ def _normalise_item(item: Any) -> dict[str, Any] | None:
         "variant_id": variant_id,
         "sku": sku,
         "name": name[:500] if name else None,
+        "image_url": _text(image_source),
         "quantity": quantity,
         "unit_price": _number(unit_price_source),
         "total_price": _number(total_price_source),
