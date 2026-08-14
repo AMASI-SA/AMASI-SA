@@ -60,6 +60,11 @@ describe("DashboardDesignPreview", () => {
         expect(html).toContain("277947819");
         expect(html).toContain("تم المراجعة");
         expect(html).toContain("بانتظار المراجعة");
+        expect(html).toContain("مصدر الطلب: سناب شات");
+        expect(html).toContain("مصدر الطلب: جوجل");
+        expect(html).toContain("مصدر الطلب: إنستقرام");
+        expect(html).toContain("returnTo=%2Fdashboard-design-preview");
+        expect((html.match(/فتح الطلب /g) || []).length).toBe(ORDER_TIMES.length);
     });
 
     test("is explicitly fake-data preview and includes every approved side card", () => {

@@ -4,11 +4,13 @@ import {
     BarChart3,
     BriefcaseBusiness,
     CalendarDays,
+    ChevronLeft,
     ChevronDown,
     CircleDollarSign,
     CreditCard,
     MapPin,
     Megaphone,
+    Instagram,
     PackageOpen,
     RefreshCw,
     ShoppingBag,
@@ -114,14 +116,14 @@ const TOP_PRODUCTS = [
 ];
 
 const ORDER_ROWS = [
-    { name: "نوال البدري", number: "277947819", city: "الرياض", status: "تم المراجعة", amount: 161.11, time: ORDER_TIMES[0], fresh: true, avatar: "👩🏻" },
-    { name: "يزيد صالح", number: "277947445", city: "جدة", status: "تم المراجعة", amount: 113.4, time: ORDER_TIMES[1], fresh: false, avatar: "👨🏻" },
-    { name: "Shatha Almorshid", number: "277944366", city: "الرياض", status: "بانتظار المراجعة", amount: 175.12, time: ORDER_TIMES[2], fresh: true, avatar: "👩🏻" },
-    { name: "أمينة الغامدي", number: "277936572", city: "الدمام", status: "تم المراجعة", amount: 134, time: ORDER_TIMES[3], fresh: false, avatar: "👨🏻" },
-    { name: "وفاء الريحان", number: "277934656", city: "الرياض", status: "تم المراجعة", amount: 204.12, time: ORDER_TIMES[4], fresh: false, avatar: "👩🏻" },
-    { name: "Zina Obaid", number: "277927065", city: "جدة", status: "بانتظار المراجعة", amount: 295.22, time: ORDER_TIMES[5], fresh: true, avatar: "👨🏻" },
-    { name: "عبدالله عود", number: "277922836", city: "صبيا", status: "تم المراجعة", amount: 233.36, time: ORDER_TIMES[6], fresh: false, avatar: "👩🏻" },
-    { name: "علي ناجي سرحان", number: "277921542", city: "الرياض", status: "تم المراجعة", amount: 170.83, time: ORDER_TIMES[7], fresh: false, avatar: "👨🏻" },
+    { name: "نوال البدري", number: "277947819", city: "الرياض", status: "تم المراجعة", amount: 161.11, time: ORDER_TIMES[0], fresh: true, avatar: "👩🏻", source: "snapchat" },
+    { name: "يزيد صالح", number: "277947445", city: "جدة", status: "تم المراجعة", amount: 113.4, time: ORDER_TIMES[1], fresh: false, avatar: "👨🏻", source: "google" },
+    { name: "Shatha Almorshid", number: "277944366", city: "الرياض", status: "بانتظار المراجعة", amount: 175.12, time: ORDER_TIMES[2], fresh: true, avatar: "👩🏻", source: "instagram" },
+    { name: "أمينة الغامدي", number: "277936572", city: "الدمام", status: "تم المراجعة", amount: 134, time: ORDER_TIMES[3], fresh: false, avatar: "👨🏻", source: "tiktok" },
+    { name: "وفاء الريحان", number: "277934656", city: "الرياض", status: "تم المراجعة", amount: 204.12, time: ORDER_TIMES[4], fresh: false, avatar: "👩🏻", source: "meta" },
+    { name: "Zina Obaid", number: "277927065", city: "جدة", status: "بانتظار المراجعة", amount: 295.22, time: ORDER_TIMES[5], fresh: true, avatar: "👨🏻", source: "snapchat" },
+    { name: "عبدالله عود", number: "277922836", city: "صبيا", status: "تم المراجعة", amount: 233.36, time: ORDER_TIMES[6], fresh: false, avatar: "👩🏻", source: "google" },
+    { name: "علي ناجي سرحان", number: "277921542", city: "الرياض", status: "تم المراجعة", amount: 170.83, time: ORDER_TIMES[7], fresh: false, avatar: "👨🏻", source: "instagram" },
 ];
 
 const TOP_PAGES = [
@@ -448,9 +450,21 @@ function LatestOrdersCard() {
             </div>
             <div>
                 {ORDER_ROWS.map((order) => (
-                    <div key={order.number} dir="ltr" className="grid min-h-[58px] grid-cols-[94px_122px_minmax(0,1fr)] items-center gap-4 border-b border-slate-100 px-4 py-2 last:border-b-0">
-                        <span className="text-[11px] text-slate-400">{order.time}</span>
-                        <span className="num text-sm font-extrabold text-teal-700">SAR {money(order.amount)}</span>
+                    <a
+                        key={order.number}
+                        href={`/orders-v2/${encodeURIComponent(order.number)}?returnTo=${encodeURIComponent("/dashboard-design-preview")}`}
+                        dir="ltr"
+                        aria-label={`فتح الطلب ${order.number} والعودة إلى لوحة التحكم`}
+                        className="grid min-h-[58px] grid-cols-[94px_140px_minmax(0,1fr)] items-center gap-4 border-b border-slate-100 px-4 py-2 transition hover:bg-slate-50 last:border-b-0"
+                    >
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                            <ChevronLeft className="h-4 w-4 shrink-0 text-slate-300" />
+                            <span>{order.time}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <OrderSourceBadge source={order.source} />
+                            <span className="num whitespace-nowrap text-sm font-extrabold text-teal-700">SAR {money(order.amount)}</span>
+                        </div>
                         <div dir="rtl" className="flex min-w-0 items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl ring-1 ring-slate-200">{order.avatar}</div>
                             <div className="min-w-0 flex-1">
@@ -467,11 +481,21 @@ function LatestOrdersCard() {
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </a>
                 ))}
             </div>
         </Panel>
     );
+}
+
+function OrderSourceBadge({ source }) {
+    const shared = "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-black shadow-sm";
+    if (source === "snapchat") return <span title="مصدر الطلب: سناب شات" aria-label="مصدر الطلب: سناب شات" className={`${shared} border-yellow-300 bg-yellow-300 text-slate-950`}>👻</span>;
+    if (source === "google") return <span title="مصدر الطلب: جوجل" aria-label="مصدر الطلب: جوجل" className={`${shared} border-blue-200 bg-white text-blue-600`}>G</span>;
+    if (source === "instagram") return <span title="مصدر الطلب: إنستقرام" aria-label="مصدر الطلب: إنستقرام" className={`${shared} border-fuchsia-300 bg-gradient-to-br from-violet-600 via-fuchsia-500 to-amber-400 text-white`}><Instagram className="h-4 w-4" /></span>;
+    if (source === "meta") return <span title="مصدر الطلب: ميتا" aria-label="مصدر الطلب: ميتا" className={`${shared} border-blue-500 bg-blue-500 text-white`}>∞</span>;
+    if (source === "tiktok") return <span title="مصدر الطلب: تيك توك" aria-label="مصدر الطلب: تيك توك" className={`${shared} border-slate-900 bg-slate-950 text-white`}>♪</span>;
+    return null;
 }
 
 function GoogleAnalyticsCard() {
