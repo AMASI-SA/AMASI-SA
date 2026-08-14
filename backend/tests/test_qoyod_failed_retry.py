@@ -196,7 +196,7 @@ async def test_failed_retry_keeps_quarantine_open_on_guard_refusal():
     )
 
 
-def test_failure_overlay_marks_unsent_as_retryable_failure():
+def test_failure_overlay_keeps_order_in_unsent_with_retry():
     result = _overlay_manual_failure(
         {"status": UNSENT, "reason": "بانتظار الإرسال إلى قيود"},
         {
@@ -206,7 +206,7 @@ def test_failure_overlay_marks_unsent_as_retryable_failure():
         },
     )
 
-    assert result["status"] == FAILED
+    assert result["status"] == UNSENT
     assert result["retry_allowed"] is True
     assert result["failure_source"] == "auto_quarantine"
     assert result["failure_code"] == "qoyod_preflight_total_mismatch"

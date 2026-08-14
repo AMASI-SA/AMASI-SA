@@ -163,39 +163,6 @@ class _UpdateResult:
     modified_count = 1
 
 
-class _SettingsCollection:
-    def __init__(self):
-        self.selector = None
-        self.update = None
-
-    async def update_one(self, selector, update):
-        self.selector = selector
-        self.update = update
-        return _UpdateResult()
-
-
-class _FakeDb:
-    def __init__(self):
-        self.qoyod_settings = _SettingsCollection()
-
-
-@pytest.mark.asyncio
-async def test_circuit_breaker_disables_automatic_sending():
-    db = _FakeDb()
-    await auto_send._trip_circuit_breaker(
-        db,
-        code="qoyod_timeout",
-        message="تعذر الاتصال بقيود",
-        run_id="run-1",
-    )
-
-    persisted = db.qoyod_settings.update["$set"]
-    assert persisted["auto_send"] is False
-    assert persisted["plan_b_auto_send_armed_at"] is None
-    assert persisted["plan_b_auto_send_disabled_reason"] == "circuit_breaker"
-    assert persisted["plan_b_auto_send_last_error"]["run_id"] == "run-1"
-
-
 class _RecoveryLookupCollection:
     def __init__(self, row):
         self.row = row
@@ -229,7 +196,7 @@ class _RecoveryDb:
         )
 
 
-def _transient_breaker_settings(**overrides):
+def _legacy_breaker_settings(**overrides):
     value = _ready_settings(
         auto_send=False,
         plan_b_auto_send_armed_at=None,
@@ -247,7 +214,7 @@ def _transient_breaker_settings(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_transient_salla_breaker_recovers_after_full_readiness_check(
+async def test_legacy_breaker_recovers_after_full_readiness_check(
     monkeypatch,
 ):
     async def fake_get_api_key(db, tenant):
@@ -257,9 +224,9 @@ async def test_transient_salla_breaker_recovers_after_full_readiness_check(
     monkeypatch.setattr(auto_send, "get_api_key", fake_get_api_key)
     db = _RecoveryDb()
 
-    recovered = await auto_send._recover_transient_salla_breaker(
+    recovered = await auto_send._recover_legacy_circuit_breaker(
         db,
-        _transient_breaker_settings(),
+        _legacy_breaker_settings(),
     )
 
     assert auto_send.is_armed(recovered) is True
@@ -279,30 +246,34 @@ async def test_transient_salla_breaker_recovers_after_full_readiness_check(
 
 
 @pytest.mark.asyncio
-async def test_real_qoyod_breaker_never_auto_recovers(monkeypatch):
-    async def forbidden_get_api_key(db, tenant):
-        raise AssertionError("real failures must remain stopped")
+async def test_old_qoyod_error_breaker_also_recovers(monkeypatch):
+    async def fake_get_api_key(db, tenant):
+        assert tenant == "main"
+        return "configured-key"
 
-    monkeypatch.setattr(auto_send, "get_api_key", forbidden_get_api_key)
+    monkeypatch.setattr(auto_send, "get_api_key", fake_get_api_key)
     db = _RecoveryDb()
-    settings = _transient_breaker_settings(
+    settings = _legacy_breaker_settings(
         plan_b_auto_send_last_error={
             "code": "qoyod_http_error",
             "message": "تعذر الاتصال بقيود",
         },
     )
 
-    recovered = await auto_send._recover_transient_salla_breaker(
+    recovered = await auto_send._recover_legacy_circuit_breaker(
         db,
         settings,
     )
 
-    assert recovered is None
-    assert db.qoyod_settings.calls == []
+    assert recovered["auto_send"] is True
+    assert recovered["plan_b_auto_send_disabled_reason"] is None
+    assert db.qoyod_settings.calls[0][1]["$set"][
+        "plan_b_auto_send_last_recovery"
+    ]["previous_error_code"] == "qoyod_http_error"
 
 
 @pytest.mark.asyncio
-async def test_transient_breaker_stays_stopped_when_readiness_is_incomplete(
+async def test_legacy_breaker_stays_stopped_when_readiness_is_incomplete(
     monkeypatch,
 ):
     async def missing_get_api_key(db, tenant):
@@ -311,9 +282,9 @@ async def test_transient_breaker_stays_stopped_when_readiness_is_incomplete(
     monkeypatch.setattr(auto_send, "get_api_key", missing_get_api_key)
     db = _RecoveryDb()
 
-    recovered = await auto_send._recover_transient_salla_breaker(
+    recovered = await auto_send._recover_legacy_circuit_breaker(
         db,
-        _transient_breaker_settings(),
+        _legacy_breaker_settings(),
     )
 
     assert recovered is None
@@ -387,7 +358,7 @@ def _candidate(order_number):
     }
 
 
-async def _prepare_run(monkeypatch, *, candidates, send_one, trip_breaker):
+async def _prepare_run(monkeypatch, *, candidates, send_one):
     async def fake_settings(db):
         return _ready_settings()
 
@@ -417,7 +388,6 @@ async def _prepare_run(monkeypatch, *, candidates, send_one, trip_breaker):
         auto_send, "_refresh_and_verify_salla_status", fake_refresh
     )
     monkeypatch.setattr(auto_send, "manual_send_one", send_one)
-    monkeypatch.setattr(auto_send, "_trip_circuit_breaker", trip_breaker)
 
 
 @pytest.mark.asyncio
@@ -425,8 +395,6 @@ async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
     monkeypatch,
 ):
     calls = []
-    breaker_calls = []
-
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
     ):
@@ -451,21 +419,16 @@ async def test_actual_total_mismatch_isolated_and_next_candidate_sends(
             "payment_id": 902,
         }
 
-    async def fake_trip(db, **kwargs):
-        breaker_calls.append(kwargs)
-
     await _prepare_run(
         monkeypatch,
         candidates=[_candidate("273811870"), _candidate("273811871")],
         send_one=fake_send,
-        trip_breaker=fake_trip,
     )
 
     db = _RunDb()
     result = await auto_send.run_once(db, batch_limit=5)
 
     assert calls == ["273811870", "273811871"]
-    assert breaker_calls == []
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
@@ -502,14 +465,10 @@ async def test_preflight_mismatch_is_quarantined_before_later_order_sends(
             )
         return {"invoice_id": 901, "payment_id": 902}
 
-    async def fake_trip(db, **kwargs):
-        raise AssertionError("order-local mismatch must not trip breaker")
-
     await _prepare_run(
         monkeypatch,
         candidates=[_candidate("273809026"), _candidate("273809027")],
         send_one=fake_send,
-        trip_breaker=fake_trip,
     )
 
     db = _RunDb()
@@ -536,9 +495,6 @@ async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
         calls.append(order_number)
         return {"invoice_id": 901, "payment_id": 902}
 
-    async def fake_trip(db, **kwargs):
-        raise AssertionError("breaker must not run")
-
     await _prepare_run(
         monkeypatch,
         candidates=[
@@ -546,7 +502,6 @@ async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
             _candidate("273809027"),
         ],
         send_one=fake_send,
-        trip_breaker=fake_trip,
     )
     db = _RunDb()
     db.qoyod_manual_auto_quarantines.rows["main:273809026"] = {
@@ -563,47 +518,46 @@ async def test_open_quarantine_is_skipped_without_consuming_batch_slot(
 
 
 @pytest.mark.asyncio
-async def test_systemic_error_still_trips_breaker_and_stops_batch(monkeypatch):
+async def test_qoyod_http_error_is_quarantined_and_next_candidate_sends(
+    monkeypatch,
+):
     calls = []
-    breaker_calls = []
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
     ):
         calls.append(order_number)
-        raise ManualSendRefused(
-            "qoyod_http_error",
-            "تعذر الاتصال بقيود",
-            {"status_code": 503},
-        )
-
-    async def fake_trip(db, **kwargs):
-        breaker_calls.append(kwargs)
+        if order_number == "273811870":
+            raise ManualSendRefused(
+                "qoyod_http_error",
+                "تعذر الاتصال بقيود",
+                {"status_code": 503},
+            )
+        return {"invoice_id": 901, "payment_id": 902}
 
     await _prepare_run(
         monkeypatch,
         candidates=[_candidate("273811870"), _candidate("273811871")],
         send_one=fake_send,
-        trip_breaker=fake_trip,
     )
 
-    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
 
-    assert calls == ["273811870"]
-    assert len(breaker_calls) == 1
-    assert breaker_calls[0]["code"] == "qoyod_http_error"
-    assert result["ok"] is False
-    assert result["status"] == "stopped_on_error"
-    assert result["sent_count"] == 0
-    assert result["manual_review_count"] == 0
+    assert calls == ["273811870", "273811871"]
+    assert result["ok"] is True
+    assert result["status"] == "succeeded"
+    assert result["sent_count"] == 1
+    assert result["manual_review_count"] == 1
+    quarantine = db.qoyod_manual_auto_quarantines.rows["main:273811870"]
+    assert quarantine["code"] == "qoyod_http_error"
 
 
 @pytest.mark.asyncio
-async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
+async def test_salla_refresh_failure_is_quarantined_and_next_candidate_sends(
     monkeypatch,
 ):
     sent = []
-    breaker_calls = []
 
     async def fake_send(
         db, *, user_id, orders_user_id, order_number, actor,
@@ -611,14 +565,10 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
         sent.append(order_number)
         return {"invoice_id": 901, "payment_id": 902}
 
-    async def fake_trip(db, **kwargs):
-        breaker_calls.append(kwargs)
-
     await _prepare_run(
         monkeypatch,
         candidates=[_candidate("276776919"), _candidate("276565610")],
         send_one=fake_send,
-        trip_breaker=fake_trip,
     )
 
     async def fake_refresh(db, *, orders_user_id, order_number):
@@ -641,14 +591,80 @@ async def test_salla_refresh_failure_retries_later_and_next_candidate_sends(
         auto_send, "_refresh_and_verify_salla_status", fake_refresh
     )
 
-    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
 
-    assert breaker_calls == []
     assert sent == ["276565610"]
     assert result["ok"] is True
     assert result["status"] == "succeeded"
     assert result["sent_count"] == 1
-    assert result["retry_later_count"] == 1
-    assert result["results"][0]["outcome"] == "retry_later"
+    assert result["manual_review_count"] == 1
+    assert result["retry_later_count"] == 0
+    assert result["results"][0]["outcome"] == "manual_review"
     assert result["results"][0]["order_number"] == "276776919"
     assert result["results"][1]["outcome"] == "sent"
+    quarantine = db.qoyod_manual_auto_quarantines.rows["main:276776919"]
+    assert quarantine["code"] == "salla_status_refresh_failed"
+
+
+@pytest.mark.asyncio
+async def test_unhandled_order_error_is_quarantined_and_batch_continues(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        if order_number == "276700001":
+            raise RuntimeError("unexpected per-order failure")
+        return {"invoice_id": 903, "payment_id": 904}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[_candidate("276700001"), _candidate("276700002")],
+        send_one=fake_send,
+    )
+
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["276700001", "276700002"]
+    assert result["ok"] is True
+    assert result["status"] == "succeeded"
+    assert result["sent_count"] == 1
+    assert result["manual_review_count"] == 1
+    quarantine = db.qoyod_manual_auto_quarantines.rows["main:276700001"]
+    assert quarantine["code"] == "unhandled_exception"
+    assert quarantine["detail"]["error_reference"]
+
+
+@pytest.mark.asyncio
+async def test_round_level_failure_keeps_worker_armed_for_next_tick(
+    monkeypatch,
+):
+    released = []
+
+    async def fake_settings(db):
+        return _ready_settings()
+
+    async def fake_acquire(db):
+        return "lease-test"
+
+    async def fake_release(db, owner):
+        released.append(owner)
+
+    async def failed_pending(db, **kwargs):
+        raise RuntimeError("database read failed")
+
+    monkeypatch.setattr(auto_send, "_current_settings", fake_settings)
+    monkeypatch.setattr(auto_send, "_acquire_lease", fake_acquire)
+    monkeypatch.setattr(auto_send, "_release_lease", fake_release)
+    monkeypatch.setattr(auto_send, "list_pending_orders", failed_pending)
+
+    result = await auto_send.run_once(_RunDb(), batch_limit=5)
+
+    assert result["ok"] is False
+    assert result["status"] == "round_failed"
+    assert released == ["lease-test"]

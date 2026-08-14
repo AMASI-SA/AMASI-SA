@@ -381,7 +381,7 @@ export default function QoyodUnsentOrders() {
                   <td className="px-3 py-2 text-slate-600 max-w-md">{o.reason}</td>
                   <td className="px-3 py-2" dir="ltr">{o.qoyod_invoice_id || "—"}</td>
                   <td className="px-3 py-2 min-w-48">
-                    {o.status === "فشل" && o.retry_allowed !== false ? (
+                    {o.retry_allowed === true ? (
                       retryConfirmOrder === o.order_number ? (
                         <div className="flex items-center gap-2">
                           <button

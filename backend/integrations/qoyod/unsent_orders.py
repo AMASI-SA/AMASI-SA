@@ -204,7 +204,9 @@ def _overlay_manual_failure(
     """Make Plan-B retry/quarantine failures visible in the four-state view.
 
     A real invoice or duplicate marker always wins.  Everything else with a
-    persisted failed send is actionable and belongs in the red failure bucket.
+    persisted failed send is actionable and belongs in ``لم يُرسل`` with the
+    exact reason and a safe manual retry action.  This keeps the operator's
+    list aligned with the runtime policy: the order stopped, not Qoyod.
     """
     if not failure or classification.get("status") in (SENT, DUPLICATE):
         return classification
@@ -212,7 +214,7 @@ def _overlay_manual_failure(
     if not message:
         message = "فشل الإرسال إلى قيود — يمكن إعادة الفحص والإرسال"
     return {
-        "status": FAILED,
+        "status": UNSENT,
         "reason": message,
         "failure_code": failure.get("code"),
         "failure_source": failure.get("source"),

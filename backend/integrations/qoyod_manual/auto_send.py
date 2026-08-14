@@ -18,10 +18,11 @@ Safety properties:
 * the manual sender's per-order lock and Qoyod reference lookup provide the
   duplicate barrier;
 * COD keeps the manual sender invariant (invoice only, never a receipt);
-* an order-specific total mismatch is isolated for manual review while later
+* every order-specific failure is isolated for manual review while later
   orders continue;
-* infrastructure and unknown errors still trip the circuit breaker by turning
-  ``auto_send`` off;
+* infrastructure and unknown errors never turn ``auto_send`` off; a failure
+  with an order number is quarantined, while a round-level failure is retried
+  on the next worker tick;
 * every mutating run is written to ``qoyod_manual_auto_runs`` before the first
   external request.
 """
@@ -48,32 +49,6 @@ _WORKER_TASK: Optional[asyncio.Task] = None
 _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
-
-# This refusal is emitted only after send.py has persisted the real Qoyod
-# invoice id and before it creates a payment.  The persisted invoice marker is
-# the duplicate barrier on later scans, while the full outstanding balance in
-# Qoyod leaves the order available for an operator to review and pay manually.
-# Keep this allow-list deliberately narrow: authentication, network, unknown,
-# and other possibly systemic failures must continue to stop the worker.
-_PER_ORDER_MANUAL_REVIEW_CODES = frozenset({
-    "qoyod_actual_total_mismatch",
-    "qoyod_payload_precision_unsupported",
-    "qoyod_preflight_total_mismatch",
-    "qoyod_preflight_payload_invalid",
-    "totals_mismatch",
-    "rounding_adjustment_product_missing",
-})
-
-# A Salla status refresh happens before any Qoyod mutation.  A transient
-# timeout or one temporarily unreadable order is therefore safe to defer:
-# no invoice can be created without the authoritative status check.  Keep
-# these failures out of the permanent quarantine so the next 15-second tick
-# retries them, and do not let one Salla read failure block healthy orders
-# later in the same batch.
-_PER_ORDER_RETRY_CODES = frozenset({
-    "salla_status_refresh_failed",
-})
-
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -167,19 +142,15 @@ async def _current_settings(db) -> dict:
     ) or {}
 
 
-async def _recover_transient_salla_breaker(
+async def _recover_legacy_circuit_breaker(
     db, settings: dict[str, Any],
 ) -> Optional[dict[str, Any]]:
-    """Re-arm a legacy breaker caused only by a transient Salla read.
+    """Re-arm any circuit breaker persisted by an older worker.
 
-    ``salla_status_refresh_failed`` is handled as ``retry_later`` by the
-    current worker, so it can no longer trip the circuit breaker.  A breaker
-    persisted by an older process, however, leaves ``auto_send`` disabled
-    forever after a deploy.  Recover that one known-safe state atomically,
-    but only after re-validating the same credential, canary, Salla-owner and
-    settings contract used by the settings activation endpoint.
-
-    Real Qoyod, amount, authentication and unknown failures remain stopped.
+    The current policy never disables the Qoyod application for an order
+    failure.  An old deployment may still have persisted a global breaker,
+    so recover it atomically after re-validating the same credential, canary,
+    Salla-owner and settings contract used by the activation endpoint.
     """
     last_error = settings.get("plan_b_auto_send_last_error") or {}
     error_code = str(last_error.get("code") or "").strip()
@@ -189,7 +160,7 @@ async def _recover_transient_salla_breaker(
         and settings.get("dry_run_mode") is not True
         and settings.get("plan_b_auto_send_disabled_reason")
         == "circuit_breaker"
-        and error_code in _PER_ORDER_RETRY_CODES
+        and bool(error_code)
     ):
         return None
 
@@ -212,7 +183,7 @@ async def _recover_transient_salla_breaker(
         )
     except Exception:
         logger.exception(
-            "Plan-B transient Salla breaker readiness check failed"
+            "Plan-B legacy breaker readiness check failed"
         )
         return None
 
@@ -229,7 +200,7 @@ async def _recover_transient_salla_breaker(
     )
     if issues or not is_armed(candidate):
         logger.warning(
-            "Plan-B transient Salla breaker remains stopped issues=%s",
+            "Plan-B legacy breaker remains stopped issues=%s",
             [issue.get("code") for issue in issues],
         )
         return None
@@ -237,7 +208,7 @@ async def _recover_transient_salla_breaker(
     now = _now()
     recovered_at = now.isoformat()
     recovery_audit = {
-        "reason": "transient_salla_status_refresh",
+        "reason": "legacy_global_breaker_removed",
         "previous_error_code": error_code,
         "previous_run_id": last_error.get("run_id"),
         "previous_error_at": last_error.get("at"),
@@ -270,7 +241,7 @@ async def _recover_transient_salla_breaker(
         return None
 
     logger.warning(
-        "Plan-B automatic sender recovered transient Salla breaker"
+        "Plan-B automatic sender recovered legacy global breaker"
     )
     return {
         **candidate,
@@ -422,7 +393,7 @@ async def _refresh_and_verify_salla_status(
     Automatic accounting must never rely only on a cached row: an operator
     may move the order to a cancelled/refunded state in Salla between two
     worker scans.  A failed authoritative refresh is a real preflight error
-    and the caller trips the circuit breaker before any Qoyod mutation.
+    and the caller quarantines only that order before any Qoyod mutation.
     """
     refresh = await resync_single_order(
         db,
@@ -445,27 +416,6 @@ async def _refresh_and_verify_salla_status(
         order_number,
         orders_user_id=orders_user_id,
     ), refresh
-
-
-async def _trip_circuit_breaker(
-    db, *, code: str, message: str, run_id: str,
-) -> None:
-    now = _now()
-    await db.qoyod_settings.update_one(
-        {"user_id": _TENANT},
-        {"$set": {
-            "auto_send": False,
-            "plan_b_auto_send_armed_at": None,
-            "plan_b_auto_send_disabled_at": now,
-            "plan_b_auto_send_disabled_reason": "circuit_breaker",
-            "plan_b_auto_send_last_error": {
-                "code": code,
-                "message": message,
-                "run_id": run_id,
-                "at": now,
-            },
-        }},
-    )
 
 
 async def _open_quarantined_order_numbers(
@@ -518,7 +468,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
     settings = await _current_settings(db)
-    recovered = await _recover_transient_salla_breaker(db, settings)
+    recovered = await _recover_legacy_circuit_breaker(db, settings)
     if recovered is not None:
         settings = recovered
     if not is_armed(settings):
@@ -593,7 +543,6 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         await db.qoyod_manual_auto_runs.insert_one(audit)
 
         results: list[dict[str, Any]] = []
-        stopped = False
         for row in candidates:
             order_number = str(row["order_number"])
             try:
@@ -640,62 +589,44 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         "code": exc.code,
                     })
                     continue
-                if exc.code in _PER_ORDER_RETRY_CODES:
-                    results.append({
-                        "order_number": order_number,
-                        "outcome": "retry_later",
-                        "code": exc.code,
-                        "message": exc.message,
-                        "detail": exc.extra,
-                    })
-                    continue
-                if exc.code in _PER_ORDER_MANUAL_REVIEW_CODES:
-                    await _quarantine_order(
-                        db,
-                        order_number=order_number,
-                        exc=exc,
-                        run_id=run_id,
-                    )
-                    results.append({
-                        "order_number": order_number,
-                        "outcome": "manual_review",
-                        "code": exc.code,
-                        "message": exc.message,
-                        "detail": exc.extra,
-                    })
-                    continue
+                await _quarantine_order(
+                    db,
+                    order_number=order_number,
+                    exc=exc,
+                    run_id=run_id,
+                )
                 results.append({
                     "order_number": order_number,
-                    "outcome": "failed",
+                    "outcome": "manual_review",
                     "code": exc.code,
                     "message": exc.message,
                     "detail": exc.extra,
                 })
-                await _trip_circuit_breaker(
-                    db, code=exc.code, message=exc.message, run_id=run_id,
-                )
-                stopped = True
-                break
+                continue
             except Exception as exc:  # noqa: BLE001
                 error_reference = uuid.uuid4().hex[:8]
                 logger.exception(
                     "Plan-B auto-send unhandled order=%s run=%s ref=%s",
                     order_number, run_id, error_reference,
                 )
+                isolated = ManualSendRefused(
+                    "unhandled_exception",
+                    f"خطأ غير متوقع (مرجع {error_reference})",
+                    {"error_reference": error_reference},
+                )
+                await _quarantine_order(
+                    db,
+                    order_number=order_number,
+                    exc=isolated,
+                    run_id=run_id,
+                )
                 results.append({
                     "order_number": order_number,
-                    "outcome": "failed_unhandled",
+                    "outcome": "manual_review",
                     "code": "unhandled_exception",
                     "error_reference": error_reference,
                 })
-                await _trip_circuit_breaker(
-                    db,
-                    code="unhandled_exception",
-                    message=f"خطأ غير متوقع (مرجع {error_reference})",
-                    run_id=run_id,
-                )
-                stopped = True
-                break
+                continue
 
         finished_at = _now()
         sent_count = sum(r["outcome"] == "sent" for r in results)
@@ -703,17 +634,14 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         manual_review_count = sum(
             r["outcome"] == "manual_review" for r in results
         )
-        retry_later_count = sum(
-            r["outcome"] == "retry_later" for r in results
-        )
         result = {
-            "ok": not stopped,
-            "status": "stopped_on_error" if stopped else "succeeded",
+            "ok": True,
+            "status": "succeeded",
             "run_id": run_id,
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
-            "retry_later_count": retry_later_count,
+            "retry_later_count": 0,
             "results": results,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
@@ -726,7 +654,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                 "result": result,
             }},
         )
-        _LAST_RUN_OK = not stopped
+        _LAST_RUN_OK = True
         _LAST_ROUND = result
         return result
     except Exception as exc:  # failure before an audited external mutation
@@ -736,16 +664,8 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "Plan-B auto-send round failed before completion ref=%s",
             error_reference,
         )
-        # Fail closed. An operator must review and save the settings again.
-        try:
-            await _trip_circuit_breaker(
-                db,
-                code="auto_round_failed",
-                message=f"تعذر تشغيل جولة الإرسال (مرجع {error_reference})",
-                run_id=f"preflight-{error_reference}",
-            )
-        except Exception:
-            logger.exception("Plan-B circuit breaker persistence failed")
+        # Keep the application armed.  No order was selected safely enough to
+        # quarantine here, so the next 15-second tick retries the round.
         result = {
             "ok": False,
             "status": "round_failed",
@@ -768,7 +688,7 @@ async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
         try:
             await run_once(db, batch_limit=batch_limit)
         except Exception:
-            # run_once is already fail-closed; this protects task liveness.
+            # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
         await asyncio.sleep(interval_sec)
 
