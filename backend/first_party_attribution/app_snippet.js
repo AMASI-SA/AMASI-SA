@@ -153,8 +153,9 @@
 
   function storeConfig(key) {
     try {
-      return window.salla && window.salla.config
-        ? window.salla.config.get(key)
+      var configSdk = window.Salla || window.salla;
+      return configSdk && configSdk.config
+        ? configSdk.config.get(key)
         : null;
     } catch (_) { return null; }
   }
