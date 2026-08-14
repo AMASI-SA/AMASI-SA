@@ -32,6 +32,8 @@ from pymongo import ReturnDocument
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 
+from auth_preview_policy import preview_password_only_enabled
+
 logger = logging.getLogger(__name__)
 
 LOGIN_PATH = "/api/auth/login"
@@ -432,6 +434,20 @@ class MfaSecurityMiddleware:
             return
 
         try:
+            if preview_password_only_enabled(scope):
+                # Preview still proved the real password through the canonical
+                # login route. Only the second factor is skipped, without
+                # mutating mfa_enabled or any enrollment data on the account.
+                await self.store.safe_event(
+                    "mfa_preview_password_only_login",
+                    user,
+                    purpose="preview",
+                )
+                response = _session_response(user)
+                response.headers["X-Mezan-Auth-Mode"] = "preview-password-only"
+                await response(scope, _replay_receive(request_messages), send)
+                return
+
             if bool(user.get("mfa_enabled")):
                 challenge = await self.store.create(user=user, purpose="login")
                 await self.store.safe_event("mfa_challenge_issued", user, purpose="login")

@@ -4,8 +4,11 @@ on:
   pull_request:
     paths:
       - "backend/auth.py"
+      - "backend/auth_preview_policy.py"
       - "backend/email_otp_policy.py"
       - "backend/email_otp_security.py"
+      - "backend/mfa_security.py"
+      - "backend/tests/test_auth_preview_policy.py"
       - "backend/tests/test_email_otp_security_v1.py"
       - "frontend/src/pages/Login.jsx"
       - ".github/workflows/auth-email-otp-security.yml"
@@ -29,6 +32,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install \
             "pytest==9.0.3" \
+            "bcrypt==4.1.3" \
+            "cryptography==48.0.0" \
+            "fastapi==0.110.1" \
             "openpyxl==3.1.5" \
             "pymongo==4.5.0" \
             "starlette==0.37.2" \
@@ -39,11 +45,16 @@ jobs:
           EMAIL_OTP_ENABLED: "0"
         run: |
           PYTHONPATH=backend python -m py_compile \
+            backend/auth_preview_policy.py \
             backend/email_otp_policy.py \
             backend/email_otp_security.py \
+            backend/mfa_security.py \
             backend/auth.py
       - name: Run email OTP security contracts
         env:
           JWT_SECRET: ci-only-email-otp-secret
           EMAIL_OTP_ENABLED: "0"
-        run: PYTHONPATH=backend python -m pytest -q backend/tests/test_email_otp_security_v1.py
+        run: |
+          PYTHONPATH=backend python -m pytest -q \
+            backend/tests/test_auth_preview_policy.py \
+            backend/tests/test_email_otp_security_v1.py

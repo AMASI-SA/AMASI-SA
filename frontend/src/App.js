@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import DashboardDesignPreview from "./pages/DashboardDesignPreview";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
 import Settings from "./pages/Settings";
@@ -115,21 +116,23 @@ import AdAccountForensic from "./pages/AdAccountForensic";
 import BalanceDriftDiagnostic from "./pages/BalanceDriftDiagnostic";
 import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
+import { getDefaultDashboardPath } from "./defaultDashboardPath";
 
 function PublicOnly({ children }) {
     const { user, loading } = useAuth();
     if (loading) return null;
-    if (user) return <Navigate to="/dashboard-v2" replace />;
+    if (user) return <Navigate to={getDefaultDashboardPath()} replace />;
     return children;
 }
 
 function AppRoutes() {
     return (
         <Routes>
+            <Route path="/dashboard-design-preview" element={<DashboardDesignPreview />} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
-            <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Navigate to={getDefaultDashboardPath()} replace /></ProtectedRoute>} />
             <Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><Layout><UploadExcel /></Layout></ProtectedRoute>} />
             <Route path="/analyses/:id" element={<ProtectedRoute><Layout><AnalysisResult /></Layout></ProtectedRoute>} />
@@ -391,7 +394,7 @@ function AppRoutes() {
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
-            <Route path="*" element={<Navigate to="/dashboard-v2" replace />} />
+            <Route path="*" element={<Navigate to={getDefaultDashboardPath()} replace />} />
         </Routes>
     );
 }
