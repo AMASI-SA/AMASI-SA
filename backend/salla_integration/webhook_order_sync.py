@@ -449,6 +449,24 @@ async def sync_order_from_verified_webhook(
             source="salla_direct",
             raw=payload,
         )
+        first_party_attribution = {
+            "linked": False,
+            "reason": "linking_failed",
+        }
+        try:
+            from first_party_attribution import link_order_attribution
+
+            first_party_attribution = await link_order_attribution(
+                db,
+                user_id=user_id,
+                order_number=order_number,
+                order_payload=payload,
+                order_doc=result.get("doc") or doc,
+            )
+        except Exception as exc:
+            # Attribution is enrichment only. An analytics failure must never
+            # block Salla's authoritative order ingestion or fulfilment.
+            first_party_attribution["error_type"] = type(exc).__name__
         auto_fulfillment = {
             "attempted": True,
             "promoted": False,
@@ -482,6 +500,7 @@ async def sync_order_from_verified_webhook(
             "shipping_company_from_order_webhook": bool(shipping_fields.get("shipping_company")),
             "tracking_from_order_webhook": bool(shipping_fields.get("tracking_number")),
             "auto_fulfillment": auto_fulfillment,
+            "first_party_attribution": first_party_attribution,
             "no_salla_api_calls": True,
             "no_qoyod_calls": True,
         }
