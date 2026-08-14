@@ -159,6 +159,24 @@ def test_normalize_salla_product_is_independent_from_legacy_shape():
     assert "legacy" not in product
 
 
+def test_normalize_salla_product_preserves_unlimited_inventory():
+    product = normalize_salla_product(
+        {
+            "id": "1152485499",
+            "name": "كوب دبدوب شفاف بغطاء ملون وشفاط",
+            "quantity": None,
+            "unlimited_quantity": True,
+            "status": "sale",
+        },
+        user_id="owner-1",
+        synced_at=datetime.now(timezone.utc),
+    )
+
+    assert product["quantity"] is None
+    assert product["unlimited_quantity"] is True
+    assert product["status"] == "active"
+
+
 @pytest.mark.asyncio
 async def test_format_light_sync_does_not_erase_previously_loaded_variants(monkeypatch):
     details_synced_at = datetime(2026, 8, 10, 9, tzinfo=timezone.utc)
