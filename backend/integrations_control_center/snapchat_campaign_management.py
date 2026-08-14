@@ -5534,7 +5534,10 @@ async def snapchat_management_readiness(
         pixel_cursor = _collection(db, TRACKING_ASSET_COLLECTION).find(
             {
                 "user_id": user_id,
-                "ad_account_id": str(account.get("ad_account_id") or ""),
+                "$or": [
+                    {"ad_account_id": str(account.get("ad_account_id") or "")},
+                    {"ad_account_ids": str(account.get("ad_account_id") or "")},
+                ],
                 "pixel_id": {"$nin": [None, ""]},
             },
             {
