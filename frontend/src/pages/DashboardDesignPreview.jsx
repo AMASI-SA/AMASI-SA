@@ -462,8 +462,8 @@ function LatestOrdersCard() {
                             <span>{order.time}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <OrderSourceBadge source={order.source} />
                             <span className="num whitespace-nowrap text-sm font-extrabold text-teal-700">SAR {money(order.amount)}</span>
+                            <OrderSourceBadge source={order.source} />
                         </div>
                         <div dir="rtl" className="flex min-w-0 items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl ring-1 ring-slate-200">{order.avatar}</div>
