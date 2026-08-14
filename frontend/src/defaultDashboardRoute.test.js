@@ -5,11 +5,11 @@ function read(relativePath) {
     return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 }
 
-test("root and authenticated public redirects land on Mezan 2 dashboard", () => {
+test("root and authenticated public redirects use the environment-aware dashboard route", () => {
     const app = read("src/App.js");
-    expect(app).toContain('if (user) return <Navigate to="/dashboard-v2" replace />;');
-    expect(app).toContain('<Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />');
-    expect(app).toContain('<Route path="*" element={<Navigate to="/dashboard-v2" replace />} />');
+    expect(app).toContain('if (user) return <Navigate to={getDefaultDashboardPath()} replace />;');
+    expect(app).toContain('<Route path="/" element={<ProtectedRoute><Navigate to={getDefaultDashboardPath()} replace /></ProtectedRoute>} />');
+    expect(app).toContain('<Route path="*" element={<Navigate to={getDefaultDashboardPath()} replace />} />');
     expect(app).not.toContain('<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
 });
 
