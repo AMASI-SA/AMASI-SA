@@ -13,12 +13,21 @@ from auth_preview_policy import preview_password_only_enabled
 from mfa_security import MfaSecurityMiddleware
 
 
-def _scope(host: str) -> dict:
+def _scope(
+    host: str,
+    *,
+    forwarded_host: str | None = None,
+    client: tuple[str, int] = ("127.0.0.1", 12345),
+) -> dict:
+    headers = [(b"host", host.encode("ascii"))]
+    if forwarded_host:
+        headers.append((b"x-forwarded-host", forwarded_host.encode("ascii")))
     return {
         "type": "http",
         "method": "POST",
         "path": "/api/auth/login",
-        "headers": [(b"host", host.encode("ascii"))],
+        "headers": headers,
+        "client": client,
     }
 
 
@@ -69,6 +78,60 @@ class PreviewPasswordOnlyPolicyTests(unittest.TestCase):
             self.assertFalse(
                 preview_password_only_enabled(
                     _scope("salla-analytics.preview.emergentagent.com")
+                )
+            )
+
+    def test_private_preview_proxy_requires_separate_opt_in(self):
+        proxied_scope = _scope(
+            "127.0.0.1:8001",
+            forwarded_host="salla-analytics.preview.emergentagent.com",
+            client=("10.79.142.69", 57916),
+        )
+        base_env = {
+            "AUTH_PREVIEW_PASSWORD_ONLY": "true",
+            "MEZAN_ENVIRONMENT": "preview",
+        }
+        with patch.dict(os.environ, base_env, clear=True):
+            self.assertFalse(preview_password_only_enabled(proxied_scope))
+
+        with patch.dict(
+            os.environ,
+            {**base_env, "AUTH_PREVIEW_TRUST_PROXY": "true"},
+            clear=True,
+        ):
+            self.assertTrue(preview_password_only_enabled(proxied_scope))
+
+    def test_forwarded_host_is_rejected_from_public_peer(self):
+        env = {
+            "AUTH_PREVIEW_PASSWORD_ONLY": "true",
+            "AUTH_PREVIEW_TRUST_PROXY": "true",
+            "MEZAN_ENVIRONMENT": "preview",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            self.assertFalse(
+                preview_password_only_enabled(
+                    _scope(
+                        "127.0.0.1:8001",
+                        forwarded_host="salla-analytics.preview.emergentagent.com",
+                        client=("8.8.8.8", 57916),
+                    )
+                )
+            )
+
+    def test_forwarded_production_host_never_enables_preview_mode(self):
+        env = {
+            "AUTH_PREVIEW_PASSWORD_ONLY": "true",
+            "AUTH_PREVIEW_TRUST_PROXY": "true",
+            "MEZAN_ENVIRONMENT": "preview",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            self.assertFalse(
+                preview_password_only_enabled(
+                    _scope(
+                        "127.0.0.1:8001",
+                        forwarded_host="salla-analytics.emergent.host",
+                        client=("10.79.142.69", 57916),
+                    )
                 )
             )
 
