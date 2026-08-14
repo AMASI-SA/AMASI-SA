@@ -2296,6 +2296,34 @@ async def create_snapchat_management_proposal(
     token = secrets.token_urlsafe(32)
     now = _utcnow()
     protocol_version = int(payload.safety_protocol_version or 1)
+    first_party_link_record: dict[str, Any] | None = None
+    if payload.action == "creative.create":
+        creative_rows = (operation.get("body") or {}).get("creatives") or []
+        creative = creative_rows[0] if creative_rows else {}
+        web_view = creative.get("web_view_properties") if isinstance(creative, dict) else None
+        destination_url = (
+            str(web_view.get("url") or "").strip()
+            if isinstance(web_view, dict)
+            else ""
+        )
+        if destination_url:
+            from first_party_attribution.core import build_tracking_url
+
+            tracked_url, first_party_link_record = build_tracking_url(
+                destination_url,
+                user_id=user_id,
+                provider="snapchat",
+                product_id=(product_rows[0].get("product_id") if product_rows else None),
+                account_id=payload.account_id,
+                link_id=f"snap-proposal:{proposal_id}",
+                snapchat_macros=True,
+            )
+            web_view["url"] = tracked_url
+            first_party_link_record.update({
+                "proposal_id": proposal_id,
+                "actor_id": actor_id,
+                "status": "proposal_ready",
+            })
     intent_fingerprint = (
         snapchat_management_intent_fingerprint(operation)
         if payload.action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS
@@ -2340,6 +2368,17 @@ async def create_snapchat_management_proposal(
         "source_mode": SOURCE_MODE,
     }
     await _collection(db, PROPOSAL_COLLECTION).insert_one(row)
+    if first_party_link_record:
+        from first_party_attribution.core import LINK_COLLECTION
+
+        await _collection(db, LINK_COLLECTION).update_one(
+            {
+                "user_id": user_id,
+                "link_id": first_party_link_record["link_id"],
+            },
+            {"$setOnInsert": first_party_link_record},
+            upsert=True,
+        )
     product_links_ok = await _ensure_proposal_product_links(db, user_id, actor_id, row)
     if product_rows:
         row["product_link_state"] = "confirmed" if product_links_ok else "deferred"

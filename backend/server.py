@@ -81,6 +81,10 @@ from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
 from mezan_mcp import make_mezan_mcp_router
+from first_party_attribution import (
+    ensure_first_party_attribution_indexes,
+    make_first_party_attribution_router,
+)
 from settlement_cycle import attach_settlement_cycle_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
@@ -3994,6 +3998,7 @@ api.include_router(
 )
 api.include_router(make_order_engine_router(db, current_user))
 api.include_router(make_order_activity_router(db, current_user))
+api.include_router(make_first_party_attribution_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
@@ -4348,7 +4353,12 @@ app.include_router(api)
 # CORS
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 extra = os.environ.get("CORS_ORIGINS", "").split(",")
-origins = list({o.strip() for o in [frontend_url, "http://localhost:3000"] + extra if o and o.strip() and o.strip() != "*"})
+origins = list({o.strip() for o in [
+    frontend_url,
+    "http://localhost:3000",
+    "https://amasi-sa.com",
+    "https://www.amasi-sa.com",
+] + extra if o and o.strip() and o.strip() != "*"})
 
 app.add_middleware(
     CORSMiddleware,
@@ -4394,6 +4404,7 @@ async def on_startup():
     # Apps & Integrations V2 — isolated metadata, health, activity,
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
+    await ensure_first_party_attribution_indexes(db)
     # Customer Intelligence conversation core.  This creates only Mongo
     # indexes and reuses the encrypted customer identity vault; it does not
     # connect a channel, send a message or expose any mutation endpoint.
