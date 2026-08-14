@@ -264,6 +264,76 @@ async def test_event_is_idempotent_and_order_links_by_hashed_identity():
 
 
 @pytest.mark.asyncio
+async def test_pilot_store_records_attribution_without_becoming_an_integration():
+    db = FakeDB()
+    await db.salla_integrations.insert_one({
+        "user_id": "amasi-owner",
+        "store_id": "amasi-production-store",
+        "status": "connected",
+    })
+
+    result = await persist_storefront_event(db, {
+        "event_id": "pilot-event-1",
+        "visitor_id": "pilot-visitor-1",
+        "session_id": "pilot-session-1",
+        "event_name": "page_view",
+        "store_id": "748155538",
+        "source": "direct",
+    })
+
+    stored = await db[EVENT_COLLECTION].find_one({"event_id": "pilot-event-1"})
+    assert result["accepted"] is True
+    assert stored["user_id"] == "amasi-owner"
+    assert stored["store_scope"] == "attribution_pilot"
+    assert stored["environment"] == "pilot"
+    assert await db.unified_orders.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_order_attribution_is_scoped_to_the_order_store():
+    db = FakeDB()
+    identity_hash = hash_customer_identity("phone", "+966 55 123 4567")
+    await db[EVENT_COLLECTION].insert_many([
+        {
+            "user_id": "amasi-owner",
+            "store_id": "748155538",
+            "event_id": "pilot-event",
+            "event_name": "page_view",
+            "visitor_id": "pilot-visitor",
+            "identity_hashes": [identity_hash],
+            "source": "snapchat",
+            "occurred_at": "2026-08-15T10:00:00+00:00",
+        },
+        {
+            "user_id": "amasi-owner",
+            "store_id": "amasi-production-store",
+            "event_id": "amasi-event",
+            "event_name": "page_view",
+            "visitor_id": "amasi-visitor",
+            "identity_hashes": [identity_hash],
+            "source": "google_organic",
+            "occurred_at": "2026-08-15T11:00:00+00:00",
+        },
+    ])
+    await db.unified_orders.insert_one({
+        "user_id": "amasi-owner",
+        "order_number": "AMASI-ORDER-1",
+    })
+
+    result = await link_order_attribution(
+        db,
+        user_id="amasi-owner",
+        order_number="AMASI-ORDER-1",
+        order_payload={"customer": {"mobile": "+966 55 123 4567"}},
+        store_id="amasi-production-store",
+    )
+
+    assert result["linked"] is True
+    assert result["source"] == "google_organic"
+    assert await db[ORDER_ATTRIBUTION_COLLECTION].count_documents({}) == 1
+
+
+@pytest.mark.asyncio
 async def test_unverified_snapchat_ids_are_not_persisted_as_truth():
     db = FakeDB()
     tracked, _ = build_tracking_url(

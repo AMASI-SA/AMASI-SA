@@ -96,3 +96,26 @@ async def test_cancelled_salla_order_cancels_outbox_instead_of_enqueuing(monkeyp
     assert result["reason"] == "order_ineligible"
     assert db.salla.query == {"store_id": {"$in": ["1233666", 1233666]}}
     assert db.outbox.query["event_id"] == "280001234"
+
+
+@pytest.mark.asyncio
+async def test_attribution_pilot_store_never_enqueues_purchase(monkeypatch):
+    monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", "748155538")
+
+    class _NeverTouchedDb:
+        def __getitem__(self, name):
+            raise AssertionError(f"database must not be touched: {name}")
+
+    result = await capi.enqueue_snapchat_purchase_from_salla_event(
+        _NeverTouchedDb(),
+        {
+            "event": "order.created",
+            "merchant": "748155538",
+            "data": {"reference_id": "DEMO-ORDER-1"},
+        },
+    )
+
+    assert result == {
+        "queued": False,
+        "reason": "attribution_pilot_store_orders_blocked",
+    }
