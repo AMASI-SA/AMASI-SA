@@ -80,6 +80,53 @@ def _matches_any(value: str, allowed: list[str]) -> bool:
     )
 
 
+def _cart_day(row: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = row.get(key)
+        if not value:
+            continue
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value.isoformat()
+        try:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+                str(value).strip().replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            return str(value)[:10]
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(RIYADH_TZ)
+        return parsed.date().isoformat()
+    return ""
+
+
+def select_abandoned_carts_for_period(
+    rows: list[dict[str, Any]],
+    *,
+    start: str,
+    end: str,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Return active rows and period counts without changing stored carts."""
+    if end < start:
+        start, end = end, start
+    abandoned_rows = [
+        row for row in rows
+        if start <= _cart_day(
+            row, "cart_created_at", "first_seen_at", "cart_updated_at", "updated_at"
+        ) <= end
+    ]
+    recovered_rows = [
+        row for row in rows
+        if row.get("purchased") is True
+        and start <= _cart_day(row, "cart_updated_at", "updated_at") <= end
+    ]
+    active_rows = sorted(
+        (row for row in abandoned_rows if row.get("purchased") is not True),
+        key=lambda row: str(row.get("cart_updated_at") or row.get("updated_at") or ""),
+        reverse=True,
+    )
+    return active_rows, len(abandoned_rows), len(recovered_rows)
+
+
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         return await cursor.to_list(length=length)
@@ -1090,15 +1137,21 @@ def make_dashboard_v2_router(
         return response
 
     @router.get("/dashboard-v2/abandoned-carts/recent")
-    async def recent_abandoned_carts(user: dict = Depends(current_user)) -> dict[str, Any]:
-        """Latest active carts for the live dashboard rail; never date-filtered."""
+    async def recent_abandoned_carts(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Date-scoped cart totals plus active cart rows for the dashboard rail."""
         current = owner(user)
-        rows = await _to_list(
+        today_s = _today_riyadh().isoformat()
+        start = from_date or today_s
+        end = to_date or start
+        if end < start:
+            start, end = end, start
+        all_rows = await _to_list(
             db.salla_abandoned_carts_v1.find(
-                {
-                    "user_id": str(current["id"]),
-                    "purchased": {"$ne": True},
-                },
+                {"user_id": str(current["id"])},
                 {
                     "_id": 0,
                     "cart_id": 1,
@@ -1106,11 +1159,19 @@ def make_dashboard_v2_router(
                     "total": 1,
                     "items": 1,
                     "customer_identity_id": 1,
+                    "purchased": 1,
+                    "cart_created_at": 1,
                     "cart_updated_at": 1,
+                    "first_seen_at": 1,
                     "updated_at": 1,
                 },
-            ).sort([("cart_updated_at", -1), ("updated_at", -1)]),
-            20,
+            ),
+            100000,
+        )
+        rows, abandoned_count, recovered_count = select_abandoned_carts_for_period(
+            all_rows,
+            start=start,
+            end=end,
         )
         identity_ids = sorted({
             str(row.get("customer_identity_id"))
@@ -1178,7 +1239,14 @@ def make_dashboard_v2_router(
             for item in row.get("items") or []:
                 if isinstance(item, dict) and not item.get("image_url"):
                     item["image_url"] = product_images.get(str(item.get("product_id") or ""), "")
-        return {"items": rows, "count": len(rows), "live": True}
+        return {
+            "items": rows,
+            "count": len(rows),
+            "abandoned_count": abandoned_count,
+            "recovered_count": recovered_count,
+            "period": {"from": start, "to": end},
+            "live": True,
+        }
 
     @router.get("/dashboard-v2/product-cost-summary")
     async def product_cost_summary(user: dict = Depends(current_user)) -> dict[str, Any]:

@@ -2,12 +2,12 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 
-import { AbandonedCartsCard, LatestOrders, SummaryStrip } from "./AdvancedDashboard";
+import { AbandonedCartsCard, LatestOrders, SummaryStrip, TopProductsCard } from "./AdvancedDashboard";
 
 test("latest orders mirrors the Orders V2 information row", () => {
     const markup = renderToStaticMarkup(
         <MemoryRouter>
-            <LatestOrders orders={[
+            <LatestOrders totals={{ total_orders: 2, total_sales: 337.33 }} orders={[
                 {
                     order_number: "278106046",
                     created_at: new Date().toISOString(),
@@ -43,6 +43,9 @@ test("latest orders mirrors the Orders V2 information row", () => {
     expect(markup).toContain("مصدر الطلب: سناب");
     expect(markup.match(/جديد/g)).toHaveLength(1);
     expect(markup).toContain("returnTo=%2Fdashboard-advanced");
+    expect(markup).toContain("2 طلب");
+    expect(markup).toContain("متوسط:");
+    expect(markup).toContain("168.67 ر.س");
 });
 
 test("summary strip includes current month order and sales cards", () => {
@@ -53,6 +56,16 @@ test("summary strip includes current month order and sales cards", () => {
                     totals: { total_orders: 5, total_sales: 500, avg_cost_per_order: 20, overall_roas: 3 },
                     product_cost_v2: { missing_products_count: 0 },
                     month_kpis: { total_orders: 903, total_sales: 169155 },
+                    ads_v2: {
+                        executive_breakdown: {
+                            providers: {
+                                snapchat: { platform_reported_orders: 4, platform_cost_per_order_sar: 25 },
+                                tiktok: { platform_reported_orders: 2, platform_cost_per_order_sar: 20 },
+                                meta: { platform_reported_orders: 1, platform_cost_per_order_sar: 30 },
+                                google: { platform_reported_orders: null, platform_cost_per_order_sar: null },
+                            },
+                        },
+                    },
                 }}
                 filters={{ from: "2026-08-15", to: "2026-08-15" }}
             />
@@ -63,7 +76,10 @@ test("summary strip includes current month order and sales cards", () => {
     expect(markup).toContain("903");
     expect(markup).toContain("مبيعات الشهر");
     expect(markup).toContain("169,155.00 ر.س");
-    expect(markup).toContain("min-\[1180px\]:grid-cols-6");
+    expect(markup).toContain("سناب:");
+    expect(markup).toContain("متوسط:");
+    expect(markup).toContain("25.00 ر.س");
+    expect(markup).not.toContain("متوسط قيمة سلة المشتريات");
 });
 
 test("abandoned carts show customer, product count, image, time and more control", () => {
@@ -77,12 +93,39 @@ test("abandoned carts show customer, product count, image, time and more control
             ? [{ quantity: 2, image_url: "https://cdn.example.com/product.png" }, { quantity: 1 }]
             : [{ quantity: 1 }],
     }));
-    const markup = renderToStaticMarkup(<AbandonedCartsCard carts={carts} />);
+    const markup = renderToStaticMarkup(<AbandonedCartsCard carts={carts} summary={{ abandoned_count: 24, recovered_count: 6 }} />);
 
     expect(markup).toContain("نورة أحمد");
     expect(markup).toContain("3 منتجات");
     expect(markup).toContain("https://cdn.example.com/product.png");
     expect(markup).toContain("منذ 1 ثانية");
     expect(markup).toContain("المزيد");
+    expect(markup).toContain("متروكة 24");
+    expect(markup).toContain("مكتملة 6");
     expect(markup).not.toContain("عميل 6");
+});
+
+test("top products header shows period counts and only five rows initially", () => {
+    const rows = Array.from({ length: 7 }, (_, index) => ({
+        identity: `product-${index + 1}`,
+        name: `منتج ${index + 1}`,
+        units_sold: 10 - index,
+        total_sales: 1000 - index,
+    }));
+    const markup = renderToStaticMarkup(
+        <TopProductsCard
+            rows={rows}
+            summary={{
+                product_count: 7,
+                salla_fallback_products_count: 3,
+                missing_all_cost_products_count: 2,
+            }}
+        />
+    );
+
+    expect(markup).toContain("7 منتجًا خلال الفترة");
+    expect(markup).toContain("بتكلفة سلة 3");
+    expect(markup).toContain("بدون تكلفة 2");
+    expect(markup).toContain("المزيد");
+    expect(markup).not.toContain("منتج 6");
 });
