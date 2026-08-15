@@ -13,6 +13,8 @@ JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
 logger = logging.getLogger(__name__)
 
+from meta_reviewer_access import review_access_expired
+
 
 def get_jwt_secret() -> str:
     return os.environ["JWT_SECRET"]
@@ -38,6 +40,7 @@ def account_is_disabled(user: dict | None) -> bool:
             user.get("disabled") is True
             or user.get("is_active") is False
             or user.get("deleted_at")
+            or review_access_expired(user)
         )
     )
 
