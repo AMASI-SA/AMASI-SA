@@ -13,6 +13,16 @@ META_REVIEW_SCOPES = frozenset({
     "ads.meta",
 })
 META_INTEGRATION_PROVIDERS = frozenset({"meta_ads", "instagram"})
+META_REVIEWER_API_PREFIXES = (
+    "/api/integrations-v2",
+    "/api/customer-intelligence/v1",
+    "/api/ads-manager",
+)
+META_REVIEWER_AUTH_PATHS = frozenset({
+    "/api/auth/me",
+    "/api/auth/logout",
+})
+
 META_REVIEWER_CI_PERMISSIONS = frozenset({
     "customer_intelligence.inbox.read",
     "customer_intelligence.suggestions.review",
@@ -40,6 +50,14 @@ def _as_utc(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def reviewer_api_path_allowed(path: str) -> bool:
+    normalized = "/" + str(path or "").strip().lstrip("/")
+    return normalized in META_REVIEWER_AUTH_PATHS or any(
+        normalized == prefix or normalized.startswith(prefix + "/")
+        for prefix in META_REVIEWER_API_PREFIXES
+    )
 
 
 def review_access_expired(user: Any, *, now: datetime | None = None) -> bool:
