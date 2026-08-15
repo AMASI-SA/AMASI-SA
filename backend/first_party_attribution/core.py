@@ -473,6 +473,15 @@ async def link_order_attribution(
     order_doc: dict[str, Any] | None = None,
     store_id: str | None = None,
 ) -> dict[str, Any]:
+    # Pilot events are valid telemetry, but a pilot order is never a production
+    # order and must not create an order-attribution record or enrich
+    # ``unified_orders`` even if this helper is called outside the webhook path.
+    if is_attribution_pilot_store(store_id):
+        return {
+            "linked": False,
+            "reason": "attribution_pilot_store_order_link_blocked",
+        }
+
     order_doc = order_doc or {}
     evidence = _order_match_evidence(order_payload, order_doc)
     evidence["order_number"] = list(dict.fromkeys([str(order_number), *evidence["order_number"]]))

@@ -28,9 +28,15 @@ def pilot_store_env(monkeypatch):
     monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", PILOT_STORE_ID)
 
 
-def test_live_amasi_store_is_not_a_pilot_without_explicit_configuration(monkeypatch):
+def test_verified_demo_store_is_pilot_without_deployment_configuration(monkeypatch):
     monkeypatch.delenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", raising=False)
-    assert not is_attribution_pilot_store("748155538")
+    assert is_attribution_pilot_store("748155538")
+
+
+def test_explicit_additional_pilot_cannot_unprotect_the_verified_demo(monkeypatch):
+    monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", "9999000111")
+    assert is_attribution_pilot_store("9999000111")
+    assert is_attribution_pilot_store(PILOT_STORE_ID)
 
 
 class NeverTouchedDB:
@@ -77,13 +83,13 @@ async def test_unknown_store_never_falls_back_to_amasi_owner():
 async def test_foreign_easy_mode_authorization_cannot_replace_connected_store(
     monkeypatch,
 ):
-    monkeypatch.delenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", raising=False)
+    monkeypatch.setenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", "8888000111")
     monkeypatch.setattr(
         easy_mode_webhook,
         "resolve_owner_user_id",
         lambda db: _owner("amasi-owner", "owner@example.test"),
     )
-    collection = BoundIntegrationCollection("748155538")
+    collection = BoundIntegrationCollection("amasi-production-store")
     db = SimpleNamespace(salla_integrations=collection)
     result = await _handle_store_authorize(
         db,
@@ -95,7 +101,7 @@ async def test_foreign_easy_mode_authorization_cannot_replace_connected_store(
     )
     assert result["stored"] is False
     assert result["reason"] == "different_store_authorization_ignored"
-    assert result["current_store_id"] == "748155538"
+    assert result["current_store_id"] == "amasi-production-store"
 
 
 async def _owner(user_id, email):

@@ -293,6 +293,43 @@ async def test_pilot_store_records_attribution_without_becoming_an_integration(
 
 
 @pytest.mark.asyncio
+async def test_pilot_store_can_never_link_or_enrich_an_order(monkeypatch):
+    monkeypatch.delenv("SALLA_ATTRIBUTION_PILOT_STORE_ID", raising=False)
+    db = FakeDB()
+    await db[EVENT_COLLECTION].insert_one({
+        "user_id": "amasi-owner",
+        "store_id": "748155538",
+        "store_scope": "attribution_pilot",
+        "event_id": "pilot-purchase-event",
+        "event_name": "purchase",
+        "order_number": "DEMO-ORDER-1",
+        "visitor_id": "pilot-visitor",
+        "source": "snapchat",
+        "occurred_at": "2026-08-15T10:00:00+00:00",
+    })
+    await db.unified_orders.insert_one({
+        "user_id": "amasi-owner",
+        "order_number": "DEMO-ORDER-1",
+    })
+
+    result = await link_order_attribution(
+        db,
+        user_id="amasi-owner",
+        order_number="DEMO-ORDER-1",
+        order_payload={"reference_id": "DEMO-ORDER-1"},
+        store_id="748155538",
+    )
+
+    assert result == {
+        "linked": False,
+        "reason": "attribution_pilot_store_order_link_blocked",
+    }
+    order = await db.unified_orders.find_one({"order_number": "DEMO-ORDER-1"})
+    assert "mezan_attribution" not in order
+    assert await db[ORDER_ATTRIBUTION_COLLECTION].count_documents({}) == 0
+
+
+@pytest.mark.asyncio
 async def test_order_attribution_is_scoped_to_the_order_store():
     db = FakeDB()
     identity_hash = hash_customer_identity("phone", "+966 55 123 4567")

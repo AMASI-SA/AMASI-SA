@@ -9,6 +9,7 @@ import os
 from typing import Any
 
 
+DEFAULT_ATTRIBUTION_PILOT_STORE_ID = "748155538"
 ATTRIBUTION_PILOT_STORE_ENV = "SALLA_ATTRIBUTION_PILOT_STORE_ID"
 
 
@@ -19,19 +20,31 @@ def normalize_store_id(value: Any) -> str:
 
 
 def attribution_pilot_store_id() -> str:
-    # There is deliberately no code default here. 748155538 is the live
-    # Amasi store, so treating it as a pilot would drop legitimate orders.
-    # A pilot may only be enabled by an explicit deployment setting.
-    return normalize_store_id(os.environ.get(ATTRIBUTION_PILOT_STORE_ENV))
+    # Return the optional deployment pilot when present for compatibility with
+    # existing callers. The verified demo ID remains independently immutable in
+    # ``is_attribution_pilot_store`` below.
+    return normalize_store_id(
+        os.environ.get(ATTRIBUTION_PILOT_STORE_ENV)
+        or DEFAULT_ATTRIBUTION_PILOT_STORE_ID
+    )
 
 
 def is_attribution_pilot_store(value: Any) -> bool:
     normalized = normalize_store_id(value)
-    return bool(normalized and normalized == attribution_pilot_store_id())
+    if not normalized:
+        return False
+    # 748155538 was verified in Salla as the dedicated demo storefront. It is
+    # always isolated even if a deployment variable is missing or points to an
+    # additional pilot store.
+    return normalized in {
+        DEFAULT_ATTRIBUTION_PILOT_STORE_ID,
+        attribution_pilot_store_id(),
+    }
 
 
 __all__ = [
     "ATTRIBUTION_PILOT_STORE_ENV",
+    "DEFAULT_ATTRIBUTION_PILOT_STORE_ID",
     "attribution_pilot_store_id",
     "is_attribution_pilot_store",
     "normalize_store_id",
