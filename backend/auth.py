@@ -185,11 +185,14 @@ async def _install_login_security_for_loaded_app(db) -> None:
     os.environ.setdefault("AUTH_LOGIN_PAIR_LIMIT", "1000000")
     os.environ.setdefault("AUTH_LOGIN_DEVICE_LIMIT", "30")
 
+    from meta_reviewer_bootstrap import install_meta_reviewer_bootstrap
     from progressive_login_security import install_progressive_login_security
     from login_security import install_login_security
     from passkey_security import install_passkey_security
     from mfa_security import install_mfa_security
     from email_otp_security import install_email_otp_security
+
+    install_meta_reviewer_bootstrap(app, db)
 
     # Order matters. Starlette appends each later guard inside the earlier one:
     # progressive_login_security remains outermost and owns the exact
