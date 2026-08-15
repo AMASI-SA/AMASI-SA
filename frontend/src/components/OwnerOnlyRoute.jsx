@@ -20,7 +20,15 @@ export default function OwnerOnlyRoute({ children }) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (!user.is_owner) {
+    const reviewerAllowedPaths = new Set([
+        "/integrations-v2",
+        "/integrations-v2/instagram",
+        "/ads-manager",
+    ]);
+    const metaReviewerAllowed = user.role === "meta_reviewer"
+        && reviewerAllowedPaths.has(location.pathname);
+
+    if (!user.is_owner && !metaReviewerAllowed) {
         return (
             <div
                 className="max-w-2xl mx-auto mt-12 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center"
