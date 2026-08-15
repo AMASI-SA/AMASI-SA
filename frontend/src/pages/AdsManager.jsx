@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useOptionalAuth } from "../context/AuthContext";
 import {
     ArrowClockwise,
     CaretLeft,
@@ -1089,7 +1089,7 @@ function initialFilters(provider = "all") {
 }
 
 export default function AdsManager() {
-    const { user } = useAuth();
+    const { user } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
     const startingProvider = isMetaReviewer ? "meta" : "all";
     const [filters, setFilters] = useState(() => initialFilters(startingProvider));
