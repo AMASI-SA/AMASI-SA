@@ -217,6 +217,7 @@ def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
                     "product_id": 88,
                     "sku": "SKU-88",
                     "name": "Product 88",
+                    "image_url": "https://cdn.example.test/products/88.png",
                     "quantity": 2,
                     "price": {"amount": 62.75, "currency": "SAR"},
                     "options": [
@@ -240,6 +241,7 @@ def test_normalizer_keeps_analytics_fields_without_customer_pii():
     assert record["cart_id"] == "cart-1"
     assert record["total"] == 125.5
     assert record["items"][0]["product_id"] == "88"
+    assert record["items"][0]["image_url"] == "https://cdn.example.test/products/88.png"
     assert record["attribution"] == {
         "platform": "snapchat",
         "account_id": "account-1",
