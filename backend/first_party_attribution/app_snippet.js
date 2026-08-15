@@ -3,7 +3,7 @@
  */
 (function mezanFirstPartyAttribution() {
   "use strict";
-  window.__mezanBuild = "20260814-01";
+  window.__mezanBuild = "20260815-01";
 
   if (window.__mezanFirstPartyAttributionV1) return;
   window.__mezanFirstPartyAttributionV1 = true;
@@ -14,14 +14,11 @@
   var TOUCH_KEY = "mz_touch_v1";
   var TOUCH_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
   var SESSION_MAX_IDLE_MS = 30 * 60 * 1000;
-  // Pilot safety gate: saving an App Snippet publishes it to every store that
-  // installed the app. Keep collection disabled outside the demo store until
-  // the end-to-end attribution test is approved.
-  // The Partners Portal label is "Mezan Attribution Test", while the
-  // storefront SDK exposes the demo store's real name as "متجر تجريبي".
+  // Production safety gate: saving an App Snippet publishes it to every store
+  // that installed the app. Collect only from the verified Amasi storefront.
   // Gate on the immutable store ID so a translated/renamed label cannot
   // accidentally enable collection for another installed store.
-  var PILOT_STORE_ID = "748155538";
+  var ENABLED_STORE_ID = "1673234356";
 
   function randomId(prefix) {
     var value = window.crypto && window.crypto.randomUUID
@@ -169,8 +166,8 @@
     return clean(storeConfig("store.id"), 160);
   }
 
-  function isPilotStore() {
-    return clean(storeConfig("store.id"), 160) === PILOT_STORE_ID;
+  function isEnabledStore() {
+    return clean(storeConfig("store.id"), 160) === ENABLED_STORE_ID;
   }
 
   function normalizeEventName(eventName) {
@@ -234,7 +231,7 @@
     if (!Salla || !Salla.analytics || typeof Salla.analytics.registerTracker !== "function") {
       return false;
     }
-    if (!isPilotStore()) return false;
+    if (!isEnabledStore()) return false;
     Salla.analytics.registerTracker({
       name: "MezanFirstPartyAttributionV1",
       track: function (eventName, payload) {
