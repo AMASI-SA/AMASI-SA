@@ -127,6 +127,21 @@ def select_abandoned_carts_for_period(
     return active_rows, len(abandoned_rows), len(recovered_rows)
 
 
+def latest_active_abandoned_carts(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Return the latest active carts for the read-only dashboard fallback."""
+    return sorted(
+        (row for row in rows if row.get("purchased") is not True),
+        key=lambda row: str(
+            row.get("cart_updated_at") or row.get("updated_at") or ""
+        ),
+        reverse=True,
+    )[:max(0, limit)]
+
+
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         return await cursor.to_list(length=length)
@@ -1173,6 +1188,13 @@ def make_dashboard_v2_router(
             start=start,
             end=end,
         )
+        # The header remains scoped to the selected business period.  When the
+        # period has no active cart, keep the dashboard rail useful by showing
+        # the latest still-active carts instead of an empty card.  This is a
+        # read-only fallback and does not alter the period counters.
+        showing_latest_active_fallback = not rows
+        if showing_latest_active_fallback:
+            rows = latest_active_abandoned_carts(all_rows)
         identity_ids = sorted({
             str(row.get("customer_identity_id"))
             for row in rows
@@ -1245,6 +1267,7 @@ def make_dashboard_v2_router(
             "abandoned_count": abandoned_count,
             "recovered_count": recovered_count,
             "period": {"from": start, "to": end},
+            "showing_latest_active_fallback": showing_latest_active_fallback,
             "live": True,
         }
 
