@@ -9,9 +9,9 @@ jest.mock("../lib/api", () => ({
 import api from "../lib/api";
 import QoyodUnsentOrders from "./QoyodUnsentOrders";
 
-async function renderRecoveryPage() {
+async function renderRecoveryPage(path = "/") {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  window.history.pushState({}, "", "/?recovery=1");
+  window.history.pushState({}, "", path);
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 
 test("recovery panel documents the closed three-status live gate", async () => {
-  const { container, root } = await renderRecoveryPage();
+  const { container, root } = await renderRecoveryPage("/?recovery=1");
   try {
     const panel = container.querySelector('[data-testid="qoyod-recovery-panel"]');
     expect(panel).not.toBeNull();
@@ -49,6 +49,25 @@ test("recovery panel documents the closed three-status live gate", async () => {
     expect(panel.textContent).toContain("تم التجهيز");
     expect(panel.textContent).toContain("completed");
     expect(panel.textContent).not.toContain("ولا يقبل إلا «تم التنفيذ»،");
+  } finally {
+    await cleanup(container, root);
+  }
+});
+
+test("visible recovery button opens the restricted resend panel", async () => {
+  const { container, root } = await renderRecoveryPage();
+  try {
+    const toggle = container.querySelector('[data-testid="qoyod-recovery-toggle"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle.textContent).toContain("إعادة إرسال الطلبات المقيدة");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[data-testid="qoyod-recovery-panel"]')).toBeNull();
+
+    await act(async () => { toggle.click(); });
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('[data-testid="qoyod-recovery-panel"]')).not.toBeNull();
+    expect(toggle.textContent).toContain("إغلاق إعادة الإرسال");
   } finally {
     await cleanup(container, root);
   }

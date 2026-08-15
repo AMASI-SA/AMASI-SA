@@ -35,15 +35,13 @@ export default function QoyodUnsentOrders() {
   const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
   const [recoveryRunning, setRecoveryRunning] = useState(false);
   const [recoveryResults, setRecoveryResults] = useState([]);
+  const [recoveryOpen, setRecoveryOpen] = useState(
+    () => new URLSearchParams(window.location.search).get("recovery") === "1",
+  );
   const [retryConfirmOrder, setRetryConfirmOrder] = useState(null);
   const [retryingOrder, setRetryingOrder] = useState(null);
   const [retryNotice, setRetryNotice] = useState(null);
 
-  // Intentionally absent from the daily workflow.  Operators open the
-  // bounded recovery panel only with ?recovery=1 after reconciling a concrete
-  // incident.  The normal exceptions page remains read-only.
-  const recoveryMode = new URLSearchParams(window.location.search)
-    .get("recovery") === "1";
   const recoveryOrderNumbers = Array.from(new Set(
     recoveryOrders.split(/[\s,،]+/)
       .map((value) => value.trim())
@@ -213,11 +211,21 @@ export default function QoyodUnsentOrders() {
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700">
             تحديث
           </button>
+          <button
+            type="button"
+            onClick={() => setRecoveryOpen((open) => !open)}
+            aria-expanded={recoveryOpen}
+            aria-controls="qoyod-recovery-panel"
+            data-testid="qoyod-recovery-toggle"
+            className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
+            {recoveryOpen ? "إغلاق إعادة الإرسال" : "إعادة إرسال الطلبات المقيدة"}
+          </button>
         </div>
       </div>
 
-      {recoveryMode && (
-        <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 space-y-3"
+      {recoveryOpen && (
+        <div id="qoyod-recovery-panel"
+             className="rounded-xl border border-rose-300 bg-rose-50 p-4 space-y-3"
              data-testid="qoyod-recovery-panel">
           <div>
             <h2 className="font-bold text-rose-950">استعادة مقيدة لدفعة طلبات</h2>
