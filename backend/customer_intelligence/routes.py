@@ -7,6 +7,11 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
 from ai_store_access_contract import PERMISSIONS, ROLE_ASSIGNMENTS, effective_permissions
+from meta_reviewer_access import (
+    META_REVIEWER_CI_PERMISSIONS,
+    is_meta_reviewer,
+    require_review_scope,
+)
 
 from .inbox import CustomerIntelligenceInboxService, LiveInboxResponse
 from .instagram_provisioning import (
@@ -96,6 +101,14 @@ async def _actor_context(db: Any, user: Any) -> CustomerIntelligenceActor:
         )
     actor_id = str(user["id"]).strip()
     role = str(user.get("role") or "").strip().casefold()
+    if is_meta_reviewer(user):
+        principal = require_review_scope(user, "customer_intelligence")
+        return CustomerIntelligenceActor(
+            actor_id=actor_id,
+            owner_user_id=str(principal["id"]),
+            permissions=META_REVIEWER_CI_PERMISSIONS,
+            is_owner=False,
+        )
     if role == "owner" or user.get("is_owner") is True:
         return CustomerIntelligenceActor(
             actor_id=actor_id,
@@ -192,7 +205,7 @@ def make_customer_intelligence_router(
             response_model=CustomerIntelligenceWorkspaceResponse,
         )
         async def workspace(user: dict = Depends(current_user)) -> dict:
-            _require_owner(user)
+            require_review_scope(user, "customer_intelligence")
             return preview_service.workspace()
 
     live_service = inbox_service or (
@@ -340,7 +353,7 @@ def make_customer_intelligence_router(
             response: Response,
             user: dict = Depends(current_user),
         ) -> InstagramSetupPublic:
-            owner = _require_owner(user)
+            owner = require_review_scope(user, "integrations.meta")
             response.headers["Cache-Control"] = "no-store, private"
             try:
                 return await instagram_setup.setup(owner_user_id=str(owner["id"]))
@@ -360,7 +373,7 @@ def make_customer_intelligence_router(
             response: Response,
             user: dict = Depends(current_user),
         ) -> InstagramProvisionResult:
-            owner = _require_owner(user)
+            owner = require_review_scope(user, "integrations.meta")
             response.headers["Cache-Control"] = "no-store, private"
             try:
                 return await instagram_setup.provision(
