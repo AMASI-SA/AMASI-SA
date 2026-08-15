@@ -31,10 +31,9 @@ export default function QoyodUnsentOrders() {
   const [error, setError] = useState(null);
   const [sallaStatus, setSallaStatus] = useState("");
   const [search, setSearch] = useState("");
-  const [recoveryOrders, setRecoveryOrders] = useState("");
-  const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
   const [recoveryRunning, setRecoveryRunning] = useState(false);
   const [recoveryResults, setRecoveryResults] = useState([]);
+  const [recoveryTotal, setRecoveryTotal] = useState(0);
   const [recoveryOpen, setRecoveryOpen] = useState(
     () => new URLSearchParams(window.location.search).get("recovery") === "1",
   );
@@ -43,36 +42,23 @@ export default function QoyodUnsentOrders() {
   const [retryNotice, setRetryNotice] = useState(null);
 
   const recoveryOrderNumbers = Array.from(new Set(
-    recoveryOrders.split(/[\s,،]+/)
-      .map((value) => value.trim())
+    (data?.orders || [])
+      .filter((order) => order.status === "لم يُرسل")
+      .map((order) => String(order.order_number || "").trim())
       .filter((value) => /^\d+$/.test(value)),
   ));
-  const recoveryPhrase = `إرسال ${recoveryOrderNumbers.length} طلب إلى قيود`;
 
   const runRecoveryBatch = async () => {
-    if (!recoveryOrderNumbers.length || recoveryOrderNumbers.length > 25) {
-      setError("دفعة الاستعادة يجب أن تحتوي من 1 إلى 25 رقم طلب صحيحاً");
-      return;
-    }
-    if (recoveryConfirmation.trim() !== recoveryPhrase) {
-      setError(`اكتب عبارة التأكيد حرفياً: ${recoveryPhrase}`);
+    if (!recoveryOrderNumbers.length) {
+      setError("لا توجد طلبات مصنفة «لم يُرسل» ضمن الفترة والفلاتر الحالية");
       return;
     }
 
     setRecoveryRunning(true);
     setRecoveryResults([]);
+    setRecoveryTotal(recoveryOrderNumbers.length);
     setError(null);
     const next = [];
-    const perOrderReviewCodes = new Set([
-      "qoyod_actual_total_mismatch",
-      "qoyod_payload_precision_unsupported",
-      "qoyod_preflight_total_mismatch",
-      "qoyod_preflight_payload_invalid",
-      "totals_mismatch",
-      "rounding_adjustment_product_missing",
-      "already_sent",
-      "already_sent_legacy",
-    ]);
 
     for (const orderNumber of recoveryOrderNumbers) {
       try {
@@ -91,15 +77,11 @@ export default function QoyodUnsentOrders() {
         const code = detail?.code || "unexpected_error";
         next.push({
           orderNumber,
-          outcome: perOrderReviewCodes.has(code) ? "review" : "stopped",
+          outcome: "review",
           code,
           message: detail?.message || String(detail || "فشل الإرسال"),
         });
         setRecoveryResults([...next]);
-        // Total/precision mismatches and duplicate barriers are isolated to the
-        // order.  Authentication, Salla, network, and unknown failures stop the
-        // batch before the next external write.
-        if (!perOrderReviewCodes.has(code)) break;
       }
       setRecoveryResults([...next]);
     }
@@ -218,7 +200,9 @@ export default function QoyodUnsentOrders() {
             aria-controls="qoyod-recovery-panel"
             data-testid="qoyod-recovery-toggle"
             className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-100">
-            {recoveryOpen ? "إغلاق إعادة الإرسال" : "إعادة إرسال الطلبات المقيدة"}
+            {recoveryOpen
+              ? "إغلاق إعادة الإرسال"
+              : `إعادة إرسال الكل (${recoveryOrderNumbers.length})`}
           </button>
         </div>
       </div>
@@ -228,44 +212,46 @@ export default function QoyodUnsentOrders() {
              className="rounded-xl border border-rose-300 bg-rose-50 p-4 space-y-3"
              data-testid="qoyod-recovery-panel">
           <div>
-            <h2 className="font-bold text-rose-950">استعادة مقيدة لدفعة طلبات</h2>
+            <h2 className="font-bold text-rose-950">
+              إعادة إرسال جميع الطلبات غير المرسلة
+            </h2>
             <p className="mt-1 text-xs leading-5 text-rose-800">
-              حد أقصى 25 طلبًا. يعيد الخادم قراءة كل طلب من سلة، ولا يقبل إلا
-              «تم التنفيذ» أو «جاري التوصيل» أو «تم التوصيل»، ثم يطبق حواجز
+              سيأخذ النظام تلقائيًا كل الطلبات المصنفة «لم يُرسل» ضمن الفترة
+              والفلاتر الحالية، وعددها {recoveryOrderNumbers.length}. لا تحتاج
+              إلى إدخال أرقام الطلبات. يعيد الخادم قراءة كل طلب من سلة، ولا يقبل
+              إلا «تم التنفيذ» أو «جاري التوصيل» أو «تم التوصيل»، ثم يطبق حواجز
               التكرار والمبلغ. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة بالحالة
-              الموثوقة completed. الدفع عند الاستلام يُنشئ فاتورة فقط، وبقية
-              الطرق فاتورة وسند قبض.
+              الموثوقة completed. إذا تعذر طلب واحد يبقى «لم يُرسل» ويواصل
+              النظام بقية الطلبات.
             </p>
           </div>
-          <textarea
-            value={recoveryOrders}
-            onChange={(e) => setRecoveryOrders(e.target.value)}
-            placeholder="ألصق أرقام الطلبات، كل رقم في سطر"
-            rows={5}
-            dir="ltr"
-            data-testid="qoyod-recovery-orders"
-            className="w-full rounded-lg border border-rose-200 bg-white p-3 font-mono text-sm"
-          />
-          <div className="text-xs text-rose-800">
-            الطلبات الصحيحة: {recoveryOrderNumbers.length} · عبارة التأكيد:
-            <strong className="mr-1">{recoveryPhrase}</strong>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={recoveryConfirmation}
-              onChange={(e) => setRecoveryConfirmation(e.target.value)}
-              placeholder={recoveryPhrase}
-              data-testid="qoyod-recovery-confirmation"
-              className="min-w-72 flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm"
-            />
+            <div className="min-w-72 flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-rose-900"
+                 data-testid="qoyod-recovery-selection-count">
+              سيتم إرسال {recoveryOrderNumbers.length} طلب إلى قيود تلقائيًا
+              {recoveryOrderNumbers.length === 1000 && (
+                <span className="mr-1 text-xs text-rose-700">
+                  (الحد الظاهر 1000؛ حدّث الصفحة بعد الانتهاء لإرسال أي دفعة متبقية)
+                </span>
+              )}
+            </div>
             <button
               onClick={runRecoveryBatch}
               disabled={recoveryRunning || !recoveryOrderNumbers.length}
               data-testid="qoyod-recovery-send"
               className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-              {recoveryRunning ? "جاري الإرسال الآمن…" : "إرسال الدفعة المقيدة"}
+              {recoveryRunning
+                ? `جاري الإرسال ${recoveryResults.length} من ${recoveryTotal}…`
+                : `تأكيد وإرسال ${recoveryOrderNumbers.length} طلب`}
             </button>
           </div>
+          {recoveryRunning && (
+            <div className="text-xs font-medium text-rose-800"
+                 data-testid="qoyod-recovery-progress">
+              تمت معالجة {recoveryResults.length} من {recoveryTotal}. يمكنك متابعة
+              النتيجة لكل طلب في الجدول أدناه.
+            </div>
+          )}
           {recoveryResults.length > 0 && (
             <div className="overflow-x-auto rounded-lg border border-rose-200 bg-white">
               <table className="w-full text-xs" data-testid="qoyod-recovery-results">
@@ -283,8 +269,7 @@ export default function QoyodUnsentOrders() {
                       <td className="px-2 py-2 font-mono">{result.orderNumber}</td>
                       <td className="px-2 py-2">
                         {result.outcome === "sent" ? "تم الإرسال"
-                          : result.outcome === "review" ? "مراجعة الطلب"
-                          : "توقفت الدفعة"}
+                          : "بقي لم يُرسل — يحتاج مراجعة"}
                       </td>
                       <td className="px-2 py-2 font-mono">{result.invoiceId || "—"}</td>
                       <td className="px-2 py-2">
