@@ -31,15 +31,30 @@ def test_live_sender_requires_the_existing_safe_settings_contract():
 
     issues = auto_send.activation_issues(
         _ready_settings(
-            invoice_trigger_statuses=["completed", "delivered"],
+            invoice_trigger_statuses=[
+                "completed", "delivering", "delivered",
+            ],
             trigger_once_only=False,
         ),
         credentials_configured=True,
         canary_succeeded=True,
     )
     codes = {issue["code"] for issue in issues}
-    assert "completed_trigger_required" in codes
+    assert "completed_trigger_required" not in codes
     assert "trigger_once_required" in codes
+
+    issues = auto_send.activation_issues(
+        _ready_settings(invoice_trigger_statuses=["completed", "shipped"]),
+        credentials_configured=True,
+        canary_succeeded=True,
+    )
+    assert "completed_trigger_required" in {
+        issue["code"] for issue in issues
+    }
+
+    assert auto_send.is_armed(_ready_settings(
+        invoice_trigger_statuses=["completed", "delivering", "delivered"],
+    )) is True
 
     issues = auto_send.activation_issues(
         _ready_settings(),
@@ -351,16 +366,19 @@ class _RunDb:
         self.qoyod_manual_auto_quarantines = _QuarantinesCollection()
 
 
-def _candidate(order_number):
+def _candidate(order_number, salla_status="تم التنفيذ"):
     return {
         "order_number": order_number,
-        "salla_status": "تم التنفيذ",
+        "salla_status": salla_status,
     }
 
 
-async def _prepare_run(monkeypatch, *, candidates, send_one):
+async def _prepare_run(
+    monkeypatch, *, candidates, send_one,
+    settings=None, candidates_by_status=None,
+):
     async def fake_settings(db):
-        return _ready_settings()
+        return settings or _ready_settings()
 
     async def fake_acquire(db):
         return "lease-test"
@@ -369,8 +387,12 @@ async def _prepare_run(monkeypatch, *, candidates, send_one):
         assert owner == "lease-test"
 
     async def fake_pending(db, **kwargs):
-        assert kwargs["status"] == "completed"
-        return {"ok": True, "orders": candidates}
+        if candidates_by_status is None:
+            assert kwargs["status"] == "completed"
+            rows = candidates
+        else:
+            rows = candidates_by_status.get(kwargs["status"], [])
+        return {"ok": True, "orders": rows}
 
     async def fake_refresh(db, *, orders_user_id, order_number):
         assert orders_user_id == "orders-user"
@@ -388,6 +410,38 @@ async def _prepare_run(monkeypatch, *, candidates, send_one):
         auto_send, "_refresh_and_verify_salla_status", fake_refresh
     )
     monkeypatch.setattr(auto_send, "manual_send_one", send_one)
+
+
+@pytest.mark.asyncio
+async def test_run_once_scans_all_three_configured_statuses(monkeypatch):
+    calls = []
+
+    async def fake_send(
+        db, *, user_id, orders_user_id, order_number, actor,
+    ):
+        calls.append(order_number)
+        return {"invoice_id": f"q-{order_number}", "payment_id": "p-1"}
+
+    await _prepare_run(
+        monkeypatch,
+        candidates=[],
+        candidates_by_status={
+            "completed": [_candidate("1001", "تم التنفيذ")],
+            "in_delivery": [_candidate("1002", "جاري التوصيل")],
+            "delivered": [_candidate("1003", "تم التوصيل")],
+        },
+        settings=_ready_settings(invoice_trigger_statuses=[
+            "completed", "delivering", "delivered",
+        ]),
+        send_one=fake_send,
+    )
+
+    db = _RunDb()
+    result = await auto_send.run_once(db, batch_limit=5)
+
+    assert calls == ["1001", "1002", "1003"]
+    assert result["sent_count"] == 3
+    assert result["manual_review_count"] == 0
 
 
 @pytest.mark.asyncio
