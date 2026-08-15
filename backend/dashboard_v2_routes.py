@@ -970,6 +970,18 @@ def make_dashboard_v2_router(
             ads,
         )
         totals = response["totals"]
+        # The V2 filtered order set is the authoritative source for both the
+        # count and gross sales.  The legacy dashboard can under-report fresh
+        # Salla Direct orders when payment-collection fields are still empty,
+        # even though each normalized order already has a valid total_amount.
+        authoritative_sales = round(
+            sum(_float(order.get("total_amount")) for order in orders),
+            2,
+        )
+        previous_sales = _float(totals.get("total_sales"))
+        sales_delta = round(authoritative_sales - previous_sales, 2)
+        totals["total_orders"] = len(orders)
+        totals["total_sales"] = authoritative_sales
         previous_product = _float(totals.get("total_product_cost"))
         previous_ads = _float(totals.get("total_ads_cost"))
         previous_operating = _float(totals.get("operating_expenses_total"))
@@ -993,9 +1005,14 @@ def make_dashboard_v2_router(
         ads_total = ads["total"]
         totals["net_profit"] = round(
             _float(totals.get("net_profit"))
+            + sales_delta
             + previous_product - product_total
             + previous_ads - ads_total
             + previous_operating - operating_total,
+            2,
+        )
+        totals["net_sales"] = round(
+            _float(totals.get("net_sales")) + sales_delta,
             2,
         )
         config = response.get("net_sales_config") or {}
