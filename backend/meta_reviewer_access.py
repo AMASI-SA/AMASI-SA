@@ -65,7 +65,7 @@ def require_review_scope(user: Any, scope: str) -> dict:
     if not is_meta_reviewer(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "meta_review_scope_required"},
+            detail={"code": "owner_only"},
         )
     if review_access_expired(user):
         raise HTTPException(
