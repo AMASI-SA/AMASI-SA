@@ -5,6 +5,12 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from meta_reviewer_access import (
+    META_INTEGRATION_PROVIDERS,
+    is_meta_reviewer,
+    require_review_scope,
+)
+
 from .catalog import PROVIDER_BY_ID, provider_or_none
 from .models import (
     ActivityListResponse,
@@ -35,6 +41,39 @@ def _require_owner(user: Any) -> dict:
     return user
 
 
+def _require_meta_integration_access(user: Any) -> dict:
+    return require_review_scope(user, "integrations.meta")
+
+
+def _filter_reviewer_overview(payload: dict, user: Any) -> dict:
+    if not is_meta_reviewer(user):
+        return payload
+    result = dict(payload)
+    providers = [
+        row for row in payload.get("providers", [])
+        if row.get("provider") in META_INTEGRATION_PROVIDERS
+    ]
+    result["providers"] = providers
+    result["summary"] = {
+        "total": len(providers),
+        "connected": sum(row.get("connection_status") == "connected" for row in providers),
+        "api_connections": sum(row.get("connection_provenance") == "api_connection" for row in providers),
+        "legacy_integrations": sum(row.get("connection_provenance") == "legacy_integration" for row in providers),
+        "data_feeds": sum(row.get("connection_provenance") == "data_feed" for row in providers),
+        "disconnected": sum(row.get("connection_provenance") == "disconnected" for row in providers),
+        "planned": sum(row.get("connection_provenance") == "planned" for row in providers),
+        "unknown": sum(row.get("connection_provenance") == "unknown" for row in providers),
+        "healthy": sum((row.get("health") or {}).get("status") == "healthy" for row in providers),
+        "missing_permissions": sum(bool((row.get("permissions") or {}).get("missing")) for row in providers),
+        "attention_required": sum(
+            (row.get("health") or {}).get("status") in {"degraded", "unhealthy"}
+            or row.get("connection_status") in {"needs_reauth", "expired", "error"}
+            for row in providers
+        ),
+    }
+    return result
+
+
 def _validated_provider(provider: str | None) -> str | None:
     if provider is None:
         return None
@@ -53,23 +92,41 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
 
     @router.get("/overview", response_model=OverviewResponse)
     async def overview(user: dict = Depends(current_user)) -> dict:
-        owner = _require_owner(user)
-        return await service.overview(str(owner["id"]))
+        principal = _require_meta_integration_access(user)
+        payload = await service.overview(str(principal["id"]))
+        return _filter_reviewer_overview(payload, user)
 
     @router.get("/capabilities", response_model=CapabilityResponse)
     async def capabilities(user: dict = Depends(current_user)) -> dict:
-        owner = _require_owner(user)
-        return await service.capabilities(str(owner["id"]))
+        principal = _require_meta_integration_access(user)
+        payload = await service.capabilities(str(principal["id"]))
+        if is_meta_reviewer(user):
+            payload = dict(payload)
+            payload["providers"] = [
+                row for row in payload.get("providers", [])
+                if row.get("provider") in META_INTEGRATION_PROVIDERS
+            ]
+        return payload
 
     @router.get("/sync-runs", response_model=ActivityListResponse)
     async def sync_runs(provider: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
-        owner = _require_owner(user)
-        return await service.list_sync_runs(str(owner["id"]), provider=_validated_provider(provider), limit=limit)
+        principal = _require_meta_integration_access(user)
+        provider_id = _validated_provider(provider)
+        if is_meta_reviewer(user):
+            if provider_id and provider_id not in META_INTEGRATION_PROVIDERS:
+                raise HTTPException(status_code=403, detail={"code": "meta_review_provider_denied"})
+            provider_id = provider_id or "meta_ads"
+        return await service.list_sync_runs(str(principal["id"]), provider=provider_id, limit=limit)
 
     @router.get("/errors", response_model=ActivityListResponse)
     async def errors(provider: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)) -> dict:
-        owner = _require_owner(user)
-        return await service.list_errors(str(owner["id"]), provider=_validated_provider(provider), limit=limit)
+        principal = _require_meta_integration_access(user)
+        provider_id = _validated_provider(provider)
+        if is_meta_reviewer(user):
+            if provider_id and provider_id not in META_INTEGRATION_PROVIDERS:
+                raise HTTPException(status_code=403, detail={"code": "meta_review_provider_denied"})
+            provider_id = provider_id or "meta_ads"
+        return await service.list_errors(str(principal["id"]), provider=provider_id, limit=limit)
 
     @router.post(
         "/snapchat_ads/sync",
@@ -124,12 +181,14 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
 
     @router.post("/{provider}/test-connection", response_model=ConnectionTestResponse)
     async def test_connection(provider: str, user: dict = Depends(current_user)) -> dict:
-        owner = _require_owner(user)
+        principal = _require_meta_integration_access(user)
         provider_id = _validated_provider(provider)
+        if is_meta_reviewer(user) and provider_id not in META_INTEGRATION_PROVIDERS:
+            raise HTTPException(status_code=403, detail={"code": "meta_review_provider_denied"})
         definition = PROVIDER_BY_ID[provider_id]
         if not definition.legacy_sources or definition.planned:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": "local_probe_not_available", "message": "لا يوجد اختبار محلي آمن لهذه المنصة في المرحلة الأولى."})
-        return await service.test_connection(str(owner["id"]), provider_id)
+        return await service.test_connection(str(principal["id"]), provider_id)
 
     return router
 
