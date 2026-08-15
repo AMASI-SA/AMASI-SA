@@ -129,3 +129,10 @@ test("top products header shows period counts and only five rows initially", () 
     expect(markup).toContain("المزيد");
     expect(markup).not.toContain("منتج 6");
 });
+
+test("GA active-user bars stay inside their chart area", () => {
+    expect(source).toContain('data-testid="advanced-ga-active-chart"');
+    expect(source).toContain("overflow-hidden");
+    expect(source).toContain("Number(m.active_users || 0) / minuteMax * 100");
+    expect(source).toContain("Math.min(100");
+});
