@@ -93,6 +93,74 @@ def _salla_payload(patch: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _money_amount(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        for key in ("amount", "value", "price", "total"):
+            if key in value:
+                return _money_amount(value.get(key))
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _salla_product(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {}
+    data = response.get("data")
+    return data if isinstance(data, dict) else response
+
+
+def _price_snapshot(product: dict[str, Any]) -> dict[str, float | None]:
+    regular = _money_amount(product.get("regular_price"))
+    if regular is None:
+        regular = _money_amount(product.get("price"))
+    return {
+        "price": regular,
+        "sale_price": _money_amount(product.get("sale_price")),
+    }
+
+
+def _salla_payload_with_preserved_prices(
+    patch: dict[str, Any], current_product: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, float | None]]:
+    """Build a complete price-safe Salla payload from a partial Mezan patch."""
+    payload = _salla_payload(patch)
+    snapshot = _price_snapshot(current_product)
+    if snapshot["price"] is None:
+        raise HTTPException(status_code=409, detail={"code": "salla_price_snapshot_missing"})
+    if "price" not in payload:
+        payload["price"] = snapshot["price"]
+    if "sale_price" not in payload and snapshot["sale_price"] is not None:
+        payload["sale_price"] = snapshot["sale_price"]
+    expected = {
+        "price": _money_amount(payload.get("price")),
+        "sale_price": _money_amount(payload.get("sale_price")),
+    }
+    return payload, expected
+
+
+def _verify_salla_prices(
+    product: dict[str, Any], expected: dict[str, float | None]
+) -> None:
+    actual = _price_snapshot(product)
+    mismatches: dict[str, dict[str, float | None]] = {}
+    for key, expected_value in expected.items():
+        if expected_value is None:
+            continue
+        actual_value = actual.get(key)
+        if actual_value is None or abs(actual_value - expected_value) > 0.0001:
+            mismatches[key] = {"expected": expected_value, "actual": actual_value}
+    if mismatches:
+        raise HTTPException(status_code=409, detail={
+            "code": "salla_price_verification_failed",
+            "mismatches": mismatches,
+        })
+
+
 async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
     row = await db[PRODUCTS].find_one({
         "user_id": user_id,
@@ -224,11 +292,21 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         if payload.get("confirmation") != "نشر التعديل إلى سلة":
             raise HTTPException(status_code=409, detail={"code": "publish_confirmation_required"})
         patch = _clean_patch(draft.get("changes") or {})
-        remote_payload = _salla_payload(patch)
-        if not remote_payload:
+        if not _salla_payload(patch):
             raise HTTPException(status_code=422, detail={"code": "no_salla_publishable_fields"})
         try:
+            current_response = await call_salla(db, user_id, "GET", f"/products/{salla_id}")
+            current_remote = _salla_product(current_response)
+            remote_payload, expected_prices = _salla_payload_with_preserved_prices(patch, current_remote)
             response = await call_salla(db, user_id, "PUT", f"/products/{salla_id}", json=remote_payload)
+            verified_response = await call_salla(db, user_id, "GET", f"/products/{salla_id}")
+            try:
+                _verify_salla_prices(_salla_product(verified_response), expected_prices)
+            except HTTPException:
+                rollback_payload = {key: value for key, value in expected_prices.items() if value is not None}
+                if rollback_payload:
+                    await call_salla(db, user_id, "PUT", f"/products/{salla_id}", json=rollback_payload)
+                raise
         except SallaError as exc:
             raise HTTPException(status_code=exc.status_code if exc.status_code != 200 else 400, detail={"code": "salla_product_publish_failed", "message": str(exc), "needs_reauth": exc.needs_reauth}) from exc
         now = _now()
