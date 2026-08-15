@@ -5,12 +5,18 @@ function read(relativePath) {
     return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 }
 
-test("root and authenticated public redirects land on Mezan 2 dashboard", () => {
+test("root and authenticated public redirects land on the advanced dashboard", () => {
     const app = read("src/App.js");
-    expect(app).toContain('if (user) return <Navigate to="/dashboard-v2" replace />;');
-    expect(app).toContain('<Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />');
-    expect(app).toContain('<Route path="*" element={<Navigate to="/dashboard-v2" replace />} />');
+    expect(app).toContain('if (user) return <Navigate to="/dashboard-advanced" replace />;');
+    expect(app).toContain('<Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-advanced" replace /></ProtectedRoute>} />');
+    expect(app).toContain('<Route path="*" element={<Navigate to="/dashboard-advanced" replace />} />');
     expect(app).not.toContain('<Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />');
+});
+
+test("the advanced dashboard keeps an explicit path back to the old dashboard", () => {
+    const advanced = read("src/pages/AdvancedDashboard.jsx");
+    expect(advanced).toContain('to="/dashboard-v2"');
+    expect(advanced).toContain("لوحة التحكم القديمة");
 });
 
 test("legacy dashboard remains reachable only through its explicit legacy route", () => {

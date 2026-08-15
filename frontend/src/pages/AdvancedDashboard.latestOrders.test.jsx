@@ -1,8 +1,12 @@
 import React from "react";
+import fs from "fs";
+import path from "path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 
 import { AbandonedCartsCard, LatestOrders, SummaryStrip, TopProductsCard } from "./AdvancedDashboard";
+
+const source = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
 
 test("latest orders mirrors the Orders V2 information row", () => {
     const markup = renderToStaticMarkup(
@@ -135,4 +139,13 @@ test("GA active-user bars stay inside their chart area", () => {
     expect(source).toContain("overflow-hidden");
     expect(source).toContain("Number(m.active_users || 0) / minuteMax * 100");
     expect(source).toContain("Math.min(100");
+});
+
+test("profit summary keeps the four audited breakdowns in scrollable accordions", () => {
+    expect(source).toContain('data-testid="advanced-profit-ads-details"');
+    expect(source).toContain('data-testid="advanced-profit-shipping-details"');
+    expect(source).toContain('data-testid="advanced-profit-payment-details"');
+    expect(source).toContain('data-testid="advanced-profit-operating-details"');
+    expect(source).toContain("max-h-72 overflow-auto");
+    expect(source).toContain("aria-expanded={row.expandable ? expanded === row.key : undefined}");
 });
