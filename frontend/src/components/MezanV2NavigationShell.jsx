@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useOptionalAuth } from "../context/AuthContext";
 import {
     CaretDown,
     Buildings,
@@ -265,7 +265,7 @@ export default function MezanV2NavigationShell({
     searchForm = null,
     notificationControl = null,
 }) {
-    const { user } = useAuth();
+    const { user } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
     const sections = isMetaReviewer ? META_REVIEWER_NAV_SECTIONS : MEZAN_V2_NAV_SECTIONS;
     const safeSearchForm = isMetaReviewer ? null : searchForm;
