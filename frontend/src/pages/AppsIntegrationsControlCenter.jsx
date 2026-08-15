@@ -10,7 +10,7 @@ import {
     WarningCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { useAuth } from "../context/AuthContext";
+import { useOptionalAuth } from "../context/AuthContext";
 import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
@@ -92,7 +92,7 @@ function PageSkeleton() {
 
 export default function AppsIntegrationsControlCenter() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user } = useOptionalAuth() || {};
     const isMetaReviewer = user?.role === "meta_reviewer";
     const [searchParams] = useSearchParams();
     const [overview, setOverview] = useState(() => normalizeIntegrationOverview({}));
