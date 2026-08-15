@@ -73,3 +73,20 @@ def test_price_verification_rejects_a_reset_regular_price():
         )
     assert exc.value.detail["code"] == "salla_price_verification_failed"
     assert exc.value.detail["mismatches"]["price"] == {"expected": 180, "actual": 139}
+
+
+def test_content_publish_preserves_tax_inclusive_prices_without_compounding_tax():
+    payload, expected = _salla_payload_with_preserved_prices(
+        {"name": "اسم جديد"},
+        {
+            "price": {"amount": 150.12, "currency": "SAR"},
+            "sale_price": {"amount": 150.12, "currency": "SAR"},
+            "regular_price": {"amount": 194.40, "currency": "SAR"},
+            "pre_tax_price": {"amount": 139, "currency": "SAR"},
+            "tax": {"amount": 11.12, "currency": "SAR"},
+            "with_tax": True,
+        },
+    )
+    assert payload["price"] == pytest.approx(180)
+    assert payload["sale_price"] == pytest.approx(139)
+    assert expected == {"price": 194.40, "sale_price": 150.12}
