@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import {
     CaretDown,
     Buildings,
@@ -119,6 +120,30 @@ export const MEZAN_V2_NAV_SECTIONS = [
     },
 ];
 
+const META_REVIEWER_NAV_SECTIONS = [
+    {
+        id: "marketing",
+        label: "التسويق",
+        Icon: Megaphone,
+        items: [{ to: "/ads-manager", label: "حملات Meta", exactSearch: true }],
+    },
+    {
+        id: "apps",
+        label: "التطبيقات",
+        Icon: Plug,
+        items: [
+            { to: "/integrations-v2?provider=meta_ads", label: "تكامل Meta" },
+            { to: "/integrations-v2/instagram", label: "تكامل Instagram", exactSearch: true },
+        ],
+    },
+    {
+        id: "intelligence",
+        label: "ذكاء العملاء",
+        Icon: Robot,
+        items: [{ to: "/customer-intelligence", label: "المحادثات والتعليقات", exactSearch: true }],
+    },
+];
+
 const MEZAN_V2_PATHS = [
     "/dashboard-v2",
     "/orders-v2",
@@ -163,23 +188,23 @@ export function isNavigationItemActive(location, item) {
     return true;
 }
 
-export function activeNavigationSection(location) {
-    const directlyMatched = MEZAN_V2_NAV_SECTIONS.find(
+export function activeNavigationSection(location, sections = MEZAN_V2_NAV_SECTIONS) {
+    const directlyMatched = sections.find(
         (section) => section.items.some((item) => isNavigationItemActive(location, item)),
     );
     if (directlyMatched) return directlyMatched;
 
     const currentPath = String(location?.pathname || "");
-    return MEZAN_V2_NAV_SECTIONS.find(
+    return sections.find(
         (section) => section.items.some(
             (item) => parseTarget(item.to).pathname === currentPath,
         ),
     ) || null;
 }
 
-export function navigationSectionsForDisplay(location, openSectionId = null) {
-    const activeSection = activeNavigationSection(location);
-    const openSection = MEZAN_V2_NAV_SECTIONS.find(
+export function navigationSectionsForDisplay(location, openSectionId = null, sections = MEZAN_V2_NAV_SECTIONS) {
+    const activeSection = activeNavigationSection(location, sections);
+    const openSection = sections.find(
         (section) => section.id === openSectionId,
     ) || null;
     return {
@@ -240,12 +265,17 @@ export default function MezanV2NavigationShell({
     searchForm = null,
     notificationControl = null,
 }) {
+    const { user } = useAuth();
+    const isMetaReviewer = user?.role === "meta_reviewer";
+    const sections = isMetaReviewer ? META_REVIEWER_NAV_SECTIONS : MEZAN_V2_NAV_SECTIONS;
+    const safeSearchForm = isMetaReviewer ? null : searchForm;
+    const safeNotificationControl = isMetaReviewer ? null : notificationControl;
     const [openSectionId, setOpenSectionId] = useState(null);
     const [searchOpen, setSearchOpen] = useState(false);
     const rootRef = useRef(null);
     const { activeSection, openSection, visibleSection } = useMemo(
-        () => navigationSectionsForDisplay(location, openSectionId),
-        [location, openSectionId],
+        () => navigationSectionsForDisplay(location, openSectionId, sections),
+        [location, openSectionId, sections],
     );
 
     useEffect(() => {
@@ -287,7 +317,8 @@ export default function MezanV2NavigationShell({
 
                 <button
                     type="button"
-                    onClick={onOpenAll}
+                    onClick={isMetaReviewer ? undefined : onOpenAll}
+                    disabled={isMetaReviewer}
                     className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2 text-[11px] font-extrabold text-slate-100 transition hover:bg-white/10 hover:text-white sm:h-11 sm:px-2.5 sm:text-xs xl:h-12 xl:px-3 2xl:px-4 2xl:text-sm"
                     data-testid="mezan-v2-open-all"
                     aria-label="فتح كل صفحات ميزان"
@@ -301,7 +332,7 @@ export default function MezanV2NavigationShell({
                     data-testid="mezan-v2-primary-scroll"
                 >
                     <div className="flex w-max min-w-full flex-nowrap items-center gap-1 whitespace-nowrap sm:gap-1.5">
-                        {MEZAN_V2_NAV_SECTIONS.map((section) => {
+                        {sections.map((section) => {
                             const active = activeSection?.id === section.id;
                             const open = openSectionId === section.id;
                             return (
@@ -344,20 +375,20 @@ export default function MezanV2NavigationShell({
                                 : <MagnifyingGlass size={21} weight="bold" />}
                         </button>
 
-                        {searchOpen && searchForm && (
+                        {searchOpen && safeSearchForm && (
                             <div
                                 id="mezan-v2-search-dropdown"
                                 className="absolute left-0 top-[calc(100%+0.65rem)] z-[80] w-[calc(100vw-1rem)] max-w-[34rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl sm:w-[32rem]"
                                 data-testid="mezan-v2-search-dropdown"
                             >
-                                {searchForm}
+                                {safeSearchForm}
                             </div>
                         )}
                     </div>
 
-                    {notificationControl && (
+                    {safeNotificationControl && (
                         <div className="shrink-0" data-testid="mezan-v2-notification-control">
-                            {notificationControl}
+                            {safeNotificationControl}
                         </div>
                     )}
                 </div>
