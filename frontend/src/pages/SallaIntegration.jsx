@@ -12,7 +12,7 @@ import api from "../lib/api";
 /**
  * /settings/salla — "ربط متجر سلة"
  *
- * Shows connection health, direct data sync, tracked abandoned-cart import,
+ * Shows connection health, direct data sync, live abandoned-cart delivery,
  * and the four privacy-safe abandoned-cart webhook states.
  *
  * IMPORTANT: This page DOES NOT touch any other data source. Make, PDF
@@ -93,7 +93,7 @@ export default function SallaIntegration() {
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [config, setConfig] = useState(null);
-    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false, syncCarts: false, reset: false });
+    const [busy, setBusy] = useState({ connect: false, test: false, refresh: false, disconnect: false, saveConfig: false, syncOrders: false, syncProducts: false, reset: false });
     const [showDisconnect, setShowDisconnect] = useState(false);
     const [showReset, setShowReset] = useState(false);
     const [liveStoreInfo, setLiveStoreInfo] = useState(null);
@@ -164,28 +164,6 @@ export default function SallaIntegration() {
     }, [location.search, location.pathname, navigate]);
 
     useEffect(() => { load(); }, [load]);
-
-    useEffect(() => {
-        if (!cartStatus?.import_running) return undefined;
-        const timer = window.setInterval(async () => {
-            try {
-                const { data } = await api.get("/salla/abandoned-carts/status");
-                setCartStatus(data);
-                if (!data?.import_running) {
-                    window.clearInterval(timer);
-                    await load();
-                    if (data?.last_sync?.status === "completed") {
-                        toast.success(`اكتمل استيراد السلات: ${data.last_sync.rows_saved || 0} سلة`);
-                    } else if (data?.last_sync?.status === "failed") {
-                        toast.error(data.last_sync.last_error || "تعذّر استيراد السلات المتروكة");
-                    }
-                }
-            } catch {
-                // Keep the current progress visible and try again on the next tick.
-            }
-        }, 5000);
-        return () => window.clearInterval(timer);
-    }, [cartStatus?.import_running, load]);
 
     const handleConnect = async () => {
         setBusy(b => ({ ...b, connect: true }));
@@ -355,38 +333,6 @@ export default function SallaIntegration() {
             await load();
         } finally {
             setBusy(b => ({ ...b, syncProducts: false }));
-        }
-    };
-
-    const handleSyncCarts = async () => {
-        setBusy(b => ({ ...b, syncCarts: true }));
-        try {
-            const { data } = await api.post("/salla/sync/abandoned-carts");
-            if (data?.already_running) {
-                toast.info("استيراد السلات يعمل بالفعل — ستتحدث الأرقام تلقائياً.");
-            } else {
-                toast.success("بدأ استيراد جميع السلات المتروكة في الخلفية.");
-            }
-            setCartStatus(prev => ({
-                ...(prev || {}),
-                import_running: true,
-                last_sync: data?.run || {
-                    id: data?.run_id,
-                    status: "running",
-                    pages_fetched: 0,
-                    rows_seen: 0,
-                    rows_saved: 0,
-                },
-            }));
-        } catch (e) {
-            const det = e?.response?.data?.detail;
-            const msg = typeof det === "string"
-                ? det
-                : (det?.message || "فشل بدء استيراد السلات المتروكة");
-            toast.error(msg);
-            await load();
-        } finally {
-            setBusy(b => ({ ...b, syncCarts: false }));
         }
     };
 
@@ -738,39 +684,16 @@ export default function SallaIntegration() {
                             </div>
                         </div>
 
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-center gap-3">
+                            <CheckCircle size={22} weight="fill" className="text-emerald-600 flex-shrink-0" />
                             <div>
-                                <div className="font-extrabold text-amber-950 text-sm">
-                                    {cartStatus?.import_running ? "الاستيراد التاريخي يعمل الآن" : "الاستيراد التاريخي لجميع السلات"}
+                                <div className="font-extrabold text-emerald-950 text-sm">
+                                    السلات الجديدة وتحديثاتها تعمل مباشرة
                                 </div>
-                                <div className="text-xs text-amber-800 mt-1" data-testid="salla-cart-sync-progress">
-                                    {cartStatus?.import_running ? (
-                                        <>تمت قراءة {cartStatus?.last_sync?.pages_fetched || 0} صفحة · {cartStatus?.last_sync?.rows_seen || 0} سلة · حُفظت {cartStatus?.last_sync?.rows_saved || 0} · رُبطت {cartStatus?.last_sync?.identity_linked || 0} بعميل و{cartStatus?.last_sync?.attributed || 0} بمصدر/حملة</>
-                                    ) : cartStatus?.last_sync?.status === "completed" ? (
-                                        <>آخر مزامنة مكتملة: {cartStatus.last_sync.rows_saved || 0} سلة · {cartStatus.last_sync.identity_linked || 0} مرتبطة بعميل · {cartStatus.last_sync.attributed || 0} مرتبطة بمصدر/حملة · {cartStatus.last_sync.ended_at ? new Date(cartStatus.last_sync.ended_at).toLocaleString("en-US") : "—"}</>
-                                    ) : cartStatus?.last_sync?.status === "failed" ? (
-                                        <span className="text-rose-700">آخر محاولة فشلت: {cartStatus.last_sync.last_error || "خطأ غير معروف"}</span>
-                                    ) : (
-                                        <>لم يُشغّل الاستيراد التاريخي بعد.</>
-                                    )}
+                                <div className="text-xs text-emerald-800 mt-1" data-testid="salla-cart-live-webhooks-mode">
+                                    تم إيقاف الاستيراد التاريخي حسب الإعداد المعتمد. تصل السلات الجديدة وتحديث الحالة والتحويل إلى طلب عبر Webhook فقط.
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleSyncCarts}
-                                disabled={busy.syncCarts || cartStatus?.import_running || !cartsReadGranted}
-                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-sm"
-                                data-testid="salla-sync-abandoned-carts-btn"
-                            >
-                                <ArrowsClockwise size={14} weight="bold" className={(busy.syncCarts || cartStatus?.import_running) ? "animate-spin" : ""} />
-                                {!cartsReadGranted
-                                    ? "صلاحية carts.read غير مفعلة"
-                                    : cartStatus?.import_running
-                                        ? "جاري الاستيراد…"
-                                        : cartStatus?.total_carts > 0
-                                            ? "إعادة مزامنة جميع السلات"
-                                            : "استيراد جميع السلات"}
-                            </button>
                         </div>
 
                         <div>
