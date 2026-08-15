@@ -4,7 +4,7 @@ import path from "path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 
-import { AbandonedCartsCard, LatestOrders, SummaryStrip, TopProductsCard } from "./AdvancedDashboard";
+import { AbandonedCartsCard, LatestOrders, ProfitCard, SummaryStrip, TopProductsCard } from "./AdvancedDashboard";
 
 const source = fs.readFileSync(path.join(__dirname, "AdvancedDashboard.jsx"), "utf8");
 
@@ -148,4 +148,34 @@ test("profit summary keeps the four audited breakdowns in scrollable accordions"
     expect(source).toContain('data-testid="advanced-profit-operating-details"');
     expect(source).toContain("max-h-72 overflow-auto");
     expect(source).toContain("aria-expanded={row.expandable ? expanded === row.key : undefined}");
+});
+
+test("profit rows keep labels on the right and render amount then currency then percentage", () => {
+    const markup = renderToStaticMarkup(<ProfitCard data={{ totals: {
+        total_sales: 253.6,
+        total_orders: 2,
+        total_product_cost: 74,
+        total_ads_cost: 411.48,
+        total_shipping_cost: 37.25,
+        total_payment_fees: 11.36,
+        operating_expenses_total: 1436.19,
+        net_profit: -1716.68,
+        avg_cost_per_order: 205.74,
+        overall_roas: 0.62,
+    } }} />);
+
+    const amountIndex = markup.indexOf(">411.48<");
+    const currencyIndex = markup.indexOf(">ر.س<", amountIndex);
+    const percentageIndex = markup.indexOf(">162.26%<", currencyIndex);
+    expect(amountIndex).toBeGreaterThan(-1);
+    expect(currencyIndex).toBeGreaterThan(amountIndex);
+    expect(percentageIndex).toBeGreaterThan(currencyIndex);
+    expect(markup).toContain("flex min-w-0 flex-1 items-center");
+});
+
+test("advanced ads card reads original hourly platform series", () => {
+    expect(source).toContain("getDashboardAdsSpend");
+    expect(source).toContain("chartData?.hourly_spend");
+    expect(source).toContain("row.hour");
+    expect(source).toContain('connectNulls={false}');
 });
