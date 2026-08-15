@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from integrations_control_center.routes import _require_owner
+from meta_reviewer_access import is_meta_reviewer, require_review_scope
 
 from .models import AdsManagerOverview
 from .service import AdsManagerService
@@ -61,10 +61,15 @@ def make_ads_manager_router(db: Any, current_user: Callable) -> APIRouter:
         limit: int = Query(default=50, ge=10, le=100),
         user: dict = Depends(current_user),
     ) -> dict:
-        owner = _require_owner(user)
+        principal = require_review_scope(user, "ads.meta")
+        if is_meta_reviewer(user) and provider != "meta":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "meta_review_provider_denied"},
+            )
         try:
             return await service.overview(
-                str(owner["id"]),
+                str(principal["id"]),
                 date_from=date_from,
                 date_to=date_to,
                 provider=provider,
