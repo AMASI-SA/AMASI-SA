@@ -13,7 +13,11 @@ JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
 logger = logging.getLogger(__name__)
 
-from meta_reviewer_access import review_access_expired
+from meta_reviewer_access import (
+    is_meta_reviewer,
+    review_access_expired,
+    reviewer_api_path_allowed,
+)
 
 
 def get_jwt_secret() -> str:
@@ -124,6 +128,11 @@ async def get_current_user_from_db(request: Request, db) -> dict:
             raise HTTPException(status_code=401, detail="User not found")
         if account_is_disabled(user):
             raise HTTPException(status_code=401, detail="Account disabled")
+        if is_meta_reviewer(user) and not reviewer_api_path_allowed(request.url.path):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "meta_review_path_denied"},
+            )
 
         # Owner/Admin sessions are valid only after a second factor has been
         # verified. This intentionally invalidates privileged browser/API tokens
