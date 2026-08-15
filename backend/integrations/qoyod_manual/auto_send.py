@@ -6,9 +6,10 @@ Qoyod pipeline.  The existing Qoyod settings switches are the control plane:
 
 * ``enabled`` and ``auto_send`` must be true;
 * ``dry_run_mode`` must be false;
-* only the canonical ``completed`` trigger arms new automatic work;
-* the final live Salla check also accepts an order that has advanced to
-  ``in_delivery`` or ``delivered`` before the worker reaches it;
+* new automatic work may start from the three approved Salla states:
+  ``completed``, ``in_delivery``/``delivering``, or ``delivered``;
+* the final live Salla check revalidates the same closed three-state policy
+  immediately before every external write;
 * the legacy pipeline must remain frozen;
 * a successful closed canary must exist before the settings can arm it.
 
@@ -50,6 +51,34 @@ _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
 
+# Settings store the exact Salla slug selected by the operator.  Salla can
+# expose the in-delivery state under more than one equivalent slug, so map the
+# closed approved list to the three keys understood by ``list_pending_orders``.
+# Nothing outside these aliases can arm the automatic worker.
+_TRIGGER_TO_PENDING_STATUS = {
+    "completed": "completed",
+    "تم التنفيذ": "completed",
+    "تم التجهيز": "completed",
+    "in_delivery": "in_delivery",
+    "in delivery": "in_delivery",
+    "shipping": "in_delivery",
+    "delivering": "in_delivery",
+    "جاري_التوصيل": "in_delivery",
+    "جاري التوصيل": "in_delivery",
+    "جارٍ التوصيل": "in_delivery",
+    "delivered": "delivered",
+    "تم التوصيل": "delivered",
+}
+
+_PENDING_STATUS_NATIVE_VALUES = {
+    "completed": frozenset({"completed", "تم التنفيذ", "تم التجهيز"}),
+    "in_delivery": frozenset({
+        "in_delivery", "in delivery", "shipping", "delivering",
+        "جاري التوصيل", "جارٍ التوصيل",
+    }),
+    "delivered": frozenset({"delivered", "تم التوصيل"}),
+}
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -57,6 +86,39 @@ def _now() -> datetime:
 def _capabilities(settings: dict) -> dict:
     value = settings.get("capabilities") or {}
     return value if isinstance(value, dict) else {}
+
+
+def _configured_pending_statuses(settings: dict) -> list[str]:
+    """Resolve saved Salla trigger slugs to the closed Plan-B status keys."""
+    resolved: list[str] = []
+    for raw in list(settings.get("invoice_trigger_statuses") or []):
+        if not isinstance(raw, str):
+            continue
+        value = raw.strip().lower()
+        status_key = _TRIGGER_TO_PENDING_STATUS.get(value)
+        if status_key and status_key not in resolved:
+            resolved.append(status_key)
+    return resolved
+
+
+def _trigger_statuses_are_safe(settings: dict) -> bool:
+    raw = list(settings.get("invoice_trigger_statuses") or [])
+    if not raw:
+        return False
+    valid_count = sum(
+        isinstance(value, str)
+        and value.strip().lower() in _TRIGGER_TO_PENDING_STATUS
+        for value in raw
+    )
+    return (
+        valid_count == len(raw)
+        and bool(_configured_pending_statuses(settings))
+    )
+
+
+def _pending_row_matches_status(row: dict[str, Any], status_key: str) -> bool:
+    native = str(row.get("salla_status") or "").strip().lower()
+    return native in _PENDING_STATUS_NATIVE_VALUES.get(status_key, frozenset())
 
 
 def activation_issues(
@@ -81,11 +143,11 @@ def activation_issues(
         )
     if not settings.get("legacy_pipeline_frozen"):
         add("legacy_pipeline_not_frozen", "يجب إبقاء مسار قيود القديم مجمداً")
-    if list(settings.get("invoice_trigger_statuses") or []) != ["completed"]:
+    if not _trigger_statuses_are_safe(settings):
         add(
             "completed_trigger_required",
-            "يجب أن يبدأ العامل التلقائي من مصنف completed؛ ويتحقق قبل "
-            "الإرسال من الحالات الثلاث المسموحة",
+            "حالات الإرسال التلقائي المسموحة فقط: تم التنفيذ، جاري التوصيل، "
+            "تم التوصيل",
         )
     if settings.get("trigger_once_only") is not True:
         add("trigger_once_required", "يجب تفعيل إنشاء الفاتورة مرة واحدة فقط")
@@ -119,7 +181,7 @@ def is_armed(settings: dict) -> bool:
         and settings.get("plan_b_auto_send_armed_at")
         and settings.get("plan_b_auto_send_orders_user_id")
         and settings.get("legacy_pipeline_frozen")
-        and list(settings.get("invoice_trigger_statuses") or []) == ["completed"]
+        and _trigger_statuses_are_safe(settings)
         and settings.get("trigger_once_only") is True
     )
 
@@ -497,22 +559,42 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             return result
 
         orders_user_id = str(settings["plan_b_auto_send_orders_user_id"])
-        pending = await list_pending_orders(
-            db,
-            user_id=_TENANT,
-            orders_user_id=orders_user_id,
-            days=60,
-            limit=max(25, batch_limit * 5),
-            status="completed",
+        candidate_groups: list[list[dict[str, Any]]] = []
+        for pending_status in _configured_pending_statuses(settings):
+            pending = await list_pending_orders(
+                db,
+                user_id=_TENANT,
+                orders_user_id=orders_user_id,
+                days=60,
+                limit=max(25, batch_limit * 5),
+                status=pending_status,
+            )
+            # The status-tab query classifies the newest trace for each order.
+            # Keep an explicit second check here, then perform the authoritative
+            # live Salla refresh below before any Qoyod write.
+            candidate_groups.append([
+                row for row in (pending.get("orders") or [])
+                if _pending_row_matches_status(row, pending_status)
+            ])
+
+        # Round-robin across the configured states so a busy completed queue
+        # cannot indefinitely starve in-delivery or delivered orders.
+        eligible_candidates: list[dict[str, Any]] = []
+        seen_order_numbers: set[str] = set()
+        max_group_size = max(
+            (len(group) for group in candidate_groups),
+            default=0,
         )
-        # The completed-tab query is the trusted canonical classification.
-        # Include the store's custom ``تم التجهيز`` label only from this tab;
-        # the live gate below still re-fetches Salla before any Qoyod write.
-        eligible_candidates = [
-            row for row in (pending.get("orders") or [])
-            if str(row.get("salla_status") or "").strip().lower()
-            in {"تم التنفيذ", "completed", "تم التجهيز"}
-        ]
+        for index in range(max_group_size):
+            for group in candidate_groups:
+                if index >= len(group):
+                    continue
+                row = group[index]
+                order_number = str(row.get("order_number") or "")
+                if not order_number or order_number in seen_order_numbers:
+                    continue
+                seen_order_numbers.add(order_number)
+                eligible_candidates.append(row)
         quarantined = await _open_quarantined_order_numbers(
             db,
             [str(row.get("order_number") or "")
