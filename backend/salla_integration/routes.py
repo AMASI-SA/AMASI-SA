@@ -23,12 +23,11 @@ from __future__ import annotations
 
 import os
 import secrets
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION
@@ -67,12 +66,49 @@ from .abandoned_carts import (
     ABANDONED_CART_EVENT_COLLECTION,
     ABANDONED_CART_EVENTS,
     ABANDONED_CART_SCHEMA_VERSION,
-    AbandonedCartScopeError,
-    backfill_abandoned_carts,
     ensure_abandoned_cart_indexes,
-    require_carts_read,
     split_scopes,
 )
+
+
+HISTORICAL_ABANDONED_CART_IMPORT_ENABLED = False
+HISTORICAL_ABANDONED_CART_STOP_REASON = (
+    "historical_import_disabled_live_webhooks_only"
+)
+
+
+async def close_running_historical_cart_imports(
+    db,
+    user_id: str,
+    *,
+    now: Optional[datetime] = None,
+) -> int:
+    """Close legacy backfills after switching the tenant to live webhooks only.
+
+    A background import can be killed between page requests while its durable
+    log remains ``running``.  The Salla settings page used that flag to disable
+    its own action forever.  Historical cart ingestion is intentionally
+    disabled now, so terminalise every orphaned run without touching saved
+    carts or the live webhook collections.
+    """
+    ended_at = now or datetime.now(timezone.utc)
+    result = await db.salla_sync_logs.update_many(
+        {
+            "user_id": user_id,
+            "kind": "abandoned_carts",
+            "status": "running",
+        },
+        {
+            "$set": {
+                "status": "cancelled",
+                "stopped_reason": HISTORICAL_ABANDONED_CART_STOP_REASON,
+                "ended_at": ended_at,
+                "updated_at": ended_at,
+                "last_error": None,
+            }
+        },
+    )
+    return int(getattr(result, "modified_count", 0) or 0)
 
 
 # Where the frontend wants to land after the callback completes
@@ -617,51 +653,13 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 public[key] = value.isoformat()
         return public
 
-    async def _run_abandoned_cart_sync(user_id: str, run_id: str) -> None:
-        async def update_progress(progress: dict) -> None:
-            await db.salla_sync_logs.update_one(
-                {"id": run_id, "user_id": user_id},
-                {"$set": {**progress, "updated_at": datetime.now(timezone.utc)}},
-            )
-
-        try:
-            result = await backfill_abandoned_carts(
-                db,
-                user_id,
-                call_provider=call_salla,
-                progress_hook=update_progress,
-            )
-        except Exception as exc:  # noqa: BLE001 - task must persist terminal state
-            await db.salla_sync_logs.update_one(
-                {"id": run_id, "user_id": user_id},
-                {"$set": {
-                    "status": "failed",
-                    "last_error": str(exc)[:500],
-                    "ended_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
-                    "provider_write_reached": False,
-                    "pii_stored": False,
-                    "plaintext_pii_stored": False,
-                }},
-            )
-            return
-
-        now = datetime.now(timezone.utc)
-        await db.salla_sync_logs.update_one(
-            {"id": run_id, "user_id": user_id},
-            {"$set": {
-                **result,
-                "status": "completed",
-                "ended_at": now,
-                "updated_at": now,
-                "last_error": None,
-            }},
-        )
-
     @router.get("/abandoned-carts/status")
     async def abandoned_carts_status(user: dict = Depends(current_user)):
         """Privacy-safe progress and coverage summary for the current tenant."""
         user_id = user["id"]
+        closed_historical_runs = await close_running_historical_cart_imports(
+            db, user_id
+        )
         integration = await get_integration(db, user_id)
         scope_granted = bool(
             integration
@@ -756,123 +754,34 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             ),
             "latest_event_at": iso((latest_event or {}).get("last_received_at")),
             "last_sync": _public_cart_sync_log(latest_sync),
-            "import_running": (latest_sync or {}).get("status") == "running",
+            "import_running": False,
+            "historical_import_enabled": (
+                HISTORICAL_ABANDONED_CART_IMPORT_ENABLED
+            ),
+            "live_webhooks_only": True,
+            "closed_historical_runs": closed_historical_runs,
             "provider_write_reached": False,
             "pii_stored": False,
             "plaintext_pii_stored": False,
             "private_data_encrypted_at_rest": True,
         }
 
-    @router.post("/sync/abandoned-carts", status_code=202)
-    async def sync_abandoned_carts(
-        background_tasks: BackgroundTasks,
-        user: dict = Depends(current_user),
-    ):
-        """Start a tracked read-only backfill without holding the HTTP request."""
+    @router.post("/sync/abandoned-carts", status_code=410)
+    async def sync_abandoned_carts(user: dict = Depends(current_user)):
+        """Reject historical imports; new carts arrive through live webhooks."""
         user_id = user["id"]
-        try:
-            await require_carts_read(db, user_id)
-        except AbandonedCartScopeError as exc:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": exc.code,
-                    "message": str(exc),
-                    "required_scope": "carts.read",
-                    "scope_request_enabled": "carts.read" in DEFAULT_SCOPES.split(),
-                    "needs_reauth": "carts.read" in DEFAULT_SCOPES.split(),
-                    "approval_pending": "carts.read" not in DEFAULT_SCOPES.split(),
-                },
-            ) from exc
-
-        now = datetime.now(timezone.utc)
-        running = await db.salla_sync_logs.find_one(
-            {
-                "user_id": user_id,
-                "kind": "abandoned_carts",
-                "status": "running",
+        await close_running_historical_cart_imports(db, user_id)
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "historical_abandoned_cart_import_disabled",
+                "message": (
+                    "تم إيقاف الاستيراد التاريخي. تصل السلات الجديدة "
+                    "وتحديثاتها مباشرة عبر Webhook."
+                ),
+                "live_webhooks_only": True,
             },
-            {"_id": 0},
-            sort=[("started_at", -1)],
         )
-        if running:
-            started_at = running.get("started_at")
-            if isinstance(started_at, datetime):
-                if started_at.tzinfo is None:
-                    started_at = started_at.replace(tzinfo=timezone.utc)
-                else:
-                    started_at = started_at.astimezone(timezone.utc)
-            updated_at = running.get("updated_at")
-            if isinstance(updated_at, datetime):
-                if updated_at.tzinfo is None:
-                    updated_at = updated_at.replace(tzinfo=timezone.utc)
-                else:
-                    updated_at = updated_at.astimezone(timezone.utc)
-            activity_at = updated_at if isinstance(updated_at, datetime) else started_at
-            # A healthy cart import updates its log after every page.  Using
-            # started_at alone kept a process killed during a hung provider
-            # request locked as "running" for two hours.  Six minutes is
-            # longer than the bounded request plus all transport retries, but
-            # short enough to replace a genuinely abandoned background task.
-            if (
-                isinstance(activity_at, datetime)
-                and activity_at >= now - timedelta(minutes=6)
-            ):
-                return {
-                    "ok": True,
-                    "accepted": False,
-                    "already_running": True,
-                    "run": _public_cart_sync_log(running),
-                }
-            await db.salla_sync_logs.update_one(
-                {"id": running.get("id"), "user_id": user_id},
-                {"$set": {
-                    "status": "failed",
-                    "last_error": "stale_background_import_replaced",
-                    "ended_at": now,
-                    "updated_at": now,
-                }},
-            )
-
-        run_id = uuid.uuid4().hex
-        await db.salla_sync_logs.update_one(
-            {"id": run_id, "user_id": user_id},
-            {"$setOnInsert": {
-                "id": run_id,
-                "user_id": user_id,
-                "kind": "abandoned_carts",
-                "status": "running",
-                "created": 0,
-                "updated": 0,
-                "errors_count": 0,
-                "pages_fetched": 0,
-                "rows_seen": 0,
-                "rows_saved": 0,
-                "started_at": now,
-                "updated_at": now,
-                "provider_write_reached": False,
-                "pii_stored": False,
-                "plaintext_pii_stored": False,
-                "schema_version": ABANDONED_CART_SCHEMA_VERSION,
-                "identity_linked": 0,
-                "attributed": 0,
-                "order_linked": 0,
-                "private_context_encrypted": 0,
-                "customer_orders_linked": 0,
-            }},
-            upsert=True,
-        )
-        background_tasks.add_task(_run_abandoned_cart_sync, user_id, run_id)
-        return {
-            "ok": True,
-            "accepted": True,
-            "run_id": run_id,
-            "status": "running",
-            "provider_write_reached": False,
-            "pii_stored": False,
-            "plaintext_pii_stored": False,
-            "schema_version": ABANDONED_CART_SCHEMA_VERSION,
-        }
 
     # ── 9. Sync logs ──────────────────────────────────────────────────
     @router.get("/sync/logs")

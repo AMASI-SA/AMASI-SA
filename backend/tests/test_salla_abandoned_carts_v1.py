@@ -9,6 +9,7 @@ from cryptography.fernet import Fernet
 
 import customer_identity
 from salla_integration import abandoned_carts as module
+from salla_integration import routes as routes_module
 from salla_integration import webhook_event_capture as webhook_capture
 from salla_integration.webhook_event_capture import _sanitize
 from salla_integration.webhook_monitor_routes import APPROVED_EVENTS
@@ -232,6 +233,53 @@ def _cart_event(*, event="abandoned.cart", updated_at="2026-08-09T10:00:00Z"):
             ],
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_live_only_mode_closes_running_historical_import_without_deleting_data():
+    db = FakeDB()
+    db.salla_sync_logs.documents.extend(
+        [
+            {
+                "id": "stuck-run",
+                "user_id": "owner-1",
+                "kind": "abandoned_carts",
+                "status": "running",
+                "rows_saved": 1920,
+            },
+            {
+                "id": "orders-run",
+                "user_id": "owner-1",
+                "kind": "orders",
+                "status": "running",
+            },
+            {
+                "id": "other-owner",
+                "user_id": "owner-2",
+                "kind": "abandoned_carts",
+                "status": "running",
+            },
+        ]
+    )
+    db.salla_abandoned_carts_v1.documents.append(
+        {"id": "saved-cart", "user_id": "owner-1"}
+    )
+
+    closed = await routes_module.close_running_historical_cart_imports(
+        db, "owner-1"
+    )
+
+    assert closed == 1
+    stuck = db.salla_sync_logs.documents[0]
+    assert stuck["status"] == "cancelled"
+    assert stuck["stopped_reason"] == (
+        routes_module.HISTORICAL_ABANDONED_CART_STOP_REASON
+    )
+    assert db.salla_sync_logs.documents[1]["status"] == "running"
+    assert db.salla_sync_logs.documents[2]["status"] == "running"
+    assert db.salla_abandoned_carts_v1.documents == [
+        {"id": "saved-cart", "user_id": "owner-1"}
+    ]
 
 
 def test_normalizer_keeps_analytics_fields_without_customer_pii():
