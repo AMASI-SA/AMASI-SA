@@ -15,5 +15,16 @@ export default function ProtectedRoute({ children }) {
     if (!user) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
+    if (user.role === "meta_reviewer") {
+        const allowed = [
+            "/integrations-v2",
+            "/integrations-v2/instagram",
+            "/customer-intelligence",
+            "/ads-manager",
+        ];
+        if (!allowed.includes(location.pathname)) {
+            return <Navigate to="/integrations-v2?provider=meta_ads" replace />;
+        }
+    }
     return children;
 }
