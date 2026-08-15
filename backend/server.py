@@ -260,6 +260,7 @@ PERMISSIONS_CATALOGUE: dict[str, str] = {
 # Default permissions per role. Override on the user document via
 # `extra_permissions` (add) and `denied_permissions` (subtract).
 ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
+    "meta_reviewer": [],
     "owner": list(PERMISSIONS_CATALOGUE.keys()),  # owner = all
     "admin": [k for k in PERMISSIONS_CATALOGUE if k != "users.manage"],
     "accountant": [
@@ -595,6 +596,8 @@ async def me(user: dict = Depends(current_user)):
         "permissions": permissions,
         "is_owner": _is_owner(user),
         "has_security_question": bool(user.get("security_question")),
+        "review_scopes": user.get("review_scopes") or [],
+        "review_access_expires_at": user.get("review_access_expires_at"),
     }
 
 

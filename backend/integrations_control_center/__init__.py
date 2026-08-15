@@ -105,6 +105,7 @@ from .models import (
     ensure_integrations_control_center_indexes,
 )
 from .routes import (
+    _require_meta_integration_access,
     _require_owner,
     make_integrations_control_center_router as _base_make_integrations_router,
 )
@@ -179,10 +180,10 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     attach_google_analytics_source_routes(
         router, db, current_user, _require_owner
     )
-    attach_meta_connection_routes(router, db, current_user, _require_owner)
-    attach_meta_account_selection_routes(router, db, current_user, _require_owner)
-    attach_meta_native_reporting_routes(router, db, current_user, _require_owner)
-    attach_meta_dashboard_summary_routes(router, db, current_user, _require_owner)
+    attach_meta_connection_routes(router, db, current_user, _require_meta_integration_access)
+    attach_meta_account_selection_routes(router, db, current_user, _require_meta_integration_access)
+    attach_meta_native_reporting_routes(router, db, current_user, _require_meta_integration_access)
+    attach_meta_dashboard_summary_routes(router, db, current_user, _require_meta_integration_access)
     attach_snapchat_connection_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_data_routes(router, db, current_user, _require_owner)
     attach_snapchat_native_tracking_routes(router, db, current_user, _require_owner)

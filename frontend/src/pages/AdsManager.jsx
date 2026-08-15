@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useOptionalAuth } from "../context/AuthContext";
 import {
     ArrowClockwise,
     CaretLeft,
@@ -842,6 +843,7 @@ export function AdsManagerView({
     onApply = () => {},
     onRefresh = () => {},
     onPageChange = () => {},
+    platformOptions = PLATFORM_OPTIONS,
 }) {
     const metrics = overview.metrics;
     const roasExcludedProviders = overview.providers.filter(
@@ -936,7 +938,7 @@ export function AdsManagerView({
                             className="h-[46px] w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             data-testid="ads-filter-provider"
                         >
-                            {PLATFORM_OPTIONS.map((option) => (
+                            {platformOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
                                     {option.label}
                                 </option>
@@ -1077,19 +1079,22 @@ function errorMessage(error) {
     return "تعذر تحميل مدير الإعلانات. تحقق من الاتصال ثم أعد المحاولة.";
 }
 
-function initialFilters() {
+function initialFilters(provider = "all") {
     return {
         dateFrom: monthStartSA(),
         dateTo: todaySA(),
-        provider: "all",
+        provider,
         campaignQuery: "",
     };
 }
 
 export default function AdsManager() {
-    const [filters, setFilters] = useState(initialFilters);
+    const { user } = useOptionalAuth() || {};
+    const isMetaReviewer = user?.role === "meta_reviewer";
+    const startingProvider = isMetaReviewer ? "meta" : "all";
+    const [filters, setFilters] = useState(() => initialFilters(startingProvider));
     const [request, setRequest] = useState(() => ({
-        ...initialFilters(),
+        ...initialFilters(startingProvider),
         page: 1,
         limit: 25,
         revision: 0,
@@ -1177,6 +1182,9 @@ export default function AdsManager() {
                 onApply={handleApply}
                 onRefresh={handleRefresh}
                 onPageChange={handlePageChange}
+                platformOptions={isMetaReviewer
+                    ? PLATFORM_OPTIONS.filter((option) => option.value === "meta")
+                    : PLATFORM_OPTIONS}
             />
         </>
     );

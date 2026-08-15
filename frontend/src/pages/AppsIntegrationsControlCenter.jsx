@@ -10,6 +10,7 @@ import {
     WarningCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { useOptionalAuth } from "../context/AuthContext";
 import CapabilityMatrix from "../components/integrationsV2/CapabilityMatrix";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
@@ -91,6 +92,8 @@ function PageSkeleton() {
 
 export default function AppsIntegrationsControlCenter() {
     const navigate = useNavigate();
+    const { user } = useOptionalAuth() || {};
+    const isMetaReviewer = user?.role === "meta_reviewer";
     const [searchParams] = useSearchParams();
     const [overview, setOverview] = useState(() => normalizeIntegrationOverview({}));
     const [activity, setActivity] = useState({ runs: [], errors: [] });
@@ -112,11 +115,19 @@ export default function AppsIntegrationsControlCenter() {
         setError("");
         const [overviewResult, activityResult] = await Promise.allSettled([
             getIntegrationsOverview(),
-            getIntegrationsActivity({ limit: 50 }),
+            getIntegrationsActivity({ limit: 50, provider: isMetaReviewer ? "meta_ads" : undefined }),
         ]);
 
         if (overviewResult.status === "fulfilled") {
-            setOverview(overviewResult.value);
+            const nextOverview = overviewResult.value;
+            setOverview(isMetaReviewer
+                ? {
+                    ...nextOverview,
+                    providers: nextOverview.providers.filter(
+                        (provider) => ["meta_ads", "instagram"].includes(provider.provider),
+                    ),
+                }
+                : nextOverview);
         } else {
             setError("تعذر تحميل حالة التكاملات. أعد المحاولة بعد التحقق من Backend.");
         }
@@ -126,7 +137,7 @@ export default function AppsIntegrationsControlCenter() {
         }
         setActivityLoading(false);
         setLoading(false);
-    }, []);
+    }, [isMetaReviewer]);
 
     useEffect(() => {
         load();

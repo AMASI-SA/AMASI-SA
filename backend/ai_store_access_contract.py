@@ -205,6 +205,14 @@ async def merged_session_permissions(
     role = str(user.get("role") or "").strip().casefold()
     if role == "owner" or user.get("is_owner") is True:
         merged |= PERMISSIONS
+    elif role == "meta_reviewer":
+        from meta_reviewer_access import (
+            META_REVIEWER_CI_PERMISSIONS,
+            require_review_scope,
+        )
+
+        require_review_scope(user, "customer_intelligence")
+        merged = set(META_REVIEWER_CI_PERMISSIONS)
     else:
         assignment = await db[ROLE_ASSIGNMENTS].find_one(
             {"user_id": str(user.get("id") or "")},
