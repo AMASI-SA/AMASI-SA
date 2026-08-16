@@ -26,6 +26,20 @@ export function buildAdsExecutiveMetricRows(value = {}) {
     const valuesFor = (field) => Object.fromEntries(
         PROVIDERS.map(({ key }) => [key, optionalNumber(providers?.[key]?.[field])]),
     );
+    const costPerSallaOrderValues = Object.fromEntries(PROVIDERS.map(({ key }) => {
+        const spend = optionalNumber(providers?.[key]?.spend_sar);
+        const orders = optionalNumber(providers?.[key]?.salla_orders);
+        return [key, spend !== null && spend > 0 && orders !== null && orders > 0
+            ? spend / orders
+            : null];
+    }));
+    const totalSpend = optionalNumber(total.spend_sar);
+    const totalOrders = optionalNumber(total.salla_orders);
+    const totalCostPerSallaOrder = (
+        totalSpend !== null && totalSpend > 0 && totalOrders !== null && totalOrders > 0
+            ? totalSpend / totalOrders
+            : null
+    );
 
     return [
         {
@@ -55,10 +69,10 @@ export function buildAdsExecutiveMetricRows(value = {}) {
         {
             key: "cost_per_order",
             label: "متوسط تكلفة الطلب",
-            source: "المنصة الإعلانية",
+            source: "صرف المنصة ÷ طلبات سلة",
             format: "sar",
-            values: valuesFor("platform_cost_per_order_sar"),
-            total: optionalNumber(total.platform_cost_per_order_sar),
+            values: costPerSallaOrderValues,
+            total: totalCostPerSallaOrder,
         },
         {
             key: "roas",
@@ -92,7 +106,7 @@ export default function AdsExecutiveBreakdownTable({ data }) {
                         📣 أداء المنصات المعتمد
                     </div>
                     <div className="mt-1 text-[10px] text-slate-500">
-                        الطلبات والمبيعات من سلة؛ الصرف ومتوسط تكلفة الطلب من المنصة الإعلانية.
+                        الطلبات والمبيعات من سلة؛ ومتوسط تكلفة الطلب = صرف المنصة ÷ طلبات سلة.
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-1 text-[9px] font-bold">
@@ -100,7 +114,7 @@ export default function AdsExecutiveBreakdownTable({ data }) {
                         سلة: الطلبات والمبيعات
                     </span>
                     <span className="rounded bg-rose-50 px-2 py-1 text-rose-700">
-                        المنصة: الصرف وتكلفة الطلب
+                        المنصة: الصرف
                     </span>
                 </div>
             </div>
