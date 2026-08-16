@@ -1,0 +1,94 @@
+name: Security Gate
+
+on:
+  push:
+    branches:
+      - hotfix/prod-snap-meta-final
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-security:
+    name: Backend security contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend
+      JWT_SECRET: ci-only-security-gate-secret-that-is-long-enough
+      EMAIL_OTP_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Validate backend dependency policy
+        run: |
+          if grep -Eq '^[[:space:]]*litellm([[:space:]@=<>]|$)' backend/requirements.txt; then
+            echo "Direct LiteLLM dependency is forbidden until upgraded and reviewed."
+            exit 1
+          fi
+          grep -vE '^[[:space:]]*emergentintegrations==' backend/requirements.txt > /tmp/security-requirements.txt
+          test -s /tmp/security-requirements.txt
+      - name: Install reproducible public dependency closure
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r /tmp/security-requirements.txt
+          python -m pip install pytest-asyncio==1.4.0
+          python -m pip check
+      - name: Compile security-critical modules
+        run: |
+          python -m py_compile \
+            backend/auth.py \
+            backend/browser_security.py \
+            backend/email_otp_policy.py \
+            backend/email_otp_security.py \
+            backend/excel_upload_security.py
+      - name: Run security contracts
+        run: |
+          python -m pytest -q \
+            backend/tests/test_browser_security.py \
+            backend/tests/test_email_otp_security_v1.py \
+            backend/tests/test_auth_session_revocation_v1.py \
+            backend/tests/test_login_security_v1.py \
+            backend/tests/test_mfa_security_v1.py \
+            backend/tests/test_passkey_security_v1.py \
+            backend/tests/test_progressive_login_security_v1.py
+
+  frontend-security:
+    name: Frontend dependency and CSP checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Reject vulnerable spreadsheet runtime
+        run: |
+          node -e "const p=require('./package.json'); if (p.dependencies?.xlsx || p.devDependencies?.xlsx) process.exit(1)"
+          if rg -n "from ['\"]xlsx['\"]|require\(['\"]xlsx['\"]\)" src; then
+            exit 1
+          fi
+      - name: Verify production build and CSP
+        env:
+          CI: "false"
+        run: |
+          yarn build
+          grep -F 'http-equiv="Content-Security-Policy"' build/index.html
+          grep -F "object-src 'none'" build/index.html

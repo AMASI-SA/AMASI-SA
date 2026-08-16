@@ -20,7 +20,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useReactToPrint } from "react-to-print";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import XLSX from "../lib/safeSpreadsheet";
 import api from "../lib/api";
 
 const fmt = (n) =>
@@ -95,8 +95,8 @@ export default function SupplierLedgerDetailPage() {
     // Iter-250b · P1.5.v — Excel multi-sheet export (Task 1).
     // Each section lands in its own sheet so the accountant can filter
     // / pivot without flattening the report. Generated entirely
-    // client-side via SheetJS.
-    const handleExportExcel = () => {
+    // client-side through the maintained ExcelJS runtime.
+    const handleExportExcel = async () => {
         if (!data) {
             toast.error("لا توجد بيانات للتصدير");
             return;
@@ -326,7 +326,7 @@ export default function SupplierLedgerDetailPage() {
             }
 
             const filename = `دفتر-المورد-${supplier.name || "supplier"}-${todayISO()}.xlsx`;
-            XLSX.writeFile(wb, filename);
+            await XLSX.writeFile(wb, filename);
             toast.success(`تم تصدير ${filename}`);
         } catch (e) {
             console.error(e);
