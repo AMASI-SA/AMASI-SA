@@ -14,6 +14,7 @@ from campaign_ai_monitor import (
     _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
+    _meta_child_entities,
     _normalize_openai_output,
     _openai_error_code,
     _recommendation_explanation,
@@ -72,6 +73,73 @@ def test_zero_spend_entities_never_reach_openai_candidates():
 
 def test_paused_entity_is_not_recommended_for_another_change():
     assert deterministic_candidates([entity(status="PAUSED", active=False)]) == []
+
+
+def test_governance_discards_a_stale_pause_for_an_entity_now_stopped():
+    stopped = entity(status="PAUSED", active=False)
+    output = RecommendationOutput(
+        summary="قديم",
+        recommendations=[RecommendationItem(
+            recommendation_id="old",
+            provider="snapchat",
+            entity_level="ad",
+            entity_id="ad-1",
+            entity_name="إعلان المنتج",
+            action="pause",
+            priority="critical",
+            confidence="high",
+            title="إيقاف",
+            rationale="قرار أصبح قديمًا",
+            evidence=[],
+            why_now="قديم",
+            recommended_wait_hours=5,
+            observation_plan="راقب",
+            success_criteria=[],
+            risk_if_ignored="هدر",
+            guardrail="موافقة",
+            next_check_at="old",
+        )],
+    )
+
+    governed = _govern_output(output, [stopped], next_check_at="2026-08-16T20:00:00+00:00")
+
+    assert governed.recommendations == []
+
+
+def test_meta_child_uses_latest_live_status_and_keeps_full_hierarchy():
+    documents = [{
+        "user_id": "owner", "ad_account_id": "act-1", "account_name": "أماسي",
+        "entity_level": "ad", "entity_id": "ad-1", "entity_name": "إعلان عام",
+        "campaign_id": "campaign-1", "campaign_name": "دمية متحركة",
+        "campaign_status": "ACTIVE", "ad_group_id": "group-1",
+        "ad_group_name": "مجموعة المبيعات", "ad_group_status": "ACTIVE",
+        "configured_status": "PAUSED", "effective_status": "PAUSED", "status": "PAUSED",
+        "status_updated_at": "2026-08-16T18:00:00+0000", "observed_at": "2026-08-16T18:01:00+00:00",
+        "campaign_ad_group_count": 1, "campaign_ad_count": 1, "date": "2026-08-16",
+        "spend_sar": 82.84, "revenue_sar": 0, "purchases": 0, "impressions": 100, "clicks": 2,
+    }]
+
+    class Cursor:
+        def limit(self, _): return self
+        async def to_list(self, length): return documents[:length]
+
+    class Collection:
+        def find(self, *_args, **_kwargs): return Cursor()
+
+    class DB:
+        def __getitem__(self, _name): return Collection()
+
+    rows = asyncio.run(_meta_child_entities(
+        DB(), "owner",
+        datetime(2026, 8, 16).date(), datetime(2026, 8, 16).date(),
+    ))
+
+    assert rows[0]["status"] == "PAUSED"
+    assert rows[0]["active"] is False
+    assert rows[0]["campaign_name"] == "دمية متحركة"
+    assert rows[0]["ad_group_name"] == "مجموعة المبيعات"
+    assert rows[0]["campaign_ad_group_count"] == 1
+    assert rows[0]["campaign_ad_count"] == 1
 
 
 def test_model_cannot_scale_an_entity_without_scale_evidence():
