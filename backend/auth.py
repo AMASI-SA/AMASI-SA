@@ -24,6 +24,22 @@ def get_jwt_secret() -> str:
     return os.environ["JWT_SECRET"]
 
 
+def _as_utc_timestamp(value) -> float | None:
+    """Parse a stored ISO datetime for session-revocation checks."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).timestamp()
+
+
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
@@ -50,21 +66,25 @@ def account_is_disabled(user: dict | None) -> bool:
 
 
 def create_access_token(user_id: str, email: str, *, mfa_verified: bool = False) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "email": email,
         "mfa": bool(mfa_verified),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=60 * 12),
+        "iat": now,
+        "exp": now + timedelta(minutes=60 * 12),
         "type": "access",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def create_refresh_token(user_id: str, *, mfa_verified: bool = False) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "mfa": bool(mfa_verified),
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "iat": now,
+        "exp": now + timedelta(days=7),
         "type": "refresh",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -128,6 +148,16 @@ async def get_current_user_from_db(request: Request, db) -> dict:
             raise HTTPException(status_code=401, detail="User not found")
         if account_is_disabled(user):
             raise HTTPException(status_code=401, detail="Account disabled")
+
+        # Password changes revoke every token minted before the change. Legacy
+        # tokens without iat are rejected once password_updated_at exists.
+        changed_at = _as_utc_timestamp(user.get("password_updated_at"))
+        issued_at = payload.get("iat")
+        if changed_at is not None and (
+            not isinstance(issued_at, (int, float)) or float(issued_at) <= changed_at
+        ):
+            raise HTTPException(status_code=401, detail="Session revoked")
+
         if is_meta_reviewer(user) and not reviewer_api_path_allowed(request.url.path):
             raise HTTPException(
                 status_code=403,
