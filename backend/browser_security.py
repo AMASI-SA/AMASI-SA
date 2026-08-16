@@ -10,6 +10,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 _COOKIE_NAMES = (b"access_token=", b"refresh_token=")
 _API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+_HSTS = "max-age=31536000; includeSubDomains"
 
 
 def _headers(scope: Scope) -> dict[bytes, bytes]:
@@ -19,6 +20,19 @@ def _headers(scope: Scope) -> dict[bytes, bytes]:
 def _has_auth_cookie(raw_cookie: bytes) -> bool:
     lowered = raw_cookie.lower()
     return any(name in lowered for name in _COOKIE_NAMES)
+
+
+def _request_is_https(scope: Scope, headers: dict[bytes, bytes]) -> bool:
+    if str(scope.get("scheme") or "").lower() == "https":
+        return True
+    forwarded_proto = (
+        headers.get(b"x-forwarded-proto", b"")
+        .decode("latin-1")
+        .split(",", 1)[0]
+        .strip()
+        .lower()
+    )
+    return forwarded_proto == "https"
 
 
 class BrowserSecurityMiddleware:
@@ -63,17 +77,22 @@ class BrowserSecurityMiddleware:
                 await response(scope, receive, send)
                 return
 
+        is_https = _request_is_https(scope, headers)
+
         async def send_with_security_headers(message: Message) -> None:
             if message.get("type") == "http.response.start":
                 response_headers = MutableHeaders(scope=message)
                 response_headers.setdefault("Content-Security-Policy", _API_CSP)
                 response_headers.setdefault("X-Frame-Options", "DENY")
                 response_headers.setdefault("X-Content-Type-Options", "nosniff")
+                response_headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
                 response_headers.setdefault("Referrer-Policy", "no-referrer")
                 response_headers.setdefault(
                     "Permissions-Policy",
                     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
                 )
+                if is_https:
+                    response_headers.setdefault("Strict-Transport-Security", _HSTS)
             await send(message)
 
         await self.app(scope, receive, send_with_security_headers)
