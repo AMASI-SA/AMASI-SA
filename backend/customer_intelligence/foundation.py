@@ -113,6 +113,8 @@ class ChannelRecord(FoundationRecord):
     egress_mode: Literal["disabled"] = "disabled"
     send_allowed: Literal[False] = False
     ai_auto_reply_allowed: Literal[False] = False
+    webhook_subscription_status: Literal["confirmed"] | None = None
+    webhook_subscription_checked_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     plaintext_credentials_stored: Literal[False] = False

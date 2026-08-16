@@ -9,10 +9,15 @@ from __future__ import annotations
 
 import hmac
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
+
+from meta_instagram_webhooks import (
+    MetaInstagramWebhookError,
+    subscribe_instagram_webhooks,
+)
 
 from .channel_gateway import build_channel_account_key
 from .foundation import CHANNELS_COLLECTION, ChannelRecord
@@ -117,7 +122,7 @@ async def _assets(db: Any, *, owner_user_id: str) -> list[dict[str, Any]]:
             "asset_type": "instagram_account",
             "connection_status": "connected",
         },
-        {"_id": 0, "external_asset_id": 1, "display_name": 1},
+        {"_id": 0, "external_asset_id": 1, "display_name": 1, "page_id": 1},
     ).limit(100)
     return await cursor.to_list(length=100)
 
@@ -144,10 +149,24 @@ def _safe_binding(document: dict[str, Any], *, owner_user_id: str) -> bool:
     )
 
 
+def _subscription_confirmed(document: dict[str, Any]) -> bool:
+    return document.get("webhook_subscription_status") == "confirmed"
+
+
+WebhookSubscriber = Callable[..., Awaitable[tuple[str, ...]]]
+
+
 class InstagramProvisioningService:
-    def __init__(self, db: Any, *, now: Any | None = None):
+    def __init__(
+        self,
+        db: Any,
+        *,
+        now: Any | None = None,
+        webhook_subscriber: WebhookSubscriber | None = None,
+    ):
         self._db = db
         self._now = now or (lambda: datetime.now(timezone.utc))
+        self._webhook_subscriber = webhook_subscriber or subscribe_instagram_webhooks
 
     async def setup(self, *, owner_user_id: str) -> InstagramSetupPublic:
         owner_id = _text(owner_user_id)
@@ -161,7 +180,14 @@ class InstagramProvisioningService:
         if connected:
             if not _safe_binding(connected, owner_user_id=owner_id):
                 raise InstagramProvisioningError("instagram_channel_policy_invalid")
-            state = "connected"
+            if _subscription_confirmed(connected):
+                state = "connected"
+            elif not permissions_ready:
+                state = "meta_reauthorization_required"
+            elif not assets:
+                state = "no_instagram_account"
+            else:
+                state = "ready"
         elif not permissions_ready:
             state = "meta_reauthorization_required"
         elif not await _connected_store_id(self._db, owner_user_id=owner_id):
@@ -210,6 +236,9 @@ class InstagramProvisioningService:
         if not selected:
             raise InstagramProvisioningError("instagram_candidate_not_found")
         external_id = _text(selected.get("external_asset_id"))
+        page_id = _text(selected.get("page_id"))
+        if not page_id:
+            raise InstagramProvisioningError("instagram_page_link_required")
         account_key = build_channel_account_key("instagram", external_id)
         digest = account_key.rsplit(":", 1)[-1]
         channel_id = f"instagram-{digest[:24]}"
@@ -224,12 +253,35 @@ class InstagramProvisioningService:
                 or not _safe_binding(existing, owner_user_id=owner_id)
             ):
                 raise InstagramProvisioningError("instagram_binding_conflict")
-            return InstagramProvisionResult(
-                status="no_change",
-                channel_ref=_channel_ref(_text(existing.get("channel_id"))),
+            channel_id = _text(existing.get("channel_id"))
+
+        try:
+            await self._webhook_subscriber(
+                self._db,
+                owner_user_id=owner_id,
+                instagram_account_id=external_id,
+                page_id=page_id,
             )
+        except MetaInstagramWebhookError as exc:
+            raise InstagramProvisioningError(exc.code) from exc
 
         now = self._now()
+        if existing:
+            await channels.update_one(
+                {"provider": "instagram", "external_account_key": account_key},
+                {
+                    "$set": {
+                        "webhook_subscription_status": "confirmed",
+                        "webhook_subscription_checked_at": now,
+                        "updated_at": now,
+                    }
+                },
+            )
+            return InstagramProvisionResult(
+                status="connected",
+                channel_ref=_channel_ref(channel_id),
+            )
+
         document = ChannelRecord(
             user_id=owner_id,
             merchant_id=merchant_id,
@@ -241,6 +293,8 @@ class InstagramProvisioningService:
             egress_mode="disabled",
             send_allowed=False,
             ai_auto_reply_allowed=False,
+            webhook_subscription_status="confirmed",
+            webhook_subscription_checked_at=now,
             created_at=now,
             updated_at=now,
             plaintext_credentials_stored=False,
