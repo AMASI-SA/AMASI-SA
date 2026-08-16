@@ -13,6 +13,10 @@ from typing import Optional
 import openpyxl
 
 
+MAX_SALLA_ROWS = 50_000
+MAX_SALLA_COLUMNS = 128
+
+
 # Candidate column-name patterns (case-insensitive substring match)
 TOTAL_COLS = [
     "إجمالي الطلب", "اجمالي الطلب", "إجمالي السلة", "اجمالي السلة",
@@ -150,10 +154,28 @@ def parse_salla_excel(file_bytes: bytes) -> dict:
           "detected_columns": {...}
         }
     """
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
-    ws = wb.active
-
-    rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    wb = openpyxl.load_workbook(
+        io.BytesIO(file_bytes),
+        data_only=True,
+        read_only=True,
+        keep_links=False,
+    )
+    try:
+        ws = wb.active
+        if ws.max_row > MAX_SALLA_ROWS + 15:
+            raise ValueError("يتجاوز الملف الحد المسموح: 50,000 طلب")
+        if ws.max_column > MAX_SALLA_COLUMNS:
+            raise ValueError("يتجاوز الملف الحد المسموح: 128 عمود")
+        rows = [
+            list(r)
+            for r in ws.iter_rows(
+                values_only=True,
+                max_row=MAX_SALLA_ROWS + 15,
+                max_col=MAX_SALLA_COLUMNS,
+            )
+        ]
+    finally:
+        wb.close()
     if not rows:
         raise ValueError("الملف فارغ")
 
