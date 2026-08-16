@@ -40,7 +40,7 @@ function initialMissingCostFilter() {
 
 function initialMissingCostRange() {
     if (typeof window === "undefined") {
-        return { from: "", to: "", paymentMethods: "", shippingCompanies: "", productIds: "" };
+        return { from: "", to: "", paymentMethods: "", shippingCompanies: "", productIds: "", missingAllCost: false };
     }
     const params = new URLSearchParams(window.location.search);
     return {
@@ -49,6 +49,7 @@ function initialMissingCostRange() {
         paymentMethods: params.get("payment_methods") || "",
         shippingCompanies: params.get("shipping_companies") || "",
         productIds: params.get("product_ids") || "",
+        missingAllCost: params.get("missing_all_cost") === "1",
     };
 }
 
@@ -281,8 +282,12 @@ export default function MezanProductsWorkspace() {
             <section className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" data-testid="missing-mezan-cost-filter-banner">
                 <div className="flex flex-wrap items-center gap-2">
                     <WarningCircle size={20} weight="fill" />
-                    <strong>يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان 2 فقط.</strong>
-                    <span>المنتج الذي لديه تكلفة سلة فقط سيظهر هنا أيضًا.</span>
+                    <strong>{missingCostRange.missingAllCost
+                        ? `يعرض الآن المنتجات المباعة بدون أي تكلفة ${pagination.total} فقط.`
+                        : `يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان ${pagination.total} فقط.`}</strong>
+                    <span>{missingCostRange.missingAllCost
+                        ? "هذه المنتجات لا توجد لها تكلفة ميزان ولا تكلفة سلة."
+                        : "المنتج الذي لديه تكلفة سلة فقط سيظهر هنا أيضًا."}</span>
                     {(missingCostRange.from || missingCostRange.to) && (
                         <span className="rounded-full bg-white px-3 py-1 text-xs font-bold">
                             {missingCostRange.from || "البداية"} — {missingCostRange.to || "اليوم"}
