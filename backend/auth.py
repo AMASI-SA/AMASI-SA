@@ -11,6 +11,7 @@ from fastapi import Request, HTTPException
 
 JWT_ALGORITHM = "HS256"
 PRIVILEGED_MFA_ROLES = {"owner", "admin"}
+BCRYPT_MAX_SECRET_BYTES = 72
 logger = logging.getLogger(__name__)
 
 from meta_reviewer_access import (
@@ -40,7 +41,15 @@ def _as_utc_timestamp(value) -> float | None:
     return parsed.astimezone(timezone.utc).timestamp()
 
 
+def validate_bcrypt_secret(value: str | None) -> str | None:
+    """Reject secrets bcrypt would otherwise truncate after 72 UTF-8 bytes."""
+    if value is not None and len(value.encode("utf-8")) > BCRYPT_MAX_SECRET_BYTES:
+        raise ValueError("يجب ألا تتجاوز كلمة المرور 72 بايت بعد ترميز UTF-8")
+    return value
+
+
 def hash_password(password: str) -> str:
+    validate_bcrypt_secret(password)
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
