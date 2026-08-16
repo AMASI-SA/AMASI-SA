@@ -169,6 +169,7 @@ test("marketing report and cost routes are separate from app integration routes"
     expect(section?.id).toBe("marketing");
     expect(section.items.map((item) => item.to)).toEqual([
         "/ads-manager",
+        "/ads-manager/recommendations",
         "/ads-manager?provider=snapchat",
         "/ads-manager?provider=tiktok",
         "/ads-manager?provider=meta",

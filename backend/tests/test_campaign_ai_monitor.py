@@ -7,6 +7,7 @@ from campaign_ai_monitor import (
     _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
+    _recommendation_explanation,
     deterministic_candidates,
 )
 
@@ -153,3 +154,25 @@ def test_fallback_never_scales_incomplete_data():
 
     assert result.recommendations[0].action == "monitor"
     assert result.recommendations[0].change_percent is None
+
+
+def test_recommendation_explanation_states_reason_wait_and_success_criteria():
+    candidate = deterministic_candidates([
+        entity(entity_id="fast-waste", spend_sar=180, purchases=0),
+    ])[0]
+    item = _deterministic_recommendations(
+        [candidate],
+        next_check_at="2026-08-16T15:00:00+00:00",
+        limitation="fallback",
+    ).recommendations[0]
+
+    explanation = _recommendation_explanation(item, candidate)
+
+    assert explanation["decision_signal"] == "rapid_spend_without_results"
+    assert explanation["recommended_wait_hours"] == 2
+    assert "اصبر 2 ساعات" in explanation["observation_plan"]
+    assert "صرف 180.00 ر.س" in explanation["decision_facts"]
+    assert len(explanation["success_criteria"]) == 3
+    assert explanation["financial_impact"]["period_estimated_contribution_sar"] == -180
+    assert explanation["financial_impact"]["forecast_delta_sar"] > 0
+    assert explanation["financial_impact"]["is_estimate"] is True
