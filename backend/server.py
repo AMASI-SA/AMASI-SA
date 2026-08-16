@@ -305,7 +305,7 @@ ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
 class TeamUserCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
     role: str = Field(default="viewer")
     extra_permissions: list[str] = Field(default_factory=list)
     denied_permissions: list[str] = Field(default_factory=list)
@@ -316,7 +316,7 @@ class TeamUserUpdateIn(BaseModel):
     role: Optional[str] = None
     extra_permissions: Optional[list[str]] = None
     denied_permissions: Optional[list[str]] = None
-    new_password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    new_password: Optional[str] = Field(default=None, min_length=MIN_PASSWORD_LENGTH, max_length=128)
 
 
 def _effective_perms(user_doc: dict) -> set[str]:
