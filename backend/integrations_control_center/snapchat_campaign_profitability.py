@@ -21,6 +21,7 @@ from typing import Any
 
 from dashboard_v2_routes import (
     _filtered_orders,
+    _index_products,
     _line_product,
     _line_sales_total,
     _to_list,
@@ -29,6 +30,7 @@ from dashboard_v2_routes import (
 from order_status_policy import effective_product_cost, get_policy_map
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
+from product_cost_revision import get_product_cost_revision
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
 
@@ -51,7 +53,7 @@ CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD = (
     "order_sales_to_products_by_line_revenue_share_then_campaign_ad_spend_by_product_sales_share"
 )
 
-_CACHE: dict[tuple[str, str, str], tuple[datetime, dict[str, Any]]] = {}
+_CACHE: dict[tuple[str, str, str, int], tuple[datetime, dict[str, Any]]] = {}
 
 
 def _float(value: Any) -> float:
@@ -84,6 +86,7 @@ async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
             {"user_id": user_id},
             {
                 "_id": 0,
+                "id": 1,
                 "salla_product_id": 1,
                 "mezan_product_id": 1,
                 "name": 1,
@@ -95,27 +98,13 @@ async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
         ),
         100_000,
     )
-    products_by_id: dict[str, dict[str, Any]] = {}
-    products_by_variant: dict[str, dict[str, Any]] = {}
-    products_by_sku: dict[str, dict[str, Any]] = {}
-    for product in products:
-        product_id = _text(product.get("salla_product_id"))
-        if product_id:
-            products_by_id[product_id] = product
-        sku = _text(product.get("sku")).casefold()
-        if sku:
-            products_by_sku[sku] = product
-        for variant in product.get("variants") or []:
-            if not isinstance(variant, dict):
-                continue
-            variant_id = _text(variant.get("id"))
-            if variant_id:
-                products_by_variant[variant_id] = product
-            variant_sku = _text(variant.get("sku")).casefold()
-            if variant_sku:
-                products_by_sku[variant_sku] = product
+    products_by_id, products_by_variant, products_by_sku = _index_products(products)
 
-    product_ids = list(products_by_id)
+    product_ids = [
+        _text(product.get("salla_product_id"))
+        for product in products
+        if _text(product.get("salla_product_id"))
+    ]
     profiles = await _to_list(
         db[COST_PROFILES].find(
             {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
@@ -493,7 +482,8 @@ async def build_campaign_profitability(
     date_to: str,
     use_cache: bool = True,
 ) -> dict[str, Any]:
-    cache_key = (user_id, date_from, date_to)
+    cost_revision = await get_product_cost_revision(db, user_id)
+    cache_key = (user_id, date_from, date_to, cost_revision)
     now = datetime.now(timezone.utc)
     cached = _CACHE.get(cache_key)
     if use_cache and cached and now - cached[0] < timedelta(

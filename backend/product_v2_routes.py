@@ -15,6 +15,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
+from product_cost_revision import bump_product_cost_revision, salla_cost_fingerprint
 from salla_integration.service import SallaError, call_salla
 
 PRODUCTS = "mezan_products_v2"
@@ -199,6 +200,7 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
     error_sample: list[dict[str, Any]] = []
 
     try:
+        cost_changed = False
         page = 1
         while page <= MAX_PRODUCT_PAGES:
             response = await call_salla(
@@ -227,6 +229,7 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                             "_id": 0,
                             "source_revision": 1,
                             "mezan_product_id": 1,
+                            "cost_price_from_salla": 1,
                             "variants": 1,
                             "variants_count": 1,
                             "details_synced_at": 1,
@@ -271,6 +274,8 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                             "occurred_at": now,
                             "sync_run_id": run_id,
                         })
+                    if salla_cost_fingerprint(result) != salla_cost_fingerprint(doc):
+                        cost_changed = True
                 except Exception as exc:  # defensive per-row isolation
                     errors_count += 1
                     if len(error_sample) < 20:
@@ -293,6 +298,9 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                 },
                 {"$set": {"archived": True, "archived_at": _now(), "updated_at": _now()}},
             )
+
+        if cost_changed:
+            await bump_product_cost_revision(db, str(user_id))
 
         ended_at = _now()
         await db[SYNC_RUNS].update_one(

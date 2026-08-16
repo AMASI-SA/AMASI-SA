@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
-from product_cost_revision import bump_product_cost_revision
+from product_cost_revision import bump_product_cost_revision, salla_cost_fingerprint
 from product_v2_routes import PRODUCTS, _now, _number, _text, normalize_salla_product
 from salla_integration.service import SallaError, call_salla
 
@@ -270,6 +270,8 @@ def make_product_v2_details_router(db: Any, current_user: Callable) -> APIRouter
         patch = _details_patch(raw, user_id=user_id)
         now = _now()
         await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**patch, "updated_at": now}})
+        if salla_cost_fingerprint(product) != salla_cost_fingerprint(patch):
+            await bump_product_cost_revision(db, user_id)
         await db[DETAIL_LOG].insert_one({"id": uuid.uuid4().hex, "user_id": user_id, "salla_product_id": salla_id, "event_type": "details_refreshed", "occurred_at": now, "options_count": len(patch["options"]), "variants_count": len(patch["variants"]), "images_count": len(patch["images"])})
         updated = await db[PRODUCTS].find_one({"user_id": user_id, "salla_product_id": salla_id}, {"_id": 0, "raw_salla": 0, "raw_salla_details": 0})
         for key in ("created_at", "updated_at", "last_synced_at", "details_synced_at"):

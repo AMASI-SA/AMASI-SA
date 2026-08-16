@@ -12,6 +12,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
+from product_cost_revision import bump_product_cost_revision, salla_cost_fingerprint
 from product_v2_routes import CHANGE_LOG, PRODUCTS, _now, ensure_product_v2_indexes, normalize_salla_product
 from salla_integration.service import SallaError, call_salla
 
@@ -40,6 +41,7 @@ async def sync_recent_products(db: Any, *, user_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail={"code": "salla_recent_products_invalid_response"})
 
     created = updated = unchanged = errors = 0
+    cost_changed = False
     synced_at = _now()
     for raw in rows:
         if not isinstance(raw, dict):
@@ -48,7 +50,10 @@ async def sync_recent_products(db: Any, *, user_id: str) -> dict[str, Any]:
         try:
             doc = normalize_salla_product(raw, user_id=user_id, synced_at=synced_at)
             selector = {"user_id": user_id, "salla_product_id": doc["salla_product_id"]}
-            existing = await db[PRODUCTS].find_one(selector, {"_id": 0, "source_revision": 1})
+            existing = await db[PRODUCTS].find_one(
+                selector,
+                {"_id": 0, "source_revision": 1, "cost_price_from_salla": 1, "variants": 1},
+            )
             if existing and existing.get("source_revision") == doc.get("source_revision"):
                 unchanged += 1
                 await db[PRODUCTS].update_one(selector, {"$set": {"last_synced_at": synced_at, "archived": False}})
@@ -76,8 +81,13 @@ async def sync_recent_products(db: Any, *, user_id: str) -> dict[str, Any]:
                     "next_revision": doc.get("source_revision"),
                     "occurred_at": synced_at,
                 })
+            if salla_cost_fingerprint(previous) != salla_cost_fingerprint(doc):
+                cost_changed = True
         except Exception:
             errors += 1
+
+    if cost_changed:
+        await bump_product_cost_revision(db, user_id)
 
     return {
         "ok": errors == 0,
