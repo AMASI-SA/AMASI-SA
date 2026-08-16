@@ -36,6 +36,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from openpyxl import load_workbook
 
+from excel_upload_security import read_safe_xlsx_upload
+
 
 # ─────────────────────────  helpers  ──────────────────────────────────
 def _now() -> str:
@@ -178,11 +180,7 @@ def make_products_import_router(db, current_user):
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(400, "الملف فارغ")
-        if len(raw) > 5 * 1024 * 1024:
-            raise HTTPException(400, "حجم الملف يتجاوز 5MB")
+        raw = await read_safe_xlsx_upload(file, max_bytes=5 * 1024 * 1024)
 
         parsed = _parse_categories_xlsx(raw)
         rows = parsed["rows"]
@@ -275,11 +273,7 @@ def make_products_import_router(db, current_user):
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(400, "الملف فارغ")
-        if len(raw) > 5 * 1024 * 1024:
-            raise HTTPException(400, "حجم الملف يتجاوز 5MB")
+        raw = await read_safe_xlsx_upload(file, max_bytes=5 * 1024 * 1024)
 
         parsed = _parse_categories_xlsx(raw)
         rows = parsed["rows"]
@@ -1010,11 +1004,7 @@ def make_products_router_phase2(db, current_user):
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(400, "الملف فارغ")
-        if len(raw) > 15 * 1024 * 1024:
-            raise HTTPException(400, "حجم الملف يتجاوز 15MB")
+        raw = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
 
         parsed = _parse_products_xlsx(raw)
         rows = parsed["rows"]
@@ -1093,11 +1083,7 @@ def make_products_router_phase2(db, current_user):
         user: dict = Depends(current_user),
     ):
         uid = user["id"]
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(400, "الملف فارغ")
-        if len(raw) > 15 * 1024 * 1024:
-            raise HTTPException(400, "حجم الملف يتجاوز 15MB")
+        raw = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
 
         parsed = _parse_products_xlsx(raw)
         rows = parsed["rows"]
