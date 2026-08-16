@@ -130,8 +130,10 @@ def resolve_base_unit_cost(
             if parsed is not None:
                 return parsed, "salla_variant_fallback"
 
-    if product.get("cost_price_from_salla") not in (None, ""):
-        parsed = _number(product.get("cost_price_from_salla"))
+    for cost_key in ("cost_price_from_salla", "cost_price", "cost"):
+        if product.get(cost_key) in (None, ""):
+            continue
+        parsed = _number(product.get(cost_key))
         if parsed is not None:
             return parsed, "salla_product_fallback"
     return None, "missing"
