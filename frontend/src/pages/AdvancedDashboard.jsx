@@ -114,7 +114,7 @@ export function CampaignAdvisorCard() {
                 </div>;
             })}
         </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصية موثوقة بإيقاف أو توسعة."}</div>}
-        {recommendations.length > 5 && <div className="border-t px-4 py-2 text-left"><Link to="/assistant" className="text-[10px] font-extrabold text-violet-700">عرض جميع التوصيات في مساعد ميزان ←</Link></div>}
+        {recommendations.length > 0 && <div className="border-t px-4 py-2 text-left"><Link to="/ads-manager/recommendations" className="text-[10px] font-extrabold text-violet-700">عرض جميع التوصيات ←</Link></div>}
     </Panel>;
 }
 
@@ -199,10 +199,8 @@ function PlatformPeriodSummary({ ads }) {
     return <div className="col-span-2 grid min-h-[78px] grid-cols-2 overflow-hidden rounded-xl border bg-white shadow-sm min-[1180px]:col-span-1 min-[1180px]:grid-cols-4" data-testid="advanced-platform-period-summary">
         {PLATFORM_META.map(({ key }) => {
             const row = providers[key] || {};
-            const sallaOrders = Number(row.salla_orders || 0);
-            const spend = Number(row.spend_sar || 0);
-            const orderCount = row.salla_orders == null ? null : sallaOrders;
-            const average = spend > 0 && sallaOrders > 0 ? spend / sallaOrders : null;
+            const orderCount = row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
+            const average = row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
             const provider = meta[key];
             return <div key={key} className="flex min-w-0 items-center justify-center gap-2 border-l px-2 py-2 last:border-l-0">
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${provider.tone}`}>{provider.mark}</span>
