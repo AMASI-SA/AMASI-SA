@@ -27,6 +27,12 @@ const CONFIDENCE = { high: "عالية", medium: "متوسطة", low: "منخف�
 const PRIORITY = { critical: 4, high: 3, medium: 2, low: 1 };
 const ACTION_PRIORITY = { pause: 5, reduce: 4, scale: 3, monitor: 2, maintain: 1 };
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const liveStatus = (value) => {
+    const status = String(value || "unknown").toUpperCase();
+    if (["ACTIVE", "ENABLED", "RUNNING", "DELIVERING"].includes(status)) return { label: "نشط", tone: "bg-emerald-50 text-emerald-700" };
+    if (["PAUSED", "DISABLED", "INACTIVE", "ARCHIVED", "DELETED"].includes(status)) return { label: "متوقف", tone: "bg-slate-100 text-slate-600" };
+    return { label: "غير معروف", tone: "bg-amber-50 text-amber-700" };
+};
 
 function relativeTime(value) {
     const date = new Date(value || 0);
@@ -295,13 +301,21 @@ export default function CampaignRecommendations() {
                     const blocked = Boolean(status);
                     const details = explain(item);
                     const isExpanded = expanded === item.recommendation_id;
+                    const singlePath = item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1;
+                    const displayName = singlePath && item.campaign_name ? item.campaign_name : item.entity_name;
+                    const entityState = liveStatus(item.effective_status || item.configured_status || item.status);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "Meta" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأعلى أولوية وتأثيرًا</span>}{item.recommendation_source === "mezan_fallback" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[8px] font-black text-amber-800">مصدر التوصية: ميزان</span>}</div>
                                 {item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب الإعلاني: {item.account_name}</p>}
-                                <Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link>
-                                {item.parent_name && <p className="mt-1 truncate text-[10px] font-bold text-slate-400">ضمن {item.parent_name}</p>}
+                                <Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{displayName}</Link>
+                                {item.provider === "meta" && <div className="mt-2 space-y-1 rounded-xl bg-slate-50 p-2 text-[10px] font-bold text-slate-600">
+                                    {item.campaign_name && <p className="truncate">الحملة: <b>{item.campaign_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${liveStatus(item.campaign_status).tone}`}>{liveStatus(item.campaign_status).label}</span></p>}
+                                    {item.ad_group_name && <p className="truncate">المجموعة: <b>{item.ad_group_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${liveStatus(item.ad_group_status).tone}`}>{liveStatus(item.ad_group_status).label}</span></p>}
+                                    {item.entity_level === "ad" && <p className="truncate">الإعلان المستهدف: <b>{item.entity_name}</b> <span className={`mr-1 rounded-full px-1.5 py-0.5 text-[8px] ${entityState.tone}`}>{entityState.label}</span></p>}
+                                </div>}
+                                {item.provider !== "meta" && item.parent_name && <p className="mt-1 truncate text-[10px] font-bold text-slate-400">ضمن {item.parent_name}</p>}
                             </div>
                             <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${config.tone}`}>{config.label}</span>
                         </div>
