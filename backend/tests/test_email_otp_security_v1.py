@@ -45,59 +45,46 @@ def test_owner_never_uses_email_otp(monkeypatch):
     assert _requires(_FakeDb(), {"id": "owner-1", "role": "owner", "email_otp_required": True}) is False
 
 
-def test_admin_and_accountant_are_sensitive_by_default(monkeypatch):
+def test_every_non_owner_employee_requires_email_otp(monkeypatch):
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
-    assert _requires(_FakeDb(), {"id": "admin-1", "role": "admin"}) is True
-    assert _requires(_FakeDb(), {"id": "acct-1", "role": "accountant"}) is True
-    # A false document flag must never weaken the role policy.
+    employees = [
+        {"id": "admin-1", "role": "admin"},
+        {"id": "acct-1", "role": "accountant"},
+        {"id": "warehouse-1", "role": "viewer"},
+        {"id": "support-1", "role": "customer_service"},
+        {"id": "employee-1", "role": "employee"},
+    ]
+    for employee in employees:
+        assert _requires(_FakeDb(), employee) is True
+
+
+def test_false_document_flag_cannot_disable_employee_otp(monkeypatch):
+    monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
     assert _requires(
         _FakeDb(),
-        {"id": "admin-2", "role": "admin", "email_otp_required": False},
+        {"id": "employee-2", "role": "viewer", "email_otp_required": False},
     ) is True
 
 
-def test_sensitive_employee_os_permissions_trigger_email_otp(monkeypatch):
+def test_meta_reviewer_is_the_only_non_owner_exception(monkeypatch):
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
-    db = _FakeDb([
+    reviewer = {
+        "id": "meta-reviewer-1",
+        "role": "meta_reviewer",
+        "email": "meta-reviewer@mezansalla.com",
+    }
+    assert _requires(_FakeDb(), reviewer) is False
+
+    # The exception is role-bound; a similarly named normal employee must
+    # still complete email OTP.
+    assert _requires(
+        _FakeDb(),
         {
-            "user_id": "product-manager",
-            "role_key": "product_manager",
-            "enabled": True,
-            "extra_permissions": [],
-            "denied_permissions": [],
+            "id": "employee-3",
+            "role": "viewer",
+            "email": "meta-reviewer@mezansalla.com",
         },
-        {
-            "user_id": "customer-service",
-            "role_key": "customer_service",
-            "enabled": True,
-            "extra_permissions": [],
-            "denied_permissions": [],
-        },
-        {
-            "user_id": "warehouse",
-            "role_key": "warehouse_operator",
-            "enabled": True,
-            "extra_permissions": [],
-            "denied_permissions": [],
-        },
-        {
-            "user_id": "product-manager-denied",
-            "role_key": "product_manager",
-            "enabled": True,
-            "extra_permissions": [],
-            # Deny every high-impact permission inherited by product_manager;
-            # the shared effective-permission resolver must respect all three.
-            "denied_permissions": [
-                "products.publish",
-                "products.media.publish",
-                "products.media.delete",
-            ],
-        },
-    ])
-    assert _requires(db, {"id": "product-manager", "role": "viewer"}) is True
-    assert _requires(db, {"id": "customer-service", "role": "viewer"}) is True
-    assert _requires(db, {"id": "warehouse", "role": "viewer"}) is False
-    assert _requires(db, {"id": "product-manager-denied", "role": "viewer"}) is False
+    ) is True
 
 
 def test_disabled_feature_preserves_existing_auth_behavior(monkeypatch):
