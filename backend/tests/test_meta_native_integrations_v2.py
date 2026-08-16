@@ -328,6 +328,7 @@ async def test_meta_start_url_is_signed_one_time_and_requests_business_scopes(
     ]
     assert "ads_management" in query["scope"][0]
     assert "business_management" in query["scope"][0]
+    assert "pages_messaging" in query["scope"][0]
     state = query["state"][0]
     assert oauth._decode_state(state)["user_id"] == "owner-1"
     await oauth._consume_state(db, state)
