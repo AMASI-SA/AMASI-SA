@@ -1,6 +1,7 @@
 """Focused contracts for Owner trusted-device WebAuthn/passkeys."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 
@@ -65,3 +66,75 @@ def test_base64url_round_trip():
 
     assert "=" not in encoded
     assert base64url_to_bytes(encoded) == raw
+
+
+class _FakeCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def to_list(self, limit):
+        return self.rows[:limit]
+
+
+class _FakeCredentials:
+    def __init__(self, rows):
+        self.rows = rows
+        self.last_query = None
+
+    def find(self, query, projection):
+        self.last_query = query
+        matches = [
+            row for row in self.rows
+            if row.get("user_id") == query.get("user_id")
+            and (
+                "device_hash" not in query
+                or row.get("device_hash") == query.get("device_hash")
+            )
+            and "revoked_at" not in row
+        ]
+        return _FakeCursor(matches)
+
+
+class _FakeDb:
+    def __init__(self, rows):
+        self.auth_passkey_credentials = _FakeCredentials(rows)
+        self.auth_passkey_challenges = object()
+        self.auth_security_events = object()
+
+
+def test_existing_user_passkey_can_be_rebound_after_browser_id_rotation():
+    """Same-browser user switching must not attempt duplicate registration."""
+    existing = {
+        "credential_id_b64": "existing-owner-passkey",
+        "user_id": "owner-1",
+        "device_hash": "old-browser-cookie",
+    }
+    store = module.PasskeyStore(_FakeDb([existing]))
+
+    current_device = asyncio.run(
+        store.reusable_for_device("owner-1", "new-browser-cookie")
+    )
+    same_user = asyncio.run(store.reusable_for_user("owner-1"))
+
+    assert current_device == []
+    assert same_user == [existing]
+    assert same_user[0]["credential_id_b64"] == "existing-owner-passkey"
+    assert module._trust_ceremony(current_device, same_user) == "rebind"
+
+
+def test_trust_ceremony_never_registers_when_user_has_existing_passkey():
+    credential = {"credential_id_b64": "owner-passkey"}
+
+    assert module._trust_ceremony([credential], [credential]) == "renew"
+    assert module._trust_ceremony([], [credential]) == "rebind"
+    assert module._trust_ceremony([], []) == "register"
+
+
+def test_frontend_rebind_uses_authentication_not_duplicate_registration():
+    source = (
+        module.__file__.replace("backend/passkey_security.py", "frontend/src/pages/Login.jsx")
+    )
+    with open(source, encoding="utf-8") as handle:
+        login_source = handle.read()
+
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source

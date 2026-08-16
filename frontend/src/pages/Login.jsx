@@ -369,7 +369,7 @@ export default function Login() {
             const { data: start } = await api.post("/auth/passkey/trust/options", {});
             const ceremony = start?.ceremony;
             let credential;
-            if (ceremony === "renew") {
+            if (ceremony === "renew" || ceremony === "rebind") {
                 credential = await navigator.credentials.get({
                     publicKey: requestOptionsFromJson(start.webauthn_options || {}),
                 });

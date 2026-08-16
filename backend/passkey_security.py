@@ -173,6 +173,17 @@ def _safe_label(value: Any) -> str:
     return rendered[:80] or "جهاز موثوق"
 
 
+def _trust_ceremony(
+    reusable_for_device: list[dict], reusable_for_user: list[dict]
+) -> str:
+    """Choose renewal/rebinding before attempting a new registration."""
+    if reusable_for_device:
+        return "renew"
+    if reusable_for_user:
+        return "rebind"
+    return "register"
+
+
 async def _read_body(receive) -> tuple[bytes, list[dict[str, Any]]]:
     chunks: list[bytes] = []
     messages: list[dict[str, Any]] = []
@@ -309,6 +320,24 @@ class PasskeyStore:
             },
             {"_id": 0},
         ).to_list(20)
+
+    async def reusable_for_user(self, user_id: str) -> list[dict]:
+        """Return credentials that can be rebound after fresh Owner MFA.
+
+        The signed browser device cookie is deliberately long-lived, but a
+        browser can still rotate or lose it while its platform passkey remains
+        installed (for example after switching Mezan users in one browser).
+        In that case registration would be rejected by the authenticator as a
+        duplicate.  A fresh password + TOTP session may instead prove the
+        existing credential and bind it to the browser's current signed ID.
+        """
+        return await self.credentials.find(
+            {
+                "user_id": user_id,
+                "revoked_at": {"$exists": False},
+            },
+            {"_id": 0},
+        ).to_list(50)
 
     async def all_user_credentials(self, user_id: str) -> list[dict]:
         return await self.credentials.find(
@@ -509,8 +538,12 @@ class PasskeySecurityMiddleware:
                 )
 
             reusable = await self.store.reusable_for_device(user["id"], device_hash)
+            reusable_for_user = (
+                [] if reusable else await self.store.reusable_for_user(user["id"])
+            )
+            ceremony = _trust_ceremony(reusable, reusable_for_user)
             challenge = secrets.token_bytes(32)
-            if reusable:
+            if ceremony == "renew":
                 # The device already owns a credential, but its 30-day trust may
                 # be expired. Re-authenticate the local device to renew it rather
                 # than creating duplicate passkeys every month.
@@ -533,7 +566,34 @@ class PasskeySecurityMiddleware:
                     challenge=challenge,
                     credential_ids=[item["credential_id_b64"] for item in reusable],
                 )
-                ceremony = "renew"
+            elif ceremony == "rebind":
+                # The platform passkey survived but Mezan's signed browser ID
+                # changed. This commonly happens while switching users in the
+                # same browser. The Owner has just completed password + TOTP,
+                # so authenticate the existing passkey and safely rebind it to
+                # the current browser ID instead of attempting a duplicate
+                # registration that Windows Hello/Chrome will reject.
+                options = generate_authentication_options(
+                    rp_id=_rp_id(),
+                    challenge=challenge,
+                    allow_credentials=[
+                        PublicKeyCredentialDescriptor(
+                            id=base64url_to_bytes(item["credential_id_b64"])
+                        )
+                        for item in reusable_for_user
+                    ],
+                    user_verification=UserVerificationRequirement.REQUIRED,
+                    timeout=60_000,
+                )
+                challenge_id = await self.store.create_challenge(
+                    user=user,
+                    device_hash=device_hash,
+                    purpose="rebind",
+                    challenge=challenge,
+                    credential_ids=[
+                        item["credential_id_b64"] for item in reusable_for_user
+                    ],
+                )
             else:
                 all_credentials = await self.store.all_user_credentials(user["id"])
                 options = generate_registration_options(
@@ -562,7 +622,6 @@ class PasskeySecurityMiddleware:
                     purpose="register",
                     challenge=challenge,
                 )
-                ceremony = "register"
 
             await self.store.safe_event(
                 "passkey_trust_started",
@@ -611,7 +670,7 @@ class PasskeySecurityMiddleware:
                 or not challenge_doc
                 or challenge_doc.get("user_id") != user["id"]
                 or challenge_doc.get("device_hash") != device_hash
-                or challenge_doc.get("purpose") not in {"register", "renew"}
+                or challenge_doc.get("purpose") not in {"register", "renew", "rebind"}
             ):
                 raise HTTPException(
                     status_code=401,
@@ -664,14 +723,14 @@ class PasskeySecurityMiddleware:
                 credential_id_b64 = str(credential.get("id") or "").strip()
                 if credential_id_b64 not in (challenge_doc.get("credential_ids") or []):
                     raise ValueError("credential is not part of this renewal challenge")
-                stored = await self.store.credentials.find_one(
-                    {
-                        "credential_id_b64": credential_id_b64,
-                        "user_id": user["id"],
-                        "device_hash": device_hash,
-                        "revoked_at": {"$exists": False},
-                    }
-                )
+                stored_query = {
+                    "credential_id_b64": credential_id_b64,
+                    "user_id": user["id"],
+                    "revoked_at": {"$exists": False},
+                }
+                if purpose == "renew":
+                    stored_query["device_hash"] = device_hash
+                stored = await self.store.credentials.find_one(stored_query)
                 if not stored:
                     raise ValueError("trusted credential was not found")
                 verification = verify_authentication_response(
@@ -690,6 +749,7 @@ class PasskeySecurityMiddleware:
                     {
                         "$set": {
                             "sign_count": int(verification.new_sign_count or 0),
+                            "device_hash": device_hash,
                             "label": label or stored.get("label") or "جهاز موثوق",
                             "trust_expires_at": trust_expires_at,
                             "updated_at": now,
