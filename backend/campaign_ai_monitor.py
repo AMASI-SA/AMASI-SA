@@ -850,6 +850,23 @@ async def _meta_child_entities(
     groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for document in documents:
         groups[(document["entity_level"], document["entity_id"], document.get("ad_account_id") or "")].append(document)
+    campaign_totals: dict[tuple[str, str], dict[str, float]] = defaultdict(lambda: {"spend": 0.0, "purchases": 0.0})
+    ad_group_totals: dict[tuple[str, str], dict[str, float]] = defaultdict(lambda: {"spend": 0.0, "purchases": 0.0})
+    campaign_ad_groups: dict[tuple[str, str], set[str]] = defaultdict(set)
+    campaign_ads: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for fact in documents:
+        account_id = str(fact.get("ad_account_id") or "")
+        campaign_id = str(fact.get("campaign_id") or "")
+        ad_group_id = str(fact.get("ad_group_id") or "")
+        if fact.get("entity_level") == "ad_group" and campaign_id:
+            campaign_totals[(account_id, campaign_id)]["spend"] += float(fact.get("spend_sar") or 0)
+            campaign_totals[(account_id, campaign_id)]["purchases"] += float(fact.get("purchases") or 0)
+            if ad_group_id:
+                campaign_ad_groups[(account_id, campaign_id)].add(ad_group_id)
+                ad_group_totals[(account_id, ad_group_id)]["spend"] += float(fact.get("spend_sar") or 0)
+                ad_group_totals[(account_id, ad_group_id)]["purchases"] += float(fact.get("purchases") or 0)
+        elif fact.get("entity_level") == "ad" and campaign_id:
+            campaign_ads[(account_id, campaign_id)].add(str(fact.get("entity_id") or ""))
     rows: list[dict[str, Any]] = []
     requested_days = (end - start).days + 1
     for (level, entity_id, account_id), facts in groups.items():
@@ -882,6 +899,26 @@ async def _meta_child_entities(
             campaign_ad_count=latest.get("campaign_ad_count"),
         )
         if row:
+            campaign_key = (account_id, str(latest.get("campaign_id") or ""))
+            ad_group_key = (account_id, str(latest.get("ad_group_id") or ""))
+            campaign_total = campaign_totals.get(campaign_key) or {}
+            ad_group_total = ad_group_totals.get(ad_group_key) or {}
+            row.update({
+                "entity_period_spend_sar": spend,
+                "entity_period_purchases": int(purchases),
+                "ad_group_period_spend_sar": ad_group_total.get("spend"),
+                "ad_group_period_purchases": int(ad_group_total.get("purchases") or 0),
+                "campaign_period_spend_sar": campaign_total.get("spend"),
+                "campaign_period_purchases": int(campaign_total.get("purchases") or 0),
+                "campaign_ad_group_count": (
+                    len(campaign_ad_groups.get(campaign_key) or set())
+                    or int(latest.get("campaign_ad_group_count") or 0)
+                ),
+                "campaign_ad_count": (
+                    len(campaign_ads.get(campaign_key) or set())
+                    or int(latest.get("campaign_ad_count") or 0)
+                ),
+            })
             rows.append(row)
     return rows
 
@@ -1366,6 +1403,9 @@ async def _ask_openai(
             "status", "configured_status", "effective_status", "status_updated_at", "active",
             "campaign_id", "campaign_name", "campaign_status", "ad_group_id", "ad_group_name",
             "ad_group_status", "campaign_ad_group_count", "campaign_ad_count",
+            "entity_period_spend_sar", "entity_period_purchases",
+            "ad_group_period_spend_sar", "ad_group_period_purchases",
+            "campaign_period_spend_sar", "campaign_period_purchases",
             "spend_sar", "revenue_sar", "purchases", "impressions",
             "clicks", "roas", "cpa_sar", "observed_days", "spend_per_day_sar",
             "ctr_pct", "data_complete", "data_quality", "account_benchmark",
@@ -1544,6 +1584,9 @@ async def run_campaign_ai_monitor(
                 "campaign_id", "campaign_name", "campaign_status",
                 "ad_group_id", "ad_group_name", "ad_group_status",
                 "campaign_ad_group_count", "campaign_ad_count",
+                "entity_period_spend_sar", "entity_period_purchases",
+                "ad_group_period_spend_sar", "ad_group_period_purchases",
+                "campaign_period_spend_sar", "campaign_period_purchases",
             )})
             executable = bool(
                 item.action in {"pause", "reduce", "scale"}
