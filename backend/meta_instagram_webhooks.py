@@ -18,6 +18,7 @@ import httpx
 META_CREDENTIALS_COLLECTION = "mezan_meta_oauth_credentials_v2"
 META_DEFAULT_GRAPH_VERSION = "v25.0"
 INSTAGRAM_WEBHOOK_FIELDS = ("comments", "messages")
+PAGE_WEBHOOK_INSTALL_FIELDS = ("messages",)
 
 
 class MetaInstagramWebhookError(RuntimeError):
@@ -148,7 +149,10 @@ async def subscribe_instagram_webhooks(
         # edge. The Instagram account ID is still validated above to prevent
         # subscribing an unrelated Page.
         edge = f"{_graph_base()}/{page_id}/subscribed_apps"
-        subscribed_fields = ",".join(INSTAGRAM_WEBHOOK_FIELDS)
+        # Page subscribed_apps accepts Page webhook fields. Instagram
+        # comments are delivered through the app-level Instagram webhook
+        # subscription configured in Meta, while DMs use the Page field.
+        subscribed_fields = ",".join(PAGE_WEBHOOK_INSTALL_FIELDS)
         installed = await _json(
             await http.post(
                 edge,
@@ -182,7 +186,7 @@ async def subscribe_instagram_webhooks(
         actual_fields = {
             _text(value) for value in (app or {}).get("subscribed_fields") or []
         }
-        if not app or not set(INSTAGRAM_WEBHOOK_FIELDS).issubset(actual_fields):
+        if not app or not set(PAGE_WEBHOOK_INSTALL_FIELDS).issubset(actual_fields):
             raise MetaInstagramWebhookError("instagram_webhook_subscription_failed")
         return INSTAGRAM_WEBHOOK_FIELDS
     except httpx.HTTPError as exc:
@@ -196,6 +200,7 @@ async def subscribe_instagram_webhooks(
 
 __all__ = [
     "INSTAGRAM_WEBHOOK_FIELDS",
+    "PAGE_WEBHOOK_INSTALL_FIELDS",
     "MetaInstagramWebhookError",
     "subscribe_instagram_webhooks",
 ]
