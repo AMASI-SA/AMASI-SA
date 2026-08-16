@@ -477,6 +477,39 @@ async def _refresh_meta_entities(
     async with httpx.AsyncClient(timeout=35.0) as client:
         for account in accounts:
             account_id = _text(account.get("ad_account_id"), limit=120)
+            state_by_level: dict[str, dict[str, dict[str, Any]]] = {
+                "campaign": {}, "ad_group": {}, "ad": {},
+            }
+            for edge, state_level, state_fields in (
+                ("campaigns", "campaign", "id,name,status,effective_status,updated_time"),
+                ("adsets", "ad_group", "id,name,status,effective_status,updated_time,campaign_id"),
+                ("ads", "ad", "id,name,status,effective_status,updated_time,campaign_id,adset_id"),
+            ):
+                try:
+                    state_rows, calls = await _paged_get(
+                        client,
+                        f"{meta_graph_base()}/{account_id}/{edge}",
+                        {
+                            "access_token": access_token,
+                            "appsecret_proof": meta_appsecret_proof(access_token),
+                            "fields": state_fields,
+                            "limit": 500,
+                        },
+                        operation=f"meta_ai_{edge}_status",
+                    )
+                    provider_calls += calls
+                    state_by_level[state_level] = {
+                        _text(item.get("id"), limit=120): item
+                        for item in state_rows
+                        if _text(item.get("id"), limit=120)
+                    }
+                except Exception as exc:
+                    errors.append({
+                        "account_id": account_id,
+                        "date": current.date().isoformat(),
+                        "level": f"{state_level}_status",
+                        "code": _text(getattr(exc, "code", type(exc).__name__), limit=100),
+                    })
             cursor = start
             while cursor <= end:
                 for level in ("adset", "ad"):
@@ -529,6 +562,20 @@ async def _refresh_meta_entities(
                         )
                         if not entity_id:
                             continue
+                        entity_level = "ad_group" if level == "adset" else "ad"
+                        entity_state = state_by_level[entity_level].get(entity_id) or {}
+                        campaign_id = _text(row.get("campaign_id"), limit=120)
+                        ad_group_id = _text(row.get("adset_id"), limit=120)
+                        campaign_state = state_by_level["campaign"].get(campaign_id) or {}
+                        ad_group_state = state_by_level["ad_group"].get(ad_group_id) or {}
+                        campaign_ad_group_count = sum(
+                            1 for item in state_by_level["ad_group"].values()
+                            if _text(item.get("campaign_id"), limit=120) == campaign_id
+                        )
+                        campaign_ad_count = sum(
+                            1 for item in state_by_level["ad"].values()
+                            if _text(item.get("campaign_id"), limit=120) == campaign_id
+                        )
                         currency = _text(
                             row.get("account_currency") or account.get("currency"),
                             limit=12,
@@ -542,15 +589,23 @@ async def _refresh_meta_entities(
                             "provider": "meta",
                             "ad_account_id": account_id,
                             "account_name": _text(account.get("display_name")),
-                            "entity_level": "ad_group" if level == "adset" else "ad",
+                            "entity_level": entity_level,
                             "entity_id": entity_id,
                             "entity_name": _text(
                                 row.get("adset_name") if level == "adset" else row.get("ad_name")
                             ) or entity_id,
-                            "campaign_id": _text(row.get("campaign_id"), limit=120),
+                            "configured_status": _text(entity_state.get("status"), limit=60) or "unknown",
+                            "effective_status": _text(entity_state.get("effective_status"), limit=60) or "unknown",
+                            "status": _text(entity_state.get("effective_status") or entity_state.get("status"), limit=60) or "unknown",
+                            "status_updated_at": _text(entity_state.get("updated_time"), limit=80) or None,
+                            "campaign_id": campaign_id,
                             "campaign_name": _text(row.get("campaign_name")),
-                            "ad_group_id": _text(row.get("adset_id"), limit=120),
+                            "campaign_status": _text(campaign_state.get("effective_status") or campaign_state.get("status"), limit=60) or "unknown",
+                            "ad_group_id": ad_group_id,
                             "ad_group_name": _text(row.get("adset_name")),
+                            "ad_group_status": _text(ad_group_state.get("effective_status") or ad_group_state.get("status"), limit=60) or "unknown",
+                            "campaign_ad_group_count": campaign_ad_group_count,
+                            "campaign_ad_count": campaign_ad_count,
                             "date": cursor.isoformat(),
                             "currency_native": currency,
                             "fx_rate_to_sar": fx_rate,
@@ -604,6 +659,17 @@ def _entity(
     account_name: Any = None,
     parent_id: Any = None,
     current_daily_budget_native: Any = None,
+    configured_status: Any = None,
+    effective_status: Any = None,
+    status_updated_at: Any = None,
+    campaign_id: Any = None,
+    campaign_name: Any = None,
+    campaign_status: Any = None,
+    ad_group_id: Any = None,
+    ad_group_name: Any = None,
+    ad_group_status: Any = None,
+    campaign_ad_group_count: Any = None,
+    campaign_ad_count: Any = None,
 ) -> dict[str, Any] | None:
     clean_id = _text(entity_id, limit=120)
     if not clean_id:
@@ -633,6 +699,17 @@ def _entity(
         "account_name": _text(account_name, limit=180) or None,
         "parent_id": _text(parent_id, limit=120) or None,
         "current_daily_budget_native": _safe_metric(current_daily_budget_native, 6),
+        "configured_status": _text(configured_status, limit=60) or None,
+        "effective_status": _text(effective_status, limit=60) or None,
+        "status_updated_at": _text(status_updated_at, limit=80) or None,
+        "campaign_id": _text(campaign_id, limit=120) or None,
+        "campaign_name": _text(campaign_name) or None,
+        "campaign_status": _text(campaign_status, limit=60) or None,
+        "ad_group_id": _text(ad_group_id, limit=120) or None,
+        "ad_group_name": _text(ad_group_name) or None,
+        "ad_group_status": _text(ad_group_status, limit=60) or None,
+        "campaign_ad_group_count": int(_safe_metric(campaign_ad_group_count, 0) or 0),
+        "campaign_ad_count": int(_safe_metric(campaign_ad_count, 0) or 0),
     }
 
 
@@ -781,18 +858,28 @@ async def _meta_child_entities(
         purchases = sum(float(item.get("purchases") or 0) for item in facts)
         impressions = sum(int(item.get("impressions") or 0) for item in facts)
         clicks = sum(int(item.get("clicks") or 0) for item in facts)
-        first = facts[0]
+        latest = max(facts, key=lambda item: (str(item.get("observed_at") or ""), str(item.get("date") or "")))
+        live_status = latest.get("effective_status") or latest.get("configured_status") or latest.get("status") or "unknown"
         row = _entity(
             provider="meta", level=level, entity_id=entity_id,
-            entity_name=first.get("entity_name"),
-            parent_name=first.get("ad_group_name") if level == "ad" else first.get("campaign_name"),
-            status="ACTIVE", spend_sar=spend, revenue_sar=revenue,
+            entity_name=latest.get("entity_name"),
+            parent_name=latest.get("ad_group_name") if level == "ad" else latest.get("campaign_name"),
+            status=live_status, spend_sar=spend, revenue_sar=revenue,
             purchases=purchases, impressions=impressions, clicks=clicks,
             observed_days=len({item.get("date") for item in facts}),
             data_complete=len({item.get("date") for item in facts}) >= requested_days,
             account_id=account_id,
-            account_name=first.get("account_name"),
-            parent_id=first.get("ad_group_id") if level == "ad" else first.get("campaign_id"),
+            account_name=latest.get("account_name"),
+            parent_id=latest.get("ad_group_id") if level == "ad" else latest.get("campaign_id"),
+            configured_status=latest.get("configured_status"),
+            effective_status=latest.get("effective_status"),
+            status_updated_at=latest.get("status_updated_at"),
+            campaign_id=latest.get("campaign_id"), campaign_name=latest.get("campaign_name"),
+            campaign_status=latest.get("campaign_status"),
+            ad_group_id=latest.get("ad_group_id"), ad_group_name=latest.get("ad_group_name"),
+            ad_group_status=latest.get("ad_group_status"),
+            campaign_ad_group_count=latest.get("campaign_ad_group_count"),
+            campaign_ad_count=latest.get("campaign_ad_count"),
         )
         if row:
             rows.append(row)
@@ -926,6 +1013,8 @@ def _govern_output(
             str(item.account_id or ""), item.entity_id,
         ))
         if not row:
+            continue
+        if row.get("active") is False:
             continue
         action = item.action
         if action == "scale" and (not row.get("data_complete") or int(row.get("purchases") or 0) < 3):
@@ -1274,7 +1363,10 @@ async def _ask_openai(
         {key: row.get(key) for key in (
             "provider", "entity_level", "account_id", "account_name", "entity_id",
             "entity_name", "parent_name",
-            "status", "active", "spend_sar", "revenue_sar", "purchases", "impressions",
+            "status", "configured_status", "effective_status", "status_updated_at", "active",
+            "campaign_id", "campaign_name", "campaign_status", "ad_group_id", "ad_group_name",
+            "ad_group_status", "campaign_ad_group_count", "campaign_ad_count",
+            "spend_sar", "revenue_sar", "purchases", "impressions",
             "clicks", "roas", "cpa_sar", "observed_days", "spend_per_day_sar",
             "ctr_pct", "data_complete", "data_quality", "account_benchmark",
         )}
@@ -1293,6 +1385,9 @@ async def _ask_openai(
             instructions=(
                 "أنت مدير الأداء المستقل لمتجر أماسي داخل ميزان، وأنت صاحب الحكم التسويقي؛ "
                 "لا توجد نتيجة أو توصية مقررة مسبقًا من كود ميزان. ادرس كامل الكيانات النشطة، "
+                "تعامل مع status وconfigured_status وeffective_status كحالة Meta الحية: لا تقترح "
+                "إيقافًا أو خفضًا أو توسعة لكيان متوقف أو غير نشط، ولا تكرر إيقاف إعلان أوقفه المالك. "
+                "افحص كذلك حالة الحملة والمجموعة الأم قبل اقتراح أي إجراء على الإعلان. "
                 "مقارنة الحساب، تاريخ 7 و30 يومًا، تقويم السوق السعودي، والقرارات السابقة. "
                 "ابدأ بأثر الحملات على صافي ربح أو خسارة ميزان اليوم ثم نوافذ 3 و7 و30 يومًا، "
                 "وتعلم من القرارات المنفذة سابقًا بمقارنة أرقامها القديمة بالأداء الحالي. "
@@ -1444,9 +1539,16 @@ async def run_campaign_ai_monitor(
             public_item["generated_at"] = started_at
             public_item["recommendation_source"] = recommendation_source
             public_item["decision_score"] = None
+            public_item.update({key: target.get(key) for key in (
+                "status", "configured_status", "effective_status", "status_updated_at",
+                "campaign_id", "campaign_name", "campaign_status",
+                "ad_group_id", "ad_group_name", "ad_group_status",
+                "campaign_ad_group_count", "campaign_ad_count",
+            )})
             executable = bool(
                 item.action in {"pause", "reduce", "scale"}
                 and target.get("account_id")
+                and target.get("active")
                 and (item.entity_level != "ad" or item.action == "pause")
             )
             public_item["approval_available"] = executable
