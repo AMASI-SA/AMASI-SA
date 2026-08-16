@@ -88,6 +88,8 @@ def _parse_categories_xlsx(raw: bytes) -> dict:
 
     header_seen = False
     try:
+        if ws.max_row > MAX_IMPORT_ROWS + 1:
+            raise HTTPException(413, "يتجاوز ملف التصنيفات الحد المسموح: 50,000 صف")
         for idx, row in enumerate(ws.iter_rows(values_only=True, max_col=3), start=1):
             if idx > MAX_IMPORT_ROWS + 1:
                 raise HTTPException(413, "يتجاوز ملف التصنيفات الحد المسموح: 50,000 صف")
@@ -425,6 +427,8 @@ def _parse_products_xlsx(raw: bytes) -> dict:
     no_name: list[int] = []
     header_seen = False
     try:
+        if ws.max_row > MAX_IMPORT_ROWS + 1:
+            raise HTTPException(413, "يتجاوز ملف المنتجات الحد المسموح: 50,000 صف")
         for idx, row in enumerate(ws.iter_rows(values_only=True, max_col=6), start=1):
             if idx > MAX_IMPORT_ROWS + 1:
                 raise HTTPException(413, "يتجاوز ملف المنتجات الحد المسموح: 50,000 صف")
