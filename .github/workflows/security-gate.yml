@@ -95,12 +95,12 @@ jobs:
           const advisories = rows
             .filter((row) => row.type === "auditAdvisory")
             .map((row) => row.data.advisory);
-          const blocking = advisories.filter((a) => ["high", "critical"].includes(a.severity));
+          const blocking = advisories.filter((a) => ["moderate", "high", "critical"].includes(a.severity));
           if (blocking.length) {
             console.error("Blocking frontend advisories:", blocking.map((a) => `${a.severity} ${a.module_name}: ${a.title}`));
             process.exit(1);
           }
-          console.log(`Frontend audit passed: ${advisories.length} advisory(s), none high or critical.`);
+          console.log(`Frontend audit passed: ${advisories.length} advisory(s), none moderate, high, or critical.`);
           NODE
       - name: Reject vulnerable spreadsheet runtime
         run: |
