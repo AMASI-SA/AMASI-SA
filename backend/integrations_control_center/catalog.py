@@ -139,6 +139,7 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
             "instagram_manage_comments",
             "instagram_manage_messages",
             "pages_manage_metadata",
+            "pages_messaging",
         ),
         native_capabilities=(
             "account.read",
@@ -147,7 +148,14 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
         ),
         capability_permissions=(
             ("account.read", ("instagram_basic",)),
-            ("messages.receive", ("instagram_manage_messages",)),
+            (
+                "messages.receive",
+                (
+                    "instagram_manage_messages",
+                    "pages_manage_metadata",
+                    "pages_messaging",
+                ),
+            ),
             ("comments.receive", ("instagram_manage_comments",)),
         ),
         ai_can_when_ready=(

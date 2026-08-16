@@ -731,6 +731,7 @@ async def test_instagram_card_reads_only_safe_receive_only_binding_evidence():
         "instagram_manage_comments",
         "instagram_manage_messages",
         "pages_manage_metadata",
+        "pages_messaging",
     ]
     db = FakeDB(
         {
