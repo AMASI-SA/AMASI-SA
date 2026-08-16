@@ -15,6 +15,7 @@ def test_product_cost_catalog_projection_keeps_raw_salla_cost_aliases():
     assert PRODUCT_COST_CATALOG_PROJECTION["cost_price_from_salla"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["cost_price"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["cost"] == 1
+    assert PRODUCT_COST_CATALOG_PROJECTION["variants"] == 1
 
 
 def test_line_product_accepts_all_mezan_catalog_identifiers():
