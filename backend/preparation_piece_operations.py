@@ -143,6 +143,23 @@ def _positive_unit_indices(line: dict[str, Any]) -> list[int]:
     return list(range(1, quantity + 1))
 
 
+def _service_context_key(line: dict[str, Any]) -> str:
+    """Identify one order line so option-linked services cannot cross-contaminate.
+
+    A Salla product can appear more than once in the same order with different
+    customer options.  Product id alone is therefore not a safe service-plan
+    key: the later line would overwrite the earlier line's services.
+    """
+    order_number = _text(line.get("order_number"))
+    order_item_id = _text(line.get("order_item_id"))
+    if order_number and order_item_id:
+        return f"order:{order_number}:item:{order_item_id}"
+    return (
+        _text(line.get("group_key"))
+        or _text(line.get("product_id"))
+    )
+
+
 def validate_materialized_piece_count(
     *,
     batch: dict[str, Any],
@@ -329,7 +346,12 @@ def build_piece_documents(
         if not isinstance(line, dict):
             continue
         product_id = _text(line.get("product_id"))
-        services = list((services_by_product.get(product_id) or {}).get("services") or [])
+        line_service_context = (
+            services_by_product.get(_service_context_key(line))
+            or services_by_product.get(product_id)
+            or {}
+        )
+        services = list(line_service_context.get("services") or [])
         signature = "|".join(sorted(_text(row.get("service_id")) for row in services))
         duration_minutes = int(duration_by_signature.get(
             (employee_id, product_id, signature),
@@ -517,7 +539,7 @@ async def _service_context_for_batch(
             continue
         product_id = _text(line.get("product_id"))
         if product_id:
-            context[product_id] = {"services": inherit_required_services(
+            context[_service_context_key(line)] = {"services": inherit_required_services(
                 line=line,
                 product_links=links_by_product.get(product_id, []),
                 option_bindings=bindings_by_product.get(product_id, []),
