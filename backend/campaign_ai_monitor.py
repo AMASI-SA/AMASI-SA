@@ -117,6 +117,8 @@ class RecommendationItem(BaseModel):
     entity_level: Literal["campaign", "ad_group", "ad"]
     entity_id: str
     entity_name: str
+    account_id: str | None = None
+    account_name: str | None = None
     parent_name: str | None = None
     action: Literal["pause", "reduce", "monitor", "maintain", "scale"]
     change_percent: int | None = Field(default=None, ge=5, le=30)
@@ -161,6 +163,8 @@ AI_SCHEMA = {
                     "entity_level": {"type": "string", "enum": ["campaign", "ad_group", "ad"]},
                     "entity_id": {"type": "string"},
                     "entity_name": {"type": "string"},
+                    "account_id": {"type": ["string", "null"]},
+                    "account_name": {"type": ["string", "null"]},
                     "parent_name": {"type": ["string", "null"]},
                     "action": {"type": "string", "enum": ["pause", "reduce", "monitor", "maintain", "scale"]},
                     "change_percent": {"type": ["integer", "null"], "minimum": 5, "maximum": 30},
@@ -179,7 +183,8 @@ AI_SCHEMA = {
                 },
                 "required": [
                     "recommendation_id", "provider", "entity_level", "entity_id",
-                    "entity_name", "parent_name", "action", "priority", "confidence",
+                    "entity_name", "account_id", "account_name", "parent_name",
+                    "action", "priority", "confidence",
                     "change_percent", "title", "rationale", "evidence", "why_now",
                     "recommended_wait_hours", "observation_plan", "success_criteria",
                     "risk_if_ignored", "guardrail", "next_check_at",
@@ -374,6 +379,7 @@ def _entity(
     observed_days: Any,
     data_complete: Any,
     account_id: Any = None,
+    account_name: Any = None,
     parent_id: Any = None,
     current_daily_budget_native: Any = None,
 ) -> dict[str, Any] | None:
@@ -402,6 +408,7 @@ def _entity(
         "observed_days": int(_safe_metric(observed_days, 0) or 0),
         "data_complete": bool(data_complete),
         "account_id": _text(account_id, limit=120) or None,
+        "account_name": _text(account_name, limit=180) or None,
         "parent_id": _text(parent_id, limit=120) or None,
         "current_daily_budget_native": _safe_metric(current_daily_budget_native, 6),
     }
@@ -415,6 +422,21 @@ async def _campaign_entities(
     end: date,
 ) -> list[dict[str, Any]]:
     from ads_manager.service import AdsManagerService
+
+    accounts = (
+        await _snapchat_accounts(db, user_id)
+        if provider == "snapchat"
+        else await _meta_accounts(db, user_id)
+    )
+    account_names = {
+        _text(
+            account.get("ad_account_id")
+            or account.get("external_account_id")
+            or account.get("account_id"),
+            limit=120,
+        ): _text(account.get("display_name") or account.get("name"), limit=180)
+        for account in accounts
+    }
 
     overview = await AdsManagerService(db).overview(
         user_id,
@@ -437,6 +459,7 @@ async def _campaign_entities(
     observed_days = coverage.get("observed_days") or (end - start).days + 1
     data_complete = coverage.get("status") in {None, "complete"}
     for item in overview.get("campaigns") or []:
+        account_id = _text(item.get("account_id") or item.get("ad_account_id"), limit=120)
         row = _entity(
             provider=provider,
             level="campaign",
@@ -451,7 +474,8 @@ async def _campaign_entities(
             clicks=item.get("clicks"),
             observed_days=observed_days,
             data_complete=data_complete,
-            account_id=item.get("account_id") or item.get("ad_account_id"),
+            account_id=account_id,
+            account_name=item.get("account_name") or account_names.get(account_id),
             current_daily_budget_native=(item.get("budget") or {}).get("daily_native"),
         )
         if row:
@@ -469,6 +493,7 @@ async def _snapchat_child_entities(
     accounts = await _snapchat_accounts(db, user_id)
     for account in accounts:
         account_id = _text(account.get("ad_account_id"), limit=120)
+        account_name = _text(account.get("display_name") or account.get("name"), limit=180)
         reports = [
             await build_account_timezone_adsquad_report(
                 db, user_id, account_id=account_id,
@@ -489,7 +514,8 @@ async def _snapchat_child_entities(
                 spend_sar=item.get("spend_sar"), revenue_sar=item.get("sales_sar"),
                 purchases=item.get("orders"), impressions=item.get("impressions"), clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"), data_complete=item.get("data_complete"),
-                account_id=account_id, parent_id=item.get("campaign_id"),
+                account_id=account_id, account_name=account_name,
+                parent_id=item.get("campaign_id"),
                 current_daily_budget_native=(item.get("budget") or {}).get("daily_native"),
             )
             if row:
@@ -503,7 +529,8 @@ async def _snapchat_child_entities(
                 spend_sar=item.get("spend_sar"), revenue_sar=item.get("sales_sar"),
                 purchases=item.get("orders"), impressions=item.get("impressions"), clicks=item.get("swipes"),
                 observed_days=item.get("observed_days"), data_complete=item.get("data_complete"),
-                account_id=account_id, parent_id=item.get("ad_squad_id"),
+                account_id=account_id, account_name=account_name,
+                parent_id=item.get("ad_squad_id"),
             )
             if row:
                 rows.append(row)
@@ -542,6 +569,7 @@ async def _meta_child_entities(
             observed_days=len({item.get("date") for item in facts}),
             data_complete=len({item.get("date") for item in facts}) >= requested_days,
             account_id=account_id,
+            account_name=first.get("account_name"),
             parent_id=first.get("ad_group_id") if level == "ad" else first.get("campaign_id"),
         )
         if row:
@@ -555,6 +583,43 @@ def _median(values: list[float]) -> float | None:
         return None
     middle = len(clean) // 2
     return clean[middle] if len(clean) % 2 else (clean[middle - 1] + clean[middle]) / 2
+
+
+def _bounded_account_sample(
+    rows: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Keep the highest-spend row from every ad account before filling the cap."""
+    ordered = sorted(
+        rows,
+        key=lambda item: float(item.get("spend_sar") or 0),
+        reverse=True,
+    )
+    if len(ordered) <= limit:
+        return ordered
+    leaders: list[dict[str, Any]] = []
+    seen_accounts: set[tuple[str, str]] = set()
+    for row in ordered:
+        key = (
+            str(row.get("provider") or "unknown"),
+            str(row.get("account_id") or "unknown"),
+        )
+        if key in seen_accounts:
+            continue
+        seen_accounts.add(key)
+        leaders.append(row)
+    selected_ids = {id(row) for row in leaders[:limit]}
+    selected = leaders[:limit]
+    if len(selected) < limit:
+        selected.extend(
+            row for row in ordered
+            if id(row) not in selected_ids
+        )
+    return sorted(
+        selected[:limit],
+        key=lambda item: float(item.get("spend_sar") or 0),
+        reverse=True,
+    )
 
 
 def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -597,20 +662,14 @@ def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, A
             "complete" if row.get("data_complete") else "partial"
         )
         candidates.append(row)
-    candidates.sort(
-        key=lambda item: (
-            float(item.get("spend_sar") or 0),
-            int(item.get("purchases") or 0),
-        ),
-        reverse=True,
-    )
-    return candidates[:MAX_AI_CANDIDATES]
+    return _bounded_account_sample(candidates, MAX_AI_CANDIDATES)
 
 
 def _fingerprint(candidates: list[dict[str, Any]]) -> str:
     stable = [
         {
             "provider": row.get("provider"), "level": row.get("entity_level"),
+            "account_id": row.get("account_id"),
             "id": row.get("entity_id"), "spend": round(float(row.get("spend_sar") or 0), 0),
             "pace": round(float(row.get("spend_per_day_sar") or 0), 0),
             "revenue": round(float(row.get("revenue_sar") or 0), 0),
@@ -632,20 +691,31 @@ def _govern_output(
 ) -> RecommendationOutput:
     """Validate model references and execution safety without choosing actions."""
     evidence = {
-        (row.get("provider"), row.get("entity_level"), str(row.get("entity_id"))): row
+        (
+            row.get("provider"), row.get("entity_level"),
+            str(row.get("account_id") or ""), str(row.get("entity_id")),
+        ): row
         for row in candidates
     }
     governed: list[RecommendationItem] = []
     for item in output.recommendations[:MAX_RECOMMENDATIONS]:
-        row = evidence.get((item.provider, item.entity_level, item.entity_id))
+        row = evidence.get((
+            item.provider, item.entity_level,
+            str(item.account_id or ""), item.entity_id,
+        ))
         if not row:
             continue
         action = item.action
         if action == "scale" and (not row.get("data_complete") or int(row.get("purchases") or 0) < 3):
             action = "monitor"
         governed.append(item.model_copy(update={
-            "recommendation_id": f"{item.provider}:{item.entity_level}:{item.entity_id}",
+            "recommendation_id": (
+                f"{item.provider}:{item.entity_level}:"
+                f"{row.get('account_id') or 'unknown'}:{item.entity_id}"
+            ),
             "entity_name": str(row.get("entity_name") or item.entity_id),
+            "account_id": row.get("account_id"),
+            "account_name": row.get("account_name") or row.get("account_id"),
             "parent_name": row.get("parent_name"),
             "action": action,
             "change_percent": (
@@ -697,11 +767,16 @@ def _deterministic_recommendations(
         if cpa is not None:
             evidence.append(f"تكلفة الشراء {cpa:.2f} ر.س")
         recommendations.append(RecommendationItem(
-            recommendation_id=f"{row.get('provider')}:{row.get('entity_level')}:{entity_id}",
+            recommendation_id=(
+                f"{row.get('provider')}:{row.get('entity_level')}:"
+                f"{row.get('account_id') or 'unknown'}:{entity_id}"
+            ),
             provider=str(row.get("provider")),
             entity_level=str(row.get("entity_level")),
             entity_id=entity_id,
             entity_name=str(row.get("entity_name") or entity_id),
+            account_id=row.get("account_id"),
+            account_name=row.get("account_name") or row.get("account_id"),
             parent_name=row.get("parent_name"),
             action=action,
             change_percent=change_percent,
@@ -779,7 +854,8 @@ async def _prior_ai_context(db: Any, user_id: str) -> dict[str, Any]:
             "recommendations": [
                 {key: item.get(key) for key in (
                     "recommendation_id", "action", "change_percent", "priority",
-                    "confidence", "entity_name", "rationale", "evidence",
+                    "confidence", "account_id", "account_name", "entity_name",
+                    "rationale", "evidence",
                     "decision_facts", "financial_impact", "execution_status",
                 )}
                 for item in (snapshot.get("recommendations") or [])[:18]
@@ -805,7 +881,8 @@ async def _campaign_history_context(
                 logger.exception("Campaign AI %s-day history failed for %s", days, provider)
         output[f"last_{days}_days"] = [
             {key: row.get(key) for key in (
-                "provider", "entity_id", "entity_name", "status", "spend_sar",
+                "provider", "account_id", "account_name", "entity_id",
+                "entity_name", "status", "spend_sar",
                 "revenue_sar", "purchases", "impressions", "clicks", "roas",
                 "cpa_sar", "observed_days", "data_complete",
             )}
@@ -972,7 +1049,8 @@ async def _ask_openai(
     next_check = _iso(now + timedelta(hours=5))
     safe_rows = [
         {key: row.get(key) for key in (
-            "provider", "entity_level", "entity_id", "entity_name", "parent_name",
+            "provider", "entity_level", "account_id", "account_name", "entity_id",
+            "entity_name", "parent_name",
             "status", "active", "spend_sar", "revenue_sar", "purchases", "impressions",
             "clicks", "roas", "cpa_sar", "observed_days", "spend_per_day_sar",
             "ctr_pct", "data_complete", "data_quality", "account_benchmark",
@@ -995,9 +1073,11 @@ async def _ask_openai(
                 "لا تعتبر الراتب أو الخميس والجمعة سببًا إلا إذا دعمه أداء المتجر التاريخي. "
                 "أعطِ الأولوية للتوصيات الأعلى أثرًا على صافي الربح، وافحص مستوى الإعلان أو "
                 "المجموعة قبل إيقاف الحملة الأم كي لا توقف عنصرًا ناجحًا معها. اشرح لماذا الآن، "
+                "حلّل كل حساب إعلاني بصورة مستقلة، وخصوصًا حسابات Snapchat، واحتفظ حرفيًا "
+                "بـ account_id وaccount_name المرسلين لكل توصية حتى لا تختلط الحسابات. "
                 "كم ساعة ننتظر، ما الذي يثبت نجاح القرار، وما خطر تجاهله بطريقة مقنعة وقابلة "
                 "للمراجعة. لا تدّعِ تنفيذ أي تعديل؛ التنفيذ لا يتم إلا بعد موافقة المالك. "
-                "recommendation_id بصيغة provider:level:id. اكتب بالعربية وبأرقام إنجليزية، "
+                "recommendation_id بصيغة provider:level:account_id:id. اكتب بالعربية وبأرقام إنجليزية، "
                 "واجعل next_check_at مساويًا للقيمة المرسلة."
             ) % (TARGET_CPA_SAR, TARGET_ROAS),
             input=json.dumps({
@@ -1058,7 +1138,7 @@ async def run_campaign_ai_monitor(
             entities.extend(await _meta_child_entities(db, user_id, start, end))
         except Exception as exc:
             errors.append({"source": "meta_children", "code": _text(type(exc).__name__, limit=100)})
-        entities = entities[:MAX_ENTITY_ROWS]
+        entities = _bounded_account_sample(entities, MAX_ENTITY_ROWS)
         candidates = deterministic_candidates(entities)
         fingerprint = _fingerprint(candidates)
         campaign_history = await _campaign_history_context(db, user_id, end)
@@ -1108,14 +1188,20 @@ async def run_campaign_ai_monitor(
                 )
                 recommendation_source = "mezan_fallback"
         candidate_by_key = {
-            (row.get("provider"), row.get("entity_level"), str(row.get("entity_id"))): row
+            (
+                row.get("provider"), row.get("entity_level"),
+                str(row.get("account_id") or ""), str(row.get("entity_id")),
+            ): row
             for row in candidates
         }
         recommendation_rows = []
         execution_targets: dict[str, dict[str, Any]] = {}
         for item in result.recommendations:
             public_item = item.model_dump()
-            target = candidate_by_key.get((item.provider, item.entity_level, item.entity_id)) or {}
+            target = candidate_by_key.get((
+                item.provider, item.entity_level,
+                str(item.account_id or ""), item.entity_id,
+            )) or {}
             public_item.update(_recommendation_explanation(item, target))
             public_item["generated_at"] = started_at
             public_item["recommendation_source"] = recommendation_source

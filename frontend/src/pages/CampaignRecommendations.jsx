@@ -299,6 +299,7 @@ export default function CampaignRecommendations() {
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "Meta" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأعلى أولوية وتأثيرًا</span>}{item.recommendation_source === "mezan_fallback" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[8px] font-black text-amber-800">مصدر التوصية: ميزان</span>}</div>
+                                {item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب الإعلاني: {item.account_name}</p>}
                                 <Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link>
                                 {item.parent_name && <p className="mt-1 truncate text-[10px] font-bold text-slate-400">ضمن {item.parent_name}</p>}
                             </div>

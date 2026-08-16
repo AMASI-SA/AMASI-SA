@@ -4,6 +4,7 @@ from campaign_ai_monitor import (
     DEFAULT_INITIAL_DELAY_SECONDS,
     RecommendationItem,
     RecommendationOutput,
+    _bounded_account_sample,
     _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
@@ -97,6 +98,75 @@ def test_model_cannot_scale_an_entity_without_scale_evidence():
     assert governed.recommendations[0].action == "monitor"
     assert governed.recommendations[0].change_percent is None
     assert governed.recommendations[0].entity_name == "إعلان المنتج"
+
+
+def test_snapchat_recommendations_keep_each_account_identity_separate():
+    candidates = [
+        entity(
+            entity_id="shared-ad",
+            account_id="snap-account-1",
+            account_name="أماسي الرئيسي",
+            entity_name="إعلان الحساب الأول",
+        ),
+        entity(
+            entity_id="shared-ad",
+            account_id="snap-account-2",
+            account_name="أماسي الوطني",
+            entity_name="إعلان الحساب الثاني",
+        ),
+    ]
+    recommendations = []
+    for account_id in ("snap-account-1", "snap-account-2"):
+        recommendations.append(RecommendationItem(
+            recommendation_id="temporary",
+            provider="snapchat",
+            entity_level="ad",
+            entity_id="shared-ad",
+            entity_name="اسم يعاد توثيقه",
+            account_id=account_id,
+            account_name="اسم يعاد توثيقه",
+            action="monitor",
+            priority="medium",
+            confidence="medium",
+            title="مراقبة",
+            rationale="اختبار فصل الحسابات",
+            evidence=["اختبار"],
+            why_now="اختبار",
+            recommended_wait_hours=5,
+            observation_plan="أعد القياس",
+            success_criteria=["بقاء الحساب منفصلًا"],
+            risk_if_ignored="اختلاط الحسابات",
+            guardrail="مراجعة",
+            next_check_at="wrong",
+        ))
+
+    governed = _govern_output(
+        RecommendationOutput(
+            summary="اختبار",
+            recommendations=recommendations,
+            limitations=[],
+        ),
+        candidates,
+        next_check_at="2026-08-16T03:00:00+00:00",
+    )
+
+    assert [item.account_name for item in governed.recommendations] == [
+        "أماسي الرئيسي",
+        "أماسي الوطني",
+    ]
+    assert len({item.recommendation_id for item in governed.recommendations}) == 2
+
+
+def test_bounded_sample_keeps_each_snapchat_account_in_the_ai_evidence():
+    rows = [
+        entity(entity_id="a1-high", account_id="account-1", spend_sar=500),
+        entity(entity_id="a1-next", account_id="account-1", spend_sar=400),
+        entity(entity_id="a2", account_id="account-2", spend_sar=20),
+    ]
+
+    sampled = _bounded_account_sample(rows, 2)
+
+    assert {row["account_id"] for row in sampled} == {"account-1", "account-2"}
 
 
 def test_scheduler_discovers_connected_v2_ad_account_owner():
