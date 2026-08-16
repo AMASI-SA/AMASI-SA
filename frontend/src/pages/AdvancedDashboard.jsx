@@ -199,8 +199,10 @@ function PlatformPeriodSummary({ ads }) {
     return <div className="col-span-2 grid min-h-[78px] grid-cols-2 overflow-hidden rounded-xl border bg-white shadow-sm min-[1180px]:col-span-1 min-[1180px]:grid-cols-4" data-testid="advanced-platform-period-summary">
         {PLATFORM_META.map(({ key }) => {
             const row = providers[key] || {};
-            const orderCount = row.platform_reported_orders == null ? null : Number(row.platform_reported_orders || 0);
-            const average = row.platform_cost_per_order_sar == null ? null : Number(row.platform_cost_per_order_sar || 0);
+            const sallaOrders = Number(row.salla_orders || 0);
+            const spend = Number(row.spend_sar || 0);
+            const orderCount = row.salla_orders == null ? null : sallaOrders;
+            const average = spend > 0 && sallaOrders > 0 ? spend / sallaOrders : null;
             const provider = meta[key];
             return <div key={key} className="flex min-w-0 items-center justify-center gap-2 border-l px-2 py-2 last:border-l-0">
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${provider.tone}`}>{provider.mark}</span>

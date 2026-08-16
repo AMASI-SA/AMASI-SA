@@ -63,10 +63,10 @@ test("summary strip includes current month order and sales cards", () => {
                     ads_v2: {
                         executive_breakdown: {
                             providers: {
-                                snapchat: { platform_reported_orders: 4, platform_cost_per_order_sar: 25 },
-                                tiktok: { platform_reported_orders: 2, platform_cost_per_order_sar: 20 },
-                                meta: { platform_reported_orders: 1, platform_cost_per_order_sar: 30 },
-                                google: { platform_reported_orders: null, platform_cost_per_order_sar: null },
+                                snapchat: { platform_reported_orders: 4, platform_cost_per_order_sar: 25, spend_sar: 100, salla_orders: 2 },
+                                tiktok: { platform_reported_orders: 2, platform_cost_per_order_sar: 20, spend_sar: 40, salla_orders: 4 },
+                                meta: { platform_reported_orders: 1, platform_cost_per_order_sar: 30, spend_sar: 30, salla_orders: 3 },
+                                google: { platform_reported_orders: null, platform_cost_per_order_sar: null, spend_sar: 0, salla_orders: 0 },
                             },
                         },
                     },
@@ -81,8 +81,10 @@ test("summary strip includes current month order and sales cards", () => {
     expect(markup).toContain("مبيعات الشهر");
     expect(markup).toContain("169,155.00 ر.س");
     expect(markup).toContain("سناب:");
+    expect(markup).toContain(">2</b>");
     expect(markup).toContain("متوسط:");
-    expect(markup).toContain("25.00 ر.س");
+    expect(markup).toContain("50.00 ر.س");
+    expect(markup).not.toContain("25.00 ر.س");
     expect(markup).not.toContain("متوسط قيمة سلة المشتريات");
 });
 

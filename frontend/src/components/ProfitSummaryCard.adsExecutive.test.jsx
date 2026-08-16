@@ -46,7 +46,7 @@ const data = {
     coverage: { salla_unattributed_orders: 1 },
 };
 
-test("keeps Salla outcomes separate from platform CPA", () => {
+test("calculates cost per order from platform spend and Salla orders", () => {
     const rows = buildAdsExecutiveMetricRows(data);
 
     expect(rows.find((row) => row.key === "orders")).toMatchObject({
@@ -58,9 +58,32 @@ test("keeps Salla outcomes separate from platform CPA", () => {
         total: 950,
     });
     expect(rows.find((row) => row.key === "cost_per_order")).toMatchObject({
-        source: "المنصة الإعلانية",
-        total: 41.1,
+        source: "صرف المنصة ÷ طلبات سلة",
+        total: 575.44 / 3,
     });
+    expect(rows.find((row) => row.key === "cost_per_order")?.values).toMatchObject({
+        snapchat: 375.44 / 2,
+        meta: 200,
+        tiktok: null,
+        google: null,
+    });
+});
+
+test("ignores Snapchat platform CPA when it conflicts with Salla orders", () => {
+    const rows = buildAdsExecutiveMetricRows({
+        providers: {
+            snapchat: {
+                spend_sar: 1942.94,
+                salla_orders: 15,
+                platform_cost_per_order_sar: 323.82,
+            },
+        },
+        total: { spend_sar: 1942.94, salla_orders: 15 },
+    });
+    const costPerOrder = rows.find((row) => row.key === "cost_per_order");
+
+    expect(costPerOrder.values.snapchat).toBeCloseTo(129.53, 2);
+    expect(costPerOrder.values.snapchat).not.toBe(323.82);
 });
 
 test("renders all approved metric rows", () => {
