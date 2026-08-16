@@ -123,8 +123,10 @@ def resolve_base_unit_cost(
         same_sku = sku and str(variant.get("sku") or "").strip().casefold() == sku
         if not (same_variant or same_sku):
             continue
-        if variant.get("cost_price_from_salla") not in (None, ""):
-            parsed = _number(variant.get("cost_price_from_salla"))
+        for cost_key in ("cost_price_from_salla", "cost_price", "cost"):
+            if variant.get(cost_key) in (None, ""):
+                continue
+            parsed = _number(variant.get(cost_key))
             if parsed is not None:
                 return parsed, "salla_variant_fallback"
 
