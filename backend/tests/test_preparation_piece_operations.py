@@ -16,6 +16,7 @@ from preparation_piece_operations import (
     _assembly_progress,
     _can_start_assigned_file,
     _piece_has_completed_preparation_receipt,
+    _service_context_key,
     _preparation_receipt_order_number,
     _preparation_receipt_piece_public,
     _piece_upsert_update,
@@ -158,6 +159,65 @@ def test_batch_units_become_assigned_piece_records_for_file_employee():
         for row in documents
     )
     assert documents[0]["estimated_due_at"] == assigned_at + timedelta(minutes=90)
+
+
+def test_same_product_order_lines_keep_independent_option_services():
+    assigned_at = datetime(2026, 8, 16, 0, 0, tzinfo=timezone.utc)
+    named_line = {
+        "order_number": "276628330",
+        "order_item_id": "item-named",
+        "unit_indices": [1],
+        "quantity": 1,
+        "group_key": "product:AMS10836",
+        "product_id": "AMS10836",
+        "product_name": "دقله ولادي بشكل جديد",
+        "file_spec_fields": [
+            {"name": "هل تريد تطريز الاسم على الدقله", "value": "نعم"},
+            {"name": "الإسم", "value": "10"},
+        ],
+    }
+    plain_line = {
+        "order_number": "276628330",
+        "order_item_id": "item-plain",
+        "unit_indices": [1],
+        "quantity": 1,
+        "group_key": "product:AMS10836",
+        "product_id": "AMS10836",
+        "product_name": "دقله ولادي بشكل جديد",
+        "file_spec_fields": [
+            {"name": "هل تريد تطريز الاسم على الدقله", "value": "لا"},
+        ],
+    }
+    embroidery = {
+        "service_id": "embroider-name",
+        "service_name": "تطريز الاسم",
+        "status": "pending",
+    }
+
+    documents = build_piece_documents(
+        user_id="owner-1",
+        registry={
+            "file_number": "PF-20260816-0018",
+            "file_title": "اختبار فصل الخدمات",
+            "responsible_employee_id": "employee-turki",
+            "responsible_employee_name": "تركي صادق",
+        },
+        batch={"id": "batch-service-split", "lines": [named_line, plain_line]},
+        services_by_product={
+            _service_context_key(named_line): {"services": [embroidery]},
+            _service_context_key(plain_line): {"services": []},
+        },
+        assigned_at=assigned_at,
+    )
+
+    assert len(documents) == 2
+    by_item = {row["order_item_id"]: row for row in documents}
+    assert [row["service_name"] for row in by_item["item-named"]["services"]] == [
+        "تطريز الاسم",
+    ]
+    assert by_item["item-named"]["service_plan_status"] == "pending"
+    assert by_item["item-plain"]["services"] == []
+    assert by_item["item-plain"]["service_plan_status"] == "no_external_services"
 
 
 def test_piece_upsert_never_reuses_a_path_across_mongodb_operators():
