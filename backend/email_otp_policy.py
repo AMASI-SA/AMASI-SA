@@ -6,24 +6,19 @@ the isolated, time-bounded Meta reviewer account.
 """
 from __future__ import annotations
 
-import os
 from typing import Any
 
 
-def _truthy(value: Any) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 def email_otp_enabled() -> bool:
-    """Return whether email OTP is enabled for this deployment."""
-    return _truthy(os.environ.get("EMAIL_OTP_ENABLED", "0"))
+    """Email OTP is mandatory and cannot be disabled by deployment flags."""
+    return True
 
 
 async def requires_email_otp(db: Any, user: dict[str, Any] | None) -> bool:
     """Resolve whether an account must complete email OTP.
 
     Policy:
-    - feature disabled -> false
+    - missing account -> false
     - Owner -> false (Owner keeps TOTP/passkey protection)
     - exact Meta reviewer role -> false
     - every other employee account -> true
@@ -33,7 +28,7 @@ async def requires_email_otp(db: Any, user: dict[str, Any] | None) -> bool:
     """
     del db
 
-    if not email_otp_enabled() or not user:
+    if not user:
         return False
 
     role = str(user.get("role") or "").strip().lower()

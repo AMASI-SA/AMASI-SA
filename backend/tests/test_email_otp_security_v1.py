@@ -87,9 +87,9 @@ def test_meta_reviewer_is_the_only_non_owner_exception(monkeypatch):
     ) is True
 
 
-def test_disabled_feature_preserves_existing_auth_behavior(monkeypatch):
+def test_deployment_flag_cannot_disable_employee_otp(monkeypatch):
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "0")
-    assert _requires(_FakeDb(), {"id": "admin-1", "role": "admin"}) is False
+    assert _requires(_FakeDb(), {"id": "admin-1", "role": "admin"}) is True
 
 
 def test_otp_is_six_digits_and_digest_never_stores_plaintext(monkeypatch):
@@ -124,7 +124,7 @@ def test_email_mask_does_not_reveal_full_local_part():
     assert "mployee" not in masked
 
 
-def test_runtime_is_fail_closed_only_when_feature_enabled(monkeypatch):
+def test_runtime_is_always_fail_closed(monkeypatch):
     for key in (
         "EMAIL_OTP_SMTP_HOST",
         "EMAIL_OTP_SMTP_USERNAME",
@@ -134,7 +134,8 @@ def test_runtime_is_fail_closed_only_when_feature_enabled(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("JWT_SECRET", "test-only-email-otp-secret-that-is-long-enough")
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "0")
-    validate_email_otp_runtime()
+    with pytest.raises(RuntimeError):
+        validate_email_otp_runtime()
 
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
     with pytest.raises(RuntimeError):
