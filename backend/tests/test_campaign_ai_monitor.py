@@ -4,6 +4,7 @@ from campaign_ai_monitor import (
     DEFAULT_INITIAL_DELAY_SECONDS,
     RecommendationItem,
     RecommendationOutput,
+    _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
     deterministic_candidates,
@@ -112,3 +113,43 @@ def test_scheduler_discovers_connected_v2_ad_account_owner():
 
 def test_first_monitor_pass_starts_promptly_after_boot():
     assert DEFAULT_INITIAL_DELAY_SECONDS <= 10
+
+
+def test_invalid_model_output_can_fall_back_to_safe_waste_recommendation():
+    candidate = deterministic_candidates([
+        entity(entity_id="fast-waste", spend_sar=180, purchases=0),
+    ])[0]
+
+    result = _deterministic_recommendations(
+        [candidate],
+        next_check_at="2026-08-16T15:00:00+00:00",
+        limitation="openai_recommendation:ValidationError",
+    )
+
+    assert result.recommendations[0].action == "reduce"
+    assert result.recommendations[0].change_percent == 20
+    assert result.recommendations[0].recommendation_id == "snapchat:ad:fast-waste"
+    assert result.recommendations[0].next_check_at == "2026-08-16T15:00:00+00:00"
+    assert result.limitations == ["openai_recommendation:ValidationError"]
+
+
+def test_fallback_never_scales_incomplete_data():
+    candidate = entity(
+        entity_id="scale-incomplete",
+        spend_sar=150,
+        revenue_sar=600,
+        purchases=4,
+        roas=4,
+        cpa_sar=37.5,
+        data_complete=False,
+    )
+    candidate["screening_signal"] = "scale_candidate"
+
+    result = _deterministic_recommendations(
+        [candidate],
+        next_check_at="2026-08-16T15:00:00+00:00",
+        limitation="fallback",
+    )
+
+    assert result.recommendations[0].action == "monitor"
+    assert result.recommendations[0].change_percent is None
