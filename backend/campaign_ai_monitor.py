@@ -1,9 +1,11 @@
-"""Hourly AI monitoring and explicitly approved execution for Snapchat and Meta.
+"""AI-led monitoring and explicitly approved execution for Snapchat and Meta.
 
-The worker refreshes bounded provider facts, screens entities deterministically,
-asks OpenAI to explain/prioritise only the screened evidence, and persists a
-small recommendation snapshot for the dashboard. The worker never changes ads;
-provider writes exist only behind the separate, owner-only approval endpoint.
+The worker refreshes bounded provider facts and gives OpenAI the complete active
+entity set, account-relative benchmarks, longer campaign history, Saudi calendar
+context, and the outcomes of prior Mezan recommendations.  OpenAI owns the
+marketing judgment; Mezan code only validates evidence, protects execution, and
+persists an auditable snapshot. The worker never changes ads; provider writes
+exist only behind the separate, owner-only approval endpoint.
 """
 from __future__ import annotations
 
@@ -54,7 +56,7 @@ META_ENTITY_COLLECTION = "mezan_meta_entity_performance_daily_v1"
 LOCK_COLLECTION = "mezan_campaign_ai_scheduler_locks_v1"
 EXECUTION_COLLECTION = "mezan_campaign_ai_executions_v1"
 LOCK_ID = "campaign_ai_hourly_monitor"
-DEFAULT_INTERVAL_SECONDS = 60 * 60
+DEFAULT_INTERVAL_SECONDS = 5 * 60 * 60
 # Run the first pass shortly after boot so a fresh deployment does not leave
 # the dashboard stuck on "waiting for first run" for several minutes.  The
 # worker is detached from FastAPI startup, so this does not delay readiness.
@@ -62,7 +64,7 @@ DEFAULT_INITIAL_DELAY_SECONDS = 5
 SCHEDULER_LEASE_SECONDS = 10 * 60
 MONITOR_TIMEOUT_SECONDS = 8 * 60
 MAX_ENTITY_ROWS = 300
-MAX_AI_CANDIDATES = 60
+MAX_AI_CANDIDATES = 120
 MAX_RECOMMENDATIONS = 18
 TARGET_CPA_SAR = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_CPA_SAR", "56.25"))
 TARGET_ROAS = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_ROAS", "2.5"))
@@ -123,6 +125,11 @@ class RecommendationItem(BaseModel):
     title: str
     rationale: str
     evidence: list[str] = Field(default_factory=list)
+    why_now: str
+    recommended_wait_hours: int = Field(ge=1, le=24)
+    observation_plan: str
+    success_criteria: list[str] = Field(default_factory=list)
+    risk_if_ignored: str
     guardrail: str
     next_check_at: str
 
@@ -162,13 +169,20 @@ AI_SCHEMA = {
                     "title": {"type": "string"},
                     "rationale": {"type": "string"},
                     "evidence": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
+                    "why_now": {"type": "string"},
+                    "recommended_wait_hours": {"type": "integer", "minimum": 1, "maximum": 24},
+                    "observation_plan": {"type": "string"},
+                    "success_criteria": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+                    "risk_if_ignored": {"type": "string"},
                     "guardrail": {"type": "string"},
                     "next_check_at": {"type": "string"},
                 },
                 "required": [
                     "recommendation_id", "provider", "entity_level", "entity_id",
                     "entity_name", "parent_name", "action", "priority", "confidence",
-                    "change_percent", "title", "rationale", "evidence", "guardrail", "next_check_at",
+                    "change_percent", "title", "rationale", "evidence", "why_now",
+                    "recommended_wait_hours", "observation_plan", "success_criteria",
+                    "risk_if_ignored", "guardrail", "next_check_at",
                 ],
             },
         },
@@ -544,7 +558,12 @@ def _median(values: list[float]) -> float | None:
 
 
 def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rank evidence for the model using account-relative, not command-driven, signals."""
+    """Prepare complete active evidence without deciding what action is correct.
+
+    The historical name is kept for compatibility with existing imports.  This
+    function performs arithmetic and bounded ordering only: it does not label a
+    campaign as waste, a scale opportunity, or prescribe an action.
+    """
     prepared: list[dict[str, Any]] = []
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for source in entities:
@@ -554,7 +573,10 @@ def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, A
             continue
         days = max(1, int(_number(row.get("observed_days")) or 1))
         row["spend_per_day_sar"] = round(spend / days, 2)
-        row["expected_results_at_target"] = round(spend / TARGET_CPA_SAR, 1) if TARGET_CPA_SAR > 0 else None
+        row["ctr_pct"] = round(
+            float(row.get("clicks") or 0) / float(row.get("impressions") or 1) * 100,
+            3,
+        ) if int(row.get("impressions") or 0) > 0 else None
         prepared.append(row)
         groups[(str(row.get("provider")), str(row.get("entity_level")))].append(row)
 
@@ -569,59 +591,19 @@ def deterministic_candidates(entities: list[dict[str, Any]]) -> list[dict[str, A
 
     candidates: list[dict[str, Any]] = []
     for row in prepared:
-        spend = float(row.get("spend_sar") or 0)
-        purchases = int(_number(row.get("purchases")) or 0)
-        roas = _number(row.get("roas"))
-        cpa = _number(row.get("cpa_sar"))
-        pace = float(row.get("spend_per_day_sar") or 0)
         baseline = benchmarks[(str(row.get("provider")), str(row.get("entity_level")))]
-        peer_count = int(baseline["peer_count"] or 0)
-        peer_pace = _number(baseline["median_spend_per_day_sar"])
-        rapid_pace = FAST_SPEND_DAILY_SAR
-        if peer_count >= 4 and peer_pace is not None:
-            rapid_pace = max(FAST_SPEND_DAILY_SAR, peer_pace * 1.5)
-        peer_cpa = _number(baseline["median_cpa_sar"])
-        high_cpa = max(
-            TARGET_CPA_SAR * 1.35,
-            (peer_cpa or 0) * 1.35 if peer_count >= 4 else 0,
+        row["account_benchmark"] = baseline
+        row["data_quality"] = (
+            "complete" if row.get("data_complete") else "partial"
         )
-        peer_roas = _number(baseline["median_roas"])
-        scale_roas = max(
-            TARGET_ROAS,
-            (peer_roas or 0) * 1.15 if peer_count >= 4 else 0,
-        )
-        scale_cpa = min(
-            TARGET_CPA_SAR,
-            peer_cpa if peer_count >= 4 and peer_cpa is not None else TARGET_CPA_SAR,
-        )
-
-        signal = None
-        score = 0.0
-        if purchases == 0 and spend >= max(MIN_WASTE_SPEND_SAR, TARGET_CPA_SAR * 1.5) and pace >= rapid_pace:
-            signal = "rapid_spend_without_results"
-            score = 1400 + pace * 10 + spend
-        elif purchases == 0 and spend >= max(MIN_WASTE_SPEND_SAR, TARGET_CPA_SAR * 1.5):
-            signal = "waste_without_purchase"
-            score = 1000 + spend
-        elif purchases > 0 and cpa is not None and cpa >= high_cpa:
-            signal = "underperforming_vs_account"
-            score = 800 + cpa
-        elif (
-            purchases >= 3 and roas is not None and cpa is not None
-            and roas >= scale_roas
-            and cpa <= scale_cpa
-        ):
-            signal = "scale_candidate"
-            score = 600 + purchases * 10 + roas
-        elif spend >= MIN_WASTE_SPEND_SAR:
-            signal = "expert_review"
-            score = 300 + spend
-        if signal:
-            row["account_benchmark"] = baseline
-            row["screening_signal"] = signal
-            row["screening_score"] = round(score, 2)
-            candidates.append(row)
-    candidates.sort(key=lambda item: float(item.get("screening_score") or 0), reverse=True)
+        candidates.append(row)
+    candidates.sort(
+        key=lambda item: (
+            float(item.get("spend_sar") or 0),
+            int(item.get("purchases") or 0),
+        ),
+        reverse=True,
+    )
     return candidates[:MAX_AI_CANDIDATES]
 
 
@@ -634,7 +616,7 @@ def _fingerprint(candidates: list[dict[str, Any]]) -> str:
             "revenue": round(float(row.get("revenue_sar") or 0), 0),
             "roas": round(float(row.get("roas") or 0), 2),
             "cpa": round(float(row.get("cpa_sar") or 0), 1),
-            "purchases": row.get("purchases"), "signal": row.get("screening_signal"),
+            "purchases": row.get("purchases"),
             "complete": row.get("data_complete"),
         }
         for row in candidates
@@ -648,7 +630,7 @@ def _govern_output(
     *,
     next_check_at: str,
 ) -> RecommendationOutput:
-    """Keep model judgment inside the supplied evidence and safety guardrails."""
+    """Validate model references and execution safety without choosing actions."""
     evidence = {
         (row.get("provider"), row.get("entity_level"), str(row.get("entity_id"))): row
         for row in candidates
@@ -659,13 +641,6 @@ def _govern_output(
         if not row:
             continue
         action = item.action
-        signal = row.get("screening_signal")
-        if action == "scale" and signal != "scale_candidate":
-            action = "monitor"
-        if action in {"pause", "reduce"} and signal not in {
-            "rapid_spend_without_results", "waste_without_purchase", "underperforming_vs_account",
-        }:
-            action = "monitor"
         if action == "scale" and (not row.get("data_complete") or int(row.get("purchases") or 0) < 3):
             action = "monitor"
         governed.append(item.model_copy(update={
@@ -692,44 +667,37 @@ def _deterministic_recommendations(
     next_check_at: str,
     limitation: str,
 ) -> RecommendationOutput:
-    """Produce a safe snapshot when the model response cannot be validated."""
+    """Issue a clearly attributed, conservative Mezan fallback recommendation."""
     recommendations: list[RecommendationItem] = []
-    action_by_signal = {
-        "rapid_spend_without_results": ("reduce", 20, "critical", "صرف سريع بلا نتائج"),
-        "waste_without_purchase": ("reduce", 15, "high", "صرف بلا مشتريات"),
-        "underperforming_vs_account": ("reduce", 15, "high", "أداء أضعف من معيار الحساب"),
-        "scale_candidate": ("scale", 15, "medium", "فرصة توسعة منضبطة"),
-        "expert_review": ("monitor", None, "low", "يحتاج مراقبة إضافية"),
-    }
-    for row in candidates[:MAX_RECOMMENDATIONS]:
-        signal = str(row.get("screening_signal") or "expert_review")
-        action, change_percent, priority, title = action_by_signal.get(
-            signal, action_by_signal["expert_review"]
-        )
-        complete = bool(row.get("data_complete"))
-        if action == "scale" and (
-            not complete or int(_number(row.get("purchases")) or 0) < 3
-        ):
-            action, change_percent, priority, title = (
-                "monitor", None, "medium", "راقب قبل التوسعة"
-            )
-        spend = _safe_metric(row.get("spend_sar")) or 0
-        purchases = int(_number(row.get("purchases")) or 0)
-        roas = _safe_metric(row.get("roas"))
-        cpa = _safe_metric(row.get("cpa_sar"))
-        pace = _safe_metric(row.get("spend_per_day_sar"))
-        evidence = [f"الصرف {spend:.2f} ر.س", f"المشتريات {purchases}"]
-        if pace is not None:
-            evidence.append(f"وتيرة الصرف اليومية {pace:.2f} ر.س")
+    for row in candidates:
+        spend = float(row.get("spend_sar") or 0)
+        purchases = int(row.get("purchases") or 0)
+        cpa = _number(row.get("cpa_sar"))
+        action: str | None = None
+        change_percent: int | None = None
+        priority = "medium"
+        title = "مراقبة احتياطية من ميزان"
+        why_now = "تعذر تحليل OpenAI، لذلك استخدم ميزان قراءة احتياطية محدودة للأرقام الحالية."
+        if purchases == 0 and spend >= TARGET_CPA_SAR * 3:
+            action, priority, title = "pause", "critical", "إيقاف احتياطي مقترح"
+            why_now = "تجاوز الصرف ثلاثة أضعاف تكلفة الطلب المرجعية دون تسجيل أي شراء."
+        elif purchases == 0 and spend >= TARGET_CPA_SAR * 1.5:
+            action, change_percent, priority, title = "reduce", 15, "high", "خفض احتياطي مقترح"
+            why_now = "تجاوز الصرف مرة ونصف تكلفة الطلب المرجعية دون تسجيل شراء."
+        elif purchases > 0 and cpa is not None and cpa >= TARGET_CPA_SAR * 1.5:
+            action, change_percent, priority, title = "reduce", 15, "high", "خفض احتياطي مقترح"
+            why_now = "تكلفة الشراء الحالية أعلى 50% على الأقل من المرجع الاقتصادي."
+        if action is None:
+            continue
+        entity_id = str(row.get("entity_id") or "")
+        evidence = [
+            f"الصرف {spend:.2f} ر.س",
+            f"المشتريات {purchases}",
+        ]
         if cpa is not None:
             evidence.append(f"تكلفة الشراء {cpa:.2f} ر.س")
-        if roas is not None:
-            evidence.append(f"العائد {roas:.2f}×")
-        entity_id = str(row.get("entity_id") or "")
         recommendations.append(RecommendationItem(
-            recommendation_id=(
-                f"{row.get('provider')}:{row.get('entity_level')}:{entity_id}"
-            ),
+            recommendation_id=f"{row.get('provider')}:{row.get('entity_level')}:{entity_id}",
             provider=str(row.get("provider")),
             entity_level=str(row.get("entity_level")),
             entity_id=entity_id,
@@ -738,24 +706,149 @@ def _deterministic_recommendations(
             action=action,
             change_percent=change_percent,
             priority=priority,
-            confidence="medium" if complete else "low",
+            confidence="medium" if row.get("data_complete") else "low",
             title=title,
-            rationale=(
-                "التوصية مبنية على الصرف والنتائج الفعلية ومقارنتها بمعيار الحساب، "
-                "وتبقى أيّ كتابة معلّقة حتى موافقة المالك."
-            ),
-            evidence=evidence[:6],
-            guardrail="نفّذ التغيير تدريجيًا ثم أعد القياس بعد ساعة؛ لا يُنفّذ شيء تلقائيًا.",
+            rationale=why_now,
+            evidence=evidence,
+            why_now=why_now,
+            recommended_wait_hours=5,
+            observation_plan="أعد التحليل عند عودة OpenAI وقارن الصرف والمشتريات قبل قرار آخر.",
+            success_criteria=[
+                "يتوقف تسارع الصرف غير المنتج",
+                "تظهر مشتريات أو تتحسن تكلفة الشراء",
+            ],
+            risk_if_ignored="قد يستمر الصرف غير المنتج حتى موعد التحليل التالي.",
+            guardrail="توصية احتياطية من ميزان؛ لا تُنفذ إلا بعد موافقة المالك.",
             next_check_at=next_check_at,
         ))
+        if len(recommendations) >= MAX_RECOMMENDATIONS:
+            break
     return RecommendationOutput(
         summary=(
-            f"رُصدت {len(recommendations)} إشارة أداء تستحق المتابعة؛ "
-            "رتّبها النظام حسب الهدر وسرعة الصرف وجودة النتائج."
+            "تعذر اتصال OpenAI؛ يعرض ميزان توصيات احتياطية محدودة ومعلّمة بمصدرها."
         ),
         recommendations=recommendations,
         limitations=[limitation],
     )
+
+
+def _saudi_calendar_context(current: datetime) -> dict[str, Any]:
+    local = current.astimezone(RIYADH_OFFSET)
+    today = local.date()
+
+    def adjusted_salary_day(month_day: date) -> date:
+        if month_day.weekday() == 4:  # Friday -> Thursday
+            return month_day - timedelta(days=1)
+        if month_day.weekday() == 5:  # Saturday -> Sunday
+            return month_day + timedelta(days=1)
+        return month_day
+
+    salary = adjusted_salary_day(date(today.year, today.month, 27))
+    if today > salary:
+        next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+        salary = adjusted_salary_day(date(next_month.year, next_month.month, 27))
+    return {
+        "local_datetime": local.isoformat(),
+        "weekday": local.strftime("%A"),
+        "day_of_month": today.day,
+        "days_until_adjusted_salary_date": (salary - today).days,
+        "adjusted_salary_date": salary.isoformat(),
+        "is_thursday_or_friday": today.weekday() in {3, 4},
+        "note": (
+            "تقويم تشغيلي فقط. أثبت أثر يوم الأسبوع وموعد الراتب من تاريخ "
+            "أداء المتجر، ولا تفترض أنه سبب تلقائي."
+        ),
+    }
+
+
+async def _prior_ai_context(db: Any, user_id: str) -> dict[str, Any]:
+    snapshots = await db[RECOMMENDATION_COLLECTION].find(
+        {"user_id": user_id},
+        {"_id": 0, "generated_at": 1, "range": 1, "recommendations": 1},
+    ).sort("generated_at", -1).limit(8).to_list(length=8)
+    executions = await db[EXECUTION_COLLECTION].find(
+        {"user_id": user_id},
+        {"_id": 0, "recommendation_id": 1, "status": 1, "started_at": 1,
+         "finished_at": 1, "result": 1, "error_code": 1},
+    ).sort("started_at", -1).limit(30).to_list(length=30)
+    compact_snapshots = []
+    for snapshot in snapshots:
+        compact_snapshots.append({
+            "generated_at": snapshot.get("generated_at"),
+            "range": snapshot.get("range"),
+            "recommendations": [
+                {key: item.get(key) for key in (
+                    "recommendation_id", "action", "change_percent", "priority",
+                    "confidence", "entity_name", "rationale", "evidence",
+                    "decision_facts", "financial_impact", "execution_status",
+                )}
+                for item in (snapshot.get("recommendations") or [])[:18]
+            ],
+        })
+    return {"recent_recommendations": compact_snapshots, "recent_executions": executions}
+
+
+async def _campaign_history_context(
+    db: Any,
+    user_id: str,
+    end: date,
+) -> dict[str, list[dict[str, Any]]]:
+    output: dict[str, list[dict[str, Any]]] = {}
+    for days in (7, 30):
+        rows: list[dict[str, Any]] = []
+        for provider in ("snapchat", "meta"):
+            try:
+                rows.extend(await _campaign_entities(
+                    db, user_id, provider, end - timedelta(days=days - 1), end
+                ))
+            except Exception:
+                logger.exception("Campaign AI %s-day history failed for %s", days, provider)
+        output[f"last_{days}_days"] = [
+            {key: row.get(key) for key in (
+                "provider", "entity_id", "entity_name", "status", "spend_sar",
+                "revenue_sar", "purchases", "impressions", "clicks", "roas",
+                "cpa_sar", "observed_days", "data_complete",
+            )}
+            for row in rows[:160]
+        ]
+    return output
+
+
+async def _business_profit_context(
+    loader: Callable[..., Any] | None,
+    user_id: str,
+    end: date,
+) -> dict[str, Any]:
+    if loader is None:
+        return {"available": False, "reason": "dashboard_profit_loader_unavailable"}
+    windows: dict[str, Any] = {}
+    for label, days in (("today", 1), ("last_3_days", 3), ("last_7_days", 7), ("last_30_days", 30)):
+        start = end - timedelta(days=days - 1)
+        payload = await loader(
+            user={"id": user_id},
+            from_date=start.isoformat(),
+            to_date=end.isoformat(),
+            payment_methods=None,
+            shipping_companies=None,
+            include_legacy_analyses=False,
+            allow_self_heal=False,
+        )
+        totals = (payload or {}).get("totals") or {}
+        windows[label] = {
+            "from": start.isoformat(),
+            "to": end.isoformat(),
+            **{key: totals.get(key) for key in (
+                "total_sales", "total_orders", "net_profit", "total_ads_cost",
+                "total_product_cost", "total_payment_fees", "total_shipping_cost",
+                "operating_expenses_total", "overall_roas", "avg_cost_per_order",
+                "missing_product_cost_count", "incomplete_profit_orders_count",
+            )},
+        }
+    return {
+        "available": True,
+        "source": "mezan_dashboard_profit_totals",
+        "windows": windows,
+    }
 
 
 def _recommendation_explanation(
@@ -763,7 +856,6 @@ def _recommendation_explanation(
     row: dict[str, Any],
 ) -> dict[str, Any]:
     """Turn the measured signal into an auditable, merchant-facing decision brief."""
-    signal = str(row.get("screening_signal") or "expert_review")
     spend = _safe_metric(row.get("spend_sar")) or 0
     purchases = int(_number(row.get("purchases")) or 0)
     pace = _safe_metric(row.get("spend_per_day_sar"))
@@ -782,47 +874,7 @@ def _recommendation_explanation(
     if roas is not None:
         facts.append(f"العائد {roas:.2f}× مقابل هدف {TARGET_ROAS:.2f}×")
 
-    explanations = {
-        "rapid_spend_without_results": (
-            "الصرف يتحرك أسرع من المستوى الآمن ولم ينتج عنه أي شراء؛ استمرار الوضع نفسه "
-            "قد يستهلك تكلفة أكثر من طلبين مستهدفين قبل وصول إشارة تحويل موثوقة.",
-            2,
-            "بعد الخفض راقب توقف تسارع الصرف وظهور أول شراء قبل أي تعديل ثانٍ.",
-            "استمرار الصرف السريع بلا مشتريات يرفع الهدر خلال الساعات التالية.",
-        ),
-        "waste_without_purchase": (
-            "تجاوز الصرف حد الهدر المقبول للحساب من دون تسجيل شراء، حتى لو لم تكن سرعة "
-            "الصرف الحالية هي الأعلى بين الحملات.",
-            3,
-            "انتظر حتى تتكوّن نافذة جديدة بعد الخفض؛ نبحث عن شراء أو انخفاض واضح في وتيرة الصرف.",
-            "ترك الحملة كما هي قد يضاعف الصرف غير المنتج قبل وصول بيانات جديدة.",
-        ),
-        "underperforming_vs_account": (
-            "الحملة تحقق مشتريات، لكن تكلفة الشراء أعلى من هدف المتجر ومن معيار الحملات "
-            "المشابهة داخل الحساب، لذلك الخفض التدريجي أفضل من الإيقاف المباشر.",
-            4,
-            "راقب تكلفة الشراء والعائد بعد الخفض؛ لا تخفض مرة ثانية قبل اكتمال النافذة.",
-            "الخفض المتكرر بسرعة قد يربك التعلم، وعدم الخفض قد يبقي تكلفة الطلب مرتفعة.",
-        ),
-        "scale_candidate": (
-            "الحملة تجاوزت حد المشتريات الأدنى وحققت عائدًا وتكلفة شراء أفضل من معيار "
-            "الحساب، لذلك تستحق توسعة صغيرة بدل قفزة كبيرة في الميزانية.",
-            6,
-            "ارفع تدريجيًا ثم انتظر؛ يجب أن يبقى العائد قويًا وتكلفة الشراء ضمن الهدف.",
-            "رفع الميزانية بقوة قد يوسّع الجمهور أسرع من قدرة الحملة على الحفاظ على كفاءتها.",
-        ),
-        "expert_review": (
-            "يوجد صرف يستحق المتابعة، لكن البيانات الحالية لا تكفي لإثبات هدر أو فرصة "
-            "توسعة بثقة تسمح بتغيير الميزانية.",
-            6,
-            "لا تغيّر الميزانية الآن؛ انتظر مشتريات إضافية أو تغيرًا واضحًا في CPA وROAS.",
-            "التعديل قبل اكتمال العينة قد يحوّل تذبذبًا طبيعيًا إلى قرار خاطئ.",
-        ),
-    }
-    why_now, wait_hours, observation_plan, risk = explanations.get(
-        signal,
-        explanations["expert_review"],
-    )
+    wait_hours = item.recommended_wait_hours
     if item.action == "pause":
         proposed_action = "أوقف الكيان مؤقتًا، ثم لا تعِد تشغيله قبل مراجعة مصدر التحويل وجودة الإعلان."
     elif item.action == "reduce":
@@ -834,19 +886,6 @@ def _recommendation_explanation(
     else:
         proposed_action = "راقب دون تغيير الميزانية حتى تكتمل نافذة القياس المطلوبة."
 
-    success_criteria = (
-        [
-            f"يبقى ROAS عند {TARGET_ROAS:.2f}× أو أعلى",
-            f"تبقى تكلفة الشراء عند {TARGET_CPA_SAR:.2f} ر.س أو أقل",
-            "لا تتسارع الميزانية أسرع من نمو المشتريات",
-        ]
-        if item.action == "scale"
-        else [
-            "تظهر مشتريات جديدة أو ينخفض الصرف غير المنتج",
-            f"تقترب تكلفة الشراء من {TARGET_CPA_SAR:.2f} ر.س",
-            "لا ينتقل الهدر إلى مجموعة أو إعلان آخر داخل الحملة",
-        ]
-    )
     revenue = _safe_metric(row.get("revenue_sar")) or 0
     hourly_spend = (pace if pace is not None else spend / observed_days) / 24
     hourly_revenue = revenue / observed_days / 24
@@ -881,17 +920,17 @@ def _recommendation_explanation(
     )
     period_contribution = revenue * CAMPAIGN_GROSS_MARGIN_RATE - spend
     return {
-        "decision_signal": signal,
+        "decision_signal": "openai_independent_judgment",
         "decision_facts": facts,
-        "why_now": why_now,
+        "why_now": item.why_now,
         "proposed_action": proposed_action,
         "recommended_wait_hours": wait_hours,
         "observation_plan": (
-            f"المجدول سيعيد الفحص كل ساعة. اصبر {wait_hours} ساعات قبل قرار ثانٍ. "
-            f"{observation_plan}"
+            f"المجدول سيعيد التحليل كل 5 ساعات. اصبر {wait_hours} ساعات قبل قرار ثانٍ. "
+            f"{item.observation_plan}"
         ),
-        "success_criteria": success_criteria,
-        "risk_if_ignored": risk,
+        "success_criteria": item.success_criteria,
+        "risk_if_ignored": item.risk_if_ignored,
         "financial_impact": {
             "basis": "provider_revenue_x_gross_margin_minus_ad_spend",
             "is_estimate": True,
@@ -919,17 +958,24 @@ def _recommendation_explanation(
     }
 
 
-async def _ask_openai(candidates: list[dict[str, Any]], *, now: datetime) -> RecommendationOutput:
+async def _ask_openai(
+    candidates: list[dict[str, Any]],
+    *,
+    now: datetime,
+    campaign_history: dict[str, Any],
+    prior_decisions: dict[str, Any],
+    business_profit: dict[str, Any],
+) -> RecommendationOutput:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("openai_api_key_missing")
-    next_check = _iso(now + timedelta(hours=1))
+    next_check = _iso(now + timedelta(hours=5))
     safe_rows = [
         {key: row.get(key) for key in (
             "provider", "entity_level", "entity_id", "entity_name", "parent_name",
             "status", "active", "spend_sar", "revenue_sar", "purchases", "impressions",
             "clicks", "roas", "cpa_sar", "observed_days", "spend_per_day_sar",
-            "expected_results_at_target", "data_complete", "screening_signal", "account_benchmark",
+            "ctr_pct", "data_complete", "data_quality", "account_benchmark",
         )}
         for row in candidates
     ]
@@ -938,19 +984,32 @@ async def _ask_openai(candidates: list[dict[str, Any]], *, now: datetime) -> Rec
         response = await client.responses.create(
             model=os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini")),
             instructions=(
-                "أنت مدير أداء إعلانات مستقل لمتجر أماسي داخل ميزان. كوّن حكمك المهني من "
-                "الأرقام ومقارنة كل كيان بمعيار حسابه account_benchmark، ولا تتبع نتيجة "
-                "مطلوبة مسبقًا. حلّل الحملة والمجموعة والإعلان. أهداف العمل المرجعية: CPA %.2f "
-                "ر.س وROAS %.2f، لكنها سياق وليست قاعدة عمياء. افحص خصوصًا سرعة الصرف بلا نتائج، "
-                "مرحلة التعلم، حجم العينة، جودة التحويل والفرق عن أداء الحساب. اكتشف الهدر وفرص "
-                "التوسع، لكن لا تدّعِ تنفيذ أي تعديل. لا توصِ بالتوسع إذا "
-                "data_complete=false أو المشتريات أقل من 3. الإيقاف أو الخفض توصية مراجعة بشرية "
-                "فقط. أعطِ الأولوية للإعلان أو المجموعة المهدرة قبل الحملة الأم حتى لا نوقف "
-                "عناصر رابحة معها. recommendation_id يجب أن يكون ثابتًا بصيغة provider:level:id. "
-                "اكتب بالعربية وبأرقام إنجليزية، واجعل next_check_at مساويًا للقيمة المرسلة."
+                "أنت مدير الأداء المستقل لمتجر أماسي داخل ميزان، وأنت صاحب الحكم التسويقي؛ "
+                "لا توجد نتيجة أو توصية مقررة مسبقًا من كود ميزان. ادرس كامل الكيانات النشطة، "
+                "مقارنة الحساب، تاريخ 7 و30 يومًا، تقويم السوق السعودي، والقرارات السابقة. "
+                "ابدأ بأثر الحملات على صافي ربح أو خسارة ميزان اليوم ثم نوافذ 3 و7 و30 يومًا، "
+                "وتعلم من القرارات المنفذة سابقًا بمقارنة أرقامها القديمة بالأداء الحالي. "
+                "استنتج بنفسك هل الصواب إيقاف أو خفض أو مراقبة أو إبقاء أو توسعة. ميّز بين "
+                "فشل تاريخي مستمر وتذبذب قصير، وبين ضعف الطلب في السوق وضعف الإعلان أو "
+                "الاستهداف. CPA %.2f ر.س وROAS %.2f× مرجعان اقتصاديان فقط وليسا قواعد قرار. "
+                "لا تعتبر الراتب أو الخميس والجمعة سببًا إلا إذا دعمه أداء المتجر التاريخي. "
+                "أعطِ الأولوية للتوصيات الأعلى أثرًا على صافي الربح، وافحص مستوى الإعلان أو "
+                "المجموعة قبل إيقاف الحملة الأم كي لا توقف عنصرًا ناجحًا معها. اشرح لماذا الآن، "
+                "كم ساعة ننتظر، ما الذي يثبت نجاح القرار، وما خطر تجاهله بطريقة مقنعة وقابلة "
+                "للمراجعة. لا تدّعِ تنفيذ أي تعديل؛ التنفيذ لا يتم إلا بعد موافقة المالك. "
+                "recommendation_id بصيغة provider:level:id. اكتب بالعربية وبأرقام إنجليزية، "
+                "واجعل next_check_at مساويًا للقيمة المرسلة."
             ) % (TARGET_CPA_SAR, TARGET_ROAS),
-            input=json.dumps({"next_check_at": next_check, "candidates": safe_rows}, ensure_ascii=False),
-            max_output_tokens=2600,
+            input=json.dumps({
+                "next_check_at": next_check,
+                "saudi_calendar": _saudi_calendar_context(now),
+                "active_entities_last_3_days": safe_rows,
+                "campaign_history": campaign_history,
+                "mezan_overall_profit_and_loss": business_profit,
+                "prior_mezan_ai_decisions": prior_decisions,
+            }, ensure_ascii=False, default=str),
+            max_output_tokens=5200,
+            store=False,
             text={"format": {"type": "json_schema", "name": "campaign_monitor_recommendations", "strict": True, "schema": AI_SCHEMA}},
         )
         output = RecommendationOutput.model_validate_json(response.output_text)
@@ -965,6 +1024,7 @@ async def run_campaign_ai_monitor(
     *,
     now: Callable[[], datetime] = _utcnow,
     refresh_meta: bool = True,
+    business_context_loader: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     current = now().astimezone(timezone.utc)
     end = current.astimezone(RIYADH_OFFSET).date()
@@ -1001,24 +1061,38 @@ async def run_campaign_ai_monitor(
         entities = entities[:MAX_ENTITY_ROWS]
         candidates = deterministic_candidates(entities)
         fingerprint = _fingerprint(candidates)
-        previous = await db[RECOMMENDATION_COLLECTION].find_one(
-            {"user_id": user_id}, {"_id": 0}, sort=[("generated_at", -1)]
-        )
+        campaign_history = await _campaign_history_context(db, user_id, end)
+        prior_decisions = await _prior_ai_context(db, user_id)
+        try:
+            business_profit = await _business_profit_context(
+                business_context_loader, user_id, end
+            )
+        except Exception as exc:
+            errors.append({
+                "source": "mezan_business_profit",
+                "code": _text(type(exc).__name__, limit=100),
+            })
+            business_profit = {
+                "available": False,
+                "reason": "dashboard_profit_context_failed",
+            }
         if not candidates:
+            recommendation_source = "none"
             result = RecommendationOutput(
-                summary="لا توجد إشارات هدر أو توسع موثوقة في آخر 3 أيام.",
+                summary="لا توجد كيانات نشطة ذات صرف يمكن للذكاء تحليلها في آخر 3 أيام.",
                 recommendations=[],
                 limitations=[item["source"] for item in errors],
             )
-        elif previous and previous.get("fingerprint") == fingerprint:
-            result = RecommendationOutput.model_validate({
-                "summary": previous.get("summary") or "لم تتغير الإشارات منذ آخر تحليل.",
-                "recommendations": previous.get("recommendations") or [],
-                "limitations": previous.get("limitations") or [],
-            })
         else:
             try:
-                result = await _ask_openai(candidates, now=current)
+                result = await _ask_openai(
+                    candidates,
+                    now=current,
+                    campaign_history=campaign_history,
+                    prior_decisions=prior_decisions,
+                    business_profit=business_profit,
+                )
+                recommendation_source = "openai"
             except Exception as exc:
                 error_code = _text(getattr(exc, "code", type(exc).__name__), limit=100)
                 logger.warning(
@@ -1029,9 +1103,10 @@ async def run_campaign_ai_monitor(
                 errors.append({"source": "openai_recommendation", "code": error_code})
                 result = _deterministic_recommendations(
                     candidates,
-                    next_check_at=_iso(current + timedelta(hours=1)),
+                    next_check_at=_iso(current + timedelta(hours=5)),
                     limitation=f"openai_recommendation:{error_code}",
                 )
+                recommendation_source = "mezan_fallback"
         candidate_by_key = {
             (row.get("provider"), row.get("entity_level"), str(row.get("entity_id"))): row
             for row in candidates
@@ -1043,7 +1118,8 @@ async def run_campaign_ai_monitor(
             target = candidate_by_key.get((item.provider, item.entity_level, item.entity_id)) or {}
             public_item.update(_recommendation_explanation(item, target))
             public_item["generated_at"] = started_at
-            public_item["decision_score"] = _safe_metric(target.get("screening_score"))
+            public_item["recommendation_source"] = recommendation_source
+            public_item["decision_score"] = None
             executable = bool(
                 item.action in {"pause", "reduce", "scale"}
                 and target.get("account_id")
@@ -1057,12 +1133,11 @@ async def run_campaign_ai_monitor(
                     key: target.get(key) for key in (
                         "provider", "entity_level", "entity_id", "account_id", "parent_id",
                         "current_daily_budget_native", "spend_sar", "purchases", "data_complete",
-                        "screening_signal",
                     )
                 }
         document = {
             "snapshot_id": str(uuid.uuid4()), "run_id": run_id, "user_id": user_id,
-            "generated_at": _iso(current), "next_run_at": _iso(current + timedelta(hours=1)),
+            "generated_at": _iso(current), "next_run_at": _iso(current + timedelta(hours=5)),
             "range": {"from": start.isoformat(), "to": end.isoformat()},
             "summary": result.summary,
             "recommendations": recommendation_rows,
@@ -1071,7 +1146,12 @@ async def run_campaign_ai_monitor(
             "fingerprint": fingerprint,
             "entities_scanned": len(entities), "candidates_scanned": len(candidates),
             "providers": ["snapchat", "meta"], "mode": "recommend_then_approve",
+            "decision_authority": recommendation_source,
+            "recommendation_source": recommendation_source,
+            "decision_interval_hours": 5,
+            "context_windows_days": [3, 7, 30],
             "writes_performed": False, "meta_refresh": meta_refresh,
+            "business_profit_context_available": bool(business_profit.get("available")),
         }
         await db[RECOMMENDATION_COLLECTION].insert_one(document)
         await db[RUN_COLLECTION].update_one(
@@ -1080,7 +1160,7 @@ async def run_campaign_ai_monitor(
         )
         return {key: value for key, value in document.items() if key != "user_id"}
     except Exception as exc:
-        logger.exception("Hourly campaign AI monitor failed for user %s", user_id)
+        logger.exception("Campaign AI monitor failed for user %s", user_id)
         await db[RUN_COLLECTION].update_one(
             {"run_id": run_id, "user_id": user_id},
             {"$set": {"status": "failed", "finished_at": _iso(), "error_code": _text(getattr(exc, "code", type(exc).__name__), limit=100)}},
@@ -1140,7 +1220,11 @@ async def _acquire_scheduler_lease(db: Any) -> str | None:
         return None
 
 
-async def run_all_campaign_ai_monitors(db: Any) -> dict[str, Any]:
+async def run_all_campaign_ai_monitors(
+    db: Any,
+    *,
+    business_context_loader: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
     owner = await _acquire_scheduler_lease(db)
     if not owner:
         return {"users": 0, "completed": 0, "failed": 0, "skipped": "lease_held", "ran_at": _iso()}
@@ -1151,7 +1235,11 @@ async def run_all_campaign_ai_monitors(db: Any) -> dict[str, Any]:
         for user_id in users:
             try:
                 await asyncio.wait_for(
-                    run_campaign_ai_monitor(db, user_id),
+                    run_campaign_ai_monitor(
+                        db,
+                        user_id,
+                        business_context_loader=business_context_loader,
+                    ),
                     timeout=MONITOR_TIMEOUT_SECONDS,
                 )
                 completed += 1
@@ -1177,17 +1265,21 @@ def start_campaign_ai_worker(
     *,
     interval_seconds: float = DEFAULT_INTERVAL_SECONDS,
     initial_delay_seconds: float = DEFAULT_INITIAL_DELAY_SECONDS,
+    business_context_loader: Callable[..., Any] | None = None,
 ) -> asyncio.Task:
     async def loop() -> None:
         await asyncio.sleep(max(0.0, initial_delay_seconds))
         while True:
             try:
-                summary = await run_all_campaign_ai_monitors(db)
-                logger.info("Campaign AI hourly monitor complete: %s", summary)
+                summary = await run_all_campaign_ai_monitors(
+                    db,
+                    business_context_loader=business_context_loader,
+                )
+                logger.info("Campaign AI 5-hour monitor complete: %s", summary)
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Campaign AI hourly scheduler failed")
+                logger.exception("Campaign AI scheduler failed")
             await asyncio.sleep(max(60.0, interval_seconds))
     return asyncio.create_task(loop())
 
@@ -1234,7 +1326,7 @@ async def _execute_snapchat_approval(
             payload=payload,
             reason=_text(recommendation.get("rationale"), limit=500),
             idempotency_key=idempotency_key,
-            expected_outcome={"source": "hourly_ai_recommendation", "action": requested},
+            expected_outcome={"source": "ai_recommendation_5h", "action": requested},
             safety_protocol_version=2,
         ),
     )
@@ -1374,7 +1466,7 @@ def attach_campaign_ai_routes(
             generated_at = datetime.fromisoformat(str(latest.get("generated_at")).replace("Z", "+00:00"))
         except (TypeError, ValueError):
             raise HTTPException(status_code=409, detail={"code": "recommendation_timestamp_invalid"})
-        if _utcnow() - generated_at.astimezone(timezone.utc) > timedelta(hours=2):
+        if _utcnow() - generated_at.astimezone(timezone.utc) > timedelta(hours=5):
             raise HTTPException(status_code=409, detail={"code": "recommendation_expired"})
         recommendation = next(
             (

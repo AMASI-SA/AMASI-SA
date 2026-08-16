@@ -86,7 +86,7 @@ export function CampaignAdvisorCard() {
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · تحليل الحملة والمجموعة والإعلان كل ساعة</p>
+                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · قرار مستقل كل 5 ساعات مع تاريخ 3 و7 و30 يومًا</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
@@ -108,6 +108,7 @@ export function CampaignAdvisorCard() {
                 const blocked = Boolean(executionLabel);
                 return <div key={item.recommendation_id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:bg-violet-50/30">
                     <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-black text-slate-400">{provider} · {AI_LEVELS[item.entity_level] || item.entity_level}</span><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${action.tone}`}>{action.label}</span></div>
+                    {item.recommendation_source === "mezan_fallback" && <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[8px] font-black text-amber-800">مصدر التوصية: ميزان</span>}
                     <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.entity_name}</Link>
                     <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.rationale}</p>
                     <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{item.approval_available && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>

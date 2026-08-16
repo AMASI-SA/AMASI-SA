@@ -29,33 +29,32 @@ def entity(**overrides):
     return value
 
 
-def test_waste_without_purchase_is_highest_priority_signal():
+def test_all_active_spending_entities_reach_ai_ordered_by_spend():
     rows = deterministic_candidates([
         entity(entity_id="waste", spend_sar=140, purchases=0),
         entity(entity_id="watch", spend_sar=80, purchases=2, cpa_sar=40, roas=1.2),
     ])
 
     assert rows[0]["entity_id"] == "waste"
-    assert rows[0]["screening_signal"] == "rapid_spend_without_results"
     assert rows[0]["spend_per_day_sar"] == 140
+    assert {row["entity_id"] for row in rows} == {"waste", "watch"}
 
 
-def test_slower_accumulated_spend_is_waste_but_not_rapid_spend():
+def test_preparation_does_not_assign_a_mezan_decision_signal():
     rows = deterministic_candidates([
         entity(entity_id="slow-waste", spend_sar=140, purchases=0, observed_days=3),
     ])
 
-    assert rows[0]["screening_signal"] == "waste_without_purchase"
+    assert "screening_signal" not in rows[0]
 
 
-def test_profitable_entity_is_selected_as_scale_candidate_only_with_volume():
+def test_ai_receives_profitable_entities_even_before_a_mezan_volume_threshold():
     rows = deterministic_candidates([
         entity(entity_id="scale", spend_sar=150, revenue_sar=600, purchases=4, roas=4, cpa_sar=37.5),
         entity(entity_id="too-early", spend_sar=40, revenue_sar=160, purchases=2, roas=4, cpa_sar=20),
     ])
 
-    assert [row["entity_id"] for row in rows] == ["scale"]
-    assert rows[0]["screening_signal"] == "scale_candidate"
+    assert [row["entity_id"] for row in rows] == ["scale", "too-early"]
 
 
 def test_zero_spend_entities_never_reach_openai_candidates():
@@ -68,7 +67,6 @@ def test_paused_entity_is_not_recommended_for_another_change():
 
 def test_model_cannot_scale_an_entity_without_scale_evidence():
     candidate = entity(entity_id="waste", spend_sar=140, purchases=0)
-    candidate.update(screening_signal="rapid_spend_without_results")
     output = RecommendationOutput(
         summary="اختبار",
         recommendations=[RecommendationItem(
@@ -84,6 +82,11 @@ def test_model_cannot_scale_an_entity_without_scale_evidence():
             title="اختبار",
             rationale="اختبار الحماية",
             evidence=["اختبار"],
+            why_now="الوقت مناسب للاختبار",
+            recommended_wait_hours=5,
+            observation_plan="أعد القياس",
+            success_criteria=["تحسن النتيجة"],
+            risk_if_ignored="استمرار الهدر",
             guardrail="مراجعة",
             next_check_at="wrong",
         )],
@@ -116,7 +119,7 @@ def test_first_monitor_pass_starts_promptly_after_boot():
     assert DEFAULT_INITIAL_DELAY_SECONDS <= 10
 
 
-def test_invalid_model_output_can_fall_back_to_safe_waste_recommendation():
+def test_unavailable_model_returns_conservative_mezan_fallback():
     candidate = deterministic_candidates([
         entity(entity_id="fast-waste", spend_sar=180, purchases=0),
     ])[0]
@@ -127,14 +130,12 @@ def test_invalid_model_output_can_fall_back_to_safe_waste_recommendation():
         limitation="openai_recommendation:ValidationError",
     )
 
-    assert result.recommendations[0].action == "reduce"
-    assert result.recommendations[0].change_percent == 20
-    assert result.recommendations[0].recommendation_id == "snapchat:ad:fast-waste"
-    assert result.recommendations[0].next_check_at == "2026-08-16T15:00:00+00:00"
+    assert result.recommendations[0].action == "pause"
+    assert "ميزان" in result.recommendations[0].guardrail
     assert result.limitations == ["openai_recommendation:ValidationError"]
 
 
-def test_fallback_never_scales_incomplete_data():
+def test_fallback_does_not_scale_a_profitable_entity():
     candidate = entity(
         entity_id="scale-incomplete",
         spend_sar=150,
@@ -144,35 +145,47 @@ def test_fallback_never_scales_incomplete_data():
         cpa_sar=37.5,
         data_complete=False,
     )
-    candidate["screening_signal"] = "scale_candidate"
-
     result = _deterministic_recommendations(
         [candidate],
         next_check_at="2026-08-16T15:00:00+00:00",
         limitation="fallback",
     )
 
-    assert result.recommendations[0].action == "monitor"
-    assert result.recommendations[0].change_percent is None
+    assert result.recommendations == []
 
 
 def test_recommendation_explanation_states_reason_wait_and_success_criteria():
     candidate = deterministic_candidates([
         entity(entity_id="fast-waste", spend_sar=180, purchases=0),
     ])[0]
-    item = _deterministic_recommendations(
-        [candidate],
+    item = RecommendationItem(
+        recommendation_id="snapchat:ad:fast-waste",
+        provider="snapchat",
+        entity_level="ad",
+        entity_id="fast-waste",
+        entity_name="إعلان المنتج",
+        action="pause",
+        priority="critical",
+        confidence="high",
+        title="إيقاف مقترح",
+        rationale="فشل تاريخي مستمر",
+        evidence=["صرف 180 ر.س دون شراء"],
+        why_now="التاريخ يؤكد استمرار الفشل",
+        recommended_wait_hours=5,
+        observation_plan="راجع الصرف والطلبات بعد 5 ساعات",
+        success_criteria=["توقف الهدر"],
+        risk_if_ignored="خسارة إضافية",
+        guardrail="بعد الموافقة فقط",
         next_check_at="2026-08-16T15:00:00+00:00",
-        limitation="fallback",
-    ).recommendations[0]
+    )
 
     explanation = _recommendation_explanation(item, candidate)
 
-    assert explanation["decision_signal"] == "rapid_spend_without_results"
-    assert explanation["recommended_wait_hours"] == 2
-    assert "اصبر 2 ساعات" in explanation["observation_plan"]
-    assert "صرف 180.00 ر.س" in explanation["decision_facts"]
-    assert len(explanation["success_criteria"]) == 3
+    assert explanation["decision_signal"] == "openai_independent_judgment"
+    assert explanation["recommended_wait_hours"] == 5
+    assert "اصبر 5 ساعات" in explanation["observation_plan"]
+    assert any("صرف 180.00 ر.س" in fact for fact in explanation["decision_facts"])
+    assert explanation["success_criteria"] == ["توقف الهدر"]
     assert explanation["financial_impact"]["period_estimated_contribution_sar"] == -180
     assert explanation["financial_impact"]["forecast_delta_sar"] > 0
     assert explanation["financial_impact"]["is_estimate"] is True
