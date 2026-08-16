@@ -1,7 +1,11 @@
+import asyncio
+
 from campaign_ai_monitor import (
+    DEFAULT_INITIAL_DELAY_SECONDS,
     RecommendationItem,
     RecommendationOutput,
     _govern_output,
+    _monitored_user_ids,
     deterministic_candidates,
 )
 
@@ -88,3 +92,23 @@ def test_model_cannot_scale_an_entity_without_scale_evidence():
     assert governed.recommendations[0].action == "monitor"
     assert governed.recommendations[0].change_percent is None
     assert governed.recommendations[0].entity_name == "إعلان المنتج"
+
+
+def test_scheduler_discovers_connected_v2_ad_account_owner():
+    class Accounts:
+        async def distinct(self, field, query):
+            assert field == "user_id"
+            assert query == {
+                "provider": {"$in": ["snapchat_ads", "meta_ads"]},
+                "connection_status": {"$in": ["connected", "needs_reauth"]},
+            }
+            return ["owner-1"]
+
+    class DB:
+        mezan_integration_accounts_v2 = Accounts()
+
+    assert asyncio.run(_monitored_user_ids(DB())) == ["owner-1"]
+
+
+def test_first_monitor_pass_starts_promptly_after_boot():
+    assert DEFAULT_INITIAL_DELAY_SECONDS <= 10

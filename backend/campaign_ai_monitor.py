@@ -55,7 +55,10 @@ LOCK_COLLECTION = "mezan_campaign_ai_scheduler_locks_v1"
 EXECUTION_COLLECTION = "mezan_campaign_ai_executions_v1"
 LOCK_ID = "campaign_ai_hourly_monitor"
 DEFAULT_INTERVAL_SECONDS = 60 * 60
-DEFAULT_INITIAL_DELAY_SECONDS = 6 * 60
+# Run the first pass shortly after boot so a fresh deployment does not leave
+# the dashboard stuck on "waiting for first run" for several minutes.  The
+# worker is detached from FastAPI startup, so this does not delay readiness.
+DEFAULT_INITIAL_DELAY_SECONDS = 5
 MAX_ENTITY_ROWS = 300
 MAX_AI_CANDIDATES = 60
 MAX_RECOMMENDATIONS = 18
@@ -834,7 +837,12 @@ async def _monitored_user_ids(db: Any) -> list[str]:
         "user_id",
         {
             "provider": {"$in": ["snapchat_ads", "meta_ads"]},
-            "$or": [{"selected": True}, {"is_selected": True}, {"enabled": True}],
+            # The V2 control plane persists owner selection as
+            # ``mezan_selected`` (not ``selected``/``is_selected``).  A
+            # connected account is sufficient to schedule the owner: the
+            # per-provider readers still enforce their own selected-account
+            # boundary and degrade to campaign-level facts when needed.
+            "connection_status": {"$in": ["connected", "needs_reauth"]},
         },
     )
     if not values:
