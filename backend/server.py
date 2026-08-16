@@ -55,6 +55,7 @@ from auth import (
     DEFAULT_SHIPPING_COMPANIES,
 )
 from excel_parser import parse_salla_excel, match_settings
+from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import BOOT_RELEASE_IDENTITY
 from report_builder import build_report as _build_report
@@ -1714,11 +1715,7 @@ async def create_analysis(
     upsert loop runs in an `asyncio.create_task` so Make.com webhook
     ingestion is never blocked by a long upload.
     """
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
 
     job = await create_import_job(
         db,
@@ -1792,11 +1789,7 @@ async def reprocess_analysis(
     if not existing:
         raise HTTPException(status_code=404, detail="التحليل غير موجود")
 
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
     try:
         parsed = parse_salla_excel(content)
     except ValueError as e:
