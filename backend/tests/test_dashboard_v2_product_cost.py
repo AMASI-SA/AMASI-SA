@@ -100,6 +100,25 @@ def test_missing_mezan_cost_falls_back_to_salla_variant_then_product():
     assert (product_cost, product_source) == (30, "salla_product_fallback")
 
 
+def test_raw_salla_variant_cost_price_is_used_as_fallback():
+    cost, source = resolve_base_unit_cost(
+        {"variant_id": "v-raw", "sku": "RAW-1"},
+        {},
+        {
+            "cost_price_from_salla": None,
+            "variants": [
+                {
+                    "id": "v-raw",
+                    "sku": "RAW-1",
+                    "cost_price": {"amount": "41.50"},
+                }
+            ],
+        },
+    )
+
+    assert (cost, source) == (41.5, "salla_variant_fallback")
+
+
 def test_salla_fallback_calculates_cost_but_stays_missing_in_mezan():
     result = calculate_mezan_v2_line_cost(
         {"product_id": "p-1", "quantity": 1},
