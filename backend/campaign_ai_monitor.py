@@ -59,6 +59,8 @@ DEFAULT_INTERVAL_SECONDS = 60 * 60
 # the dashboard stuck on "waiting for first run" for several minutes.  The
 # worker is detached from FastAPI startup, so this does not delay readiness.
 DEFAULT_INITIAL_DELAY_SECONDS = 5
+SCHEDULER_LEASE_SECONDS = 10 * 60
+MONITOR_TIMEOUT_SECONDS = 8 * 60
 MAX_ENTITY_ROWS = 300
 MAX_AI_CANDIDATES = 60
 MAX_RECOMMENDATIONS = 18
@@ -680,6 +682,78 @@ def _govern_output(
     )
 
 
+def _deterministic_recommendations(
+    candidates: list[dict[str, Any]],
+    *,
+    next_check_at: str,
+    limitation: str,
+) -> RecommendationOutput:
+    """Produce a safe snapshot when the model response cannot be validated."""
+    recommendations: list[RecommendationItem] = []
+    action_by_signal = {
+        "rapid_spend_without_results": ("reduce", 20, "critical", "صرف سريع بلا نتائج"),
+        "waste_without_purchase": ("reduce", 15, "high", "صرف بلا مشتريات"),
+        "underperforming_vs_account": ("reduce", 15, "high", "أداء أضعف من معيار الحساب"),
+        "scale_candidate": ("scale", 15, "medium", "فرصة توسعة منضبطة"),
+        "expert_review": ("monitor", None, "low", "يحتاج مراقبة إضافية"),
+    }
+    for row in candidates[:MAX_RECOMMENDATIONS]:
+        signal = str(row.get("screening_signal") or "expert_review")
+        action, change_percent, priority, title = action_by_signal.get(
+            signal, action_by_signal["expert_review"]
+        )
+        complete = bool(row.get("data_complete"))
+        if action == "scale" and (
+            not complete or int(_number(row.get("purchases")) or 0) < 3
+        ):
+            action, change_percent, priority, title = (
+                "monitor", None, "medium", "راقب قبل التوسعة"
+            )
+        spend = _safe_metric(row.get("spend_sar")) or 0
+        purchases = int(_number(row.get("purchases")) or 0)
+        roas = _safe_metric(row.get("roas"))
+        cpa = _safe_metric(row.get("cpa_sar"))
+        pace = _safe_metric(row.get("spend_per_day_sar"))
+        evidence = [f"الصرف {spend:.2f} ر.س", f"المشتريات {purchases}"]
+        if pace is not None:
+            evidence.append(f"وتيرة الصرف اليومية {pace:.2f} ر.س")
+        if cpa is not None:
+            evidence.append(f"تكلفة الشراء {cpa:.2f} ر.س")
+        if roas is not None:
+            evidence.append(f"العائد {roas:.2f}×")
+        entity_id = str(row.get("entity_id") or "")
+        recommendations.append(RecommendationItem(
+            recommendation_id=(
+                f"{row.get('provider')}:{row.get('entity_level')}:{entity_id}"
+            ),
+            provider=str(row.get("provider")),
+            entity_level=str(row.get("entity_level")),
+            entity_id=entity_id,
+            entity_name=str(row.get("entity_name") or entity_id),
+            parent_name=row.get("parent_name"),
+            action=action,
+            change_percent=change_percent,
+            priority=priority,
+            confidence="medium" if complete else "low",
+            title=title,
+            rationale=(
+                "التوصية مبنية على الصرف والنتائج الفعلية ومقارنتها بمعيار الحساب، "
+                "وتبقى أيّ كتابة معلّقة حتى موافقة المالك."
+            ),
+            evidence=evidence[:6],
+            guardrail="نفّذ التغيير تدريجيًا ثم أعد القياس بعد ساعة؛ لا يُنفّذ شيء تلقائيًا.",
+            next_check_at=next_check_at,
+        ))
+    return RecommendationOutput(
+        summary=(
+            f"رُصدت {len(recommendations)} إشارة أداء تستحق المتابعة؛ "
+            "رتّبها النظام حسب الهدر وسرعة الصرف وجودة النتائج."
+        ),
+        recommendations=recommendations,
+        limitations=[limitation],
+    )
+
+
 async def _ask_openai(candidates: list[dict[str, Any]], *, now: datetime) -> RecommendationOutput:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -778,7 +852,21 @@ async def run_campaign_ai_monitor(
                 "limitations": previous.get("limitations") or [],
             })
         else:
-            result = await _ask_openai(candidates, now=current)
+            try:
+                result = await _ask_openai(candidates, now=current)
+            except Exception as exc:
+                error_code = _text(getattr(exc, "code", type(exc).__name__), limit=100)
+                logger.warning(
+                    "Campaign AI model output unavailable for user %s (%s); using governed fallback",
+                    user_id,
+                    error_code,
+                )
+                errors.append({"source": "openai_recommendation", "code": error_code})
+                result = _deterministic_recommendations(
+                    candidates,
+                    next_check_at=_iso(current + timedelta(hours=1)),
+                    limitation=f"openai_recommendation:{error_code}",
+                )
         candidate_by_key = {
             (row.get("provider"), row.get("entity_level"), str(row.get("entity_id"))): row
             for row in candidates
@@ -857,16 +945,27 @@ async def _acquire_scheduler_lease(db: Any) -> str | None:
     owner = str(uuid.uuid4())
     current = _utcnow()
     collection = db[LOCK_COLLECTION]
+    stale_before = current - timedelta(seconds=SCHEDULER_LEASE_SECONDS)
     result = await collection.update_one(
-        {"lock_id": LOCK_ID, "expires_at": {"$lte": current}},
-        {"$set": {"owner": owner, "acquired_at": current, "expires_at": current + timedelta(minutes=55)}},
+        {
+            "lock_id": LOCK_ID,
+            "$or": [
+                {"expires_at": {"$lte": current}},
+                {"acquired_at": {"$lte": stale_before}},
+            ],
+        },
+        {"$set": {
+            "owner": owner,
+            "acquired_at": current,
+            "expires_at": current + timedelta(seconds=SCHEDULER_LEASE_SECONDS),
+        }},
     )
     if getattr(result, "modified_count", 0):
         return owner
     try:
         await collection.insert_one({
             "lock_id": LOCK_ID, "owner": owner, "acquired_at": current,
-            "expires_at": current + timedelta(minutes=55),
+            "expires_at": current + timedelta(seconds=SCHEDULER_LEASE_SECONDS),
         })
         return owner
     except DuplicateKeyError:
@@ -883,8 +982,21 @@ async def run_all_campaign_ai_monitors(db: Any) -> dict[str, Any]:
         failed = 0
         for user_id in users:
             try:
-                await run_campaign_ai_monitor(db, user_id)
+                await asyncio.wait_for(
+                    run_campaign_ai_monitor(db, user_id),
+                    timeout=MONITOR_TIMEOUT_SECONDS,
+                )
                 completed += 1
+            except asyncio.TimeoutError:
+                failed += 1
+                await db[RUN_COLLECTION].update_many(
+                    {"user_id": user_id, "status": "running"},
+                    {"$set": {
+                        "status": "failed",
+                        "finished_at": _iso(),
+                        "error_code": "monitor_timeout",
+                    }},
+                )
             except Exception:
                 failed += 1
         return {"users": len(users), "completed": completed, "failed": failed, "ran_at": _iso()}
