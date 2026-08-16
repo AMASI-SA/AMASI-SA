@@ -43,6 +43,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, model_validator
 
+from excel_upload_security import read_safe_xlsx_upload
+
 logger = logging.getLogger(__name__)
 
 
@@ -653,22 +655,34 @@ def _build_router(db, current_user_dep) -> APIRouter:
         ),
         user: dict = Depends(current_user_dep),
     ):
-        if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
-            raise HTTPException(status_code=400,
-                                detail="الملف يجب أن يكون Excel (.xlsx أو .xls)")
         try:
             from openpyxl import load_workbook
         except ImportError:
             raise HTTPException(status_code=500,
                                 detail="openpyxl missing — install it on the backend")
-        content = await file.read()
+        content = await read_safe_xlsx_upload(file, max_bytes=10 * 1024 * 1024)
         try:
-            wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            wb = load_workbook(
+                io.BytesIO(content),
+                read_only=True,
+                data_only=True,
+                keep_links=False,
+            )
         except Exception as exc:
             raise HTTPException(status_code=400,
                                 detail=f"تعذر قراءة الملف: {exc}")
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
+        try:
+            ws = wb.active
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                rows.append(row)
+                if len(rows) > 50_001:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="عدد صفوف ملف Excel يتجاوز الحد المسموح.",
+                    )
+        finally:
+            wb.close()
         if not rows:
             raise HTTPException(status_code=400, detail="الملف فارغ")
         headers_raw = [str(c or "").strip() for c in rows[0]]
