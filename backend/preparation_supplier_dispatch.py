@@ -328,17 +328,27 @@ def _piece_dispatch_group_key(piece: dict[str, Any]) -> str:
     return f"{base_key[:470]}::service:{suffix}"
 
 
+def _piece_selector_group_key(piece: dict[str, Any]) -> str:
+    """Address one physical piece without depending on product-card grouping."""
+    piece_id = _text(piece.get("piece_id") or piece.get("id"))
+    return f"piece:{piece_id}" if piece_id else _piece_dispatch_group_key(piece)
+
+
 def plan_piece_selections(
     pieces: list[dict[str, Any]],
     selections: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Choose deterministic physical pieces for product/quantity selections."""
     by_group: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_piece_selector: dict[str, dict[str, Any]] = {}
     effective_keys_by_stored_key: dict[str, set[str]] = defaultdict(set)
     for piece in pieces:
         group_key = _piece_dispatch_group_key(piece)
         if group_key:
             by_group[group_key].append(piece)
+        piece_selector = _piece_selector_group_key(piece)
+        if piece_selector:
+            by_piece_selector[piece_selector] = piece
         stored_key = _text(piece.get("group_key"))
         if stored_key and group_key:
             effective_keys_by_stored_key[stored_key].add(group_key)
@@ -359,6 +369,8 @@ def plan_piece_selections(
             raise ValueError("duplicate_piece_group")
         seen.add(group_key)
         available = by_group.get(group_key) or []
+        if not available and group_key in by_piece_selector:
+            available = [by_piece_selector[group_key]]
         if not available:
             # Accept the pre-fix product key only when it resolves to exactly
             # one service-aware group.  Ambiguous stale clients must refresh.
@@ -713,11 +725,65 @@ def _hydrate_piece_print_facts_from_batches(
             )
 
 
+def _piece_products(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose one database-backed row per physical piece for native clients."""
+    rows: list[dict[str, Any]] = []
+    for piece in sorted(pieces, key=_piece_sort_key):
+        dispatch_status = _text(piece.get("supplier_dispatch_status"))
+        status = _text(piece.get("status"))
+        rows.append({
+            "group_key": _piece_selector_group_key(piece),
+            "piece_id": _text(piece.get("piece_id") or piece.get("id")) or None,
+            "order_item_id": _text(piece.get("order_item_id")) or None,
+            "unit_index": int(piece.get("unit_index") or 0),
+            "product_id": _text(piece.get("product_id")) or None,
+            "product_name": _text(piece.get("product_name")) or "منتج",
+            "sku": _text(piece.get("sku")) or None,
+            "selected_image_url": _text(piece.get("selected_image_url")) or None,
+            "resolved_image_url": _text(piece.get("resolved_image_url")) or None,
+            "image_url": _text(piece.get("image_url")) or None,
+            "services": [
+                {
+                    "service_id": _text(service.get("service_id")),
+                    "service_name": _text(service.get("service_name"))
+                    or _text(service.get("service_code")),
+                    "status": _text(service.get("status")) or "pending",
+                }
+                for service in piece.get("services") or []
+                if isinstance(service, dict) and _text(service.get("service_id"))
+            ],
+            "specifications": list(piece.get("specifications_snapshot") or []),
+            "service_specifications": list(
+                piece.get("service_specifications_snapshot") or []
+            ),
+            "product_options": dict(piece.get("product_options_snapshot") or {}),
+            "quantity": 1,
+            "available_quantity": 1 if piece_is_available_for_supplier_dispatch(piece) else 0,
+            "sent_quantity": 1 if dispatch_status == DISPATCH_STATUS_SENT else 0,
+            "ready_quantity": 1 if (
+                dispatch_status == DISPATCH_STATUS_READY
+                or status == PIECE_STATUS_READY_FOR_RECEIPT
+            ) else 0,
+            "received_quantity": 1 if (
+                dispatch_status == DISPATCH_STATUS_RECEIVED
+                or status == PIECE_STATUS_RECEIVED
+            ) else 0,
+            "order_numbers": (
+                [_text(piece.get("order_number"))]
+                if _text(piece.get("order_number"))
+                else []
+            ),
+        })
+    return rows
+
+
 def _file_view(
     registry: dict[str, Any],
     pieces: list[dict[str, Any]],
+    *,
+    piece_grain: bool = False,
 ) -> dict[str, Any]:
-    products = _group_piece_products(pieces)
+    products = _piece_products(pieces) if piece_grain else _group_piece_products(pieces)
     return {
         "file_number": _text(registry.get("file_number"))
         or _text((pieces[0] if pieces else {}).get("file_number")),
@@ -855,6 +921,7 @@ async def _employee_workspace(
     user_id: str,
     employee_id: str,
     limit: int,
+    piece_grain: bool = False,
 ) -> dict[str, Any]:
     pieces = await db[PIECES].find(
         {
@@ -913,7 +980,11 @@ async def _employee_workspace(
     for piece in pieces:
         pieces_by_batch[_text(piece.get("batch_id"))].append(piece)
     files = [
-        _file_view(registry_by_batch.get(batch_id, {}), rows)
+        _file_view(
+            registry_by_batch.get(batch_id, {}),
+            rows,
+            piece_grain=piece_grain,
+        )
         for batch_id, rows in pieces_by_batch.items()
     ]
     files.sort(
@@ -953,7 +1024,11 @@ async def _employee_workspace(
             if _text(row.get("supplier_id")) == supplier_id
             and _text(row.get("sent_to_supplier_by_id")) == employee_id
         ]
-        account["products"] = _group_piece_products(account_pieces)
+        account["products"] = (
+            _piece_products(account_pieces)
+            if piece_grain
+            else _group_piece_products(account_pieces)
+        )
 
     dispatches = await db[DISPATCHES].find(
         {"user_id": user_id, "sent_by_id": employee_id, "status": {"$ne": "building"}},
@@ -1164,6 +1239,7 @@ def make_preparation_supplier_dispatch_router(
     @router.get("/workspace")
     async def workspace(
         limit: int = Query(100, ge=1, le=200),
+        grain: str = Query("product", pattern="^(product|piece)$"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         worker = await _require_preparation_worker(
@@ -1177,6 +1253,7 @@ def make_preparation_supplier_dispatch_router(
             user_id=_merchant_user_id(worker),
             employee_id=_text(worker.get("id")),
             limit=limit,
+            piece_grain=grain == "piece",
         )
         return {
             "ok": True,
