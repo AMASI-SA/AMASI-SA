@@ -70,6 +70,10 @@ MIN_WASTE_SPEND_SAR = float(os.environ.get("MEZAN_CAMPAIGN_MIN_WASTE_SPEND_SAR",
 FAST_SPEND_DAILY_SAR = float(
     os.environ.get("MEZAN_CAMPAIGN_FAST_SPEND_DAILY_SAR", str(TARGET_CPA_SAR * 2))
 )
+CAMPAIGN_GROSS_MARGIN_RATE = min(
+    1.0,
+    max(0.0, float(os.environ.get("MEZAN_CAMPAIGN_GROSS_MARGIN_RATE", "0.55"))),
+)
 
 
 def _utcnow() -> datetime:
@@ -754,6 +758,167 @@ def _deterministic_recommendations(
     )
 
 
+def _recommendation_explanation(
+    item: RecommendationItem,
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    """Turn the measured signal into an auditable, merchant-facing decision brief."""
+    signal = str(row.get("screening_signal") or "expert_review")
+    spend = _safe_metric(row.get("spend_sar")) or 0
+    purchases = int(_number(row.get("purchases")) or 0)
+    pace = _safe_metric(row.get("spend_per_day_sar"))
+    cpa = _safe_metric(row.get("cpa_sar"))
+    roas = _safe_metric(row.get("roas"))
+    observed_days = max(1, int(_number(row.get("observed_days")) or 1))
+
+    facts = [
+        f"صرف {spend:.2f} ر.س خلال {observed_days} يوم",
+        f"حقق {purchases} مشتريات",
+    ]
+    if pace is not None:
+        facts.append(f"وتيرة الصرف {pace:.2f} ر.س يوميًا")
+    if cpa is not None:
+        facts.append(f"تكلفة الشراء {cpa:.2f} ر.س مقابل هدف {TARGET_CPA_SAR:.2f} ر.س")
+    if roas is not None:
+        facts.append(f"العائد {roas:.2f}× مقابل هدف {TARGET_ROAS:.2f}×")
+
+    explanations = {
+        "rapid_spend_without_results": (
+            "الصرف يتحرك أسرع من المستوى الآمن ولم ينتج عنه أي شراء؛ استمرار الوضع نفسه "
+            "قد يستهلك تكلفة أكثر من طلبين مستهدفين قبل وصول إشارة تحويل موثوقة.",
+            2,
+            "بعد الخفض راقب توقف تسارع الصرف وظهور أول شراء قبل أي تعديل ثانٍ.",
+            "استمرار الصرف السريع بلا مشتريات يرفع الهدر خلال الساعات التالية.",
+        ),
+        "waste_without_purchase": (
+            "تجاوز الصرف حد الهدر المقبول للحساب من دون تسجيل شراء، حتى لو لم تكن سرعة "
+            "الصرف الحالية هي الأعلى بين الحملات.",
+            3,
+            "انتظر حتى تتكوّن نافذة جديدة بعد الخفض؛ نبحث عن شراء أو انخفاض واضح في وتيرة الصرف.",
+            "ترك الحملة كما هي قد يضاعف الصرف غير المنتج قبل وصول بيانات جديدة.",
+        ),
+        "underperforming_vs_account": (
+            "الحملة تحقق مشتريات، لكن تكلفة الشراء أعلى من هدف المتجر ومن معيار الحملات "
+            "المشابهة داخل الحساب، لذلك الخفض التدريجي أفضل من الإيقاف المباشر.",
+            4,
+            "راقب تكلفة الشراء والعائد بعد الخفض؛ لا تخفض مرة ثانية قبل اكتمال النافذة.",
+            "الخفض المتكرر بسرعة قد يربك التعلم، وعدم الخفض قد يبقي تكلفة الطلب مرتفعة.",
+        ),
+        "scale_candidate": (
+            "الحملة تجاوزت حد المشتريات الأدنى وحققت عائدًا وتكلفة شراء أفضل من معيار "
+            "الحساب، لذلك تستحق توسعة صغيرة بدل قفزة كبيرة في الميزانية.",
+            6,
+            "ارفع تدريجيًا ثم انتظر؛ يجب أن يبقى العائد قويًا وتكلفة الشراء ضمن الهدف.",
+            "رفع الميزانية بقوة قد يوسّع الجمهور أسرع من قدرة الحملة على الحفاظ على كفاءتها.",
+        ),
+        "expert_review": (
+            "يوجد صرف يستحق المتابعة، لكن البيانات الحالية لا تكفي لإثبات هدر أو فرصة "
+            "توسعة بثقة تسمح بتغيير الميزانية.",
+            6,
+            "لا تغيّر الميزانية الآن؛ انتظر مشتريات إضافية أو تغيرًا واضحًا في CPA وROAS.",
+            "التعديل قبل اكتمال العينة قد يحوّل تذبذبًا طبيعيًا إلى قرار خاطئ.",
+        ),
+    }
+    why_now, wait_hours, observation_plan, risk = explanations.get(
+        signal,
+        explanations["expert_review"],
+    )
+    if item.action == "pause":
+        proposed_action = "أوقف الكيان مؤقتًا، ثم لا تعِد تشغيله قبل مراجعة مصدر التحويل وجودة الإعلان."
+    elif item.action == "reduce":
+        proposed_action = f"اخفض الميزانية {int(item.change_percent or 15)}% فقط، وتجنب أي خفض ثانٍ خلال فترة المراقبة."
+    elif item.action == "scale":
+        proposed_action = f"ارفع الميزانية {int(item.change_percent or 15)}% فقط، مع منع أي توسعة ثانية قبل القياس."
+    elif item.action == "maintain":
+        proposed_action = "استمر بالميزانية الحالية؛ لا يوجد دليل يبرر تغييرها الآن."
+    else:
+        proposed_action = "راقب دون تغيير الميزانية حتى تكتمل نافذة القياس المطلوبة."
+
+    success_criteria = (
+        [
+            f"يبقى ROAS عند {TARGET_ROAS:.2f}× أو أعلى",
+            f"تبقى تكلفة الشراء عند {TARGET_CPA_SAR:.2f} ر.س أو أقل",
+            "لا تتسارع الميزانية أسرع من نمو المشتريات",
+        ]
+        if item.action == "scale"
+        else [
+            "تظهر مشتريات جديدة أو ينخفض الصرف غير المنتج",
+            f"تقترب تكلفة الشراء من {TARGET_CPA_SAR:.2f} ر.س",
+            "لا ينتقل الهدر إلى مجموعة أو إعلان آخر داخل الحملة",
+        ]
+    )
+    revenue = _safe_metric(row.get("revenue_sar")) or 0
+    hourly_spend = (pace if pace is not None else spend / observed_days) / 24
+    hourly_revenue = revenue / observed_days / 24
+    future_spend_without_action = hourly_spend * wait_hours
+    future_revenue_without_action = hourly_revenue * wait_hours
+    future_contribution_without_action = (
+        future_revenue_without_action * CAMPAIGN_GROSS_MARGIN_RATE
+        - future_spend_without_action
+    )
+    change_ratio = min(0.30, max(0.05, float(item.change_percent or 15) / 100))
+    if item.action == "pause":
+        future_spend_with_action = 0.0
+        future_revenue_with_action = 0.0
+    elif item.action == "reduce":
+        future_spend_with_action = future_spend_without_action * (1 - change_ratio)
+        # For proven no-result waste, reducing spend is modeled as avoided waste.
+        # Otherwise revenue is reduced proportionally to avoid overstating upside.
+        future_revenue_with_action = (
+            future_revenue_without_action
+            if purchases == 0
+            else future_revenue_without_action * (1 - change_ratio)
+        )
+    elif item.action == "scale":
+        future_spend_with_action = future_spend_without_action * (1 + change_ratio)
+        future_revenue_with_action = future_revenue_without_action * (1 + change_ratio)
+    else:
+        future_spend_with_action = future_spend_without_action
+        future_revenue_with_action = future_revenue_without_action
+    future_contribution_with_action = (
+        future_revenue_with_action * CAMPAIGN_GROSS_MARGIN_RATE
+        - future_spend_with_action
+    )
+    period_contribution = revenue * CAMPAIGN_GROSS_MARGIN_RATE - spend
+    return {
+        "decision_signal": signal,
+        "decision_facts": facts,
+        "why_now": why_now,
+        "proposed_action": proposed_action,
+        "recommended_wait_hours": wait_hours,
+        "observation_plan": (
+            f"المجدول سيعيد الفحص كل ساعة. اصبر {wait_hours} ساعات قبل قرار ثانٍ. "
+            f"{observation_plan}"
+        ),
+        "success_criteria": success_criteria,
+        "risk_if_ignored": risk,
+        "financial_impact": {
+            "basis": "provider_revenue_x_gross_margin_minus_ad_spend",
+            "is_estimate": True,
+            "gross_margin_rate": round(CAMPAIGN_GROSS_MARGIN_RATE, 4),
+            "period_spend_sar": round(spend, 2),
+            "period_provider_revenue_sar": round(revenue, 2),
+            "period_estimated_gross_profit_sar": round(
+                revenue * CAMPAIGN_GROSS_MARGIN_RATE,
+                2,
+            ),
+            "period_estimated_contribution_sar": round(period_contribution, 2),
+            "forecast_hours": wait_hours,
+            "forecast_without_action_sar": round(future_contribution_without_action, 2),
+            "forecast_with_action_sar": round(future_contribution_with_action, 2),
+            "forecast_delta_sar": round(
+                future_contribution_with_action - future_contribution_without_action,
+                2,
+            ),
+            "confidence": "medium" if bool(row.get("data_complete")) else "low",
+            "limitation": (
+                "تقدير مبني على إيراد المنصة وهامش إجمالي 55% وثبات وتيرة الأداء؛ "
+                "يصبح صافي ربح مؤكدًا فقط عند اكتمال ربط طلب سلة بالحملة وتكاليفه."
+            ),
+        },
+    }
+
+
 async def _ask_openai(candidates: list[dict[str, Any]], *, now: datetime) -> RecommendationOutput:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -876,6 +1041,9 @@ async def run_campaign_ai_monitor(
         for item in result.recommendations:
             public_item = item.model_dump()
             target = candidate_by_key.get((item.provider, item.entity_level, item.entity_id)) or {}
+            public_item.update(_recommendation_explanation(item, target))
+            public_item["generated_at"] = started_at
+            public_item["decision_score"] = _safe_metric(target.get("screening_score"))
             executable = bool(
                 item.action in {"pause", "reduce", "scale"}
                 and target.get("account_id")
