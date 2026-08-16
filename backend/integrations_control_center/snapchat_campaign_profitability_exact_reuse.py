@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from dashboard_v2_routes import _filtered_orders
+from product_cost_revision import get_product_cost_revision
 
 from . import snapchat_campaign_profitability as profitability
 from . import snapchat_campaign_result_source_routes as routes
@@ -25,7 +26,7 @@ _MATCHED_ORDERS: ContextVar[dict[tuple[str, str], list[dict[str, Any]]]] = (
     ContextVar("snapchat_campaign_matched_orders", default={})
 )
 _CACHE: dict[
-    tuple[str, str, str],
+    tuple[str, str, str, int],
     tuple[datetime, dict[tuple[str, str], dict[str, Any]], dict[str, Any]],
 ] = {}
 
@@ -83,7 +84,8 @@ async def calculate_profitability_from_exact_matches(
     matched_orders: dict[tuple[str, str], list[dict[str, Any]]],
     campaign_spend: dict[tuple[str, str], float],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
-    cache_key = (user_id, date_from, date_to)
+    cost_revision = await get_product_cost_revision(db, user_id)
+    cache_key = (user_id, date_from, date_to, cost_revision)
     now = datetime.now(timezone.utc)
     cached = _CACHE.get(cache_key)
     if cached and now - cached[0] < timedelta(seconds=CACHE_TTL_SECONDS):

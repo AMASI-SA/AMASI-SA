@@ -2,10 +2,25 @@ from dashboard_v2_routes import (
     _aggregate_provider_rows,
     _build_snapchat_account_summaries,
     _finalize_product_profit_rows,
+    _index_products,
     _line_sales_total,
+    _line_product,
     calculate_mezan_v2_line_cost,
 )
 from order_option_cost_snapshot_routes import resolve_base_unit_cost
+
+
+def test_line_product_accepts_all_mezan_catalog_identifiers():
+    product = {"id": "internal-1", "mezan_product_id": "mezan-1", "salla_product_id": "salla-1"}
+    products_by_id, products_by_variant, products_by_sku = _index_products([product])
+
+    for identity in products_by_id:
+        assert _line_product(
+            {"product_id": identity},
+            products_by_id=products_by_id,
+            products_by_variant=products_by_variant,
+            products_by_sku=products_by_sku,
+        ) is product
 
 
 def test_mezan_base_wins_and_selected_components_are_added_once():

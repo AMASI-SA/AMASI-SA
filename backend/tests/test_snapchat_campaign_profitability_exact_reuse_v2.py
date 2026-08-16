@@ -56,6 +56,9 @@ async def test_capture_reuses_the_same_campaign_matcher(monkeypatch):
 async def test_profitability_uses_exact_orders_and_campaign_spend(monkeypatch):
     module._CACHE.clear()
 
+    async def cost_revision(db, user_id):
+        return 0
+
     async def cost_context(db, user_id):
         return {"loaded": True}
 
@@ -74,6 +77,7 @@ async def test_profitability_uses_exact_orders_and_campaign_spend(monkeypatch):
 
     monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
     monkeypatch.setattr(module.profitability, "_order_cost_and_products", order_cost)
+    monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
 
     by_campaign, totals = await module.calculate_profitability_from_exact_matches(
         object(),
@@ -99,6 +103,35 @@ async def test_profitability_uses_exact_orders_and_campaign_spend(monkeypatch):
     assert totals["orders"] == 2
     assert totals["product_cost_sar"] == 60.0
     assert totals["contribution_profit_sar"] == 60.0
+
+
+@pytest.mark.asyncio
+async def test_profitability_cache_is_invalidated_by_mezan_cost_revision(monkeypatch):
+    module._CACHE.clear()
+    revisions = iter((3, 4))
+    loads = 0
+
+    async def cost_revision(db, user_id):
+        return next(revisions)
+
+    async def cost_context(db, user_id):
+        nonlocal loads
+        loads += 1
+        return {}
+
+    monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
+    monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
+
+    kwargs = {
+        "date_from": "2026-08-04",
+        "date_to": "2026-08-04",
+        "matched_orders": {},
+        "campaign_spend": {},
+    }
+    await module.calculate_profitability_from_exact_matches(object(), "owner-1", **kwargs)
+    await module.calculate_profitability_from_exact_matches(object(), "owner-1", **kwargs)
+
+    assert loads == 2
 
 
 def test_source_policy_is_exact_and_read_only():

@@ -166,6 +166,41 @@ def _line_product(
     return products_by_sku.get(sku) if sku else None
 
 
+def _index_products(
+    products: list[dict[str, Any]],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
+    """Index the canonical Mezan catalog by every stored product identity."""
+    products_by_id: dict[str, dict[str, Any]] = {}
+    products_by_variant: dict[str, dict[str, Any]] = {}
+    products_by_sku: dict[str, dict[str, Any]] = {}
+    for product in products:
+        for product_id in (
+            product.get("salla_product_id"),
+            product.get("mezan_product_id"),
+            product.get("id"),
+        ):
+            product_id = str(product_id or "").strip()
+            if product_id:
+                products_by_id[product_id] = product
+        sku = str(product.get("sku") or "").strip().casefold()
+        if sku:
+            products_by_sku[sku] = product
+        for variant in product.get("variants") or []:
+            if not isinstance(variant, dict):
+                continue
+            variant_id = str(variant.get("id") or "").strip()
+            if variant_id:
+                products_by_variant[variant_id] = product
+            variant_sku = str(variant.get("sku") or "").strip().casefold()
+            if variant_sku:
+                products_by_sku[variant_sku] = product
+    return products_by_id, products_by_variant, products_by_sku
+
+
 def calculate_mezan_v2_line_cost(
     item: dict[str, Any],
     *,
@@ -378,6 +413,7 @@ async def build_mezan_v2_product_cost(
             {"user_id": user_id},
             {
                 "_id": 0,
+                "id": 1,
                 "salla_product_id": 1,
                 "mezan_product_id": 1,
                 "name": 1,
@@ -389,27 +425,13 @@ async def build_mezan_v2_product_cost(
         ),
         100000,
     )
-    products_by_id: dict[str, dict[str, Any]] = {}
-    products_by_variant: dict[str, dict[str, Any]] = {}
-    products_by_sku: dict[str, dict[str, Any]] = {}
-    for product in products:
-        product_id = str(product.get("salla_product_id") or "").strip()
-        if product_id:
-            products_by_id[product_id] = product
-        sku = str(product.get("sku") or "").strip().casefold()
-        if sku:
-            products_by_sku[sku] = product
-        for variant in product.get("variants") or []:
-            if not isinstance(variant, dict):
-                continue
-            variant_id = str(variant.get("id") or "").strip()
-            if variant_id:
-                products_by_variant[variant_id] = product
-            variant_sku = str(variant.get("sku") or "").strip().casefold()
-            if variant_sku:
-                products_by_sku[variant_sku] = product
+    products_by_id, products_by_variant, products_by_sku = _index_products(products)
 
-    product_ids = list(products_by_id)
+    product_ids = [
+        str(product.get("salla_product_id") or "").strip()
+        for product in products
+        if str(product.get("salla_product_id") or "").strip()
+    ]
     profiles = await _to_list(
         db[COST_PROFILES].find(
             {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
