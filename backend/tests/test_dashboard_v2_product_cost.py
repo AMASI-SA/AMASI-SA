@@ -119,6 +119,22 @@ def test_raw_salla_variant_cost_price_is_used_as_fallback():
     assert (cost, source) == (41.5, "salla_variant_fallback")
 
 
+def test_raw_salla_product_cost_price_is_used_as_fallback():
+    cost, source = resolve_base_unit_cost(
+        {"product_id": "319849177", "sku": "AMS13060"},
+        {},
+        {
+            "id": "319849177",
+            "sku": "AMS13060",
+            "cost_price_from_salla": None,
+            "cost_price": {"amount": "55.00"},
+            "variants": [],
+        },
+    )
+
+    assert (cost, source) == (55, "salla_product_fallback")
+
+
 def test_salla_fallback_calculates_cost_but_stays_missing_in_mezan():
     result = calculate_mezan_v2_line_cost(
         {"product_id": "p-1", "quantity": 1},
