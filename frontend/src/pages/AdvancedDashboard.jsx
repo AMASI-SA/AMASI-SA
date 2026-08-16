@@ -422,8 +422,14 @@ export default function AdvancedDashboard() {
     const loadPeriod = useCallback(async (next) => {
         setLoading(true);
         try {
-            const response = await api.get(`/dashboard-v2?${filtersToQueryString(next)}`);
+            const query = new URLSearchParams(filtersToQueryString(next));
+            query.set("_refresh", String(Date.now()));
+            const response = await api.get(`/dashboard-v2?${query.toString()}`, {
+                headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            });
             setData(response.data);
+        } catch {
+            setData(null);
         } finally { setLoading(false); }
     }, []);
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
