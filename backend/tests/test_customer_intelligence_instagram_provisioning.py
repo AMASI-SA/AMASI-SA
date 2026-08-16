@@ -291,7 +291,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
     assert fields == ("comments", "messages")
     assert [request.method for request in requests] == ["GET", "POST", "GET"]
     assert requests[1].url.path.endswith(
-        f"/{RAW_INSTAGRAM_ID}/subscribed_apps"
+        f"/{RAW_PAGE_ID}/subscribed_apps"
     )
 
 

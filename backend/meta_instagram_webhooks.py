@@ -143,7 +143,11 @@ async def subscribe_instagram_webhooks(
         if not page_token:
             raise MetaInstagramWebhookError("instagram_page_access_required")
 
-        edge = f"{_graph_base()}/{instagram_account_id}/subscribed_apps"
+        # Facebook Login yields a Page access token, so Meta requires the app
+        # subscription to be installed on the linked Page's subscribed_apps
+        # edge. The Instagram account ID is still validated above to prevent
+        # subscribing an unrelated Page.
+        edge = f"{_graph_base()}/{page_id}/subscribed_apps"
         subscribed_fields = ",".join(INSTAGRAM_WEBHOOK_FIELDS)
         installed = await _json(
             await http.post(
