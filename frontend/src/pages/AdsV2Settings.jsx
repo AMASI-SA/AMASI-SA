@@ -566,7 +566,21 @@ function DiagnosticReport({ report }) {
           NEVER touched until the merchant approves on the review screen. */}
       {report.provider === "snapchat" &&
         ["needs_relink", "expired", "missing"].includes(s.token) && (
-          <RelinkSnapchatPanel />
+          <Card className="bg-amber-500/10 border-amber-500/40">
+            <CardContent className="pt-4">
+              <p className="text-sm text-amber-100 font-semibold">
+                تم تجميد إعادة الربط القديمة. إدارة Snapchat والربط والمزامنة متاحة من ميزان 2 فقط.
+              </p>
+              <Button
+                size="sm"
+                className="mt-3"
+                onClick={() => { window.location.href = "/integrations-v2?provider=snapchat_ads"; }}
+                data-testid="open-snapchat-mezan2"
+              >
+                فتح Snapchat في ميزان 2
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
       {/* Stats */}

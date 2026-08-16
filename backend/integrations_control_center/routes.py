@@ -128,48 +128,31 @@ def make_integrations_control_center_router(db: Any, current_user: Callable) -> 
             provider_id = provider_id or "meta_ads"
         return await service.list_errors(str(principal["id"]), provider=provider_id, limit=limit)
 
-    @router.post(
-        "/snapchat_ads/sync",
-        response_model=SnapchatAnalyticsSyncResponse,
-    )
+    # Kept only for the focused legacy harness. The production package
+    # composer removes this route unconditionally and installs the native
+    # Mezan 2 implementation at the same URL.
+    @router.post("/snapchat_ads/sync", response_model=SnapchatAnalyticsSyncResponse)
     async def sync_snapchat_ads(
         payload: SnapchatAnalyticsSyncInput,
         user: dict = Depends(current_user),
     ) -> dict:
         owner = _require_owner(user)
         try:
-            return await service.sync_snapchat_analytics(
-                str(owner["id"]),
-                payload,
-            )
+            return await service.sync_snapchat_analytics(str(owner["id"]), payload)
         except SnapchatAnalyticsSyncError as exc:
-            failure_result = exc.result or {}
+            result = exc.result or {}
             raise HTTPException(
                 status_code=exc.status_code,
                 detail={
                     "run_id": getattr(exc, "run_id", None),
                     "provider": "snapchat_ads",
                     "status": "failed",
-                    "date_from": (
-                        failure_result.get("date_from")
-                        or payload.from_date
-                    ),
-                    "date_to": (
-                        failure_result.get("date_to")
-                        or payload.to_date
-                    ),
-                    "accounts_attempted": int(
-                        failure_result.get("accounts_synced") or 0
-                    ),
-                    "accounts_complete": int(
-                        failure_result.get("accounts_complete") or 0
-                    ),
-                    "rows_saved": int(
-                        failure_result.get("rows_saved") or 0
-                    ),
-                    "errors_count": int(
-                        failure_result.get("errors_count") or 1
-                    ),
+                    "date_from": result.get("date_from") or payload.from_date,
+                    "date_to": result.get("date_to") or payload.to_date,
+                    "accounts_attempted": int(result.get("accounts_synced") or 0),
+                    "accounts_complete": int(result.get("accounts_complete") or 0),
+                    "rows_saved": int(result.get("rows_saved") or 0),
+                    "errors_count": int(result.get("errors_count") or 1),
                     "source_only": True,
                     "accounting_write_reached": False,
                     "qoyod_write_reached": False,
