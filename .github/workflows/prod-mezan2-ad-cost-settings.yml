@@ -52,6 +52,7 @@ jobs:
           pytest
           pytest-asyncio
           openpyxl
+          openai==1.99.9
 
       - name: Compile Mezan 2 account cost settings
         run: >-

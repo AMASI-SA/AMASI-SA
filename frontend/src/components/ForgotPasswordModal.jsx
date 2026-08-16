@@ -27,7 +27,7 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
             setHasQuestion(!!data.has_question);
             setStep("reset");
             if (!data.has_question) {
-                toast.warning("هذا الحساب لا يحتوي على سؤال أمان مضبوط.");
+                toast.warning(data.question || "الاسترداد الذاتي متوقف. تواصل مع مالك النظام.");
             }
         } catch (err) {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
@@ -39,7 +39,7 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
     const submitReset = async (e) => {
         e.preventDefault();
         if (!answer.trim()) return toast.error("الرجاء إدخال الإجابة");
-        if (newPwd.length < 6) return toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+        if (newPwd.length < 12) return toast.error("كلمة المرور يجب أن تكون 12 حرفاً على الأقل");
         if (newPwd !== confirmPwd) return toast.error("كلمتا المرور غير متطابقتين");
         setBusy(true);
         try {
@@ -73,7 +73,7 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
 
                 {step === "email" && (
                     <form onSubmit={lookupQuestion} className="p-5 space-y-4">
-                        <p className="text-sm text-muted-foreground">أدخل بريدك الإلكتروني المسجّل وسنعرض لك سؤال الأمان.</p>
+                        <p className="text-sm text-muted-foreground">أدخل بريدك الإلكتروني للتحقق من خيارات الاسترداد المتاحة.</p>
                         <div>
                             <label className="block text-sm font-semibold mb-1.5">البريد الإلكتروني</label>
                             <div className="relative">
@@ -111,7 +111,7 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
                         </div>
                         {!hasQuestion && (
                             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
-                                لم يتم ضبط سؤال أمان لهذا الحساب. تواصل مع Owner لإعادة تعيين كلمة المرور.
+                                الاسترداد الذاتي متوقف لحماية الحسابات. تواصل مع مالك النظام لإعادة تعيين كلمة المرور.
                             </div>
                         )}
                         <div>
@@ -131,11 +131,11 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
                             <div className="relative">
                                 <LockKey size={18} className="absolute top-3 right-3 text-muted-foreground" />
                                 <input
-                                    type="text"
+                                    type="password"
                                     value={newPwd}
                                     onChange={(e) => setNewPwd(e.target.value)}
                                     className={`${inputCls} ps-3 pe-9`}
-                                    placeholder="6 أحرف على الأقل"
+                                    placeholder="12 حرفاً على الأقل"
                                     data-testid="forgot-new-pwd-input"
                                     disabled={!hasQuestion}
                                 />
@@ -144,7 +144,7 @@ export default function ForgotPasswordModal({ onClose, onSuccess }) {
                         <div>
                             <label className="block text-sm font-semibold mb-1.5">تأكيد كلمة المرور</label>
                             <input
-                                type="text"
+                                type="password"
                                 value={confirmPwd}
                                 onChange={(e) => setConfirmPwd(e.target.value)}
                                 className={inputCls}

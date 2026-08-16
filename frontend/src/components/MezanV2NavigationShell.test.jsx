@@ -191,6 +191,7 @@ test("opening marketing selects a visible secondary rail outside the primary scr
     expect(state.visibleSection?.id).toBe("marketing");
     expect(state.visibleSection.items.map((item) => item.label)).toEqual([
         "جميع المنصات",
+        "توصيات الحملات",
         "سناب شات",
         "تيك توك",
         "ميتا",

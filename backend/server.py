@@ -37,11 +37,13 @@ def _local_today_date():
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
+from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
     hash_password,
+    validate_bcrypt_secret,
     verify_password,
     account_is_disabled,
     create_access_token,
@@ -55,6 +57,7 @@ from auth import (
     DEFAULT_SHIPPING_COMPANIES,
 )
 from excel_parser import parse_salla_excel, match_settings
+from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
 from release_identity import BOOT_RELEASE_IDENTITY
 from report_builder import build_report as _build_report
@@ -179,10 +182,28 @@ async def current_user(request: Request) -> dict:
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+MIN_PASSWORD_LENGTH = 12
+
+
+def _public_registration_enabled() -> bool:
+    """Public signup is closed unless deployment explicitly opts in."""
+    return os.environ.get("AUTH_PUBLIC_REGISTRATION_ENABLED", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _security_question_recovery_enabled() -> bool:
+    """Legacy knowledge-based recovery is disabled unless explicitly enabled."""
+    return os.environ.get("AUTH_SECURITY_QUESTION_RESET_ENABLED", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class LoginIn(BaseModel):
@@ -193,7 +214,8 @@ class LoginIn(BaseModel):
 # iter-51 — Profile/account management schemas
 class ChangePasswordIn(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ChangeEmailIn(BaseModel):
@@ -210,7 +232,8 @@ class SecurityQuestionIn(BaseModel):
     The answer is hashed on the server before storage."""
     current_password: str = Field(min_length=1)
     question: str = Field(min_length=4, max_length=200)
-    answer: str = Field(min_length=2, max_length=200)
+    answer: str = Field(min_length=8, max_length=200)
+    _answer_utf8_limit = validator("answer", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ForgotPasswordCheckIn(BaseModel):
@@ -220,7 +243,8 @@ class ForgotPasswordCheckIn(BaseModel):
 class ForgotPasswordResetIn(BaseModel):
     email: EmailStr
     answer: str = Field(min_length=1, max_length=200)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 # iter-51 — Multi-user / RBAC schemas
@@ -288,10 +312,11 @@ ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
 class TeamUserCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
     role: str = Field(default="viewer")
     extra_permissions: list[str] = Field(default_factory=list)
     denied_permissions: list[str] = Field(default_factory=list)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class TeamUserUpdateIn(BaseModel):
@@ -299,7 +324,8 @@ class TeamUserUpdateIn(BaseModel):
     role: Optional[str] = None
     extra_permissions: Optional[list[str]] = None
     denied_permissions: Optional[list[str]] = None
-    new_password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    new_password: Optional[str] = Field(default=None, min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 def _effective_perms(user_doc: dict) -> set[str]:
@@ -308,10 +334,11 @@ def _effective_perms(user_doc: dict) -> set[str]:
     Formula:  role_defaults ∪ extra_permissions  −  denied_permissions
     The owner ALWAYS has every permission and cannot be downgraded.
     """
-    role = (user_doc.get("role") or "viewer").lower()
+    role = (user_doc.get("role") or "").lower()
     if role == "owner":
         return set(PERMISSIONS_CATALOGUE.keys())
-    base = set(ROLE_DEFAULT_PERMS.get(role, ROLE_DEFAULT_PERMS["viewer"]))
+    # Unknown/missing roles fail closed. They must never inherit viewer access.
+    base = set(ROLE_DEFAULT_PERMS.get(role, []))
     base |= set(user_doc.get("extra_permissions") or [])
     base -= set(user_doc.get("denied_permissions") or [])
     return base
@@ -530,8 +557,10 @@ class AnalysisCreate(BaseModel):
 
 
 # ── Auth Routes ───────────────────────────────────────────────────────────────
-@api.post("/auth/register")
+@api.post("/auth/register", include_in_schema=_public_registration_enabled())
 async def register(payload: RegisterIn, response: Response):
+    if not _public_registration_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     email = payload.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="هذا البريد الإلكتروني مسجل بالفعل")
@@ -654,8 +683,15 @@ async def change_my_email(payload: ChangeEmailIn, user: dict = Depends(current_u
 
 @api.put("/auth/profile/security-question")
 async def set_security_question(payload: SecurityQuestionIn, user: dict = Depends(current_user)):
-    """Set/update the security question used for password recovery. The
-    answer is normalised (trim + lower) and bcrypt-hashed before storage."""
+    """Legacy knowledge-based recovery is unavailable by default."""
+    if not _security_question_recovery_enabled():
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "security_question_recovery_disabled",
+                "message": "سؤال الأمان متوقف. استخدم استرداداً يوافق عليه مالك النظام.",
+            },
+        )
     full = await db.users.find_one({"id": user["id"]})
     if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
@@ -674,21 +710,30 @@ async def set_security_question(payload: SecurityQuestionIn, user: dict = Depend
 # ── iter-51 — Password recovery via security question (no email needed) ────
 @api.post("/auth/forgot-password/check")
 async def forgot_password_check(payload: ForgotPasswordCheckIn):
-    """Step 1 — given an email, return that user's security question
-    (if any). We intentionally DO NOT reveal whether the email exists,
-    to avoid email enumeration: return a generic question if not found
-    or no security question is set."""
+    """Return no account-specific data while legacy recovery is disabled."""
+    if not _security_question_recovery_enabled():
+        return {
+            "question": "الاسترداد الذاتي متوقف. تواصل مع مالك النظام.",
+            "has_question": False,
+            "recovery_method": "contact_owner",
+        }
     user = await db.users.find_one({"email": payload.email.lower()})
     if user and user.get("security_question"):
         return {"question": user["security_question"], "has_question": True}
-    # Generic placeholder — prevents enumeration. Frontend should still
-    # collect an answer but the next call will fail.
-    return {"question": "سؤال الاسترداد غير مضبوط لهذا الحساب.", "has_question": False}
+    return {"question": "تعذّر بدء الاسترداد الذاتي.", "has_question": False}
 
 
 @api.post("/auth/forgot-password/reset")
 async def forgot_password_reset(payload: ForgotPasswordResetIn):
-    """Step 2 — verify the answer + reset the password in one shot."""
+    """Legacy reset remains unavailable until purpose-bound email OTP lands."""
+    if not _security_question_recovery_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "security_question_recovery_disabled",
+                "message": "الاسترداد الذاتي متوقف. تواصل مع مالك النظام.",
+            },
+        )
     user = await db.users.find_one({"email": payload.email.lower()})
     if not user or not user.get("security_answer_hash"):
         # Same generic message → no enumeration.
@@ -1685,11 +1730,7 @@ async def create_analysis(
     upsert loop runs in an `asyncio.create_task` so Make.com webhook
     ingestion is never blocked by a long upload.
     """
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
 
     job = await create_import_job(
         db,
@@ -1763,11 +1804,7 @@ async def reprocess_analysis(
     if not existing:
         raise HTTPException(status_code=404, detail="التحليل غير موجود")
 
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
     try:
         parsed = parse_salla_excel(content)
     except ValueError as e:
@@ -4351,25 +4388,39 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 app.include_router(make_mezan_mcp_router(db))
 app.include_router(api)
 
-# CORS
+# CORS — production origins are explicit and never fall back to wildcard.
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 extra = os.environ.get("CORS_ORIGINS", "").split(",")
+_localhost_origins = (
+    ["http://localhost:3000"]
+    if os.environ.get("CORS_ALLOW_LOCALHOST", "").strip().lower() in {"1", "true", "yes", "on"}
+    else []
+)
 origins = list({o.strip() for o in [
     frontend_url,
-    "http://localhost:3000",
     "https://amasi-sa.com",
     "https://www.amasi-sa.com",
-    # Salla partner demo storefront used to validate App Snippets before
-    # enabling them for the live Amasi store.
-    "https://demostore.salla.sa",
-] + extra if o and o.strip() and o.strip() != "*"})
+] + _localhost_origins + extra if o and o.strip() and o.strip() != "*"})
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# CORS controls response sharing; this separate guard blocks cross-site browser
+# mutations that carry Mezan's HttpOnly session cookies.
+app.add_middleware(
+    BrowserSecurityMiddleware,
+    trusted_origins={
+        frontend_url,
+        "https://mezansalla.com",
+        "https://www.mezansalla.com",
+        "https://amasi-sa.com",
+        "https://www.amasi-sa.com",
+    },
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
