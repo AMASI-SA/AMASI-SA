@@ -77,7 +77,12 @@ async def import_file(
         }
 
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        wb = openpyxl.load_workbook(
+            io.BytesIO(content),
+            data_only=True,
+            read_only=True,
+            keep_links=False,
+        )
     except Exception as e:
         raise ValueError(f"تعذّر فتح الملف كـ Excel: {e}") from e
 
