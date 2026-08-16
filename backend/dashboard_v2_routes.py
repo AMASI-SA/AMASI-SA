@@ -53,6 +53,20 @@ PROVIDER_IDS = {
     "tiktok": TIKTOK_PROVIDER_ID,
 }
 
+PRODUCT_COST_CATALOG_PROJECTION = {
+    "_id": 0,
+    "id": 1,
+    "salla_product_id": 1,
+    "mezan_product_id": 1,
+    "name": 1,
+    "sku": 1,
+    "main_image": 1,
+    "cost_price_from_salla": 1,
+    "cost_price": 1,
+    "cost": 1,
+    "variants": 1,
+}
+
 
 def _today_riyadh() -> date:
     return datetime.now(timezone.utc).astimezone(RIYADH_TZ).date()
@@ -411,17 +425,7 @@ async def build_mezan_v2_product_cost(
     products = await _to_list(
         db[PRODUCTS].find(
             {"user_id": user_id},
-            {
-                "_id": 0,
-                "id": 1,
-                "salla_product_id": 1,
-                "mezan_product_id": 1,
-                "name": 1,
-                "sku": 1,
-                "main_image": 1,
-                "cost_price_from_salla": 1,
-                "variants": 1,
-            },
+            PRODUCT_COST_CATALOG_PROJECTION,
         ),
         100000,
     )
