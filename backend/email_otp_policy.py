@@ -9,8 +9,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from meta_reviewer_access import is_meta_reviewer
-
 
 def _truthy(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
@@ -42,7 +40,7 @@ async def requires_email_otp(db: Any, user: dict[str, Any] | None) -> bool:
     if role == "owner":
         return False
 
-    if is_meta_reviewer(user):
+    if role == "meta_reviewer":
         return False
 
     return True
