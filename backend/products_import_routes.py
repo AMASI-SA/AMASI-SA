@@ -39,6 +39,9 @@ from openpyxl import load_workbook
 from excel_upload_security import read_safe_xlsx_upload
 
 
+MAX_IMPORT_ROWS = 50_000
+
+
 # ─────────────────────────  helpers  ──────────────────────────────────
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -74,7 +77,7 @@ def _parse_categories_xlsx(raw: bytes) -> dict:
         D..: ignored
     """
     try:
-        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True, keep_links=False)
     except Exception as e:
         raise HTTPException(400, f"تعذّر قراءة ملف Excel: {e}")
     ws = wb.active
@@ -84,36 +87,42 @@ def _parse_categories_xlsx(raw: bytes) -> dict:
     seen_keys: set[str] = set()
 
     header_seen = False
-    for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        if not row:
-            continue
-        a = _norm(row[0] if len(row) > 0 else None)
-        b = row[1] if len(row) > 1 else None
-        c = _norm(row[2] if len(row) > 2 else None)
-        if not header_seen:
-            header_seen = True
-            # Treat row 1 as header. We don't strictly validate header
-            # text; we trust column positions.
-            continue
-        if not a:
-            continue
-        is_sub = _is_yes(b)
-        parent = c if (is_sub and c) else None
-        key = _norm_key(a)
-        if key in seen_keys:
-            duplicates_in_file.append({"row": idx, "name": a})
-            continue
-        seen_keys.add(key)
-        item = {
-            "name": a,
-            "is_sub": is_sub,
-            "parent": parent,
-            "raw_row_index": idx,
-            "key": key,
-        }
-        if is_sub and not c:
-            orphans.append(item)
-        rows.append(item)
+    try:
+        for idx, row in enumerate(ws.iter_rows(values_only=True, max_col=3), start=1):
+            if idx > MAX_IMPORT_ROWS + 1:
+                raise HTTPException(413, "يتجاوز ملف التصنيفات الحد المسموح: 50,000 صف")
+            if not row:
+                continue
+            a = _norm(row[0] if len(row) > 0 else None)
+            b = row[1] if len(row) > 1 else None
+            c = _norm(row[2] if len(row) > 2 else None)
+            if not header_seen:
+                header_seen = True
+                # Treat row 1 as header. We don't strictly validate header
+                # text; we trust column positions.
+                continue
+            if not a:
+                continue
+            is_sub = _is_yes(b)
+            parent = c if (is_sub and c) else None
+            key = _norm_key(a)
+            if key in seen_keys:
+                duplicates_in_file.append({"row": idx, "name": a})
+                continue
+            seen_keys.add(key)
+            item = {
+                "name": a,
+                "is_sub": is_sub,
+                "parent": parent,
+                "raw_row_index": idx,
+                "key": key,
+            }
+            if is_sub and not c:
+                orphans.append(item)
+            rows.append(item)
+    finally:
+        wb.close()
+
     return {
         "rows":                rows,
         "orphans":             orphans,
@@ -406,7 +415,7 @@ def _parse_products_xlsx(raw: bytes) -> dict:
        F: سعر التكلفة               — optional
     """
     try:
-        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True, keep_links=False)
     except Exception as e:
         raise HTTPException(400, f"تعذّر قراءة ملف Excel: {e}")
     ws = wb.active
@@ -415,61 +424,67 @@ def _parse_products_xlsx(raw: bytes) -> dict:
     duplicates_in_file: list[dict] = []
     no_name: list[int] = []
     header_seen = False
-    for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        if not row:
-            continue
-        if not header_seen:
-            header_seen = True
-            continue
-        pid  = _norm(row[0] if len(row) > 0 else None)
-        name = _norm(row[1] if len(row) > 1 else None)
-        cats = _norm(row[2] if len(row) > 2 else None)
-        imgs = _norm(row[3] if len(row) > 3 else None)
-        # Column E is empty by spec — column F is cost.
-        cost_raw = row[5] if len(row) > 5 else None
-        if not pid:
-            continue
-        if not name:
-            no_name.append(idx)
-            continue
-        if pid in seen:
-            duplicates_in_file.append(
-                {"row": idx, "product_id": pid, "name": name})
-            continue
-        seen[pid] = idx
-        # Parse categories: comma-separated paths, each path uses " > ".
-        cat_paths: list[list[str]] = []
-        if cats:
-            for path in cats.split(","):
-                tokens = [t.strip() for t in path.split(">") if t.strip()]
-                if tokens:
-                    cat_paths.append(tokens)
-        # Parse images
-        image_urls: list[str] = []
-        if imgs:
-            for u in imgs.split(","):
-                u = u.strip()
-                if u:
-                    image_urls.append(u)
-        # Cost
-        cost = None
-        if cost_raw not in (None, ""):
-            try:
-                cost = round(float(cost_raw), 2)
-                if cost <= 0:
+    try:
+        for idx, row in enumerate(ws.iter_rows(values_only=True, max_col=6), start=1):
+            if idx > MAX_IMPORT_ROWS + 1:
+                raise HTTPException(413, "يتجاوز ملف المنتجات الحد المسموح: 50,000 صف")
+            if not row:
+                continue
+            if not header_seen:
+                header_seen = True
+                continue
+            pid  = _norm(row[0] if len(row) > 0 else None)
+            name = _norm(row[1] if len(row) > 1 else None)
+            cats = _norm(row[2] if len(row) > 2 else None)
+            imgs = _norm(row[3] if len(row) > 3 else None)
+            # Column E is empty by spec — column F is cost.
+            cost_raw = row[5] if len(row) > 5 else None
+            if not pid:
+                continue
+            if not name:
+                no_name.append(idx)
+                continue
+            if pid in seen:
+                duplicates_in_file.append(
+                    {"row": idx, "product_id": pid, "name": name})
+                continue
+            seen[pid] = idx
+            # Parse categories: comma-separated paths, each path uses " > ".
+            cat_paths: list[list[str]] = []
+            if cats:
+                for path in cats.split(","):
+                    tokens = [t.strip() for t in path.split(">") if t.strip()]
+                    if tokens:
+                        cat_paths.append(tokens)
+            # Parse images
+            image_urls: list[str] = []
+            if imgs:
+                for u in imgs.split(","):
+                    u = u.strip()
+                    if u:
+                        image_urls.append(u)
+            # Cost
+            cost = None
+            if cost_raw not in (None, ""):
+                try:
+                    cost = round(float(cost_raw), 2)
+                    if cost <= 0:
+                        cost = None
+                except (TypeError, ValueError):
                     cost = None
-            except (TypeError, ValueError):
-                cost = None
-        rows.append({
-            "row":         idx,
-            "product_id":  pid,
-            "name":        name,
-            "name_lower":  _norm_key(name),
-            "cat_paths":   cat_paths,
-            "image_urls":  image_urls,
-            "image_url":   (image_urls[0] if image_urls else None),
-            "cost":        cost,
-        })
+            rows.append({
+                "row":         idx,
+                "product_id":  pid,
+                "name":        name,
+                "name_lower":  _norm_key(name),
+                "cat_paths":   cat_paths,
+                "image_urls":  image_urls,
+                "image_url":   (image_urls[0] if image_urls else None),
+                "cost":        cost,
+            })
+    finally:
+        wb.close()
+
     return {
         "rows": rows,
         "duplicates_in_file": duplicates_in_file,
