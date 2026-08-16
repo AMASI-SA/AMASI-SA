@@ -37,6 +37,7 @@ def _local_today_date():
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
+from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
@@ -4373,25 +4374,39 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 app.include_router(make_mezan_mcp_router(db))
 app.include_router(api)
 
-# CORS
+# CORS — production origins are explicit and never fall back to wildcard.
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 extra = os.environ.get("CORS_ORIGINS", "").split(",")
+_localhost_origins = (
+    ["http://localhost:3000"]
+    if os.environ.get("CORS_ALLOW_LOCALHOST", "").strip().lower() in {"1", "true", "yes", "on"}
+    else []
+)
 origins = list({o.strip() for o in [
     frontend_url,
-    "http://localhost:3000",
     "https://amasi-sa.com",
     "https://www.amasi-sa.com",
-    # Salla partner demo storefront used to validate App Snippets before
-    # enabling them for the live Amasi store.
-    "https://demostore.salla.sa",
-] + extra if o and o.strip() and o.strip() != "*"})
+] + _localhost_origins + extra if o and o.strip() and o.strip() != "*"})
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# CORS controls response sharing; this separate guard blocks cross-site browser
+# mutations that carry Mezan's HttpOnly session cookies.
+app.add_middleware(
+    BrowserSecurityMiddleware,
+    trusted_origins={
+        frontend_url,
+        "https://mezansalla.com",
+        "https://www.mezansalla.com",
+        "https://amasi-sa.com",
+        "https://www.amasi-sa.com",
+    },
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
