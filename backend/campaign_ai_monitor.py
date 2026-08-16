@@ -23,7 +23,7 @@ from typing import Any, Callable, Literal
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pymongo.errors import DuplicateKeyError
 
 from integrations_control_center.meta_campaign_reporting import _paged_get
@@ -66,6 +66,10 @@ MONITOR_TIMEOUT_SECONDS = 8 * 60
 MAX_ENTITY_ROWS = 300
 MAX_AI_CANDIDATES = 120
 MAX_RECOMMENDATIONS = 18
+OPENAI_MAX_OUTPUT_TOKENS = min(
+    24000,
+    max(8000, int(os.environ.get("MEZAN_CAMPAIGN_AI_MAX_OUTPUT_TOKENS", "12000"))),
+)
 TARGET_CPA_SAR = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_CPA_SAR", "56.25"))
 TARGET_ROAS = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_ROAS", "2.5"))
 MIN_WASTE_SPEND_SAR = float(os.environ.get("MEZAN_CAMPAIGN_MIN_WASTE_SPEND_SAR", "75"))
@@ -195,6 +199,217 @@ AI_SCHEMA = {
     },
     "required": ["summary", "recommendations", "limitations"],
 }
+
+
+class CampaignOpenAIError(RuntimeError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _openai_error_code(exc: Exception) -> str:
+    """Keep API failures distinct from model-output validation failures."""
+    if isinstance(exc, CampaignOpenAIError):
+        return exc.code
+    if isinstance(exc, ValidationError):
+        return "openai_response_validation_error"
+    raw_code = _text(getattr(exc, "code", ""), limit=100).lower()
+    message = _text(exc, limit=500).lower()
+    status = getattr(exc, "status_code", None)
+    combined = f"{raw_code} {message}"
+    if "openai_api_key_missing" in combined:
+        return "openai_api_key_missing"
+    if "insufficient_quota" in combined or "billing quota" in combined:
+        return "openai_insufficient_quota"
+    if status == 401 or "invalid_api_key" in combined:
+        return "openai_invalid_api_key"
+    if status == 403 or "model_not_found" in combined:
+        return "openai_model_access_denied"
+    if status == 429 or "rate_limit_exceeded" in combined:
+        return "openai_rate_limited"
+    if raw_code:
+        return f"openai_{raw_code}"
+    return f"openai_{type(exc).__name__.lower()}"
+
+
+def _fallback_summary(error_code: str) -> str:
+    labels = {
+        "openai_api_key_missing": "مفتاح OpenAI غير مهيأ؛ يعرض ميزان توصيات احتياطية محدودة.",
+        "openai_invalid_api_key": "مفتاح OpenAI غير صالح؛ يعرض ميزان توصيات احتياطية محدودة.",
+        "openai_insufficient_quota": "رصيد OpenAI API أو حد الإنفاق غير متاح؛ يعرض ميزان توصيات احتياطية محدودة.",
+        "openai_rate_limited": "OpenAI مزدحم مؤقتًا؛ يعرض ميزان توصيات احتياطية حتى المحاولة التالية.",
+        "openai_model_access_denied": "المشروع لا يملك صلاحية نموذج OpenAI المحدد؛ يعرض ميزان توصيات احتياطية.",
+        "openai_response_validation_error": "وصل رد OpenAI لكن تعذر اعتماد تنسيق النتيجة؛ يعرض ميزان توصيات احتياطية.",
+        "openai_response_invalid_json": "وصل رد OpenAI غير مكتمل؛ يعرض ميزان توصيات احتياطية حتى المحاولة التالية.",
+        "openai_response_empty": "لم يصل محتوى قابل للتحليل من OpenAI؛ يعرض ميزان توصيات احتياطية.",
+    }
+    if error_code.startswith("openai_response_incomplete"):
+        return "توقف رد OpenAI قبل اكتمال التوصيات؛ يعرض ميزان توصيات احتياطية حتى المحاولة التالية."
+    return labels.get(
+        error_code,
+        "تعذر تشغيل تحليل OpenAI؛ يعرض ميزان توصيات احتياطية محدودة ومعلّمة بمصدرها.",
+    )
+
+
+def _text_list(value: Any, *, limit: int) -> list[str]:
+    values = value if isinstance(value, list) else [value]
+    output: list[str] = []
+    for item in values:
+        normalized = _text(item, limit=260)
+        if normalized:
+            output.append(normalized)
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _normalize_openai_output(
+    raw_text: str,
+    candidates: list[dict[str, Any]],
+    *,
+    next_check_at: str,
+) -> RecommendationOutput:
+    """Normalize harmless model variance while preserving the model's decision."""
+    raw = (raw_text or "").strip()
+    if not raw:
+        raise CampaignOpenAIError("openai_response_empty")
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CampaignOpenAIError("openai_response_invalid_json") from exc
+    if not isinstance(payload, dict):
+        raise CampaignOpenAIError("openai_response_validation_error")
+
+    provider_aliases = {
+        "snap": "snapchat", "snapchat_ads": "snapchat", "snapchat": "snapchat",
+        "facebook": "meta", "instagram": "meta", "meta_ads": "meta", "meta": "meta",
+    }
+    level_aliases = {
+        "campaign": "campaign", "ad_group": "ad_group", "adgroup": "ad_group",
+        "ad_set": "ad_group", "adset": "ad_group", "ad_squad": "ad_group",
+        "adsquad": "ad_group", "ad": "ad", "advertisement": "ad",
+    }
+    action_aliases = {
+        "pause": "pause", "stop": "pause", "إيقاف": "pause", "ايقاف": "pause",
+        "reduce": "reduce", "decrease": "reduce", "خفض": "reduce",
+        "monitor": "monitor", "watch": "monitor", "مراقبة": "monitor",
+        "maintain": "maintain", "keep": "maintain", "continue": "maintain",
+        "استمرار": "maintain", "إبقاء": "maintain", "ابقاء": "maintain",
+        "scale": "scale", "increase": "scale", "توسعة": "scale", "زيادة": "scale",
+    }
+    priority_aliases = {
+        "critical": "critical", "حرج": "critical", "high": "high", "عالي": "high",
+        "medium": "medium", "متوسط": "medium", "low": "low", "منخفض": "low",
+    }
+    confidence_aliases = {
+        "high": "high", "عالية": "high", "عالي": "high",
+        "medium": "medium", "متوسطة": "medium", "متوسط": "medium",
+        "low": "low", "منخفضة": "low", "منخفض": "low",
+    }
+
+    candidate_index: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for candidate in candidates:
+        candidate_index[(
+            str(candidate.get("provider") or ""),
+            str(candidate.get("entity_level") or ""),
+            str(candidate.get("entity_id") or ""),
+        )].append(candidate)
+
+    raw_items = payload.get("recommendations")
+    if raw_items is None:
+        raw_items = []
+    if not isinstance(raw_items, list):
+        raise CampaignOpenAIError("openai_response_validation_error")
+    recommendations: list[RecommendationItem] = []
+    rejected = 0
+    for raw_item in raw_items[:MAX_RECOMMENDATIONS]:
+        if not isinstance(raw_item, dict):
+            rejected += 1
+            continue
+        provider = provider_aliases.get(_text(raw_item.get("provider"), limit=40).lower())
+        level = level_aliases.get(_text(raw_item.get("entity_level"), limit=40).lower())
+        action = action_aliases.get(_text(raw_item.get("action"), limit=40).lower())
+        entity_id = _text(raw_item.get("entity_id"), limit=160)
+        if not provider or not level or not action or not entity_id:
+            rejected += 1
+            continue
+        matches = candidate_index.get((provider, level, entity_id), [])
+        account_id = _text(raw_item.get("account_id"), limit=160) or None
+        if account_id:
+            matches = [row for row in matches if str(row.get("account_id") or "") == account_id]
+        if len(matches) == 1:
+            target = matches[0]
+            account_id = str(target.get("account_id") or "") or None
+        else:
+            target = {}
+        change = _number(raw_item.get("change_percent"))
+        wait = _number(raw_item.get("recommended_wait_hours"))
+        rationale = _text(raw_item.get("rationale") or raw_item.get("why_now"), limit=900)
+        why_now = _text(raw_item.get("why_now") or rationale, limit=900)
+        try:
+            recommendations.append(RecommendationItem(
+                recommendation_id=_text(raw_item.get("recommendation_id"), limit=300) or "pending",
+                provider=provider,
+                entity_level=level,
+                entity_id=entity_id,
+                entity_name=_text(
+                    target.get("entity_name") or raw_item.get("entity_name") or entity_id,
+                    limit=300,
+                ),
+                account_id=account_id,
+                account_name=_text(
+                    target.get("account_name") or raw_item.get("account_name") or account_id,
+                    limit=300,
+                ) or None,
+                parent_name=_text(
+                    target.get("parent_name") or raw_item.get("parent_name"),
+                    limit=300,
+                ) or None,
+                action=action,
+                change_percent=(
+                    min(30, max(5, int(round(change or 15))))
+                    if action in {"reduce", "scale"} else None
+                ),
+                priority=priority_aliases.get(
+                    _text(raw_item.get("priority"), limit=40).lower(), "medium"
+                ),
+                confidence=confidence_aliases.get(
+                    _text(raw_item.get("confidence"), limit=40).lower(), "medium"
+                ),
+                title=_text(raw_item.get("title"), limit=300) or "توصية OpenAI",
+                rationale=rationale or "قرار مبني على تحليل OpenAI للبيانات المرسلة.",
+                evidence=_text_list(raw_item.get("evidence"), limit=6),
+                why_now=why_now or "هذه هي نقطة المراجعة الحالية ضمن دورة التحليل.",
+                recommended_wait_hours=min(24, max(1, int(round(wait or 5)))),
+                observation_plan=_text(raw_item.get("observation_plan"), limit=900)
+                or "أعد القياس في موعد المراجعة التالي.",
+                success_criteria=_text_list(raw_item.get("success_criteria"), limit=4)
+                or ["تحسن النتيجة الاقتصادية بعد فترة المراقبة"],
+                risk_if_ignored=_text(raw_item.get("risk_if_ignored"), limit=900)
+                or "قد يستمر الأداء الحالي دون تصحيح.",
+                guardrail=_text(raw_item.get("guardrail"), limit=900)
+                or "لا يُنفذ أي تغيير إلا بعد موافقة المالك.",
+                next_check_at=next_check_at,
+            ))
+        except ValidationError:
+            rejected += 1
+    if raw_items and not recommendations:
+        raise CampaignOpenAIError("openai_response_validation_error")
+    if rejected:
+        logger.warning("Campaign AI normalized response with %s rejected item(s)", rejected)
+    return RecommendationOutput(
+        summary=_text(payload.get("summary"), limit=1200)
+        or "اكتمل تحليل OpenAI دون ملخص نصي.",
+        recommendations=recommendations,
+        limitations=_text_list(payload.get("limitations"), limit=8),
+    )
 
 
 async def ensure_campaign_ai_indexes(db: Any) -> None:
@@ -736,6 +951,7 @@ def _deterministic_recommendations(
     *,
     next_check_at: str,
     limitation: str,
+    summary: str | None = None,
 ) -> RecommendationOutput:
     """Issue a clearly attributed, conservative Mezan fallback recommendation."""
     recommendations: list[RecommendationItem] = []
@@ -799,8 +1015,8 @@ def _deterministic_recommendations(
         if len(recommendations) >= MAX_RECOMMENDATIONS:
             break
     return RecommendationOutput(
-        summary=(
-            "تعذر اتصال OpenAI؛ يعرض ميزان توصيات احتياطية محدودة ومعلّمة بمصدرها."
+        summary=summary or _fallback_summary(
+            limitation.removeprefix("openai_recommendation:")
         ),
         recommendations=recommendations,
         limitations=[limitation],
@@ -1088,11 +1304,20 @@ async def _ask_openai(
                 "mezan_overall_profit_and_loss": business_profit,
                 "prior_mezan_ai_decisions": prior_decisions,
             }, ensure_ascii=False, default=str),
-            max_output_tokens=5200,
+            max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
+            reasoning={"effort": "low"},
             store=False,
             text={"format": {"type": "json_schema", "name": "campaign_monitor_recommendations", "strict": True, "schema": AI_SCHEMA}},
         )
-        output = RecommendationOutput.model_validate_json(response.output_text)
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            reason = _text(getattr(details, "reason", "unknown"), limit=80) or "unknown"
+            raise CampaignOpenAIError(f"openai_response_incomplete_{reason}")
+        output = _normalize_openai_output(
+            response.output_text,
+            candidates,
+            next_check_at=next_check,
+        )
         return _govern_output(output, candidates, next_check_at=next_check)
     finally:
         await client.close()
@@ -1174,7 +1399,7 @@ async def run_campaign_ai_monitor(
                 )
                 recommendation_source = "openai"
             except Exception as exc:
-                error_code = _text(getattr(exc, "code", type(exc).__name__), limit=100)
+                error_code = _openai_error_code(exc)
                 logger.warning(
                     "Campaign AI model output unavailable for user %s (%s); using governed fallback",
                     user_id,
