@@ -1,13 +1,21 @@
 import asyncio
+import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import campaign_ai_monitor
 
 from campaign_ai_monitor import (
     DEFAULT_INITIAL_DELAY_SECONDS,
     RecommendationItem,
     RecommendationOutput,
     _bounded_account_sample,
+    _ask_openai,
     _deterministic_recommendations,
     _govern_output,
     _monitored_user_ids,
+    _normalize_openai_output,
+    _openai_error_code,
     _recommendation_explanation,
     deterministic_candidates,
 )
@@ -203,6 +211,132 @@ def test_unavailable_model_returns_conservative_mezan_fallback():
     assert result.recommendations[0].action == "pause"
     assert "ميزان" in result.recommendations[0].guardrail
     assert result.limitations == ["openai_recommendation:ValidationError"]
+
+
+def test_openai_output_normalizer_repairs_safe_format_variance_without_changing_decision():
+    candidate = entity(
+        provider="snapchat",
+        entity_level="ad_group",
+        entity_id="group-1",
+        entity_name="مجموعة الوطني",
+        account_id="snap-account-1",
+        account_name="أماسي الرئيسي",
+    )
+    raw = json.dumps({
+        "summary": "قرار مستقل من OpenAI",
+        "recommendations": [{
+            "recommendation_id": "temporary",
+            "provider": "snapchat_ads",
+            "entity_level": "ad_squad",
+            "entity_id": "group-1",
+            "action": "خفض",
+            "change_percent": "17",
+            "priority": "عالي",
+            "confidence": "متوسطة",
+            "why_now": "الصرف أسرع من النتائج",
+            "evidence": "صرف مرتفع دون نتائج كافية",
+            "recommended_wait_hours": "5",
+            "success_criteria": "انخفاض تكلفة الشراء",
+        }],
+        "limitations": [],
+    }, ensure_ascii=False)
+
+    output = _normalize_openai_output(
+        raw,
+        [candidate],
+        next_check_at="2026-08-16T15:00:00+00:00",
+    )
+
+    item = output.recommendations[0]
+    assert item.action == "reduce"
+    assert item.change_percent == 17
+    assert item.account_id == "snap-account-1"
+    assert item.account_name == "أماسي الرئيسي"
+    assert item.entity_name == "مجموعة الوطني"
+    assert item.recommended_wait_hours == 5
+
+
+def test_openai_quota_and_validation_errors_are_not_reported_as_connection_errors():
+    quota = RuntimeError("insufficient_quota: billing quota exceeded")
+
+    assert _openai_error_code(quota) == "openai_insufficient_quota"
+    result = _deterministic_recommendations(
+        [],
+        next_check_at="2026-08-16T15:00:00+00:00",
+        limitation="openai_recommendation:openai_response_validation_error",
+    )
+    assert "وصل رد OpenAI" in result.summary
+
+
+def test_openai_request_has_enough_output_budget_and_normalizes_the_response(monkeypatch):
+    captured = {}
+    candidate = entity(
+        provider="meta",
+        entity_level="campaign",
+        entity_id="campaign-1",
+        entity_name="حملة اختبار",
+        account_id="meta-account-1",
+        account_name="أماسي",
+    )
+    response_payload = {
+        "summary": "تحليل OpenAI",
+        "recommendations": [{
+            "recommendation_id": "temporary",
+            "provider": "meta",
+            "entity_level": "campaign",
+            "entity_id": "campaign-1",
+            "entity_name": "حملة اختبار",
+            "account_id": "meta-account-1",
+            "account_name": "أماسي",
+            "parent_name": None,
+            "action": "monitor",
+            "change_percent": None,
+            "priority": "medium",
+            "confidence": "medium",
+            "title": "مراقبة",
+            "rationale": "لا توجد نافذة كافية للتغيير",
+            "evidence": ["الصرف قيد التقييم"],
+            "why_now": "موعد المراجعة",
+            "recommended_wait_hours": 5,
+            "observation_plan": "أعد القياس",
+            "success_criteria": ["اكتمال البيانات"],
+            "risk_if_ignored": "قرار مبكر",
+            "guardrail": "بعد موافقة المالك",
+            "next_check_at": "ignored",
+        }],
+        "limitations": [],
+    }
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                status="completed",
+                output_text=json.dumps(response_payload, ensure_ascii=False),
+            )
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+        async def close(self):
+            return None
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setattr(campaign_ai_monitor, "AsyncOpenAI", FakeClient)
+
+    output = asyncio.run(_ask_openai(
+        [candidate],
+        now=datetime(2026, 8, 16, tzinfo=timezone.utc),
+        campaign_history={},
+        prior_decisions={},
+        business_profit={},
+    ))
+
+    assert captured["max_output_tokens"] >= 12000
+    assert captured["reasoning"] == {"effort": "low"}
+    assert output.recommendations[0].action == "monitor"
+    assert output.recommendations[0].account_name == "أماسي"
 
 
 def test_fallback_does_not_scale_a_profitable_entity():
