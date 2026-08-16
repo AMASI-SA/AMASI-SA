@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle, ArrowRight, BarChart3, BriefcaseBusiness, ChevronDown, ChevronLeft,
-    CircleDollarSign, CreditCard, Instagram, Megaphone, PackageOpen,
-    RefreshCw, ShoppingBag, ShoppingCart, TrendingUp, Truck, Trophy, UsersRound,
+    CircleDollarSign, Clock3, CreditCard, Instagram, Megaphone, PackageOpen,
+    RefreshCw, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, TrendingUp, Truck, Trophy, UsersRound,
 } from "lucide-react";
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -27,6 +27,95 @@ const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumF
 
 function Panel({ children, className = "", testid }) {
     return <section data-testid={testid} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
+}
+
+const AI_ACTIONS = {
+    pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
+    reduce: { label: "خفض مقترح", tone: "border-orange-200 bg-orange-50 text-orange-700" },
+    monitor: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
+    maintain: { label: "استمرار", tone: "border-sky-200 bg-sky-50 text-sky-700" },
+    scale: { label: "توسعة مقترحة", tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+};
+
+const AI_LEVELS = { campaign: "حملة", ad_group: "مجموعة", ad: "إعلان" };
+
+export function CampaignAdvisorCard() {
+    const [snapshot, setSnapshot] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [approving, setApproving] = useState({});
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            try {
+                const response = await api.get("/ads-manager/ai-monitor/latest");
+                if (active) setSnapshot(response.data);
+            } catch {
+                if (active) setSnapshot(null);
+            } finally {
+                if (active) setLoading(false);
+            }
+        };
+        load();
+        const timer = window.setInterval(load, 5 * 60 * 1000);
+        return () => { active = false; window.clearInterval(timer); };
+    }, []);
+    const recommendations = snapshot?.recommendations || [];
+    const visible = recommendations.slice(0, 5);
+    const urgent = recommendations.filter((item) => ["pause", "reduce"].includes(item.action)).length;
+    const scale = recommendations.filter((item) => item.action === "scale").length;
+    const approve = async (item) => {
+        const change = item.action === "pause" ? "إيقاف" : item.action === "reduce" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
+        if (!window.confirm(`موافقتك ستنفّذ ${change} على ${item.entity_name} في ${item.provider === "meta" ? "Meta" : "Snapchat"}. هل تريد المتابعة؟`)) return;
+        setApproving((value) => ({ ...value, [item.recommendation_id]: true }));
+        try {
+            const { data } = await api.post(`/ads-manager/ai-monitor/recommendations/${encodeURIComponent(item.recommendation_id)}/approve`, { snapshot_id: snapshot.snapshot_id });
+            setSnapshot((value) => ({ ...value, recommendations: (value.recommendations || []).map((row) => row.recommendation_id === item.recommendation_id ? { ...row, execution_status: data.status } : row) }));
+            window.setTimeout(async () => {
+                try {
+                    const latest = await api.get("/ads-manager/ai-monitor/latest");
+                    setSnapshot(latest.data);
+                } catch { /* the regular five-minute refresh remains available */ }
+            }, 6000);
+        } catch (error) {
+            window.alert(error?.response?.data?.detail?.message || "تعذّر تنفيذ التوصية بأمان. حدّث التحليل وحاول مجددًا.");
+        } finally {
+            setApproving((value) => ({ ...value, [item.recommendation_id]: false }));
+        }
+    };
+    return <Panel className="border-violet-200" testid="advanced-campaign-ai-advisor">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
+            <div>
+                <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
+                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · تحليل الحملة والمجموعة والإعلان كل ساعة</p>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-bold">
+                <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
+                <span className="rounded-full bg-white/15 px-2 py-1">فرص توسعة {integer(scale)}</span>
+            </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-violet-50/60 px-4 py-2 text-[10px] text-violet-900">
+            <span className="font-bold">{loading ? "جارٍ قراءة آخر تحليل…" : (snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.")}</span>
+            <div className="flex items-center gap-3 whitespace-nowrap text-violet-600">
+                <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" />{snapshot?.generated_at ? relativeTime(snapshot.generated_at) : "بانتظار أول تشغيل"}</span>
+                <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3" />تنفيذ بعد موافقتك</span>
+            </div>
+        </div>
+        {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
+            {visible.map((item) => {
+                const action = AI_ACTIONS[item.action] || AI_ACTIONS.monitor;
+                const provider = item.provider === "meta" ? "Meta" : "سناب";
+                const executionLabel = item.execution_status === "completed" ? "تم التنفيذ" : item.execution_status === "verification_required" ? "بانتظار التحقق" : item.execution_status === "failed" ? "تعذر التنفيذ" : item.execution_status === "executing" ? "جارٍ التنفيذ…" : null;
+                const blocked = Boolean(executionLabel);
+                return <div key={item.recommendation_id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:bg-violet-50/30">
+                    <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-black text-slate-400">{provider} · {AI_LEVELS[item.entity_level] || item.entity_level}</span><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${action.tone}`}>{action.label}</span></div>
+                    <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.entity_name}</Link>
+                    <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.rationale}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{item.approval_available && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
+                </div>;
+            })}
+        </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصية موثوقة بإيقاف أو توسعة."}</div>}
+        {recommendations.length > 5 && <div className="border-t px-4 py-2 text-left"><Link to="/assistant" className="text-[10px] font-extrabold text-violet-700">عرض جميع التوصيات في مساعد ميزان ←</Link></div>}
+    </Panel>;
 }
 
 function relativeTime(value) {
@@ -343,6 +432,7 @@ export default function AdvancedDashboard() {
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
         <SummaryStrip data={data} filters={filters} />
+        <CampaignAdvisorCard />
         <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} filters={filters} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
     </div>;
 }
