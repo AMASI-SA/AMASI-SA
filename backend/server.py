@@ -58,7 +58,6 @@ from excel_parser import parse_salla_excel, match_settings
 from exports import export_report_excel, export_report_pdf
 from release_identity import BOOT_RELEASE_IDENTITY
 from report_builder import build_report as _build_report
-from snapchat_routes import attach_snapchat_routes
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
@@ -3974,7 +3973,6 @@ async def root():
 
 
 # ── App wiring ────────────────────────────────────────────────────────────────
-attach_snapchat_routes(api, db)
 attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
@@ -4821,21 +4819,9 @@ async def on_startup():
     if _uo.get("updated"):
         logger.info("iter-72: scrubbed %d/%d shipping_company values in unified_orders",
                     _uo["updated"], _uo["scanned"])
-    await db.snapchat_connections.create_index("user_id", unique=True)
-    # Multi-account Snapchat selection (iteration 15) — one doc per
-    # (user_id, ad_account_id). `enabled` toggles whether the account
-    # participates in /sync-all-accounts and /accounts-summary.
-    await db.snapchat_ad_accounts.create_index(
-        [("user_id", 1), ("ad_account_id", 1)], unique=True,
-    )
-    # Per-account, per-day spend rows. Stores BOTH native and SAR amounts +
-    # fx_rate so accounting traces are auditable.
-    await db.snapchat_account_daily.create_index(
-        [("user_id", 1), ("ad_account_id", 1), ("date", 1)], unique=True,
-    )
-    await db.snapchat_account_daily.create_index(
-        [("user_id", 1), ("date", -1)],
-    )
+    # Legacy Snapchat V1 collections are intentionally left untouched as an
+    # archive. Their router and writers are frozen; Mezan 2 owns the only live
+    # Snapchat credential and reporting data plane.
     # ── Product cost catalogue (iteration 19) ──────────────────────────────
     # One doc per (user_id, sku_normalized). Provides the cost lookup table
     # used by webhook ingestion + dashboard's total_product_cost field.

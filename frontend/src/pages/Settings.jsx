@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, Ghost, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning, UserPlus } from "@phosphor-icons/react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Trash, FloppyDisk, LinkSimple, LinkBreak, ArrowsClockwise, Eye, EyeSlash, SquaresFour, Calculator, LockKey, MagnifyingGlass, Warning, UserPlus } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../lib/api";
 import { KPI_GROUPS, SPECIAL_DASHBOARD_CARDS } from "../lib/dashboardCards";
@@ -8,9 +8,6 @@ import SecretField, { StatusBadge } from "../components/SecretField";
 import OrderStatusPolicySection from "../components/OrderStatusPolicySection";
 import SettlementCycleSection from "../components/SettlementCycleSection";
 import { useAuth } from "../context/AuthContext";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const DEFAULT_SNAP_REDIRECT = `${BACKEND_URL}/api/snapchat/oauth/callback`;
 
 // Stable per-row id for React keys (so deleting middle rows does not re-mount inputs)
 let _rowSeq = 0;
@@ -71,28 +68,33 @@ export default function Settings() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // ── Snapchat state ────────────────────────────────────────────────
-    const location = useLocation();
     const navigate = useNavigate();
+    // The old Snapchat form is retained below only as unreachable migration
+    // markup while existing snapshots are phased out. Every action is routed
+    // to the sole live Snapchat control plane in Mezan 2.
     const [snapConfig, setSnapConfig] = useState({
-        connected: false,
-        has_credentials: false,
-        client_id: "",
-        redirect_uri: DEFAULT_SNAP_REDIRECT,
-        ad_account_id: "",
-        ad_account_name: "",
+        connected: false, has_credentials: false, client_id: "",
+        redirect_uri: "", ad_account_id: "", ad_account_name: "",
     });
     const [snapClientSecret, setSnapClientSecret] = useState("");
-    const [snapSaving, setSnapSaving] = useState(false);
-    const [snapConnecting, setSnapConnecting] = useState(false);
-    const [snapAccounts, setSnapAccounts] = useState([]);
-    const [snapLoadingAccounts, setSnapLoadingAccounts] = useState(false);
-    // Multi-account selection (iteration 15): Set of ad_account_ids the
-    // merchant has enabled. Loaded from `/snapchat/selected-accounts` on
-    // mount and persisted via `PUT /snapchat/selected-accounts` when
-    // they click "حفظ الحسابات المختارة".
+    const [snapAccounts] = useState([]);
     const [snapEnabledIds, setSnapEnabledIds] = useState(new Set());
-    const [snapSelectionSaving, setSnapSelectionSaving] = useState(false);
+    const snapSaving = false;
+    const snapConnecting = false;
+    const snapLoadingAccounts = false;
+    const snapSelectionSaving = false;
+    const openSnapchatMezan2 = () => navigate("/integrations-v2?provider=snapchat_ads");
+    const saveSnapConfig = openSnapchatMezan2;
+    const connectSnap = openSnapchatMezan2;
+    const disconnectSnap = openSnapchatMezan2;
+    const loadSnapAccounts = openSnapchatMezan2;
+    const saveSnapSelectedAccounts = openSnapchatMezan2;
+    const toggleSnapAccount = (adAccountId) => setSnapEnabledIds((current) => {
+        const next = new Set(current);
+        if (next.has(adAccountId)) next.delete(adAccountId);
+        else next.add(adAccountId);
+        return next;
+    });
 
     // ── Meta Ads state ─────────────────────────────────────────────────
     const [metaConfig, setMetaConfig] = useState({
@@ -178,22 +180,6 @@ export default function Settings() {
         }
     };
 
-    const loadSnapConfig = async () => {
-        try {
-            const { data } = await api.get("/snapchat/config");
-            setSnapConfig({
-                connected: !!data.connected,
-                has_credentials: !!data.has_credentials,
-                client_id: data.client_id || "",
-                redirect_uri: data.redirect_uri || DEFAULT_SNAP_REDIRECT,
-                ad_account_id: data.ad_account_id || "",
-                ad_account_name: data.ad_account_name || "",
-            });
-        } catch {
-            // snapchat config not yet set up — treat as disconnected
-        }
-    };
-
     useEffect(() => {
         (async () => {
             try {
@@ -232,7 +218,6 @@ export default function Settings() {
                 setShippingDiscovery(discovery || null);
             } finally { setLoading(false); }
         })();
-        loadSnapConfig();
         loadMetaConfig();
         loadAppConfig();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -411,143 +396,6 @@ export default function Settings() {
             toast.error(formatApiErrorDetail(err.response?.data?.detail));
         } finally {
             setAutoAdding(false);
-        }
-    };
-
-    // Handle ?snapchat=success|error redirect after OAuth callback
-    useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const status = params.get("snapchat");
-        if (status === "success") {
-            toast.success("تم ربط حساب Snapchat Ads بنجاح");
-            loadSnapConfig();
-            navigate("/settings", { replace: true });
-        } else if (status === "error") {
-            toast.error("فشل ربط Snapchat: " + (params.get("msg") || "خطأ غير معروف"));
-            navigate("/settings", { replace: true });
-        }
-    }, [location.search, navigate]);
-
-    const saveSnapConfig = async () => {
-        if (!snapConfig.client_id?.trim() || !snapClientSecret?.trim() || !snapConfig.redirect_uri?.trim()) {
-            toast.error("يرجى تعبئة App ID و App Secret و Redirect URI");
-            return;
-        }
-        setSnapSaving(true);
-        try {
-            await api.post("/snapchat/config", {
-                client_id: snapConfig.client_id.trim(),
-                client_secret: snapClientSecret.trim(),
-                redirect_uri: snapConfig.redirect_uri.trim(),
-            });
-            toast.success("تم حفظ بيانات تطبيق سناب. اضغط (الاتصال بسناب).");
-            setSnapClientSecret("");
-            await loadSnapConfig();
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
-        } finally { setSnapSaving(false); }
-    };
-
-    const connectSnap = async () => {
-        setSnapConnecting(true);
-        try {
-            const { data } = await api.get("/snapchat/authorize-url");
-            window.location.href = data.authorize_url;
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
-            setSnapConnecting(false);
-        }
-    };
-
-    const disconnectSnap = async () => {
-        if (!window.confirm("سيتم حذف بيانات الاتصال والـ Refresh Token الخاصين بحساب سناب. متابعة؟")) return;
-        try {
-            await api.delete("/snapchat/config");
-            toast.success("تم فصل حساب سناب");
-            setSnapAccounts([]);
-            await loadSnapConfig();
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
-        }
-    };
-
-    const loadSnapAccounts = async () => {
-        setSnapLoadingAccounts(true);
-        try {
-            // Load BOTH the available accounts from Snapchat API AND the
-            // merchant's previously-enabled selection (so checkboxes default
-            // to the existing state).
-            const [accountsResp, selectedResp] = await Promise.all([
-                api.get("/snapchat/adaccounts"),
-                api.get("/snapchat/selected-accounts").catch(() => ({ data: { accounts: [] } })),
-            ]);
-            setSnapAccounts(accountsResp.data.adaccounts || []);
-            const enabled = new Set(
-                (selectedResp.data.accounts || []).map((a) => a.ad_account_id),
-            );
-            setSnapEnabledIds(enabled);
-            if ((accountsResp.data.adaccounts || []).length === 0) {
-                toast.message("لم يتم العثور على حسابات إعلانات في حسابك");
-            }
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
-        } finally { setSnapLoadingAccounts(false); }
-    };
-
-    const toggleSnapAccount = (ad_account_id) => {
-        setSnapEnabledIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(ad_account_id)) next.delete(ad_account_id);
-            else next.add(ad_account_id);
-            return next;
-        });
-    };
-
-    const saveSnapSelectedAccounts = async () => {
-        if (snapEnabledIds.size === 0) {
-            const confirmEmpty = window.confirm(
-                "لم تختر أي حساب — هل تريد إلغاء تفعيل جميع حسابات Snapchat؟",
-            );
-            if (!confirmEmpty) return;
-        }
-        setSnapSelectionSaving(true);
-        try {
-            const accountsPayload = snapAccounts
-                .filter((acc) => snapEnabledIds.has(acc.ad_account_id))
-                .map((acc) => ({
-                    ad_account_id: acc.ad_account_id,
-                    name: acc.name || "",
-                    currency: acc.currency || "",
-                    timezone: acc.timezone || "",
-                    organization_id: acc.organization_id || "",
-                    organization_name: acc.organization_name || "",
-                    status: acc.status || "",
-                }));
-            const { data } = await api.put("/snapchat/selected-accounts", {
-                accounts: accountsPayload,
-            });
-            toast.success(
-                `تم حفظ ${data.enabled_count} حساب Snapchat — افتح صفحة "حسابات Snapchat" لعرض التفاصيل.`,
-                { duration: 6000 },
-            );
-            await loadSnapConfig();
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
-        } finally { setSnapSelectionSaving(false); }
-    };
-
-    const selectAccount = async (acc) => {
-        try {
-            await api.post("/snapchat/select-adaccount", {
-                ad_account_id: acc.ad_account_id,
-                ad_account_name: acc.name || "",
-                timezone: acc.timezone || "",
-                currency: acc.currency || "",
-            });
-            toast.success(`تم اختيار حساب: ${acc.name || acc.ad_account_id}`);
-            await loadSnapConfig();
-        } catch (err) {
-            toast.error(formatApiErrorDetail(err.response?.data?.detail));
         }
     };
 
@@ -1504,7 +1352,7 @@ export default function Settings() {
                     </div>
                 </div>
 
-                <details className="mt-4 group" data-testid="snap-credentials-details">
+                {false ? (<details className="mt-4 group" data-testid="snap-credentials-details">
                     <summary className="cursor-pointer list-none flex items-center justify-between gap-3 py-3 px-4 rounded-lg bg-accent/40 hover:bg-accent/60 transition-colors">
                         <div className="flex items-center gap-2 min-w-0">
                             <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: "#FFFC00" }}>
@@ -1716,7 +1564,22 @@ export default function Settings() {
 
             {/* Meta Ads (Facebook + Instagram) integration */}
                     </div>
-                </details>
+                </details>) : (
+                    <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4" data-testid="snap-legacy-frozen">
+                        <div className="font-bold text-amber-950">تم تجميد ربط Snapchat القديم</div>
+                        <p className="mt-1 text-sm text-amber-900">
+                            الربط والتوكنات والمزامنة أصبحت من ميزان 2 فقط. البيانات القديمة محفوظة للأرشيف ولن تُحدّث.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={openSnapchatMezan2}
+                            className="mt-3 rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white"
+                            data-testid="open-snapchat-mezan2"
+                        >
+                            فتح Snapchat في ميزان 2
+                        </button>
+                    </div>
+                )}
 
                 <details className="mt-3 group" data-testid="meta-credentials-details">
                     <summary className="cursor-pointer list-none flex items-center justify-between gap-3 py-3 px-4 rounded-lg bg-accent/40 hover:bg-accent/60 transition-colors">
