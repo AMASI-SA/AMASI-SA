@@ -142,6 +142,46 @@ def test_meta_child_uses_latest_live_status_and_keeps_full_hierarchy():
     assert rows[0]["campaign_ad_count"] == 1
 
 
+def test_meta_ad_keeps_its_own_spend_separate_from_group_and_campaign_totals():
+    base = {
+        "user_id": "owner", "ad_account_id": "act-1", "account_name": "أماسي",
+        "campaign_id": "campaign-1", "campaign_name": "منتجات جاهزة أماسي",
+        "campaign_status": "ACTIVE", "configured_status": "ACTIVE",
+        "effective_status": "ACTIVE", "status": "ACTIVE",
+        "observed_at": "2026-08-17T00:07:00+00:00", "date": "2026-08-17",
+        "revenue_sar": 0, "impressions": 100, "clicks": 2,
+    }
+    documents = [
+        {**base, "entity_level": "ad_group", "entity_id": "group-1", "entity_name": "المجموعة الأولى", "ad_group_id": "group-1", "ad_group_name": "المجموعة الأولى", "spend_sar": 54.25, "purchases": 1},
+        {**base, "entity_level": "ad_group", "entity_id": "group-2", "entity_name": "المجموعة الثانية", "ad_group_id": "group-2", "ad_group_name": "المجموعة الثانية", "spend_sar": 249.97, "purchases": 3},
+        {**base, "entity_level": "ad", "entity_id": "ad-1", "entity_name": "الإعلان المستهدف", "ad_group_id": "group-2", "ad_group_name": "المجموعة الثانية", "spend_sar": 37.18, "purchases": 0},
+        {**base, "entity_level": "ad", "entity_id": "ad-2", "entity_name": "إعلان رابح", "ad_group_id": "group-2", "ad_group_name": "المجموعة الثانية", "spend_sar": 212.79, "purchases": 3},
+    ]
+
+    class Cursor:
+        def limit(self, _): return self
+        async def to_list(self, length): return documents[:length]
+
+    class Collection:
+        def find(self, *_args, **_kwargs): return Cursor()
+
+    class DB:
+        def __getitem__(self, _name): return Collection()
+
+    rows = asyncio.run(_meta_child_entities(
+        DB(), "owner",
+        datetime(2026, 8, 17).date(), datetime(2026, 8, 17).date(),
+    ))
+    target = next(row for row in rows if row["entity_id"] == "ad-1")
+
+    assert target["entity_period_spend_sar"] == 37.18
+    assert target["ad_group_period_spend_sar"] == 249.97
+    assert target["campaign_period_spend_sar"] == 304.22
+    assert target["campaign_period_purchases"] == 4
+    assert target["campaign_ad_group_count"] == 2
+    assert target["campaign_ad_count"] == 2
+
+
 def test_model_cannot_scale_an_entity_without_scale_evidence():
     candidate = entity(entity_id="waste", spend_sar=140, purchases=0)
     output = RecommendationOutput(
