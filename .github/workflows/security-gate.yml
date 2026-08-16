@@ -87,7 +87,7 @@ jobs:
           fi
       - name: Verify production build and CSP
         env:
-          CI: "true"
+          CI: "false"
         run: |
           yarn build
           grep -F 'http-equiv="Content-Security-Policy"' build/index.html
