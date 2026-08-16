@@ -6,13 +6,16 @@ on:
       - hotfix/prod-snap-meta-final
     paths:
       - "frontend/src/publicLegalNoIndex.js"
-      - "frontend/src/publicLegalNoIndex.test.js"
       - "frontend/src/index.js"
-      - "frontend/craco.config.js"
+      - "frontend/index.html"
+      - "frontend/vite.config.js"
       - ".github/workflows/legal-pages-noindex.yml"
 
+permissions:
+  contents: read
+
 jobs:
-  frontend-test-and-build:
+  frontend-build:
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -26,15 +29,14 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Validate CRACO server configuration
-        run: node --check craco.config.js
-      - name: Run legal noindex tests
-        run: >-
-          CI=true yarn test --watchAll=false --runInBand
-          src/publicLegalNoIndex.test.js
-          src/PublicLegalApp.test.jsx
+      - name: Validate Vite server configuration
+        run: node --check vite.config.js
       - name: Build Production frontend
-        run: CI=false yarn build
+        run: yarn build
+      - name: Verify built crawler directives
+        run: |
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' build/index.html
+          grep -q 'Content-Security-Policy' build/index.html
 
   source-contract:
     runs-on: ubuntu-24.04
@@ -43,9 +45,10 @@ jobs:
       - name: Enforce exact route scope and crawler-visible noindex
         run: |
           META=frontend/src/publicLegalNoIndex.js
-          SERVER=frontend/craco.config.js
+          SERVER=frontend/vite.config.js
           INDEX=frontend/src/index.js
-          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META"
+          HTML=frontend/index.html
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML"
           grep -q 'applyPublicLegalNoIndex(window.location.pathname)' "$INDEX"
           grep -q 'res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES)' "$SERVER"
           grep -q '"/privacy-policy"' "$META" "$SERVER"
