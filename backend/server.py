@@ -43,6 +43,7 @@ from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
     hash_password,
+    validate_bcrypt_secret,
     verify_password,
     account_is_disabled,
     create_access_token,
@@ -202,6 +203,7 @@ class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
     password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class LoginIn(BaseModel):
@@ -213,6 +215,7 @@ class LoginIn(BaseModel):
 class ChangePasswordIn(BaseModel):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ChangeEmailIn(BaseModel):
@@ -230,6 +233,7 @@ class SecurityQuestionIn(BaseModel):
     current_password: str = Field(min_length=1)
     question: str = Field(min_length=4, max_length=200)
     answer: str = Field(min_length=8, max_length=200)
+    _answer_utf8_limit = validator("answer", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ForgotPasswordCheckIn(BaseModel):
@@ -240,6 +244,7 @@ class ForgotPasswordResetIn(BaseModel):
     email: EmailStr
     answer: str = Field(min_length=1, max_length=200)
     new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 # iter-51 — Multi-user / RBAC schemas
@@ -311,6 +316,7 @@ class TeamUserCreateIn(BaseModel):
     role: str = Field(default="viewer")
     extra_permissions: list[str] = Field(default_factory=list)
     denied_permissions: list[str] = Field(default_factory=list)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class TeamUserUpdateIn(BaseModel):
@@ -319,6 +325,7 @@ class TeamUserUpdateIn(BaseModel):
     extra_permissions: Optional[list[str]] = None
     denied_permissions: Optional[list[str]] = None
     new_password: Optional[str] = Field(default=None, min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 def _effective_perms(user_doc: dict) -> set[str]:
