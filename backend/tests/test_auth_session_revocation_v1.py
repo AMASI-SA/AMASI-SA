@@ -1,8 +1,57 @@
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import hashlib
+import sys
+import types
 
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
+
+
+# The isolated security-test environment intentionally installs only the small
+# unit-test dependency set. Provide deterministic stand-ins so this file tests
+# Mezan's revocation and byte-limit policy without requiring crypto wheels.
+_fake_bcrypt = types.ModuleType("bcrypt")
+_fake_bcrypt.gensalt = lambda: b"unit-test-salt"
+_fake_bcrypt.hashpw = lambda password, salt: b"$unit$" + hashlib.sha256(password).hexdigest().encode()
+_fake_bcrypt.checkpw = lambda password, hashed: hashed == _fake_bcrypt.hashpw(password, b"")
+sys.modules.setdefault("bcrypt", _fake_bcrypt)
+
+_fake_jwt = types.ModuleType("jwt")
+_fake_jwt_store = {}
+_fake_jwt_counter = {"value": 0}
+
+
+class _ExpiredSignatureError(Exception):
+    pass
+
+
+class _InvalidTokenError(Exception):
+    pass
+
+
+def _jwt_encode(payload, secret, algorithm):
+    _fake_jwt_counter["value"] += 1
+    token = f"unit-token-{_fake_jwt_counter['value']}"
+    stored = {}
+    for key, value in payload.items():
+        stored[key] = int(value.timestamp()) if isinstance(value, datetime) else value
+    _fake_jwt_store[token] = stored
+    return token
+
+
+def _jwt_decode(token, secret, algorithms):
+    if token not in _fake_jwt_store:
+        raise _InvalidTokenError()
+    return deepcopy(_fake_jwt_store[token])
+
+
+_fake_jwt.encode = _jwt_encode
+_fake_jwt.decode = _jwt_decode
+_fake_jwt.ExpiredSignatureError = _ExpiredSignatureError
+_fake_jwt.InvalidTokenError = _InvalidTokenError
+sys.modules.setdefault("jwt", _fake_jwt)
 
 import auth
 
