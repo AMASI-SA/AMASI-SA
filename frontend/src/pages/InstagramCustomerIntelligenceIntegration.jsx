@@ -25,6 +25,11 @@ const ERROR_MESSAGES = {
     instagram_candidate_not_found: "لم يعد الحساب المحدد متاحًا. حدّث القائمة وحاول مجددًا.",
     instagram_binding_conflict: "هذا الحساب مرتبط مسبقًا بمتجر آخر ولا يمكن نقله تلقائيًا.",
     instagram_channel_policy_invalid: "حالة القناة الحالية لا تطابق سياسة الاستقبال الآمن.",
+    instagram_page_link_required: "حساب Instagram غير مرتبط بصفحة Facebook داخل Meta.",
+    instagram_page_access_required: "تعذر الوصول إلى الصفحة المرتبطة. أعد تفويض Meta ثم حاول مجددًا.",
+    instagram_asset_link_mismatch: "الحساب المختار لم يعد مرتبطًا بالصفحة المكتشفة في Meta.",
+    instagram_webhook_subscription_failed: "تعذر اشتراك الحساب فعليًا في Webhooks لدى Meta. أعد التفويض ثم حاول مجددًا.",
+    meta_configuration_invalid: "إعدادات Meta في الخادم غير مكتملة.",
     owner_only: "هذه الخطوة متاحة لمالك الحساب فقط.",
 };
 
