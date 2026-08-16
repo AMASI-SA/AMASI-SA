@@ -33,6 +33,7 @@ const liveStatus = (value) => {
     if (["PAUSED", "DISABLED", "INACTIVE", "ARCHIVED", "DELETED"].includes(status)) return { label: "متوقف", tone: "bg-slate-100 text-slate-600" };
     return { label: "غير معروف", tone: "bg-amber-50 text-amber-700" };
 };
+const impactTitle = (level) => level === "ad" ? "أثر الإعلان المستهدف على الربح" : level === "ad_group" ? "أثر المجموعة المستهدفة على الربح" : "أثر الحملة على الربح";
 
 function relativeTime(value) {
     const date = new Date(value || 0);
@@ -321,6 +322,11 @@ export default function CampaignRecommendations() {
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
                         <p className="mt-3 text-xs font-bold leading-6 text-slate-600">{details.whyNow}</p>
+                        {item.provider === "meta" && <div className="mt-3 grid gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-2 text-[9px] sm:grid-cols-3" data-testid={`recommendation-hierarchy-spend-${item.recommendation_id}`}>
+                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">صرف الإعلان المستهدف</p><p className="mt-1 font-black text-slate-800">{money(item.entity_period_spend_sar ?? item.period_spend_sar)} ر.س · {Number((item.entity_period_purchases ?? item.purchases) || 0).toLocaleString("en-US")} شراء</p></div>
+                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">إجمالي المجموعة خلال نفس الفترة</p><p className="mt-1 font-black text-slate-800">{item.ad_group_period_spend_sar == null ? "—" : `${money(item.ad_group_period_spend_sar)} ر.س · ${Number(item.ad_group_period_purchases || 0).toLocaleString("en-US")} شراء`}</p></div>
+                            <div className="rounded-lg bg-white p-2"><p className="font-bold text-slate-400">إجمالي الحملة خلال نفس الفترة</p><p className="mt-1 font-black text-slate-800">{item.campaign_period_spend_sar == null ? "—" : `${money(item.campaign_period_spend_sar)} ر.س · ${Number(item.campaign_period_purchases || 0).toLocaleString("en-US")} شراء`}</p></div>
+                        </div>}
                         {item.evidence?.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{item.evidence.map((evidence) => <span key={evidence} className="rounded-lg bg-slate-100 px-2 py-1 text-[9px] font-extrabold text-slate-600">{evidence}</span>)}</div>}
                         <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">
                             {isExpanded ? "إخفاء شرح القرار" : "لماذا اتُخذ هذا القرار؟"}
@@ -336,7 +342,7 @@ export default function CampaignRecommendations() {
                                 const periodContribution = Number(details.financial.period_estimated_contribution_sar || 0);
                                 const forecastDelta = Number(details.financial.forecast_delta_sar || 0);
                                 return <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3" data-testid={`recommendation-financial-impact-${item.recommendation_id}`}>
-                                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-black text-emerald-950">أثر الحملة على الربح</h3><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700">تقدير مالي · ليس ضمانًا</span></div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-black text-emerald-950">{impactTitle(item.entity_level)}</h3><span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700">تقدير مالي · ليس ضمانًا</span></div>
                                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                         <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">صرف فترة الدراسة</p><p className="mt-1 text-xs font-black text-slate-800">{money(details.financial.period_spend_sar)} ر.س</p></div>
                                         <div className="rounded-xl bg-white p-2"><p className="text-[9px] font-bold text-slate-400">إيراد المنصة</p><p className="mt-1 text-xs font-black text-slate-800">{money(details.financial.period_provider_revenue_sar)} ر.س</p></div>
