@@ -683,8 +683,15 @@ async def change_my_email(payload: ChangeEmailIn, user: dict = Depends(current_u
 
 @api.put("/auth/profile/security-question")
 async def set_security_question(payload: SecurityQuestionIn, user: dict = Depends(current_user)):
-    """Set/update the security question used for password recovery. The
-    answer is normalised (trim + lower) and bcrypt-hashed before storage."""
+    """Legacy knowledge-based recovery is unavailable by default."""
+    if not _security_question_recovery_enabled():
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "security_question_recovery_disabled",
+                "message": "سؤال الأمان متوقف. استخدم استرداداً يوافق عليه مالك النظام.",
+            },
+        )
     full = await db.users.find_one({"id": user["id"]})
     if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
