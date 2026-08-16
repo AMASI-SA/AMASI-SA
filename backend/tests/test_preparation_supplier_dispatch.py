@@ -24,6 +24,7 @@ from preparation_supplier_dispatch import (
     _hydrate_piece_images_from_batches,
     _hydrate_piece_print_facts_from_batches,
     _mark_orders_started_if_fully_dispatched,
+    _piece_products,
     _require_preparation_worker,
     employee_workspace_summary,
     file_is_fully_dispatched,
@@ -160,6 +161,42 @@ def test_same_product_with_and_without_service_uses_two_independent_cards():
     assert [row["piece_id"] for row in plan_piece_selections(
         [without_service, with_name_service],
         [{"group_key": plain_group, "quantity": 1}],
+    )] == ["plain-piece"]
+
+
+def test_piece_grain_keeps_physical_units_independent_when_grouping_is_wrong():
+    named = _piece(
+        "named-piece",
+        order_item_id="item-named",
+        specifications_snapshot=[
+            {"name": "هل تريد تطريز الاسم", "value": "نعم"},
+            {"name": "الاسم", "value": "محمد"},
+        ],
+    )
+    plain = _piece(
+        "plain-piece",
+        order_item_id="item-plain",
+        specifications_snapshot=[
+            {"name": "هل تريد تطريز الاسم", "value": "لا"},
+        ],
+    )
+
+    products = _piece_products([named, plain])
+
+    assert [row["group_key"] for row in products] == [
+        "piece:named-piece",
+        "piece:plain-piece",
+    ]
+    assert [row["available_quantity"] for row in products] == [1, 1]
+    assert products[0]["specifications"][0]["value"] == "نعم"
+    assert products[1]["specifications"][0]["value"] == "لا"
+    assert [row["piece_id"] for row in plan_piece_selections(
+        [named, plain],
+        [{"group_key": "piece:named-piece", "quantity": 1}],
+    )] == ["named-piece"]
+    assert [row["piece_id"] for row in plan_piece_selections(
+        [named, plain],
+        [{"group_key": "piece:plain-piece", "quantity": 1}],
     )] == ["plain-piece"]
 
 
