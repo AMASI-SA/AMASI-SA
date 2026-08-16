@@ -92,14 +92,19 @@ export function buildMissingMezanCostHref(productCost, filters = {}) {
     const missing = Array.isArray(productCost?.missing_products)
         ? productCost.missing_products
         : [];
-    if (missing.length === 1 && missing[0]?.catalog_product_found !== false) {
+    const missingEverywhere = missing.filter((product) => product?.missing_everywhere === true);
+    const actionableMissing = missingEverywhere.length ? missingEverywhere : missing;
+    if (missingEverywhere.length) params.set("missing_all_cost", "1");
+    if (actionableMissing.length === 1 && actionableMissing[0]?.catalog_product_found !== false) {
         const directHref = buildMezanProductCostHref(
-            { ...missing[0], cost_status: "missing" },
+            { ...actionableMissing[0], cost_status: "missing" },
             filters,
         );
-        return directHref;
+        const directUrl = new URL(directHref, "https://mezan.local");
+        if (missingEverywhere.length) directUrl.searchParams.set("missing_all_cost", "1");
+        return `${directUrl.pathname}${directUrl.search}`;
     }
-    const soldProductIds = [...new Set(missing
+    const soldProductIds = [...new Set(actionableMissing
         .filter((product) => product?.catalog_product_found !== false)
         .map((product) => product?.salla_product_id || product?.mezan_product_id)
         .filter(Boolean)
