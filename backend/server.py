@@ -4409,7 +4409,7 @@ async def on_startup():
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
     await ensure_first_party_attribution_indexes(db)
-    # Hourly Snapchat + Meta campaign monitoring. The worker only refreshes
+    # Five-hour Snapchat + Meta campaign monitoring. The worker only refreshes
     # analytical facts and persists recommendations; provider changes remain
     # behind the separate owner-only approval endpoint.
     from campaign_ai_monitor import (
@@ -4417,7 +4417,10 @@ async def on_startup():
         start_campaign_ai_worker as _start_campaign_ai_worker,
     )
     await _ensure_campaign_ai_indexes(db)
-    app.state.campaign_ai_monitor_task = _start_campaign_ai_worker(db)
+    app.state.campaign_ai_monitor_task = _start_campaign_ai_worker(
+        db,
+        business_context_loader=dashboard,
+    )
     # Customer Intelligence conversation core.  This creates only Mongo
     # indexes and reuses the encrypted customer identity vault; it does not
     # connect a channel, send a message or expose any mutation endpoint.
