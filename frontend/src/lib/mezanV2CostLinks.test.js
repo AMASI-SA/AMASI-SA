@@ -46,6 +46,23 @@ test("multiple missing products open the filtered sold-products list with dashbo
 });
 
 
+test("dashboard link prioritizes products missing both Mezan and Salla costs", () => {
+    const href = buildMissingMezanCostHref({
+        missing_products: [
+            { salla_product_id: "p-fallback-1", uses_salla_fallback: true, missing_everywhere: false },
+            { salla_product_id: "p-hard-1", missing_everywhere: true },
+            { salla_product_id: "p-fallback-2", uses_salla_fallback: true, missing_everywhere: false },
+            { salla_product_id: "p-hard-2", missing_everywhere: true },
+        ],
+    }, { from: "2026-08-16", to: "2026-08-16" });
+
+    expect(href).toContain("missing_all_cost=1");
+    expect(decodeURIComponent(href)).toContain("product_ids=p-hard-1,p-hard-2");
+    expect(href).not.toContain("p-fallback-1");
+    expect(href).not.toContain("p-fallback-2");
+});
+
+
 test("an unmapped order line opens the filtered list instead of a missing editor", () => {
     const href = buildMissingMezanCostHref({
         missing_products: [{
