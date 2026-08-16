@@ -317,6 +317,7 @@ def test_openai_request_has_enough_output_budget_and_normalizes_the_response(mon
 
     class FakeClient:
         def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
             self.responses = FakeResponses()
 
         async def close(self):
@@ -335,6 +336,9 @@ def test_openai_request_has_enough_output_budget_and_normalizes_the_response(mon
 
     assert captured["max_output_tokens"] >= 12000
     assert captured["reasoning"] == {"effort": "low"}
+    assert captured["client_kwargs"]["timeout"] == campaign_ai_monitor.OPENAI_TIMEOUT_SECONDS
+    assert captured["client_kwargs"]["timeout"] > 45
+    assert captured["client_kwargs"]["max_retries"] == 0
     assert output.recommendations[0].action == "monitor"
     assert output.recommendations[0].account_name == "أماسي"
 

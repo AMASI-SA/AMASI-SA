@@ -70,6 +70,13 @@ OPENAI_MAX_OUTPUT_TOKENS = min(
     24000,
     max(8000, int(os.environ.get("MEZAN_CAMPAIGN_AI_MAX_OUTPUT_TOKENS", "12000"))),
 )
+# The request includes multi-window campaign history and a strict Arabic JSON
+# schema. Production responses can legitimately need longer than 45 seconds,
+# so allow one bounded request to finish within the outer monitor deadline.
+OPENAI_TIMEOUT_SECONDS = min(
+    300.0,
+    max(60.0, float(os.environ.get("MEZAN_CAMPAIGN_AI_TIMEOUT_SECONDS", "240"))),
+)
 TARGET_CPA_SAR = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_CPA_SAR", "56.25"))
 TARGET_ROAS = float(os.environ.get("MEZAN_CAMPAIGN_TARGET_ROAS", "2.5"))
 MIN_WASTE_SPEND_SAR = float(os.environ.get("MEZAN_CAMPAIGN_MIN_WASTE_SPEND_SAR", "75"))
@@ -1273,7 +1280,13 @@ async def _ask_openai(
         )}
         for row in candidates
     ]
-    client = AsyncOpenAI(api_key=api_key, max_retries=1, timeout=45.0)
+    # Avoid spending the eight-minute monitor budget on two long SDK attempts;
+    # the next scheduled pass is the safe retry boundary.
+    client = AsyncOpenAI(
+        api_key=api_key,
+        max_retries=0,
+        timeout=OPENAI_TIMEOUT_SECONDS,
+    )
     try:
         response = await client.responses.create(
             model=os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini")),
