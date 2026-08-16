@@ -14,7 +14,7 @@ test("all recommendations open in their own protected page", () => {
 
 test("recommendation page explains the decision and observation window", () => {
     expect(page).toContain('api.get("/ads-manager/ai-monitor/latest")');
-    expect(page).toContain("لماذا اتخذ ميزان هذا القرار؟");
+    expect(page).toContain("لماذا اتُخذ هذا القرار؟");
     expect(page).toContain("الأرقام التي بنى عليها القرار");
     expect(page).toContain("كم ساعة أصبر؟");
     expect(page).toContain("متى نعتبر القرار ناجحًا؟");
@@ -33,6 +33,7 @@ test("recommendation page explains the decision and observation window", () => {
     expect(page).toContain("الأعلى أولوية وتأثيرًا");
     expect(page).toContain("أُنشئت");
     expect(page).toContain("item.generated_at || snapshot?.generated_at");
+    expect(page).toContain("الحساب الإعلاني: {item.account_name}");
     expect(page).toContain("recommended_wait_hours");
     expect(page).not.toContain("آخر تحديث");
 });
