@@ -341,6 +341,18 @@ def test_normalizer_accepts_official_salla_purchased_webhook_shape():
     assert record["status"] == "purchased"
     assert record["currency"] == "SAR"
     assert record["total"] == 34.99
+    assert record["cart_updated_at"] == "2025-03-25T08:59:37+00:00"
+
+
+def test_normalizer_accepts_unix_millisecond_cart_timestamps():
+    payload = _cart_event(updated_at=1786626000000)
+    payload["data"]["created_at"] = 1786622400
+
+    record = module.normalize_abandoned_cart_event(payload)
+
+    assert record is not None
+    assert record["cart_created_at"] == "2026-08-13T12:00:00+00:00"
+    assert record["cart_updated_at"] == "2026-08-13T13:00:00+00:00"
 
 
 def test_cart_token_is_never_used_as_persisted_identity():

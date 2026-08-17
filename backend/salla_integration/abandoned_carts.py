@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable
 
@@ -82,19 +83,64 @@ def _nested(source: dict[str, Any], *path: str) -> Any:
     return current
 
 
-def _datetime(value: Any) -> datetime | None:
+def parse_salla_datetime(value: Any) -> datetime | None:
+    """Normalize every timestamp shape emitted by Salla to aware UTC.
+
+    Salla webhook examples use JavaScript-style dates (``Tue Mar ...
+    GMT+0300``), while API snapshots normally use ISO strings.  Older stored
+    carts may also contain Unix seconds or milliseconds.  Keeping this parser
+    at the ingestion boundary prevents valid carts from becoming timeless and
+    therefore impossible to sort on the dashboard.
+    """
     if isinstance(value, datetime):
         parsed = value
-    elif value:
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
         try:
-            parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
-        except (TypeError, ValueError):
+            timestamp = float(value)
+            if abs(timestamp) >= 100_000_000_000:
+                timestamp /= 1000
+            parsed = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        except (OverflowError, OSError, TypeError, ValueError):
             return None
+    elif value:
+        rendered = str(value).strip()
+        try:
+            numeric = float(rendered)
+        except (TypeError, ValueError):
+            numeric = None
+        if numeric is not None:
+            try:
+                if abs(numeric) >= 100_000_000_000:
+                    numeric /= 1000
+                parsed = datetime.fromtimestamp(numeric, tz=timezone.utc)
+            except (OverflowError, OSError, TypeError, ValueError):
+                return None
+        else:
+            try:
+                parsed = datetime.fromisoformat(rendered.replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                official = re.match(
+                    r"^[A-Za-z]{3} [A-Za-z]{3} \d{1,2} \d{4} "
+                    r"\d{2}:\d{2}:\d{2} GMT[+-]\d{4}",
+                    rendered,
+                )
+                if not official:
+                    return None
+                try:
+                    parsed = datetime.strptime(
+                        official.group(0), "%a %b %d %Y %H:%M:%S GMT%z"
+                    )
+                except ValueError:
+                    return None
     else:
         return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _datetime(value: Any) -> datetime | None:
+    return parse_salla_datetime(value)
 
 
 def _iso(value: Any) -> str | None:
@@ -1207,6 +1253,7 @@ __all__ = [
     "ensure_abandoned_cart_indexes",
     "normalize_abandoned_cart_event",
     "persist_abandoned_cart_event",
+    "parse_salla_datetime",
     "reconcile_purchased_cart_flags",
     "require_carts_read",
     "split_scopes",
