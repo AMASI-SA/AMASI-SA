@@ -106,6 +106,13 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
                 "cost_price_from_salla": 40,
                 "variants": [],
             },
+            {
+                "id": "m-3",
+                "mezan_product_id": "m-3",
+                "salla_product_id": "p-3",
+                "name": "بدون أي تكلفة",
+                "variants": [],
+            },
         ],
         COST_PROFILES: [
             {"salla_product_id": "p-2", "base_cost": 18},
@@ -116,6 +123,7 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
                 "products": [
                     {"product_id": "p-1", "quantity": 1},
                     {"product_id": "p-2", "quantity": 1},
+                    {"product_id": "p-3", "quantity": 1},
                 ],
             },
         ],
@@ -128,9 +136,13 @@ def test_sold_salla_fallback_product_is_returned_as_missing_mezan(monkeypatch):
         to_date="2026-08-01",
     ))
 
-    assert list(result) == ["p-1"]
+    assert list(result) == ["p-1", "p-3"]
     assert result["p-1"]["uses_salla_fallback"] is True
     assert result["p-1"]["missing_everywhere"] is False
+    assert result["p-1"]["calculation_cost_available"] is True
+    assert result["p-3"]["uses_salla_fallback"] is False
+    assert result["p-3"]["missing_everywhere"] is True
+    assert result["p-3"]["calculation_cost_available"] is False
 
 
 def test_sold_missing_products_use_same_payment_and_shipping_cohort(monkeypatch):

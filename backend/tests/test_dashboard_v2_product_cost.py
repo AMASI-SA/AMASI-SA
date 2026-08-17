@@ -8,7 +8,7 @@ from dashboard_v2_routes import (
     PRODUCT_COST_CATALOG_PROJECTION,
     calculate_mezan_v2_line_cost,
 )
-from order_option_cost_snapshot_routes import resolve_base_unit_cost
+from order_option_cost_snapshot_routes import classify_base_unit_cost, resolve_base_unit_cost
 
 
 def test_product_cost_catalog_projection_keeps_raw_salla_cost_aliases():
@@ -16,6 +16,8 @@ def test_product_cost_catalog_projection_keeps_raw_salla_cost_aliases():
     assert PRODUCT_COST_CATALOG_PROJECTION["cost_price"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["cost"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["variants"] == 1
+    assert PRODUCT_COST_CATALOG_PROJECTION["raw_salla"] == 1
+    assert PRODUCT_COST_CATALOG_PROJECTION["raw_salla_details"] == 1
 
 
 def test_line_product_accepts_all_mezan_catalog_identifiers():
@@ -23,12 +25,68 @@ def test_line_product_accepts_all_mezan_catalog_identifiers():
     products_by_id, products_by_variant, products_by_sku = _index_products([product])
 
     for identity in products_by_id:
-        assert _line_product(
+        resolved = _line_product(
             {"product_id": identity},
             products_by_id=products_by_id,
             products_by_variant=products_by_variant,
             products_by_sku=products_by_sku,
-        ) is product
+        )
+        assert resolved["salla_product_id"] == "salla-1"
+
+
+def test_dashboard_recovers_salla_cost_from_full_product_snapshot():
+    products_by_id, products_by_variant, products_by_sku = _index_products([{
+        "salla_product_id": "p-1",
+        "name": "منتج بتكلفة سلة",
+        "cost_price_from_salla": None,
+        "raw_salla_details": {"cost_price": {"amount": "37.50"}},
+        "variants": [],
+    }])
+    product = _line_product(
+        {"source_product_id": "p-1", "quantity": 1},
+        products_by_id=products_by_id,
+        products_by_variant=products_by_variant,
+        products_by_sku=products_by_sku,
+    )
+    result = calculate_mezan_v2_line_cost(
+        {"source_product_id": "p-1", "quantity": 1},
+        product=product,
+        profile=None,
+        product_bindings=[],
+        option_bindings=[],
+        resources={},
+    )
+
+    assert result["line_total"] == 37.5
+    assert result["base_cost_source"] == "salla_product_fallback"
+    assert result["calculation_cost_available"] is True
+    assert result["mezan_cost_missing"] is True
+
+
+def test_dashboard_resolves_historical_line_by_unique_name_but_not_duplicate_name():
+    unique = {
+        "salla_product_id": "p-unique",
+        "name": "منتج تاريخي فريد",
+        "cost_price_from_salla": 25,
+    }
+    duplicate_a = {"salla_product_id": "p-a", "name": "منتج مكرر"}
+    duplicate_b = {"salla_product_id": "p-b", "name": "منتج مكرر"}
+    products_by_id, products_by_variant, products_by_sku = _index_products([
+        unique, duplicate_a, duplicate_b,
+    ])
+
+    assert _line_product(
+        {"product_id": "old-id", "name": " منتج تاريخي فريد "},
+        products_by_id=products_by_id,
+        products_by_variant=products_by_variant,
+        products_by_sku=products_by_sku,
+    )["salla_product_id"] == "p-unique"
+    assert _line_product(
+        {"product_id": "old-id", "name": "منتج مكرر"},
+        products_by_id=products_by_id,
+        products_by_variant=products_by_variant,
+        products_by_sku=products_by_sku,
+    ) is None
 
 
 def test_mezan_base_wins_and_selected_components_are_added_once():
@@ -155,8 +213,34 @@ def test_salla_fallback_calculates_cost_but_stays_missing_in_mezan():
 
     assert result["line_total"] == 30
     assert result["base_complete"] is True
+    assert result["calculation_cost_available"] is True
     assert result["mezan_cost_complete"] is False
+    assert result["mezan_cost_missing"] is True
     assert result["uses_salla_fallback"] is True
+
+
+def test_cost_semantics_keep_mezan_completeness_separate_from_calculation_readiness():
+    cases = [
+        (
+            {"base_cost": 20},
+            {"cost_price_from_salla": 30},
+            {"mezan_cost_missing": False, "calculation_cost_available": True, "calculation_uses_salla_fallback": False},
+        ),
+        (
+            {},
+            {"cost_price_from_salla": 30},
+            {"mezan_cost_missing": True, "calculation_cost_available": True, "calculation_uses_salla_fallback": True},
+        ),
+        (
+            {},
+            {},
+            {"mezan_cost_missing": True, "calculation_cost_available": False, "calculation_uses_salla_fallback": False},
+        ),
+    ]
+
+    for profile, product, expected in cases:
+        status = classify_base_unit_cost({"product_id": "p-1"}, profile, product)
+        assert {key: status[key] for key in expected} == expected
 
 
 def test_explicit_zero_in_mezan_does_not_fall_back_to_salla():

@@ -16,7 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
-from order_option_cost_snapshot_routes import classify_base_unit_cost
+from order_option_cost_snapshot_routes import (
+    COST_SEMANTICS_VERSION,
+    classify_base_unit_cost,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, ensure_product_v2_indexes
 from salla_integration.service import SallaError, call_salla
@@ -260,7 +263,7 @@ async def _sold_missing_mezan_cost_products(
             if not salla_id:
                 continue
             status = classify_base_unit_cost(item, profile_map.get(salla_id), product)
-            if status["mezan_cost_complete"]:
+            if not status["mezan_cost_missing"]:
                 continue
             row = missing.setdefault(salla_id, {
                 "salla_product_id": salla_id,
@@ -268,6 +271,7 @@ async def _sold_missing_mezan_cost_products(
                 "name": product.get("name") or item.get("name") or "منتج بدون اسم",
                 "uses_salla_fallback": False,
                 "missing_everywhere": False,
+                "calculation_cost_available": True,
                 "fallback_sources": set(),
                 "sold_lines": 0,
             })
@@ -276,7 +280,12 @@ async def _sold_missing_mezan_cost_products(
                 row["uses_salla_fallback"] or status["uses_salla_fallback"]
             )
             row["missing_everywhere"] = bool(
-                row["missing_everywhere"] or not status["cost_available"]
+                row["missing_everywhere"]
+                or not status["calculation_cost_available"]
+            )
+            row["calculation_cost_available"] = bool(
+                row["calculation_cost_available"]
+                and status["calculation_cost_available"]
             )
             if status["uses_salla_fallback"]:
                 row["fallback_sources"].add(status["source"])
@@ -407,7 +416,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "total_pages": max(1, (total + per_page - 1) // per_page),
             },
             "meta": {
-                "contract_version": "sold-missing-cost-v2"
+                "contract_version": "sold-missing-cost-v3"
                 if missing_mezan_cost and sold_only else "workspace-products-v1",
                 "sort": sort,
                 "legacy_dependency": False,
@@ -420,6 +429,11 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                 "shipping_companies": shipping_companies,
                 "matched_sold_products": len(missing_cost_rows),
                 "requested_product_ids_count": len(requested_product_ids),
+                "cost_semantics": {
+                    "version": COST_SEMANTICS_VERSION,
+                    "missing_mezan_cost": "explicit_mezan_cost_only",
+                    "calculation_cost": "mezan_then_salla_fallback",
+                },
             },
         }
 
