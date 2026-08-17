@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import re
 from typing import Any
@@ -17,16 +18,29 @@ import httpx
 
 META_CREDENTIALS_COLLECTION = "mezan_meta_oauth_credentials_v2"
 META_DEFAULT_GRAPH_VERSION = "v25.0"
-INSTAGRAM_WEBHOOK_FIELDS = ("comments", "messages")
-PAGE_WEBHOOK_INSTALL_FIELDS = ("messages",)
+INSTAGRAM_WEBHOOK_FIELDS = ("messages", "comments")
+
+logger = logging.getLogger(__name__)
 
 
 class MetaInstagramWebhookError(RuntimeError):
     """A stable, token-safe provider subscription failure."""
 
-    def __init__(self, code: str):
+    def __init__(
+        self,
+        code: str,
+        *,
+        http_status: int | None = None,
+        meta_error_code: int | None = None,
+        error_subcode: int | None = None,
+        trace_id: str | None = None,
+    ):
         super().__init__(code)
         self.code = code
+        self.http_status = http_status
+        self.meta_error_code = meta_error_code
+        self.error_subcode = error_subcode
+        self.trace_id = trace_id
 
 
 def _text(value: Any) -> str:
@@ -73,17 +87,81 @@ def _appsecret_proof(access_token: str) -> str:
     ).hexdigest()
 
 
-async def _json(response: httpx.Response) -> dict[str, Any]:
-    if response.status_code >= 400:
-        raise MetaInstagramWebhookError("instagram_webhook_subscription_failed")
+def _integer(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _trace_id(value: Any) -> str | None:
+    rendered = _text(value)
+    if not rendered or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", rendered):
+        return None
+    return rendered
+
+
+def _provider_error(
+    *,
+    operation: str,
+    response: httpx.Response,
+    payload: dict[str, Any] | None,
+) -> MetaInstagramWebhookError:
+    error = (payload or {}).get("error")
+    error = error if isinstance(error, dict) else {}
+    meta_error_code = _integer(error.get("code"))
+    error_subcode = _integer(error.get("error_subcode"))
+    trace_id = _trace_id(error.get("fbtrace_id"))
+    logger.warning(
+        "instagram_webhook_meta_error operation=%s http_status=%s "
+        "meta_error_code=%s error_subcode=%s trace_id=%s",
+        operation,
+        response.status_code,
+        meta_error_code,
+        error_subcode,
+        trace_id,
+    )
+    return MetaInstagramWebhookError(
+        "instagram_webhook_subscription_failed",
+        http_status=response.status_code,
+        meta_error_code=meta_error_code,
+        error_subcode=error_subcode,
+        trace_id=trace_id,
+    )
+
+
+async def _json(
+    response: httpx.Response,
+    *,
+    operation: str,
+) -> dict[str, Any]:
+    payload: Any = None
     try:
         payload = response.json()
-    except ValueError as exc:
+    except ValueError:
+        if response.status_code >= 400:
+            raise _provider_error(
+                operation=operation,
+                response=response,
+                payload=None,
+            ) from None
         raise MetaInstagramWebhookError(
-            "instagram_webhook_subscription_failed"
-        ) from exc
+            "instagram_webhook_subscription_failed",
+            http_status=response.status_code,
+        ) from None
+    if response.status_code >= 400 or (
+        isinstance(payload, dict) and isinstance(payload.get("error"), dict)
+    ):
+        raise _provider_error(
+            operation=operation,
+            response=response,
+            payload=payload if isinstance(payload, dict) else None,
+        )
     if not isinstance(payload, dict):
-        raise MetaInstagramWebhookError("instagram_webhook_subscription_failed")
+        raise MetaInstagramWebhookError(
+            "instagram_webhook_subscription_failed",
+            http_status=response.status_code,
+        )
     return payload
 
 
@@ -123,7 +201,8 @@ async def subscribe_instagram_webhooks(
                     "access_token": user_token,
                     "appsecret_proof": _appsecret_proof(user_token),
                 },
-            )
+            ),
+            operation="resolve_linked_instagram_account",
         )
         page = next(
             (
@@ -144,36 +223,41 @@ async def subscribe_instagram_webhooks(
         if not page_token:
             raise MetaInstagramWebhookError("instagram_page_access_required")
 
-        # Facebook Login yields a Page access token, so Meta requires the app
-        # subscription to be installed on the linked Page's subscribed_apps
-        # edge. The Instagram account ID is still validated above to prevent
-        # subscribing an unrelated Page.
-        edge = f"{_graph_base()}/{page_id}/subscribed_apps"
-        # Page subscribed_apps accepts Page webhook fields. Instagram
-        # comments are delivered through the app-level Instagram webhook
-        # subscription configured in Meta, while DMs use the Page field.
-        subscribed_fields = ",".join(PAGE_WEBHOOK_INSTALL_FIELDS)
+        # Subscribe the exact Instagram professional account after proving it
+        # belongs to the selected Page. The Page token is used transiently and
+        # is never persisted or exposed in errors.
+        edge = f"{_graph_base()}/{instagram_account_id}/subscribed_apps"
+        subscribed_fields = ",".join(INSTAGRAM_WEBHOOK_FIELDS)
+        install_response = await http.post(
+            edge,
+            params={
+                "subscribed_fields": subscribed_fields,
+                "access_token": page_token,
+                "appsecret_proof": _appsecret_proof(page_token),
+            },
+        )
         installed = await _json(
-            await http.post(
-                edge,
-                params={
-                    "subscribed_fields": subscribed_fields,
-                    "access_token": page_token,
-                    "appsecret_proof": _appsecret_proof(page_token),
-                },
-            )
+            install_response,
+            operation="subscribe_instagram_account",
         )
         if installed.get("success") is not True:
-            raise MetaInstagramWebhookError("instagram_webhook_subscription_failed")
-
-        verified = await _json(
-            await http.get(
-                edge,
-                params={
-                    "access_token": page_token,
-                    "appsecret_proof": _appsecret_proof(page_token),
-                },
+            raise _provider_error(
+                operation="subscribe_instagram_account_unconfirmed",
+                response=install_response,
+                payload=installed,
             )
+
+        verify_response = await http.get(
+            edge,
+            params={
+                "fields": "id,subscribed_fields",
+                "access_token": page_token,
+                "appsecret_proof": _appsecret_proof(page_token),
+            },
+        )
+        verified = await _json(
+            verify_response,
+            operation="verify_instagram_account_subscription",
         )
         app = next(
             (
@@ -183,16 +267,27 @@ async def subscribe_instagram_webhooks(
             ),
             None,
         )
+        raw_fields = (app or {}).get("subscribed_fields") or []
+        if isinstance(raw_fields, str):
+            raw_fields = raw_fields.split(",")
         actual_fields = {
-            _text(value) for value in (app or {}).get("subscribed_fields") or []
+            _text(value) for value in raw_fields if _text(value)
         }
-        if not app or not set(PAGE_WEBHOOK_INSTALL_FIELDS).issubset(actual_fields):
-            raise MetaInstagramWebhookError("instagram_webhook_subscription_failed")
+        if not app or not set(INSTAGRAM_WEBHOOK_FIELDS).issubset(actual_fields):
+            raise _provider_error(
+                operation="verify_instagram_account_subscription_unconfirmed",
+                response=verify_response,
+                payload=verified,
+            )
         return INSTAGRAM_WEBHOOK_FIELDS
     except httpx.HTTPError as exc:
+        logger.warning(
+            "instagram_webhook_meta_transport_error exception_type=%s",
+            type(exc).__name__,
+        )
         raise MetaInstagramWebhookError(
             "instagram_webhook_subscription_failed"
-        ) from exc
+        ) from None
     finally:
         if owns_client:
             await http.aclose()
@@ -200,7 +295,6 @@ async def subscribe_instagram_webhooks(
 
 __all__ = [
     "INSTAGRAM_WEBHOOK_FIELDS",
-    "PAGE_WEBHOOK_INSTALL_FIELDS",
     "MetaInstagramWebhookError",
     "subscribe_instagram_webhooks",
 ]

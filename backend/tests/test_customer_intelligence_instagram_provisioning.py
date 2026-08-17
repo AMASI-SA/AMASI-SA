@@ -91,7 +91,7 @@ class RecordingSubscriber:
         self.calls.append(deepcopy(kwargs))
         if self.error_code:
             raise MetaInstagramWebhookError(self.error_code)
-        return ("comments", "messages")
+        return ("messages", "comments")
 
 
 class FakeDB:
@@ -266,7 +266,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
                 },
             )
         if request.method == "POST":
-            assert request.url.params["subscribed_fields"] == "messages"
+            assert request.url.params["subscribed_fields"] == "messages,comments"
             assert request.url.params["access_token"] == page_token
             return Response(200, json={"success": True})
         return Response(
@@ -274,7 +274,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
             json={
                 "data": [{
                     "id": "953625110827548",
-                    "subscribed_fields": ["messages"],
+                    "subscribed_fields": ["messages", "comments"],
                 }]
             },
         )
@@ -288,16 +288,188 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
             client=client,
         )
 
-    assert fields == ("comments", "messages")
+    assert fields == ("messages", "comments")
     assert [request.method for request in requests] == ["GET", "POST", "GET"]
     assert requests[1].url.path.endswith(
-        f"/{PAGE_ID}/subscribed_apps"
+        f"/{RAW_INSTAGRAM_ID}/subscribed_apps"
     )
+    assert requests[2].url.path.endswith(
+        f"/{RAW_INSTAGRAM_ID}/subscribed_apps"
+    )
+    assert requests[2].url.params["fields"] == "id,subscribed_fields"
+    assert not requests[1].url.path.endswith(f"/{PAGE_ID}/subscribed_apps")
 
 
 @pytest.mark.asyncio
-async def test_missing_new_meta_permissions_requires_reauthorization_without_write():
-    db = FakeDB(scopes=INSTAGRAM_REQUIRED_PERMISSIONS - {"pages_messaging"})
+async def test_meta_subscription_stops_when_page_links_a_different_instagram_account(
+    monkeypatch,
+):
+    db = FakeDB()
+    token_key = Fernet.generate_key()
+    monkeypatch.setenv("META_TOKEN_ENC_KEY", token_key.decode())
+    monkeypatch.setenv("META_BUSINESS_APP_ID", "953625110827548")
+    monkeypatch.setenv("META_BUSINESS_APP_SECRET", "provider-secret")
+    db.collections[META_CREDENTIALS_COLLECTION].rows[0][
+        "access_token_ciphertext"
+    ] = Fernet(token_key).encrypt(b"encrypted-user-token")
+    requests: list[Request] = []
+
+    def handler(request: Request) -> Response:
+        requests.append(request)
+        return Response(
+            200,
+            json={
+                "data": [{
+                    "id": PAGE_ID,
+                    "access_token": "transient-page-token",
+                    "instagram_business_account": {"id": "different-instagram-id"},
+                }]
+            },
+        )
+
+    async with AsyncClient(transport=MockTransport(handler)) as client:
+        with pytest.raises(MetaInstagramWebhookError) as failure:
+            await subscribe_instagram_webhooks(
+                db,
+                owner_user_id=OWNER_ID,
+                instagram_account_id=RAW_INSTAGRAM_ID,
+                page_id=PAGE_ID,
+                client=client,
+            )
+
+    assert failure.value.code == "instagram_asset_link_mismatch"
+    assert len(requests) == 1
+    assert requests[0].url.path.endswith("/me/accounts")
+
+
+@pytest.mark.asyncio
+async def test_meta_subscription_requires_read_back_of_both_instagram_fields(monkeypatch):
+    db = FakeDB()
+    token_key = Fernet.generate_key()
+    monkeypatch.setenv("META_TOKEN_ENC_KEY", token_key.decode())
+    monkeypatch.setenv("META_BUSINESS_APP_ID", "953625110827548")
+    monkeypatch.setenv("META_BUSINESS_APP_SECRET", "provider-secret")
+    db.collections[META_CREDENTIALS_COLLECTION].rows[0][
+        "access_token_ciphertext"
+    ] = Fernet(token_key).encrypt(b"encrypted-user-token")
+
+    def handler(request: Request) -> Response:
+        if request.url.path.endswith("/me/accounts"):
+            return Response(
+                200,
+                json={
+                    "data": [{
+                        "id": PAGE_ID,
+                        "access_token": "transient-page-token",
+                        "instagram_business_account": {"id": RAW_INSTAGRAM_ID},
+                    }]
+                },
+            )
+        if request.method == "POST":
+            return Response(200, json={"success": True})
+        return Response(
+            200,
+            json={
+                "data": [{
+                    "id": "953625110827548",
+                    "subscribed_fields": ["messages"],
+                }]
+            },
+        )
+
+    async with AsyncClient(transport=MockTransport(handler)) as client:
+        with pytest.raises(MetaInstagramWebhookError) as failure:
+            await subscribe_instagram_webhooks(
+                db,
+                owner_user_id=OWNER_ID,
+                instagram_account_id=RAW_INSTAGRAM_ID,
+                page_id=PAGE_ID,
+                client=client,
+            )
+
+    assert failure.value.code == "instagram_webhook_subscription_failed"
+
+
+@pytest.mark.asyncio
+async def test_meta_subscription_logs_only_safe_provider_error_fields(
+    monkeypatch,
+    caplog,
+):
+    db = FakeDB()
+    token_key = Fernet.generate_key()
+    monkeypatch.setenv("META_TOKEN_ENC_KEY", token_key.decode())
+    monkeypatch.setenv("META_BUSINESS_APP_ID", "953625110827548")
+    monkeypatch.setenv("META_BUSINESS_APP_SECRET", "provider-secret")
+    user_token = "sensitive-user-token"
+    page_token = "sensitive-page-token"
+    db.collections[META_CREDENTIALS_COLLECTION].rows[0][
+        "access_token_ciphertext"
+    ] = Fernet(token_key).encrypt(user_token.encode())
+
+    def handler(request: Request) -> Response:
+        if request.url.path.endswith("/me/accounts"):
+            return Response(
+                200,
+                json={
+                    "data": [{
+                        "id": PAGE_ID,
+                        "access_token": page_token,
+                        "instagram_business_account": {"id": RAW_INSTAGRAM_ID},
+                    }]
+                },
+            )
+        return Response(
+            400,
+            json={
+                "error": {
+                    "message": f"provider rejected {page_token}",
+                    "code": 200,
+                    "error_subcode": 2018065,
+                    "fbtrace_id": "TraceABC_123",
+                }
+            },
+        )
+
+    async with AsyncClient(transport=MockTransport(handler)) as client:
+        with pytest.raises(MetaInstagramWebhookError) as failure:
+            await subscribe_instagram_webhooks(
+                db,
+                owner_user_id=OWNER_ID,
+                instagram_account_id=RAW_INSTAGRAM_ID,
+                page_id=PAGE_ID,
+                client=client,
+            )
+
+    assert failure.value.http_status == 400
+    assert failure.value.meta_error_code == 200
+    assert failure.value.error_subcode == 2018065
+    assert failure.value.trace_id == "TraceABC_123"
+    assert "http_status=400" in caplog.text
+    assert "meta_error_code=200" in caplog.text
+    assert "error_subcode=2018065" in caplog.text
+    assert "trace_id=TraceABC_123" in caplog.text
+    assert user_token not in caplog.text
+    assert page_token not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_pages_messaging_is_not_required_for_instagram_receive_only_setup():
+    assert "pages_messaging" not in INSTAGRAM_REQUIRED_PERMISSIONS
+    db = FakeDB(scopes=INSTAGRAM_REQUIRED_PERMISSIONS)
+    service = InstagramProvisioningService(db, now=lambda: NOW)
+
+    setup = await service.setup(owner_user_id=OWNER_ID)
+
+    assert setup.state == "ready"
+    assert setup.required_permissions_ready is True
+    assert db.collections[CHANNELS_COLLECTION].rows == []
+
+
+@pytest.mark.asyncio
+async def test_missing_actual_instagram_permission_requires_reauthorization_without_write():
+    db = FakeDB(
+        scopes=INSTAGRAM_REQUIRED_PERMISSIONS - {"instagram_manage_messages"}
+    )
     service = InstagramProvisioningService(db, now=lambda: NOW)
 
     setup = await service.setup(owner_user_id=OWNER_ID)
