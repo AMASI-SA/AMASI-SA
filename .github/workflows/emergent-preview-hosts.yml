@@ -1,0 +1,43 @@
+name: Emergent Preview Host Gate
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/vite.config.js"
+      - "frontend/scripts/verify-emergent-preview-hosts.cjs"
+      - ".github/workflows/emergent-preview-hosts.yml"
+  push:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/vite.config.js"
+      - "frontend/scripts/verify-emergent-preview-hosts.cjs"
+      - ".github/workflows/emergent-preview-hosts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-host-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify controlled Preview host suffixes
+        run: node frontend/scripts/verify-emergent-preview-hosts.cjs
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+      - name: Build Production frontend with governed Vite config
+        working-directory: frontend
+        env:
+          CI: "false"
+        run: yarn build
