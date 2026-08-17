@@ -48,6 +48,7 @@ jobs:
           fastapi==0.110.1
           pydantic==2.13.4
           pymongo==4.5.0
+          openpyxl
           pytest
       - name: Compile store courier modules
         working-directory: backend
