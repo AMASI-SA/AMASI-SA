@@ -451,7 +451,9 @@ export default function AdvancedDashboard() {
             });
             if (requestSequence === requestSequenceRef.current) setData(response.data);
         } catch {
-            if (!background && requestSequence === requestSequenceRef.current) setData(null);
+            // Network/auth refresh/provider failures are transient. Never erase
+            // a verified dashboard snapshot and replace it with false zeros;
+            // the next scheduled refresh will reconcile it safely.
         } finally {
             if (background) backgroundRefreshInFlightRef.current = false;
             if (requestSequence === requestSequenceRef.current) setLoading(false);
