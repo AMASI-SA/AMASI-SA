@@ -45,15 +45,18 @@ async def _graph_get(
     path: str,
     *,
     fields: str,
+    extra_params: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
+    params = {
+        "access_token": access_token,
+        "appsecret_proof": meta_appsecret_proof(access_token),
+        "fields": fields,
+        "limit": 100,
+    }
+    params.update(extra_params or {})
     response = await client.get(
         f"{meta_graph_base()}/{path.lstrip('/')}",
-        params={
-            "access_token": access_token,
-            "appsecret_proof": meta_appsecret_proof(access_token),
-            "fields": fields,
-            "limit": 100,
-        },
+        params=params,
     )
     if response.status_code >= 400:
         return None, _safe_error(response)
@@ -108,7 +111,8 @@ def _tasks_for_user(payload: dict[str, Any] | None, external_user_id: str) -> li
     rows = (payload or {}).get("data") or []
     for row in rows:
         if str(row.get("id") or "") == external_user_id:
-            return sorted({str(task).upper() for task in row.get("tasks") or [] if task})
+            granted = list(row.get("tasks") or []) + list(row.get("permitted_tasks") or [])
+            return sorted({str(task).upper() for task in granted if task})
     return []
 
 
@@ -131,13 +135,15 @@ async def inspect_meta_management_readiness(db: Any, user_id: str) -> dict[str, 
                 client,
                 access_token,
                 account_id,
-                fields="id,name,account_status,disable_reason,currency,timezone_name",
+                fields="id,name,account_status,disable_reason,currency,timezone_name,business{id,name}",
             )
+            business_id = str(((metadata or {}).get("business") or {}).get("id") or "").strip()
             assigned, assigned_error = await _graph_get(
                 client,
                 access_token,
                 f"{account_id}/assigned_users",
-                fields="id,name,tasks",
+                fields="id,name,tasks,user_type,permitted_tasks",
+                extra_params={"business": business_id} if business_id else None,
             )
             tasks = _tasks_for_user(assigned, external_user_id)
             role_verified = bool(tasks)
@@ -153,6 +159,7 @@ async def inspect_meta_management_readiness(db: Any, user_id: str) -> dict[str, 
                     "timezone": (metadata or {}).get("timezone_name") or account.get("timezone"),
                     "account_status": (metadata or {}).get("account_status") or account.get("account_status"),
                     "disable_reason": (metadata or {}).get("disable_reason"),
+                    "business_id": business_id or None,
                     "readable": readable,
                     "role_verified": role_verified,
                     "tasks": tasks,
