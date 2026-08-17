@@ -101,3 +101,46 @@ def test_latest_active_abandoned_carts_keeps_dashboard_rail_populated():
     latest = latest_active_abandoned_carts(rows, limit=5)
 
     assert [row["cart_id"] for row in latest] == ["active-new", "active-old"]
+
+
+def test_latest_active_abandoned_carts_orders_official_salla_dates_chronologically():
+    rows = [
+        {
+            "cart_id": "new-tuesday",
+            "purchased": False,
+            "cart_updated_at": "Tue Mar 25 2025 11:59:37 GMT+0300",
+        },
+        {
+            "cart_id": "old-wednesday",
+            "purchased": False,
+            "cart_updated_at": "Wed Mar 19 2025 11:59:37 GMT+0300",
+        },
+    ]
+
+    latest = latest_active_abandoned_carts(rows, limit=5)
+
+    assert [row["cart_id"] for row in latest] == ["new-tuesday", "old-wednesday"]
+
+
+def test_period_selection_falls_back_to_live_receipt_time_when_provider_time_missing():
+    rows = [
+        {
+            "cart_id": "live-cart",
+            "purchased": False,
+            "last_received_at": "2026-08-17T06:30:00Z",
+        },
+        {
+            "cart_id": "timeless-legacy-cart",
+            "purchased": False,
+        },
+    ]
+
+    active, abandoned_count, recovered_count = select_abandoned_carts_for_period(
+        rows,
+        start="2026-08-17",
+        end="2026-08-17",
+    )
+
+    assert [row["cart_id"] for row in active] == ["live-cart"]
+    assert abandoned_count == 1
+    assert recovered_count == 0

@@ -94,7 +94,7 @@ test("abandoned carts show customer, product count, image, time and more control
         customer_name: index === 0 ? "نورة أحمد" : `عميل ${index + 1}`,
         total: 99 + index,
         currency: "SAR",
-        cart_updated_at: new Date().toISOString(),
+        activity_at: new Date().toISOString(),
         items: index === 0
             ? [{ quantity: 2, image_url: "https://cdn.example.com/product.png" }, { quantity: 1 }]
             : [{ quantity: 1 }],
@@ -109,6 +109,9 @@ test("abandoned carts show customer, product count, image, time and more control
     expect(markup).toContain("متروكة 24");
     expect(markup).toContain("مكتملة 6");
     expect(markup).not.toContain("عميل 6");
+    expect(markup).toContain("bg-slate-800");
+    expect(markup).toContain("text-teal-700");
+    expect(markup).not.toContain("bg-rose-700");
 });
 
 test("top products header shows period counts and only five rows initially", () => {

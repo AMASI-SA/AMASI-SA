@@ -29,6 +29,7 @@ const PLATFORM_META = [
 
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const CARTS_AUTO_REFRESH_MS = 15_000;
 
 function Panel({ children, className = "", testid }) {
     return <section data-testid={testid} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
@@ -126,9 +127,10 @@ export function CampaignAdvisorCard() {
     </Panel>;
 }
 
-function relativeTime(value) {
+function relativeTime(value, now = Date.now()) {
+    if (!value) return "—";
     const date = new Date(value || 0);
-    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    const seconds = Math.max(0, Math.floor((now - date.getTime()) / 1000));
     if (!Number.isFinite(seconds)) return "—";
     if (seconds < 60) return `منذ ${Math.max(1, seconds)} ثانية`;
     if (seconds < 3600) return `منذ ${Math.floor(seconds / 60)} دقيقة`;
@@ -140,33 +142,38 @@ function relativeTime(value) {
 
 export function AbandonedCartsCard({ carts, summary = {} }) {
     const [visibleCount, setVisibleCount] = useState(5);
+    const [clock, setClock] = useState(() => Date.now());
     const cartRows = carts || [];
     const visibleCarts = cartRows.slice(0, visibleCount);
     const hasMore = visibleCount < cartRows.length;
     useEffect(() => { setVisibleCount(5); }, [carts]);
+    useEffect(() => {
+        const timer = window.setInterval(() => setClock(Date.now()), 1_000);
+        return () => window.clearInterval(timer);
+    }, []);
     return (
-        <Panel className="border-rose-200" testid="advanced-abandoned-carts">
-            <div className="flex h-14 items-center justify-between border-b border-rose-800 bg-rose-700 px-4 text-white">
+        <Panel className="border-teal-200" testid="advanced-abandoned-carts">
+            <div className="flex h-14 items-center justify-between border-b border-slate-900 bg-slate-800 px-4 text-white">
                 <h2 className="flex items-center gap-2 font-extrabold"><ShoppingCart className="h-5 w-5" />السلات المتروكة</h2>
                 <div className="flex items-center gap-1.5 text-[10px] font-black">
-                    <span className="rounded-full bg-white/15 px-2 py-1">متروكة {integer(summary.abandoned_count)}</span>
-                    <span className="rounded-full bg-white/15 px-2 py-1">مكتملة {integer(summary.recovered_count)}</span>
+                    <span className="rounded-full bg-teal-400/20 px-2 py-1 text-teal-50">متروكة {integer(summary.abandoned_count)}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-1 text-slate-100">مكتملة {integer(summary.recovered_count)}</span>
                 </div>
             </div>
             <div className="h-[410px] overflow-y-auto overscroll-contain" data-testid="advanced-abandoned-carts-scroll">
             {visibleCarts.length ? visibleCarts.map((cart) => {
                 const item = Array.isArray(cart.items) ? cart.items[0] : null;
                 const productCount = (cart.items || []).reduce((sum, product) => sum + Math.max(1, Number(product?.quantity || 1)), 0);
-                return <div key={cart.cart_id} className="flex min-h-[82px] items-center gap-3 border-b border-rose-100 px-4 py-3 last:border-0 odd:bg-rose-50/30">
+                return <div key={cart.cart_id} className="flex min-h-[82px] items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0 odd:bg-teal-50/30">
                     {item?.image_url
                         ? <img src={item.image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" loading="lazy" />
-                        : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-xl">🛒</div>}
-                    <div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{cart.customer_name || "عميل سلة"}</p><p className="mt-1 text-[10px] font-bold text-rose-600">{integer(productCount)} {productCount === 1 ? "منتج" : "منتجات"}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">سلة #{cart.cart_id}</p></div>
-                    <div className="text-left"><p className="num text-xs font-black text-rose-500">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.cart_updated_at || cart.updated_at)}</p></div>
+                        : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-xl">🛒</div>}
+                    <div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{cart.customer_name || "عميل سلة"}</p><p className="mt-1 text-[10px] font-bold text-teal-700">{integer(productCount)} {productCount === 1 ? "منتج" : "منتجات"}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">سلة #{cart.cart_id}</p></div>
+                    <div className="text-left"><p className="num text-xs font-black text-teal-700">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.activity_at || cart.cart_updated_at || cart.updated_at || cart.created_at, clock)}</p></div>
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
             </div>
-            {cartRows.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : setVisibleCount(5)} className="w-full border-t border-rose-200 bg-rose-50/60 px-4 py-3 text-xs font-extrabold text-rose-700 hover:bg-rose-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
+            {cartRows.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
@@ -478,7 +485,47 @@ export default function AdvancedDashboard() {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, [filters, loadPeriod]);
-    useEffect(() => { let active = true; const loadLive = async () => { const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString(); const [cartResult, gaResult] = await Promise.allSettled([api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`), api.get("/integrations-v2/google_analytics_4/realtime-dashboard")]); if (!active) return; if (cartResult.status === "fulfilled") { setCarts(cartResult.value.data?.items || []); setCartSummary({ abandoned_count: Number(cartResult.value.data?.abandoned_count || 0), recovered_count: Number(cartResult.value.data?.recovered_count || 0) }); } if (gaResult.status === "fulfilled") setGa(gaResult.value.data); }; loadLive(); const timer = window.setInterval(loadLive, 60000); return () => { active = false; window.clearInterval(timer); }; }, [filters.from, filters.to]);
+    useEffect(() => {
+        let active = true;
+        let cartRequestInFlight = false;
+        const loadCarts = async () => {
+            if (cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+            cartRequestInFlight = true;
+            const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString();
+            try {
+                const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`);
+                if (!active) return;
+                setCarts(result.data?.items || []);
+                setCartSummary({ abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) });
+            } catch { /* Keep the last good cart snapshot during transient failures. */ }
+            finally { cartRequestInFlight = false; }
+        };
+        const handleVisibilityChange = () => { if (!document.hidden) loadCarts(); };
+        loadCarts();
+        const timer = window.setInterval(loadCarts, CARTS_AUTO_REFRESH_MS);
+        window.addEventListener("focus", loadCarts);
+        window.addEventListener("online", loadCarts);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+            window.removeEventListener("focus", loadCarts);
+            window.removeEventListener("online", loadCarts);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [filters.from, filters.to]);
+    useEffect(() => {
+        let active = true;
+        const loadGa = async () => {
+            try {
+                const result = await api.get("/integrations-v2/google_analytics_4/realtime-dashboard");
+                if (active) setGa(result.data);
+            } catch { /* Preserve the last successful realtime snapshot. */ }
+        };
+        loadGa();
+        const timer = window.setInterval(loadGa, 60_000);
+        return () => { active = false; window.clearInterval(timer); };
+    }, []);
     return <div dir="rtl" className="space-y-4" data-testid="advanced-dashboard-page">
         <header className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-xs text-slate-400">لوحة التحكم الافتراضية</p><h1 className="text-2xl font-black sm:text-3xl">لوحة التحكم المتقدمة</h1></div>

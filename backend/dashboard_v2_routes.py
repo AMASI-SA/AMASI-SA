@@ -46,6 +46,7 @@ from salla_marketing_attribution import (
     SALLA_RAW_ATTRIBUTION_PROJECTION,
     attach_projected_salla_attribution,
 )
+from salla_integration.abandoned_carts import parse_salla_datetime
 
 
 SNAP_FACTS = "mezan_snapchat_performance_daily_v2"
@@ -101,23 +102,37 @@ def _matches_any(value: str, allowed: list[str]) -> bool:
     )
 
 
-def _cart_day(row: dict[str, Any], *keys: str) -> str:
+def _cart_datetime(row: dict[str, Any], *keys: str) -> datetime | None:
     for key in keys:
         value = row.get(key)
-        if not value:
-            continue
         if isinstance(value, date) and not isinstance(value, datetime):
-            return value.isoformat()
-        try:
-            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
-                str(value).strip().replace("Z", "+00:00")
-            )
-        except (TypeError, ValueError):
-            return str(value)[:10]
-        if parsed.tzinfo is not None:
-            parsed = parsed.astimezone(RIYADH_TZ)
-        return parsed.date().isoformat()
-    return ""
+            return datetime.combine(value, datetime.min.time(), tzinfo=RIYADH_TZ)
+        parsed = parse_salla_datetime(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _cart_day(row: dict[str, Any], *keys: str) -> str:
+    parsed = _cart_datetime(row, *keys)
+    return parsed.astimezone(RIYADH_TZ).date().isoformat() if parsed else ""
+
+
+def _cart_activity_at(row: dict[str, Any]) -> datetime | None:
+    return _cart_datetime(
+        row,
+        "cart_updated_at",
+        "last_received_at",
+        "updated_at",
+        "cart_created_at",
+        "first_seen_at",
+        "created_at",
+    )
+
+
+def _cart_activity_iso(row: dict[str, Any]) -> str | None:
+    parsed = _cart_activity_at(row)
+    return parsed.astimezone(timezone.utc).isoformat() if parsed else None
 
 
 def select_abandoned_carts_for_period(
@@ -132,7 +147,26 @@ def select_abandoned_carts_for_period(
     abandoned_rows = [
         row for row in rows
         if start <= _cart_day(
-            row, "cart_created_at", "first_seen_at", "cart_updated_at", "updated_at"
+            row,
+            "cart_created_at",
+            "first_seen_at",
+            "cart_updated_at",
+            "last_received_at",
+            "updated_at",
+            "created_at",
+        ) <= end
+    ]
+    active_period_rows = [
+        row for row in rows
+        if row.get("purchased") is not True
+        and start <= _cart_day(
+            row,
+            "cart_updated_at",
+            "cart_created_at",
+            "last_received_at",
+            "updated_at",
+            "first_seen_at",
+            "created_at",
         ) <= end
     ]
     recovered_rows = [
@@ -141,8 +175,8 @@ def select_abandoned_carts_for_period(
         and start <= _cart_day(row, "cart_updated_at", "updated_at") <= end
     ]
     active_rows = sorted(
-        (row for row in abandoned_rows if row.get("purchased") is not True),
-        key=lambda row: str(row.get("cart_updated_at") or row.get("updated_at") or ""),
+        active_period_rows,
+        key=lambda row: _cart_activity_at(row) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
     return active_rows, len(abandoned_rows), len(recovered_rows)
@@ -156,9 +190,7 @@ def latest_active_abandoned_carts(
     """Return the latest active carts for the read-only dashboard fallback."""
     return sorted(
         (row for row in rows if row.get("purchased") is not True),
-        key=lambda row: str(
-            row.get("cart_updated_at") or row.get("updated_at") or ""
-        ),
+        key=lambda row: _cart_activity_at(row) or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:max(0, limit)]
 
@@ -1198,6 +1230,8 @@ def make_dashboard_v2_router(
                     "cart_created_at": 1,
                     "cart_updated_at": 1,
                     "first_seen_at": 1,
+                    "last_received_at": 1,
+                    "created_at": 1,
                     "updated_at": 1,
                 },
             ),
@@ -1273,6 +1307,7 @@ def make_dashboard_v2_router(
             }
 
         for row in rows:
+            row["activity_at"] = _cart_activity_iso(row)
             row["customer_name"] = customer_names.get(
                 str(row.get("customer_identity_id") or ""),
                 "عميل سلة",
