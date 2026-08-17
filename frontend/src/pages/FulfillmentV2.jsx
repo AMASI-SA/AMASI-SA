@@ -24,7 +24,15 @@ import PreparationFilesRegistry from "../components/fulfillment/PreparationFiles
 import PreparationWorkDashboard from "../components/fulfillment/PreparationWorkDashboard";
 import ReadyToShipOrders from "../components/fulfillment/ReadyToShipOrders";
 import StoreCourierDispatchWorkspace from "../components/fulfillment/StoreCourierDispatchWorkspace";
+import StoreCourierMyShipments from "../components/fulfillment/StoreCourierMyShipments";
 import SupplierReceivingWorkspace from "../components/fulfillment/SupplierReceivingWorkspace";
+import { userHasPermission } from "../components/PermissionRoute";
+import { useAuth } from "../context/AuthContext";
+
+
+const STORE_COURIER_ASSIGN_PERMISSION = "fulfillment.store_courier.assign";
+const STORE_COURIER_DELIVER_PERMISSION = "fulfillment.store_courier.deliver";
+const COURIER_STAGE_KEYS = new Set(["courier_dispatch", "delivering", "delivered"]);
 
 
 export const FULFILLMENT_STAGES = [
@@ -146,14 +154,30 @@ function PlannedStage({ stage }) {
 
 
 export default function FulfillmentV2() {
+    const { user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const searchKey = searchParams.toString();
-    const myProductsWorkspace = searchParams.get("workspace") === "my-products";
-    const requestedStage = String(searchParams.get("stage") || "pending_review").trim();
-    const activeStage = useMemo(
-        () => FULFILLMENT_STAGES.find((stage) => stage.key === requestedStage) || FULFILLMENT_STAGES[0],
-        [requestedStage],
+    const isOwner = user?.is_owner === true || String(user?.role || "").toLowerCase() === "owner";
+    const canAssignStoreCourier = isOwner || userHasPermission(user, STORE_COURIER_ASSIGN_PERMISSION);
+    const canDeliverStoreCourier = isOwner || userHasPermission(user, STORE_COURIER_DELIVER_PERMISSION);
+    const courierOnly = canDeliverStoreCourier && !canAssignStoreCourier;
+    const visibleNavigationItems = useMemo(
+        () => courierOnly
+            ? FULFILLMENT_STAGES.filter((stage) => COURIER_STAGE_KEYS.has(stage.key))
+            : FULFILLMENT_NAVIGATION_ITEMS,
+        [courierOnly],
     );
+    const myProductsWorkspace = !courierOnly && searchParams.get("workspace") === "my-products";
+    const requestedStage = String(
+        searchParams.get("stage") || (courierOnly ? "courier_dispatch" : "pending_review"),
+    ).trim();
+    const activeStage = useMemo(() => {
+        const requested = FULFILLMENT_STAGES.find((stage) => stage.key === requestedStage);
+        if (courierOnly && (!requested || !COURIER_STAGE_KEYS.has(requested.key))) {
+            return FULFILLMENT_STAGES.find((stage) => stage.key === "courier_dispatch");
+        }
+        return requested || FULFILLMENT_STAGES[0];
+    }, [courierOnly, requestedStage]);
     const reviewedView = activeStage.key === "reviewed" && searchParams.get("view") === "files"
         ? "files"
         : "products";
@@ -161,6 +185,15 @@ export default function FulfillmentV2() {
         ? "سجل ملفات التجهيز"
         : activeStage.label;
     const ActiveStageIcon = activeStage.Icon;
+
+    useEffect(() => {
+        if (!courierOnly) return;
+        const requested = String(searchParams.get("stage") || "").trim();
+        if (COURIER_STAGE_KEYS.has(requested) && !searchParams.get("workspace")) return;
+        const next = new URLSearchParams();
+        next.set("stage", "courier_dispatch");
+        setSearchParams(next, { replace: true });
+    }, [courierOnly, searchKey, searchParams, setSearchParams]);
 
     useEffect(() => {
         if (activeStage.key !== "reviewed" || searchParams.get("view")) return;
@@ -189,6 +222,10 @@ export default function FulfillmentV2() {
     };
 
     const showFulfillmentOverview = () => {
+        if (courierOnly) {
+            setSearchParams(new URLSearchParams("stage=courier_dispatch"), { replace: true });
+            return;
+        }
         setSearchParams(new URLSearchParams(), { replace: true });
     };
 
@@ -209,9 +246,13 @@ export default function FulfillmentV2() {
     ) : activeStage.key === "completed" ? (
         <CompletedFulfillmentOrders />
     ) : activeStage.key === "courier_dispatch" ? (
-        <StoreCourierDispatchWorkspace />
+        canAssignStoreCourier
+            ? <StoreCourierDispatchWorkspace />
+            : <StoreCourierMyShipments stage="waiting" />
     ) : activeStage.key === "delivering" || activeStage.key === "delivered" ? (
-        <DeliveryTrackingOrders stage={activeStage.key} />
+        courierOnly
+            ? <StoreCourierMyShipments stage={activeStage.key} />
+            : <DeliveryTrackingOrders stage={activeStage.key} />
     ) : (
         <PlannedStage stage={activeStage} />
     );
@@ -228,14 +269,14 @@ export default function FulfillmentV2() {
                             <ActiveStageIcon size={22} weight="duotone" />
                         </span>
                         <div className="min-w-0 flex-1">
-                            <div className="text-[10px] font-black text-emerald-100">إدارة التجهيز</div>
+                            <div className="text-[10px] font-black text-emerald-100">{courierOnly ? "توصيل مندوب المتجر" : "إدارة التجهيز"}</div>
                             <h1 className="truncate text-lg font-black">{currentWindowLabel}</h1>
                         </div>
                     </div>
                     <details className="group border-t border-emerald-100">
                         <summary className="cursor-pointer list-none px-4 py-2.5 text-center text-xs font-black text-emerald-800">الانتقال إلى مرحلة أخرى</summary>
                         <nav className="grid grid-cols-2 gap-2 border-t border-slate-100 bg-slate-50 p-3" aria-label="مراحل إدارة التجهيز للجوال">
-                            {FULFILLMENT_NAVIGATION_ITEMS.map((item) => (
+                            {visibleNavigationItems.map((item) => (
                                 <button
                                     key={item.key}
                                     type="button"
@@ -256,8 +297,12 @@ export default function FulfillmentV2() {
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <div className="text-sm font-bold text-violet-100">Mezan OS V2</div>
-                                <h1 className="mt-1 text-2xl font-black sm:text-3xl">إدارة التجهيز</h1>
-                                <p className="mt-2 max-w-3xl text-sm leading-6 text-violet-100">إدارة دورة الطلب من المراجعة والرفع والتجهيز والاستلام، حتى الشحن والتوصيل، داخل مسار تشغيل واحد.</p>
+                                <h1 className="mt-1 text-2xl font-black sm:text-3xl">{courierOnly ? "توصيل مندوب المتجر" : "إدارة التجهيز"}</h1>
+                                <p className="mt-2 max-w-3xl text-sm leading-6 text-violet-100">
+                                    {courierOnly
+                                        ? "استلام الشحنات المسندة لك، متابعة جاري التوصيل، ثم تسجيل التسليم للعميل داخل نفس المسار."
+                                        : "إدارة دورة الطلب من المراجعة والرفع والتجهيز والاستلام، حتى الشحن والتوصيل، داخل صفحة تشغيل واحدة."}
+                                </p>
                             </div>
                             <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur">
                                 <div className="text-xs font-bold text-violet-100">النافذة الحالية</div>
@@ -269,13 +314,15 @@ export default function FulfillmentV2() {
                     <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-3 sm:px-4">
                         <div className="mb-3 flex flex-wrap items-end justify-between gap-2 px-1">
                             <div>
-                                <div className="text-sm font-extrabold text-slate-800">تبويبات إدارة التجهيز</div>
-                                <p className="mt-0.5 text-xs text-slate-500">كل تبويب يمثل مرحلة مستقلة داخل المسار نفسه.</p>
+                                <div className="text-sm font-extrabold text-slate-800">{courierOnly ? "مراحل التوصيل" : "تبويبات إدارة التجهيز"}</div>
+                                <p className="mt-0.5 text-xs text-slate-500">كل تبويب يمثل مرحلة مستقلة من دورة الطلب.</p>
                             </div>
-                            <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-bold text-violet-700">{FULFILLMENT_NAVIGATION_ITEMS.length} مراحل</span>
+                            <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-bold text-violet-700">
+                                {visibleNavigationItems.length} مراحل
+                            </span>
                         </div>
                         <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" aria-label="مراحل إدارة التجهيز">
-                            {FULFILLMENT_NAVIGATION_ITEMS.map((item, index) => {
+                            {visibleNavigationItems.map((item, index) => {
                                 const active = item.key === activeStage.key;
                                 const Icon = item.Icon;
                                 return (
