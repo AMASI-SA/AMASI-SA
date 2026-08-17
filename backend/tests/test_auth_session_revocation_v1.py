@@ -6,6 +6,7 @@ import types
 
 import pytest
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 
@@ -91,6 +92,21 @@ def _request(token: str) -> Request:
     })
 
 
+def _cookie_request(name: str, token: str, path: str = "/api/auth/refresh") -> Request:
+    return Request({
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "headers": [(b"cookie", f"{name}={token}".encode())],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 443),
+    })
+
+
 def _token(*, issued_at: datetime | None) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -135,6 +151,82 @@ def test_access_and_refresh_tokens_include_issued_at():
     assert isinstance(refresh["iat"], int)
     assert access["type"] == "access"
     assert refresh["type"] == "refresh"
+
+
+def test_refresh_token_and_cookie_contract_is_thirty_days():
+    assert auth.REFRESH_TOKEN_TTL == timedelta(days=30)
+    assert auth.REFRESH_COOKIE_MAX_AGE_SECONDS == 60 * 60 * 24 * 30
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotates_both_cookies_and_preserves_verified_mfa():
+    user = {
+        "id": "user-1",
+        "email": "viewer@example.com",
+        "role": "viewer",
+    }
+    old_refresh = auth.create_refresh_token("user-1", mfa_verified=True)
+    response = JSONResponse({"placeholder": True})
+
+    result = await auth.refresh_browser_session(
+        _cookie_request("refresh_token", old_refresh),
+        response,
+        _DB(user),
+    )
+
+    assert result == {"ok": True}
+    cookies = response.headers.getlist("set-cookie")
+    assert any("access_token=" in value and "Max-Age=43200" in value for value in cookies)
+    assert any("refresh_token=" in value and "Max-Age=2592000" in value for value in cookies)
+
+
+@pytest.mark.asyncio
+async def test_refresh_rechecks_password_revocation():
+    issued = datetime.now(timezone.utc) - timedelta(minutes=5)
+    changed = datetime.now(timezone.utc)
+    user = _user(changed)
+    token = auth.jwt.encode(
+        {
+            "sub": "user-1",
+            "mfa": True,
+            "iat": issued,
+            "exp": issued + timedelta(days=30),
+            "type": "refresh",
+        },
+        auth.get_jwt_secret(),
+        algorithm=auth.JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await auth.refresh_browser_session(
+            _cookie_request("refresh_token", token),
+            JSONResponse({"placeholder": True}),
+            _DB(user),
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Session revoked"
+
+
+@pytest.mark.asyncio
+async def test_refresh_rechecks_account_disabled_state():
+    user = {
+        "id": "user-1",
+        "email": "viewer@example.com",
+        "role": "viewer",
+        "disabled": True,
+    }
+    token = auth.create_refresh_token("user-1", mfa_verified=True)
+
+    with pytest.raises(HTTPException) as exc:
+        await auth.refresh_browser_session(
+            _cookie_request("refresh_token", token),
+            JSONResponse({"placeholder": True}),
+            _DB(user),
+        )
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Account disabled"
 
 
 @pytest.mark.asyncio
