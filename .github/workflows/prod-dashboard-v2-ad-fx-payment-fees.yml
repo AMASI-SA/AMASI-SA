@@ -11,6 +11,7 @@ on:
       - "frontend/src/components/ProfitSummaryCard.jsx"
       - "frontend/src/components/ProfitSummaryCard.paymentFees.test.jsx"
       - "frontend/src/pages/Dashboard.jsx"
+      - "frontend/src/pages/AdvancedDashboard.jsx"
       - ".github/workflows/prod-dashboard-v2-ad-fx-payment-fees.yml"
 
 permissions:
@@ -93,12 +94,14 @@ jobs:
         env:
           CI: "false"
         run: yarn build
-      - name: Enforce executive-summary contract
+      - name: Enforce advanced executive-summary contract
         working-directory: .
         run: |
           CARD=frontend/src/components/ProfitSummaryCard.jsx
-          DASH=frontend/src/pages/Dashboard.jsx
+          ADVANCED=frontend/src/pages/AdvancedDashboard.jsx
           grep -q 'profit-line-payment-fees' "$CARD"
           grep -q 'payment-fees-breakdown-table' "$CARD"
           grep -q 'ad_bank_commission_fees' "$CARD"
-          grep -q 'paymentBreakdown={data?.payment_breakdown || \[\]}' "$DASH"
+          grep -q 'buildPaymentFeeRows(rows)' "$ADVANCED"
+          grep -q 'testid="advanced-profit-payment-details"' "$ADVANCED"
+          grep -q '<PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />' "$ADVANCED"
