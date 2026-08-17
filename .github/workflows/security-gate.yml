@@ -71,7 +71,7 @@ jobs:
             backend/tests/test_meta_instagram_webhook_deadline.py
 
   frontend-security:
-    name: Frontend dependency and edge header checks
+    name: Frontend dependency and CSP checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
