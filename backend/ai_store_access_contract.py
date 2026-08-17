@@ -45,6 +45,7 @@ PERMISSIONS = {
     "fulfillment.labels.reprint",
     "fulfillment.pack.confirm",
     "fulfillment.carrier.handoff",
+    "fulfillment.store_courier.deliver",
     "inventory.receipts.read",
     "inventory.receipts.write",
     "inventory.preparation.read",
@@ -105,7 +106,7 @@ ROLE_CATALOG = {
     "shipping_operator": sorted({
         "products.read", "fulfillment.ready.read", "fulfillment.batch.claim",
         "fulfillment.labels.print", "fulfillment.pack.confirm",
-        "fulfillment.carrier.handoff",
+        "fulfillment.carrier.handoff", "fulfillment.store_courier.deliver",
     }),
     "marketing_manager": sorted({
         "products.read", "products.review", "products.media.read",
@@ -137,6 +138,7 @@ RESPONSIBILITY_TYPES = {
     "packing",
     "shipping_labeling",
     "carrier_handoff",
+    "store_courier_delivery",
     "stock_preparation",
 }
 
