@@ -18,6 +18,7 @@ test("one missing product opens its Mezan V2 editor directly", () => {
     expect(href).toContain("sold_only=1");
     expect(href).toContain("product=m-1");
     expect(href).toContain("focus=cost");
+    expect(decodeURIComponent(href)).toContain("product_ids=p-1");
     expect(href).toContain("from=2026-08-01");
 });
 
@@ -46,7 +47,7 @@ test("multiple missing products open the filtered sold-products list with dashbo
 });
 
 
-test("dashboard link leaves the missing-Mezan cohort to the backend source of truth", () => {
+test("dashboard link preserves the complete missing-Mezan sold cohort", () => {
     const href = buildMissingMezanCostHref({
         missing_products: [
             { salla_product_id: "p-fallback-1", uses_salla_fallback: true, missing_everywhere: false },
@@ -57,7 +58,9 @@ test("dashboard link leaves the missing-Mezan cohort to the backend source of tr
     }, { from: "2026-08-16", to: "2026-08-16" });
 
     expect(href).not.toContain("missing_all_cost");
-    expect(href).not.toContain("product_ids");
+    expect(decodeURIComponent(href)).toContain(
+        "product_ids=p-fallback-1,p-hard-1,p-fallback-2,p-hard-2",
+    );
     expect(href).toContain("missing_mezan_cost=1");
     expect(href).toContain("sold_only=1");
 });
