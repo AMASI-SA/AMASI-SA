@@ -31,7 +31,7 @@ class FakeClient:
     async def get(self, url, **kwargs):
         type(self).calls.append((url, deepcopy(kwargs.get("params") or {})))
         if url.endswith("/act_1/assigned_users"):
-            return FakeResponse({"data": [{"id": "meta-user-1", "name": "Owner", "tasks": ["ADVERTISE", "ANALYZE"]}]})
+            return FakeResponse({"data": [{"id": "meta-user-1", "name": "Owner", "tasks": ["ADVERTISE"], "permitted_tasks": ["ANALYZE"]}]})
         if url.endswith("/act_1"):
             return FakeResponse({
                 "id": "act_1",
@@ -40,6 +40,7 @@ class FakeClient:
                 "disable_reason": 0,
                 "currency": "SAR",
                 "timezone_name": "Asia/Riyadh",
+                "business": {"id": "business-1", "name": "Amasi"},
             })
         raise AssertionError(url)
 
@@ -84,6 +85,9 @@ async def test_readiness_proves_scope_and_account_task_without_provider_write(mo
     assert result["provider_write_reached"] is False
     assert result["campaign_write_reached"] is False
     assert all(call[1]["appsecret_proof"] == "proof" for call in FakeClient.calls)
+    assigned_call = next(call for call in FakeClient.calls if call[0].endswith("/assigned_users"))
+    assert assigned_call[1]["business"] == "business-1"
+    assert "permitted_tasks" in assigned_call[1]["fields"]
     assert "opaque-token" not in repr(result)
 
 
