@@ -6,6 +6,12 @@ function BrokenPage() {
   throw new Error("route render failed");
 }
 
+let transientPageReady = false;
+function TransientPage() {
+  if (!transientPageReady) throw new Error("temporary navigation state");
+  return <div data-testid="recovered-page">تمت الاستعادة</div>;
+}
+
 describe("AppCrashBoundary", () => {
   let container;
   let root;
@@ -13,6 +19,8 @@ describe("AppCrashBoundary", () => {
 
   beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
+    jest.useFakeTimers();
+    transientPageReady = false;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -26,15 +34,57 @@ describe("AppCrashBoundary", () => {
     });
     consoleError.mockRestore();
     container.remove();
+    jest.useRealTimers();
   });
 
-  test("replaces an uncaught render crash with a visible recovery screen", async () => {
+  test("retries one transient render crash without showing the manual reload card", async () => {
+    await act(async () => {
+      root.render(
+        <AppCrashBoundary>
+          <TransientPage />
+        </AppCrashBoundary>,
+      );
+    });
+
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery-pending"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).toBeNull();
+
+    transientPageReady = true;
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(container.querySelector('[data-testid="recovered-page"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery-pending"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).toBeNull();
+  });
+
+  test("shows manual recovery only after the bounded retry also fails", async () => {
     await act(async () => {
       root.render(
         <AppCrashBoundary>
           <BrokenPage />
         </AppCrashBoundary>,
       );
+    });
+
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery-pending"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
     });
 
     const fallback = container.querySelector('[data-testid="app-crash-recovery"]');
@@ -54,6 +104,11 @@ describe("AppCrashBoundary", () => {
     });
 
     expect(container.querySelector('[data-testid="healthy-page"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="app-crash-recovery"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery-pending"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="app-crash-recovery"]'),
+    ).toBeNull();
   });
 });
