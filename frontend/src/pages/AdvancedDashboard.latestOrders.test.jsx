@@ -122,7 +122,7 @@ test("top products header shows period counts and only five rows initially", () 
         <TopProductsCard
             rows={rows}
             summary={{
-                product_count: 7,
+                product_profit_summary: { product_count: 7 },
                 salla_fallback_products_count: 3,
                 missing_all_cost_products_count: 2,
             }}
@@ -134,6 +134,28 @@ test("top products header shows period counts and only five rows initially", () 
     expect(markup).toContain("بدون تكلفة 2");
     expect(markup).toContain("المزيد");
     expect(markup).not.toContain("منتج 6");
+});
+
+test("top products count falls back to the rows instead of showing a stale zero", () => {
+    const rows = Array.from({ length: 4 }, (_, index) => ({
+        identity: `product-${index + 1}`,
+        name: `منتج ${index + 1}`,
+        units_sold: 4 - index,
+        total_sales: 100 - index,
+    }));
+    const markup = renderToStaticMarkup(<TopProductsCard rows={rows} summary={{}} />);
+
+    expect(markup).toContain("4 منتجًا خلال الفترة");
+    expect(markup).not.toContain("0 منتجًا خلال الفترة");
+});
+
+test("initial dashboard loading never presents fake zero profit or empty products", () => {
+    const profitMarkup = renderToStaticMarkup(<ProfitCard data={null} loading />);
+    const productsMarkup = renderToStaticMarkup(<TopProductsCard rows={undefined} summary={{}} loading />);
+
+    expect(profitMarkup).toContain("جارٍ مزامنة الفترة");
+    expect(productsMarkup).toContain("جارٍ مزامنة المنتجات المباعة");
+    expect(productsMarkup).not.toContain("لا توجد منتجات مباعة");
 });
 
 test("GA active-user bars stay inside their chart area", () => {
