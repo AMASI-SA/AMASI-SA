@@ -173,6 +173,22 @@ async def inspect_meta_management_readiness(db: Any, user_id: str) -> dict[str, 
         "campaign_create": write_ready,
         "campaign_clone": write_ready,
     }
+    return {
+        "provider": "meta_ads",
+        "checked_at": _now().isoformat(),
+        "token_valid": bool(debug.get("is_valid")),
+        "scopes": scopes,
+        "missing_scopes": missing_scopes,
+        "accounts": account_results,
+        "capabilities": capabilities,
+        "write_ready": write_ready,
+        "read_only_check": True,
+        "source_only": True,
+        "provider_write_reached": False,
+        "campaign_write_reached": False,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    }
 
 
 async def read_meta_campaign_hierarchy(
@@ -240,24 +256,6 @@ async def read_meta_campaign_hierarchy(
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
     }
-    return {
-        "provider": "meta_ads",
-        "checked_at": _now().isoformat(),
-        "token_valid": bool(debug.get("is_valid")),
-        "scopes": scopes,
-        "missing_scopes": missing_scopes,
-        "accounts": account_results,
-        "capabilities": capabilities,
-        "write_ready": write_ready,
-        "read_only_check": True,
-        "source_only": True,
-        "provider_write_reached": False,
-        "campaign_write_reached": False,
-        "accounting_write_reached": False,
-        "qoyod_write_reached": False,
-    }
-
-
 def attach_meta_management_readiness_routes(
     router: Any,
     db: Any,
