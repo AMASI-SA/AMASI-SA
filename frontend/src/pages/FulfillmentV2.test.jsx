@@ -3,10 +3,27 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 
 let mockSearchParams = new URLSearchParams("stage=pending_review");
+let mockUser = {
+    id: "owner-1",
+    role: "owner",
+    is_owner: true,
+    permissions: [],
+};
 const mockSetSearchParams = jest.fn();
 
 jest.mock("react-router-dom", () => ({
     useSearchParams: () => [mockSearchParams, mockSetSearchParams],
+}));
+
+jest.mock("../context/AuthContext", () => ({
+    useAuth: () => ({ user: mockUser }),
+}));
+
+jest.mock("../components/PermissionRoute", () => ({
+    userHasPermission: (user, permission) => Boolean(
+        user?.is_owner === true
+        || (Array.isArray(user?.permissions) && user.permissions.includes(permission))
+    ),
 }));
 
 jest.mock("./OrderReview", () => function PendingOrderReviewFixture() {
@@ -41,6 +58,14 @@ jest.mock("../components/fulfillment/DeliveryTrackingOrders", () => function Del
     return <div data-testid={`delivery-tracking-${stage}`}>{stage === "delivered" ? "تم التوصيل" : "جاري التوصيل"} · مزامنة صفحة الطلبات في ميزان</div>;
 });
 
+jest.mock("../components/fulfillment/StoreCourierDispatchWorkspace", () => function StoreCourierDispatchFixture() {
+    return <div data-testid="store-courier-dispatch-workspace">اختيار الموصل ثم تصوير الشحنة لإسنادها</div>;
+});
+
+jest.mock("../components/fulfillment/StoreCourierMyShipments", () => function StoreCourierMyShipmentsFixture({ stage }) {
+    return <div data-testid={`store-courier-my-shipments-${stage}`}>شحنات مندوب المتجر · {stage}</div>;
+});
+
 jest.mock("../components/fulfillment/SupplierReceivingWorkspace", () => function SupplierReceivingFixture() {
     return <div data-testid="supplier-receiving-workspace">استلام منتجات المورد بالباركود · من المستودع · من المورد · تصنيع داخلي · ينتظر توريد · قيد التجميع · متوقف بسبب نقص منتج</div>;
 });
@@ -55,6 +80,7 @@ const EXPECTED_STAGE_KEYS = [
     "assembly",
     "ready_to_ship",
     "completed",
+    "courier_dispatch",
     "delivering",
     "delivered",
 ];
@@ -69,6 +95,12 @@ afterAll(() => {
 
 beforeEach(() => {
     mockSearchParams = new URLSearchParams("stage=pending_review");
+    mockUser = {
+        id: "owner-1",
+        role: "owner",
+        is_owner: true,
+        permissions: [],
+    };
     mockSetSearchParams.mockClear();
 });
 
@@ -83,6 +115,7 @@ test("fulfillment workspace keeps the governed stage order", () => {
         "الاستلام من التجهيز",
         "التجميع والعنونة",
         "تم التنفيذ",
+        "إدارة الموصلين",
         "جاري التوصيل",
         "تم التوصيل",
     ]);
@@ -98,6 +131,7 @@ test("my products is a navigation stop immediately before supplier receiving", (
         "assembly",
         "ready_to_ship",
         "completed",
+        "courier_dispatch",
         "delivering",
         "delivered",
     ]);
@@ -107,19 +141,25 @@ test("my products is a navigation stop immediately before supplier receiving", (
     });
 });
 
-test("preparation is the Mezan OS parent with ten nested navigation tabs", () => {
+test("preparation is the Mezan OS parent with eleven nested navigation tabs", () => {
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain("إدارة التجهيز");
     expect(markup).not.toContain("إدارة رفع الطلبات");
     expect(markup).toContain("تبويبات إدارة التجهيز");
-    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(10);
+    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(11);
     EXPECTED_STAGE_KEYS.forEach((stageKey) => {
         expect(markup).toContain(`data-testid="fulfillment-stage-tab-${stageKey}"`);
     });
     expect(markup).toContain('data-testid="fulfillment-stage-tab-my_products"');
     expect(markup.indexOf('data-testid="fulfillment-stage-tab-my_products"')).toBeLessThan(
         markup.indexOf('data-testid="fulfillment-stage-tab-preparation"'),
+    );
+    expect(markup.indexOf('data-testid="fulfillment-stage-tab-completed"')).toBeLessThan(
+        markup.indexOf('data-testid="fulfillment-stage-tab-courier_dispatch"'),
+    );
+    expect(markup.indexOf('data-testid="fulfillment-stage-tab-courier_dispatch"')).toBeLessThan(
+        markup.indexOf('data-testid="fulfillment-stage-tab-delivering"'),
     );
 });
 
@@ -241,7 +281,17 @@ test("completed stage keeps the carrier label action available", () => {
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("delivering stage renders the external carrier tracking board", () => {
+test("courier dispatch is a governed stage after completed for managers", () => {
+    mockSearchParams = new URLSearchParams("stage=courier_dispatch");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="store-courier-dispatch-workspace"');
+    expect(markup).toContain("اختيار الموصل ثم تصوير الشحنة لإسنادها");
+    expect(markup).toContain("إدارة الموصلين");
+    expect(markup).not.toContain('data-testid="store-courier-my-shipments-waiting"');
+});
+
+test("delivering stage renders the external carrier tracking board for managers", () => {
     mockSearchParams = new URLSearchParams("stage=delivering");
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
@@ -251,11 +301,74 @@ test("delivering stage renders the external carrier tracking board", () => {
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
 });
 
-test("delivered stage renders the completed external carrier board", () => {
+test("delivered stage renders the completed external carrier board for managers", () => {
     mockSearchParams = new URLSearchParams("stage=delivered");
     const markup = renderToStaticMarkup(<FulfillmentV2 />);
 
     expect(markup).toContain('data-testid="delivery-tracking-delivered"');
     expect(markup).toContain("تم التوصيل");
     expect(markup).not.toContain("هذه المرحلة مثبتة ضمن المسار، ولم نفعّل عملياتها بعد");
+});
+
+test("store courier sees only assignment pickup delivering and delivered tabs", () => {
+    mockUser = {
+        id: "courier-1",
+        role: "viewer",
+        is_owner: false,
+        permissions: ["fulfillment.store_courier.deliver"],
+    };
+    mockSearchParams = new URLSearchParams("stage=courier_dispatch");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="store-courier-my-shipments-waiting"');
+    expect(markup).toContain("توصيل مندوب المتجر");
+    expect(markup.match(/data-testid="fulfillment-stage-tab-/g) || []).toHaveLength(3);
+    expect(markup).toContain('data-testid="fulfillment-stage-tab-courier_dispatch"');
+    expect(markup).toContain('data-testid="fulfillment-stage-tab-delivering"');
+    expect(markup).toContain('data-testid="fulfillment-stage-tab-delivered"');
+    expect(markup).not.toContain('data-testid="fulfillment-stage-tab-pending_review"');
+    expect(markup).not.toContain('data-testid="fulfillment-stage-tab-my_products"');
+    expect(markup).not.toContain('data-testid="store-courier-dispatch-workspace"');
+});
+
+test("store courier delivering tab shows only the courier own shipment queue", () => {
+    mockUser = {
+        id: "courier-1",
+        role: "viewer",
+        is_owner: false,
+        permissions: ["fulfillment.store_courier.deliver"],
+    };
+    mockSearchParams = new URLSearchParams("stage=delivering");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="store-courier-my-shipments-delivering"');
+    expect(markup).not.toContain('data-testid="delivery-tracking-delivering"');
+});
+
+test("store courier delivered tab shows only the courier completed history", () => {
+    mockUser = {
+        id: "courier-1",
+        role: "viewer",
+        is_owner: false,
+        permissions: ["fulfillment.store_courier.deliver"],
+    };
+    mockSearchParams = new URLSearchParams("stage=delivered");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="store-courier-my-shipments-delivered"');
+    expect(markup).not.toContain('data-testid="delivery-tracking-delivered"');
+});
+
+test("store courier is forced back to its assignment queue from unrelated stages", () => {
+    mockUser = {
+        id: "courier-1",
+        role: "viewer",
+        is_owner: false,
+        permissions: ["fulfillment.store_courier.deliver"],
+    };
+    mockSearchParams = new URLSearchParams("stage=pending_review");
+    const markup = renderToStaticMarkup(<FulfillmentV2 />);
+
+    expect(markup).toContain('data-testid="store-courier-my-shipments-waiting"');
+    expect(markup).not.toContain('data-testid="pending-review-queue"');
 });

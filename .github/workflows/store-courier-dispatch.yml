@@ -1,0 +1,116 @@
+name: Store Courier Dispatch
+
+on:
+  pull_request:
+    paths:
+      - "backend/ai_store_access_contract.py"
+      - "backend/ai_store_access_control.py"
+      - "backend/store_courier_dispatch_routes.py"
+      - "backend/tests/test_store_courier_dispatch.py"
+      - "frontend/src/components/fulfillment/StoreCourierDispatchWorkspace.jsx"
+      - "frontend/src/components/fulfillment/StoreCourierMyShipments.jsx"
+      - "frontend/src/pages/FulfillmentV2.jsx"
+      - "frontend/src/pages/FulfillmentV2.test.jsx"
+      - "frontend/src/services/storeCourierDispatch.js"
+      - ".github/workflows/store-courier-dispatch.yml"
+  push:
+    branches:
+      - main
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/ai_store_access_contract.py"
+      - "backend/ai_store_access_control.py"
+      - "backend/store_courier_dispatch_routes.py"
+      - "backend/tests/test_store_courier_dispatch.py"
+      - "frontend/src/components/fulfillment/StoreCourierDispatchWorkspace.jsx"
+      - "frontend/src/components/fulfillment/StoreCourierMyShipments.jsx"
+      - "frontend/src/pages/FulfillmentV2.jsx"
+      - "frontend/src/pages/FulfillmentV2.test.jsx"
+      - "frontend/src/services/storeCourierDispatch.js"
+      - ".github/workflows/store-courier-dispatch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install targeted backend dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          openpyxl
+          pytest
+          pytest-asyncio
+          python-dateutil
+          tzdata
+      - name: Compile store courier modules
+        working-directory: backend
+        run: >-
+          python -m py_compile
+          ai_store_access_contract.py
+          ai_store_access_control.py
+          store_courier_dispatch_routes.py
+          tests/test_store_courier_dispatch.py
+      - name: Run store courier contract tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set +e
+          python -m pytest tests/test_store_courier_dispatch.py -q --tb=short > /tmp/store-courier-pytest.log 2>&1
+          status=$?
+          cat /tmp/store-courier-pytest.log
+          exit "$status"
+      - name: Upload store courier pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-courier-pytest-log
+          path: /tmp/store-courier-pytest.log
+          if-no-files-found: ignore
+
+  frontend-test-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Run fulfillment permission and routing tests
+        env:
+          CI: "true"
+        shell: bash
+        run: |
+          set +e
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx > /tmp/store-courier-jest.log 2>&1
+          status=$?
+          cat /tmp/store-courier-jest.log
+          exit "$status"
+      - name: Upload store courier Jest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-courier-jest-log
+          path: /tmp/store-courier-jest.log
+          if-no-files-found: ignore
+      - name: Build frontend
+        env:
+          CI: "false"
+        run: yarn build

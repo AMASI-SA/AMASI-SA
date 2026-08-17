@@ -22,6 +22,7 @@ from ai_store_access_contract import (
     effective_permissions,
     validate_assignment,
 )
+from store_courier_dispatch_routes import make_store_courier_dispatch_router
 from warehouse_location_routes import WAREHOUSES
 
 
@@ -180,4 +181,7 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
         ).sort("occurred_at", -1).limit(limit).to_list(limit)
         return {"ok": True, "items": rows, "total": len(rows)}
 
+    router.include_router(
+        make_store_courier_dispatch_router(db, current_user)
+    )
     return router
