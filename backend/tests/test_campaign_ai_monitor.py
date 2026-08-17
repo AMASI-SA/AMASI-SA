@@ -322,6 +322,57 @@ def test_scheduler_discovers_connected_v2_ad_account_owner():
     assert asyncio.run(_monitored_user_ids(DB())) == ["owner-1"]
 
 
+def test_scheduler_discovers_legacy_credential_owners_when_v2_is_empty():
+    class DistinctCollection:
+        def __init__(self, values, expected_query):
+            self.values = values
+            self.expected_query = expected_query
+
+        async def distinct(self, field, query):
+            assert field == "user_id"
+            assert query == self.expected_query
+            return self.values
+
+    class DB:
+        mezan_integration_accounts_v2 = DistinctCollection([], {
+            "provider": {"$in": ["snapchat_ads", "meta_ads"]},
+            "connection_status": {"$in": ["connected", "needs_reauth"]},
+        })
+        mezan_integrations_v2 = DistinctCollection([], {
+            "provider": {"$in": ["snapchat_ads", "meta_ads"]},
+            "connection_status": "connected",
+        })
+        snapchat_connections = DistinctCollection(["snap-owner", "shared"], {
+            "refresh_token": {"$exists": True, "$nin": ["", None]},
+        })
+        meta_connections = DistinctCollection(["meta-owner", "shared", ""], {
+            "access_token": {"$exists": True, "$nin": ["", None]},
+            "connection_status": {
+                "$nin": ["error", "failed", "last_check_failed"],
+            },
+        })
+
+    assert asyncio.run(_monitored_user_ids(DB())) == [
+        "meta-owner", "shared", "snap-owner",
+    ]
+
+
+def test_scheduler_keeps_legacy_fallback_out_of_the_v2_path():
+    class Accounts:
+        async def distinct(self, field, query):
+            assert field == "user_id"
+            assert query["connection_status"]["$in"] == ["connected", "needs_reauth"]
+            return ["owner-1"]
+
+    class DB:
+        mezan_integration_accounts_v2 = Accounts()
+
+        def __getattr__(self, name):
+            raise AssertionError(f"unexpected fallback collection: {name}")
+
+    assert asyncio.run(_monitored_user_ids(DB())) == ["owner-1"]
+
+
 def test_first_monitor_pass_starts_promptly_after_boot():
     assert DEFAULT_INITIAL_DELAY_SECONDS <= 10
 
