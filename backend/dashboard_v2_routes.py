@@ -34,6 +34,10 @@ from order_option_cost_snapshot_routes import (
 from order_status_policy import effective_product_cost, get_policy_map
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_option_cost_routes import BINDINGS, RESOURCES
+from product_catalog_cost_resolution import (
+    index_current_catalog_products,
+    resolve_current_catalog_line_product,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS, _number
 from recurring_obligations_routes import compute_recurring_obligations_for_range
@@ -65,6 +69,8 @@ PRODUCT_COST_CATALOG_PROJECTION = {
     "cost_price": 1,
     "cost": 1,
     "variants": 1,
+    "raw_salla": 1,
+    "raw_salla_details": 1,
 }
 
 
@@ -169,15 +175,12 @@ def _line_product(
     products_by_variant: dict[str, dict[str, Any]],
     products_by_sku: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
-    for key in (item.get("parent_product_id"), item.get("product_id")):
-        value = str(key or "").strip()
-        if value and value in products_by_id:
-            return products_by_id[value]
-    variant_id = str(item.get("variant_id") or "").strip()
-    if variant_id and variant_id in products_by_variant:
-        return products_by_variant[variant_id]
-    sku = str(item.get("sku") or "").strip().casefold()
-    return products_by_sku.get(sku) if sku else None
+    return resolve_current_catalog_line_product(
+        item,
+        products_by_id=products_by_id,
+        products_by_variant=products_by_variant,
+        products_by_sku=products_by_sku,
+    )
 
 
 def _index_products(
@@ -187,32 +190,8 @@ def _index_products(
     dict[str, dict[str, Any]],
     dict[str, dict[str, Any]],
 ]:
-    """Index the canonical Mezan catalog by every stored product identity."""
-    products_by_id: dict[str, dict[str, Any]] = {}
-    products_by_variant: dict[str, dict[str, Any]] = {}
-    products_by_sku: dict[str, dict[str, Any]] = {}
-    for product in products:
-        for product_id in (
-            product.get("salla_product_id"),
-            product.get("mezan_product_id"),
-            product.get("id"),
-        ):
-            product_id = str(product_id or "").strip()
-            if product_id:
-                products_by_id[product_id] = product
-        sku = str(product.get("sku") or "").strip().casefold()
-        if sku:
-            products_by_sku[sku] = product
-        for variant in product.get("variants") or []:
-            if not isinstance(variant, dict):
-                continue
-            variant_id = str(variant.get("id") or "").strip()
-            if variant_id:
-                products_by_variant[variant_id] = product
-            variant_sku = str(variant.get("sku") or "").strip().casefold()
-            if variant_sku:
-                products_by_sku[variant_sku] = product
-    return products_by_id, products_by_variant, products_by_sku
+    """Index the current full Salla catalog through the shared cost contract."""
+    return index_current_catalog_products(products)
 
 
 def calculate_mezan_v2_line_cost(
@@ -267,9 +246,13 @@ def calculate_mezan_v2_line_cost(
     return {
         "quantity": quantity,
         "base_cost_source": source,
-        "base_complete": base is not None,
+        "base_complete": base_status["calculation_cost_available"],
+        "calculation_cost_available": base_status["calculation_cost_available"],
+        "calculation_cost_source": base_status["calculation_cost_source"],
         "mezan_cost_complete": base_status["mezan_cost_complete"],
+        "mezan_cost_missing": base_status["mezan_cost_missing"],
         "uses_salla_fallback": base_status["uses_salla_fallback"],
+        "cost_semantics_version": base_status["semantics_version"],
         "base_total": round(base_unit * quantity, 4),
         "product_components_total": round(product_resource_unit * quantity, 4),
         "selected_options_total": round(option_resource_unit * quantity, 4),

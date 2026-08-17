@@ -36,6 +36,7 @@ META_DEFAULT_SCOPES = (
     "pages_show_list",
     "pages_read_engagement",
     "pages_manage_metadata",
+    "pages_messaging",
     "leads_retrieval",
     "instagram_basic",
     "instagram_manage_insights",

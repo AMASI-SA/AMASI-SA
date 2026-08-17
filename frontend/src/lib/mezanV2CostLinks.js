@@ -29,9 +29,11 @@ function productMatchesIds(product, expectedIds) {
 
 export function isValidSoldMissingCostResult(result, expectedProductIds = "") {
     if (
-        result?.meta?.contract_version !== "sold-missing-cost-v2"
+        result?.meta?.contract_version !== "sold-missing-cost-v3"
         || result?.meta?.missing_mezan_cost !== true
         || result?.meta?.sold_only !== true
+        || result?.meta?.cost_semantics?.missing_mezan_cost !== "explicit_mezan_cost_only"
+        || result?.meta?.cost_semantics?.calculation_cost !== "mezan_then_salla_fallback"
     ) {
         return false;
     }
@@ -94,16 +96,13 @@ export function buildMissingMezanCostHref(productCost, filters = {}) {
         : [];
     if (missing.length === 1 && missing[0]?.catalog_product_found !== false) {
         const directHref = buildMezanProductCostHref(
-            { ...missing[0], cost_status: "missing" },
+            { ...missing[0], cost_status: "salla_fallback" },
             filters,
         );
         return directHref;
     }
-    const soldProductIds = [...new Set(missing
-        .filter((product) => product?.catalog_product_found !== false)
-        .map((product) => product?.salla_product_id || product?.mezan_product_id)
-        .filter(Boolean)
-        .map(String))];
-    if (soldProductIds.length) params.set("product_ids", soldProductIds.join(","));
+    // The backend is the source of truth for the sold/missing-Mezan cohort.
+    // Never copy dashboard product IDs into the URL: that can freeze a stale
+    // or narrower "missing everywhere" subset and silently change the filter.
     return `/products-v2?${params.toString()}`;
 }

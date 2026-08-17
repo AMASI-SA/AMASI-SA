@@ -254,6 +254,7 @@ export default function MezanProductsWorkspace() {
             url.searchParams.delete("payment_methods");
             url.searchParams.delete("shipping_companies");
             url.searchParams.delete("product_ids");
+            url.searchParams.delete("missing_all_cost");
         }
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
@@ -281,8 +282,8 @@ export default function MezanProductsWorkspace() {
             <section className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" data-testid="missing-mezan-cost-filter-banner">
                 <div className="flex flex-wrap items-center gap-2">
                     <WarningCircle size={20} weight="fill" />
-                    <strong>يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان 2 فقط.</strong>
-                    <span>المنتج الذي لديه تكلفة سلة فقط سيظهر هنا أيضًا.</span>
+                    <strong>{`يعرض الآن المنتجات المباعة بدون تكلفة صريحة في ميزان ${pagination.total} فقط.`}</strong>
+                    <span>تكلفة سلة تُستخدم للحساب فقط، ولا تُخرج المنتج من هذه القائمة.</span>
                     {(missingCostRange.from || missingCostRange.to) && (
                         <span className="rounded-full bg-white px-3 py-1 text-xs font-bold">
                             {missingCostRange.from || "البداية"} — {missingCostRange.to || "اليوم"}

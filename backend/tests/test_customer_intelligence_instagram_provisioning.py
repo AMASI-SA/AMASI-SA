@@ -266,7 +266,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
                 },
             )
         if request.method == "POST":
-            assert request.url.params["subscribed_fields"] == "comments,messages"
+            assert request.url.params["subscribed_fields"] == "messages"
             assert request.url.params["access_token"] == page_token
             return Response(200, json={"success": True})
         return Response(
@@ -274,7 +274,7 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
             json={
                 "data": [{
                     "id": "953625110827548",
-                    "subscribed_fields": ["messages", "comments"],
+                    "subscribed_fields": ["messages"],
                 }]
             },
         )
@@ -291,13 +291,13 @@ async def test_meta_subscription_uses_transient_page_token_and_verifies_app(monk
     assert fields == ("comments", "messages")
     assert [request.method for request in requests] == ["GET", "POST", "GET"]
     assert requests[1].url.path.endswith(
-        f"/{RAW_PAGE_ID}/subscribed_apps"
+        f"/{PAGE_ID}/subscribed_apps"
     )
 
 
 @pytest.mark.asyncio
 async def test_missing_new_meta_permissions_requires_reauthorization_without_write():
-    db = FakeDB(scopes={"instagram_basic"})
+    db = FakeDB(scopes=INSTAGRAM_REQUIRED_PERMISSIONS - {"pages_messaging"})
     service = InstagramProvisioningService(db, now=lambda: NOW)
 
     setup = await service.setup(owner_user_id=OWNER_ID)

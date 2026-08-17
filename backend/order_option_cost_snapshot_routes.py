@@ -144,6 +144,7 @@ SALLA_FALLBACK_COST_SOURCES = frozenset({
     "salla_variant_fallback",
     "salla_product_fallback",
 })
+COST_SEMANTICS_VERSION = "mezan-cost-semantics-v1"
 
 
 def classify_base_unit_cost(
@@ -158,12 +159,25 @@ def classify_base_unit_cost(
     distinction drives the actionable dashboard warning and product filter.
     """
     unit_cost, source = resolve_base_unit_cost(item, profile, product)
+    calculation_cost_available = unit_cost is not None
+    mezan_cost_complete = source in MEZAN_V2_COST_SOURCES
+    uses_salla_fallback = source in SALLA_FALLBACK_COST_SOURCES
     return {
+        "semantics_version": COST_SEMANTICS_VERSION,
         "unit_cost": unit_cost,
         "source": source,
-        "cost_available": unit_cost is not None,
-        "mezan_cost_complete": source in MEZAN_V2_COST_SOURCES,
-        "uses_salla_fallback": source in SALLA_FALLBACK_COST_SOURCES,
+        # Product setup completeness is deliberately Mezan-only.  A Salla
+        # fallback must never hide a product from "missing Mezan cost".
+        "mezan_cost_complete": mezan_cost_complete,
+        "mezan_cost_missing": not mezan_cost_complete,
+        # Profitability/campaign calculations may use Salla when Mezan has no
+        # explicit cost.  Keep this axis separate from setup completeness.
+        "calculation_cost_available": calculation_cost_available,
+        "calculation_cost_source": source,
+        "calculation_uses_salla_fallback": uses_salla_fallback,
+        # Compatibility aliases for existing dashboard and snapshot callers.
+        "cost_available": calculation_cost_available,
+        "uses_salla_fallback": uses_salla_fallback,
     }
 
 
@@ -233,11 +247,13 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
         product_id = str(item.parent_product_id or item.product_id or "").strip()
         quantity = float(item.quantity or 1)
         profile = profile_map.get(product_id, {})
-        resolved_base_cost, base_cost_source = resolve_base_unit_cost(
+        base_status = classify_base_unit_cost(
             item,
             profile,
             product_map.get(product_id),
         )
+        resolved_base_cost = base_status["unit_cost"]
+        base_cost_source = base_status["source"]
         base_unit_cost = resolved_base_cost if resolved_base_cost is not None else 0.0
         applied_product_resources = []
         product_resource_unit_cost = 0.0
@@ -316,6 +332,11 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             "base_unit_cost": round(base_unit_cost, 4),
             "base_cost_source": base_cost_source,
             "cost_complete": resolved_base_cost is not None,
+            "mezan_cost_complete": base_status["mezan_cost_complete"],
+            "mezan_cost_missing": base_status["mezan_cost_missing"],
+            "calculation_cost_available": base_status["calculation_cost_available"],
+            "uses_salla_fallback": base_status["calculation_uses_salla_fallback"],
+            "cost_semantics_version": base_status["semantics_version"],
             "product_resource_unit_cost": round(
                 product_resource_unit_cost,
                 4,
