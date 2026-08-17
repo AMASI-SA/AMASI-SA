@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle, ArrowRight, BarChart3, BriefcaseBusiness, ChevronDown, ChevronLeft,
@@ -13,6 +13,11 @@ import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
 import { buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
+import {
+    DASHBOARD_AUTO_REFRESH_MS,
+    dashboardOrdersSignature,
+    shouldRefreshDashboardForOrders,
+} from "../lib/dashboardLiveRefresh";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 
 const PLATFORM_META = [
@@ -166,21 +171,22 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
     );
 }
 
-export function TopProductsCard({ rows, summary = {} }) {
+export function TopProductsCard({ rows, summary = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
+    const productCount = Math.max(Number(summary?.product_profit_summary?.product_count || 0), products.length);
     const visibleProducts = products.slice(0, visibleCount);
     const hasMore = visibleCount < products.length;
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products">
-            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><div className="text-left text-[9px] font-bold leading-4"><p>{integer(summary.product_count)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {integer(summary.salla_fallback_products_count)} · بدون تكلفة {integer(summary.missing_all_cost_products_count)}</p></div></div>
+            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا</h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · بدون تكلفة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
             <div className="grid grid-cols-[minmax(0,1fr)_58px_94px] gap-2 border-b px-3 py-2 text-[9px] font-bold text-slate-400"><span>المنتج</span><span>الوحدات</span><span>المبيعات</span></div>
             <div className="h-[330px] overflow-y-auto overscroll-contain" data-testid="advanced-top-products-scroll">
             {visibleProducts.length ? visibleProducts.map((item) => <div key={item.identity} className="grid min-h-[66px] grid-cols-[minmax(0,1fr)_58px_94px] items-center gap-2 border-b px-3 py-2 last:border-0">
                 <div className="flex min-w-0 items-center gap-2">{item.image_url ? <img src={item.image_url} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">📦</div>}<p className="line-clamp-2 text-[10px] font-bold">{item.name}</p></div>
                 <span className="num text-xs font-bold">{integer(item.units_sold)}</span><span className="num whitespace-nowrap text-[10px] font-black text-blue-600">{money(item.total_sales)} ر.س</span>
-            </div>) : <div className="p-8 text-center text-xs text-slate-400">لا توجد منتجات مباعة في الفترة.</div>}
+            </div>) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
             {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
@@ -213,17 +219,17 @@ function PlatformPeriodSummary({ ads }) {
     </div>;
 }
 
-export function SummaryStrip({ data, filters }) {
+export function SummaryStrip({ data, filters, loading = false }) {
     const totals = data?.totals || {};
     const monthTotals = data?.month_kpis || {};
     const missing = Number(data?.product_cost_v2?.missing_products_count || totals.missing_product_cost_count || 0);
     return <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-[minmax(0,1.75fr)_minmax(260px,.7fr)]" data-testid="advanced-date-summary">
         <div dir="rtl" className="grid grid-cols-2 gap-2 min-[1180px]:grid-cols-[minmax(118px,.46fr)_minmax(180px,.78fr)_minmax(0,2fr)]">
-            <Metric label="طلبات الشهر" value={integer(monthTotals.total_orders)} Icon={ShoppingCart} tone="bg-teal-50 text-teal-700" />
-            <Metric label="مبيعات الشهر" value={`${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
+            <Metric label="طلبات الشهر" value={loading && !data ? "—" : integer(monthTotals.total_orders)} Icon={ShoppingCart} tone="bg-teal-50 text-teal-700" />
+            <Metric label="مبيعات الشهر" value={loading && !data ? "—" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
             <PlatformPeriodSummary ads={data?.ads_v2} />
         </div>
-        <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان<span className="block text-amber-700">أضف التكلفة لاعتماد الأرباح</span></p></Link>
+        <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>
     </div>;
 }
 
@@ -288,7 +294,7 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
     return <ProfitDetailBox testid="advanced-profit-operating-details"><DetailTitle title="💼 تفاصيل المصروفات التشغيلية" count={`${integer(rows.length)} بند`} tone="text-orange-900" />{rows.length === 0 ? <EmptyDetails text="لا توجد مصروفات تشغيلية في هذه الفترة" /> : <div className="text-xs">{rows.map(([name, value]) => <div key={name} className="flex justify-between border-b py-2"><b>{name}</b><span className="num font-black text-orange-700">{money(value)}</span></div>)}<div className="flex justify-between border-t-2 border-orange-200 py-2"><b>الإجمالي</b><span className="num font-black text-orange-800">{money(total)}</span></div></div>}</ProfitDetailBox>;
 }
 
-export function ProfitCard({ data }) {
+export function ProfitCard({ data, loading = false }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
     const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
@@ -309,7 +315,8 @@ export function ProfitCard({ data }) {
         payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />,
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">الفترة المحددة</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={`${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const percentage = index > 0 && sales > 0 ? (Number(row.value || 0) / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{money(row.value)}</span><span className="text-[11px] font-extrabold">ر.س</span>{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black"><span>{money(t.net_profit)}</span><span className="text-sm">ر.س</span></p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">بعد جميع التكاليف والمصروفات</p></div></div></Panel>;
+    const initialLoading = loading && !data;
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const percentage = index > 0 && sales > 0 ? (Number(row.value || 0) / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : money(row.value)}</span>{!initialLoading && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black"><span>{initialLoading ? "—" : money(t.net_profit)}</span>{!initialLoading && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">بعد جميع التكاليف والمصروفات</p></div></div></Panel>;
 }
 
 function orderSource(order) {
@@ -419,20 +426,58 @@ export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
     const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [loading, setLoading] = useState(true);
     const { orders } = useOrders();
-    const loadPeriod = useCallback(async (next) => {
-        setLoading(true);
+    const dashboardDataRef = useRef(null);
+    const requestSequenceRef = useRef(0);
+    const backgroundRefreshInFlightRef = useRef(false);
+    const lastOrderSignatureRef = useRef("");
+    const orderSignature = useMemo(() => dashboardOrdersSignature(orders), [orders]);
+    const loadPeriod = useCallback(async (next, { background = false } = {}) => {
+        if (background && backgroundRefreshInFlightRef.current) return;
+        const requestSequence = ++requestSequenceRef.current;
+        if (background) backgroundRefreshInFlightRef.current = true;
+        else setLoading(true);
         try {
             const query = new URLSearchParams(filtersToQueryString(next));
             query.set("_refresh", String(Date.now()));
             const response = await api.get(`/dashboard-v2?${query.toString()}`, {
                 headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
             });
-            setData(response.data);
+            if (requestSequence === requestSequenceRef.current) setData(response.data);
         } catch {
-            setData(null);
-        } finally { setLoading(false); }
+            if (!background && requestSequence === requestSequenceRef.current) setData(null);
+        } finally {
+            if (background) backgroundRefreshInFlightRef.current = false;
+            if (requestSequence === requestSequenceRef.current) setLoading(false);
+        }
     }, []);
     useEffect(() => { loadPeriod(filters); }, [filters, loadPeriod]);
+    useEffect(() => { dashboardDataRef.current = data; }, [data]);
+    useEffect(() => {
+        const previousSignature = lastOrderSignatureRef.current;
+        lastOrderSignatureRef.current = orderSignature;
+        if (shouldRefreshDashboardForOrders(previousSignature, orderSignature, Boolean(dashboardDataRef.current))) {
+            loadPeriod(filters, { background: true });
+        }
+    }, [filters, loadPeriod, orderSignature]);
+    useEffect(() => {
+        const refresh = () => {
+            if (
+                (typeof document === "undefined" || !document.hidden)
+                && (typeof navigator === "undefined" || navigator.onLine)
+            ) loadPeriod(filters, { background: true });
+        };
+        const handleVisibilityChange = () => { if (!document.hidden) refresh(); };
+        const timer = window.setInterval(refresh, DASHBOARD_AUTO_REFRESH_MS);
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [filters, loadPeriod]);
     useEffect(() => { let active = true; const loadLive = async () => { const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString(); const [cartResult, gaResult] = await Promise.allSettled([api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`), api.get("/integrations-v2/google_analytics_4/realtime-dashboard")]); if (!active) return; if (cartResult.status === "fulfilled") { setCarts(cartResult.value.data?.items || []); setCartSummary({ abandoned_count: Number(cartResult.value.data?.abandoned_count || 0), recovered_count: Number(cartResult.value.data?.recovered_count || 0) }); } if (gaResult.status === "fulfilled") setGa(gaResult.value.data); }; loadLive(); const timer = window.setInterval(loadLive, 60000); return () => { active = false; window.clearInterval(timer); }; }, [filters.from, filters.to]);
     return <div dir="rtl" className="space-y-4" data-testid="advanced-dashboard-page">
         <header className="flex flex-wrap items-center justify-between gap-3">
@@ -440,8 +485,8 @@ export default function AdvancedDashboard() {
             <Link to="/dashboard-v2" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"><ArrowRight className="h-4 w-4" />لوحة التحكم القديمة</Link>
         </header>
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
-        <SummaryStrip data={data} filters={filters} />
+        <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} filters={filters} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[clamp(280px,24vw,350px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><AdsCard ads={data?.ads_v2} filters={filters} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl"><GaLive data={ga} /></div></div></main></div>
     </div>;
 }

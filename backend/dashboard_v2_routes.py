@@ -9,6 +9,7 @@ payment fee formulae stay inherited from the legacy dashboard response.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
@@ -988,38 +989,46 @@ def make_dashboard_v2_router(
     ) -> dict[str, Any]:
         current = owner(user)
         user_id = str(current["id"])
-        response = await legacy_dashboard(
-            user=current,
-            from_date=from_date,
-            to_date=to_date,
-            payment_methods=payment_methods,
-            shipping_companies=shipping_companies,
-            include_legacy_analyses=False,
-            allow_self_heal=False,
-        )
-        orders = await _filtered_orders(
-            db,
-            user_id,
-            from_date=from_date,
-            to_date=to_date,
-            payment_methods=payment_methods,
-            shipping_companies=shipping_companies,
-            include_marketing_attribution=True,
-        )
         today = _today_riyadh()
         month_start = today.replace(day=1).isoformat()
         today_s = today.isoformat()
-        if from_date == month_start and to_date == today_s:
-            month_orders = orders
-        else:
-            month_orders = await _filtered_orders(
+        selected_is_current_month = from_date == month_start and to_date == today_s
+        initial_reads = [
+            legacy_dashboard(
+                user=current,
+                from_date=from_date,
+                to_date=to_date,
+                payment_methods=payment_methods,
+                shipping_companies=shipping_companies,
+                include_legacy_analyses=False,
+                allow_self_heal=False,
+            ),
+            _filtered_orders(
+                db,
+                user_id,
+                from_date=from_date,
+                to_date=to_date,
+                payment_methods=payment_methods,
+                shipping_companies=shipping_companies,
+                include_marketing_attribution=True,
+            ),
+        ]
+        if not selected_is_current_month:
+            initial_reads.append(_filtered_orders(
                 db,
                 user_id,
                 from_date=month_start,
                 to_date=today_s,
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
-            )
+            ))
+        initial_results = await asyncio.gather(*initial_reads)
+        response = initial_results[0]
+        orders = initial_results[1]
+        if selected_is_current_month:
+            month_orders = orders
+        else:
+            month_orders = initial_results[2]
         month_kpis = {
             "from_date": month_start,
             "to_date": today_s,
@@ -1029,17 +1038,6 @@ def make_dashboard_v2_router(
                 2,
             ),
         }
-        product_cost = await build_mezan_v2_product_cost(db, user_id, orders)
-        ads = await build_mezan_v2_ads(
-            db,
-            user_id,
-            from_date=from_date,
-            to_date=to_date,
-        )
-        ads["executive_breakdown"] = build_salla_ads_executive_breakdown(
-            orders,
-            ads,
-        )
         totals = response["totals"]
         # The V2 filtered order set is the authoritative source for both the
         # count and gross sales.  The legacy dashboard can under-report fresh
@@ -1067,8 +1065,21 @@ def make_dashboard_v2_router(
             operating_to = today
         if operating_to < operating_from:
             operating_from, operating_to = operating_to, operating_from
-        recurring = await compute_recurring_obligations_for_range(
-            db, user_id, operating_from, operating_to
+        product_cost, ads, recurring = await asyncio.gather(
+            build_mezan_v2_product_cost(db, user_id, orders),
+            build_mezan_v2_ads(
+                db,
+                user_id,
+                from_date=from_date,
+                to_date=to_date,
+            ),
+            compute_recurring_obligations_for_range(
+                db, user_id, operating_from, operating_to
+            ),
+        )
+        ads["executive_breakdown"] = build_salla_ads_executive_breakdown(
+            orders,
+            ads,
         )
         recurring_total = _float(recurring.get("total"))
         operating_total = salary_total + recurring_total
