@@ -87,5 +87,11 @@ describe("SPA runtime recovery", () => {
 
     root.innerHTML = '<main data-mezan-crash-recovery="true"></main>';
     expect(isApplicationShellHealthy(root)).toBe(true);
+
+    root.innerHTML = '<main data-testid="auth-loading"></main>';
+    expect(isApplicationShellHealthy(root)).toBe(true);
+
+    root.innerHTML = '<main data-testid="auth-unavailable"></main>';
+    expect(isApplicationShellHealthy(root)).toBe(true);
   });
 });

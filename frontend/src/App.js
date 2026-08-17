@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AuthLoadingScreen from "./components/AuthLoadingScreen";
+import AuthRecoveryScreen from "./components/AuthRecoveryScreen";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -119,8 +121,11 @@ import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
 
 function PublicOnly({ children }) {
-    const { user, loading } = useAuth();
-    if (loading) return null;
+    const { user, loading, authStatus, retryAuth } = useAuth();
+    if (authStatus === "unavailable") {
+        return <AuthRecoveryScreen onRetry={retryAuth} />;
+    }
+    if (loading) return <AuthLoadingScreen />;
     if (user) return <Navigate to="/dashboard-advanced" replace />;
     return children;
 }

@@ -166,6 +166,7 @@ export function isApplicationShellHealthy(
   if (rootElement.querySelector("[data-mezan-crash-recovery]")) return true;
   if (rootElement.querySelector('[data-testid="main-content"]')) return true;
   if (rootElement.querySelector('[data-testid="auth-loading"]')) return true;
+  if (rootElement.querySelector('[data-testid="auth-unavailable"]')) return true;
   if (rootElement.querySelector("form")) return true;
   return rootElement.childElementCount > 0
     && normalizedText(rootElement.textContent, 200).length > 0;

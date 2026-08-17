@@ -34,6 +34,7 @@ import {
     recoverSnapchatSyncAfterTransportFailure,
     rewriteSnapchatSyncRequest,
 } from "./snapchatSyncRecovery";
+import { AUTH_SESSION_REQUEST_TIMEOUT_MS } from "../context/authBootstrap";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
@@ -59,12 +60,34 @@ function shouldRefreshBrowserSession(error) {
         && !url.includes("/auth/passkey/");
 }
 
-async function refreshBrowserSessionOnce() {
+function browserSessionRefreshTimeout(config = {}) {
+    const configuredTimeout = Number(config.timeout);
+    const deadlineAt = Number(config._mezanAuthDeadlineAt);
+    const remainingToDeadline = Number.isFinite(deadlineAt)
+        ? deadlineAt - Date.now()
+        : AUTH_SESSION_REQUEST_TIMEOUT_MS;
+    const requestBudget = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout
+        : AUTH_SESSION_REQUEST_TIMEOUT_MS;
+    return Math.max(
+        1,
+        Math.min(
+            AUTH_SESSION_REQUEST_TIMEOUT_MS,
+            requestBudget,
+            remainingToDeadline,
+        ),
+    );
+}
+
+async function refreshBrowserSessionOnce(timeoutMs) {
     if (!authRefreshPromise) {
         authRefreshPromise = axios.post(
             `${API_BASE}/auth/refresh`,
             {},
-            { withCredentials: true },
+            {
+                withCredentials: true,
+                timeout: timeoutMs,
+            },
         ).finally(() => {
             authRefreshPromise = null;
         });
@@ -301,16 +324,22 @@ api.interceptors.response.use(
     async (error) => {
         if (shouldRefreshBrowserSession(error)) {
             try {
-                await refreshBrowserSessionOnce();
+                await refreshBrowserSessionOnce(
+                    browserSessionRefreshTimeout(error.config),
+                );
                 return api.request({
                     ...error.config,
                     _mezanAuthRetried: true,
                 });
-            } catch {
-                // Preserve the original 401. AuthContext is the authority that
-                // decides whether the browser is anonymous; background API
-                // failures must not force navigation on their own.
-                return Promise.reject(error);
+            } catch (refreshError) {
+                // Only a definitive refresh rejection proves the cookie
+                // session is invalid. Network/429/5xx/timeout failures must
+                // remain transient so AuthContext can fail closed with retry
+                // instead of falsely navigating the browser to /login.
+                if (refreshError?.response?.status === 401) {
+                    return Promise.reject(error);
+                }
+                return Promise.reject(refreshError);
             }
         }
 
