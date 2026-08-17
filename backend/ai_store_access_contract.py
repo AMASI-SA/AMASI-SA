@@ -45,6 +45,7 @@ PERMISSIONS = {
     "fulfillment.labels.reprint",
     "fulfillment.pack.confirm",
     "fulfillment.carrier.handoff",
+    "fulfillment.store_courier.assign",
     "fulfillment.store_courier.deliver",
     "inventory.receipts.read",
     "inventory.receipts.write",
@@ -106,7 +107,11 @@ ROLE_CATALOG = {
     "shipping_operator": sorted({
         "products.read", "fulfillment.ready.read", "fulfillment.batch.claim",
         "fulfillment.labels.print", "fulfillment.pack.confirm",
-        "fulfillment.carrier.handoff", "fulfillment.store_courier.deliver",
+        "fulfillment.carrier.handoff", "fulfillment.store_courier.assign",
+        "fulfillment.store_courier.deliver",
+    }),
+    "store_courier": sorted({
+        "fulfillment.store_courier.deliver",
     }),
     "marketing_manager": sorted({
         "products.read", "products.review", "products.media.read",
@@ -129,6 +134,7 @@ ROLE_LABELS = {
     "cost_manager": "مسؤول التكاليف والمشتريات",
     "warehouse_operator": "موظف المخزن",
     "shipping_operator": "موظف الشحن والعنونة",
+    "store_courier": "مندوب توصيل المتجر",
     "marketing_manager": "مسؤول التسويق",
     "ai_product_optimizer": "وكيل تحسين المنتجات بالذكاء الاصطناعي",
 }
@@ -138,6 +144,7 @@ RESPONSIBILITY_TYPES = {
     "packing",
     "shipping_labeling",
     "carrier_handoff",
+    "store_courier_dispatch",
     "store_courier_delivery",
     "stock_preparation",
 }
