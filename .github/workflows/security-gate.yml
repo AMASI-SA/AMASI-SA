@@ -111,10 +111,48 @@ jobs:
           if rg -n "from ['\"]xlsx['\"]|require\(['\"]xlsx['\"]\)" src; then
             exit 1
           fi
-      - name: Verify production build and CSP
+      - name: Verify production build and frontend security manifests
         env:
           CI: "false"
         run: |
           yarn build
           grep -F 'http-equiv="Content-Security-Policy"' build/index.html
           grep -F "object-src 'none'" build/index.html
+          grep -F 'name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex"' build/index.html
+          test -f build/_headers
+          test -f build/_headers.json
+          test -f build/.well-known/security.txt
+          grep -F "X-Permitted-Cross-Domain-Policies: none" build/_headers
+          grep -F "X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex" build/_headers
+          grep -F "Canonical: https://mezansalla.com/.well-known/security.txt" build/.well-known/security.txt
+          node - <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync("build/_headers.json", "utf8"));
+          const rule = manifest?.rules?.find((candidate) => candidate?.path === "/*");
+          if (!rule || !rule.headers || typeof rule.headers !== "object") {
+            throw new Error("Emergent edge header rule for /* is missing");
+          }
+          const expected = {
+            "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests",
+            "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+          };
+          for (const [name, value] of Object.entries(expected)) {
+            if (rule.headers[name] !== value) {
+              throw new Error(`${name} differs from the governed Emergent edge value`);
+            }
+          }
+          if (!rule.headers["Content-Security-Policy"].includes("frame-ancestors 'none'")) {
+            throw new Error("HTTP CSP must deny framing");
+          }
+          if (!rule.headers["Content-Security-Policy"].includes("connect-src 'self' https: wss:")) {
+            throw new Error("HTTP CSP must preserve API and WebSocket connections");
+          }
+          if (!rule.headers["Permissions-Policy"].startsWith("camera=(self)")) {
+            throw new Error("Barcode camera permission must remain same-origin");
+          }
+          console.log("Emergent edge security manifest passed.");
+          NODE
