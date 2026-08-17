@@ -17,10 +17,12 @@ def test_auth_context_never_persists_access_token_to_local_storage():
 
 def test_legacy_access_token_is_removed_before_initial_auth_probe():
     source = AUTH_CONTEXT.read_text(encoding="utf-8")
-    cleanup_pos = source.index("clearLegacyBrowserAccessToken();")
-    refresh_pos = source.index("await refreshUser();", cleanup_pos)
+    provider_pos = source.index("export function AuthProvider")
+    cleanup_pos = source.index("clearLegacyBrowserAccessToken();", provider_pos)
+    bootstrap_pos = source.index("runBoundedAuthBootstrap({", cleanup_pos)
+    probe_pos = source.index("loadCurrentUser(requestOptions)", bootstrap_pos)
 
-    assert cleanup_pos < refresh_pos
+    assert cleanup_pos < bootstrap_pos < probe_pos
 
 
 def test_shared_api_uses_credentials_cookie_transport():
@@ -36,18 +38,24 @@ def test_browser_401_uses_single_flight_cookie_refresh_before_retry():
     assert '`${API_BASE}/auth/refresh`' in source
     assert "_mezanAuthRetried" in source
     assert "return api.request" in source
+    assert "browserSessionRefreshTimeout(error.config)" in source
+    assert "timeout: timeoutMs" in source
+    assert "catch (refreshError)" in source
+    assert "Promise.reject(refreshError)" in source
 
 
-def test_transient_auth_probe_never_marks_browser_anonymous():
+def test_transient_auth_probe_is_bounded_without_marking_browser_anonymous():
     source = AUTH_CONTEXT.read_text(encoding="utf-8")
 
     catch_start = source.index("} catch (error) {")
-    retry_comment = source.index("temporary network/origin failure", catch_start)
-    throw_pos = source.index("throw error;", retry_comment)
+    preservation_comment = source.index("temporary network/origin failure", catch_start)
+    throw_pos = source.index("throw error;", preservation_comment)
     false_pos = source.index("setUser(false);", catch_start)
 
-    assert false_pos < retry_comment < throw_pos
-    assert "window.setTimeout(probe, 2000)" in source
+    assert false_pos < preservation_comment < throw_pos
+    assert 'setAuthStatus("unavailable")' in source
+    assert "runBoundedAuthBootstrap" in source
+    assert "window.setTimeout(probe, 2000)" not in source
 
 
 def test_login_and_register_still_refresh_full_user_after_cookie_is_set():

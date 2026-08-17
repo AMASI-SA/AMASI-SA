@@ -1,5 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import {
+    AUTH_SESSION_REQUEST_TIMEOUT_MS,
+    isAuthBootstrapAbort,
+    runBoundedAuthBootstrap,
+} from "./authBootstrap";
 
 const AuthContext = createContext(null);
 
@@ -24,47 +29,93 @@ clearLegacyBrowserAccessToken();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null); // null while checking, false if anon
-    const [loading, setLoading] = useState(true);
+    const [authStatus, setAuthStatus] = useState("checking");
+    const [authError, setAuthError] = useState(null);
+    const [probeGeneration, setProbeGeneration] = useState(0);
+    const loading = authStatus === "checking";
 
-    const refreshUser = useCallback(async () => {
+    const loadCurrentUser = useCallback(async ({
+        signal,
+        timeoutMs = AUTH_SESSION_REQUEST_TIMEOUT_MS,
+    } = {}) => {
+        const { data } = await api.get("/auth/me", {
+            signal,
+            timeout: timeoutMs,
+            _mezanAuthDeadlineAt: Date.now() + timeoutMs,
+        });
+        return data;
+    }, []);
+
+    const refreshUser = useCallback(async (options = {}) => {
         try {
-            const { data } = await api.get("/auth/me");
+            const data = await loadCurrentUser(options);
             setUser(data);
+            setAuthError(null);
+            setAuthStatus("authenticated");
             return data;
         } catch (error) {
             const status = error?.response?.status;
-            if (status === 401 || status === 403) {
+            if (status === 401) {
                 setUser(false);
+                setAuthError(null);
+                setAuthStatus("anonymous");
                 return null;
             }
 
             // A temporary network/origin failure is not proof that the cookie
-            // session ended. Keep the last authenticated user and let the
-            // bootstrap probe retry instead of redirecting to /login.
+            // session ended. Keep the last authenticated user internally, but
+            // fail closed until a fresh probe succeeds instead of redirecting.
+            setAuthError(error);
+            setAuthStatus("unavailable");
             throw error;
         }
-    }, []);
+    }, [loadCurrentUser]);
 
     useEffect(() => {
         let cancelled = false;
-        let retryTimer = null;
+        const controller = new AbortController();
 
-        const probe = async () => {
-            clearLegacyBrowserAccessToken();
-            try {
-                await refreshUser();
-                if (!cancelled) setLoading(false);
-            } catch {
-                if (!cancelled) retryTimer = window.setTimeout(probe, 2000);
-            }
-        };
+        setAuthError(null);
+        setAuthStatus("checking");
+        clearLegacyBrowserAccessToken();
 
-        probe();
+        runBoundedAuthBootstrap({
+            signal: controller.signal,
+            probe: async (requestOptions) => {
+                try {
+                    const data = await loadCurrentUser(requestOptions);
+                    return { user: data, status: "authenticated" };
+                } catch (error) {
+                    if (error?.response?.status === 401) {
+                        return { user: false, status: "anonymous" };
+                    }
+                    throw error;
+                }
+            },
+        }).then((result) => {
+            if (cancelled) return;
+            setUser(result.user);
+            setAuthError(null);
+            setAuthStatus(result.status);
+        }).catch((error) => {
+            if (cancelled || isAuthBootstrapAbort(error)) return;
+            // Fail closed without deleting the cookie or pretending the user
+            // is anonymous. Protected/Public routes render a retry surface.
+            setAuthError(error);
+            setAuthStatus("unavailable");
+        });
+
         return () => {
             cancelled = true;
-            if (retryTimer) window.clearTimeout(retryTimer);
+            controller.abort();
         };
-    }, [refreshUser]);
+    }, [loadCurrentUser, probeGeneration]);
+
+    const retryAuth = useCallback(() => {
+        setAuthError(null);
+        setAuthStatus("checking");
+        setProbeGeneration((generation) => generation + 1);
+    }, []);
 
     const login = async (email, password, mfaBootstrapCode = "", forceTotp = false) => {
         const payload = { email, password };
@@ -101,6 +152,7 @@ export function AuthProvider({ children }) {
         // optional trusted-device enrollment screen must remain visible.
         if (deferRefresh) {
             setUser(false);
+            setAuthStatus("anonymous");
             return data;
         }
 
@@ -131,6 +183,9 @@ export function AuthProvider({ children }) {
         <AuthContext.Provider value={{
             user,
             loading,
+            authStatus,
+            authError,
+            retryAuth,
             login,
             verifyMfa,
             register,
