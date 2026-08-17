@@ -46,6 +46,29 @@ const api = axios.create({
 
 let authRefreshPromise = null;
 
+// Dashboard enrichment is optional. It must never hold the complete dashboard
+// response hostage when a provider-specific read is slow or temporarily
+// unavailable (for example while a browser session is being refreshed).
+export const DASHBOARD_ENRICHMENT_TIMEOUT_MS = 2_500;
+
+function withinDashboardEnrichmentDeadline(promise, timeoutMs = DASHBOARD_ENRICHMENT_TIMEOUT_MS) {
+    return new Promise((resolve, reject) => {
+        const timer = globalThis.setTimeout(() => {
+            reject(new Error("dashboard_enrichment_timeout"));
+        }, timeoutMs);
+        Promise.resolve(promise).then(
+            (value) => {
+                globalThis.clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                globalThis.clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
+}
+
 function shouldRefreshBrowserSession(error) {
     const status = error?.response?.status;
     const config = error?.config || {};
@@ -235,13 +258,15 @@ api.interceptors.response.use(
             && !hasDashboardExecutiveBreakdown(response.data)
         ) {
             try {
-                const executiveResponse = await axios.get(
-                    `${API_BASE}/integrations-v2/dashboard/ads-executive-breakdown`,
-                    {
-                        params: dashboardExecutiveParams(response.config),
-                        withCredentials: true,
-                        headers: directRequestHeaders(),
-                    },
+                const executiveResponse = await withinDashboardEnrichmentDeadline(
+                    axios.get(
+                        `${API_BASE}/integrations-v2/dashboard/ads-executive-breakdown`,
+                        {
+                            params: dashboardExecutiveParams(response.config),
+                            withCredentials: true,
+                            headers: directRequestHeaders(),
+                        },
+                    ),
                 );
                 return {
                     ...response,
@@ -268,13 +293,15 @@ api.interceptors.response.use(
 
         if (isDashboardAuthoritativeResponse(response)) {
             try {
-                const authoritativeResponse = await axios.get(
-                    `${API_BASE}/integrations-v2/dashboard/authoritative-summary`,
-                    {
-                        params: dashboardAuthoritativeParams(response.config),
-                        withCredentials: true,
-                        headers: directRequestHeaders(),
-                    },
+                const authoritativeResponse = await withinDashboardEnrichmentDeadline(
+                    axios.get(
+                        `${API_BASE}/integrations-v2/dashboard/authoritative-summary`,
+                        {
+                            params: dashboardAuthoritativeParams(response.config),
+                            withCredentials: true,
+                            headers: directRequestHeaders(),
+                        },
+                    ),
                 );
                 return {
                     ...response,
