@@ -108,7 +108,6 @@ ROLE_CATALOG = {
         "products.read", "fulfillment.ready.read", "fulfillment.batch.claim",
         "fulfillment.labels.print", "fulfillment.pack.confirm",
         "fulfillment.carrier.handoff", "fulfillment.store_courier.assign",
-        "fulfillment.store_courier.deliver",
     }),
     "store_courier": sorted({
         "fulfillment.store_courier.deliver",
